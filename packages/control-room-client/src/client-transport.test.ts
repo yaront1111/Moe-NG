@@ -155,6 +155,33 @@ it("carries the credential in a HEADER and never in the URL", async () => {
   expect(call?.headers["x-moe-protocol-version"]).toBe(gatedSurface().wireProtocolVersion);
 });
 
+it("routes commands to the explicitly selected v2 authority plane", async () => {
+  const stub = stubFetch(jsonReply(200, { ok: true }));
+  const transport = createControlRoomTransport({
+    commandAuthorityPlane: "V2",
+    csrfToken: CSRF,
+    fetch: stub.fetch,
+    origin: ORIGIN,
+    sessionCredential: CREDENTIAL,
+    wireProtocolVersion: gatedSurface().wireProtocolVersion,
+  });
+
+  await transport.sendCommand(builtEnvelope());
+
+  expect(stub.calls[0]?.url).toBe(`${ORIGIN}/v2/command`);
+});
+
+it("refuses an unknown command authority plane instead of falling back to v1", () => {
+  expect(() => createControlRoomTransport({
+    commandAuthorityPlane: "V3",
+    csrfToken: CSRF,
+    fetch: stubFetch(jsonReply(200, { ok: true })).fetch,
+    origin: ORIGIN,
+    sessionCredential: CREDENTIAL,
+    wireProtocolVersion: gatedSurface().wireProtocolVersion,
+  } as unknown as TransportOptions)).toThrowError("CONTROL_ROOM_COMMAND_AUTHORITY_PLANE_INVALID");
+});
+
 it("sets the EXACT header set it intends, and no forbidden header among them", async () => {
   const stub = stubFetch(jsonReply(200, { ok: true }));
   await transportWith(stub).sendCommand(builtEnvelope());

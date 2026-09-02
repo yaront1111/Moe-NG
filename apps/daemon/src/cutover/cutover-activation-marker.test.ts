@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 const ACTIVATED_AT = 1_756_000_000_000;
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const READINESS_DIGEST = "f".repeat(64);
+const READINESS_VERSION = 1;
 
 const GENERATIONS = Object.freeze({
   backupGenerationDigest: "a".repeat(64),
@@ -19,9 +21,10 @@ describe("cutover activation marker shape", () => {
     const marker = await markerModule();
 
     expect(marker.CUTOVER_ACTIVATION_MARKER_KEYS).toEqual([
-      "activatedAtEpochMs", "generations", "schemaVersion", "sourceCommit",
+      "activatedAtEpochMs", "generations", "readinessManifestSha256",
+      "readinessManifestVersion", "schemaVersion", "sourceCommit",
     ]);
-    expect(marker.CUTOVER_ACTIVATION_MARKER_KEYS).toHaveLength(4);
+    expect(marker.CUTOVER_ACTIVATION_MARKER_KEYS).toHaveLength(6);
     expect(Object.isFrozen(marker.CUTOVER_ACTIVATION_MARKER_KEYS)).toBe(true);
     expect("CUTOVER_ACTIVATION_MARKER_LAYER" in marker).toBe(false);
   });
@@ -32,6 +35,8 @@ describe("cutover activation marker shape", () => {
     const result = composeCutoverActivationMarker({
       activatedAtEpochMs: ACTIVATED_AT,
       generations: GENERATIONS,
+      readinessManifestSha256: READINESS_DIGEST,
+      readinessManifestVersion: READINESS_VERSION,
       sourceCommit: SOURCE_COMMIT,
       sourceState: "ACTIVATE_APPROVED",
     });
@@ -40,14 +45,17 @@ describe("cutover activation marker shape", () => {
       marker: {
         activatedAtEpochMs: ACTIVATED_AT,
         generations: GENERATIONS,
-        schemaVersion: "moe-cutover-activation-marker/1",
+        readinessManifestSha256: READINESS_DIGEST,
+        readinessManifestVersion: READINESS_VERSION,
+        schemaVersion: "moe-cutover-activation-marker/2",
         sourceCommit: SOURCE_COMMIT,
       },
       ok: true,
     });
     if (!result.ok) throw new Error(`unexpected refusal ${result.error.code}`);
     expect(Object.keys(result.marker).sort()).toEqual([
-      "activatedAtEpochMs", "generations", "schemaVersion", "sourceCommit",
+      "activatedAtEpochMs", "generations", "readinessManifestSha256",
+      "readinessManifestVersion", "schemaVersion", "sourceCommit",
     ]);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.marker)).toBe(true);
@@ -77,6 +85,8 @@ describe("cutover activation marker refusals", () => {
     const result = composeCutoverActivationMarker({
       activatedAtEpochMs: ACTIVATED_AT,
       generations: GENERATIONS,
+      readinessManifestSha256: READINESS_DIGEST,
+      readinessManifestVersion: READINESS_VERSION,
       sourceCommit: SOURCE_COMMIT,
       sourceState: "IMPORT_VERIFIED",
     });
@@ -101,6 +111,8 @@ describe("cutover activation marker refusals", () => {
     const result = composeCutoverActivationMarker({
       activatedAtEpochMs: ACTIVATED_AT,
       generations: GENERATIONS,
+      readinessManifestSha256: READINESS_DIGEST,
+      readinessManifestVersion: READINESS_VERSION,
       sourceCommit: SOURCE_COMMIT,
       sourceState: "TELEPORTED" as "ACTIVATE_APPROVED",
     });
@@ -131,6 +143,8 @@ describe("cutover activation marker refusals", () => {
       const result = composeCutoverActivationMarker({
         activatedAtEpochMs,
         generations: GENERATIONS,
+        readinessManifestSha256: READINESS_DIGEST,
+        readinessManifestVersion: READINESS_VERSION,
         sourceCommit: SOURCE_COMMIT,
         sourceState: "ACTIVATE_APPROVED",
       });
@@ -152,18 +166,24 @@ describe("cutover activation marker refusals", () => {
       composeCutoverActivationMarker({
         activatedAtEpochMs: ACTIVATED_AT,
         generations: GENERATIONS,
+        readinessManifestSha256: READINESS_DIGEST,
+        readinessManifestVersion: READINESS_VERSION,
         sourceCommit: SOURCE_COMMIT,
         sourceState: "IMPORT_VERIFIED",
       }),
       composeCutoverActivationMarker({
         activatedAtEpochMs: ACTIVATED_AT,
         generations: GENERATIONS,
+        readinessManifestSha256: READINESS_DIGEST,
+        readinessManifestVersion: READINESS_VERSION,
         sourceCommit: SOURCE_COMMIT,
         sourceState: "TELEPORTED" as "ACTIVATE_APPROVED",
       }),
       ...invalidMoments.map(([, activatedAtEpochMs]) => composeCutoverActivationMarker({
         activatedAtEpochMs,
         generations: GENERATIONS,
+        readinessManifestSha256: READINESS_DIGEST,
+        readinessManifestVersion: READINESS_VERSION,
         sourceCommit: SOURCE_COMMIT,
         sourceState: "ACTIVATE_APPROVED" as const,
       })),
@@ -185,11 +205,13 @@ describe("cutover activation marker bytes", () => {
     const attempt = await import("./cutover-attempt-contracts.js");
 
     const first = marker.deriveCutoverActivationMarkerAggregateId("project-1");
+    const legacy = marker.deriveLegacyCutoverActivationMarkerAggregateId("project-1");
     // Server-derived, so the caller cannot nominate where its own marker lands, and DISTINCT
     // from the attempt aggregate: the attempt fold refuses any foreign event type, so a marker
     // written there would make the attempt permanently unreadable.
     expect(marker.deriveCutoverActivationMarkerAggregateId("project-1")).toBe(first);
     expect(marker.deriveCutoverActivationMarkerAggregateId("project-2")).not.toBe(first);
+    expect(legacy).not.toBe(first);
     expect(first).not.toBe(attempt.deriveCutoverAttemptAggregateId("project-1"));
     // Long project ids stay inside the store's identifier bound rather than being truncated.
     expect(marker.deriveCutoverActivationMarkerAggregateId("p".repeat(4096)).length)
@@ -201,6 +223,8 @@ describe("cutover activation marker bytes", () => {
     const composed = marker.composeCutoverActivationMarker({
       activatedAtEpochMs: ACTIVATED_AT,
       generations: GENERATIONS,
+      readinessManifestSha256: READINESS_DIGEST,
+      readinessManifestVersion: READINESS_VERSION,
       sourceCommit: SOURCE_COMMIT,
       sourceState: "ACTIVATE_APPROVED",
     });
@@ -224,7 +248,9 @@ describe("cutover activation marker bytes", () => {
     const wellFormed = {
       activatedAtEpochMs: ACTIVATED_AT,
       generations: { ...GENERATIONS },
-      schemaVersion: "moe-cutover-activation-marker/1",
+      readinessManifestSha256: READINESS_DIGEST,
+      readinessManifestVersion: READINESS_VERSION,
+      schemaVersion: "moe-cutover-activation-marker/2",
       sourceCommit: SOURCE_COMMIT,
     };
     // A single defect per case, so exactly one reason can answer each.
@@ -238,12 +264,14 @@ describe("cutover activation marker bytes", () => {
       ["generation not a string", encode({
         ...wellFormed, generations: { ...GENERATIONS, importGenerationSha256: 7 },
       })],
+      ["malformed readiness digest", encode({ ...wellFormed, readinessManifestSha256: "abc" })],
+      ["zero readiness version", encode({ ...wellFormed, readinessManifestVersion: 0 })],
       ["extra generation", encode({
         ...wellFormed, generations: { ...GENERATIONS, spare: "e".repeat(64) },
       })],
     ];
 
-    expect(cases).toHaveLength(8);
+    expect(cases).toHaveLength(10);
     for (const [label, bytes] of cases) {
       const decoded = marker.decodeCutoverActivationMarker(bytes);
       expect(decoded.ok, label).toBe(false);
@@ -254,5 +282,50 @@ describe("cutover activation marker bytes", () => {
       expect(decoded.error.code, label).not.toBe("UNKNOWN_ERROR");
       expect(decoded.layer, label).toBe("CUTOVER_ACTIVATION_MARKER");
     }
+  });
+
+  it("keeps /1 bytes forensic-decodable but never decodes them as a /2 authority marker", async () => {
+    const marker = await markerModule();
+    const legacyBytes = new TextEncoder().encode(JSON.stringify({
+      activatedAtEpochMs: ACTIVATED_AT,
+      generations: GENERATIONS,
+      schemaVersion: "moe-cutover-activation-marker/1",
+      sourceCommit: SOURCE_COMMIT,
+    }));
+
+    const forensic = marker.decodeLegacyCutoverActivationMarker(legacyBytes);
+    expect(forensic).toEqual({
+      marker: {
+        activatedAtEpochMs: ACTIVATED_AT,
+        generations: GENERATIONS,
+        schemaVersion: "moe-cutover-activation-marker/1",
+        sourceCommit: SOURCE_COMMIT,
+      },
+      ok: true,
+    });
+    const authoritative = marker.decodeCutoverActivationMarker(legacyBytes);
+    expect(authoritative.ok).toBe(false);
+    if (authoritative.ok) return;
+    expect(authoritative.error.code).toBe("INPUT_INVALID");
+    expect(authoritative.layer).toBe("CUTOVER_ACTIVATION_MARKER");
+  });
+
+  it("preserves the /1 decoder's historical string semantics without widening /2", async () => {
+    const marker = await markerModule();
+    const historical = {
+      activatedAtEpochMs: ACTIVATED_AT,
+      generations: {
+        backupGenerationDigest: "legacy-backup",
+        distributionManifestSha256: "legacy-distribution",
+        importGenerationSha256: "legacy-import",
+        quiesceRecordSha256: "legacy-quiesce",
+      },
+      schemaVersion: "moe-cutover-activation-marker/1" as const,
+      sourceCommit: "legacy-source-ref",
+    };
+    const bytes = new TextEncoder().encode(JSON.stringify(historical));
+
+    expect(marker.decodeLegacyCutoverActivationMarker(bytes)).toEqual({ marker: historical, ok: true });
+    expect(marker.decodeCutoverActivationMarker(bytes).ok).toBe(false);
   });
 });

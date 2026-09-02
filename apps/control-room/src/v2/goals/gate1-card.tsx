@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
@@ -7,16 +7,18 @@ import type {
   Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1ClarificationView, Gate1PendingView,
   Gate1ReadOutcome,
 } from "./gate1-approval.js";
+import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
 
 /**
  * The GATE 1 card (approve the Product Contract): rendered above the plan
  * screen for a source-bound goal while a committed revision awaits the human's
- * approval, absent otherwise — a plain goal never sees it.
+ * approval and after the daemon authenticates it as the recorded current Gate 1
+ * revision. A plain goal with no contract projection never sees it.
  *
  * The card renders whatever the pending read answered and dispatches only the
  * daemon-minted approval it was handed. SUCCESS RE-READS: an accepted approval
- * asks the route again and renders the answer (normally NONE — the card
- * retires itself and the offer ladder flips the goal to the dispatcher).
+ * asks the same goal-bound route again and renders the authenticated CURRENT
+ * revision and slot. It makes no claim that a planning compiler is active.
  * A refusal stays on screen with the code and layer that answered.
  */
 
@@ -27,137 +29,155 @@ export interface Gate1CardProps {
 }
 
 type LoadState =
-  | { readonly phase: "LOADING" }
-  | { readonly outcome: Gate1ReadOutcome; readonly phase: "LOADED" };
+  | { readonly goalGeneration: number; readonly goalId: string; readonly phase: "LOADING" }
+  | { readonly goalGeneration: number; readonly goalId: string;
+    readonly outcome: Gate1ReadOutcome; readonly phase: "LOADED" };
 
 type DispatchRefusal = Extract<Gate1ApprovalOutcome, { ok: false }>;
+interface DispatchState {
+  readonly approvedOnce: boolean;
+  readonly busy: boolean;
+  readonly goalGeneration: number;
+  readonly goalId: string;
+  readonly refusal: DispatchRefusal | null;
+}
 
-function PendingBody({ pending }: { readonly pending: Gate1PendingView }): JSX.Element {
-  return (
-    <div className="cr2-approve-body" data-testid="cr.gate1.pending">
-      <section className="cr2-approve-block" data-testid="cr.gate1.requirements">
-        <h3 className="cr2-approve-heading">
-          {`REQUIREMENTS ${MIDDOT} ${pending.requirements.length}`}
-        </h3>
-        <ul className="cr2-approve-obligations">
-          {pending.requirements.map((requirement) => (
-            <li
-              className="cr2-approve-obligation"
-              data-testid={`cr.gate1.requirement.${requirement.requirementId}`}
-              key={requirement.requirementId}
-            >
-              <span className="cr2-approve-mono">{requirement.requirementId}</span>
-              <span className="cr2-approve-step-body">{requirement.statement}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="cr2-approve-block" data-testid="cr.gate1.criteria">
-        <h3 className="cr2-approve-heading">
-          {`ACCEPTANCE CRITERIA ${MIDDOT} ${pending.criteria.length}`}
-        </h3>
-        <ul className="cr2-approve-obligations">
-          {pending.criteria.map((criterion) => (
-            <li
-              className="cr2-approve-obligation"
-              data-testid={`cr.gate1.criterion.${criterion.criterionId}`}
-              key={criterion.criterionId}
-            >
-              <span className="cr2-approve-mono">{criterion.criterionId}</span>
-              <span className="cr2-approve-step-body">{criterion.statement}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <details className="cr2-approve-inspect" data-testid="cr.gate1.inspect">
-        <summary className="cr2-approve-inspect-summary">Inspect revision</summary>
-        <dl className="cr2-approve-hashes">
-          <dt>contractId</dt>
-          <dd className="cr2-approve-mono">{pending.contractId}</dd>
-          <dt>revisionId</dt>
-          <dd className="cr2-approve-mono">{pending.revisionId}</dd>
-          <dt>revisionDigest</dt>
-          <dd className="cr2-approve-mono">{pending.revisionDigest}</dd>
-        </dl>
-      </details>
-    </div>
-  );
+function idleDispatch(goalId: string, goalGeneration: number): DispatchState {
+  return { approvedOnce: false, busy: false, goalGeneration, goalId, refusal: null };
 }
 
 export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element | null {
-  const [state, setState] = useState<LoadState>({ phase: "LOADING" });
-  const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState<DispatchRefusal | null>(null);
-  const [approvedOnce, setApprovedOnce] = useState(false);
+  const goalIdentity = useRef({ generation: 0, goalId, port, read });
+  if (goalIdentity.current.goalId !== goalId || goalIdentity.current.port !== port
+    || goalIdentity.current.read !== read) {
+    goalIdentity.current = {
+      generation: goalIdentity.current.generation + 1, goalId, port, read,
+    };
+  }
+  const goalGeneration = goalIdentity.current.generation;
+  const [state, setState] = useState<LoadState>({ goalGeneration, goalId, phase: "LOADING" });
+  const [dispatch, setDispatch] = useState<DispatchState>(
+    () => idleDispatch(goalId, goalGeneration),
+  );
   const [applied, setApplied] = useState(0);
   const generation = useRef(0);
+  const headingId = useId();
+
+  const shownState: LoadState = state.goalGeneration === goalGeneration
+    ? state : { goalGeneration, goalId, phase: "LOADING" };
+  const shownDispatch = dispatch.goalGeneration === goalGeneration
+    ? dispatch : idleDispatch(goalId, goalGeneration);
+  const { approvedOnce, busy, refusal } = shownDispatch;
 
   useEffect(() => {
     const run = generation.current + 1;
     generation.current = run;
-    setState({ phase: "LOADING" });
-    void read(goalId).then((outcome) => {
-      if (generation.current === run) setState({ outcome, phase: "LOADED" });
+    setState({ goalGeneration, goalId, phase: "LOADING" });
+    void Promise.resolve().then(() => read(goalId)).then((outcome) => {
+      if (generation.current === run && goalIdentity.current.generation === goalGeneration) {
+        setState({ goalGeneration, goalId, outcome, phase: "LOADED" });
+      }
+    }, () => {
+      if (generation.current === run && goalIdentity.current.generation === goalGeneration) {
+        setState({
+          goalGeneration,
+          goalId,
+          outcome: { code: "GATE1_READ_FAILED", layer: "CONTROL_ROOM_GATE1", status: "ERROR" },
+          phase: "LOADED",
+        });
+      }
     });
     return (): void => { generation.current += 1; };
-  }, [applied, goalId, read]);
+  }, [applied, goalGeneration, goalId, read]);
 
   const onAnswer = useCallback((
-    clarification: Gate1ClarificationView, optionId: string, contractId: string,
+    clarification: Gate1ClarificationView, optionId: string,
   ) => {
     if (busy) return;
-    setBusy(true);
-    setRefusal(null);
-    void port.answer(clarification, optionId, contractId).then((outcome) => {
-      setBusy(false);
+    const dispatchGoal = goalId;
+    const run = generation.current;
+    setDispatch({ approvedOnce, busy: true, goalGeneration, goalId: dispatchGoal, refusal: null });
+    void Promise.resolve().then(() => port.answer(clarification, optionId)).then((outcome) => {
+      if (goalIdentity.current.generation !== goalGeneration || generation.current !== run) return;
       // An accepted answer re-reads: the daemon decides whether the fence lifted.
-      if (outcome.ok) setApplied((previous) => previous + 1);
-      else setRefusal(outcome);
+      if (outcome.ok) {
+        setDispatch({ approvedOnce, busy: false, goalGeneration, goalId: dispatchGoal, refusal: null });
+        setApplied((previous) => previous + 1);
+      } else {
+        setDispatch({ approvedOnce, busy: false, goalGeneration, goalId: dispatchGoal, refusal: outcome });
+      }
     }, () => {
-      setBusy(false);
-      setRefusal({ code: "GATE1_DISPATCH_FAILED", layer: "CONTROL_ROOM_GATE1", ok: false });
+      if (goalIdentity.current.generation !== goalGeneration || generation.current !== run) return;
+      setDispatch({
+        approvedOnce,
+        busy: false,
+        goalGeneration,
+        goalId: dispatchGoal,
+        refusal: { code: "GATE1_DISPATCH_FAILED", layer: "CONTROL_ROOM_GATE1", ok: false },
+      });
     });
-  }, [busy, port]);
+  }, [approvedOnce, busy, goalGeneration, goalId, port]);
 
   const onApprove = useCallback((pending: Gate1PendingView) => {
     if (busy) return;
-    setBusy(true);
-    setRefusal(null);
-    void port.submit(pending).then((outcome) => {
-      setBusy(false);
+    const dispatchGoal = goalId;
+    const run = generation.current;
+    setDispatch({ approvedOnce, busy: true, goalGeneration, goalId: dispatchGoal, refusal: null });
+    void Promise.resolve().then(() => port.submit(pending)).then((outcome) => {
+      if (goalIdentity.current.generation !== goalGeneration || generation.current !== run) return;
       if (outcome.ok) {
-        setApprovedOnce(true);
+        setDispatch({
+          approvedOnce: true, busy: false, goalGeneration, goalId: dispatchGoal, refusal: null,
+        });
         setApplied((previous) => previous + 1);
       } else {
-        setRefusal(outcome);
+        setDispatch({ approvedOnce, busy: false, goalGeneration, goalId: dispatchGoal, refusal: outcome });
       }
     }, () => {
-      setBusy(false);
-      setRefusal({ code: "GATE1_DISPATCH_FAILED", layer: "CONTROL_ROOM_GATE1", ok: false });
+      if (goalIdentity.current.generation !== goalGeneration || generation.current !== run) return;
+      setDispatch({
+        approvedOnce,
+        busy: false,
+        goalGeneration,
+        goalId: dispatchGoal,
+        refusal: { code: "GATE1_DISPATCH_FAILED", layer: "CONTROL_ROOM_GATE1", ok: false },
+      });
     });
-  }, [busy, port]);
+  }, [approvedOnce, busy, goalGeneration, goalId, port]);
 
-  if (state.phase === "LOADED" && state.outcome.status === "NONE" && !approvedOnce) {
+  if (shownState.phase === "LOADED" && shownState.outcome.status === "NONE" && !approvedOnce) {
     // Nothing pending and nothing just approved: a plain goal shows no card.
     return null;
   }
 
   return (
-    <section className="cr2-approve" data-testid="cr.gate1.card">
-      <p className="cr2-slot-kicker">{`PRODUCT CONTRACT ${MIDDOT} GATE 1 ${MIDDOT} ${goalId}`}</p>
-      {state.phase === "LOADING" ? (
-        <p className="cr2-slot-kicker" data-testid="cr.gate1.loading">Reading the contract...</p>
-      ) : state.outcome.status === "PENDING" ? (
+    <section
+      aria-busy={shownState.phase === "LOADING" || busy}
+      aria-labelledby={headingId}
+      className="cr2-approve"
+      data-testid="cr.gate1.card"
+    >
+      <h2 className="cr2-slot-kicker" id={headingId}>
+        {`PRODUCT CONTRACT ${MIDDOT} GATE 1 ${MIDDOT} ${goalId}`}
+      </h2>
+      {shownState.phase === "LOADING" ? (
+        <p className="cr2-slot-kicker" data-testid="cr.gate1.loading" role="status">
+          Reading the contract...
+        </p>
+      ) : shownState.outcome.status === "PENDING" ? (
         <>
           <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.gate1.banner">
-            {state.outcome.approval === null
-              ? "The planning agent needs a product decision before this contract can be"
-                + " approved. Pick an answer below."
+            {shownState.outcome.approval === null
+              ? shownState.outcome.clarifications.length > 0
+                ? "The planning agent needs a product decision before this contract can be"
+                  + " approved. Pick an answer below."
+                : "The product decision is recorded. Approval remains withheld while the"
+                  + " daemon advances the contract fence."
               : "The planning agent proposed this Product Contract from your PRD. Approving it"
-                + " lets the daemon compile the plan."}
+                + " records this revision as the daemon's current Gate 1 contract."}
           </p>
-          <PendingBody pending={state.outcome} />
-          {state.outcome.clarifications.filter((row) => !row.answered).map((row) => (
+          <Gate1ContractDossier revision={shownState.outcome.revision} />
+          {shownState.outcome.clarifications.map((row) => (
             <section
               className="cr2-approve-block"
               data-testid={`cr.gate1.question.${row.clarificationId}`}
@@ -169,8 +189,8 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
                   disabled={busy}
                   key={option.optionId}
                   onClick={(): void => {
-                    if (state.outcome.status === "PENDING") {
-                      onAnswer(row, option.optionId, state.outcome.contractId);
+                    if (shownState.outcome.status === "PENDING") {
+                      onAnswer(row, option.optionId);
                     }
                   }}
                   testId={`cr.gate1.answer.${row.clarificationId}.${option.optionId}`}
@@ -181,11 +201,11 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               ))}
             </section>
           ))}
-          {state.outcome.approval === null ? null : (
+          {shownState.outcome.approval === null ? null : (
             <ActionButton
               disabled={busy}
               onClick={(): void => {
-                if (state.outcome.status === "PENDING") onApprove(state.outcome);
+                if (shownState.outcome.status === "PENDING") onApprove(shownState.outcome);
               }}
               testId="cr.gate1.approve"
             >
@@ -193,17 +213,50 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
             </ActionButton>
           )}
         </>
-      ) : state.outcome.status === "NONE" ? (
-        <p className="cr2-approve-banner" data-testid="cr.gate1.approved">
-          {`Contract approved ${MIDDOT} the daemon now compiles the plan from it.`}
+      ) : shownState.outcome.status === "CURRENT" ? (
+        <>
+          <p className="cr2-approve-banner" data-testid="cr.gate1.current" role="status">
+            {`Contract approved ${MIDDOT} this revision was reported current at the last read.`}
+          </p>
+          <Gate1ContractDossier revision={shownState.outcome.revision} />
+          <section className="cr2-approve-block" data-testid="cr.gate1.current-slot">
+            <h3 className="cr2-approve-heading">CURRENT SLOT PROVENANCE</h3>
+            <dl className="cr2-approve-hashes">
+              <dt>project</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.projectId}</dd>
+              <dt>generation</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.generation}</dd>
+              <dt>slot digest</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.slotDigest}</dd>
+              <dt>current revision</dt>
+              <dd className="cr2-approve-mono">
+                {shownState.outcome.slot.currentRevision.revisionId}
+              </dd>
+              <dt>history revisions</dt>
+              <dd className="cr2-approve-mono">
+                {shownState.outcome.slot.revisionHistory.length}
+              </dd>
+            </dl>
+          </section>
+          <ActionButton
+            onClick={(): void => { setApplied((previous) => previous + 1); }}
+            testId="cr.gate1.refresh-current"
+            variant="secondary"
+          >
+            Refresh current status
+          </ActionButton>
+        </>
+      ) : shownState.outcome.status === "NONE" ? (
+        <p className="cr2-approve-banner" data-testid="cr.gate1.approved" role="status">
+          {`Contract approval accepted ${MIDDOT} no current contract projection was returned.`}
         </p>
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal">
-          {`${state.outcome.status} ${MIDDOT} ${state.outcome.code} ${MIDDOT} ${state.outcome.layer}`}
+        <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal" role="alert">
+          {`${shownState.outcome.status} ${MIDDOT} ${shownState.outcome.code} ${MIDDOT} ${shownState.outcome.layer}`}
         </p>
       )}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal">
+        <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal" role="alert">
           {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
         </p>
       )}

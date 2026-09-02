@@ -2,6 +2,7 @@ import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
 import { request as httpRequest } from "node:http";
 import { expect, it } from "vitest";
 
+import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
   LISTENER_REFUSAL_CODES,
@@ -232,6 +233,181 @@ it("ADMITS the matching Origin, so the two refusals above are not a guard that r
     expect(reply.body).not.toHaveProperty("layer", CONTROL_ROOM_LISTENER_LAYER);
     expect(reply.status).toBe(200);
   });
+});
+
+it("routes /v2/command only through the separately injected v2 command plane", async () => {
+  await withListener(async (listener) => {
+    const reply = await send(listener, { path: "/v2/command" });
+    expect(reply.body).toMatchObject({ outcome: "ACCEPTED" });
+    expect(reply.status).toBe(200);
+  }, { v2Deps: deps() });
+});
+
+it("refuses /v2/command when no v2 authority plane was composed", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { path: "/v2/command" }),
+      "LISTENER_V2_COMMAND_UNAVAILABLE",
+    );
+  });
+});
+
+it("refuses a non-POST /v2/command before the v2 adapter sees a body", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { method: "GET", path: "/v2/command" }),
+      "LISTENER_V2_COMMAND_REQUEST_INVALID",
+    );
+  }, { v2Deps: deps() });
+});
+
+it("routes the activated Product Contract /2 current read through its dedicated port", async () => {
+  const seen: string[] = [];
+  await withListener(async (listener) => {
+    const reply = await send(listener, {
+      body: JSON.stringify({ contractId: "contract-v2" }),
+      path: "/v2/product-contract/current",
+    });
+    expect(reply).toEqual({
+      body: { code: "CURRENT_ABSENT", layer: "TEST_READER", outcome: "REFUSED" },
+      status: 200,
+    });
+    expect(seen).toEqual(["contract-v2"]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Current: {
+      boundProjectId: "proj-0001",
+      readCurrent: (contractId: string) => {
+        seen.push(contractId);
+        return { code: "CURRENT_ABSENT", layer: "TEST_READER", outcome: "REFUSED" };
+      },
+    },
+  });
+});
+
+it("refuses the Product Contract /2 current read when its port is absent", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, {
+        body: JSON.stringify({ contractId: "contract-v2" }),
+        path: "/v2/product-contract/current",
+      }),
+      "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE",
+    );
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+  });
+});
+
+it("refuses a non-POST Product Contract /2 current read before its port sees a body", async () => {
+  const calls = { count: 0 };
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { method: "GET", path: "/v2/product-contract/current" }),
+      "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID",
+    );
+    expect(calls.count).toBe(0);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Current: {
+      boundProjectId: "proj-0001",
+      readCurrent: () => {
+        calls.count += 1;
+        return { code: "UNREACHABLE", layer: "TEST_READER", outcome: "REFUSED" };
+      },
+    },
+  });
+});
+
+it("never authenticates a Product Contract /2 read through the v1 authority plane", async () => {
+  const calls = { count: 0 };
+  await withListener(async (listener) => {
+    const reply = await send(listener, {
+      body: JSON.stringify({ contractId: "contract-v2" }),
+      path: "/v2/product-contract/current",
+    });
+    expect(reply).toEqual({
+      body: {
+        code: "PRODUCT_CONTRACT_V2_CURRENT_READ_CAPABILITY_DENIED",
+        layer: "PRODUCT_CONTRACT_V2_CURRENT_READ",
+        outcome: "REFUSED",
+      },
+      status: 200,
+    });
+    expect(calls.count).toBe(0);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Current: {
+      boundProjectId: "proj-0001",
+      readCurrent: () => {
+        calls.count += 1;
+        return { code: "UNREACHABLE", layer: "TEST_READER", outcome: "REFUSED" };
+      },
+    },
+    v2Deps: { ...deps(), authenticator: authenticator([]) },
+  });
+});
+
+it("never exposes a Product Contract /2 read port without the v2 dependency plane", async () => {
+  const calls = { count: 0 };
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, {
+        body: JSON.stringify({ contractId: "contract-v2" }),
+        path: "/v2/product-contract/current",
+      }),
+      "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE",
+    );
+    expect(calls.count).toBe(0);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Current: {
+      boundProjectId: "proj-0001",
+      readCurrent: () => {
+        calls.count += 1;
+        return { code: "UNREACHABLE", layer: "TEST_READER", outcome: "REFUSED" };
+      },
+    },
+  });
+});
+
+it("routes Product Contract /2 pending only through its dedicated v2 port", async () => {
+  const seen: string[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" })).toEqual({
+      body: { outcome: "NONE" }, status: 200,
+    });
+    expect(seen).toEqual(["goal-v2"]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([]) },
+    productContractV2Pending: { boundProjectId: "proj-0001",
+      readPending: (goalRef: string) => { seen.push(goalRef); return { outcome: "NONE" }; } },
+    v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+  });
+});
+
+it("refuses absent, non-POST, and v1-only Product Contract /2 pending authority", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE");
+  }, { v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET",
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID");
+  }, { v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Pending: { boundProjectId: "proj-0001",
+      readPending: () => ({ outcome: "NONE" }) } });
 });
 
 it("refuses a state-changing request carrying no CSRF token or a wrong one", async () => {

@@ -36,12 +36,22 @@ import {
 import { putGraphBody } from "./graph-body-record.js";
 import {
   RUN_POLICY_ACTION,
+  captureStableRunPolicySelection,
   evaluateRunPolicy,
+  evaluateRunPolicyContent,
   runPolicyAggregateId,
 } from "./run-policy-evaluation.js";
 
 const DECIDED_AT = "2026-08-08T00:00:00.000Z";
 const PRINCIPAL_ID = "principal-1";
+
+const runInput = () => ({
+  decidedAt: DECIDED_AT,
+  graphContentHash: SEALED_GRAPH_CONTENT_HASH,
+  principalId: PRINCIPAL_ID,
+  projectId: PROJECT_ID,
+  runId: RUN_ID,
+});
 
 /** The journey graph's four node-property fact ids, taken from the PRODUCTION derivation. */
 function journeyFactIds(): readonly string[] {
@@ -74,13 +84,7 @@ function seededStore(): SqliteEventStore {
 }
 
 const evaluate = (store: SqliteEventStore) => evaluateRunPolicy(
-  store, readDurableLedger(store, PROJECT_ID), {
-    decidedAt: DECIDED_AT,
-    graphContentHash: SEALED_GRAPH_CONTENT_HASH,
-    principalId: PRINCIPAL_ID,
-    projectId: PROJECT_ID,
-    runId: RUN_ID,
-  },
+  store, readDurableLedger(store, PROJECT_ID), runInput(),
 );
 
 /**
@@ -102,6 +106,16 @@ function installSlice(
     { slice: { ...body, sliceRef: digest.digest } }, commandId,
   ));
   if (!outcome.ok) throw new Error(`the arm's install refused: ${outcome.code}`);
+}
+
+function installNonEvaluationArtifact(store: SqliteEventStore, commandId: string): void {
+  const expectedVersion = versionOf(readDurableLedger(store, PROJECT_ID), `${PROJECT_ID}-policy`);
+  const outcome = send(store, envelope(
+    "policy.install", expectedVersion,
+    { slice: { calibration: "unchanged-selection", sliceRef: "reviewer-calibration" } },
+    commandId,
+  ));
+  if (!outcome.ok) throw new Error(`the artifact install refused: ${outcome.code}`);
 }
 
 describe("evaluateRunPolicy — the daemon's own run tier", () => {
@@ -142,6 +156,188 @@ describe("evaluateRunPolicy — the daemon's own run tier", () => {
     expect(result.aggregateId).toBe(runPolicyAggregateId(RUN_ID));
   });
 
+  it("captures the selected slice with the exact durable policy fence", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+
+    const captured = captureStableRunPolicySelection(store, ledger, PROJECT_ID);
+
+    if (!captured.ok) throw new Error(`selection refused ${captured.reason}`);
+    expect(captured.selection.sliceRef).toBe(CLASSIFYING_POLICY_REF);
+    expect(captured.selection.fence).toStrictEqual({
+      aggregateId: `${PROJECT_ID}-policy`,
+      expectedVersion: versionOf(ledger, `${PROJECT_ID}-policy`),
+    });
+  });
+
+  it("refuses a stale ledger even when the selected slice bytes stay identical", () => {
+    const store = seededStore();
+    const priorLedger = readDurableLedger(store, PROJECT_ID);
+    const prior = captureStableRunPolicySelection(store, priorLedger, PROJECT_ID);
+    if (!prior.ok) throw new Error(`prior selection refused ${prior.reason}`);
+    installNonEvaluationArtifact(store, "cmd-policy-artifact");
+
+    const stale = captureStableRunPolicySelection(store, priorLedger, PROJECT_ID);
+    const current = captureStableRunPolicySelection(
+      store, readDurableLedger(store, PROJECT_ID), PROJECT_ID,
+    );
+
+    expect(stale).toStrictEqual({ ok: false, reason: "VERSION_DRIFT" });
+    if (!current.ok) throw new Error(`current selection refused ${current.reason}`);
+    expect(current.selection.sliceRef).toBe(prior.selection.sliceRef);
+    expect(JSON.stringify(current.selection.slice)).toBe(JSON.stringify(prior.selection.slice));
+  });
+
+  it("refuses when the policy aggregate moves between its two version reads", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const version = versionOf(ledger, `${PROJECT_ID}-policy`);
+    let reads = 0;
+    const drifting = {
+      getAggregateVersion: () => reads++ === 0 ? version : version + 1,
+    };
+
+    const captured = captureStableRunPolicySelection(drifting, ledger, PROJECT_ID);
+
+    expect(reads).toBe(2);
+    expect(captured).toStrictEqual({ ok: false, reason: "VERSION_DRIFT" });
+  });
+
+  it("keeps exact payload parity between persisted-body and direct-content evaluation", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const persisted = evaluateRunPolicy(store, ledger, runInput());
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+    const selection = captureStableRunPolicySelection(store, ledger, PROJECT_ID);
+
+    const direct = evaluateRunPolicyContent(decoded.value.content, selection, runInput());
+
+    if (!persisted.ok || !direct.ok) throw new Error("both paths must evaluate");
+    expect(JSON.stringify(direct.payload)).toBe(JSON.stringify(persisted.payload));
+    expect(direct.computedTier).toBe(persisted.computedTier);
+  });
+
+  it("refuses direct content whose durable graph identity names different bytes", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+    const foreignHash = "f".repeat(64) === SEALED_GRAPH_CONTENT_HASH
+      ? "e".repeat(64) : "f".repeat(64);
+
+    const direct = evaluateRunPolicyContent(
+      decoded.value.content,
+      captureStableRunPolicySelection(store, ledger, PROJECT_ID),
+      { ...runInput(), graphContentHash: foreignHash },
+    );
+
+    expect(direct.ok).toBe(false);
+    if (direct.ok) throw new Error("foreign graph identity must not evaluate");
+    expect([direct.code, direct.layer, direct.factIds]).toStrictEqual([
+      "RUN_POLICY_INPUT_INVALID", "DAEMON_RUN_POLICY", [],
+    ]);
+  });
+
+  it("refuses a selected policy captured from another project aggregate", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+
+    const direct = evaluateRunPolicyContent(
+      decoded.value.content,
+      captureStableRunPolicySelection(store, ledger, PROJECT_ID),
+      { ...runInput(), projectId: "foreign-project" },
+    );
+
+    expect(direct.ok).toBe(false);
+    if (direct.ok) throw new Error("foreign project policy must not evaluate");
+    expect([direct.code, direct.layer]).toStrictEqual([
+      "RUN_POLICY_INPUT_INVALID", "DAEMON_RUN_POLICY",
+    ]);
+  });
+
+  it("refuses selected policy bytes that no longer match their durable slice ref", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+    const captured = captureStableRunPolicySelection(store, ledger, PROJECT_ID);
+    if (!captured.ok) throw new Error(`selection refused ${captured.reason}`);
+    const slice = captured.selection.slice as Readonly<Record<string, JsonValue>>;
+    const drifted = {
+      ok: true as const,
+      selection: {
+        ...captured.selection,
+        slice: {
+          ...slice,
+          riskClassifications: journeyFactIds().map((factId) => ({ factId, tier: "R0" })),
+        },
+      },
+    };
+
+    const direct = evaluateRunPolicyContent(decoded.value.content, drifted, runInput());
+
+    expect(direct.ok).toBe(false);
+    if (direct.ok) throw new Error("drifted policy bytes must not evaluate");
+    expect([direct.code, direct.layer]).toStrictEqual([
+      "RUN_POLICY_INPUT_INVALID", "DAEMON_RUN_POLICY",
+    ]);
+  });
+
+  it("maps an unstable policy selection to the exact fail-closed evaluation refusal", () => {
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+
+    const direct = evaluateRunPolicyContent(
+      decoded.value.content, { ok: false, reason: "VERSION_DRIFT" }, runInput(),
+    );
+
+    expect(direct.ok).toBe(false);
+    if (direct.ok) throw new Error("an unstable selection must not evaluate");
+    expect([direct.code, direct.layer]).toStrictEqual([
+      "RUN_POLICY_INPUT_INVALID", "DAEMON_RUN_POLICY",
+    ]);
+    expect(direct.factIds).toStrictEqual(journeyFactIds());
+  });
+
+  it("refuses a proxied direct-content definition roster without invoking it as authority", () => {
+    const store = seededStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const decoded = decodeGraphContent(
+      Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+    );
+    if (!decoded.ok) throw new Error("the journey graph must decode");
+    const definitions = new Proxy(
+      [...decoded.value.content.nodeAuthority.definitions], {},
+    );
+    const hostile = {
+      ...decoded.value.content,
+      nodeAuthority: { ...decoded.value.content.nodeAuthority, definitions },
+    } as typeof decoded.value.content;
+
+    const direct = evaluateRunPolicyContent(
+      hostile, captureStableRunPolicySelection(store, ledger, PROJECT_ID), runInput(),
+    );
+
+    expect(direct.ok).toBe(false);
+    if (direct.ok) throw new Error("a proxied roster must not evaluate");
+    expect([direct.code, direct.layer, direct.factIds]).toStrictEqual([
+      "RUN_POLICY_NODE_UNADMITTED", "DAEMON_RUN_POLICY", [],
+    ]);
+  });
+
   it("derives the refs and the scope from the sealed body, never from a caller", () => {
     const store = seededStore();
     const result = evaluate(store);
@@ -176,6 +372,17 @@ describe("evaluateRunPolicy — the daemon's own run tier", () => {
       expect(result.code).toBe("RUN_POLICY_UNCLASSIFIABLE");
       expect(result.layer).toBe("DAEMON_RUN_POLICY");
       expect(result.factIds).toStrictEqual(journeyFactIds());
+      const decoded = decodeGraphContent(
+        Uint8Array.from(Buffer.from(SEALED_GRAPH_CONTENT_BYTES, "base64")),
+      );
+      if (!decoded.ok) throw new Error("the journey graph must decode");
+      const ledger = readDurableLedger(store, PROJECT_ID);
+      const direct = evaluateRunPolicyContent(
+        decoded.value.content,
+        captureStableRunPolicySelection(store, ledger, PROJECT_ID),
+        runInput(),
+      );
+      expect(direct).toStrictEqual(result);
     });
 
   it("DIVERGES on the classification alone: the same run, one table apart", () => {

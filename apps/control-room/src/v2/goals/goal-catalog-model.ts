@@ -8,18 +8,39 @@ import type {
 /**
  * Turns the authenticated project's durable /goals/read answer into cards.
  *
- * The catalog intentionally supplies only identity and the planning-run ref. It
- * does not borrow task state from the project affordance surface or invent
- * progress, spend, timestamps, acceptance, or human-attention state.
+ * The catalog supplies identity, the planning-run ref, and only the exact brief
+ * and source-binding provenance it returned. It does not borrow task state from
+ * the project affordance surface or invent progress, spend, timestamps,
+ * acceptance, or human-attention state.
  */
 
 const SOURCE_ROW = Object.freeze({ k: "SOURCE", v: "POST /goals/read" });
 
+function expandedCatalogFact(
+  goalId: string,
+  suffix: string,
+  label: string,
+  field: string,
+  value: string,
+  note: string,
+  truthClass: LiveGoalCatalogEntry["truthClass"],
+): GoalFact {
+  return Object.freeze({
+    factId: `catalog.${goalId}.${suffix}`,
+    label,
+    note,
+    rows: Object.freeze([SOURCE_ROW, Object.freeze({ k: field, v: value })]),
+    truthClass,
+    value,
+  });
+}
+
+const GOAL_TITLE_COMING_ONLINE: ComingOnlineFact = Object.freeze({
+  label: "Goal title",
+  reason: "The durable catalog carries identity, not advisory goal prose; the goal id is shown verbatim.",
+});
+
 const COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
-  Object.freeze({
-    label: "Goal title",
-    reason: "The durable catalog carries identity, not advisory goal prose; the goal id is shown verbatim.",
-  }),
   Object.freeze({
     label: "Acceptance progress",
     reason: "Node acceptance is not joined to the goal catalog yet.",
@@ -32,6 +53,10 @@ const COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
     label: "Last event",
     reason: "The catalog does not carry a last-event timestamp.",
   }),
+]);
+
+const LEGACY_COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
+  GOAL_TITLE_COMING_ONLINE, ...COMING_ONLINE,
 ]);
 
 function empty(label: string, note: string): GoalsData {
@@ -50,7 +75,7 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
     label: "Goal",
     note: "A durable GoalCreated record in the authenticated project's ledger.",
     rows: Object.freeze([SOURCE_ROW, Object.freeze({ k: "GOAL", v: entry.goalId })]),
-    truthClass: "DAEMON_VERIFIED",
+    truthClass: entry.truthClass,
     value: entry.goalId,
   });
   const runFact: GoalFact = Object.freeze({
@@ -58,14 +83,68 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
     label: "Planning run",
     note: "The planning-run reference stored with GoalCreated; opening this goal reads this exact ref.",
     rows: Object.freeze([SOURCE_ROW, Object.freeze({ k: "RUN", v: entry.planningRunRef })]),
-    truthClass: "DAEMON_VERIFIED",
+    truthClass: entry.truthClass,
     value: entry.planningRunRef,
   });
+  const expandedFacts: GoalFact[] = [];
+  if (entry.brief !== null) {
+    expandedFacts.push(expandedCatalogFact(
+      entry.goalId,
+      "brief.instructions",
+      "Brief instructions",
+      "brief.instructions",
+      entry.brief.instructions,
+      "The normalized brief instructions stored with GoalCreated and returned by the durable catalog.",
+      entry.truthClass,
+    ));
+  }
+  if (entry.binding !== null) {
+    const note = "The source binding stored with GoalCreated and returned by the durable catalog.";
+    expandedFacts.push(
+      expandedCatalogFact(
+        entry.goalId,
+        "binding.byteLength",
+        "PRD byte length",
+        "binding.byteLength",
+        String(entry.binding.byteLength),
+        note,
+        entry.truthClass,
+      ),
+      expandedCatalogFact(
+        entry.goalId,
+        "binding.contentSha256",
+        "PRD content SHA-256",
+        "binding.contentSha256",
+        entry.binding.contentSha256,
+        note,
+        entry.truthClass,
+      ),
+      expandedCatalogFact(
+        entry.goalId,
+        "binding.sourceAggregateId",
+        "PRD source aggregate",
+        "binding.sourceAggregateId",
+        entry.binding.sourceAggregateId,
+        note,
+        entry.truthClass,
+      ),
+      expandedCatalogFact(
+        entry.goalId,
+        "binding.sourceRef",
+        "PRD source ref",
+        "binding.sourceRef",
+        entry.binding.sourceRef,
+        note,
+        entry.truthClass,
+      ),
+    );
+  }
+  const facts = Object.freeze([identityFact, runFact, ...expandedFacts]);
 
   return Object.freeze({
     budgetComingOnline: "No budget read is joined to the goal catalog yet.",
-    comingOnlineFacts: COMING_ONLINE,
-    facts: Object.freeze([identityFact, runFact]),
+    comingOnlineFacts: entry.brief === null ? LEGACY_COMING_ONLINE : COMING_ONLINE,
+    facts,
     goalId: entry.goalId,
     headline: `Durable GoalCreated record \u00b7 planning run ${entry.planningRunRef}`,
     headlineFacts: Object.freeze([identityFact, runFact]),

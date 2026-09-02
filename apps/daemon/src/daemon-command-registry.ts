@@ -31,7 +31,9 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DurableDecision }
   from "./http/http-contract.js";
 import { readCommandTransportOrigin } from "./http/http-adapter.js";
-import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
+import {
+  createCommandAuthorityGate, DomainRefusal, decisionOf, encoder,
+} from "./daemon-command-dispatch.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
@@ -84,6 +86,8 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  /** Which durable cutover authority must admit every registry entry. */
+  readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
   readonly cutoverActivation?: CutoverActivationWiring;
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
@@ -146,6 +150,7 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
+  const commandAuthority = createCommandAuthorityGate(store, projectId, options.authorityPlane);
   if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
@@ -202,13 +207,16 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // carries an async handler and none of the synchronous wiring below applies to it. The
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
-    if (asyncEntry !== undefined) return asyncEntry;
+    if (asyncEntry !== undefined) {
+      return commandAuthority.wrapAsync(asyncEntry);
+    }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
       confirmReleased, continuation, cutover, eventResume,
       graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
+      commandAuthority.assert();
       // The typed SOFT_POLICY_WAIVER arm, composed BEFORE the operator fence below: a
       // paired browser HUMAN holding ADMIN may decide one, while the legacy bytes stay
       // operator-only for that same principal. Decode, fences, witness, one-use step-up

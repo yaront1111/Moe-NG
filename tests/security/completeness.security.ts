@@ -73,6 +73,22 @@ import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cas
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
+import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
+import {
+  RECENT_DELIVERY_V2_DURABLE_CASES,
+  RECENT_DELIVERY_V2_INTEGRITY_CASES,
+} from "./recent-delivery-v2-hostile-cases.js";
+import {
+  RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
+  RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES,
+  RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES,
+} from "./recent-product-contract-v2-hostile-cases.js";
+import {
+  RECENT_GATE1_TRANSPORT_CASES,
+  RECENT_V2_COMPILER_SCHEDULER_CASES,
+  RECENT_V2_COMPILER_SCHEDULER_RACES,
+  RECENT_V2_CUTOVER_INTEGRITY_CASES,
+} from "./recent-v2-cutover-hostile-cases.js";
 import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
 import {
   RECENT_SCHEDULER_CASES,
@@ -115,12 +131,18 @@ const AXES: readonly string[] = Object.freeze([...new Set(ROSTER.map((row) => ro
 // ── The four table-backed axes ────────────────────────────────────────────────────────────
 
 const transportPairs = (): readonly CoveredPair[] =>
-  [...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES, ...RECENT_TRANSPORT_HOSTILE_CASES]
-    .map((entry) => [entry.boundary, entry.arm] as const);
+  [
+    ...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES, ...RECENT_TRANSPORT_HOSTILE_CASES,
+    ...RECENT_GATE1_TRANSPORT_CASES,
+  ].map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
-  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES, ...RECENT_INTEGRITY_HOSTILE_CASES]
-    .map((entry) => [entry.constant, entry.arm] as const);
+  [
+    ...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES,
+    ...RECENT_INTEGRITY_HOSTILE_CASES, ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
+    ...RECENT_DELIVERY_V2_INTEGRITY_CASES, ...RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
+    ...RECENT_V2_CUTOVER_INTEGRITY_CASES,
+  ].map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the
  *  wrong export resolves to the arm it actually declares. Race cases carry no phase field. */
@@ -130,6 +152,7 @@ const durableStorePairs = (): readonly CoveredPair[] => [
   ),
   ...hostileRaceCases.map((entry) => [entry.boundary, "RACE"] as const),
   ...RECENT_DURABLE_HOSTILE_CASES.map((entry) => [entry.boundary, entry.arm] as const),
+  ...RECENT_DELIVERY_V2_DURABLE_CASES.map((entry) => [entry.boundary, entry.arm] as const),
 ];
 
 /** Subject modules pair tables carrying `arm` with race tables carrying none. The planning-graph,
@@ -149,6 +172,8 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...PROJECT_ADMISSION_CASES,
     ...POLICY_RISK_CASES,
     ...RECENT_SCHEDULER_CASES,
+    ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES,
+    ...RECENT_V2_COMPILER_SCHEDULER_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
@@ -159,6 +184,8 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...PROJECT_ADMISSION_RACES,
     ...POLICY_RISK_RACES,
     ...RECENT_SCHEDULER_RACES,
+    ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES,
+    ...RECENT_V2_COMPILER_SCHEDULER_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 

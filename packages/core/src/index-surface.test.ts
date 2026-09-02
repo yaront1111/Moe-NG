@@ -61,11 +61,18 @@ import type {
   AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
   AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
   AcceptanceContractDraft, AcceptanceContractEncodeResult, AcceptanceContractLayer,
-  AcceptanceContractRefusal, AcceptanceCriterionContent, AcceptanceCriterionContentResult,
-  AcceptanceCriterionObligation, AcceptanceEvidenceRequirement, PlanExecutionContentResult,
+  AcceptanceContractRefusal, AcceptanceCriteriaContent, AcceptanceCriteriaContentDecodeResult,
+  AcceptanceCriteriaContentEncodeResult, AcceptanceCriterionContent,
+  AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
+  AcceptanceCriterionContentResult, AcceptanceCriterionObligation, AcceptanceEvidenceRequirement,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDecodeResult,
+  PlanExecutionContentDraft, PlanExecutionContentEncodeResult, PlanExecutionContentResult,
   PlanRevision, PlanRevisionCode, PlanRevisionCreateResult, PlanRevisionDecodeResult,
   PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
+  SourceSnapshot, SourceSnapshotCode, SourceSnapshotCreateResult, SourceSnapshotDecodeResult,
+  SourceSnapshotDigestResult, SourceSnapshotDraft, SourceSnapshotEncodeResult,
+  SourceSnapshotLayer, SourceSnapshotRef, SourceSnapshotRefAdmission, SourceSnapshotRefusal,
 } from "@moe/core";
 import type {
   ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
@@ -77,6 +84,22 @@ import type {
   ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
   ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
   ProductContractRevisionDraft,
+} from "@moe/core";
+import type {
+  ProductAcceptanceBindingV2Request, ProductAcceptanceBindingV2Result,
+  ProductContractCurrentRevisionSlotV2, ProductContractCurrentRevisionSlotV2EncodeResult,
+  ProductContractCurrentRevisionSlotV2Result,
+  ProductContractRevisionV2, ProductContractRevisionV2Draft,
+  ProductContractV2Assumption, ProductContractV2Budget, ProductContractV2BudgetKind,
+  ProductContractV2Code, ProductContractV2CreateResult, ProductContractV2Criterion,
+  ProductContractRevisionV2Ref, ProductContractV2DecisionOption,
+  ProductContractV2DecodeResult, ProductContractV2DigestResult,
+  ProductContractV2AmendmentResult,
+  ProductContractV2EncodeResult, ProductContractV2Journey, ProductContractV2Layer,
+  ProductContractV2Lineage, ProductContractV2MaterialDecision,
+  ProductContractV2NegativeScope, ProductContractV2Objective, ProductContractV2Priority,
+  ProductContractV2ProductCompleteDefinition, ProductContractV2Refusal,
+  ProductContractV2Requirement, ProductContractV2SuccessMetric, ProductContractV2UserJob,
 } from "@moe/core";
 import {
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
@@ -103,9 +126,54 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["APPROVAL_ACTOR_KINDS", "array"],
   ["APPROVAL_AUTHORITY_CODES", "array"], ["APPROVAL_AUTHORITY_LAYERS", "array"],
   ["APPROVAL_COMMAND_KINDS", "array"], ["APPROVAL_POLICY_KINDS", "array"],
+  ["BUILT_IN_DELIVERY_PROFILE_QUALIFICATIONS", "array"],
+  ["BUILT_IN_DELIVERY_PROFILE_REVISIONS", "array"],
+  ["CAPABILITY_CATALOG_AUTHORITY_KINDS", "array"],
+  ["CAPABILITY_CATALOG_CODES", "array"],
+  ["CAPABILITY_CATALOG_CRITERION_CATEGORIES", "array"],
+  ["CAPABILITY_CATALOG_DELIVERY_PROFILE_FAMILY_IDS", "array"],
+  ["CAPABILITY_CATALOG_DIGEST_DOMAIN", "string"],
+  ["CAPABILITY_CATALOG_LAYERS", "array"],
+  ["CAPABILITY_CATALOG_LIMITS", "record"],
+  ["CAPABILITY_CATALOG_REQUIRED_VERIFIER_ROLES", "array"],
+  ["CAPABILITY_CATALOG_RESOURCE_KINDS", "array"],
+  ["CAPABILITY_CATALOG_ROLES", "array"],
+  ["CAPABILITY_CATALOG_VERSION", "string"],
   ["CARRY_FORWARD_REASON_CODES", "array"], ["CORE_DECISION_REASON_OBLIGATION", "string"],
   ["CORE_GRAPH_REVISION_REPLAY", "string"], ["CORE_STEP_UP_OBLIGATION", "string"],
   ["CUTOVER_COMMAND_KINDS", "array"], ["CUTOVER_TRANSITIONS", "record"],
+  ["DELIVERY_PROFILE_BENCHMARK_VERDICTS", "array"],
+  ["DELIVERY_PROFILE_CODES", "array"],
+  ["DELIVERY_PROFILE_DIGEST_DOMAIN", "string"],
+  ["DELIVERY_PROFILE_FAMILY_DEFINITIONS", "array"],
+  ["DELIVERY_PROFILE_FAMILY_DEFINITION_DIGEST_DOMAIN", "string"],
+  ["DELIVERY_PROFILE_FAMILY_IDS", "array"],
+  ["DELIVERY_PROFILE_LAYERS", "array"],
+  ["DELIVERY_PROFILE_LIMITS", "record"],
+  ["DELIVERY_PROFILE_MODEL_PROVIDER_CAPABILITIES", "array"],
+  ["DELIVERY_PROFILE_OPERATOR_DECISIONS", "array"],
+  ["DELIVERY_PROFILE_POLICY_KINDS", "array"],
+  ["DELIVERY_PROFILE_QUALIFICATION_DIGEST_DOMAIN", "string"],
+  ["DELIVERY_PROFILE_QUALIFICATION_VALIDITIES", "array"],
+  ["DELIVERY_PROFILE_QUALIFICATION_VERSION", "string"],
+  ["DELIVERY_PROFILE_RECIPE_DIGEST_DOMAIN", "string"],
+  ["DELIVERY_PROFILE_RECIPE_KINDS", "array"],
+  ["DELIVERY_PROFILE_RESOURCE_CLASSES", "array"],
+  ["DELIVERY_PROFILE_STACK_ROLES", "array"],
+  ["DELIVERY_PROFILE_VERSION", "string"],
+  ["EXECUTION_ISOLATION_BUILD_AGENT_MOUNT_SHAPE", "array"],
+  ["EXECUTION_ISOLATION_FRESH_VERIFIER_MOUNT_SHAPE", "array"],
+  ["EXECUTION_ISOLATION_NETWORK_ACCESS_MODES", "array"],
+  ["EXECUTION_ISOLATION_NETWORK_PLANE_IDENTITIES", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_CODES", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_DEFAULT_PLANE", "string"],
+  ["EXECUTION_ISOLATION_PROFILE_DIGEST_DOMAIN", "string"],
+  ["EXECUTION_ISOLATION_PROFILE_FORBIDDEN_HOST_INPUTS", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_LAYERS", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_LIMITS", "record"],
+  ["EXECUTION_ISOLATION_PROFILE_PLANES", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_PURPOSES", "array"],
+  ["EXECUTION_ISOLATION_PROFILE_VERSION", "string"],
   ["EXPANSION_APPROVAL_CODES", "array"], ["EXPANSION_APPROVAL_COMPONENTS", "array"],
   ["EXPANSION_APPROVAL_LAYERS", "array"],
   ["EXPANSION_HOLD_CAUSES", "array"], ["EXPANSION_HOLD_COMMAND_KINDS", "array"],
@@ -130,10 +198,23 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["POLICY_SLICE_DIGEST_LAYERS", "array"], ["POLICY_SLICE_DIGEST_VERSION", "string"],
   ["POLICY_SLICE_KEYS", "array"],
   ["PRINCIPAL_KINDS", "array"],
-  ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_CODES", "array"],
+  ["PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION", "string"],
+  ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_LAYERS", "array"],
   ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_REVISION_REF_KEYS", "array"],
+  ["PRODUCT_CONTRACT_V2_BUDGET_KINDS", "array"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES", "array"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER", "string"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_V2_CODES", "array"],
+  ["PRODUCT_CONTRACT_V2_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_V2_LAYERS", "array"],
+  ["PRODUCT_CONTRACT_V2_LIMITS", "record"],
+  ["PRODUCT_CONTRACT_V2_PRIORITIES", "array"],
+  ["PRODUCT_CONTRACT_V2_VERSION", "string"],
   ["PRODUCT_CONTRACT_VERSION", "string"],
   ["PROJECT_COMMAND_KINDS", "array"],
   ["PROJECT_CONFIGURATION_CODEC_CODES", "array"],
@@ -141,29 +222,83 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN", "string"],
   ["PROJECT_TRANSITIONS", "record"],
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
+  ["SOURCE_SNAPSHOT_CODES", "array"], ["SOURCE_SNAPSHOT_DIGEST_DOMAIN", "string"],
+  ["SOURCE_SNAPSHOT_LAYERS", "array"], ["SOURCE_SNAPSHOT_LIMITS", "record"],
+  ["SOURCE_SNAPSHOT_REF_KEYS", "array"], ["SOURCE_SNAPSHOT_VERSION", "string"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
-  ["admitProductContractRevisionRef", "function"],
+  ["VERIFICATION_RECIPE_BUILD_AGENT_SAFE_ENVIRONMENT_NAMES", "array"],
+  ["VERIFICATION_RECIPE_CODES", "array"],
+  ["VERIFICATION_RECIPE_DIGEST_DOMAIN", "string"],
+  ["VERIFICATION_RECIPE_FORBIDDEN_SHELL_TOOLS", "array"],
+  ["VERIFICATION_RECIPE_FRESH_VERIFIER_SAFE_ENVIRONMENT_NAMES", "array"],
+  ["VERIFICATION_RECIPE_LAYERS", "array"],
+  ["VERIFICATION_RECIPE_LIMITS", "record"],
+  ["VERIFICATION_RECIPE_NETWORK_ACCESS_MODES", "array"],
+  ["VERIFICATION_RECIPE_NETWORK_PLANE_IDENTITIES", "array"],
+  ["VERIFICATION_RECIPE_OUTPUT_MOUNTS", "array"],
+  ["VERIFICATION_RECIPE_VERSION", "string"],
+  ["admitProductContractRevisionRef", "function"], ["admitSourceSnapshotRef", "function"],
+  ["admitVerificationRecipeForExecutionProfile", "function"],
+  ["advanceProductContractCurrentRevisionSlotV2", "function"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["assessClarificationMateriality", "function"],
+  ["assessProductContractClarificationMaterialityV2", "function"],
   ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
-  ["createAcceptanceContract", "function"], ["createCredential", "function"],
+  ["computeDeliveryProfileRecipeDigest", "function"],
+  ["createAcceptanceContract", "function"], ["createAcceptanceCriterionContent", "function"],
+  ["createCapabilityCatalogRevision", "function"], ["createCredential", "function"],
+  ["createDeliveryProfileQualification", "function"],
+  ["createDeliveryProfileRevision", "function"],
+  ["createExecutionIsolationProfileRevision", "function"],
+  ["createPlanExecutionContent", "function"],
   ["createPlanRevision", "function"], ["createPrincipal", "function"],
+  ["createProductContractCurrentRevisionSlotV2", "function"],
   ["createProductContractRevision", "function"],
+  ["createProductContractRevisionV2", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
+  ["createSourceSnapshot", "function"],
+  ["createVerificationRecipeRevision", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
-  ["decodeAcceptanceContractBytes", "function"], ["decodePlanRevisionBytes", "function"],
+  ["decodeAcceptanceContractBytes", "function"],
+  ["decodeAcceptanceCriteriaContentBytes", "function"],
+  ["decodeCapabilityCatalogRevisionBytes", "function"],
+  ["decodeDeliveryProfileQualificationBytes", "function"],
+  ["decodeDeliveryProfileRevisionBytes", "function"],
+  ["decodeExecutionIsolationProfileRevisionBytes", "function"],
+  ["decodePlanExecutionContentBytes", "function"],
+  ["decodePlanRevisionBytes", "function"],
+  ["decodeProductContractCurrentRevisionSlotV2Bytes", "function"],
   ["decodeProductContractRevisionBytes", "function"],
+  ["decodeProductContractRevisionV2Bytes", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
+  ["decodeSourceSnapshotBytes", "function"],
+  ["decodeVerificationRecipeRevisionBytes", "function"],
+  ["deliveryProfileFamilyDefinition", "function"],
   ["deriveAcceptanceContractDigest", "function"],
   ["deriveAcceptanceCriterionContent", "function"],
+  ["deriveCapabilityCatalogRevisionDigest", "function"],
   ["deriveLiveQuiesceEvidenceDigest", "function"],
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
   ["derivePolicySliceDigest", "function"],
+  ["deriveProductContractClarificationProjectionDigestV2", "function"],
   ["deriveProductContractRevisionDigest", "function"],
-  ["encodeAcceptanceContract", "function"], ["encodePlanRevision", "function"],
+  ["deriveProductContractRevisionV2Digest", "function"],
+  ["deriveSourceSnapshotDigest", "function"],
+  ["encodeAcceptanceContract", "function"],
+  ["encodeAcceptanceCriteriaContent", "function"],
+  ["encodeCapabilityCatalogRevision", "function"],
+  ["encodeDeliveryProfileQualification", "function"],
+  ["encodeDeliveryProfileRevision", "function"],
+  ["encodeExecutionIsolationProfileRevision", "function"],
+  ["encodePlanExecutionContent", "function"],
+  ["encodePlanRevision", "function"],
+  ["encodeProductContractCurrentRevisionSlotV2", "function"],
   ["encodeProductContractRevision", "function"],
+  ["encodeProductContractRevisionV2", "function"],
   ["encodeProjectConfigurationManifest", "function"],
+  ["encodeSourceSnapshot", "function"],
+  ["encodeVerificationRecipeRevision", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["grantHumanAuthority", "function"],
   ["inspectPlanningExpansionContract", "function"], ["isCurrentGeneration", "function"],
@@ -172,7 +307,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["reduceCutover", "function"], ["reduceExpansionPlanningHold", "function"],
   ["reduceGoal", "function"], ["reduceGraphRevision", "function"],
   ["reducePlanningRun", "function"], ["reduceProject", "function"],
-  ["replayGraphRevisionEvents", "function"], ["rotateCredential", "function"],
+  ["replayGraphRevisionEvents", "function"],
+  ["resolveCapabilityCatalogEntry", "function"],
+  ["resolveQualifiedDeliveryProfile", "function"],
+  ["rotateCredential", "function"],
   ["serializeLiveQuiesceEvidenceCanonical", "function"],
   ["snapshotPlanningRunContractState", "function"],
   ["snapshotProjectState", "function"],
@@ -182,13 +320,16 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["validPlanningRunContractState", "function"],
   ["validateApprovalDependencyChanges", "function"], ["validateApprovalRecord", "function"],
   ["validateProductAcceptanceBinding", "function"],
+  ["validateProductAcceptanceBindingV2", "function"],
   ["validateProductContractAmendment", "function"],
   ["validateProductContractGate1", "function"],
+  ["validateProductContractGate1V2", "function"],
+  ["validateProductContractV2Amendment", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(136);
+  expect(EXPECTED_EXPORTS.length).toBe(255);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -606,6 +747,21 @@ const contractDraft = (): AcceptanceContractDraft => ({
 });
 
 it("round-trips a plan revision through the root and names every published plan type", () => {
+  const executionDraft: PlanExecutionContentDraft = {
+    affectedCriterionIds: planDraft().affectedCriterionIds,
+    affectedNodeIds: planDraft().affectedNodeIds, steps: planDraft().steps,
+    verificationRecipeRefs: planDraft().verificationRecipeRefs,
+  };
+  const executionCreated: PlanExecutionContentCreateResult =
+    core.createPlanExecutionContent(executionDraft);
+  if (!executionCreated.ok) throw new Error(`unexpected refusal ${executionCreated.code}`);
+  const executionBody: PlanExecutionContent = executionCreated.content;
+  const executionEncoded: PlanExecutionContentEncodeResult =
+    core.encodePlanExecutionContent(executionBody);
+  if (!executionEncoded.ok) throw new Error(`unexpected refusal ${executionEncoded.code}`);
+  const executionDecoded: PlanExecutionContentDecodeResult =
+    core.decodePlanExecutionContentBytes(executionEncoded.bytes);
+  if (!executionDecoded.ok) throw new Error(`unexpected refusal ${executionDecoded.code}`);
   const created: PlanRevisionCreateResult = core.createPlanRevision(planDraft());
   if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
   const revision: PlanRevision = created.revision;
@@ -628,6 +784,9 @@ it("round-trips a plan revision through the root and names every published plan 
   // A DIFFERENT digest under a DIFFERENT domain: the graph-independent projection
   // is what a nodeAuthorityHash embeds, so proving it is not the planHash matters.
   expect(content.digest).toMatch(/^[0-9a-f]{64}$/u);
+  expect(executionCreated.planExecutionContentDigest).toBe(content.digest);
+  expect(executionDecoded.planExecutionContentDigest).toBe(content.digest);
+  expect(executionBody.version).toBe(core.PLAN_REVISION_VERSION);
   expect(content.digest).not.toBe(revision.planHash);
   expect([core.PLAN_REVISION_DIGEST_DOMAIN, core.PLAN_EXECUTION_CONTENT_DOMAIN])
     .toEqual(["moe-plan-revision-digest/1", "@moe/core.plan-execution-content/1"]);
@@ -660,6 +819,20 @@ it("refuses a plan revision with a duplicate step id from the root, naming code 
 
 it("round-trips an acceptance contract through the root and names every published contract type",
   () => {
+    const criterionDraft: AcceptanceCriterionContentDraft = {
+      nodeKind: contractDraft().applicability.nodeKind,
+      obligations: contractDraft().obligations,
+    };
+    const criterionCreated: AcceptanceCriterionContentCreateResult =
+      core.createAcceptanceCriterionContent(criterionDraft);
+    if (!criterionCreated.ok) throw new Error(`unexpected refusal ${criterionCreated.code}`);
+    const criterionBody: AcceptanceCriteriaContent = criterionCreated.content;
+    const criterionEncoded: AcceptanceCriteriaContentEncodeResult =
+      core.encodeAcceptanceCriteriaContent(criterionBody);
+    if (!criterionEncoded.ok) throw new Error(`unexpected refusal ${criterionEncoded.code}`);
+    const criterionDecoded: AcceptanceCriteriaContentDecodeResult =
+      core.decodeAcceptanceCriteriaContentBytes(criterionEncoded.bytes);
+    if (!criterionDecoded.ok) throw new Error(`unexpected refusal ${criterionDecoded.code}`);
     const created: AcceptanceContractCreateResult = core.createAcceptanceContract(contractDraft());
     if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
     const contract: AcceptanceContract = created.contract;
@@ -689,6 +862,9 @@ it("round-trips an acceptance contract through the root and names every publishe
     expect([criterion?.criterionId, obligation?.criterionId])
       .toEqual(["criterion-a", "criterion-a"]);
     expect(criterion?.contentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(criterionCreated.criteria).toStrictEqual(content.criteria);
+    expect(criterionDecoded.criteria).toStrictEqual(content.criteria);
+    expect(criterionBody.version).toBe(core.ACCEPTANCE_CONTRACT_VERSION);
     expect(criterion?.contentDigest).not.toBe(contract.criteriaDigest);
     expect([core.ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, core.ACCEPTANCE_CRITERION_CONTENT_DOMAIN])
       .toEqual(["moe-acceptance-contract-digest/1", "@moe/core.acceptance-criterion-content/1"]);
@@ -707,6 +883,43 @@ it("refuses an obligation-free acceptance contract from the root, naming code an
   expect(core.ACCEPTANCE_CONTRACT_LAYERS).toContain(layer);
   expect([Object.isFrozen(core.ACCEPTANCE_CONTRACT_CODES),
     Object.isFrozen(core.ACCEPTANCE_CONTRACT_LAYERS)]).toEqual([true, true]);
+});
+
+it("round-trips a source snapshot through the root and names every public source type", () => {
+  const draft: SourceSnapshotDraft = {
+    baseRevisionHash: hex("a"), projectId: "project-a",
+    repositoryBaseTree: "b".repeat(40), repositoryRef: "refs/heads/main",
+    scopeRef: "services/api",
+  };
+  const created: SourceSnapshotCreateResult = core.createSourceSnapshot(draft);
+  if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+  const snapshot: SourceSnapshot = created.snapshot;
+  const encoded: SourceSnapshotEncodeResult = core.encodeSourceSnapshot(snapshot);
+  if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+  const decoded: SourceSnapshotDecodeResult = core.decodeSourceSnapshotBytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+  const digest: SourceSnapshotDigestResult = core.deriveSourceSnapshotDigest(snapshot);
+  if (!digest.ok) throw new Error(`unexpected refusal ${digest.code}`);
+  const ref: SourceSnapshotRef = { projectId: snapshot.projectId,
+    sourceSnapshotDigest: snapshot.sourceSnapshotDigest };
+  const refAdmission: SourceSnapshotRefAdmission = core.admitSourceSnapshotRef(ref);
+  if (!refAdmission.ok) throw new Error(`unexpected refusal ${refAdmission.code}`);
+
+  expect(decoded.snapshot).toStrictEqual(snapshot);
+  expect(digest.sourceSnapshotDigest).toBe(snapshot.sourceSnapshotDigest);
+  expect(refAdmission.ref).toStrictEqual(ref);
+  expect([core.SOURCE_SNAPSHOT_VERSION, core.SOURCE_SNAPSHOT_DIGEST_DOMAIN])
+    .toStrictEqual(["moe-source-snapshot/1", "moe-source-snapshot-digest/1"]);
+
+  const refusalResult: SourceSnapshotCreateResult = core.createSourceSnapshot({
+    ...draft, repositoryBaseTree: "B".repeat(40),
+  });
+  expect(refusalResult.ok).toBe(false);
+  if (refusalResult.ok) throw new Error("expected a source snapshot refusal");
+  const refusal: SourceSnapshotRefusal = refusalResult;
+  const code: SourceSnapshotCode = "SOURCE_SNAPSHOT_MALFORMED";
+  const layer: SourceSnapshotLayer = "SOURCE_SNAPSHOT_ADMISSION";
+  expect([refusal.code, refusal.layer]).toStrictEqual([code, layer]);
 });
 
 const productRequirement = (
@@ -811,6 +1024,157 @@ it("publishes the immutable Product Contract kernel through the package root", (
   ]);
 });
 
+const v2Priority: ProductContractV2Priority = "MUST";
+const v2BudgetKind: ProductContractV2BudgetKind = "TIME";
+const v2Requirement = (requirementId: string): ProductContractV2Requirement => ({
+  dependsOnRequirementIds: [], priority: v2Priority, requirementId,
+  statement: `${requirementId} must hold.`, supersedesRequirementId: null,
+});
+const v2Criterion = (
+  criterionId: string, requirementId: string,
+): ProductContractV2Criterion => ({
+  criterionId, requirementId, statement: `${criterionId} is observable.`,
+  supersedesCriterionId: null, verification: `Verify ${criterionId} deterministically.`,
+});
+
+const V2_CRITERION_IDS = Object.freeze([
+  "criterion-deploy", "criterion-functional", "criterion-nfr",
+  "criterion-security", "criterion-tech", "criterion-ux",
+]);
+
+const productV2Draft = (): ProductContractRevisionV2Draft => {
+  const objective: ProductContractV2Objective = {
+    objectiveId: "objective-a", statement: "Deliver the intended user outcome.",
+  };
+  const userJob: ProductContractV2UserJob = {
+    job: "Complete the primary workflow.", user: "Registered operator", userJobId: "job-a",
+  };
+  const journey: ProductContractV2Journey = {
+    criterionIds: ["criterion-functional"], journeyId: "journey-a",
+    statement: "The operator completes the primary workflow.", userJobId: userJob.userJobId,
+  };
+  const assumption: ProductContractV2Assumption = {
+    assumptionId: "assumption-a", statement: "The qualified runtime is installed.",
+    validationCriterionId: "criterion-tech",
+  };
+  const budget: ProductContractV2Budget = {
+    budgetId: "budget-a", kind: v2BudgetKind, limit: 30, unit: "days",
+  };
+  const metric: ProductContractV2SuccessMetric = {
+    measurement: "Measure consented completed workflows.", metricId: "metric-a",
+    objectiveIds: [objective.objectiveId], statement: "The workflow is completed.",
+    target: "At least eighty percent in a cohort of ten or more.",
+  };
+  const optionA: ProductContractV2DecisionOption = {
+    optionId: "option-a", statement: "Use the selected qualified profile.",
+  };
+  const optionB: ProductContractV2DecisionOption = {
+    optionId: "option-b", statement: "Qualify another profile before planning.",
+  };
+  const decision: ProductContractV2MaterialDecision = {
+    decisionId: "decision-a", options: [optionA, optionB],
+    question: "Which qualified delivery profile is required?", selectedOptionId: optionA.optionId,
+  };
+  const negative: ProductContractV2NegativeScope = {
+    scopeId: "scope-a", statement: "No native mobile client.",
+  };
+  const complete: ProductContractV2ProductCompleteDefinition = {
+    criterionIds: V2_CRITERION_IDS,
+    statement: "Every approved criterion is independently verified.",
+  };
+  const lineage: ProductContractV2Lineage | null = null;
+  return {
+    assumptions: [assumption], authorRef: "principal-product", budgets: [budget],
+    contractId: "product-contract-v2-root",
+    criteria: [
+      v2Criterion("criterion-deploy", "requirement-deploy"),
+      v2Criterion("criterion-functional", "requirement-functional"),
+      v2Criterion("criterion-nfr", "requirement-nfr"),
+      v2Criterion("criterion-security", "requirement-security"),
+      v2Criterion("criterion-tech", "requirement-tech"),
+      v2Criterion("criterion-ux", "requirement-ux"),
+    ],
+    deploymentRequirements: [v2Requirement("requirement-deploy")],
+    functionalRequirements: [v2Requirement("requirement-functional")],
+    journeys: [journey], lineage, materialDecisions: [decision], negativeScope: [negative],
+    nonFunctionalRequirements: [v2Requirement("requirement-nfr")], objectives: [objective],
+    productCompleteDefinition: complete, retiredCriterionIds: [], retiredRequirementIds: [],
+    revisionId: "product-revision-v2-root",
+    securityPrivacyRequirements: [v2Requirement("requirement-security")],
+    sourceDocumentDigests: [hex("e")], successMetrics: [metric],
+    technologyRequirements: [v2Requirement("requirement-tech")], userJobs: [userJob],
+    uxAccessibilityRequirements: [v2Requirement("requirement-ux")],
+  };
+};
+
+it("publishes the distinct Product Contract /2 codec and every v2 type through the root", () => {
+  const created: ProductContractV2CreateResult =
+    core.createProductContractRevisionV2(productV2Draft());
+  if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
+  const revision: ProductContractRevisionV2 = created.revision;
+  const encoded: ProductContractV2EncodeResult = core.encodeProductContractRevisionV2(revision);
+  if (!encoded.ok) throw new Error(`${encoded.code}@${encoded.layer}`);
+  const decoded: ProductContractV2DecodeResult =
+    core.decodeProductContractRevisionV2Bytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+  const digest: ProductContractV2DigestResult =
+    core.deriveProductContractRevisionV2Digest(revision);
+  if (!digest.ok) throw new Error(`${digest.code}@${digest.layer}`);
+  const slotCreated: ProductContractCurrentRevisionSlotV2Result =
+    core.createProductContractCurrentRevisionSlotV2("project-a", revision);
+  if (!slotCreated.ok) throw new Error(`${slotCreated.code}@${slotCreated.layer}`);
+  const slot: ProductContractCurrentRevisionSlotV2 = slotCreated.slot;
+  const currentRef: ProductContractRevisionV2Ref = slot.currentRevision;
+  const slotEncoded: ProductContractCurrentRevisionSlotV2EncodeResult =
+    core.encodeProductContractCurrentRevisionSlotV2(slot);
+  if (!slotEncoded.ok) throw new Error(`${slotEncoded.code}@${slotEncoded.layer}`);
+  const slotDecoded: ProductContractCurrentRevisionSlotV2Result =
+    core.decodeProductContractCurrentRevisionSlotV2Bytes(slotEncoded.bytes, revision);
+  if (!slotDecoded.ok) throw new Error(`${slotDecoded.code}@${slotDecoded.layer}`);
+  const bindingRequest = null as unknown as ProductAcceptanceBindingV2Request;
+  const binding: ProductAcceptanceBindingV2Result =
+    core.validateProductAcceptanceBindingV2(bindingRequest);
+
+  expect(decoded.revision).toEqual(revision);
+  expect([digest.revisionDigest, currentRef.revisionDigest, slotDecoded.slot.slotDigest])
+    .toEqual([revision.revisionDigest, revision.revisionDigest, slot.slotDigest]);
+  expect([
+    core.PRODUCT_CONTRACT_V2_VERSION, core.PRODUCT_CONTRACT_V2_DIGEST_DOMAIN,
+    core.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+    core.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN,
+  ]).toEqual([
+    "moe-product-contract-revision/2", "moe-product-contract-revision-digest/2",
+    "moe-product-contract-current-revision-slot/2",
+    "moe-product-contract-current-revision-slot-digest/2",
+  ]);
+
+  const unresolved = productV2Draft();
+  const decision = unresolved.materialDecisions[0]!;
+  const result: ProductContractV2CreateResult = core.createProductContractRevisionV2({
+    ...unresolved, materialDecisions: [{ ...decision, selectedOptionId: null }],
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected unresolved material choice to refuse");
+  const refusal: ProductContractV2Refusal = result;
+  const code: ProductContractV2Code = "PRODUCT_CONTRACT_V2_MATERIAL_DECISION_UNRESOLVED";
+  const layer: ProductContractV2Layer = "PRODUCT_CONTRACT_V2_SEMANTICS";
+  expect([refusal.code, refusal.layer]).toEqual([code, layer]);
+  expect(core.PRODUCT_CONTRACT_V2_CODES).toContain(code);
+  expect(core.PRODUCT_CONTRACT_V2_LAYERS).toContain(layer);
+  expect(core.PRODUCT_CONTRACT_V2_PRIORITIES).toContain(v2Priority);
+  expect(core.PRODUCT_CONTRACT_V2_BUDGET_KINDS).toContain(v2BudgetKind);
+  expect(binding).toEqual({
+    code: "PRODUCT_CONTRACT_ACCEPTANCE_INVALID", layer: "ACCEPTANCE_BINDING", ok: false,
+  });
+  const selfAmendment: ProductContractV2AmendmentResult =
+    core.validateProductContractV2Amendment(revision, revision);
+  expect(selfAmendment).toEqual({
+    code: "PRODUCT_CONTRACT_V2_LINEAGE_PARENT_NOT_CURRENT",
+    layer: "PRODUCT_CONTRACT_V2_LINEAGE",
+    ok: false,
+  });
+});
+
 it("publishes amendment lineage and exact Product Contract refusals through the root", () => {
   const currentResult = core.createProductContractRevision(productDraft());
   if (!currentResult.ok) throw new Error(`unexpected refusal ${currentResult.code}`);
@@ -893,16 +1257,45 @@ try {
     approvalPolicyKinds: [...(ns.APPROVAL_POLICY_KINDS ?? [])],
     approvalAuthorityLayers: [...(ns.APPROVAL_AUTHORITY_LAYERS ?? [])],
     createProductContractRevision: typeof ns.createProductContractRevision,
+    encodePlanExecutionContent: typeof ns.encodePlanExecutionContent,
+    decodePlanExecutionContentBytes: typeof ns.decodePlanExecutionContentBytes,
+    encodeAcceptanceCriteriaContent: typeof ns.encodeAcceptanceCriteriaContent,
+    decodeAcceptanceCriteriaContentBytes: typeof ns.decodeAcceptanceCriteriaContentBytes,
+    createProductContractRevisionV2: typeof ns.createProductContractRevisionV2,
+    encodeProductContractRevisionV2: typeof ns.encodeProductContractRevisionV2,
+    decodeProductContractRevisionV2Bytes: typeof ns.decodeProductContractRevisionV2Bytes,
+    deriveProductContractRevisionV2Digest: typeof ns.deriveProductContractRevisionV2Digest,
+    createProductContractCurrentRevisionSlotV2: typeof ns.createProductContractCurrentRevisionSlotV2,
+    advanceProductContractCurrentRevisionSlotV2: typeof ns.advanceProductContractCurrentRevisionSlotV2,
+    encodeProductContractCurrentRevisionSlotV2: typeof ns.encodeProductContractCurrentRevisionSlotV2,
+    decodeProductContractCurrentRevisionSlotV2Bytes: typeof ns.decodeProductContractCurrentRevisionSlotV2Bytes,
+    validateProductContractV2Amendment: typeof ns.validateProductContractV2Amendment,
+    productContractV2Version: ns.PRODUCT_CONTRACT_V2_VERSION,
+    productContractV2Layers: [...(ns.PRODUCT_CONTRACT_V2_LAYERS ?? [])],
+    productContractCurrentSlotV2Version: ns.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
     assessClarificationMateriality: typeof ns.assessClarificationMateriality,
+    assessProductContractClarificationMaterialityV2: typeof ns.assessProductContractClarificationMaterialityV2,
+    deriveProductContractClarificationProjectionDigestV2: typeof ns.deriveProductContractClarificationProjectionDigestV2,
+    productContractV2ClarificationMaterialityCodes: [...(ns.PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES ?? [])],
+    productContractV2ClarificationMaterialityLayer: ns.PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER,
+    productContractV2ClarificationProjectionDigestDomain: ns.PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN,
     validateProductContractAmendment: typeof ns.validateProductContractAmendment,
     validateProductContractGate1: typeof ns.validateProductContractGate1,
     productContractGate1Authority: typeof ns.productContractGate1Authority,
     validateProductAcceptanceBinding: typeof ns.validateProductAcceptanceBinding,
+    validateProductAcceptanceBindingV2: typeof ns.validateProductAcceptanceBindingV2,
     productContractLayers: [...(ns.PRODUCT_CONTRACT_LAYERS ?? [])],
     derivePolicySliceDigest: typeof ns.derivePolicySliceDigest,
     policySliceDigestVersion: ns.POLICY_SLICE_DIGEST_VERSION,
     policySliceDigestCodes: [...(ns.POLICY_SLICE_DIGEST_CODES ?? [])],
     policySliceDigestLayers: [...(ns.POLICY_SLICE_DIGEST_LAYERS ?? [])],
+    createSourceSnapshot: typeof ns.createSourceSnapshot,
+    encodeSourceSnapshot: typeof ns.encodeSourceSnapshot,
+    decodeSourceSnapshotBytes: typeof ns.decodeSourceSnapshotBytes,
+    deriveSourceSnapshotDigest: typeof ns.deriveSourceSnapshotDigest,
+    admitSourceSnapshotRef: typeof ns.admitSourceSnapshotRef,
+    sourceSnapshotVersion: ns.SOURCE_SNAPSHOT_VERSION,
+    sourceSnapshotCodes: [...(ns.SOURCE_SNAPSHOT_CODES ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -927,18 +1320,50 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 136,
+    namedExportCount: 255,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
     approvalPolicyKinds: ["PROCEED_WITHOUT_HUMAN", "REQUIRE_HUMAN"],
     approvalAuthorityLayers: ["HUMAN_AUTHORITY_GATE", "APPROVAL_POLICY"],
     createProductContractRevision: "function",
+    encodePlanExecutionContent: "function",
+    decodePlanExecutionContentBytes: "function",
+    encodeAcceptanceCriteriaContent: "function",
+    decodeAcceptanceCriteriaContentBytes: "function",
+    createProductContractRevisionV2: "function",
+    encodeProductContractRevisionV2: "function",
+    decodeProductContractRevisionV2Bytes: "function",
+    deriveProductContractRevisionV2Digest: "function",
+    createProductContractCurrentRevisionSlotV2: "function",
+    advanceProductContractCurrentRevisionSlotV2: "function",
+    encodeProductContractCurrentRevisionSlotV2: "function",
+    decodeProductContractCurrentRevisionSlotV2Bytes: "function",
+    validateProductContractV2Amendment: "function",
+    productContractV2Version: "moe-product-contract-revision/2",
+    productContractV2Layers: [
+      "PRODUCT_CONTRACT_V2_PROVENANCE", "PRODUCT_CONTRACT_V2_SEMANTICS",
+      "PRODUCT_CONTRACT_V2_CURRENT_SLOT", "PRODUCT_CONTRACT_V2_LINEAGE",
+    ],
+    productContractCurrentSlotV2Version: "moe-product-contract-current-revision-slot/2",
     assessClarificationMateriality: "function",
+    assessProductContractClarificationMaterialityV2: "function",
+    deriveProductContractClarificationProjectionDigestV2: "function",
+    productContractV2ClarificationMaterialityCodes: [
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_INVALID",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_VACUOUS",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_IMMATERIAL",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_IDENTITY_MISMATCH",
+    ],
+    productContractV2ClarificationMaterialityLayer:
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY",
+    productContractV2ClarificationProjectionDigestDomain:
+      "moe-product-contract-clarification-projection/2",
     validateProductContractAmendment: "function",
     validateProductContractGate1: "function",
     productContractGate1Authority: "function",
     validateProductAcceptanceBinding: "function",
+    validateProductAcceptanceBindingV2: "function",
     productContractLayers: [
       "PROVENANCE", "LINEAGE", "MATERIALITY", "GATE_1", "ACCEPTANCE_BINDING",
     ],
@@ -946,6 +1371,18 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     policySliceDigestVersion: "moe.policy.slice.content.v1",
     policySliceDigestCodes: ["POLICY_SLICE_INVALID"],
     policySliceDigestLayers: ["POLICY_SLICE_CODEC"],
+    createSourceSnapshot: "function",
+    encodeSourceSnapshot: "function",
+    decodeSourceSnapshotBytes: "function",
+    deriveSourceSnapshotDigest: "function",
+    admitSourceSnapshotRef: "function",
+    sourceSnapshotVersion: "moe-source-snapshot/1",
+    sourceSnapshotCodes: [
+      "SOURCE_SNAPSHOT_MALFORMED", "SOURCE_SNAPSHOT_VERSION_UNSUPPORTED",
+      "SOURCE_SNAPSHOT_LIMIT_EXCEEDED", "SOURCE_SNAPSHOT_BYTES_INVALID",
+      "SOURCE_SNAPSHOT_DUPLICATE_KEY", "SOURCE_SNAPSHOT_NONCANONICAL",
+      "SOURCE_SNAPSHOT_DIGEST_MISMATCH",
+    ],
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",

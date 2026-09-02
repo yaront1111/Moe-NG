@@ -4,7 +4,8 @@ import { admitProductContractRevisionRef, grantHumanAuthority,
   productContractGate1Authority } from "@moe/core";
 import type { HumanAuthorityGate, ProductContractRevisionRef } from "@moe/core";
 import { identifyReplayRequest } from "@moe/store";
-import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
+import type { CommandDecisionRecord, ExpectedVersionDecisionLeg,
+  SqliteEventStore } from "@moe/store";
 
 import type { SessionAuthorityService } from "../identity/session-authority-contracts.js";
 import { isTransportOrigin } from "../http/http-contract.js";
@@ -110,6 +111,20 @@ function hasExactKeys(record: JsonObject, roster: ReadonlySet<string>, size: num
   return keys.length === size && keys.every((key) => roster.has(key));
 }
 
+function replayPayload(payload: JsonObject): JsonObject {
+  const authentication = payload["authentication"];
+  if (!isBearerPresentation(authentication)) return payload;
+  // `issuedAt` is presentation freshness, not durable command authority. The
+  // request id and subject digest remain bound, while signed presentations keep
+  // their complete byte identity.
+  return {
+    authentication: { kind: authentication.kind,
+      requestDigest: authentication.requestDigest, requestId: authentication.requestId },
+    contractId: payload["contractId"]!, revisionDigest: payload["revisionDigest"]!,
+    revisionId: payload["revisionId"]!,
+  };
+}
+
 type DecodeResult =
   | { readonly ok: true; readonly request: ProductContractGate1Request }
   | { readonly ok: false; readonly refusal: ProductContractGate1Refused };
@@ -145,11 +160,10 @@ export function decodeProductContractGate1Request(input: unknown): DecodeResult 
     ok: true,
     request: Object.freeze({
       authentication: payload["authentication"],
-      // The replay preimage deliberately EXCLUDES the stamped moment: the registry
-      // re-stamps `decidedAt` from its clock on every submission, so including it
-      // would make an honest retry a byte conflict instead of a replay.
+      // Server-stamped decidedAt and bearer issuedAt are ephemeral presentation
+      // moments. Stable bearer subject fields stay exact; signed auth stays byte-exact.
       bytes: encoder.encode(JSON.stringify({
-        kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, payload,
+        kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, payload: replayPayload(payload),
       })),
       commandId: envelope["commandId"],
       contractId: payload["contractId"],
@@ -186,6 +200,16 @@ export interface ProductContractGate1AuthorityOptions {
   readonly projectId: string;
   readonly sessions: SessionAuthorityService;
   readonly store: SqliteEventStore;
+}
+
+export interface ProductContractGate1CommitExtension {
+  readonly prepare: (request: ProductContractGate1Request,
+    ref: ProductContractRevisionRef) => Readonly<{
+      readonly legs: readonly ExpectedVersionDecisionLeg[]; readonly ok: true;
+    }> | ProductContractGate1Refused;
+  readonly verifyReplay: (
+    request: ProductContractGate1Request,
+  ) => ProductContractGate1Refused | null;
 }
 
 /**
@@ -247,6 +271,7 @@ function commit(
   request: ProductContractGate1Request,
   ref: ProductContractRevisionRef,
   gate: HumanAuthorityGate,
+  secondaryLegs?: readonly ExpectedVersionDecisionLeg[],
 ): ProductContractGate1Outcome {
   const grant = gate.grant;
   if (grant === null) return authInvalid();
@@ -261,25 +286,29 @@ function commit(
   // request identity stable across submissions, which is what makes an honest
   // retry a REPLAY; a second, different command over the same revision meets the
   // store's own expected-version answer instead of appending a rival grant.
-  const response = store.commitExpectedVersionDecision({
+  const base = {
     commandKind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
     committedResultBytes: body,
     correlationId: request.correlationId,
     decidedAt: request.decidedAt,
-    events: [{
-      domainSchemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
-      eventId: `${PRODUCT_CONTRACT_GATE_1_COMMAND_KIND}:${request.commandId}`,
-      eventType: PRODUCT_CONTRACT_GATE_1_EVENT_TYPE,
-      payload: body,
-    }],
-    expectedVersion: 0,
     key: {
       commandId: request.commandId, principalId: request.principalId,
       projectId: request.projectId,
     },
     requestBytes: request.bytes,
-    targetAggregateId: deriveProductContractGate1AggregateId(gate.workRef),
-  });
+  };
+  const events = [{
+      domainSchemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
+      eventId: `${PRODUCT_CONTRACT_GATE_1_COMMAND_KIND}:${request.commandId}`,
+      eventType: PRODUCT_CONTRACT_GATE_1_EVENT_TYPE,
+      payload: body,
+    }];
+  const targetAggregateId = deriveProductContractGate1AggregateId(gate.workRef);
+  const response = secondaryLegs === undefined
+    ? store.commitExpectedVersionDecision({ ...base, events, expectedVersion: 0,
+      targetAggregateId })
+    : store.commitExpectedVersionDecisionLegs({ ...base, legs: [{ aggregateId:
+      targetAggregateId, events, expectedVersion: 0 }, ...secondaryLegs] });
   return response.decision.effectDisposition === "EFFECTS_COMMITTED"
     ? acceptedProductContractGate1(response.decision, response.disposition)
     : upstream(response.decision.resultCode, "DURABLE_STORE");
@@ -323,6 +352,7 @@ export function runProductContractGate1Command(
   input: unknown,
   authority: ProductContractGate1Authority,
   bearerWitness?: TransportBoundBearerSessionWitness,
+  extension?: ProductContractGate1CommitExtension,
 ): ProductContractGate1Outcome {
   const decoded = decodeProductContractGate1Request(input);
   if (!decoded.ok) return decoded.refusal;
@@ -338,7 +368,7 @@ export function runProductContractGate1Command(
   });
   if (prior !== null) {
     const replayed = answerReplay(request, prior);
-    if (replayed !== null) return replayed;
+    if (replayed !== null) return extension?.verifyReplay(request) ?? replayed;
   }
   const admission = admitProductContractRevisionRef({
     contractId: request.contractId,
@@ -346,6 +376,8 @@ export function runProductContractGate1Command(
     revisionId: request.revisionId,
   });
   if (!admission.ok) return upstream(admission.code, admission.layer);
+  const prepared = extension?.prepare(request, admission.ref);
+  if (prepared !== undefined && !prepared.ok) return prepared;
   const granted = authority.authorize({
     authentication: request.authentication,
     ...(bearerWitness === undefined ? {} : { bearerWitness }),
@@ -354,5 +386,5 @@ export function runProductContractGate1Command(
     ref: admission.ref,
   });
   if (!granted.ok) return granted;
-  return commit(store, request, admission.ref, granted.gate);
+  return commit(store, request, admission.ref, granted.gate, prepared?.legs);
 }

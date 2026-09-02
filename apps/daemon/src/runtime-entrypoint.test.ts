@@ -175,6 +175,34 @@ const runtimeTierModules = (
 const bridgeOf = (module: string): string => `${module.slice(0, -".ts".length)}.js`;
 
 const DEFAULT_EXPORT_BRIDGES = new Set(["daemon-store-dependencies.ts"]);
+const PRODUCT_CONTRACT_V2_RUNTIME_MODULES = Object.freeze([
+  "product-contract-v2-address.ts",
+  "product-contract-v2-clarification-answer-service.ts",
+  "product-contract-v2-clarification-ask-authority.ts",
+  "product-contract-v2-clarification-authority.ts",
+  "product-contract-v2-clarification-canonical.ts",
+  "product-contract-v2-clarification-contract.ts",
+  "product-contract-v2-clarification-projection.ts",
+  "product-contract-v2-clarification-provenance.ts",
+  "product-contract-v2-clarification-reader.ts",
+  "product-contract-v2-clarification-row.ts",
+  "product-contract-v2-clarification-service.ts",
+  "product-contract-v2-clarification-writer.ts",
+  "product-contract-v2-event-contract.ts",
+  "product-contract-v2-gate-1-command.ts",
+  "product-contract-v2-gate-1-resolver.ts",
+  "product-contract-v2-goal-binding-contract.ts",
+  "product-contract-v2-goal-binding-leg.ts",
+  "product-contract-v2-goal-binding-reader.ts",
+  "product-contract-v2-propose-service.ts",
+  "product-contract-v2-provenance.ts",
+  "product-contract-v2-reader.ts",
+  "product-contract-v2-store.ts",
+  "product-contract-v2-workflow-contract.ts",
+  "product-contract-v2-workflow-primary.ts",
+  "product-contract-v2-workflow-reader.ts",
+  "product-contract-v2-workflow-transition.ts",
+] as const);
 const expectedBridgeSource = (module: string): string => {
   const target = `./${basename(module, ".ts")}.ts`;
   return DEFAULT_EXPORT_BRIDGES.has(basename(module))
@@ -197,6 +225,15 @@ it("has an exact .js bridge for every runtime module and none for test-tier ones
   expect(runtime.has(resolve(SRC_ROOT, "http/http-adapter.ts"))).toBe(true);
   expect(runtime.has(resolve(SRC_ROOT, "work/work-race-fixtures.ts"))).toBe(false);
   expect(DEFAULT_EXPORT_BRIDGES).toEqual(new Set(["daemon-store-dependencies.ts"]));
+  const productContractV2Dir = resolve(SRC_ROOT, "product-contract");
+  const productContractV2Modules = modules.filter((file) =>
+    dirname(file) === productContractV2Dir
+      && basename(file).startsWith("product-contract-v2-"),
+  );
+  expect(productContractV2Modules.map((file) => basename(file)).sort())
+    .toEqual([...PRODUCT_CONTRACT_V2_RUNTIME_MODULES].sort());
+  expect(productContractV2Modules.filter((file) => !runtime.has(file)))
+    .toEqual([]);
 
   const bridges = new Set(files.filter((file) => file.endsWith(".js")));
   const missing = [...runtime].filter((file) => !bridges.has(bridgeOf(file)));

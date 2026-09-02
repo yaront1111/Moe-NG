@@ -86,6 +86,7 @@ export function NavRail({
                 className="cr2-navitem"
                 data-active={active ? "true" : undefined}
                 data-testid={`cr.nav.${item.id}`}
+                data-unavailable-reason={reason ?? undefined}
                 disabled={unavailable}
                 onClick={onNavigate === undefined || route === null
                   ? undefined
@@ -104,7 +105,9 @@ export function NavRail({
                     strokeWidth={1.7}
                   />
                 </svg>
-                <span className="cr2-navlabel">{item.label}</span>
+                <span className="cr2-navlabel">
+                  {item.label}{reason === null ? null : " not available yet"}
+                </span>
                 {badge === undefined ? null : (
                   <StatusChip
                     label={badge.count}

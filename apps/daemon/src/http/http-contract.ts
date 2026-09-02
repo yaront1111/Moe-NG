@@ -92,6 +92,23 @@ export const WIRE_PROTOCOL_VERSION =
 
 export type WireProtocolVersion = typeof WIRE_PROTOCOL_VERSION;
 
+/**
+ * Which command plane this daemon currently serves as authoritative. `/bootstrap`
+ * STATES it, so a browser routes to `/command` or `/v2/command` by the daemon's
+ * durable cutover state and never by what its own bundle was built to assume: a
+ * client pinned to `/v2/command` refuses every write (CUTOVER_V2_NOT_ACTIVE) on a
+ * daemon whose marker was never committed, and one pinned to `/command` is
+ * retired the moment `cutover.activate` lands.
+ */
+export const COMMAND_AUTHORITY_PLANES = Object.freeze(["V1", "V2"] as const);
+export type CommandAuthorityPlane = (typeof COMMAND_AUTHORITY_PLANES)[number];
+
+/** Reads the plane on EVERY call; the answer flips when the cutover marker commits. */
+export interface CommandAuthorityPlanePort {
+  readonly boundProjectId: string;
+  readPlane(): CommandAuthorityPlane;
+}
+
 /** The three verdicts kept distinct: a caller we do not know is not a caller we deny. */
 export type AuthVerdict =
   | "AUTHENTICATED"

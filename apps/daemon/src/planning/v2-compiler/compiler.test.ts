@@ -1,0 +1,2215 @@
+import { createHash } from "node:crypto";
+
+import {
+  createAcceptanceCriterionContent, createCapabilityCatalogRevision,
+  createDeliveryProfileQualification, createPlanExecutionContent,
+  createProductContractRevisionV2, type SourceSnapshotRef,
+} from "@moe/core";
+import { decodeGraphContent } from "@moe/scheduler";
+import { describe, expect, it } from "vitest";
+
+import {
+  createV2Compiler, type V2CompilerResolutionToken,
+} from "./compiler.js";
+import { sealCanonicalDag } from "./canonical.js";
+import {
+  V2_COMPILED_DAG_DIGEST_DOMAIN, V2_COMPILED_DAG_VERSION,
+  V2_COMPILER_NODE_INTENT_DIGEST_DOMAIN,
+} from "./contracts.js";
+import { materialIdentity, qualifiedIdentity } from "./material-identity.js";
+import { PLANNER_ADMISSION_PROFILE_VERSION } from "./planner-admission-profile-contract.js";
+import { mapPlannerAdmissionProfileRevision } from "./planner-admission-profile-mapping.js";
+import { nodeIntentDigest } from "./scheduler-node-intent.js";
+import type { NodeFact } from "./topology.js";
+import { compilerQualificationStatus } from "./compiler-profile-test-fixtures.js";
+import { compilerResolutionMintInput } from "./compiler-resolution-test-fixtures.js";
+import {
+  TEST_PROJECT_ID, TEST_REPOSITORY_BASE_TREE, TEST_SOURCE_SNAPSHOT,
+  compilerGraphAuthority, compilerNodeAdmissionAuthority, compilerNodeDefinition,
+  compilerNodePlanningAuthority,
+  compilerPlannerAdmissionProfileRevision,
+  compilerPublishedSourceSnapshot, compilerSourceSnapshot,
+} from "./compiler-scheduler-test-fixtures.js";
+import type {
+  V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
+  V2CompilerNodeAdmissionRequest, V2CompilerNodeAuthorityRequest,
+  V2CompilerNodePlanningAuthorityReader,
+} from "./authority-contracts.js";
+
+const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
+const criterionIds = Object.freeze([
+  "criterion-deployment", "criterion-keyboard", "criterion-latency",
+  "criterion-login", "criterion-runtime", "criterion-session",
+]);
+
+const requirement = (requirementId: string, dependencies: readonly string[] = []) => ({
+  dependsOnRequirementIds: [...dependencies], priority: "MUST" as const, requirementId,
+  statement: `${requirementId} must hold.`, supersedesRequirementId: null,
+});
+const criterion = (criterionId: string, requirementId: string) => ({
+  criterionId, requirementId, statement: `${criterionId} is observable.`,
+  supersedesCriterionId: null, verification: `Run ${criterionId}.`,
+});
+
+function contract(
+  transitive = false,
+  budgetIds: readonly string[] = ["budget-build", "budget-verify"],
+  budgetKinds: Readonly<Record<string, "COMPUTE" | "TIME">> = {},
+) {
+  const result = createProductContractRevisionV2({
+    assumptions: [{
+      assumptionId: "assumption-browser", statement: "A supported browser is available.",
+      validationCriterionId: "criterion-runtime",
+    }],
+    authorRef: "principal-product",
+    budgets: [...budgetIds].sort().map((budgetId) => ({
+      budgetId, kind: budgetKinds[budgetId] ?? "TIME", limit: 30, unit: "days",
+    })),
+    contractId: "contract-v2", criteria: [
+      criterion("criterion-deployment", "deployment-loopback"),
+      criterion("criterion-keyboard", "ux-keyboard"),
+      criterion("criterion-latency", "nfr-latency"),
+      criterion("criterion-login", "requirement-login"),
+      criterion("criterion-runtime", "technology-runtime"),
+      criterion("criterion-session", "security-session"),
+    ],
+    deploymentRequirements: [requirement("deployment-loopback", ["technology-runtime"])],
+    functionalRequirements: [requirement("requirement-login")],
+    journeys: [{
+      criterionIds: ["criterion-login", "criterion-session"], journeyId: "journey-login",
+      statement: "An operator signs in.", userJobId: "job-access",
+    }],
+    lineage: null,
+    materialDecisions: [{
+      decisionId: "decision-stack", options: [
+        { optionId: "option-next", statement: "Use the qualified Next.js profile." },
+        { optionId: "option-rust", statement: "Use the qualified Rust profile." },
+      ], question: "Which qualified profile is required?", selectedOptionId: "option-next",
+    }],
+    negativeScope: [{ scopeId: "scope-native", statement: "No native mobile client." }],
+    nonFunctionalRequirements: [requirement("nfr-latency", ["requirement-login"])],
+    objectives: [{ objectiveId: "objective-adoption", statement: "Enable first-use success." }],
+    productCompleteDefinition: {
+      criterionIds: [...criterionIds], statement: "Every criterion is independently verified.",
+    },
+    retiredCriterionIds: [], retiredRequirementIds: [], revisionId: "contract-v2-r1",
+    securityPrivacyRequirements: [requirement("security-session", ["requirement-login"])],
+    sourceDocumentDigests: [digest("source-document")],
+    successMetrics: [{
+      measurement: "Count successful first sessions.", metricId: "metric-first-use",
+      objectiveIds: ["objective-adoption"], statement: "Operators complete a first session.",
+      target: "At least ten successful sessions.",
+    }],
+    technologyRequirements: [requirement(
+      "technology-runtime", transitive ? ["requirement-login"] : [],
+    )],
+    userJobs: [{ job: "Reach the product.", user: "Operator", userJobId: "job-access" }],
+    uxAccessibilityRequirements: [requirement("ux-keyboard", ["requirement-login"])],
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result.revision;
+}
+
+const RESOLUTION_MINT_INPUT = compilerResolutionMintInput();
+interface CompilerOverrides {
+  readonly clock?: () => number;
+  readonly projectId?: string;
+  readonly readGraphAuthority?: V2CompilerGraphAuthorityReader;
+  readonly readNodeAdmissionAuthority?: V2CompilerNodeAdmissionAuthorityReader;
+  readonly readNodePlanningAuthority?: V2CompilerNodePlanningAuthorityReader;
+  readonly readPublishedSourceSnapshot?: (ref: SourceSnapshotRef) => unknown;
+}
+const createCompiler = (
+  qualificationAuthority = RESOLUTION_MINT_INPUT.qualificationAuthority,
+  overrides: CompilerOverrides = {},
+) => createV2Compiler({
+  clock: overrides.clock ?? (() => 1_500),
+  projectId: overrides.projectId ?? TEST_PROJECT_ID,
+  qualificationAuthority,
+  readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
+  readNodeAdmissionAuthority:
+    overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
+  readNodePlanningAuthority:
+    overrides.readNodePlanningAuthority ?? compilerNodePlanningAuthority,
+  readPublishedSourceSnapshot:
+    overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
+});
+const COMPILER = createCompiler();
+const MINTED = COMPILER.mintResolutionToken(
+  RESOLUTION_MINT_INPUT.catalog,
+  {
+    capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+    requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+  },
+  RESOLUTION_MINT_INPUT.materials,
+);
+if (!MINTED.ok) throw new Error(`${MINTED.code}@${MINTED.layer}`);
+const REAL_TOKEN = MINTED.token;
+const compile = (
+  value: unknown,
+  tokens?: readonly V2CompilerResolutionToken[],
+) => {
+  if (tokens !== undefined) return COMPILER.compile(value, tokens);
+  const minted = COMPILER.mintResolutionToken(
+    RESOLUTION_MINT_INPUT.catalog, {
+      capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+      requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+    }, RESOLUTION_MINT_INPUT.materials,
+  );
+  if (!minted.ok) return minted;
+  return COMPILER.compile(value, [minted.token]);
+};
+
+function compileWithAuthority(value: unknown, overrides: CompilerOverrides = {}) {
+  const compiler = createCompiler(RESOLUTION_MINT_INPUT.qualificationAuthority, overrides);
+  const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog, {
+    capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+    requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+  }, RESOLUTION_MINT_INPUT.materials);
+  if (!minted.ok) return minted;
+  return compiler.compile(value, [minted.token]);
+}
+
+function sourceBoundCompiler(
+  world = RESOLUTION_MINT_INPUT,
+  overrides: CompilerOverrides = {},
+) {
+  return createV2Compiler({
+    clock: overrides.clock ?? (() => 1_500),
+    projectId: overrides.projectId ?? TEST_PROJECT_ID,
+    qualificationAuthority: world.qualificationAuthority,
+    readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
+    readNodeAdmissionAuthority:
+      overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
+    readNodePlanningAuthority:
+      overrides.readNodePlanningAuthority ?? compilerNodePlanningAuthority,
+    readPublishedSourceSnapshot:
+      overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
+  });
+}
+
+function compileWithSourceAuthority(
+  value: unknown,
+  world = RESOLUTION_MINT_INPUT,
+  overrides: CompilerOverrides = {},
+) {
+  const compiler = sourceBoundCompiler(world, overrides);
+  const minted = compiler.mintResolutionToken(world.catalog, {
+    capabilityId: world.request.capabilityId,
+    requiredCriterionCategories: world.request.requiredCriterionCategories,
+  }, world.materials);
+  return minted.ok ? compiler.compile(value, [minted.token]) : minted;
+}
+
+const MATERIAL_DIGEST_UNBOUND = Object.freeze({
+  code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND" as const,
+  layer: "V2_COMPILER_MATERIAL_BINDING" as const,
+  ok: false as const,
+});
+const EXPECTED_BUILDER_NODE_INTENT_DIGEST =
+  "ea674e2fe54d77f4290ed5ec521829c1076ff3d04c00dfaf9e096ac4318ea603";
+const EXPECTED_BUILDER_PROFILE_REVISION_DIGEST =
+  "3661daf01b6ce4bf23304870bef5d014c94a8524ada68b908da9651cdeb209fd";
+const EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST =
+  "90f4a3995a62346de729e05053b9423e16344db72d9f2bb1c8d94f3e1d090d4e";
+
+function input(contractValue = contract()) {
+  const resolutionRef = {
+    builderCapabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+    catalogRevisionDigest: RESOLUTION_MINT_INPUT.catalog.revisionDigest,
+  };
+  return {
+    completionNodeKey: "node-verify", contract: contractValue, graphId: "graph-v2-r1",
+    nodes: [
+      {
+        authorityKind: "BUILDER", budgetRefs: [{ budgetId: "budget-build" }],
+        capabilityId: "capability-web-build",
+        criterionRefs: criterionIds.map((criterionId) => ({ criterionId })),
+        dependsOn: [], nodeId: "node-build", resolutionRef,
+      },
+      {
+        authorityKind: "VERIFIER", budgetRefs: [{ budgetId: "budget-verify" }],
+        capabilityId: "capability-web-verify",
+        criterionRefs: criterionIds.map((criterionId) => ({ criterionId })),
+        dependsOn: [{ nodeId: "node-build" }], nodeId: "node-verify",
+        resolutionRef,
+      },
+    ],
+  };
+}
+
+function inputForWorld(world: ReturnType<typeof compilerResolutionMintInput>) {
+  const value = input();
+  for (const node of value.nodes) node.resolutionRef = {
+    builderCapabilityId: world.request.capabilityId,
+    catalogRevisionDigest: world.catalog.revisionDigest,
+  };
+  return value;
+}
+
+function assignExclusiveBudgets(value: ReturnType<typeof input>, transitive = false): void {
+  const budgetIds = value.nodes.map((node) => `budget-${node.nodeId}`).sort();
+  value.contract = contract(transitive, budgetIds);
+  for (const node of value.nodes) node.budgetRefs = [{ budgetId: `budget-${node.nodeId}` }];
+}
+
+function inputWithUnknownAndSharedBudget(sharedFirst: boolean) {
+  const value = input(contract(false, ["budget-shared"]));
+  const builder = { ...value.nodes[0]!, budgetRefs: [{ budgetId: "budget-shared" }] };
+  const verifier = { ...value.nodes[1]!, budgetRefs: [{ budgetId: "budget-shared" }] };
+  const unknown = {
+    ...value.nodes[0]!, budgetRefs: [{ budgetId: "budget-ghost" }],
+    nodeId: "node-unknown",
+  };
+  value.nodes = sharedFirst
+    ? [builder, verifier, unknown]
+    : [builder, unknown, verifier];
+  return value;
+}
+
+function secondCatalog(label: string) {
+  const result = createCapabilityCatalogRevision({
+    catalogId: `catalog-v2-${label}`, entries: RESOLUTION_MINT_INPUT.catalog.entries,
+    lineage: null, revisionId: `catalog-${label}-r1`,
+    sourceCommitSha256: digest(`source-commit-${label}`),
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result.revision;
+}
+
+function inputWithSecondResolution(catalogRevisionDigest: string) {
+  const value = input();
+  const builder = value.nodes[0]!; const verifier = value.nodes[1]!;
+  const firstCriteria = ["criterion-login", "criterion-runtime"];
+  const secondCriteria = criterionIds.filter((criterionId) => !firstCriteria.includes(criterionId));
+  const secondResolutionRef = {
+    builderCapabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+    catalogRevisionDigest,
+  };
+  value.nodes = [
+    { ...builder, criterionRefs: firstCriteria.map((criterionId) => ({ criterionId })),
+      nodeId: "node-base-build" },
+    { ...verifier, criterionRefs: firstCriteria.map((criterionId) => ({ criterionId })),
+      dependsOn: [{ nodeId: "node-base-build" }], nodeId: "node-base-verify" },
+    { ...builder, criterionRefs: secondCriteria.map((criterionId) => ({ criterionId })),
+      dependsOn: [{ nodeId: "node-base-verify" }], nodeId: "node-rest-build",
+      resolutionRef: secondResolutionRef },
+    { ...verifier, criterionRefs: secondCriteria.map((criterionId) => ({ criterionId })),
+      dependsOn: [{ nodeId: "node-rest-build" }], nodeId: "node-rest-verify",
+      resolutionRef: secondResolutionRef },
+  ];
+  value.completionNodeKey = "node-rest-verify";
+  assignExclusiveBudgets(value);
+  return value;
+}
+
+function inputWithCriterionResolutions(catalogRevisionDigests: readonly string[]) {
+  const value = input(); const builder = value.nodes[0]!; const verifier = value.nodes[1]!;
+  const prerequisite: Readonly<Record<string, string>> = {
+    "criterion-deployment": "criterion-runtime", "criterion-keyboard": "criterion-login",
+    "criterion-latency": "criterion-login", "criterion-session": "criterion-login",
+  };
+  value.nodes = criterionIds.flatMap((criterionId, index) => {
+    const label = criterionId.slice("criterion-".length);
+    const resolutionRef = { builderCapabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+      catalogRevisionDigest: catalogRevisionDigests[index]! };
+    const prerequisiteId = prerequisite[criterionId];
+    return [
+      { ...builder, criterionRefs: [{ criterionId }], dependsOn: prerequisiteId === undefined
+        ? [] : [{ nodeId: `node-${prerequisiteId.slice("criterion-".length)}-verify` }],
+      nodeId: `node-${label}-build`, resolutionRef },
+      { ...verifier, criterionRefs: [{ criterionId }],
+        dependsOn: [{ nodeId: `node-${label}-build` }], nodeId: `node-${label}-verify`,
+        resolutionRef },
+    ];
+  });
+  value.completionNodeKey = "node-deployment-verify";
+  value.nodes.find(({ nodeId }) => nodeId === value.completionNodeKey)!.dependsOn.push(
+    { nodeId: "node-keyboard-verify" },
+    { nodeId: "node-latency-verify" },
+    { nodeId: "node-session-verify" },
+  );
+  assignExclusiveBudgets(value);
+  return value;
+}
+
+function inputWithIndependentVerifierSinks() {
+  const value = input(contract(false));
+  value.nodes[0]!.criterionRefs = value.nodes[0]!.criterionRefs.filter(
+    (item) => item.criterionId !== "criterion-runtime"
+      && item.criterionId !== "criterion-deployment",
+  );
+  value.nodes[1]!.criterionRefs = [...value.nodes[0]!.criterionRefs];
+  value.nodes.push({ ...value.nodes[0]!, criterionRefs: [
+    { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
+  ],
+    dependsOn: [], nodeId: "node-runtime-build" });
+  value.nodes.push({ ...value.nodes[1]!, criterionRefs: [
+    { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
+  ],
+    dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-runtime-verify" });
+  value.completionNodeKey = "node-runtime-verify";
+  assignExclusiveBudgets(value);
+  return value;
+}
+
+function compileWithCountedSchedulerAuthority(value: unknown) {
+  const reads = { graph: 0, nodeAdmission: 0, nodeDefinition: 0, sourceSnapshot: 0 };
+  const result = compileWithAuthority(value, {
+    readGraphAuthority: (request) => {
+      reads.graph += 1;
+      return compilerGraphAuthority(request);
+    },
+    readNodeAdmissionAuthority: (request) => {
+      reads.nodeAdmission += 1;
+      return compilerNodeAdmissionAuthority(request);
+    },
+    readNodePlanningAuthority: (request) => {
+      reads.nodeDefinition += 1;
+      return compilerNodePlanningAuthority(request);
+    },
+    readPublishedSourceSnapshot: (ref) => {
+      reads.sourceSnapshot += 1;
+      return compilerPublishedSourceSnapshot(ref);
+    },
+  });
+  return { reads, result };
+}
+
+describe("compileV2Dag", () => {
+  it("publishes compiled DAG /3 while retaining Planner profile /1", () => {
+    expect(V2_COMPILED_DAG_VERSION).toBe("moe-compiled-dag/3");
+    expect(V2_COMPILED_DAG_DIGEST_DOMAIN).toBe("moe-compiled-dag-digest/3");
+    expect(V2_COMPILER_NODE_INTENT_DIGEST_DOMAIN)
+      .toBe("moe-v2-compiler-node-intent-digest/1");
+    expect(PLANNER_ADMISSION_PROFILE_VERSION)
+      .toBe("moe-planner-admission-profile-revision/1");
+  });
+
+  it.each([
+    ["authorityKind", (fact: any) => { fact.authorityKind = "VERIFIER"; }],
+    ["budgetRefs", (fact: any) => { fact.budgetIds[0] = "budget-c"; }],
+    ["capabilityId", (fact: any) => { fact.capabilityId = "capability-changed"; }],
+    ["criterionRefs", (fact: any) => { fact.criterionIds[0] = "criterion-c"; }],
+    ["dependsOn", (fact: any) => { fact.dependencyIds[0] = "node-c"; }],
+    ["nodeId", (fact: any) => { fact.nodeId = "node-changed"; }],
+    ["resolutionRef.builderCapabilityId", (fact: any) => {
+      fact.resolution.builder.capabilityId = "builder-capability-changed";
+    }],
+    ["resolutionRef.catalogRevisionDigest", (fact: any) => {
+      fact.resolution.catalogRevisionDigest = digest("catalog-changed");
+    }],
+  ])("binds normalized node-intent semantic field %s", (_name, mutate) => {
+    const base = {
+      authorityKind: "BUILDER", budgetIds: ["budget-b", "budget-a"],
+      capabilityId: "capability-a", criterionIds: ["criterion-b", "criterion-a"],
+      dependencyIds: ["node-b", "node-a"], nodeId: "node-target",
+      resolution: { builder: { capabilityId: "builder-capability-a" },
+        catalogRevisionDigest: digest("catalog-a") },
+    } as unknown as NodeFact;
+    const reordered = structuredClone(base) as unknown as any;
+    reordered.budgetIds.reverse(); reordered.criterionIds.reverse();
+    reordered.dependencyIds.reverse();
+    expect(nodeIntentDigest(reordered)).toBe(nodeIntentDigest(base));
+    const changed = structuredClone(base) as unknown as any;
+    mutate(changed);
+    expect(nodeIntentDigest(changed)).not.toBe(nodeIntentDigest(base));
+  });
+
+  it("refuses a Product budget shared by multiple nodes without allocation authority", () => {
+    const value = input(contract(false, ["budget-shared"]));
+    for (const node of value.nodes) node.budgetRefs = [{ budgetId: "budget-shared" }];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_BUDGET_SHARED_UNALLOCATED",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
+  it("gives unknown budgets precedence over sharing independent of node order", () => {
+    for (const sharedFirst of [false, true]) expect(
+      compile(inputWithUnknownAndSharedBudget(sharedFirst)),
+    ).toEqual({
+      code: "V2_COMPILER_BUDGET_INVALID",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
+  it("refuses any budget shared by nonadjacent nodes of the same authority kind", () => {
+    const value = input(contract(false, ["budget-a", "budget-b", "budget-c"]));
+    const builder = value.nodes[0]!;
+    const verifier = value.nodes[1]!;
+    builder.budgetRefs = [{ budgetId: "budget-a" }, { budgetId: "budget-b" }];
+    verifier.budgetRefs = [{ budgetId: "budget-c" }];
+    value.nodes = [
+      builder,
+      verifier,
+      { ...builder, budgetRefs: [{ budgetId: "budget-a" }], nodeId: "node-second-build" },
+    ];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_BUDGET_SHARED_UNALLOCATED",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
+  it("accepts a tierless planner graph and rejects planner-supplied policy tier authority", () => {
+    const tierless = input();
+    expect(compile(tierless).ok).toBe(true);
+    const tiered = input();
+    (tiered.nodes[0]! as Record<string, unknown>)["riskTier"] = "R2";
+    expect(compile(tiered)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses cloned or copied resolution authority", () => {
+    const copies = [structuredClone(REAL_TOKEN), { ...REAL_TOKEN }];
+    for (const copy of copies) expect(compile(
+      input(), [copy as V2CompilerResolutionToken],
+    )).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+  });
+
+  it("mints an opaque token and re-reads durable status exactly once at compile", () => {
+    let statusReads = 0;
+    const authority = Object.freeze({
+      ...RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readDurableQualificationStatus: (binding: {
+        qualificationDigest: string; qualificationId: string;
+      }) => {
+        statusReads += 1;
+        return RESOLUTION_MINT_INPUT.qualificationAuthority
+          .readDurableQualificationStatus(binding);
+      },
+    });
+    const compiler = createCompiler(authority);
+    const minted = compiler.mintResolutionToken(
+      RESOLUTION_MINT_INPUT.catalog, {
+        capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+      }, RESOLUTION_MINT_INPUT.materials,
+    );
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    expect(statusReads).toBe(1);
+    expect(Reflect.ownKeys(minted.token)).toEqual([]);
+    expect(Object.isFrozen(minted.token)).toBe(true);
+    expect(compiler.compile(input(), [minted.token])).toEqual(compile(input(), [REAL_TOKEN]));
+    expect(statusReads).toBe(2);
+  });
+
+  it("revalidates qualification at compile and consumes each token once", () => {
+    let statusReads = 0;
+    const authority = Object.freeze({
+      ...RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readDurableQualificationStatus: (binding: {
+        qualificationDigest: string; qualificationId: string;
+      }) => {
+        statusReads += 1;
+        return RESOLUTION_MINT_INPUT.qualificationAuthority
+          .readDurableQualificationStatus(binding);
+      },
+    });
+    const compiler = createCompiler(authority);
+    const minted = compiler.mintResolutionToken(
+      RESOLUTION_MINT_INPUT.catalog, {
+        capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+      }, RESOLUTION_MINT_INPUT.materials,
+    );
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    expect(compiler.compile(input(), [minted.token]).ok).toBe(true);
+    expect(statusReads).toBe(2);
+    expect(compiler.compile(input(), [minted.token])).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING",
+      ok: false,
+    });
+    expect(statusReads).toBe(2);
+  });
+
+  it("refuses a token whose durable qualification was revoked after mint", () => {
+    let revoked = false;
+    const authority = Object.freeze({
+      ...RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readDurableQualificationStatus: (binding: {
+        qualificationDigest: string; qualificationId: string;
+      }) => {
+        const current = RESOLUTION_MINT_INPUT.qualificationAuthority
+          .readDurableQualificationStatus(binding);
+        return current === undefined || !revoked ? current : { ...current, status: "REVOKED" as const };
+      },
+    });
+    const compiler = createCompiler(authority);
+    const minted = compiler.mintResolutionToken(
+      RESOLUTION_MINT_INPUT.catalog, {
+        capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+      }, RESOLUTION_MINT_INPUT.materials,
+    );
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    revoked = true;
+    expect(compiler.compile(input(), [minted.token])).toEqual({
+      code: "V2_COMPILER_DELIVERY_PROFILE_UNQUALIFIED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING",
+      ok: false,
+    });
+  });
+
+  it("freezes children even when a supplied parent container was already frozen", () => {
+    const child = { nodeId: "node-unfrozen" };
+    sealCanonicalDag({
+      contractBinding: { contractId: "contract", revisionDigest: digest("contract"),
+        revisionId: "contract-r1" },
+      criteria: [], graphId: "graph", materialDigests: [],
+      nodes: Object.freeze([child]) as any,
+      plannerAdmissionProfileBindings: [],
+      qualificationFences: [],
+      schedulerAuthority: { canonicalBytesBase64: "AA==", content: {},
+        graphContentHash: digest("graph-content"), schemaVersion: 3,
+        snapshotIdentity: digest("snapshot") },
+    } as any);
+    expect(Object.isFrozen(child)).toBe(true);
+  });
+
+  it("produces a canonical immutable multi-node DAG with exact owner and verifier bindings", () => {
+    const value = input(); const result = compile(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.nodes).toHaveLength(2);
+    expect(result.dag.criteria).toHaveLength(6);
+    expect(result.dag.criteria[0]).toMatchObject({
+      ownerNodeId: "node-build", verifierNodeId: "node-verify",
+    });
+    expect(result.graphDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(result.canonicalBytesBase64.length).toBeGreaterThan(0);
+    expect(Object.isFrozen(result.dag)).toBe(true);
+    expect(Object.isFrozen(result.dag.nodes)).toBe(true);
+    expect(result.dag.nodes.every((node) => !("riskTier" in node))).toBe(true);
+    expect(Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8"))
+      .not.toContain("riskTier");
+    const status = compilerQualificationStatus(
+      RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification,
+    );
+    expect(result.dag.materialDigests).toContainEqual({
+      digest: status.statusDigest,
+      kind: "DELIVERY_PROFILE_QUALIFICATION_STATUS",
+      ref: materialIdentity("DELIVERY_PROFILE_QUALIFICATION_STATUS", [
+        status.statusRef, status.statusDigest,
+      ]),
+    });
+    expect(result.dag.nodes.every((node) => node.verificationRecipes.length > 0)).toBe(true);
+    expect(result.dag.nodes.every((node) =>
+      node.materialBinding.deliveryProfileQualificationStatusDigest
+        === status.statusDigest)).toBe(true);
+
+    const reordered = input();
+    reordered.nodes.reverse();
+    reordered.nodes[0]!.criterionRefs.reverse();
+    expect(compile(reordered)).toEqual(result);
+  });
+
+  it("binds exact nine-field node admission requests and a frozen bijective profile roster", () => {
+    const requests: V2CompilerNodeAdmissionRequest[] = [];
+    const returnedBindings:
+      ReturnType<typeof compilerNodeAdmissionAuthority>["profileBinding"][] = [];
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        requests.push(request);
+        const mapped = compilerNodeAdmissionAuthority(request);
+        returnedBindings.push(mapped.profileBinding);
+        return mapped;
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(requests).toHaveLength(2);
+    const builderRequest = requests.find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(Object.keys(builderRequest).sort()).toEqual([
+      "authorityKind", "budgetBindingDigest", "budgetBindings", "contractBinding", "graphId",
+      "graphSnapshotIdentity", "nodeIntentDigest", "nodeKey", "policyRevision",
+    ]);
+    expect(builderRequest).toEqual({
+      authorityKind: "BUILDER",
+      budgetBindingDigest: qualifiedIdentity("budget-bindings", [
+        "node-build", "budget-build", "TIME", "30", "days",
+      ]),
+      budgetBindings: [{ budgetId: "budget-build", kind: "TIME", limit: 30, unit: "days" }],
+      contractBinding: result.dag.contractBinding,
+      graphId: "graph-v2-r1",
+      graphSnapshotIdentity: result.dag.schedulerAuthority.snapshotIdentity,
+      nodeIntentDigest: EXPECTED_BUILDER_NODE_INTENT_DIGEST,
+      nodeKey: "node-build",
+      policyRevision: digest("policy:v2-compiler-test"),
+    });
+    const expectedBindings = [{
+      nodeKey: "node-build",
+      profileId: "planner-admission-profile:node-build",
+      revisionDigest: EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-build:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }, {
+      nodeKey: "node-verify",
+      profileId: "planner-admission-profile:node-verify",
+      revisionDigest: EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-verify:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }];
+    expect(returnedBindings.slice().sort((left, right) => left.nodeKey < right.nodeKey ? -1 : 1))
+      .toEqual(expectedBindings);
+    expect(result.dag.plannerAdmissionProfileBindings).toEqual(expectedBindings);
+    expect(result.dag.plannerAdmissionProfileBindings.map(({ nodeKey }) => nodeKey))
+      .toEqual(result.dag.nodes.map(({ nodeId }) => nodeId));
+    expect(Object.isFrozen(result.dag.plannerAdmissionProfileBindings)).toBe(true);
+    expect(result.dag.plannerAdmissionProfileBindings.every(Object.isFrozen)).toBe(true);
+    expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .every(({ schemaVersion }) => schemaVersion === 2)).toBe(true);
+    expect(Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8"))
+      .toContain('"plannerAdmissionProfileBindings"');
+  });
+
+  it("accepts exactly the TIME and COMPUTE mapper meter image", () => {
+    const value = input(contract(false,
+      ["budget-build-compute", "budget-build-time", "budget-verify"],
+      { "budget-build-compute": "COMPUTE" }));
+    value.nodes[0]!.budgetRefs = [
+      { budgetId: "budget-build-time" }, { budgetId: "budget-build-compute" },
+    ];
+    value.nodes[1]!.budgetRefs = [{ budgetId: "budget-verify" }];
+    const result = compileWithAuthority(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const builder = result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(builder.admissionAmounts).toEqual([
+      "CONTINGENCY", "EXECUTION", "FINAL_ACCEPTANCE", "INDEPENDENT_REVIEW", "VERIFICATION",
+    ].flatMap((purpose) => ["attempt.count", "runner.authorized_ms"]
+      .map((meter) => ({ meter, purpose, quantity: 1 }))));
+  });
+
+  it("normalizes set-like node intent order and binds a semantic dependency mutation", () => {
+    const ordered = inputWithIndependentVerifierSinks();
+    ordered.nodes.find(({ nodeId }) => nodeId === ordered.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-verify",
+    });
+    const reordered = structuredClone(ordered);
+    reordered.nodes.reverse();
+    for (const node of reordered.nodes) {
+      node.budgetRefs.reverse();
+      node.criterionRefs.reverse();
+      node.dependsOn.reverse();
+    }
+    const requestMaps: Map<string, string>[] = [];
+    const compileAndCapture = (value: unknown) => {
+      const digests = new Map<string, string>();
+      const result = compileWithAuthority(value, {
+        readNodeAdmissionAuthority: (request) => {
+          digests.set(request.nodeKey, request.nodeIntentDigest);
+          return compilerNodeAdmissionAuthority(request);
+        },
+      });
+      requestMaps.push(digests);
+      return result;
+    };
+    const first = compileAndCapture(ordered);
+    const second = compileAndCapture(reordered);
+    expect(first.ok && second.ok).toBe(true);
+    expect(second).toEqual(first);
+    expect(requestMaps[1]).toEqual(requestMaps[0]);
+
+    const changed = structuredClone(ordered);
+    changed.nodes.find(({ nodeId }) => nodeId === changed.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-build",
+    });
+    const third = compileAndCapture(changed);
+    expect(third.ok).toBe(true);
+    expect(requestMaps[2]!.get(changed.completionNodeKey))
+      .not.toBe(requestMaps[0]!.get(ordered.completionNodeKey));
+  });
+
+  it("binds a different valid profile revision into NodeDefinition, GraphContent, and DAG", () => {
+    const baseline = compileWithAuthority(input());
+    const changed = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => compilerNodeAdmissionAuthority(request,
+        request.nodeKey === "node-build" ? {
+          profileId: "planner-admission-profile:node-build:changed",
+          revisionId: "planner-admission-profile:node-build:r2",
+        } : {}),
+    });
+    expect(baseline.ok && changed.ok).toBe(true);
+    if (!baseline.ok || !changed.ok) return;
+    const baselineDefinition = baseline.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    const changedDefinition = changed.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    const changedBinding = changed.dag.plannerAdmissionProfileBindings
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(changedDefinition.admissionAmounts).toEqual(baselineDefinition.admissionAmounts);
+    expect(changedDefinition.constraints).toContain(qualifiedIdentity(
+      "planner-admission-profile-binding",
+      [changedBinding.nodeKey, changedBinding.profileId, changedBinding.revisionDigest,
+        changedBinding.revisionId, changedBinding.version],
+    ));
+    expect(changedDefinition).not.toEqual(baselineDefinition);
+    expect(changed.dag.schedulerAuthority.graphContentHash)
+      .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+    expect(changed.graphDigest).not.toBe(baseline.graphDigest);
+  });
+
+  it("preserves a valid transitive requirement-owner chain", () => {
+    const value = input(contract(true));
+    value.nodes[0]!.criterionRefs = [
+      { criterionId: "criterion-deployment" }, { criterionId: "criterion-keyboard" },
+      { criterionId: "criterion-latency" }, { criterionId: "criterion-session" },
+    ];
+    value.nodes[0]!.dependsOn = [{ nodeId: "node-runtime-verify" }];
+    const base = {
+      ...value.nodes[0]!, criterionRefs: [{ criterionId: "criterion-login" }],
+      dependsOn: [], nodeId: "node-base",
+    };
+    const baseVerifier = {
+      ...value.nodes[1]!, criterionRefs: [{ criterionId: "criterion-login" }],
+      dependsOn: [{ nodeId: "node-base" }], nodeId: "node-base-verify",
+    };
+    const runtime = {
+      ...value.nodes[0]!, criterionRefs: [{ criterionId: "criterion-runtime" }],
+      dependsOn: [{ nodeId: "node-base-verify" }], nodeId: "node-runtime",
+    };
+    const runtimeVerifier = {
+      ...value.nodes[1]!, criterionRefs: [{ criterionId: "criterion-runtime" }],
+      dependsOn: [{ nodeId: "node-runtime" }], nodeId: "node-runtime-verify",
+    };
+    value.nodes.splice(1, 0, base, baseVerifier, runtime, runtimeVerifier);
+    value.nodes[5]!.criterionRefs = [...value.nodes[0]!.criterionRefs];
+    value.nodes[5]!.dependsOn = [{ nodeId: "node-build" }];
+    assignExclusiveBudgets(value, true);
+    const result = compile(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.nodes).toHaveLength(6);
+    expect(result.dag.nodes.find((node) => node.nodeId === "node-build")?.dependsOn)
+      .toEqual([{ nodeId: "node-runtime-verify" }]);
+  });
+
+  it("orders canonical identifiers by UTF-16 code units, including Z before a", () => {
+    const value = input();
+    value.nodes[0]!.nodeId = "Z-builder";
+    value.nodes[1]!.nodeId = "a-verifier";
+    value.nodes[1]!.dependsOn = [{ nodeId: "Z-builder" }];
+    value.completionNodeKey = "a-verifier";
+    const result = compile(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.nodes.map((node) => node.nodeId)).toEqual(["Z-builder", "a-verifier"]);
+    expect(result.dag.criteria[0]).toMatchObject({
+      ownerNodeId: "Z-builder", verifierNodeId: "a-verifier",
+    });
+  });
+
+  it("refuses scheduler-incompatible node identifiers", () => {
+    const value = input();
+    value.nodes[0]!.nodeId = "node build";
+    value.nodes[1]!.dependsOn = [{ nodeId: "node build" }];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it.each([
+    ["graph", (value: ReturnType<typeof input>) => { value.graphId = "graph id"; }],
+    ["capability", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.capabilityId = "capability id";
+    }],
+  ])("refuses a scheduler-incompatible %s identifier", (_name, mutate) => {
+    const value = input(); mutate(value);
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses more than the scheduler absolute node ceiling before coverage", () => {
+    const value = input();
+    const builder = value.nodes[0]!; const verifier = value.nodes[1]!;
+    value.nodes = Array.from({ length: 65 }, (_, index) => ({
+      ...(index % 2 === 0 ? builder : verifier),
+      dependsOn: index === 0 ? [] : [{ nodeId: `node-${index - 1}` }],
+      nodeId: `node-${index}`,
+    }));
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_GRAPH_LIMIT_EXCEEDED", layer: "V2_COMPILER_TOPOLOGY", ok: false,
+    });
+  });
+
+  it("refuses more than the scheduler absolute hard-edge ceiling before coverage", () => {
+    const value = input();
+    const builder = value.nodes[0]!; const verifier = value.nodes[1]!;
+    value.nodes = Array.from({ length: 64 }, (_, index) => ({
+      ...(index % 2 === 0 ? builder : verifier),
+      dependsOn: Array.from({ length: index }, (_unused, producer) => ({
+        nodeId: `node-${producer}`,
+      })),
+      nodeId: `node-${index}`,
+    }));
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_GRAPH_LIMIT_EXCEEDED", layer: "V2_COMPILER_TOPOLOGY", ok: false,
+    });
+  });
+
+  it("requires a dependent requirement builder to wait for prerequisite verification", () => {
+    const value = input(contract(true));
+    const builder = value.nodes[0]!; const verifier = value.nodes[1]!;
+    value.nodes = [
+      { ...builder, criterionRefs: [
+        { criterionId: "criterion-login" }, { criterionId: "criterion-session" },
+      ], dependsOn: [], nodeId: "node-base-build" },
+      { ...verifier, criterionRefs: [
+        { criterionId: "criterion-login" }, { criterionId: "criterion-session" },
+      ], dependsOn: [{ nodeId: "node-base-build" }], nodeId: "node-base-verify" },
+      { ...builder, criterionRefs: [{ criterionId: "criterion-runtime" }],
+        dependsOn: [{ nodeId: "node-base-build" }], nodeId: "node-runtime-build" },
+      { ...verifier, criterionRefs: [{ criterionId: "criterion-runtime" }],
+        dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-runtime-verify" },
+      { ...builder, criterionRefs: [
+        { criterionId: "criterion-deployment" }, { criterionId: "criterion-keyboard" },
+        { criterionId: "criterion-latency" },
+      ], dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-rest-build" },
+      { ...verifier, criterionRefs: [
+        { criterionId: "criterion-deployment" }, { criterionId: "criterion-keyboard" },
+        { criterionId: "criterion-latency" },
+      ], dependsOn: [{ nodeId: "node-rest-build" }], nodeId: "node-rest-verify" },
+    ];
+    assignExclusiveBudgets(value, true);
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_REQUIREMENT_ORDER_INVALID",
+      layer: "V2_COMPILER_TOPOLOGY", ok: false,
+    });
+  });
+
+  it.each([
+    ["omits", false],
+    ["reverses", true],
+  ])("refuses a graph that %s contract requirement ordering", (_name, reversed) => {
+    const value = input();
+    value.nodes[0]!.criterionRefs = [
+      { criterionId: "criterion-deployment" }, { criterionId: "criterion-keyboard" },
+      { criterionId: "criterion-latency" }, { criterionId: "criterion-session" },
+    ];
+    const prerequisite = {
+      ...value.nodes[0]!, criterionRefs: [
+        { criterionId: "criterion-login" }, { criterionId: "criterion-runtime" },
+      ], dependsOn: reversed ? [{ nodeId: "node-build" }] : [], nodeId: "node-prerequisite",
+    };
+    value.nodes.splice(1, 0, prerequisite);
+    value.nodes[2]!.dependsOn = [{ nodeId: "node-build" }, { nodeId: "node-prerequisite" }];
+    assignExclusiveBudgets(value);
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_REQUIREMENT_ORDER_INVALID",
+      layer: "V2_COMPILER_TOPOLOGY",
+      ok: false,
+    });
+  });
+
+  it("refuses a plain fabricated CURRENT-status token", () => {
+    const fabricated = Object.freeze({
+      deliveryProfileQualificationStatus: compilerQualificationStatus(
+        RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification,
+      ),
+    }) as unknown as V2CompilerResolutionToken;
+    expect(compile(input(), [fabricated])).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+  });
+
+  it("refuses transport-embedded resolution facts", () => {
+    const value = { ...input(), resolutionFacts: [{ status: "CURRENT" }] };
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("rejects duplicate minted token authority", () => {
+    expect(compile(input(), [REAL_TOKEN, REAL_TOKEN])).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+  });
+
+  it.each([
+    ["empty graph", (value: ReturnType<typeof input>) => { value.nodes = []; },
+      "V2_COMPILER_GRAPH_EMPTY", "V2_COMPILER_TOPOLOGY"],
+    ["duplicate node", (value: ReturnType<typeof input>) => {
+      value.nodes.push({ ...value.nodes[0]! });
+    }, "V2_COMPILER_NODE_DUPLICATE", "V2_COMPILER_TOPOLOGY"],
+    ["duplicate dependency", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.dependsOn.push({ nodeId: "node-build" });
+    }, "V2_COMPILER_DEPENDENCY_DUPLICATE", "V2_COMPILER_TOPOLOGY"],
+    ["prose dependency", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.dependsOn = ["node-build"] as any;
+    }, "V2_COMPILER_INPUT_MALFORMED", "V2_COMPILER_INPUT"],
+    ["unknown dependency", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.dependsOn = [{ nodeId: "node-ghost" }];
+    }, "V2_COMPILER_DEPENDENCY_UNKNOWN", "V2_COMPILER_TOPOLOGY"],
+    ["self dependency", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.dependsOn = [{ nodeId: "node-verify" }];
+    }, "V2_COMPILER_DEPENDENCY_SELF", "V2_COMPILER_TOPOLOGY"],
+    ["cycle", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.dependsOn = [{ nodeId: "node-verify" }];
+    }, "V2_COMPILER_GRAPH_CYCLE", "V2_COMPILER_TOPOLOGY"],
+    ["planner risk tier", (value: ReturnType<typeof input>) => {
+      (value.nodes[0]! as Record<string, unknown>)["riskTier"] = "R9";
+    }, "V2_COMPILER_INPUT_MALFORMED", "V2_COMPILER_INPUT"],
+    ["missing node budget", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.budgetRefs = [];
+    }, "V2_COMPILER_BUDGET_MISSING", "V2_COMPILER_BUDGET"],
+    ["unknown budget", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.budgetRefs = [{ budgetId: "budget-ghost" }];
+    }, "V2_COMPILER_BUDGET_INVALID", "V2_COMPILER_BUDGET"],
+    ["unknown criterion", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.criterionRefs.push({ criterionId: "criterion-ghost" });
+    }, "V2_COMPILER_CRITERION_UNKNOWN", "V2_COMPILER_COVERAGE"],
+    ["owner missing", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.criterionRefs = value.nodes[0]!.criterionRefs.slice(1);
+    }, "V2_COMPILER_CRITERION_OWNER_MISSING", "V2_COMPILER_COVERAGE"],
+    ["owner duplicated in one node", (value: ReturnType<typeof input>) => {
+      value.nodes[0]!.criterionRefs.push({ criterionId: criterionIds[0]! });
+    }, "V2_COMPILER_CRITERION_OWNER_MULTIPLE", "V2_COMPILER_COVERAGE"],
+    ["owner multiply covered", (value: ReturnType<typeof input>) => {
+      value.nodes.push({
+        ...value.nodes[0]!, criterionRefs: [{ criterionId: criterionIds[0]! }],
+        nodeId: "node-build-two",
+      });
+      assignExclusiveBudgets(value);
+    }, "V2_COMPILER_CRITERION_OWNER_MULTIPLE", "V2_COMPILER_COVERAGE"],
+    ["verifier missing", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.criterionRefs = value.nodes[1]!.criterionRefs.slice(1);
+    }, "V2_COMPILER_CRITERION_VERIFIER_MISSING", "V2_COMPILER_COVERAGE"],
+    ["verifier duplicated in one node", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.criterionRefs.push({ criterionId: criterionIds[0]! });
+    }, "V2_COMPILER_CRITERION_VERIFIER_MULTIPLE", "V2_COMPILER_COVERAGE"],
+    ["verifier multiply covered", (value: ReturnType<typeof input>) => {
+      value.nodes.push({
+        ...value.nodes[1]!, criterionRefs: [{ criterionId: criterionIds[0]! }],
+        nodeId: "node-verify-two",
+      });
+      assignExclusiveBudgets(value);
+    }, "V2_COMPILER_CRITERION_VERIFIER_MULTIPLE", "V2_COMPILER_COVERAGE"],
+    ["verifier unordered", (value: ReturnType<typeof input>) => {
+      value.nodes[1]!.dependsOn = [];
+    }, "V2_COMPILER_VERIFIER_ORDER_INVALID", "V2_COMPILER_COVERAGE"],
+  ])("refuses %s at the exact named fence", (_name, mutate, code, layer) => {
+    const value = input();
+    mutate(value);
+    expect(compile(value)).toEqual({ code, layer, ok: false });
+  });
+
+  it("refuses a digest-mutated contract rather than compiling advisory lookalike bytes", () => {
+    const value = input();
+    value.contract = { ...value.contract, revisionDigest: digest("forged-contract") };
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_CONTRACT_INVALID", layer: "V2_COMPILER_CONTRACT", ok: false,
+    });
+  });
+
+  it("snapshots hostile values without executing accessors or throwing", () => {
+    let reads = 0;
+    const accessor = input() as Record<string, unknown>;
+    Object.defineProperty(accessor, "nodes", {
+      enumerable: true, get: () => { reads += 1; throw new Error("must not execute"); },
+    });
+    expect(compile(accessor)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    expect(reads).toBe(0);
+
+    const cyclic = input() as Record<string, unknown>;
+    cyclic["cycle"] = cyclic;
+    expect(compile(cyclic)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    const hostile = new Proxy(input(), { ownKeys: () => { throw new Error("proxy trap"); } });
+    expect(() => compile(hostile)).not.toThrow();
+    expect(compile(hostile)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["prose", "completion node"],
+    ["NUL-bearing", "completion\0node"],
+    ["non-normalized", "e\u0301"],
+    ["overlong", "x".repeat(129)],
+    ["null", null],
+    ["number", 1],
+    ["array", ["node-verify"]],
+  ])("refuses a %s completion node key as malformed input", (_name, completionNodeKey) => {
+    const value = input() as Record<string, unknown>;
+    value["completionNodeKey"] = completionNodeKey;
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses an input missing the explicit completion node key", () => {
+    const value = input() as unknown as Record<string, unknown>;
+    delete value["completionNodeKey"];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses an accessor-backed completion node key without invoking it", () => {
+    let reads = 0;
+    const value = input() as unknown as Record<string, unknown>;
+    Object.defineProperty(value, "completionNodeKey", {
+      enumerable: true,
+      get: () => { reads += 1; throw new Error("must not execute"); },
+    });
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    expect(reads).toBe(0);
+  });
+
+  it("embeds the exact admitted Scheduler GraphContent bytes and catalog authority", () => {
+    const result = compileWithAuthority(input());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const authority = result.dag.schedulerAuthority;
+    const bytes = Buffer.from(authority.canonicalBytesBase64, "base64");
+    const decoded = decodeGraphContent(new Uint8Array(bytes));
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.graphContentHash).toBe(authority.graphContentHash);
+    expect(decoded.value.snapshotIdentity).toBe(authority.snapshotIdentity);
+    expect(decoded.value.content).toEqual(authority.content);
+    expect(authority.content.nodeAuthority.definitions).toHaveLength(2);
+    const status = compilerQualificationStatus(
+      RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification,
+    );
+    expect(result.dag.qualificationFences).toEqual([{
+      qualificationDigest:
+        RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification.qualificationDigest,
+      qualificationId:
+        RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification.qualificationId,
+      statusDigest: status.statusDigest, statusRef: status.statusRef,
+    }]);
+    const builder = authority.content.nodeAuthority.definitions.find(
+      (definition) => definition.nodeKey === "node-build",
+    )!;
+    const catalog = RESOLUTION_MINT_INPUT.catalog.entries.find(
+      (entry) => entry.capabilityId === "capability-web-build",
+    )!;
+    const compiledBuilder = result.dag.nodes.find((node) => node.nodeId === "node-build")!;
+    expect(builder.capability).toBe(catalog.capabilityId);
+    expect(builder.readScopes).toEqual(catalog.readScopes);
+    expect(builder.writeScopes).toEqual(catalog.writeScopes);
+    expect(builder.resources).toHaveLength(catalog.resourceScopes.length + catalog.roles.length
+      + catalog.requiredImageDigests.length + catalog.requiredToolDigests.length + 1);
+    expect(builder.resources.every((value) => value.startsWith("moe.v2."))).toBe(true);
+    expect(builder.resources).toContain(qualifiedIdentity("build-recipe", [
+      compiledBuilder.buildRecipe!.recipeRef, compiledBuilder.buildRecipe!.recipeDigest,
+      compiledBuilder.buildRecipe!.toolRef, ...compiledBuilder.buildRecipe!.argv,
+    ]));
+    expect(builder.verificationRecipeRevisions).toEqual(catalog.verificationRecipeRevisions.map(
+      (recipe) => qualifiedIdentity("verification-recipe", [
+        "verify-builder", recipe.recipeRevisionId, recipe.recipeRevisionDigest,
+      ]),
+    ));
+    const material = compiledBuilder.materialBinding;
+    expect(builder.admissionAmounts).toEqual([
+      "CONTINGENCY", "EXECUTION", "FINAL_ACCEPTANCE", "INDEPENDENT_REVIEW", "VERIFICATION",
+    ].map((purpose) => ({ meter: "runner.authorized_ms", purpose, quantity: 1 })));
+    expect(builder.admissionGatePolicy).toBe("POLICY_ALLOWANCE");
+    expect(builder.objective).toBe("Execute builder node-build for contract-v2@contract-v2-r1.");
+    expect(builder.policySliceHash).toBe(authority.content.policyRevision);
+    expect(builder.constraints).toEqual([
+      qualifiedIdentity("contract-constraint", ["contract-v2", "contract-v2-r1",
+        result.dag.contractBinding.revisionDigest]),
+      qualifiedIdentity("budget-constraint", ["budget-build", "TIME", "30", "days"]),
+      qualifiedIdentity("criteria-constraint", result.dag.criteria.flatMap((criterion) => [
+        criterion.category, criterion.criterionId, criterion.requirementId,
+        criterion.statement, criterion.verification,
+      ])),
+      qualifiedIdentity("node-intent-constraint", ["graph-v2-r1", "node-build", "BUILDER",
+        "capability-web-build", material.catalogRevisionDigest,
+        material.deliveryProfileQualificationDigest,
+        material.deliveryProfileQualificationStatusDigest,
+        material.deliveryProfileRevisionDigest, material.executionIsolationProfileRevisionDigest,
+        material.sourceSnapshotDigest]),
+      qualifiedIdentity("planner-admission-profile-binding", [
+        "node-build", "planner-admission-profile:node-build",
+        EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+        "planner-admission-profile:node-build:r1", PLANNER_ADMISSION_PROFILE_VERSION,
+      ]),
+    ].sort());
+    const canonicalDag = Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8");
+    expect(canonicalDag).toContain(authority.graphContentHash);
+    expect(canonicalDag).toContain(authority.canonicalBytesBase64);
+  });
+
+  it.each([
+    ["author", (value: ReturnType<typeof compilerGraphAuthority>) => ({
+      ...value, author: "principal:changed",
+    })],
+    ["decomposition budget", (value: ReturnType<typeof compilerGraphAuthority>) => ({
+      ...value, decompositionBudget: 63,
+    })],
+    ["parent revision", (value: ReturnType<typeof compilerGraphAuthority>) => ({
+      ...value, parentRevision: "graph:parent",
+    })],
+    ["policy revision", (value: ReturnType<typeof compilerGraphAuthority>) => ({
+      ...value, policyRevision: digest("policy:changed"),
+    })],
+  ])("binds Scheduler graph-author field %s into both authority and compiler digests",
+    (_name, mutate) => {
+      const baseline = compileWithAuthority(input());
+      const changed = compileWithAuthority(input(), {
+        readGraphAuthority: (request) => mutate(compilerGraphAuthority(request)),
+      });
+      expect(baseline.ok && changed.ok).toBe(true);
+      if (!baseline.ok || !changed.ok) return;
+      expect(changed.dag.schedulerAuthority.graphContentHash)
+        .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+      expect(changed.graphDigest).not.toBe(baseline.graphDigest);
+    });
+
+  it("refuses a graph repository tree not corroborated by published SourceSnapshots", () => {
+    const result = compileWithAuthority(input(), {
+      readGraphAuthority: (request) => ({
+        ...compilerGraphAuthority(request),
+        repositoryBaseTree: digest("changed-base-tree"),
+      }),
+    });
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+  });
+
+  it("binds a matched graph and published SourceSnapshot tree into compiler digests", () => {
+    const changedTree = digest("changed-base-tree");
+    const sourceSnapshot = compilerSourceSnapshot("changed-base-tree", {
+      repositoryBaseTree: changedTree,
+    });
+    const world = compilerResolutionMintInput({
+      builder: sourceSnapshot.sourceSnapshotDigest,
+      verifier: sourceSnapshot.sourceSnapshotDigest,
+    });
+    const baseline = compileWithSourceAuthority(input());
+    const changed = compileWithSourceAuthority(inputForWorld(world), world, {
+      readGraphAuthority: (request) => ({
+        ...compilerGraphAuthority(request), repositoryBaseTree: changedTree,
+      }),
+      readPublishedSourceSnapshot: () => ({ ok: true, snapshot: sourceSnapshot }),
+    });
+    expect(baseline.ok && changed.ok).toBe(true);
+    if (!baseline.ok || !changed.ok) return;
+    expect(changed.dag.schedulerAuthority.content.repositoryBaseTree).toBe(changedTree);
+    expect(changed.dag.schedulerAuthority.graphContentHash)
+      .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+    expect(changed.graphDigest).not.toBe(baseline.graphDigest);
+  });
+
+  it("constructs NodeDefinition authority from graph-free planning content", () => {
+    const sources = new Map<string, ReturnType<typeof compilerNodePlanningAuthority>>();
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = compilerNodePlanningAuthority(request);
+        sources.set(request.nodeKey, source);
+        return source;
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const definitions = result.dag.schedulerAuthority.content.nodeAuthority.definitions;
+    expect(definitions).toHaveLength(input().nodes.length);
+    for (const definition of definitions) {
+      const source = sources.get(definition.nodeKey)!;
+      expect(Object.keys(source.planExecutionContent))
+        .not.toContain("planExecutionContentDigest");
+      expect(Object.keys(source.acceptanceCriterionContent)).not.toContain("criteria");
+      const execution = createPlanExecutionContent(source.planExecutionContent);
+      const acceptance = createAcceptanceCriterionContent(source.acceptanceCriterionContent);
+      expect(execution.ok && acceptance.ok).toBe(true);
+      if (!execution.ok || !acceptance.ok) continue;
+      expect(definition.planExecutionContentDigest).toBe(execution.planExecutionContentDigest);
+      expect(definition.criterionBindings).toEqual(acceptance.criteria);
+    }
+  });
+
+  it("refuses a caller-constructed complete NodeDefinition at the planning-source seam", () => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: compilerNodeDefinition,
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["plan body", (source: any) => { delete source.planExecutionContent.version; }],
+    ["acceptance body", (source: any) => { delete source.acceptanceCriterionContent.version; }],
+    ["plan body version", (source: any) => {
+      source.planExecutionContent.version = "moe-plan-revision/9";
+    }],
+    ["acceptance body version", (source: any) => {
+      source.acceptanceCriterionContent.version = "moe-acceptance-contract/9";
+    }],
+  ])("refuses an unversioned or unsupported graph-free %s", (_name, mutate) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(source);
+        return source;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["leaf content for the graph completion", "COMPLETION", "LEAF"],
+    ["completion content for a non-completion node", "NONE", "COMPOSITE_COMPLETION"],
+  ] as const)("refuses %s", (_name, joinRole, nodeKind) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        if (request.joinRole === joinRole) {
+          (source.acceptanceCriterionContent as any).nodeKind = nodeKind;
+        }
+        return source;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    "admissionAmounts", "admissionGatePolicy", "constraints", "objective", "policySliceHash",
+  ])("refuses planning source that injects compiler-owned %s", (field) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request)) as any;
+        body[field] = "caller-owned";
+        return body;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["criterion statement", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0].statement = "A forged criterion statement.";
+    }],
+    ["missing own evidence requirement", (source: any, request: any) => {
+      const obligation = source.acceptanceCriterionContent.obligations[0];
+      const binding = request.criterionBindings.find(
+        (item: any) => item.criterionId === obligation.criterionId,
+      );
+      obligation.evidenceRequirements[0].requirementId =
+        request.contractRequirementIds.find((id: string) => id !== binding.requirementId);
+    }],
+    ["foreign evidence requirement", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0].evidenceRequirements.push({
+        evidenceRef: "evidence:foreign", kind: "ARTIFACT", requirementId: "requirement-foreign",
+      });
+    }],
+    ["verification recipe", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0]
+        .verificationRecipeRefs = ["recipe-foreign"];
+    }],
+  ])("refuses product-inconsistent planning-source %s", (_name, mutate) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(source, request);
+        return source;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["dependency contract", (body: any) => {
+      if (body.directHardDependencies.length > 0) {
+        body.directHardDependencies[0].requirement.contract.producer.digest =
+          digest("changed-artifact");
+      }
+    }],
+    ["monotonic proof", (body: any) => {
+      if (body.predicateRegistry.length > 0) {
+        body.predicateRegistry[0].proofRationale = "A different durable monotonic proof.";
+      }
+    }],
+  ])("binds planning-source %s into GraphContent and compiler digest", (_name, mutate) => {
+    const baseline = compileWithAuthority(input());
+    const changed = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(body as any);
+        return body;
+      },
+    });
+    expect(baseline.ok && changed.ok).toBe(true);
+    if (!baseline.ok || !changed.ok) return;
+    expect(changed.dag.schedulerAuthority.graphContentHash)
+      .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+    expect(changed.graphDigest).not.toBe(baseline.graphDigest);
+  });
+
+  it.each([
+    ["criterion roster", (body: any) => {
+      body.acceptanceCriterionContent.obligations[0].criterionId = "criterion-forged";
+    }],
+    ["verification recipe superset", (body: any) => {
+      body.planExecutionContent.verificationRecipeRefs.push("recipe-forged");
+    }],
+    ["affected criterion superset", (body: any) => {
+      body.planExecutionContent.affectedCriterionIds.push("criterion-z-forged");
+    }],
+    ["affected node superset", (body: any) => {
+      body.planExecutionContent.affectedNodeIds.push("node-z-forged");
+    }],
+    ["derived plan identity", (body: any) => {
+      body.planExecutionContent.planExecutionContentDigest = digest("forged-plan-content");
+    }],
+    ["derived criterion roster", (body: any) => {
+      body.acceptanceCriterionContent.criteria = [];
+    }],
+    ["missing dependency contract", (body: any) => {
+      body.directHardDependencies = [];
+    }],
+    ["dependency endpoint", (body: any) => {
+      if (body.directHardDependencies.length > 0) {
+        body.directHardDependencies[0].requirement.contract.producerNodeKey = "node-forged";
+      }
+    }],
+    ["dependency graph binding", (body: any) => {
+      if (body.directHardDependencies.length > 0) {
+        body.directHardDependencies[0].requirement.contract.graphBindingDigest = digest("forged-graph");
+      }
+    }],
+  ])("refuses planning source with mismatched %s", (_name, mutate) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(body as any);
+        return body;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each(["graphSnapshotIdentity", "nodeIntentDigest"] as const)(
+    "collapses a real mapper %s mismatch before any NodeDefinition read", (field) => {
+      let admissionReads = 0; let nodeDefinitionReads = 0;
+      const result = compileWithAuthority(input(), {
+        readNodeAdmissionAuthority: (request) => {
+          admissionReads += 1;
+          const staleRequest = Object.freeze({
+            ...request, [field]: digest(`stale:${field}`),
+          });
+          return mapPlannerAdmissionProfileRevision(
+            compilerPlannerAdmissionProfileRevision(staleRequest), request,
+          );
+        },
+        readNodePlanningAuthority: (request) => {
+          nodeDefinitionReads += 1;
+          return compilerNodePlanningAuthority(request);
+        },
+      });
+      expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+        layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+      expect(admissionReads).toBe(1);
+      expect(nodeDefinitionReads).toBe(0);
+    });
+
+  it("rejects one profile revision digest attached to different node keys", () => {
+    let admissionReads = 0; let firstDigest: string | undefined;
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        const mapped = structuredClone(compilerNodeAdmissionAuthority(request)) as any;
+        admissionReads += 1;
+        if (firstDigest === undefined) firstDigest = mapped.profileBinding.revisionDigest;
+        else mapped.profileBinding.revisionDigest = firstDigest;
+        return mapped;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(admissionReads).toBe(2);
+  });
+
+  it("allows one profile id to name distinct node-bound profile revisions", () => {
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => compilerNodeAdmissionAuthority(request, {
+        profileId: "planner-admission-profile:shared",
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.plannerAdmissionProfileBindings.map(({ profileId }) => profileId))
+      .toEqual(["planner-admission-profile:shared", "planner-admission-profile:shared"]);
+    expect(new Set(result.dag.plannerAdmissionProfileBindings
+      .map(({ revisionDigest }) => revisionDigest)).size).toBe(2);
+  });
+
+  it("detaches profile authority before later NodeDefinition callbacks can mutate aliases", () => {
+    const returned: any[] = [];
+    const admissionRequests: V2CompilerNodeAdmissionRequest[] = [];
+    const nodeConstraints = new Map<string, readonly string[]>();
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        const mutable = structuredClone(compilerNodeAdmissionAuthority(request));
+        admissionRequests.push(request);
+        returned.push(mutable);
+        return mutable;
+      },
+      readNodePlanningAuthority: (request) => {
+        for (const mutable of returned) {
+          mutable.authority.admissionAmounts[0].quantity = 999;
+          mutable.profileBinding.nodeKey = "node-mutated-alias";
+          mutable.profileBinding.profileId = "planner-admission-profile:mutated-alias";
+          mutable.profileBinding.revisionDigest = digest("mutated-alias");
+          mutable.profileBinding.revisionId = "planner-admission-profile:mutated-alias:r9";
+          mutable.profileBinding.version = "moe-planner-admission-profile-revision/9";
+        }
+        nodeConstraints.set(request.nodeKey, request.constraints);
+        return compilerNodePlanningAuthority(request);
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(returned.every((value) => value.authority.admissionAmounts[0].quantity === 999))
+      .toBe(true);
+    expect(admissionRequests.map(({ nodeKey }) => nodeKey))
+      .toEqual(["node-build", "node-verify"]);
+    expect(admissionRequests[0]!.nodeIntentDigest).toBe(EXPECTED_BUILDER_NODE_INTENT_DIGEST);
+    expect(admissionRequests[1]!.nodeIntentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(admissionRequests.every(Object.isFrozen)).toBe(true);
+    expect(result.dag.plannerAdmissionProfileBindings).toEqual([{
+      nodeKey: "node-build", profileId: "planner-admission-profile:node-build",
+      revisionDigest: EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-build:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }, {
+      nodeKey: "node-verify", profileId: "planner-admission-profile:node-verify",
+      revisionDigest: EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-verify:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }]);
+    for (const binding of result.dag.plannerAdmissionProfileBindings) {
+      const constraint = qualifiedIdentity("planner-admission-profile-binding", [
+        binding.nodeKey, binding.profileId, binding.revisionDigest,
+        binding.revisionId, binding.version,
+      ]);
+      expect(nodeConstraints.get(binding.nodeKey)).toContain(constraint);
+      expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+        .find(({ nodeKey }) => nodeKey === binding.nodeKey)!.constraints).toContain(constraint);
+    }
+    expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .every(({ admissionAmounts }) => admissionAmounts[0]?.quantity === 1)).toBe(true);
+  });
+
+  it("detaches planning-source bodies before later callbacks can mutate aliases", () => {
+    const baseline = compileWithAuthority(input());
+    const returned: any[] = [];
+    const mutate = (source: any) => {
+      source.planExecutionContent.steps[0].description = "Mutated after the authority read.";
+      source.acceptanceCriterionContent.obligations[0].statement = "Mutated after the read.";
+      if (source.directHardDependencies.length > 0) {
+        source.directHardDependencies[0].requirement.contract.producer.digest =
+          digest("mutated-dependency-alias");
+        source.predicateRegistry[0].proofRationale = "Mutated proof alias.";
+      }
+    };
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        returned.forEach(mutate);
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        returned.push(source);
+        return source;
+      },
+    });
+    returned.forEach(mutate);
+    expect(baseline.ok && result.ok).toBe(true);
+    if (!baseline.ok || !result.ok) return;
+    expect(result.dag.schedulerAuthority).toEqual(baseline.dag.schedulerAuthority);
+    expect(result.graphDigest).toBe(baseline.graphDigest);
+  });
+
+  it("rejects authority-reader proxies without invoking traps", () => {
+    let graphTraps = 0;
+    const graphResult = compileWithAuthority(input(), { readGraphAuthority: (request) =>
+      new Proxy(compilerGraphAuthority(request), { ownKeys: (target) => {
+        graphTraps += 1; return Reflect.ownKeys(target);
+      } }) });
+    expect(graphResult).toEqual({ code: "V2_COMPILER_GRAPH_AUTHORITY_UNAVAILABLE",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(graphTraps).toBe(0);
+    let nodeTraps = 0;
+    const nodeResult = compileWithAuthority(input(), { readNodePlanningAuthority: (request) =>
+      new Proxy(compilerNodePlanningAuthority(request), { ownKeys: (target) => {
+        nodeTraps += 1; return Reflect.ownKeys(target);
+      } }) });
+    expect(nodeResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(nodeTraps).toBe(0);
+  });
+
+  it("rejects nested hostile planning-source values without invoking traps or accessors", () => {
+    let accessorReads = 0;
+    const accessorResult = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source: any = structuredClone(compilerNodePlanningAuthority(request));
+        const step = source.planExecutionContent.steps[0];
+        const description = step.description;
+        Object.defineProperty(step, "description", {
+          enumerable: true,
+          get: () => {
+            accessorReads += 1;
+            return description;
+          },
+        });
+        return source;
+      },
+    });
+    expect(accessorResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(accessorReads).toBe(0);
+
+    let proxyTraps = 0;
+    const proxyResult = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source: any = structuredClone(compilerNodePlanningAuthority(request));
+        source.predicateRegistry = new Proxy(source.predicateRegistry, {
+          ownKeys: (target) => {
+            proxyTraps += 1;
+            return Reflect.ownKeys(target);
+          },
+        });
+        return source;
+      },
+    });
+    expect(proxyResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(proxyTraps).toBe(0);
+  });
+
+  it("rejects a proxied token roster without invoking traps", () => {
+    const compiler = createCompiler();
+    const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    let traps = 0;
+    const tokens = new Proxy([minted.token], { getPrototypeOf: (target) => {
+      traps += 1; return Reflect.getPrototypeOf(target);
+    } });
+    expect(compiler.compile(input(), tokens)).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+    expect(traps).toBe(0);
+  });
+
+  it("refuses independent verifier sinks before reading any Scheduler authority", () => {
+    const { reads, result } = compileWithCountedSchedulerAuthority(
+      inputWithIndependentVerifierSinks(),
+    );
+    expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_CLOSURE_INCOMPLETE",
+      layer: "V2_COMPILER_TOPOLOGY", ok: false });
+    expect(reads).toEqual({ graph: 0, nodeAdmission: 0, nodeDefinition: 0, sourceSnapshot: 0 });
+  });
+
+  it("emits exactly planner-declared HARD edges into an explicit verifier completion", () => {
+    const value = inputWithIndependentVerifierSinks();
+    value.nodes.find(({ nodeId }) => nodeId === value.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-verify",
+    });
+    const result = compileWithAuthority(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { snapshot, nodeAuthority } = result.dag.schedulerAuthority.content;
+    const declaredEdges = value.nodes.flatMap((node) => node.dependsOn.map((dependency) => ({
+      consumerNodeKey: node.nodeId,
+      edgeKey: qualifiedIdentity("hard-edge", [dependency.nodeId, node.nodeId]),
+      kind: "HARD" as const,
+      producerNodeKey: dependency.nodeId,
+    }))).sort((left, right) => left.edgeKey < right.edgeKey ? -1 : left.edgeKey > right.edgeKey ? 1 : 0);
+    expect(snapshot.completionNodeKey).toBe(value.completionNodeKey);
+    expect(snapshot.nodes.every(({ executionBearing }) => executionBearing)).toBe(true);
+    expect(snapshot.edges).toHaveLength(declaredEdges.length);
+    expect(snapshot.edges).toEqual(declaredEdges);
+    expect(snapshot.edges.map(({ edgeKey }) => edgeKey)).not.toContain(
+      qualifiedIdentity("completion-edge", ["node-verify", value.completionNodeKey]),
+    );
+    expect(nodeAuthority.definitions.filter((body) => body.joinRole === "COMPLETION"))
+      .toHaveLength(1);
+  });
+
+  it.each([
+    ["unknown", "node-ghost"],
+    ["builder", "node-build"],
+  ])("refuses an %s explicit completion before reading any Scheduler authority",
+    (_name, completionNodeKey) => {
+      const value = input();
+      value.completionNodeKey = completionNodeKey;
+      const { reads, result } = compileWithCountedSchedulerAuthority(value);
+      expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_NODE_INVALID",
+        layer: "V2_COMPILER_TOPOLOGY", ok: false });
+      expect(reads).toEqual({ graph: 0, nodeAdmission: 0,
+        nodeDefinition: 0, sourceSnapshot: 0 });
+    });
+
+  it("refuses a nonterminal verifier completion before reading any Scheduler authority", () => {
+    const value = inputWithSecondResolution(RESOLUTION_MINT_INPUT.catalog.revisionDigest);
+    value.completionNodeKey = "node-base-verify";
+    const { reads, result } = compileWithCountedSchedulerAuthority(value);
+    expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_NODE_INVALID",
+      layer: "V2_COMPILER_TOPOLOGY", ok: false });
+    expect(reads).toEqual({ graph: 0, nodeAdmission: 0,
+      nodeDefinition: 0, sourceSnapshot: 0 });
+  });
+
+  it("uses collision-resistant ASCII length-framed identities", () => {
+    const left = qualifiedIdentity("material-test", ["a:b", "c"]);
+    const right = qualifiedIdentity("material-test", ["a", "b:c"]);
+    expect(left).not.toBe(right);
+    expect(left).toMatch(/^[A-Za-z0-9_][A-Za-z0-9._:@/+~-]*$/u);
+    expect(left.length).toBeLessThanOrEqual(128);
+  });
+
+  it("rejects separately minted but unused duplicate resolution authority", () => {
+    let sourceReads = 0;
+    const compiler = createCompiler(RESOLUTION_MINT_INPUT.qualificationAuthority, {
+      readPublishedSourceSnapshot: (ref) => {
+        sourceReads += 1;
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+    const minted = [0, 1].map(() => compiler.mintResolutionToken(
+      RESOLUTION_MINT_INPUT.catalog, { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials,
+    ));
+    expect(minted.every((item) => item.ok)).toBe(true);
+    const first = minted[0]!; const second = minted[1]!;
+    if (!first.ok || !second.ok) return;
+    expect(compiler.compile(input(), [first.token, second.token])).toEqual({
+      code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND",
+      layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
+    });
+    expect(sourceReads).toBe(0);
+  });
+
+  it("rejects conflicting bytes under one durable catalog revision identity", () => {
+    const draft = structuredClone(RESOLUTION_MINT_INPUT.catalog) as unknown as
+      Record<string, unknown>;
+    delete draft["revisionDigest"]; delete draft["version"];
+    draft["sourceCommitSha256"] = digest("conflicting-source-commit");
+    const changed = createCapabilityCatalogRevision(draft);
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    expect(changed.revision.catalogId).toBe(RESOLUTION_MINT_INPUT.catalog.catalogId);
+    expect(changed.revision.revisionId).toBe(RESOLUTION_MINT_INPUT.catalog.revisionId);
+    expect(changed.revision.revisionDigest)
+      .not.toBe(RESOLUTION_MINT_INPUT.catalog.revisionDigest);
+
+    const compiler = createCompiler();
+    const first = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    const second = compiler.mintResolutionToken(changed.revision,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(compiler.compile(inputWithSecondResolution(changed.revision.revisionDigest),
+      [first.token, second.token])).toEqual({
+      code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND",
+      layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
+    });
+  });
+
+  it("emits one fence for many used resolutions sharing exact qualification authority", () => {
+    const compiler = createCompiler();
+    const catalogs = [RESOLUTION_MINT_INPUT.catalog,
+      ...Array.from({ length: criterionIds.length - 1 }, (_, index) =>
+        secondCatalog(`shared-authority-${index}`))];
+    const minted = catalogs.map((catalog) => compiler.mintResolutionToken(catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials));
+    expect(minted.every((item) => item.ok)).toBe(true);
+    if (minted.some((item) => !item.ok)) return;
+    const tokens = minted.map((item) => item.ok ? item.token : undefined)
+      .filter((token): token is V2CompilerResolutionToken => token !== undefined);
+    const result = compiler.compile(inputWithCriterionResolutions(
+      catalogs.map((catalog) => catalog.revisionDigest)), tokens);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.qualificationFences).toHaveLength(1);
+  });
+
+  it("refuses two otherwise valid resolutions with distinct qualification authority", () => {
+    const catalog = secondCatalog("distinct-authority");
+    const qualificationDraft = structuredClone(
+      RESOLUTION_MINT_INPUT.materials.deliveryProfileQualification,
+    ) as unknown as Record<string, unknown>;
+    delete qualificationDraft["qualificationDigest"]; delete qualificationDraft["version"];
+    qualificationDraft["qualificationId"] = "qualification-profile-next-r2";
+    const created = createDeliveryProfileQualification(qualificationDraft);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const materials = { ...RESOLUTION_MINT_INPUT.materials,
+      deliveryProfileQualification: created.qualification };
+    const compiler = createCompiler();
+    const first = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    const second = compiler.mintResolutionToken(catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      materials);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(compiler.compile(inputWithSecondResolution(catalog.revisionDigest),
+      [first.token, second.token])).toEqual({
+      code: "V2_COMPILER_QUALIFICATION_AUTHORITY_MISMATCH",
+      layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
+    });
+  });
+
+  it("bounds qualification no-event fence inputs to the store decision-leg ceiling", () => {
+    const compiler = createCompiler();
+    const tokens: V2CompilerResolutionToken[] = [];
+    for (let index = 0; index < 9; index += 1) {
+      const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+        { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+          requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+        RESOLUTION_MINT_INPUT.materials);
+      expect(minted.ok).toBe(true);
+      if (minted.ok) tokens.push(minted.token);
+    }
+    expect(compiler.compile(input(), tokens)).toEqual({
+      code: "V2_COMPILER_QUALIFICATION_FENCE_LIMIT_EXCEEDED",
+      layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
+    });
+  });
+
+  it("binds the server-owned project into graph and deduplicated SourceSnapshot reads", () => {
+    const graphProjects: unknown[] = [];
+    const refs: SourceSnapshotRef[] = [];
+    const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+      readGraphAuthority: (request) => {
+        graphProjects.push((request as unknown as Record<string, unknown>)["projectId"]);
+        return compilerGraphAuthority(request);
+      },
+      readPublishedSourceSnapshot: (ref) => {
+        refs.push(ref);
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(graphProjects).toEqual([TEST_PROJECT_ID]);
+    expect(refs).toEqual([{
+      projectId: TEST_PROJECT_ID,
+      sourceSnapshotDigest: TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+    }]);
+    expect(Object.isFrozen(refs[0])).toBe(true);
+  });
+
+  it("does not accept caller-owned project authority", () => {
+    let sourceReads = 0;
+    const value = { ...input(), projectId: "project-caller-forged" };
+    const result = compileWithSourceAuthority(value, RESOLUTION_MINT_INPUT, {
+      readPublishedSourceSnapshot: (ref) => {
+        sourceReads += 1;
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+
+    expect(result).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    expect(sourceReads).toBe(0);
+  });
+
+  it("reads canonical-roster SourceSnapshots once in code-unit order before node authority", () => {
+    const candidates = [compilerSourceSnapshot("z-source"), compilerSourceSnapshot("a-source")]
+      .sort((left, right) => left.sourceSnapshotDigest < right.sourceSnapshotDigest
+        ? -1 : left.sourceSnapshotDigest > right.sourceSnapshotDigest ? 1 : 0);
+    const low = candidates[0]!; const high = candidates[1]!;
+    expect(low.sourceSnapshotDigest).not.toBe(high.sourceSnapshotDigest);
+    expect(low.repositoryBaseTree).toBe(TEST_REPOSITORY_BASE_TREE);
+    expect(high.repositoryBaseTree).toBe(TEST_REPOSITORY_BASE_TREE);
+    const world = compilerResolutionMintInput({
+      builder: high.sourceSnapshotDigest,
+      verifier: low.sourceSnapshotDigest,
+    });
+    const snapshots = new Map(candidates.map((snapshot) => [
+      snapshot.sourceSnapshotDigest, snapshot,
+    ]));
+    for (const reverseNodes of [false, true]) {
+      const events: string[] = [];
+      const value = inputForWorld(world);
+      if (reverseNodes) value.nodes.reverse();
+      const result = compileWithSourceAuthority(value, world, {
+        readGraphAuthority: (request) => {
+          events.push("graph");
+          return compilerGraphAuthority(request);
+        },
+        readNodeAdmissionAuthority: (request) => {
+          events.push(`node-admission:${request.nodeKey}`);
+          return compilerNodeAdmissionAuthority(request);
+        },
+        readNodePlanningAuthority: (request) => {
+          events.push(`node-definition:${request.nodeKey}`);
+          return compilerNodePlanningAuthority(request);
+        },
+        readPublishedSourceSnapshot: (ref) => {
+          events.push(`source:${ref.sourceSnapshotDigest}`);
+          const snapshot = snapshots.get(ref.sourceSnapshotDigest);
+          return snapshot === undefined
+            ? { code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false }
+            : { ok: true, snapshot };
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      const requested = events.filter((event) => event.startsWith("source:"))
+        .map((event) => event.slice("source:".length));
+      const emitted = [...new Set(result.dag.materialDigests
+        .filter(({ kind }) => kind === "SOURCE_SNAPSHOT")
+        .map(({ digest: value }) => value))].sort();
+      const emittedRows = result.dag.materialDigests
+        .filter(({ kind }) => kind === "SOURCE_SNAPSHOT");
+      expect(events.slice(0, 3)).toEqual([
+        "graph", `source:${low.sourceSnapshotDigest}`, `source:${high.sourceSnapshotDigest}`,
+      ]);
+      expect(requested).toEqual(emitted);
+      expect(requested).toHaveLength(2);
+      expect(emittedRows).toHaveLength(2);
+      expect(emittedRows.map(({ digest: value }) => value).sort())
+        .toEqual([low.sourceSnapshotDigest, high.sourceSnapshotDigest]);
+      expect(events[3]).toMatch(/^node-admission:/u);
+    }
+  });
+
+  it("reads a SourceSnapshot emitted for an unselected verifier capability", () => {
+    const unselected = compilerSourceSnapshot("unselected-verifier");
+    const world = compilerResolutionMintInput({
+      unselectedVerifier: unselected.sourceSnapshotDigest,
+    });
+    const snapshots = new Map([
+      [TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest, TEST_SOURCE_SNAPSHOT],
+      [unselected.sourceSnapshotDigest, unselected],
+    ]);
+    const requested: string[] = [];
+    const result = compileWithSourceAuthority(inputForWorld(world), world, {
+      readPublishedSourceSnapshot: (ref) => {
+        requested.push(ref.sourceSnapshotDigest);
+        const snapshot = snapshots.get(ref.sourceSnapshotDigest);
+        return snapshot === undefined
+          ? { code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false }
+          : { ok: true, snapshot };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.nodes.map(({ capabilityId }) => capabilityId))
+      .not.toContain("capability-web-verify-unselected");
+    const emitted = [...new Set(result.dag.materialDigests
+      .filter(({ kind }) => kind === "SOURCE_SNAPSHOT")
+      .map(({ digest: value }) => value))].sort();
+    expect(requested).toEqual(emitted);
+    expect(requested).toEqual([
+      TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest, unselected.sourceSnapshotDigest,
+    ].sort());
+    expect(result.dag.materialDigests).toContainEqual({
+      digest: unselected.sourceSnapshotDigest,
+      kind: "SOURCE_SNAPSHOT",
+      ref: materialIdentity("SOURCE_SNAPSHOT", [
+        "capability-web-verify-unselected", "execution-verifier-unselected-r1",
+        unselected.sourceSnapshotDigest,
+      ]),
+    });
+  });
+
+  it.each([
+    ["thrown reader", () => { throw new Error("source reader unavailable"); }],
+    ["undefined result", () => undefined],
+    ["delivery refusal", () => ({
+      code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false,
+    })],
+    ["missing success key", () => ({ snapshot: TEST_SOURCE_SNAPSHOT })],
+    ["missing snapshot key", () => ({ ok: true })],
+    ["excess success key", () => ({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT, extra: true })],
+    ["excess snapshot key", () => ({ ok: true, snapshot: {
+      ...TEST_SOURCE_SNAPSHOT, extra: true,
+    } })],
+    ["digest-invalid snapshot", () => ({ ok: true, snapshot: {
+      ...TEST_SOURCE_SNAPSHOT, repositoryRef: "refs/heads/forged",
+    } })],
+  ])("collapses %s before any node authority read", (_name, reader) => {
+    let nodeReads = 0;
+    const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+      readNodeAdmissionAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodeAdmissionAuthority(request);
+      },
+      readNodePlanningAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodePlanningAuthority(request);
+      },
+      readPublishedSourceSnapshot: reader,
+    });
+
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    expect(nodeReads).toBe(0);
+  });
+
+  it.each([
+    ["project", compilerSourceSnapshot("foreign-project", {
+      projectId: "project-v2-compiler-foreign",
+    }), true],
+    ["digest", compilerSourceSnapshot("different-digest"), false],
+    ["repository tree", compilerSourceSnapshot("foreign-tree", {
+      repositoryBaseTree: digest("foreign-repository-tree"),
+    }), true],
+  ])("collapses a published SourceSnapshot with independently mismatched %s", (
+    _name, snapshot, bindRequestedDigest,
+  ) => {
+    let nodeReads = 0;
+    const world = bindRequestedDigest ? compilerResolutionMintInput({
+      builder: snapshot.sourceSnapshotDigest,
+      verifier: snapshot.sourceSnapshotDigest,
+    }) : RESOLUTION_MINT_INPUT;
+    const result = compileWithSourceAuthority(inputForWorld(world), world, {
+      readNodeAdmissionAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodeAdmissionAuthority(request);
+      },
+      readNodePlanningAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodePlanningAuthority(request);
+      },
+      readPublishedSourceSnapshot: () => ({ ok: true, snapshot }),
+    });
+
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    expect(nodeReads).toBe(0);
+  });
+
+  it("snapshots hostile published-reader results without invoking traps or accessors", () => {
+    let traps = 0; let accessorReads = 0; let nodeReads = 0;
+    const proxied = new Proxy({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT }, {
+      getPrototypeOf: (target) => {
+        traps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const revoked = Proxy.revocable({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT }, {
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    revoked.revoke();
+    const accessor = { ok: true } as Record<string, unknown>;
+    Object.defineProperty(accessor, "snapshot", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return TEST_SOURCE_SNAPSHOT;
+      },
+    });
+    const okAccessor = { snapshot: TEST_SOURCE_SNAPSHOT } as Record<string, unknown>;
+    Object.defineProperty(okAccessor, "ok", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return true;
+      },
+    });
+    const snapshotProxy = new Proxy(TEST_SOURCE_SNAPSHOT, {
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const snapshotAccessor = { ...TEST_SOURCE_SNAPSHOT } as Record<string, unknown>;
+    Object.defineProperty(snapshotAccessor, "repositoryRef", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return TEST_SOURCE_SNAPSHOT.repositoryRef;
+      },
+    });
+    for (const hostile of [
+      proxied, revoked.proxy, accessor, okAccessor,
+      { ok: true, snapshot: snapshotProxy },
+      { ok: true, snapshot: snapshotAccessor },
+    ]) {
+      const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+        readNodeAdmissionAuthority: (request) => {
+          nodeReads += 1;
+          return compilerNodeAdmissionAuthority(request);
+        },
+        readPublishedSourceSnapshot: () => hostile,
+      });
+      expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    }
+    expect(traps).toBe(0);
+    expect(accessorReads).toBe(0);
+    expect(nodeReads).toBe(0);
+  });
+
+  it("descriptor-captures project and published-reader authority once at factory creation", () => {
+    const refs: SourceSnapshotRef[] = [];
+    let planningReads = 0;
+    const dependencies = {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readGraphAuthority: compilerGraphAuthority,
+      readNodeAdmissionAuthority: compilerNodeAdmissionAuthority,
+      readNodePlanningAuthority: ((request: V2CompilerNodeAuthorityRequest) => {
+        planningReads += 1;
+        return compilerNodePlanningAuthority(request);
+      }) as V2CompilerNodePlanningAuthorityReader,
+      readPublishedSourceSnapshot: (ref: SourceSnapshotRef) => {
+        refs.push(ref);
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    };
+    const compiler = createV2Compiler(dependencies as never);
+    const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog, {
+      capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+      requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+    }, RESOLUTION_MINT_INPUT.materials);
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    dependencies.projectId = "project-mutated-after-factory";
+    dependencies.readNodePlanningAuthority = () => undefined;
+    dependencies.readPublishedSourceSnapshot = () => ({
+      code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false,
+    });
+
+    const compileInput = input();
+    expect(compiler.compile(compileInput, [minted.token]).ok).toBe(true);
+    expect(planningReads).toBe(compileInput.nodes.length);
+    expect(refs).toEqual([{
+      projectId: TEST_PROJECT_ID,
+      sourceSnapshotDigest: TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+    }]);
+  });
+
+  it("uses SourceSnapshots only as a gate without adding payload or material rows", () => {
+    const result = compileWithSourceAuthority(input());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const sourceRows = result.dag.materialDigests.filter(({ kind }) => kind === "SOURCE_SNAPSHOT");
+    const sourceDigest = TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest;
+    expect(sourceRows).toEqual([
+      {
+        digest: sourceDigest, kind: "SOURCE_SNAPSHOT",
+        ref: materialIdentity("SOURCE_SNAPSHOT", [
+          "capability-web-build", "execution-builder-r1", sourceDigest,
+        ]),
+      },
+      {
+        digest: sourceDigest, kind: "SOURCE_SNAPSHOT",
+        ref: materialIdentity("SOURCE_SNAPSHOT", [
+          "capability-web-verify", "execution-verifier-r1", sourceDigest,
+        ]),
+      },
+    ].sort((left, right) => left.ref < right.ref ? -1 : left.ref > right.ref ? 1 : 0));
+    expect(result.dag.materialDigests.map(({ kind }) => kind)).toEqual([
+      "BUILD_RECIPE",
+      "CAPABILITY_CATALOG",
+      "DELIVERY_PROFILE",
+      "DELIVERY_PROFILE_QUALIFICATION",
+      "DELIVERY_PROFILE_QUALIFICATION_STATUS",
+      "EXECUTION_ISOLATION_PROFILE",
+      "EXECUTION_ISOLATION_PROFILE",
+      "SOURCE_SNAPSHOT",
+      "SOURCE_SNAPSHOT",
+      "VERIFICATION_RECIPE",
+      "VERIFICATION_RECIPE",
+    ]);
+    const canonical = Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8");
+    for (const value of [
+      TEST_PROJECT_ID, TEST_SOURCE_SNAPSHOT.baseRevisionHash,
+      TEST_SOURCE_SNAPSHOT.repositoryRef, TEST_SOURCE_SNAPSHOT.scopeRef,
+    ]) expect(canonical).not.toContain(value);
+    expect(result.dag.schedulerAuthority.content.repositoryBaseTree)
+      .toBe(TEST_REPOSITORY_BASE_TREE);
+  });
+
+  it("revalidates qualification expiry using the factory clock", () => {
+    let now = 1_500;
+    const compiler = createCompiler(RESOLUTION_MINT_INPUT.qualificationAuthority,
+      { clock: () => now });
+    const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    now = 2_000;
+    expect(compiler.compile(input(), [minted.token])).toEqual({
+      code: "V2_COMPILER_DELIVERY_PROFILE_UNQUALIFIED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+  });
+
+  it("revalidates durable status after scheduler authority assembly and before sealing", () => {
+    let revoked = false; let statusReads = 0;
+    const authority = Object.freeze({ ...RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readDurableQualificationStatus: (binding: {
+        qualificationDigest: string; qualificationId: string;
+      }) => {
+        statusReads += 1;
+        const current = RESOLUTION_MINT_INPUT.qualificationAuthority
+          .readDurableQualificationStatus(binding);
+        return revoked && current !== undefined
+          ? { ...current, status: "REVOKED" as const, statusDigest: digest("revoked-at-seal") }
+          : current;
+      } });
+    const compiler = createCompiler(authority, { readGraphAuthority: (request) => {
+      revoked = true; return compilerGraphAuthority(request);
+    } });
+    const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    expect(compiler.compile(input(), [minted.token])).toEqual({
+      code: "V2_COMPILER_DELIVERY_PROFILE_UNQUALIFIED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false,
+    });
+    expect(statusReads).toBe(2);
+  });
+});

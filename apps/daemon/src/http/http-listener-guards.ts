@@ -67,6 +67,11 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
+  // The activated `/2` current-contract read remains a separate authority plane.
+  "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID",
+  "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE",
+  "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID",
+  "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE",
   // The pending-plan read route's transport faults, mirroring the dossier pair: a malformed or
   // non-POST `{runId}` request, and a daemon composed without the read port.
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",
@@ -87,6 +92,8 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_BIND_FAILED",
   "LISTENER_STREAM_REQUEST_INVALID",
   "LISTENER_STREAM_UNAVAILABLE",
+  "LISTENER_V2_COMMAND_UNAVAILABLE",
+  "LISTENER_V2_COMMAND_REQUEST_INVALID",
 ] as const);
 
 export type ListenerRefusalCode = (typeof LISTENER_REFUSAL_CODES)[number];
@@ -170,6 +177,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   if (code === "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID") return 400;
@@ -187,6 +196,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_ROUTE_UNKNOWN") return 404;
   if (code === "LISTENER_STREAM_REQUEST_INVALID") return 400;
   if (code === "LISTENER_STREAM_UNAVAILABLE") return 503;
+  if (code === "LISTENER_V2_COMMAND_UNAVAILABLE") return 503;
+  if (code === "LISTENER_V2_COMMAND_REQUEST_INVALID") return 405;
   return 403;
 }
 

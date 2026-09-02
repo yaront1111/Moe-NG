@@ -15,7 +15,9 @@ import { encodeAcceptanceContract } from "../planning/acceptance-contract-codec.
 import {
   checkHumanAuthority, type ApprovalAuthorityRefusal, type HumanAuthorityGate,
 } from "../planning/approval-authority.js";
-import { admitProductContractRevision } from "./product-contract-admission.js";
+import {
+  admitProductContractRevision, admitProductContractRevisionRef,
+} from "./product-contract-admission.js";
 import {
   PRODUCT_CONTRACT_LIMITS, productContractRefusal, type ProductContractRefusal,
   type ProductContractRevision, type ProductContractRevisionRef,
@@ -153,7 +155,7 @@ function readGraphBinding(value: unknown): ProductContractGraphBinding | undefin
  * question, which is whether this authority was given for THIS revision.
  */
 function gateResult(
-  revision: ProductContractRevision, gateValue: unknown,
+  revision: ProductContractRevisionRef, gateValue: unknown,
 ): ProductContractGate1Result {
   if (gateValue === null || gateValue === undefined) {
     return refuseGate("PRODUCT_CONTRACT_GATE_1_REQUIRED");
@@ -171,6 +173,15 @@ function gateResult(
   });
 }
 
+/** Package-internal composition seam for another admitted Product Contract wire family. */
+export function validateProductContractGate1Ref(
+  revisionValue: unknown,
+  gateValue: unknown,
+): ProductContractGate1Result {
+  const admitted = admitProductContractRevisionRef(revisionValue);
+  return admitted.ok ? gateResult(admitted.ref, gateValue) : admitted;
+}
+
 export function validateProductContractGate1(
   revisionValue: unknown, gate: HumanAuthorityGate,
 ): ProductContractGate1Result;
@@ -178,7 +189,11 @@ export function validateProductContractGate1(
   revisionValue: unknown, gateValue: unknown,
 ): ProductContractGate1Result {
   const revision = admittedRevision(revisionValue);
-  return "ok" in revision ? revision : gateResult(revision, gateValue);
+  return "ok" in revision ? revision : validateProductContractGate1Ref({
+    contractId: revision.contractId,
+    revisionDigest: revision.revisionDigest,
+    revisionId: revision.revisionId,
+  }, gateValue);
 }
 
 function admittedAcceptance(value: unknown): AcceptanceContract | undefined {

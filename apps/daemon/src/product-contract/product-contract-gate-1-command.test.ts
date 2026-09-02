@@ -432,7 +432,7 @@ function withDirectStore(run: (store: SqliteEventStore) => void): void {
 }
 
 describe("Gate 1 stage-E bearer dispatch", () => {
-  it("commits the same durable HUMAN grant shape through the runner bearer seam", () =>
+  it("replays an emitted bearer approval with refreshed issuedAt but rejects changed authority", () =>
     withDirectStore((store) => {
       const sessionId = "gate1-direct-bearer-human";
       const sessions = createSessionAuthority(store, { clock: () => NOW, projectId: PROJECT });
@@ -461,11 +461,43 @@ describe("Gate 1 stage-E bearer dispatch", () => {
       expect(outcome).toMatchObject({
         decision: { resultCode: "EFFECTS_COMMITTED" }, disposition: "DECIDED", ok: true,
       });
+      const witness = Object.freeze({ sessionId, transportOrigin: "MCP_STDIO" as const });
+      expect(runProductContractGate1Command(
+        store,
+        directRequest(commandId, sessionId, {
+          authentication: { issuedAt: NOW + 1, kind: "BEARER", requestDigest,
+            requestId: commandId },
+          ...TRIPLE,
+        }),
+        authority,
+        witness,
+      )).toMatchObject({ disposition: "REPLAYED", ok: true });
+      expect(runProductContractGate1Command(
+        store,
+        directRequest(commandId, sessionId, {
+          authentication: { issuedAt: NOW + 2, kind: "BEARER",
+            requestDigest: "cd".repeat(32), requestId: commandId },
+          ...TRIPLE,
+        }), authority, witness,
+      )).toMatchObject({ code: "IDEMPOTENCY_CONFLICT", ok: false,
+        refusedBy: "DURABLE_STORE" });
+      expect(runProductContractGate1Command(
+        store,
+        directRequest(commandId, sessionId, {
+          authentication: { issuedAt: NOW + 3, kind: "BEARER", requestDigest,
+            requestId: commandId },
+          ...TRIPLE, revisionId: "revision-gate-1-changed",
+        }), authority, witness,
+      )).toMatchObject({ code: "IDEMPOTENCY_CONFLICT", ok: false,
+        refusedBy: "DURABLE_STORE" });
       expect(store.getCommandDecision({ commandId, principalId: sessionId, projectId: PROJECT }))
         .not.toBeNull();
       const events = store.readEvents(deriveProductContractGate1AggregateId(workRefOf(TRIPLE)));
       expect(events).toHaveLength(1);
       expect(events[0]?.eventType).toBe(PRODUCT_CONTRACT_GATE_1_EVENT_TYPE);
+      expect(store.readEvents(replayAggregateId(bearerReplayDigest(
+        sessionId, commandId, requestDigest,
+      )))).toHaveLength(1);
       expect(JSON.parse(decoder.decode(events[0]?.payload))).toEqual({
         contractId: CONTRACT_ID,
         gateId: gateOf(TRIPLE).gateId,
@@ -499,6 +531,16 @@ describe("Gate 1 stage-E bearer dispatch", () => {
         authority,
         Object.freeze({ sessionId: signed.sessionId, transportOrigin: "HTTP_LISTENER" }),
       )).toMatchObject({ ok: true });
+      const proof = authentication["proof"] as Record<string, unknown>;
+      expect(runProductContractGate1Command(
+        store,
+        directRequest(commandId, signed.principalId, { authentication: {
+          ...authentication, proof: { ...proof, issuedAt: NOW + 1 },
+        }, ...triple }),
+        authority,
+        Object.freeze({ sessionId: signed.sessionId, transportOrigin: "HTTP_LISTENER" }),
+      )).toMatchObject({ code: "IDEMPOTENCY_CONFLICT", ok: false,
+        refusedBy: "DURABLE_STORE" });
       const bearerDigest = bearerReplayDigest(signed.sessionId, commandId, requestDigest);
       expect(store.readEvents(replayAggregateId(bearerDigest))).toHaveLength(0);
     }));

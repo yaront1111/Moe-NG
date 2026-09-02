@@ -39,12 +39,14 @@ describe("planning run creation and readiness", () => {
       commandId: "" } as PlanningRunCommand), "UNKNOWN_ERROR");
   });
 
-  it("returns the typed UNSUPPORTED variant for a REVISION run kind", () => {
+  it("creates an immutable REVISION draft at version 1", () => {
     const result = reducePlanningRun(undefined, {
       ...commandFor("planning.create_draft", 0), runKind: "REVISION",
     } as PlanningRunCommand);
-    expect(result).toEqual({ executionBearingNodeKeys: [], ok: false,
-      reason: "PLANNING_KIND_UNSUPPORTED", unsupported: true });
+    expect(accepted(result)).toEqual(state("DRAFT", { runKind: "REVISION", version: 1 }));
+    expect(result.ok && result.events[0]).toMatchObject({
+      kind: "PlanningRunCreated", runKind: "REVISION",
+    });
   });
 
   it("moves DRAFT to READY only on a strong readiness witness", () => {
@@ -129,13 +131,14 @@ describe("planning run submission", () => {
     expect(next.facets.livePlannerEffect).toBe(false);
   });
 
-  it("refuses REVISION proposals with the typed UNSUPPORTED variant", () => {
-    for (const proposalKind of ["REVISION"] as const) {
-      const result = reducePlanningRun(state("PLANNING"),
-        { ...commandFor("plan.propose"), proposalKind } as PlanningRunCommand);
-      expect(result).toEqual({ executionBearingNodeKeys: [], ok: false,
-        reason: "PLANNING_KIND_UNSUPPORTED", unsupported: true });
-    }
+  it("seals a REVISION proposal only on a REVISION run", () => {
+    const command = {
+      ...commandFor("plan.propose"), proposalKind: "REVISION",
+    } as PlanningRunCommand;
+    const revision = state("PLANNING", { runKind: "REVISION" });
+    expect(accepted(reducePlanningRun(revision, command)).submissionHash)
+      .toBe(SUBMISSION_HASH);
+    expectIllegal(reducePlanningRun(state("PLANNING"), command), "plan.propose", "PLANNING");
   });
 
   it("accepts an identical-byte re-present and refuses a second distinct submission", () => {
@@ -172,12 +175,12 @@ describe("planning run submission finalization", () => {
     expect(result.ok && result.events.map((event) => event.kind)).toEqual(["PlanRevisionCreated"]);
   });
 
-  it("returns typed UNSUPPORTED with zero state change for a multi-node graph", () => {
+  it("records a bounded multi-node plan and graph revision atomically", () => {
     const before = JSON.stringify(sealedPlanning);
     const command = { ...commandFor("planning.finalize_submission"), witness: finalizeWitness(2) };
     const result = reducePlanningRun(sealedPlanning, command as PlanningRunCommand);
-    expect(result).toEqual({ executionBearingNodeKeys: ["node-0", "node-1"], ok: false,
-      reason: "MULTI_NODE_EXECUTION_UNSUPPORTED", unsupported: true });
+    expect(accepted(result)).toMatchObject({ lifecycle: "PLAN_REVIEW", version: 8 });
+    expect(result.ok && result.events.map((event) => event.kind)).toEqual(["PlanRevisionCreated"]);
     expect(JSON.stringify(sealedPlanning)).toBe(before);
   });
 

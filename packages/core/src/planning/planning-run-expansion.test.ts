@@ -33,9 +33,6 @@ import {
   state,
 } from "./planning-run-test-fixtures.js";
 
-const UNSUPPORTED = { executionBearingNodeKeys: [], ok: false,
-  reason: "PLANNING_KIND_UNSUPPORTED", unsupported: true };
-
 const EXPANSION_STATE_KEYS = [
   "approvedHashes", "attemptRef", "expansion", "facets", "goalRef", "graphRevisionRef",
   "leaseRef", "lifecycle", "runId", "runKind", "sealedHashes", "sealedProposal",
@@ -69,10 +66,13 @@ describe("planning run EXPANSION creation", () => {
     expect(Object.keys(next).sort()).toEqual(EXPANSION_STATE_KEYS);
   });
 
-  it("still refuses a REVISION draft with the exact typed UNSUPPORTED variant", () => {
+  it("keeps a REVISION draft free of EXPANSION authority", () => {
     const result = reducePlanningRun(undefined,
       { ...commandFor("planning.create_draft", 0), runKind: "REVISION" } as PlanningRunCommand);
-    expect(result).toEqual(UNSUPPORTED);
+    const next = accepted(result);
+    expect(next.runKind).toBe("REVISION");
+    expect("expansion" in next).toBe(false);
+    expect("sealedProposal" in next).toBe(false);
   });
 
   it("refuses every malformed hold binding on creation with UNKNOWN_ERROR", () => {
@@ -167,10 +167,12 @@ describe("planning run EXPANSION submission", () => {
       "plan.propose", "PLANNING");
   });
 
-  it("still refuses a REVISION proposal with the exact typed UNSUPPORTED variant", () => {
-    expect(reducePlanningRun(state("PLANNING"),
-      { ...commandFor("plan.propose"), proposalKind: "REVISION" } as PlanningRunCommand))
-      .toEqual(UNSUPPORTED);
+  it("keeps a REVISION proposal on the non-EXPANSION authority arm", () => {
+    const next = accepted(reducePlanningRun(state("PLANNING", { runKind: "REVISION" }),
+      { ...commandFor("plan.propose"), proposalKind: "REVISION" } as PlanningRunCommand));
+    expect(next.runKind).toBe("REVISION");
+    expect("expansion" in next).toBe(false);
+    expect("sealedProposal" in next).toBe(false);
   });
 
   it("refuses every malformed hold binding on the proposal path", () => {

@@ -183,7 +183,9 @@ import type {
   ArtifactDirectoryEntry, ArtifactDirectoryEntryKind, ArtifactEnumerationFailure,
   ArtifactEnumerationLayer, ArtifactEnumerationOk, ArtifactEnumerationResult,
   ArtifactObjectObservation, ArtifactStagingObservation, GitRefListing, GitRefObservation,
-  ScopeObserverLayer,
+  ScopeObserverLayer, SourceSnapshotGitCode, SourceSnapshotGitLayer,
+  SourceSnapshotGitObservation, SourceSnapshotGitObserved, SourceSnapshotGitObserver,
+  SourceSnapshotGitRefusal, SourceSnapshotGitResult,
 } from "@moe/runner";
 /**
  * The provider-run settlement seam's type closure, through the same root. A
@@ -213,7 +215,7 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
 
 type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "string";
 /**
- * Hand-transcribed: 38 runner scope/artifact/workspace values plus the 12 the
+ * Hand-transcribed: 43 runner scope/artifact/workspace/source-snapshot values plus the 12 the
  * Foundation workspace capture seam publishes, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
  * process wrapper publishes, the 15 values the platform boundary seam publishes
@@ -232,10 +234,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EFFECT_COMMANDS", "array"], ["EFFECT_STATES", "array"],
   ["GRANT_STATES", "array"], ["MAX_ARTIFACT_ENUMERATION_ENTRIES", "number"],
   ["MAX_SCOPE_OBSERVATION_BYTES", "number"], ["MAX_SCOPE_PATHS", "number"],
+  ["MAX_SOURCE_SNAPSHOT_GIT_OUTPUT_BYTES", "number"],
   ["MAX_SUPERVISOR_COUNT", "number"], ["MAX_SUPERVISOR_TEXT_CHARS", "number"],
   ["MAX_WORKSPACE_ENTRIES", "number"], ["MAX_WORKTREE_COMMAND_BYTES", "number"],
   ["MIRRORED_LEASE_KINDS", "array"], ["MIRRORED_LEASE_STATES", "array"],
   ["RUNNER_ARTIFACT_ERROR_CODES", "array"], ["RUNNER_SCOPE_ERROR_CODES", "array"],
+  ["RUNNER_SOURCE_SNAPSHOT_GIT_CODES", "array"],
+  ["RUNNER_SOURCE_SNAPSHOT_GIT_LAYER", "string"],
   ["RUNNER_WORKSPACE_ERROR_CODES", "array"], ["RUNNER_WORKTREE_LAYERS", "array"],
   ["SCOPE_ATTRIBUTION_CLASSES", "array"],
   ["SCOPE_OBSERVATION_VERSION", "string"], ["SUPERVISOR_ACTIVATION_VERSION", "string"],
@@ -245,6 +250,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORKSPACE_INPUT_MANIFEST_VERSION", "string"], ["WORKSPACE_RESULT_MANIFEST_VERSION", "string"],
   // workspace/worktree-materializer-*: the physical allocator seam.
   ["WORKTREE_ASSIGNMENT_VERSION", "string"], ["WORKTREE_GIT_TIMEOUT_MS", "number"],
+  ["SOURCE_SNAPSHOT_GIT_TIMEOUT_MS", "number"],
   ["WORKTREE_RELEASE_DISPOSITIONS", "array"], ["WORKTREE_RELEASE_INTENTS", "array"],
   ["activateEffect", "function"], ["activationDigestInput", "function"],
   ["applyEffectCommand", "function"], ["applyEffectTombstone", "function"],
@@ -252,6 +258,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["canonicalPathRejection", "function"], ["consumeActivationGrant", "function"],
   ["createArtifactStore", "function"], ["createNodeArtifactFs", "function"],
   ["createNodeGitObserver", "function"], ["createNodeScopePaths", "function"],
+  ["createNodeSourceSnapshotGitObserver", "function"],
   ["createNodeWorktreeMaterializer", "function"], ["deriveWorktreeTarget", "function"],
   ["deriveGrantId", "function"], ["enumerateArtifactsAt", "function"],
   ["fenceMirroredLease", "function"],
@@ -444,7 +451,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(269);
+  expect(EXPECTED_EXPORTS.length).toBe(274);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -458,6 +465,27 @@ it.each(EXPECTED_EXPORTS)("publishes %s on the package root as a %s", (name, kin
   if (kind === "array") expect(Array.isArray(value)).toBe(true);
   else if (kind === "regexp") expect(value instanceof RegExp).toBe(true);
   else expect(typeof value).toBe(kind);
+});
+
+it("publishes the SourceSnapshot Git observer's complete result closure", () => {
+  const observer: SourceSnapshotGitObserver = runner.createNodeSourceSnapshotGitObserver(
+    join(dirname(fileURLToPath(import.meta.url)), "absent-source-snapshot-repository"),
+    process.env,
+  );
+  const result: SourceSnapshotGitResult = observer.observe("a".repeat(64));
+  if (result.ok) {
+    const accepted: SourceSnapshotGitObserved = result;
+    const observation: SourceSnapshotGitObservation = accepted.observation;
+    expect(observation.repositoryBaseTree).toMatch(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/u);
+    return;
+  }
+  const refusal: SourceSnapshotGitRefusal = result;
+  const code: SourceSnapshotGitCode = refusal.code;
+  const layer: SourceSnapshotGitLayer = refusal.layer;
+  expect({ code, layer }).toEqual({
+    code: "RUNNER_SOURCE_SNAPSHOT_ROOT_UNRESOLVABLE",
+    layer: "RUNNER_SOURCE_SNAPSHOT_GIT",
+  });
 });
 
 /**

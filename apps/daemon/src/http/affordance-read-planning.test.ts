@@ -321,6 +321,16 @@ describe("planningGoalRef when no goal owns the board's run", () => {
     const surface = absentPort.readSurface();
     if (surface.outcome !== "SURFACE") throw new Error(`refused: ${surface.code}`);
     expect(surface.planningGoalRef).toBeNull();
+    const proposed = surface.steps.find((entry) => entry.kind === "plan.propose");
+    const offered = surface.nextAllowedCommands.find((entry) =>
+      entry.commandKind === "plan.propose");
+    // The compatibility card must ride the one durable per-goal binding when there is
+    // exactly one. A READY card on run-live-1 beside an offer on another run is inert:
+    // the control room correctly refuses to author a payload without an exact binding.
+    expect(proposed).toMatchObject({
+      aggregateId: `run-${DECOY_GOAL_COMMAND}`, status: "READY", version: 0,
+    });
+    expect(offered?.targetAggregateId).toBe(proposed?.aggregateId);
   });
 });
 

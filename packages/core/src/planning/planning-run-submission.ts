@@ -25,7 +25,6 @@ import {
   idle,
   illegal,
   rejectRun,
-  unsupported,
 } from "./planning-results.js";
 import { deepFreeze, validHex64 } from "./planning-snapshot.js";
 import {
@@ -116,8 +115,7 @@ export function propose(
     return illegal(state, command.kind);
   }
   if (command.proposalKind === "EXPANSION") return proposeExpansion(state, command);
-  if (command.proposalKind !== "INITIAL") return unsupported("PLANNING_KIND_UNSUPPORTED");
-  if (state.runKind === "EXPANSION") return illegal(state, command.kind);
+  if (state.runKind !== command.proposalKind) return illegal(state, command.kind);
   if (state.submissionHash !== null) {
     return state.submissionHash === command.submissionHash
       ? accepted(clonedState(state), []) : illegal(state, command.kind);
@@ -130,12 +128,11 @@ export function propose(
 }
 
 /**
- * Foundation Preview admission (design 396 and 1322) runs here, at submission validation, so a
- * multi-node graph can never reach `PLAN_REVIEW`. The refusal branch deliberately skips it: the
- * daemon's follow-up refusal for a refused admission must stay reachable (design row 293). The
- * fence is gated on the run KIND, never on the node count: an EXPANSION run is inherently
- * multi-node, its whole purpose being one sealed child plus integrator proposal. A graph
- * bearing no execution at all stays illegal for both kinds — malformed, not unsupported.
+ * Finalization admits bounded execution-bearing rosters for every compound submission kind.
+ * Structural graph limits and dependency validity belong to the canonical graph/compiler
+ * authorities; this reducer only requires that the runner-proven terminal witness contains at
+ * least one execution-bearing node. The refusal arm deliberately remains reachable so a failed
+ * upstream admission can still reject the run with successor data (design row 293).
  */
 export function finalize(
   state: PlanningRunState,
@@ -155,9 +152,6 @@ export function finalize(
   }
   if (!validSeal(revision)) return illegal(state, command.kind);
   const bearing = executionBearingKeys(command.witness);
-  if (state.runKind !== "EXPANSION" && bearing.length > 1) {
-    return unsupported("MULTI_NODE_EXECUTION_UNSUPPORTED", bearing);
-  }
   if (bearing.length === 0) return illegal(state, command.kind);
   const hashes = hashesOf(revision);
   const next = clonedState(state, {

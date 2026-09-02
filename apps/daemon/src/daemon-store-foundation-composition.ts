@@ -2,57 +2,71 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-
 import { DurableStoreError } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
-
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
+import {
+  createDeliveryV2SourceSnapshotPublisher,
+  type DeliveryV2SourceSnapshotPublisher,
+} from "./delivery-v2/source-snapshot-publisher.js";
 import { acquireFoundationStore } from "./daemon-store-acquisition.js";
-import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
-import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
-import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
-import { createAffordancePort } from "./http/affordance-read.js";
-import { createBudgetCommitmentReadPort,
-  type BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
-import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
-import { createDocumentIngestPort } from "./http/document-ingest-route.js";
-import type { DocumentIngestPort } from "./http/document-ingest-route.js";
-import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
-import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
-  SubscriptionPort } from "./http/event-stream-contract.js";
-import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
-import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
-import type { CommandAdapterDeps } from "./http/http-contract.js";
-import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
-import { createPlanningRunReadPort } from "./http/planning-run-read.js";
-import type { PlanningRunReadPort } from "./http/planning-run-read.js";
-import { createProductContractGate1ReadPort,
-  type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
-import { createProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
-import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
-import { createSessionChallengeOperandsReadPort,
-  type SessionChallengeOperandsReadPort } from "./http/session-challenge-operands-read.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
-import { createSessionAuthority } from "./identity/session-authority.js";
 import {
   OPERATOR_SESSION_TTL_MS, createOperatorSessionHandshakePort,
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
-import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
-import type { GraphQueryPort } from "./planning/graph-query.js";
-import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
+import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
+import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
 import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
+import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
+import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
+import { createAffordancePort } from "./http/affordance-read.js";
+import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
+import { createDocumentIngestPort } from "./http/document-ingest-route.js";
+import type { DocumentIngestPort } from "./http/document-ingest-route.js";
+import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import {
+  createProductContractV2CurrentReadPort,
+  type ProductContractV2CurrentReadPort,
+} from "./http/product-contract-v2-current-read.js";
+import {
+  createProductContractV2PendingReadPort,
+  type ProductContractV2PendingReadPort,
+} from "./http/product-contract-v2-pending-read.js";
+import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createPlanningRunReadPort } from "./http/planning-run-read.js";
+import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import { createBudgetCommitmentReadPort,
+  type BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
+import { createProductContractGate1ReadPort,
+  type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
+import { createSessionChallengeOperandsReadPort,
+  type SessionChallengeOperandsReadPort } from "./http/session-challenge-operands-read.js";
+import { createSessionAuthority } from "./identity/session-authority.js";
+import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
+import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
+import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "./http/http-contract.js";
+import { admitV2ActiveInstallation } from "./cutover/cutover-v2-authority.js";
+import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
+  SubscriptionPort } from "./http/event-stream-contract.js";
 
 export interface StoreDependencyConfig {
+  /** Optional deterministic command identity source for bounded harness composition. */
+  readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
   readonly credential: string;
   readonly nodeSpecsDir?: string | undefined;
@@ -95,16 +109,27 @@ function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; ti
 export type StoreDependencyProvider = DaemonDependencyProvider & {
   close(): void;
   restore(): RestorePort;
+  sourceSnapshotPublisher(): DeliveryV2SourceSnapshotPublisher;
 };
 
 export function createStoreDependencies(
   config: StoreDependencyConfig,
 ): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
+  // One composition clock for every authority decision. Mixing an injected
+  // command clock with Date.now() lets a session be current to the command
+  // ledger and expired to authentication during the same request.
+  const epochClock = (): number => Date.parse(clock());
   const { foundation, store } = acquireFoundationStore({
     clock, projectConfigurationDigest: config.projectConfigurationDigest,
     projectId: config.projectId, storePath: config.storePath,
     verificationCatalogPath: config.verificationCatalogPath, workspaceCatalogPath: config.workspaceCatalogPath,
+  });
+  const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
+    catalogSource: foundation.foundationCatalogSource,
+    clock,
+    projectId: config.projectId,
+    store,
   });
   let subscriptionDatabase: DatabaseSync | null = null;
   const DEFAULT_READER = "control-room-1";
@@ -123,9 +148,19 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
+  const v2Ports = createDaemonV2CommandPorts({
+    clock,
+    eventSubscriberId: DEFAULT_READER,
+    foundationCatalogSource: foundation.foundationCatalogSource,
+    ...(foundation.foundationContextSeal === undefined
+      ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
+    foundationLifecycle: foundation.foundationLifecycle,
+    operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    verificationCatalogSource: foundation.verificationCatalogSource,
+  });
 
   const authenticator = createSessionAuthenticator(store, {
-    clock: () => Date.now(),
+    clock: epochClock,
     operatorCapabilities: OPERATOR_CAPABILITIES,
     operatorCredential: config.credential,
     operatorPrincipalId: config.principalId,
@@ -138,6 +173,12 @@ export function createStoreDependencies(
 
   const provide = (): CommandAdapterDeps =>
     Object.freeze({ authenticator, decisions, eventStreamAccess, registry });
+  const provideV2 = (): CommandAdapterDeps => Object.freeze({
+    authenticator,
+    decisions: v2Ports.decisions,
+    eventStreamAccess,
+    registry: v2Ports.registry,
+  });
 
   /** One acquisition = one handle plus the board built over it; the pair travels
    *  together because a board fold is only meaningful over the handle it read. */
@@ -227,7 +268,7 @@ export function createStoreDependencies(
     ];
   };
   const affordances = () => createAffordancePort({
-    mintId: () => randomUUID(),
+    mintId: config.affordanceMintId ?? (() => randomUUID()),
     nodes: mergedNodes,
     projectId: config.projectId,
     store,
@@ -275,6 +316,30 @@ export function createStoreDependencies(
     createProductContractPendingReadPort({
       mintId: () => `gate1-${randomUUID()}`, projectId: config.projectId, store,
     });
+  /** Activated `/2` current-contract state, bound to this root's store and project. */
+  const productContractV2Current = (): ProductContractV2CurrentReadPort =>
+    createProductContractV2CurrentReadPort({ projectId: config.projectId, store });
+  /** `/2` pending work with command and correlation identities minted only by this daemon. */
+  const productContractV2Pending = (): ProductContractV2PendingReadPort =>
+    createProductContractV2PendingReadPort({
+      mintCommandId: () => `product-contract-v2-command:${randomUUID()}`,
+      mintCorrelationId: () => `product-contract-v2-correlation:${randomUUID()}`,
+      projectId: config.projectId,
+      store,
+    });
+  /**
+   * The plane `/bootstrap` tells a browser to write to, derived from the durable
+   * cutover marker on EVERY read and never cached, so the answer flips the moment
+   * `cutover.activate` commits. The same marker read the V1 gate uses: an
+   * unreadable or readiness-divergent marker answers V1 here, and `/command` then
+   * refuses that write itself with V1_AUTHORITY_STATUS_UNKNOWN, so the browser is
+   * routed to the plane that names the fault rather than to one that is silent.
+   */
+  const commandAuthorityPlane = (): CommandAuthorityPlanePort => Object.freeze({
+    boundProjectId: config.projectId,
+    readPlane: () =>
+      admitV2ActiveInstallation(store, { projectId: config.projectId }).ok ? "V2" : "V1",
+  });
   /**
    * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
    * A caller names nothing: the principal is the authenticated one.
@@ -289,10 +354,10 @@ export function createStoreDependencies(
    * the one authenticating later would mint a session nothing could then use.
    */
   const pairingOpenSessions = (): PairingOpenSessionPort =>
-    createSessionAuthority(store, { clock: () => Date.now(), projectId: config.projectId });
+    createSessionAuthority(store, { clock: epochClock, projectId: config.projectId });
 
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
-    clock: () => new Date().toISOString(),
+    clock,
     mintCorrelationId: () => `document-ingest:${randomUUID()}`,
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
@@ -307,7 +372,7 @@ export function createStoreDependencies(
    */
   const sessionHandshake = (): SessionHandshakePort => createOperatorSessionHandshakePort({
     capabilities: OPERATOR_CAPABILITIES,
-    clock: () => Date.now(),
+    clock: epochClock,
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
     reservedPrincipalIds: [config.principalId],
@@ -333,6 +398,7 @@ export function createStoreDependencies(
     affordances,
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
+    commandAuthorityPlane,
     documentDossiers,
     documentIngest,
     graph,
@@ -341,12 +407,16 @@ export function createStoreDependencies(
     planningRuns,
     productContractGate1,
     productContractPending,
+    productContractV2Current,
+    productContractV2Pending,
     provide,
+    provideV2,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,
     sessionChallengeOperands,
     sessionHandshake,
+    sourceSnapshotPublisher: () => sourceSnapshotPublisher,
     subscriptions,
   });
 }

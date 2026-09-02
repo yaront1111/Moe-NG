@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import {
   createAcceptanceContract,
+  createAcceptanceCriterionContent,
+  createPlanExecutionContent,
   createPlanRevision,
   deriveAcceptanceCriterionContent,
   derivePlanExecutionContent,
@@ -23,6 +25,7 @@ import {
 import {
   admitNodeDefinition,
   createNodeDefinition,
+  createNodeDefinitionFromPlanningContent,
   decodeNodeDefinitionBytes,
   draftNodeAuthority,
   encodeNodeDefinition,
@@ -77,6 +80,27 @@ const acceptanceDraft = () => ({
     verificationRecipeRefs: ["recipe-a"],
   }],
 });
+
+const planContent = () => {
+  const draft = planDraft();
+  const result = createPlanExecutionContent({
+    affectedCriterionIds: draft.affectedCriterionIds,
+    affectedNodeIds: draft.affectedNodeIds,
+    steps: draft.steps,
+    verificationRecipeRefs: draft.verificationRecipeRefs,
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result.content;
+};
+
+const criterionContent = () => {
+  const draft = acceptanceDraft();
+  const result = createAcceptanceCriterionContent({
+    nodeKind: draft.applicability.nodeKind, obligations: draft.obligations,
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result.content;
+};
 
 const registryEntry = () => ({
   parameterSchema: { digest: hex("b"), kind: "JSON_SCHEMA" },
@@ -223,6 +247,63 @@ function everyValueFrozen(value: unknown, path = "$"): readonly string[] {
 }
 
 describe("node authority admission", () => {
+  it("creates byte-identical authority from aligned graph-independent planning content", () => {
+    const contentResult = createNodeDefinitionFromPlanningContent({
+      acceptanceCriterionContent: criterionContent(),
+      draft: authorityDraft(),
+      planExecutionContent: planContent(),
+      predicateRegistry: [registryEntry()],
+    });
+    expect(contentResult.ok).toBe(true);
+    if (!contentResult.ok) return;
+    const finalResult = acceptedOrThrow();
+    expect(contentResult.value.definition).toStrictEqual(finalResult.definition);
+    expect(contentResult.value.bytes).toStrictEqual(finalResult.bytes);
+    expect(Object.keys(planContent())).not.toContain("planExecutionContentDigest");
+    expect(Object.keys(planContent())).not.toContain("graphBinding");
+    expect(Object.keys(criterionContent())).not.toContain("criteria");
+    expect(Object.keys(criterionContent())).not.toContain("applicability");
+
+    const extraApplicability = acceptanceDraft();
+    extraApplicability.applicability = {
+      ...extraApplicability.applicability, nodeIds: ["node-a", "node-z"],
+    };
+    const withUnrelatedNode = acceptedOrThrow(createInput({
+      acceptanceContract: acceptanceOrThrow(extraApplicability),
+    }));
+    expect(withUnrelatedNode.bytes).toStrictEqual(finalResult.bytes);
+  });
+
+  it("requires the final node key in both planning applicability sources", () => {
+    const planWithoutNode = planDraft();
+    planWithoutNode.affectedNodeIds = ["node-b"];
+    expectRefusal(createNodeDefinition(createInput({
+      planRevision: planOrThrow(planWithoutNode),
+    })), "NODE_AUTHORITY_APPLICABILITY_MISMATCH", "NODE_AUTHORITY_ADMISSION");
+
+    const contractWithoutNode = acceptanceDraft();
+    contractWithoutNode.applicability = {
+      ...contractWithoutNode.applicability, nodeIds: ["node-b"],
+    };
+    expectRefusal(createNodeDefinition(createInput({
+      acceptanceContract: acceptanceOrThrow(contractWithoutNode),
+    })), "NODE_AUTHORITY_APPLICABILITY_MISMATCH", "NODE_AUTHORITY_ADMISSION");
+  });
+
+  it("refuses caller-stated content digests instead of trusting them", () => {
+    expectRefusal(createNodeDefinitionFromPlanningContent({
+      acceptanceCriterionContent: criterionContent(), draft: authorityDraft(),
+      planExecutionContent: { ...planContent(), planExecutionContentDigest: hex("9") },
+      predicateRegistry: [registryEntry()],
+    }), "PLAN_REVISION_MALFORMED", "PLANNING_SOURCE");
+    expectRefusal(createNodeDefinitionFromPlanningContent({
+      acceptanceCriterionContent: { ...criterionContent(), criteria: [{
+        contentDigest: hex("8"), criterionId: "criterion-a",
+      }] },
+      draft: authorityDraft(), planExecutionContent: planContent(),
+      predicateRegistry: [registryEntry()],
+    }), "ACCEPTANCE_CONTRACT_MALFORMED", "PLANNING_SOURCE");
+  });
   it("covers every nonrecursive design-255 field with a closed, versioned roster", () => {
     const { definition } = acceptedOrThrow();
     expect(Object.keys(definition).sort()).toEqual([...NODE_DEFINITION_KEYS]);

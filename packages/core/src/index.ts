@@ -114,12 +114,15 @@ export type {
 } from "./planning/acceptance-contract.js";
 export {
   ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, ACCEPTANCE_CRITERION_CONTENT_DOMAIN,
-  createAcceptanceContract, decodeAcceptanceContractBytes, deriveAcceptanceContractDigest,
-  deriveAcceptanceCriterionContent, encodeAcceptanceContract,
+  createAcceptanceContract, createAcceptanceCriterionContent, decodeAcceptanceContractBytes,
+  decodeAcceptanceCriteriaContentBytes, deriveAcceptanceContractDigest,
+  deriveAcceptanceCriterionContent, encodeAcceptanceContract, encodeAcceptanceCriteriaContent,
 } from "./planning/acceptance-contract-codec.js";
 export type {
-  AcceptanceContractCreateResult, AcceptanceContractDecodeResult,
-  AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent,
+  AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
+  AcceptanceContractEncodeResult, AcceptanceCriteriaContent, AcceptanceCriteriaContentDecodeResult,
+  AcceptanceCriteriaContentEncodeResult, AcceptanceCriterionContent,
+  AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
   AcceptanceCriterionContentResult,
 } from "./planning/acceptance-contract-codec.js";
 
@@ -138,6 +141,90 @@ export type {
   ProductContractCreateResult, ProductContractDecodeResult, ProductContractDigestResult,
   ProductContractEncodeResult,
 } from "./product-contract/product-contract-codec.js";
+
+/**
+ * The v2 contract is a distinct wire family. It is intentionally exported beside
+ * `/1`, never through an alias or decoder fallback that could silently grant old
+ * bytes the richer `/2` meaning.
+ */
+export {
+  PRODUCT_CONTRACT_V2_BUDGET_KINDS, PRODUCT_CONTRACT_V2_CODES,
+  PRODUCT_CONTRACT_V2_DIGEST_DOMAIN, PRODUCT_CONTRACT_V2_LAYERS,
+  PRODUCT_CONTRACT_V2_LIMITS,
+  PRODUCT_CONTRACT_V2_PRIORITIES, PRODUCT_CONTRACT_V2_VERSION,
+  createProductContractRevisionV2, decodeProductContractRevisionV2Bytes,
+  deriveProductContractRevisionV2Digest, encodeProductContractRevisionV2,
+} from "./product-contract/product-contract-v2-codec.js";
+export type {
+  ProductContractRevisionV2, ProductContractRevisionV2Draft,
+  ProductContractV2Assumption, ProductContractV2Budget, ProductContractV2BudgetKind,
+  ProductContractV2Code, ProductContractV2CreateResult, ProductContractV2Criterion,
+  ProductContractV2DecisionOption, ProductContractV2DecodeResult,
+  ProductContractV2DigestResult, ProductContractV2EncodeResult,
+  ProductContractV2Journey, ProductContractV2Layer,
+  ProductContractV2Lineage, ProductContractV2MaterialDecision,
+  ProductContractV2NegativeScope, ProductContractV2Objective, ProductContractV2Priority,
+  ProductContractV2ProductCompleteDefinition, ProductContractV2Refusal,
+  ProductContractV2Requirement, ProductContractV2SuccessMetric, ProductContractV2UserJob,
+} from "./product-contract/product-contract-v2-codec.js";
+export {
+  PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN,
+  PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+  advanceProductContractCurrentRevisionSlotV2,
+  createProductContractCurrentRevisionSlotV2,
+  decodeProductContractCurrentRevisionSlotV2Bytes,
+  encodeProductContractCurrentRevisionSlotV2,
+} from "./product-contract/product-contract-v2-current-slot.js";
+export { validateProductContractV2Amendment }
+  from "./product-contract/product-contract-v2-lineage.js";
+export type { ProductContractV2AmendmentResult }
+  from "./product-contract/product-contract-v2-lineage.js";
+export type {
+  ProductContractCurrentRevisionSlotV2,
+  ProductContractCurrentRevisionSlotV2EncodeResult,
+  ProductContractCurrentRevisionSlotV2Result,
+  ProductContractRevisionV2Ref,
+} from "./product-contract/product-contract-v2-current-slot.js";
+export { validateProductContractGate1V2 }
+  from "./product-contract/product-contract-v2-gate-1.js";
+export type { ProductContractV2Gate1Result }
+  from "./product-contract/product-contract-v2-gate-1.js";
+export { validateProductAcceptanceBindingV2 }
+  from "./product-contract/product-contract-v2-acceptance-binding.js";
+export type {
+  ProductAcceptanceBindingV2Request, ProductAcceptanceBindingV2Result,
+} from "./product-contract/product-contract-v2-acceptance-binding.js";
+export {
+  PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES,
+  PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER,
+  PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN,
+  assessProductContractClarificationMaterialityV2,
+  deriveProductContractClarificationProjectionDigestV2,
+} from "./product-contract/product-contract-v2-materiality.js";
+export type {
+  ProductContractClarificationV2,
+  ProductContractClarificationV2MaterialityRefusal,
+  ProductContractClarificationV2MaterialityResult,
+  ProductContractClarificationV2Option,
+  ProductContractClarificationV2OptionDigest,
+  ProductContractClarificationV2SharedIdentity,
+  ProductContractV2ClarificationMaterialityCode,
+} from "./product-contract/product-contract-v2-materiality.js";
+
+/** Content-addressed delivery, isolation, and fresh-verifier authority for `/2`. */
+export * from "./delivery-profile/delivery-profile-codec.js";
+export {
+  BUILT_IN_DELIVERY_PROFILE_QUALIFICATIONS,
+  BUILT_IN_DELIVERY_PROFILE_REVISIONS,
+} from "./delivery-profile/delivery-profile-builtins.js";
+export { resolveQualifiedDeliveryProfile }
+  from "./delivery-profile/delivery-profile-qualification.js";
+export type { QualifiedDeliveryProfileResolution }
+  from "./delivery-profile/delivery-profile-qualification.js";
+export * from "./capability-catalog/capability-catalog-codec.js";
+export * from "./capability-catalog/capability-catalog-resolution.js";
+export * from "./execution-profile/execution-isolation-profile-codec.js";
+export * from "./execution-profile/verification-recipe-codec.js";
 /**
  * The bounded identity triple a Gate 1 grant binds to. Only the REF admission is
  * published: `admitProductContractRevision` stays unexported so the full-revision
@@ -180,13 +267,16 @@ export type {
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
 } from "./planning/plan-revision-contract.js";
 export {
-  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanRevision,
-  decodePlanRevisionBytes, derivePlanExecutionContent, derivePlanRevisionDigest,
+  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanExecutionContent,
+  createPlanRevision, decodePlanExecutionContentBytes, decodePlanRevisionBytes,
+  derivePlanExecutionContent, derivePlanRevisionDigest, encodePlanExecutionContent,
   encodePlanRevision,
 } from "./planning/plan-revision-codec.js";
 export type {
-  PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult,
-  PlanRevisionDigestResult, PlanRevisionEncodeResult,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDecodeResult,
+  PlanExecutionContentDraft, PlanExecutionContentEncodeResult, PlanExecutionContentResult,
+  PlanRevisionCreateResult, PlanRevisionDecodeResult, PlanRevisionDigestResult,
+  PlanRevisionEncodeResult,
 } from "./planning/plan-revision-codec.js";
 export {
   GRAPH_REVISION_COMMAND_KINDS,
@@ -231,6 +321,19 @@ export type {
   GraphRevisionSupersedeCommand,
   GraphSubmissionWitness,
 } from "./planning/graph-revision-contract.js";
+
+/** Exact repository-material bytes. Git observation and publication remain a later authority. */
+export {
+  SOURCE_SNAPSHOT_CODES, SOURCE_SNAPSHOT_DIGEST_DOMAIN, SOURCE_SNAPSHOT_LAYERS,
+  SOURCE_SNAPSHOT_LIMITS, SOURCE_SNAPSHOT_REF_KEYS, SOURCE_SNAPSHOT_VERSION,
+  admitSourceSnapshotRef, createSourceSnapshot, decodeSourceSnapshotBytes,
+  deriveSourceSnapshotDigest, encodeSourceSnapshot,
+} from "./source-snapshot/source-snapshot-codec.js";
+export type {
+  SourceSnapshot, SourceSnapshotCode, SourceSnapshotCreateResult, SourceSnapshotDecodeResult,
+  SourceSnapshotDigestResult, SourceSnapshotDraft, SourceSnapshotEncodeResult,
+  SourceSnapshotLayer, SourceSnapshotRef, SourceSnapshotRefAdmission, SourceSnapshotRefusal,
+} from "./source-snapshot/source-snapshot-codec.js";
 
 /**
  * WHEN a submitted plan may proceed without a human, and the per-unit-of-work

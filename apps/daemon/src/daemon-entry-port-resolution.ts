@@ -1,4 +1,5 @@
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
+import type { CommandAuthorityPlanePort } from "./http/http-contract.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -8,6 +9,11 @@ import type { PlanningRunReadPort } from "./http/planning-run-read.js";
 import type { BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
 import type { ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
 import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import type {
+  ProductContractV2CurrentReadPort,
+} from "./http/product-contract-v2-current-read.js";
+import type { ProductContractV2PendingReadPort }
+  from "./http/product-contract-v2-pending-read.js";
 import type {
   SessionChallengeOperandsReadPort,
 } from "./http/session-challenge-operands-read.js";
@@ -36,6 +42,16 @@ export interface OptionalDaemonPortProvider {
   productContractGate1?(): ProductContractGate1ReadPort;
   /** The pending-contract read port (the Gate 1 card's read), same binding. */
   productContractPending?(): ProductContractPendingReadPort;
+  /** The activated `/2` current-contract reader, bound to this daemon's project. */
+  productContractV2Current?(): ProductContractV2CurrentReadPort;
+  /** The activated `/2` Gate 1 card projection, bound to this daemon's project. */
+  productContractV2Pending?(): ProductContractV2PendingReadPort;
+  /**
+   * The plane `/bootstrap` tells a browser to write to, read from the durable cutover
+   * marker on every call. ABSENT means the listener answers V1, which is exactly what
+   * `/command` serves on a daemon that composes no plane reader.
+   */
+  commandAuthorityPlane?(): CommandAuthorityPlanePort;
   /** The OPEN_SESSION challenge-operands read port, bound to this daemon's own project. */
   sessionChallengeOperands?(): SessionChallengeOperandsReadPort;
   /**
@@ -69,6 +85,9 @@ export interface ResolvedOptionalDaemonPorts {
   readonly budgetCommitment?: BudgetCommitmentReadPort;
   readonly productContractGate1?: ProductContractGate1ReadPort;
   readonly productContractPending?: ProductContractPendingReadPort;
+  readonly productContractV2Current?: ProductContractV2CurrentReadPort;
+  readonly productContractV2Pending?: ProductContractV2PendingReadPort;
+  readonly commandAuthorityPlane?: CommandAuthorityPlanePort;
   readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
   readonly pairingOpenSessions?: PairingOpenSessionPort;
   readonly reconciliation?: BootReconciliationPort;
@@ -84,6 +103,7 @@ const FACTORIES = Object.freeze([
   "subscriptions", "affordances", "budgetCommitment", "documentDossiers", "documentIngest",
   "graph", "goalCatalog",
   "planningRuns", "productContractGate1", "productContractPending",
+  "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
   "reconciliation",
   "sessionHandshake",
@@ -195,6 +215,39 @@ export function resolveOptionalDaemonPorts(
       && !hasMethods(productContractPending, ["readPending"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const currentV2Factory = provider.productContractV2Current;
+    if (currentV2Factory !== undefined && typeof currentV2Factory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const productContractV2Current = currentV2Factory?.call(provider);
+    if (productContractV2Current !== undefined
+      && (!hasMethods(productContractV2Current, ["readCurrent"])
+        || typeof Reflect.get(productContractV2Current, "boundProjectId") !== "string"
+        || (Reflect.get(productContractV2Current, "boundProjectId") as string).trim().length === 0)) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const pendingV2Factory = provider.productContractV2Pending;
+    if (pendingV2Factory !== undefined && typeof pendingV2Factory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const productContractV2Pending = pendingV2Factory?.call(provider);
+    if (productContractV2Pending !== undefined
+      && (!hasMethods(productContractV2Pending, ["readPending"])
+        || typeof Reflect.get(productContractV2Pending, "boundProjectId") !== "string"
+        || (Reflect.get(productContractV2Pending, "boundProjectId") as string).trim().length === 0)) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const planeFactory = provider.commandAuthorityPlane;
+    if (planeFactory !== undefined && typeof planeFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const commandAuthorityPlane = planeFactory?.call(provider);
+    if (commandAuthorityPlane !== undefined
+      && (!hasMethods(commandAuthorityPlane, ["readPlane"])
+        || typeof Reflect.get(commandAuthorityPlane, "boundProjectId") !== "string"
+        || (Reflect.get(commandAuthorityPlane, "boundProjectId") as string).trim().length === 0)) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const operandsFactory = provider.sessionChallengeOperands;
     if (operandsFactory !== undefined && typeof operandsFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -245,6 +298,9 @@ export function resolveOptionalDaemonPorts(
       ...(budgetCommitment === undefined ? {} : { budgetCommitment }),
       ...(productContractGate1 === undefined ? {} : { productContractGate1 }),
       ...(productContractPending === undefined ? {} : { productContractPending }),
+      ...(productContractV2Current === undefined ? {} : { productContractV2Current }),
+      ...(productContractV2Pending === undefined ? {} : { productContractV2Pending }),
+      ...(commandAuthorityPlane === undefined ? {} : { commandAuthorityPlane }),
       ...(sessionChallengeOperands === undefined ? {} : { sessionChallengeOperands }),
       ...(pairingOpenSessions === undefined ? {} : { pairingOpenSessions }),
       ...(reconciliation === undefined ? {} : { reconciliation }),

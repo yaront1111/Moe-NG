@@ -45,13 +45,17 @@ import {
   encodeCutoverActivationMarker,
 } from "./cutover-activation-marker.js";
 import type { CutoverActivationMarker } from "./cutover-activation-marker.js";
-import { readCutoverActivationMarker } from "./cutover-v2-authority.js";
+import {
+  cutoverMarkerBindsReadiness,
+  readCutoverActivationMarker,
+} from "./cutover-v2-authority.js";
 import {
   CUTOVER_ACTIVATE_COMMAND_KIND,
   bindingMatches,
   deriveCutoverActivateCommandId,
   driftedFact,
   forwarded,
+  readinessDriftedFact,
   refuse,
   replayMatches,
   storeRefusal,
@@ -71,6 +75,11 @@ import { readCutoverAttemptState } from "./cutover-attempt-reader.js";
 import type { CutoverAttemptPresent } from "./cutover-attempt-reader.js";
 import { readCutoverGenerationSnapshot } from "./cutover-generation-snapshot.js";
 import type { CutoverGenerationPorts } from "./cutover-generation-snapshot.js";
+import {
+  deriveV2ReadinessManifestAggregateId,
+  readV2ReadinessManifest,
+} from "./v2-readiness-manifest.js";
+import type { V2ReadinessManifestPresent } from "./v2-readiness-manifest.js";
 
 interface PreparedActivation {
   readonly aggregateId: string;
@@ -80,13 +89,13 @@ interface PreparedActivation {
   readonly marker: CutoverActivationMarker;
   readonly nextState: CutoverAttemptState;
   readonly projectId: string;
+  readonly readiness: V2ReadinessManifestPresent;
 }
 
 /**
- * ONE decision, two legs, so the ACTIVE transition and the marker share a single SQLite
- * transaction, one fence pass and one replay identity. `legs[0]` stays the attempt: it is the
- * aggregate the durable decision record describes. The marker leg fences at version 0, so a
- * second activation over an existing marker is refused by the store rather than overwriting it.
+ * ONE decision, three legs: ACTIVE + marker are writes, while the already-read readiness
+ * aggregate is an empty-event fence. `legs[0]` stays the attempt, and readiness drift aborts
+ * both writes inside the same SQLite transaction.
  */
 function commitActivation(
   store: CutoverActivateStore,
@@ -129,6 +138,11 @@ function commitActivation(
           }],
           expectedVersion: 0,
         },
+        {
+          aggregateId: deriveV2ReadinessManifestAggregateId(prepared.projectId),
+          events: [],
+          expectedVersion: prepared.readiness.version,
+        },
       ],
       requestBytes: attemptBytes,
     });
@@ -161,6 +175,10 @@ function answerReplay(
   if (fold.state.lifecycle !== "ACTIVE") return refuse("CUTOVER_ACTIVATE_REPLAY_DIVERGED");
   const marker = readCutoverActivationMarker(store, { projectId: prepared.projectId });
   if (marker === null) return refuse("CUTOVER_ACTIVATE_REPLAY_DIVERGED");
+  const readiness = readV2ReadinessManifest(store, { projectId: prepared.projectId });
+  if (!readiness.ok || !cutoverMarkerBindsReadiness(marker, readiness)) {
+    return refuse("CUTOVER_ACTIVATE_REPLAY_DIVERGED");
+  }
   return Object.freeze({
     aggregateId: prepared.aggregateId,
     commandId: prepared.commandId,
@@ -216,15 +234,26 @@ export function activateCutover(
   const drifted = driftedFact(admission.binding, snapshot.generations);
   if (drifted !== null) return refuse("CUTOVER_ACTIVATE_GENERATION_DRIFT", drifted);
 
+  // Read ONCE before composition, then carry this exact version into commitActivation's empty
+  // leg. No request field can name or replace the readiness aggregate or any evidence pin.
+  const readiness = readV2ReadinessManifest(store, { projectId: input.projectId });
+  if (!readiness.ok) return readiness;
+  const readinessDrift = readinessDriftedFact(admission.binding, readiness.manifest);
+  if (readinessDrift !== null) {
+    return refuse("CUTOVER_ACTIVATE_READINESS_DRIFT", readinessDrift);
+  }
+
   const composed = composeCutoverActivationMarker({
     activatedAtEpochMs: input.activatedAtEpochMs,
     generations: admission.binding.generations,
+    readinessManifestSha256: readiness.digest,
+    readinessManifestVersion: readiness.version,
     sourceCommit: admission.binding.sourceCommit,
     sourceState: fold.state.lifecycle,
   });
   if (!composed.ok) return composed;
   return commitActivation(store, input, {
     aggregateId, commandId, expectedVersion: fold.version, key, marker: composed.marker,
-    nextState: reduced.state, projectId: input.projectId,
+    nextState: reduced.state, projectId: input.projectId, readiness,
   });
 }

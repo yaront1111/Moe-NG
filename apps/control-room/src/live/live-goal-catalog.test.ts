@@ -32,8 +32,14 @@ const SOURCE_BINDING = Object.freeze({
 
 const GOALS = Object.freeze({
   goals: Object.freeze([
-    Object.freeze({ goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" }),
-    Object.freeze({ goalId: "goal-random-91b", planningRunRef: "planning/a:b" }),
+    Object.freeze({
+      goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301",
+      truthClass: "DAEMON_VERIFIED",
+    }),
+    Object.freeze({
+      goalId: "goal-random-91b", planningRunRef: "planning/a:b",
+      truthClass: "HUMAN_APPROVED",
+    }),
   ]),
   nextCursor: null,
   outcome: "GOALS",
@@ -50,10 +56,12 @@ describe("mapGoalCatalogAnswer", () => {
         {
           binding: null, brief: null,
           goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301",
+          truthClass: "DAEMON_VERIFIED",
         },
         {
           binding: null, brief: null,
           goalId: "goal-random-91b", planningRunRef: "planning/a:b",
+          truthClass: "HUMAN_APPROVED",
         },
       ],
       outcome: "GOALS",
@@ -72,22 +80,25 @@ describe("mapGoalCatalogAnswer", () => {
   });
 
   /**
-   * BOTH WIRE GENERATIONS. The daemon's catalog entry gained `brief` in task-e10e1627, so a
-   * Control Room that decodes only the two-key shape refuses the live answer, and one that
-   * decodes only the three-key shape refuses every row written before that change. The roster
-   * is exact: a shape added or removed without an arm changes the first assertion's count.
+   * ALL DURABLE WRITER GENERATIONS. Every current wire shape carries the projected truth class;
+   * `brief` and `binding` remain nullable/migrated independently. The roster is exact: a shape
+   * added or removed without an arm changes the first assertion's count.
    */
   const ACCEPTED_ENTRY_SHAPES = Object.freeze([
     Object.freeze({
       brief: null,
-      label: "legacy two-key row",
-      row: Object.freeze({ goalId: "goal-legacy-1", planningRunRef: "run-legacy-1" }),
+      label: "legacy writer row",
+      row: Object.freeze({
+        goalId: "goal-legacy-1", planningRunRef: "run-legacy-1",
+        truthClass: "DAEMON_VERIFIED",
+      }),
     }),
     Object.freeze({
       brief: null,
       label: "explicit brief-unknown row",
       row: Object.freeze({
         brief: null, goalId: "goal-null-1", planningRunRef: "run-null-1",
+        truthClass: "HUMAN_APPROVED",
       }),
     }),
     Object.freeze({
@@ -101,6 +112,7 @@ describe("mapGoalCatalogAnswer", () => {
         }),
         goalId: "goal-brief-1",
         planningRunRef: "run-brief-1",
+        truthClass: "DAEMON_VERIFIED",
       }),
     }),
     Object.freeze({
@@ -108,7 +120,7 @@ describe("mapGoalCatalogAnswer", () => {
       brief: Object.freeze({
         instructions: "Behind bearer credentials", title: "Ship from the selected PRD",
       }),
-      label: "source-bound four-key row",
+      label: "source-bound five-key row",
       row: Object.freeze({
         binding: SOURCE_BINDING,
         brief: Object.freeze({
@@ -116,6 +128,7 @@ describe("mapGoalCatalogAnswer", () => {
         }),
         goalId: "goal-source-1",
         planningRunRef: "run-source-1",
+        truthClass: "HUMAN_APPROVED",
       }),
     }),
   ] as const);
@@ -136,6 +149,7 @@ describe("mapGoalCatalogAnswer", () => {
           brief,
           goalId: row.goalId,
           planningRunRef: row.planningRunRef,
+          truthClass: row.truthClass,
         }],
         outcome: "GOALS",
       });
@@ -145,22 +159,27 @@ describe("mapGoalCatalogAnswer", () => {
   it.each([
     ["a brief carrying an extra key", {
       brief: { instructions: "i", title: "t", urgency: "high" },
-      goalId: "goal-1", planningRunRef: "run-1",
+      goalId: "goal-1", planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED",
     }],
     ["a brief missing title", {
       brief: { instructions: "i" }, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a non-string brief instructions", {
       brief: { instructions: 7, title: "t" }, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["an empty brief title", {
       brief: { instructions: "i", title: "" }, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a brief that is a string", {
       brief: "text", goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
-    ["a brief-bearing row with a fourth unknown key", {
-      brief: null, goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker",
+    ["a brief-bearing row with a fifth unknown key", {
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      projectId: "project-attacker", truthClass: "DAEMON_VERIFIED",
     }],
   ])("fails the whole delivered catalog closed for %s", (_label, row) => {
     expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
@@ -180,12 +199,16 @@ describe("mapGoalCatalogAnswer", () => {
   it("decodes a source-bound row's binding beside an ordinary row's null", () => {
     const frame = mapGoalCatalogAnswer(200, {
       goals: [
-        { binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain" },
+        {
+          binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain",
+          truthClass: "DAEMON_VERIFIED",
+        },
         {
           binding: SOURCE_BINDING,
           brief: null,
           goalId: "goal-bound",
           planningRunRef: "run-bound",
+          truthClass: "HUMAN_APPROVED",
         },
       ],
       nextCursor: null,
@@ -196,12 +219,16 @@ describe("mapGoalCatalogAnswer", () => {
       connection: "CONNECTED",
       detail: "",
       goals: [
-        { binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain" },
+        {
+          binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain",
+          truthClass: "DAEMON_VERIFIED",
+        },
         {
           binding: SOURCE_BINDING,
           brief: null,
           goalId: "goal-bound",
           planningRunRef: "run-bound",
+          truthClass: "HUMAN_APPROVED",
         },
       ],
       outcome: "GOALS",
@@ -209,21 +236,48 @@ describe("mapGoalCatalogAnswer", () => {
     expect(Object.isFrozen(frame.goals[1]?.binding)).toBe(true);
   });
 
+  it("carries the daemon-projected truth class without upgrading it", () => {
+    expect(mapGoalCatalogAnswer(200, {
+      goals: [{
+        binding: SOURCE_BINDING,
+        brief: { instructions: "Use the bound PRD.", title: "Bound goal" },
+        goalId: "goal-human-approved",
+        planningRunRef: "run-human-approved",
+        truthClass: "HUMAN_APPROVED",
+      }],
+      nextCursor: null,
+      outcome: "GOALS",
+    })).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "",
+      goals: [{
+        binding: SOURCE_BINDING,
+        brief: { instructions: "Use the bound PRD.", title: "Bound goal" },
+        goalId: "goal-human-approved",
+        planningRunRef: "run-human-approved",
+        truthClass: "HUMAN_APPROVED",
+      }],
+      outcome: "GOALS",
+    });
+  });
+
   /**
    * DoD 3, EXACTNESS WIDENED AND NOT ABANDONED (taskRail 2). The roster grew by ONE key; it did
    * not grow tolerance. Every case here must reach the SAME refusal path - CONNECTED /
    * UNREADABLE / LIVE_GOAL_CATALOG_UNREADABLE, the decoder's own stable code, not merely "not
-   * the row I sent". A fifth key is refused at the ENTRY level, and an over-wide or malformed
+   * the row I sent". A sixth key is refused at the ENTRY level, and an over-wide or malformed
    * binding is refused at the BINDING level, so admitting `binding` did not admit it opaquely.
    */
   it.each([
-    ["a fifth unknown key beside the binding", {
+    ["a sixth unknown key beside the binding", {
       binding: SOURCE_BINDING, brief: null, goalId: "goal-1",
       planningRunRef: "run-1", projectId: "project-attacker",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding carrying a fifth key", {
       binding: { ...SOURCE_BINDING, displayPath: "PRD.md" },
       brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding missing sourceRef", {
       binding: {
@@ -232,22 +286,26 @@ describe("mapGoalCatalogAnswer", () => {
         sourceAggregateId: SOURCE_BINDING.sourceAggregateId,
       },
       brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding with an empty content digest", {
       binding: { ...SOURCE_BINDING, contentSha256: "" },
       brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding with a fractional byte length", {
       binding: { ...SOURCE_BINDING, byteLength: 1.5 },
       brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding with a negative byte length", {
       binding: { ...SOURCE_BINDING, byteLength: -1 },
       brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      truthClass: "DAEMON_VERIFIED",
     }],
     ["a binding that is a string", {
       binding: "document-source/deadbeef", brief: null,
-      goalId: "goal-1", planningRunRef: "run-1",
+      goalId: "goal-1", planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED",
     }],
   ])("fails the whole delivered catalog closed for %s", (_label, row) => {
     expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
@@ -271,6 +329,7 @@ describe("mapGoalCatalogAnswer", () => {
     expect(mapGoalCatalogAnswer(200, {
       goals: [{
         binding: accessorBinding, brief: null, goalId: "goal-1", planningRunRef: "run-1",
+        truthClass: "DAEMON_VERIFIED",
       }],
       nextCursor: null,
       outcome: "GOALS",
@@ -296,11 +355,15 @@ describe("mapGoalCatalogAnswer", () => {
       brief: { enumerable: true, get: briefGetter },
       goalId: { enumerable: true, value: "goal-1" },
       planningRunRef: { enumerable: true, value: "run-1" },
+      truthClass: { enumerable: true, value: "DAEMON_VERIFIED" },
     });
 
     for (const row of [
       rowWithAccessorBrief,
-      { brief: accessorBrief, goalId: "goal-1", planningRunRef: "run-1" },
+      {
+        brief: accessorBrief, goalId: "goal-1", planningRunRef: "run-1",
+        truthClass: "DAEMON_VERIFIED",
+      },
     ]) {
       expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toMatchObject({
         connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE",
@@ -314,21 +377,36 @@ describe("mapGoalCatalogAnswer", () => {
     ["extra success key", { ...GOALS, projectId: "project-attacker" }],
     ["missing goals", { nextCursor: null, outcome: "GOALS" }],
     ["extra row key", {
-      goals: [{ goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker" }],
+      goals: [{
+        goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker",
+        truthClass: "DAEMON_VERIFIED",
+      }],
       nextCursor: null,
       outcome: "GOALS",
     }],
     ["empty goal id", {
-      goals: [{ goalId: "", planningRunRef: "run-1" }], nextCursor: null, outcome: "GOALS",
+      goals: [{ goalId: "", planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED" }],
+      nextCursor: null, outcome: "GOALS",
     }],
     ["empty planning run", {
-      goals: [{ goalId: "goal-1", planningRunRef: "" }], nextCursor: null, outcome: "GOALS",
+      goals: [{ goalId: "goal-1", planningRunRef: "", truthClass: "DAEMON_VERIFIED" }],
+      nextCursor: null, outcome: "GOALS",
     }],
     ["duplicate durable identity", {
       goals: [
-        { goalId: "goal-1", planningRunRef: "run-1" },
-        { goalId: "goal-1", planningRunRef: "run-2" },
+        { goalId: "goal-1", planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED" },
+        { goalId: "goal-1", planningRunRef: "run-2", truthClass: "HUMAN_APPROVED" },
       ],
+      nextCursor: null,
+      outcome: "GOALS",
+    }],
+    ["missing projected truth class", {
+      goals: [{ goalId: "goal-1", planningRunRef: "run-1" }],
+      nextCursor: null,
+      outcome: "GOALS",
+    }],
+    ["unsupported projected truth class", {
+      goals: [{ goalId: "goal-1", planningRunRef: "run-1", truthClass: "UNKNOWN" }],
       nextCursor: null,
       outcome: "GOALS",
     }],
@@ -364,14 +442,20 @@ describe("mapGoalCatalogAnswer", () => {
    */
   it("keeps the continuation cursor out of the frame and on the page", () => {
     const answer = {
-      goals: [{ binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      goals: [{
+        binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1",
+        truthClass: "DAEMON_VERIFIED",
+      }],
       nextCursor: "cursor-1",
       outcome: "GOALS",
     };
     const frame = {
       connection: "CONNECTED",
       detail: "",
-      goals: [{ binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      goals: [{
+        binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1",
+        truthClass: "DAEMON_VERIFIED",
+      }],
       outcome: "GOALS",
     };
 
@@ -387,6 +471,7 @@ describe("mapGoalCatalogAnswer", () => {
     Object.defineProperties(row, {
       goalId: { enumerable: true, get: getter },
       planningRunRef: { enumerable: true, value: "run-1" },
+      truthClass: { enumerable: true, value: "DAEMON_VERIFIED" },
     });
 
     expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toMatchObject({
@@ -453,6 +538,7 @@ describe("readGoalCatalog draining pages", () => {
         brief: null,
         goalId: `goal-${String(offset + index).padStart(4, "0")}`,
         planningRunRef: `run-${String(offset + index).padStart(4, "0")}`,
+        truthClass: "DAEMON_VERIFIED",
       })),
       nextCursor,
       outcome: "GOALS",

@@ -48,7 +48,7 @@ export type {
   StoredEvent,
   StoreHealth,
 } from "./sqlite-event-store.js";
-export { identifyReplayRequest } from "./store-digests.js";
+export { identifyCorrelation, identifyReplayRequest } from "./store-digests.js";
 export {
   BACKUP_GENERATION_MANIFEST_VERSION,
   BACKUP_GENERATION_REASONS,

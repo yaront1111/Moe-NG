@@ -18,7 +18,7 @@
 import type { NodeAuthorityLayer } from "./node-authority-contract.js";
 import type { NodeAuthorityRecursionLayer } from "./node-authority-recursion.js";
 /**
- * The codec boundary. `createNodeDefinition` and `admitNodeDefinition` are the
+ * The codec boundary. The two create routes and `admitNodeDefinition` are the
  * only routes to a `NodeDefinition`, and `encodeNodeDefinition` /
  * `decodeNodeDefinitionBytes` the only routes to and from its bytes.
  *
@@ -30,6 +30,7 @@ import type { NodeAuthorityRecursionLayer } from "./node-authority-recursion.js"
 export {
   admitNodeDefinition,
   createNodeDefinition,
+  createNodeDefinitionFromPlanningContent,
   decodeNodeDefinitionBytes,
   encodeNodeDefinition,
 } from "./node-authority-codec.js";
@@ -38,6 +39,29 @@ export type {
   NodeAuthorityBytesResult,
   NodeAuthorityResult,
 } from "./node-authority-codec.js";
+/**
+ * Graph-free planner-authored source content. This codec proves inert content only; it neither
+ * selects a graph nor grants execution authority. The compiler remains responsible for matching
+ * the admitted source to one durable graph/contract/node request.
+ */
+export {
+  NODE_PLANNING_SOURCE_CODES,
+  NODE_PLANNING_SOURCE_DIGEST_DOMAIN,
+  NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+  createNodePlanningSourceContent,
+  decodeNodePlanningSourceContentBytes,
+  encodeNodePlanningSourceContent,
+} from "./node-planning-source-codec.js";
+export type {
+  NodePlanningSourceBytesResult,
+  NodePlanningSourceCode,
+  NodePlanningSourceContent,
+  NodePlanningSourceDependency,
+  NodePlanningSourceIssue,
+  NodePlanningSourceIssueCode,
+  NodePlanningSourceLayer,
+  NodePlanningSourceResult,
+} from "./node-planning-source-codec.js";
 /**
  * Recursive authority over a whole snapshot, plus its own refusal vocabulary.
  * A consumer that can derive the set but cannot name why a derivation refused
@@ -93,6 +117,7 @@ export type {
   NodeAuthorityDraftResult,
   NodeAuthorityEdgeInput,
   NodeAuthorityIssue,
+  NodeAuthorityIssueCode,
   NodeAuthorityLayer,
   NodeAuthorityRefusal,
   NodeCriterionBinding,

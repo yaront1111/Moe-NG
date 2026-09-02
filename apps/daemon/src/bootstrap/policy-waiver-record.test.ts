@@ -167,18 +167,22 @@ describe("immutable policy-waiver record", () => {
   it("accepts every exact upper boundary and rejects the next value", () => {
     const scope = Object.freeze(Array.from({ length: 64 }, (_, index) =>
       `scope-${String(index).padStart(2, "0")}`));
-    expect(buildPolicyWaiverGrant(input({
-      actionKind: "x".repeat(512), decisionReason: "r".repeat(2048),
+    const acceptedBoundary = buildPolicyWaiverGrant(input({
+      actionKind: "x".repeat(512), commandId: "c".repeat(489), decisionReason: "r".repeat(2048),
       expiresAtEpochMs: Date.parse(APPROVED_AT) + 86_400_000, scope,
-    })).ok).toBe(true);
+    }));
+    expect(acceptedBoundary.ok).toBe(true);
+    if (acceptedBoundary.ok) expect(new TextEncoder().encode(
+      `${acceptedBoundary.record.commandId}-${acceptedBoundary.eventType}`).byteLength).toBe(512);
     const BOUNDARY_REJECTIONS = Object.freeze([
       input({ actionKind: "x".repeat(513) }),
+      input({ commandId: "c".repeat(490) }),
       input({ decisionReason: "r".repeat(2049) }),
       input({ scope: Object.freeze([...scope, "scope-64"]) }),
       input({ expiresAtEpochMs: Date.parse(APPROVED_AT) }),
       input({ expiresAtEpochMs: Date.parse(APPROVED_AT) + 86_400_001 }),
     ]);
-    expect(BOUNDARY_REJECTIONS).toHaveLength(5);
+    expect(BOUNDARY_REJECTIONS).toHaveLength(6);
     for (const candidate of BOUNDARY_REJECTIONS) {
       expectRefusal(buildPolicyWaiverGrant(candidate), "POLICY_WAIVER_RECORD_INVALID");
     }
@@ -193,10 +197,11 @@ describe("immutable policy-waiver record", () => {
       ["empty scope", input({ scope: Object.freeze([]) })],
       ["duplicate scope", input({ scope: Object.freeze(["graph.read", "graph.read"]) })],
       ["unsorted scope", input({ scope: Object.freeze(["plan.preview", "graph.read"]) })],
+      ["reserved command namespace", input({ commandId: "moe-internal:forged" })],
       ["NUL", input({ projectId: "project\0one" })],
     ] as const);
-    expect(INVALID_VALUES).toHaveLength(8);
-    expect(new Set(INVALID_VALUES.map(([name]) => name)).size).toBe(8);
+    expect(INVALID_VALUES).toHaveLength(9);
+    expect(new Set(INVALID_VALUES.map(([name]) => name)).size).toBe(9);
     for (const [, candidate] of INVALID_VALUES) {
       expectRefusal(buildPolicyWaiverGrant(candidate), "POLICY_WAIVER_RECORD_INVALID");
     }
@@ -213,6 +218,9 @@ describe("immutable policy-waiver record", () => {
       ownKeys: () => { throw new Error("ownKeys trap"); },
     });
     const transparentProxy = new Proxy(BASE, {});
+    const revokedProxy = Proxy.revocable(BASE, {});
+    revokedProxy.revoke();
+    const transparentScopeProxy = { ...BASE, scope: new Proxy([...BASE.scope], {}) };
     const symbol = { ...BASE, [Symbol("extra")]: "smuggled" };
     const exotic = Object.setPrototypeOf({ ...BASE }, { authority: true });
     const cycle = { ...BASE, scope: [] as unknown[] };
@@ -229,10 +237,11 @@ describe("immutable policy-waiver record", () => {
     const missing = { ...BASE } as Partial<PolicyWaiverGrantInput>;
     delete missing.actionKind;
     const HOSTILE_SHAPES = Object.freeze([
-      getter, proxy, transparentProxy, symbol, exotic, cycle, { ...BASE, scope: accessorScope },
-      { ...BASE, scope: nestedScopeProxy }, missing, { ...BASE, extra: "smuggled" },
+      getter, proxy, transparentProxy, revokedProxy.proxy, transparentScopeProxy, symbol, exotic, cycle,
+      { ...BASE, scope: accessorScope }, { ...BASE, scope: nestedScopeProxy },
+      missing, { ...BASE, extra: "smuggled" },
     ]);
-    expect(HOSTILE_SHAPES).toHaveLength(10);
+    expect(HOSTILE_SHAPES).toHaveLength(12);
     for (const candidate of HOSTILE_SHAPES) {
       expectRefusal(buildPolicyWaiverGrant(candidate as never), "POLICY_WAIVER_RECORD_INVALID");
     }

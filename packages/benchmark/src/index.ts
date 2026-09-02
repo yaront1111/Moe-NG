@@ -196,11 +196,6 @@ export type {
   BenchmarkRecordRefusals, BenchmarkReproducibility, BenchmarkRunProjection, BenchmarkSettings,
   BenchmarkTiming,
 } from "./benchmark-run-projection.js";
-export {
-  FIXTURE_OBSERVED_END, FIXTURE_OBSERVED_END_OTHER_BOOT, FIXTURE_OBSERVED_START,
-  FIXTURE_USAGE_ROW, FIXTURE_USAGE_ROW_UNMEASURED, completeRunRecordFixture,
-  unknownFactFixture, unobservedRunRecordFixture,
-} from "./benchmark-record-fixture.js";
 export { PROJECTED_RECORD_KEYS, PROJECTED_RECORD_VERSION } from "./benchmark-record-contracts.js";
 export type {
   ProjectedClockObservation, ProjectedConcurrency, ProjectedDeclaredSelection,

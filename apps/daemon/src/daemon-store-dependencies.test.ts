@@ -17,6 +17,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
 import { acquireFoundationStore } from "./daemon-store-acquisition.js";
+import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import {
@@ -201,6 +202,56 @@ describe("the Foundation workspace catalog never gates daemon boot", () => {
 });
 
 describe("createStoreDependencies", () => {
+  it("provides the project-bound Product Contract /2 current reader", () => {
+    const current = provider.productContractV2Current?.();
+    expect(current).toBeDefined();
+    expect(current?.boundProjectId).toBe(PROJECT);
+    expect(current?.readCurrent("contract-v2")).toEqual({
+      code: "CUTOVER_V2_NOT_ACTIVE",
+      layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      outcome: "REFUSED",
+    });
+  });
+
+  it("provides the project-bound Product Contract /2 pending reader", () => {
+    const pending = provider.productContractV2Pending?.();
+    expect(pending).toBeDefined();
+    expect(pending?.boundProjectId).toBe(PROJECT);
+    expect(pending?.readPending("goal-v2-pending")).toEqual({
+      code: "CUTOVER_V2_NOT_ACTIVE",
+      layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      outcome: "REFUSED",
+    });
+  });
+
+  it("provides a distinct /2 command plane that is inactive rather than falling back to v1", () => {
+    const v2 = provider.provideV2?.();
+    expect(v2).toBeDefined();
+    if (v2 === undefined) return;
+    expect([...v2.registry.keys()].sort()).toEqual(Object.keys(PAYLOAD_KEYS)
+      .filter((kind) => kind !== "planning.submit_decomposition").sort());
+
+    const result = handleCommandRequest(v2, {
+      body: bytes(envelopeObject({
+        commandId: "command-v2-before-cutover",
+        commandKind: "product_contract.propose_revision",
+        payload: { draft: {}, goalRef: "goal-v2-before-cutover" },
+      })),
+      credential: CREDENTIAL,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+    expect(result).toMatchObject({
+      httpStatus: 422,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "CUTOVER_V2_NOT_ACTIVE",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      },
+      stage: "DISPATCH",
+    });
+  });
+
   it("provides the goal catalog over its bound project store", () => {
     const port = provider.goalCatalog?.();
     expect(port).toBeDefined();
@@ -588,6 +639,7 @@ try {
   }, "HTTP_LISTENER");
   const first = dispatch();
   const second = dispatch();
+  const sourceSnapshotPublisher = provider.sourceSnapshotPublisher();
   const shapeOf = (result) => ({
     commandId: result.decision?.commandId ?? null,
     disposition: result.decision?.disposition ?? null,
@@ -605,6 +657,8 @@ try {
     registerPayloadKeys: entry.payloadKeys,
     registryKinds: [...deps.registry.keys()].sort(),
     sameEffect: first.decision?.effectId === second.decision?.effectId,
+    sameSourceSnapshotPublisher:
+      sourceSnapshotPublisher === provider.sourceSnapshotPublisher(),
     second: shapeOf(second),
   });
 } catch (error) {
@@ -648,12 +702,15 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // unreachable from the real daemon while every direct-injection test stays
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "budgetCommitment", "documentDossiers", "documentIngest", "goalCatalog",
+        "affordances", "budgetCommitment", "commandAuthorityPlane", "documentDossiers",
+        "documentIngest", "goalCatalog",
         "graph",
         "pairingOpenSessions",
         "planningRuns", "productContractGate1", "productContractPending",
-        "provide", "reconciliation", "restore",
-        "sessionChallengeOperands", "sessionHandshake", "subscriptions",
+        "productContractV2Current", "productContractV2Pending",
+        "provide", "provideV2", "reconciliation", "restore",
+        "sessionChallengeOperands", "sessionHandshake", "sourceSnapshotPublisher",
+        "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",
@@ -685,6 +742,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "work.renew", "work.resume",
       ],
       sameEffect: true,
+      sameSourceSnapshotPublisher: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",

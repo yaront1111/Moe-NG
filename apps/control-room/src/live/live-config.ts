@@ -1,5 +1,7 @@
 import { createCompatGate, createControlRoomTransport } from "@moe/control-room-client";
-import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
+import type {
+  CommandAuthorityPlane, ControlRoomClientSurface, ControlRoomTransport,
+} from "@moe/control-room-client";
 
 /**
  * Resolves the DEVELOPMENT-ONLY live attachment from build-time configuration.
@@ -27,6 +29,12 @@ export type LiveConfigRefusalCode = (typeof LIVE_CONFIG_REFUSAL_CODES)[number];
 export interface LiveSetup {
   /** The gated surface: generated builders + wire protocol; the gate admitted it. */
   readonly client: ControlRoomClientSurface;
+  /**
+   * The command plane the DAEMON stated on `/bootstrap`. Surfaces with a plane-specific
+   * read (Gate 1) pick their wire by this, never by build; the legacy build-time dev
+   * path reads no bootstrap and states V1.
+   */
+  readonly commandAuthorityPlane: CommandAuthorityPlane;
   /** Header values for the one route the transport does not carry (/affordances/read). */
   readonly headers: Readonly<Record<string, string>>;
   readonly ok: true;
@@ -71,7 +79,11 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
   }
   // Origin is empty on purpose: requests stay same-origin and the dev server
   // proxies /command, /events/read, /events/ack and /affordances/read to the daemon.
+  // V1 is STATED, not inferred: this build-time attachment never reads `/bootstrap`,
+  // so it cannot learn a cutover plane and must not pretend to. The shipped path is
+  // the handshake in live-handshake.ts, which routes by what the daemon states.
   const transport = createControlRoomTransport({
+    commandAuthorityPlane: "V1",
     csrfToken: csrf,
     origin: "",
     sessionCredential: credential,
@@ -79,6 +91,7 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
   });
   return Object.freeze({
     client: gate.client,
+    commandAuthorityPlane: "V1",
     headers: Object.freeze({
       "content-type": "application/json",
       "x-moe-csrf": csrf,

@@ -10,8 +10,9 @@ const CSRF = "goal-catalog-entry-csrf";
 const VIEW = Object.freeze({
   goals: Object.freeze([{
     // `binding: null` is the honest absent value /goals/read projects for a row with no bound
-    // source document (task-221fa0c3); the entry shape is four-keyed, never three.
+    // source document (task-221fa0c3); the entry shape is five-keyed, never four.
     binding: null, brief: null, goalId: "goal-entry-random", planningRunRef: "run-entry-random",
+    truthClass: "DAEMON_VERIFIED" as const,
   }]),
   nextCursor: null,
   outcome: "GOALS" as const,

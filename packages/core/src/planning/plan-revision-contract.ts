@@ -71,7 +71,7 @@ export type PlanRevisionAdmission =
   | Readonly<{ ok: true; revision: PlanRevision }>
   | PlanRevisionRefusal;
 
-type ReadResult<T> = Readonly<{ ok: true; value: T }> | PlanRevisionRefusal;
+export type PlanRevisionReadResult<T> = Readonly<{ ok: true; value: T }> | PlanRevisionRefusal;
 interface ParsedPlan {
   readonly body: PlanRevisionDraft;
   readonly planHash?: string;
@@ -133,18 +133,18 @@ function hostileObject(
   }
 }
 
-function readText(value: unknown, maximum: number): ReadResult<string> {
+function readText(value: unknown, maximum: number): PlanRevisionReadResult<string> {
   if (typeof value !== "string" || value.length === 0 || value.includes("\0")
     || !value.isWellFormed() || value.normalize("NFC") !== value) return malformed();
   if (encoder.encode(value).byteLength > maximum) return exceeded();
   return success(value);
 }
 
-function readNullableText(value: unknown): ReadResult<string | null> {
+function readNullableText(value: unknown): PlanRevisionReadResult<string | null> {
   return value === null ? success(null) : readText(value, PLAN_REVISION_LIMITS.maxIdBytes);
 }
 
-function readSet(value: unknown): ReadResult<readonly string[]> {
+export function readPlanRevisionSet(value: unknown): PlanRevisionReadResult<readonly string[]> {
   if (!Array.isArray(value) || value.length === 0) return malformed();
   if (value.length > PLAN_REVISION_LIMITS.maxSetEntries) return exceeded();
   const items: string[] = [];
@@ -159,7 +159,7 @@ function readSet(value: unknown): ReadResult<readonly string[]> {
   return success(Object.freeze(items));
 }
 
-function readStep(value: unknown): ReadResult<PlanRevisionStep> {
+function readStep(value: unknown): PlanRevisionReadResult<PlanRevisionStep> {
   if (!exact(value, STEP_KEYS)) return malformed();
   const stepId = readText(value["stepId"], PLAN_REVISION_LIMITS.maxIdBytes);
   const description = readText(value["description"], PLAN_REVISION_LIMITS.maxDescriptionBytes);
@@ -173,7 +173,7 @@ function readStep(value: unknown): ReadResult<PlanRevisionStep> {
     stepId: stepId.value }));
 }
 
-function readSteps(value: unknown): ReadResult<readonly PlanRevisionStep[]> {
+export function readPlanRevisionSteps(value: unknown): PlanRevisionReadResult<readonly PlanRevisionStep[]> {
   if (!Array.isArray(value) || value.length === 0) return malformed();
   if (value.length > PLAN_REVISION_LIMITS.maxSteps) return exceeded();
   const ids = new Set<string>();
@@ -188,14 +188,14 @@ function readSteps(value: unknown): ReadResult<readonly PlanRevisionStep[]> {
   return success(Object.freeze(steps));
 }
 
-function readGraph(value: unknown): ReadResult<PlanRevisionGraphBinding> {
+function readGraph(value: unknown): PlanRevisionReadResult<PlanRevisionGraphBinding> {
   if (!exact(value, GRAPH_KEYS) || !validHex64(value["graphContentHash"])) return malformed();
   const revision = readText(value["graphRevisionRef"], PLAN_REVISION_LIMITS.maxIdBytes);
   return revision.ok ? success(Object.freeze({ graphContentHash: value["graphContentHash"],
     graphRevisionRef: revision.value })) : revision;
 }
 
-function parsePlan(value: unknown, full: boolean): ReadResult<ParsedPlan> {
+function parsePlan(value: unknown, full: boolean): PlanRevisionReadResult<ParsedPlan> {
   const hostile = hostileObject(value);
   if (hostile !== undefined) return hostile;
   const snapshot = snapshotData(value);
@@ -209,10 +209,10 @@ function parsePlan(value: unknown, full: boolean): ReadResult<ParsedPlan> {
   const rejectionRef = readNullableText(record["rejectionRef"]);
   const authorRef = readText(record["authorRef"], PLAN_REVISION_LIMITS.maxIdBytes);
   const graphBinding = readGraph(record["graphBinding"]);
-  const steps = readSteps(record["steps"]);
-  const nodes = readSet(record["affectedNodeIds"]);
-  const criteria = readSet(record["affectedCriterionIds"]);
-  const recipes = readSet(record["verificationRecipeRefs"]);
+  const steps = readPlanRevisionSteps(record["steps"]);
+  const nodes = readPlanRevisionSet(record["affectedNodeIds"]);
+  const criteria = readPlanRevisionSet(record["affectedCriterionIds"]);
+  const recipes = readPlanRevisionSet(record["verificationRecipeRefs"]);
   if (!revisionId.ok) return revisionId; if (!parentRevisionId.ok) return parentRevisionId;
   if (!rejectionRef.ok) return rejectionRef; if (!authorRef.ok) return authorRef;
   if (!graphBinding.ok) return graphBinding; if (!steps.ok) return steps;

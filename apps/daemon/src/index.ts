@@ -22,6 +22,16 @@ export {
 export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+// v2 compiler composition is public only through its server-bound factory; the
+// factory captures every authority reader and never accepts caller-owned readers.
+export {
+  createV2Compiler,
+  type V2Compiler,
+  type V2CompilerFactoryDependencies,
+  type V2CompilerResolutionRequest,
+  type V2CompilerResolutionToken,
+  type V2CompilerResolutionTokenMintResult,
+} from "./planning/v2-compiler/compiler.js";
 /** Server-derived expansion release selection (task-671cdd10). No exported seam takes an
  *  `attemptRef`: the reader derives it, and the internal locator scan stays unexported. */
 export {

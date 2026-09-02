@@ -15,7 +15,7 @@ import type {
 } from "./planning-contract.js";
 import {
   BINDING, expectDeepFrozen, finalizeWitness, GRAPH_HASH, HASHES, PLAN_APPROVAL, PLAN_HASH,
-  REVISION_ACTIVATION, REVISION_RANK, REVISION_TERMINAL, RUN_ACTIVATION, RUN_APPROVAL_STATES,
+  REVISION_ACTIVATION, REVISION_RANK, REVISION_TERMINAL, RUN_ACTIVATION,
   RUN_RANK, RUN_TERMINAL, SUBMISSION_HASH, xorshift32,
 } from "./planning-invariant-fixtures.js";
 import {
@@ -101,7 +101,6 @@ export function runTrace(seed: number, bearing: number): readonly unknown[] {
       expect(RUN_TERMINAL.has(source)).toBe(false);
       expect(RUN_RANK[result.state.lifecycle]).toBeGreaterThanOrEqual(RUN_RANK[source]);
     }
-    if (bearing > 1) expect(RUN_APPROVAL_STATES.has(result.state.lifecycle)).toBe(false);
     expect(result.state.runId).toBe("planning-run-1");
     current = result.state;
     entries.push([kind, current.lifecycle, current.version]);
@@ -186,10 +185,13 @@ const DRAINING_STEPS: readonly RunStep[] = [...OWNED_STEPS, ["plan.propose", 1]]
 const REVIEW_STEPS: readonly RunStep[] = [...SEALED_STEPS, ["planning.finalize_submission", 3]];
 const APPROVED_STEPS: readonly RunStep[] = [...REVIEW_STEPS, ["plan.approve", 1]];
 
-function driveRun(steps: readonly RunStep[], expected: PlanningRunLifecycle): PlanningRunState {
+function driveRun(
+  steps: readonly RunStep[], expected: PlanningRunLifecycle, bearing = 1,
+): PlanningRunState {
   let current: PlanningRunState | undefined;
   for (const [kind, roll] of steps) {
-    const result = reducePlanningRun(current, runCommand(kind, current?.version ?? 0, 1, roll));
+    const result = reducePlanningRun(current,
+      runCommand(kind, current?.version ?? 0, bearing, roll));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`sequence failed at ${kind}`);
     current = result.state;
@@ -210,9 +212,8 @@ function runSeedPool(bearing: number): readonly (PlanningRunState | undefined)[]
     driveRun(OWNED_STEPS, "PLANNING"), driveRun(SEALED_STEPS, "PLANNING"),
     driveRun(DRAINING_STEPS, "SUBMISSION_DRAINING"),
   ];
-  if (bearing === 1) {
-    pool.push(driveRun(REVIEW_STEPS, "PLAN_REVIEW"), driveRun(APPROVED_STEPS, "APPROVED"));
-  }
+  pool.push(driveRun(REVIEW_STEPS, "PLAN_REVIEW", bearing),
+    driveRun(APPROVED_STEPS, "APPROVED", bearing));
   return pool;
 }
 

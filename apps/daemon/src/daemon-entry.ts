@@ -67,6 +67,8 @@ export type DaemonEntryRefusalCode = (typeof DAEMON_ENTRY_REFUSAL_CODES)[number]
 /** The one seam through which real authority reaches the transport. */
 export interface DaemonDependencyProvider extends OptionalDaemonPortProvider {
   provide(): CommandAdapterDeps;
+  /** Separate authority plane for `/v2/command`; absence is surfaced by the listener. */
+  provideV2?(): CommandAdapterDeps;
 }
 
 export interface DaemonEntryRefused {
@@ -144,7 +146,10 @@ export function isDependencyProvider(value: unknown): value is DaemonDependencyP
   if (typeof value !== "object" || value === null) return false;
   try {
     const provide = Reflect.get(value, "provide") as unknown;
-    return typeof provide === "function" && optionalPortFactoriesAreValid(value);
+    const provideV2 = Reflect.get(value, "provideV2") as unknown;
+    return typeof provide === "function"
+      && (provideV2 === undefined || typeof provideV2 === "function")
+      && optionalPortFactoriesAreValid(value);
   } catch {
     return false;
   }
@@ -173,6 +178,7 @@ function isCommandAdapterDeps(value: unknown): value is CommandAdapterDeps {
 type ResolvedDependencies = DaemonEntryRefused | (ResolvedOptionalDaemonPorts & {
   readonly deps: CommandAdapterDeps;
   readonly ok: true;
+  readonly v2Deps?: CommandAdapterDeps;
 });
 
 function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDependencies {
@@ -186,12 +192,27 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
     return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
   }
 
+  let providedV2: unknown;
+  try {
+    providedV2 = provider.provideV2?.();
+  } catch {
+    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+  }
+  if (providedV2 !== undefined && !isCommandAdapterDeps(providedV2)) {
+    return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+  }
+
   const ports = resolveOptionalDaemonPorts(provider);
   if (!ports.ok) {
     return refuseEntry(ports.failure === "THREW"
       ? "DAEMON_ENTRY_PROVIDER_THREW" : "DAEMON_ENTRY_DEPENDENCIES_INVALID");
   }
-  return Object.freeze({ deps: provided, ok: true, ...ports.ports } as const);
+  return Object.freeze({
+    deps: provided,
+    ok: true,
+    ...ports.ports,
+    ...(providedV2 === undefined ? {} : { v2Deps: providedV2 }),
+  } as const);
 }
 
 /**
@@ -241,6 +262,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
+    ...(resolved.v2Deps === undefined ? {} : { v2Deps: resolved.v2Deps }),
     ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
     ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
@@ -263,6 +285,12 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       ? {} : { productContractGate1: resolved.productContractGate1 }),
     ...(resolved.productContractPending === undefined
       ? {} : { productContractPending: resolved.productContractPending }),
+    ...(resolved.productContractV2Current === undefined
+      ? {} : { productContractV2Current: resolved.productContractV2Current }),
+    ...(resolved.productContractV2Pending === undefined
+      ? {} : { productContractV2Pending: resolved.productContractV2Pending }),
+    ...(resolved.commandAuthorityPlane === undefined
+      ? {} : { commandAuthorityPlane: resolved.commandAuthorityPlane }),
     ...(resolved.sessionChallengeOperands === undefined
       ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
     ...(resolved.pairingOpenSessions === undefined

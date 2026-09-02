@@ -74,6 +74,7 @@ function catalogRow(goalId: string): Record<string, unknown> {
     brief: { instructions: "durable instructions", title: "Durable title" },
     goalId,
     planningRunRef: `run-${goalId}`,
+    truthClass: "DAEMON_VERIFIED",
   };
 }
 

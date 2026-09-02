@@ -60,6 +60,28 @@ export { observeScope } from "./scope/scope-observation.js";
 export { parseRefListing } from "./scope/scope-refs.js";
 
 /**
+ * Git truth for SourceSnapshot publication. The root and environment are fixed
+ * when the observer is built; a consumer may name only the expected immutable
+ * commit, and receives the exact Git tree or the boundary that refused it.
+ */
+export {
+  MAX_SOURCE_SNAPSHOT_GIT_OUTPUT_BYTES,
+  RUNNER_SOURCE_SNAPSHOT_GIT_CODES,
+  RUNNER_SOURCE_SNAPSHOT_GIT_LAYER,
+  SOURCE_SNAPSHOT_GIT_TIMEOUT_MS,
+  type SourceSnapshotGitCode,
+  type SourceSnapshotGitLayer,
+  type SourceSnapshotGitObservation,
+  type SourceSnapshotGitObserved,
+  type SourceSnapshotGitObserver,
+  type SourceSnapshotGitRefusal,
+  type SourceSnapshotGitResult,
+} from "./source-snapshot/source-snapshot-git-contract.js";
+export {
+  createNodeSourceSnapshotGitObserver,
+} from "./source-snapshot/source-snapshot-git-node.js";
+
+/**
  * The supervisor effect seam, curated rather than blanket re-exported: a consumer
  * can create an effect intent, apply a lifecycle command, consume and validate a
  * one-use activation grant, and mirror-fence a lease. `effect-shape`'s generic

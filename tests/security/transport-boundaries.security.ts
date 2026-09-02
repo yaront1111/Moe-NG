@@ -33,6 +33,7 @@ import { assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import type { LegOutcome } from "./hostile-harness.js";
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
+import { RECENT_GATE1_TRANSPORT_CASES } from "./recent-v2-cutover-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import type { HostileArm } from "./transport-hostile-cases.js";
 
@@ -53,6 +54,7 @@ const HOSTILE_CASES = Object.freeze([
   ...TRANSPORT_HOSTILE_CASES,
   ...PROJECT_TRANSPORT_HOSTILE_CASES,
   ...RECENT_TRANSPORT_HOSTILE_CASES,
+  ...RECENT_GATE1_TRANSPORT_CASES,
 ]);
 
 interface Recorded {
@@ -141,7 +143,9 @@ describe("transport axis — completeness against the roster and the no-admissio
 
   it("reads a POSITIVE number of transport entries off the roster's committed bytes", () => {
     expect(ROSTER_TRANSPORT.length).toBeGreaterThan(0);
-    expect(ROSTER_TRANSPORT).toHaveLength(25);
+    // 25 -> 26 on 2026-09-02 for GATE1_LAYER, the Gate 1 card's mapping of a daemon answer,
+    // seen once the roster scanner became digit-aware; arms in recent-v2-cutover-hostile-cases.ts.
+    expect(ROSTER_TRANSPORT).toHaveLength(26);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

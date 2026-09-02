@@ -92,8 +92,7 @@ function isIsoInstant(value: unknown): value is string {
 
 function retryable(result: LiveKeyedPostResult): boolean {
   if (result.status !== 409 || !isRecord(result.body)) return false;
-  return exactKeys(result.body, ["code", "layer", "ok"])
-    && result.body["ok"] === false
+  return exactKeys(result.body, ["code", "layer"])
     && result.body["layer"] === "CONTROL_ROOM_PAIRING_APPROVAL"
     && (result.body["code"] === "PAIRING_APPROVAL_REQUIRED"
       || result.body["code"] === "PAIRING_REQUEST_BUSY");

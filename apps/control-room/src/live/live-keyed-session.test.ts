@@ -163,24 +163,59 @@ describe("live keyed session claim and signed open", () => {
     expect(JSON.stringify(result)).not.toContain("privateKey");
   });
 
-  it("memoizes one key across an approval retry and exposes an exact retry result", async () => {
-    let claims = 0;
-    const port = recordingPost((path, body) => {
-      if (path === "/session/pair/open") return exactOpen(body);
-      claims += 1;
-      return claims === 1
-        ? refused({ code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL",
-          ok: false }, 409)
-        : accepted(claimBody());
+  it("memoizes one key across each exact live retry refusal", async () => {
+    const RETRY_CODES = Object.freeze([
+      "PAIRING_APPROVAL_REQUIRED", "PAIRING_REQUEST_BUSY",
+    ] as const);
+    expect(RETRY_CODES).toHaveLength(2);
+    for (const code of RETRY_CODES) {
+      let claims = 0;
+      const port = recordingPost((path, body) => {
+        if (path === "/session/pair/open") return exactOpen(body);
+        claims += 1;
+        return claims === 1
+          ? refused({ code, layer: "CONTROL_ROOM_PAIRING_APPROVAL" }, 409)
+          : accepted(claimBody());
+      });
+      const keyed = session(port.post);
+      const retry = await keyed.claimAndOpen();
+      expect(retry).toEqual({ status: "RETRY_CLAIM" });
+      expect(Object.keys(retry)).toEqual(["status"]);
+      expect(await keyed.claimAndOpen()).toEqual({ ok: true, sessionCredential: CREDENTIAL });
+      const claimsSent = port.calls.filter(({ path }) => path === "/session/pair/claim");
+      expect(claimsSent).toHaveLength(2);
+      expect(claimsSent[1]!.body["publicKeySpkiHex"]).toBe(claimsSent[0]!.body["publicKeySpkiHex"]);
+    }
+  });
+
+  it("refuses retry-code near misses at the local claim boundary", async () => {
+    const RETRY_CODES = Object.freeze([
+      "PAIRING_APPROVAL_REQUIRED", "PAIRING_REQUEST_BUSY",
+    ] as const);
+    const HOSTILE_RETRIES = Object.freeze(RETRY_CODES.flatMap((code) => [
+      Object.freeze({ body: { code, layer: "WRONG_LAYER" }, name: `${code}:wrong-layer` }),
+      Object.freeze({ body: { code, layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false },
+        name: `${code}:surplus-ok` }),
+    ]));
+    expect(HOSTILE_RETRIES).toHaveLength(4);
+    expect(new Set(HOSTILE_RETRIES.map(({ name }) => name)).size).toBe(4);
+    for (const { body } of HOSTILE_RETRIES) {
+      const port = recordingPost(() => refused(body, 409));
+      expect(await session(port.post).claimAndOpen()).toEqual({
+        code: "LIVE_PAIRING_REFUSED", detail: "session pairing claim refused", ok: false,
+      });
+      expect(port.calls.map(({ path }) => path)).toEqual(["/session/pair/claim"]);
+    }
+  });
+
+  it("does not retry an exact retry body without the conflict status", async () => {
+    const port = recordingPost(() => refused({
+      code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL",
+    }, 403));
+    expect(await session(port.post).claimAndOpen()).toEqual({
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing claim refused", ok: false,
     });
-    const keyed = session(port.post);
-    const retry = await keyed.claimAndOpen();
-    expect(retry).toEqual({ status: "RETRY_CLAIM" });
-    expect(Object.keys(retry)).toEqual(["status"]);
-    expect(await keyed.claimAndOpen()).toEqual({ ok: true, sessionCredential: CREDENTIAL });
-    const claimsSent = port.calls.filter(({ path }) => path === "/session/pair/claim");
-    expect(claimsSent).toHaveLength(2);
-    expect(claimsSent[1]!.body["publicKeySpkiHex"]).toBe(claimsSent[0]!.body["publicKeySpkiHex"]);
+    expect(port.calls.map(({ path }) => path)).toEqual(["/session/pair/claim"]);
   });
 
   it("refuses a claim without the keyed challenge at its distinct guard", async () => {

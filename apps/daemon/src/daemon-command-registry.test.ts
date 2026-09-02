@@ -12,6 +12,7 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
@@ -1217,6 +1218,7 @@ describe("goal.create admits prose and nothing else", () => {
             title: "Seam goal",
           },
           goalId: "goal-cmd-goal-prose-only", planningRunRef: "run-cmd-goal-prose-only",
+          truthClass: "DAEMON_VERIFIED",
         }],
         nextCursor: null,
         outcome: "GOALS",
@@ -1620,6 +1622,30 @@ describe("createDaemonCommandPorts", () => {
       projectId: PROJECT,
       store: portStore,
     })).toThrow("OPERATOR_PRINCIPAL_RESERVED");
+  });
+
+  it("snapshots and validates the command authority plane at construction", () => {
+    let reads = 0;
+    const options = {
+      get authorityPlane(): "V1" | "V2" {
+        reads += 1;
+        return reads === 1 ? "V1" : "V2";
+      },
+      clock: CLOCK,
+      operatorPrincipalId: "operator-local",
+      projectId: PROJECT,
+      store: portStore,
+    } satisfies DaemonCommandPortOptions;
+
+    const snapshotPorts = createDaemonCommandPorts(options);
+    expect(reads).toBe(1);
+    expect(snapshotPorts.registry.size).toBe(45);
+    expect(reads).toBe(1);
+
+    expect(() => createDaemonCommandPorts({
+      ...options,
+      authorityPlane: "V3" as never,
+    })).toThrow("COMMAND_AUTHORITY_PLANE_INVALID");
   });
 
   it("passes a committed decision through unchanged", () => {

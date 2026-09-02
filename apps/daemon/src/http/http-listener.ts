@@ -27,6 +27,17 @@ import {
 } from "./product-contract-pending-read.js";
 import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
 import {
+  PRODUCT_CONTRACT_V2_CURRENT_READ_PATH,
+  handleProductContractV2CurrentReadRequest,
+} from "./product-contract-v2-current-read.js";
+import type {
+  ProductContractV2CurrentReadPort,
+} from "./product-contract-v2-current-read.js";
+import {
+  PRODUCT_CONTRACT_V2_PENDING_READ_PATH, handleProductContractV2PendingReadRequest,
+  type ProductContractV2PendingReadPort,
+} from "./product-contract-v2-pending-read.js";
+import {
   SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
 } from "./session-challenge-operands-read.js";
 import type { SessionChallengeOperandsReadPort } from "./session-challenge-operands-read.js";
@@ -40,8 +51,10 @@ import {
   EVENT_STREAM_RESUME_LAYER, EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
 } from "./event-resume-command.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
-import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
-import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import type {
+  CommandAdapterDeps, CommandAuthorityPlane, CommandAuthorityPlanePort, HttpCommandResult,
+} from "./http-contract.js";
+import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { answerGatedGraphQuery, gateGraphQuery } from "../planning/graph-query.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
@@ -146,6 +159,17 @@ export interface StartListenerOptions {
   readonly assetSecrets?: readonly string[];
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
+  /**
+   * The separately composed `/2` registry. Absence is an explicit unavailable
+   * authority plane; it never falls back to the v1 registry in `deps`.
+   */
+  readonly v2Deps?: CommandAdapterDeps;
+  /**
+   * States on `/bootstrap` which plane a browser must write to. Absent means the
+   * listener answers V1, the plane `/command` serves when no cutover marker exists;
+   * a composed reader answers from the durable marker on every request.
+   */
+  readonly commandAuthorityPlane?: CommandAuthorityPlanePort;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
   /** Absent means the operator ingest route refuses rather than recording a document. */
@@ -166,6 +190,10 @@ export interface StartListenerOptions {
   readonly productContractGate1?: ProductContractGate1ReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
+  /** Absent means the activated `/2` current-contract read refuses as unavailable. */
+  readonly productContractV2Current?: ProductContractV2CurrentReadPort;
+  /** Absent means the activated `/2` pending-contract read refuses as unavailable. */
+  readonly productContractV2Pending?: ProductContractV2PendingReadPort;
   /**
    * Optional for the same reason as the gate above: a daemon composed without
    * it answers UNAVAILABLE rather than publishing a fabricated operand set.
@@ -199,6 +227,7 @@ export interface StartListenerOptions {
 }
 
 const COMMAND_PATH = "/command";
+const V2_COMMAND_PATH = "/v2/command";
 const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 const EVENT_RESUME_PATH = "/events/resume";
@@ -229,7 +258,10 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   PLANNING_RUN_READ_PATH,
   PRODUCT_CONTRACT_GATE_1_READ_PATH,
   PRODUCT_CONTRACT_PENDING_READ_PATH,
+  PRODUCT_CONTRACT_V2_CURRENT_READ_PATH,
+  PRODUCT_CONTRACT_V2_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
+  V2_COMMAND_PATH,
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
@@ -283,6 +315,24 @@ async function serveCommand(
     protocolVersion: protocolVersionOf(request),
   }, "HTTP_LISTENER");
   // Serialized verbatim. The adapter chose the status and owns the codes.
+  reply(response, result.httpStatus, result);
+}
+
+async function serveV2Command(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): Promise<void> {
+  if (options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_V2_COMMAND_UNAVAILABLE");
+    return;
+  }
+  const result: HttpCommandResult = await handleAsyncCommandRequest(options.v2Deps, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  }, "HTTP_LISTENER");
   reply(response, result.httpStatus, result);
 }
 
@@ -589,6 +639,46 @@ function serveProductContractPending(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveProductContractV2Current(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  if (options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE");
+    return;
+  }
+  const result = handleProductContractV2CurrentReadRequest({
+    authenticator: options.v2Deps.authenticator,
+    ...(options.productContractV2Current === undefined
+      ? {} : { productContractV2Current: options.productContractV2Current }),
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveProductContractV2Pending(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  if (options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE"); return;
+  }
+  const result = handleProductContractV2PendingReadRequest({
+    authenticator: options.v2Deps.authenticator,
+    ...(options.productContractV2Pending === undefined ? {}
+      : { productContractV2Pending: options.productContractV2Pending }),
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveSessionChallengeOperands(
   response: ServerResponse,
   request: IncomingMessage,
@@ -723,11 +813,46 @@ function serveBootstrap(
     refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
     return;
   }
-  reply(response, 200, {
+  const body = composeBootstrapBody(options, pairing.boundProjectId);
+  // A plane this listener cannot serve is not stated. V2 with no `/2` registry
+  // would send every browser write to a 503; the same unavailable code is the
+  // honest answer here, before the browser commits to a route.
+  if (body.commandAuthorityPlane === "V2" && options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_V2_COMMAND_UNAVAILABLE", policy);
+    return;
+  }
+  reply(response, 200, body, policy);
+}
+
+/**
+ * The exact `/bootstrap` body. Exported for `tests/integration`, where the real
+ * browser-client admission is fed THIS composition rather than a hand-written
+ * fixture of it. The plane is read per request: a daemon that activates `/2`
+ * while a browser is open answers V2 to that browser's next bootstrap without a
+ * restart. A reader that answers outside the plane roster THROWS, which the
+ * request loop reports as LISTENER_REQUEST_FAILED; it is never coerced to V1.
+ */
+export function composeBootstrapBody(
+  options: Pick<StartListenerOptions, "commandAuthorityPlane" | "csrfToken">,
+  boundProjectId: string,
+): Readonly<{
+  readonly commandAuthorityPlane: CommandAuthorityPlane;
+  readonly csrfToken: string;
+  readonly projectId: string;
+  readonly protocolVersion: typeof WIRE_PROTOCOL_VERSION;
+}> {
+  const plane: unknown = options.commandAuthorityPlane === undefined
+    ? "V1" : options.commandAuthorityPlane.readPlane();
+  if (typeof plane !== "string"
+    || !(COMMAND_AUTHORITY_PLANES as readonly string[]).includes(plane)) {
+    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
+  }
+  return Object.freeze({
+    commandAuthorityPlane: plane as CommandAuthorityPlane,
     csrfToken: options.csrfToken,
-    projectId: pairing.boundProjectId,
+    projectId: boundProjectId,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  }, policy);
+  });
 }
 
 /**
@@ -858,8 +983,20 @@ async function serve(
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID");
     return;
   }
+  if (path === PRODUCT_CONTRACT_V2_CURRENT_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID");
+    return;
+  }
+  if (path === PRODUCT_CONTRACT_V2_PENDING_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID");
+    return;
+  }
   if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
+    return;
+  }
+  if (path === V2_COMMAND_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_V2_COMMAND_REQUEST_INVALID");
     return;
   }
   const body = await readBoundedBody(request);
@@ -869,6 +1006,7 @@ async function serve(
   }
 
   if (path === COMMAND_PATH) await serveCommand(response, request, options, body);
+  else if (path === V2_COMMAND_PATH) await serveV2Command(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
   else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options);
@@ -883,6 +1021,10 @@ async function serve(
     serveProductContractGate1(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_PENDING_READ_PATH) {
     serveProductContractPending(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_V2_CURRENT_READ_PATH) {
+    serveProductContractV2Current(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_V2_PENDING_READ_PATH) {
+    serveProductContractV2Pending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);

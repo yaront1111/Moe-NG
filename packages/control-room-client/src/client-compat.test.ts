@@ -134,6 +134,7 @@ it("exports the gate and the transport from the package root, and nothing genera
   // bare specifier from both apps/control-room and the e2e spec, and it holds ZERO `node:`
   // imports, so publishing it cannot blank the dev graph the way `./contract-digest` would.
   expect(Object.keys(packageRoot).sort()).toEqual([
+    "COMMAND_AUTHORITY_PLANES",
     "CONTROL_ROOM_TRANSPORT_LAYER",
     "SESSION_KEY_LAYER",
     "SESSION_KEY_REFUSAL_CODES",
@@ -144,6 +145,7 @@ it("exports the gate and the transport from the package root, and nothing genera
     "createCompatGate",
     "createControlRoomTransport",
     "generateSessionKey",
+    "isCommandAuthorityPlane",
     "openSessionRequestDigest",
     "signSessionChallenge",
   ]);

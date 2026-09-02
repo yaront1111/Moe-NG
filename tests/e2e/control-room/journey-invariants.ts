@@ -13,11 +13,11 @@
  *
  * A silent omission inside an honesty artifact reads exactly like coverage. So the
  * seven are enumerated here, the count is asserted, and every entry is either COVERED
- * with the browser tests that prove it named by title, or UNKNOWN with its cause,
+ * with the browser tests that prove it named by exact file and title, or UNKNOWN with its cause,
  * missing input and owner. Deleting an invariant, or deleting the test that proves
  * one, now fails loudly instead of quietly shrinking the claim.
  *
- * THE LIST IS HAND-WRITTEN AND SO ARE THE TEST TITLES. Neither can be derived from
+ * THE LIST IS HAND-WRITTEN AND SO ARE THE TEST DECLARATIONS. Neither can be derived from
  * the other, so the binding in `journey-coverage.test.ts` cannot pass vacuously —
  * the same reason `journeys.spec.ts` hand-writes its own EXERCISED_SCENARIOS.
  */
@@ -36,12 +36,8 @@ export interface CoveredInvariant {
   readonly status: "COVERED";
   /** What the browser actually asserts. Non-empty for every covered invariant. */
   readonly bar: string;
-  /**
-   * Titles of the `journeys.spec.ts` tests that prove it, matched against that file.
-   * This is the load-bearing binding: delete a proving test and the ledger goes RED
-   * rather than continuing to claim the invariant holds.
-   */
-  readonly provenBy: readonly string[];
+  /** Exact browser declarations that prove it; both file and title are load-bearing. */
+  readonly provenBy: readonly Readonly<{ file: string; title: string }>[];
 }
 
 export interface UnknownInvariant {
@@ -57,44 +53,53 @@ export type InvariantRecord = CoveredInvariant | UnknownInvariant;
 /**
  * All seven, in DoD 2's order. Read the statuses as written. The production cutover
  * removed the development fixture witness; an invariant stays COVERED only where
- * Cordum v2 still supplies a non-vacuous production-static witness.
+ * Cordum v2 supplies a non-vacuous production or real-daemon browser witness.
  *
- * The two UNKNOWNs DERIVE from the single record that owns each in
+ * Two of the UNKNOWNs DERIVE from the single record that owns each in
  * `journey-coverage.ts` rather than restating it. Two hand-copies of one fact drift,
  * and a drifted honesty record is worse than a single one, because both then look
- * authoritative. `provenBy` names whole test titles rather than line numbers, which
- * drift for an unrelated reason every time a test above them grows.
+ * authoritative. `provenBy` names whole files and test titles rather than line numbers,
+ * which drift for an unrelated reason every time a test above them grows.
  */
 export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
   Object.freeze({
-    cause: "NO_ATTACHED_FACT_IN_PRODUCTION_STATIC_LANE",
+    bar: "A real daemon-backed goal renders its attached identity fact with the exact "
+      + "truth class projected from its durable GoalCreated witness.",
     id: "TRUTH",
-    missingInput: "Cordum v2 renders the five-class legend, but the daemonless production build "
-      + "renders no attached fact whose required descendant chip can be checked non-vacuously.",
-    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached fact-chip journey",
-    status: "UNKNOWN",
+    provenBy: Object.freeze([Object.freeze({
+      file: "tests/e2e/control-room/prd-to-approval.spec.ts",
+      title: "v2: pairs by handshake, reads the sealed plan, and never fabricates approval",
+    })]),
+    status: "COVERED",
   } as const),
   Object.freeze({
-    cause: "NO_INTERACTIVE_FACT_IN_PRODUCTION_STATIC_LANE",
+    bar: "The attached goal fact opens a proof inspector whose rows name the exact "
+      + "authenticated POST /goals/read boundary and durable goal identity.",
     id: "PROVENANCE",
-    missingInput: "The production-static page exposes non-interactive legend chips only; it has no "
-      + "attached receipt-bearing fact from which the proof inspector can be opened.",
-    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached proof journey",
-    status: "UNKNOWN",
+    provenBy: Object.freeze([Object.freeze({
+      file: "tests/e2e/control-room/prd-to-approval.spec.ts",
+      title: "v2: pairs by handshake, reads the sealed plan, and never fabricates approval",
+    })]),
+    status: "COVERED",
   } as const),
   Object.freeze({
-    cause: "NO_INTERACTIVE_FACT_IN_PRODUCTION_STATIC_LANE",
+    bar: "Enter opens the attached fact's proof, focus moves to its heading, and Escape "
+      + "closes it and returns focus to the invoking chip.",
     id: "KEYBOARD",
-    missingInput: "Without a production-static interactive fact chip, a browser cannot prove that "
-      + "keyboard activation moves focus into real provenance and returns it to the invoking fact.",
-    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached keyboard journey",
-    status: "UNKNOWN",
+    provenBy: Object.freeze([Object.freeze({
+      file: "tests/e2e/control-room/prd-to-approval.spec.ts",
+      title: "v2: pairs by handshake, reads the sealed plan, and never fabricates approval",
+    })]),
+    status: "COVERED",
   } as const),
   Object.freeze({
     bar: "At the narrow breakpoint the action set matches the wide one — parity, not mere "
       + "presence, so an action cannot quietly disappear on a small viewport.",
     id: "NARROW_WINDOW",
-    provenBy: Object.freeze(["the narrow layout keeps action parity with the wide one"]),
+    provenBy: Object.freeze([Object.freeze({
+      file: "tests/e2e/control-room/journeys.spec.ts",
+      title: "the narrow layout keeps action parity with the wide one",
+    })]),
     status: "COVERED",
   } as const),
   Object.freeze({

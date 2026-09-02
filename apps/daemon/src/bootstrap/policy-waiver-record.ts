@@ -61,7 +61,7 @@ export type PolicyWaiverRecordResult<Record extends PolicyWaiverRecord = PolicyW
   Event extends PolicyWaiverEventType = PolicyWaiverEventType> = PolicyWaiverAccepted<Record, Event> | PolicyWaiverRefusal;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const MAX_REF_BYTES = 512;
+const MAX_REF_BYTES = 512, MAX_COMMAND_ID_BYTES = 489; // Reserves `-` plus either exact v1 event type.
 const MAX_REASON_BYTES = 2_048;
 const MAX_SCOPE_ITEMS = 64;
 const DAY_MS = 86_400_000;
@@ -78,7 +78,7 @@ function refuse(code: PolicyWaiverRecordCode): PolicyWaiverRefusal {
   return policyWaiverRefusal(code);
 }
 export function snapshotPolicyWaiverFields(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || nodeTypes.isProxy(value)) return null;
+  if (typeof value !== "object" || value === null || nodeTypes.isProxy(value) || Array.isArray(value)) return null;
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
@@ -127,10 +127,10 @@ function common(input: Record<string, unknown>): Omit<PolicyWaiverCommonInput, "
   readonly scope: readonly string[];
 } | null {
   const scope = scopeSnapshot(input["scope"]);
-  const refs = ["actionKind", "approvedBy", "commandId", "namedObligationId",
-    "policyRevisionRef", "projectId", "stepUpAuthRef"] as const;
+  const refs = ["actionKind", "approvedBy", "namedObligationId", "policyRevisionRef", "projectId", "stepUpAuthRef"] as const;
   if (scope === null || !instant(input["approvedAt"])
     || !boundedString(input["decisionReason"], MAX_REASON_BYTES)
+    || !boundedString(input["commandId"], MAX_COMMAND_ID_BYTES) || input["commandId"].startsWith("moe-internal:")
     || refs.some((key) => !boundedString(input[key]))) return null;
   return {
     actionKind: input["actionKind"] as string, approvedAt: input["approvedAt"],

@@ -13,9 +13,14 @@ import {
   assertPackRuntimeMatchesCommit,
   packChildEnvironment,
   packWindowsFromCommit,
+  reportWindowsPackChildRefusal,
   resolvePackExecutable,
 } from "./pack-windows-main.js";
+import {
+  PACK_TOOLCHAIN_SCHEMA, resolveProtectedWindowsPackExecutable,
+} from "./pack-command.js";
 import { withPrivateWindowsCandidate } from "./pack-windows-candidate.js";
+import { captureNativePackTool } from "./pack-tool-identity.js";
 import { canonicalWindowsReleaseValue } from "../../scripts/release/windows-pack-observation-contract.mjs";
 import {
   canonicalWindowsPackObservationBytes,
@@ -74,6 +79,81 @@ afterEach(() => {
 });
 
 describe("the production Windows pack source composition", () => {
+  it("surfaces a bounded structured refusal for a failed materialized child", () => {
+    const lines: string[] = [];
+    const oversized = `${"x".repeat(4_095)}🙂secret-tail`;
+
+    expect(reportWindowsPackChildRefusal(lines.push.bind(lines), {
+      status: 17, stderr: oversized,
+    })).toBe(17);
+    expect(lines).toHaveLength(1);
+    const refusal = JSON.parse(lines[0] ?? "") as Record<string, unknown>;
+    expect(refusal).toEqual({
+      code: "PACK_SOURCE_IMMUTABILITY_FAILED",
+      layer: "PACKAGING_SOURCE",
+      ok: false,
+      status: 17,
+      stderr: "x".repeat(4_095),
+      stderrTruncated: true,
+    });
+    expect(Buffer.byteLength(String(refusal["stderr"]), "utf8")).toBeLessThanOrEqual(4_096);
+  });
+
+  it("refuses to report a successful or invalid child status as a refusal", () => {
+    for (const status of [0, -1, 0x1_0000_0000, Number.NaN]) {
+      expect(() => reportWindowsPackChildRefusal(() => {}, { status, stderr: "" }))
+        .toThrow(expect.objectContaining({
+          code: "PACK_SOURCE_IMMUTABILITY_FAILED", layer: "PACKAGING_SOURCE",
+        }));
+    }
+  });
+
+  it.runIf(process.platform === "win32")(
+    "wires the bounded refusal report into the real materialized-child boundary", () => {
+      const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-pack-child-refusal-"));
+      const outputRoot = mkdtempSync(join(tmpdir(), "moe-pack-child-refusal-output-"));
+      roots.push(repositoryRoot, outputRoot);
+      git(["init", "--quiet"], repositoryRoot);
+      git(["config", "user.email", "pack-child@example.invalid"], repositoryRoot);
+      git(["config", "user.name", "Pack Child Test"], repositoryRoot);
+      git(["config", "core.autocrlf", "false"], repositoryRoot);
+      const entry = join(repositoryRoot, "tools", "packaging", "pack-windows-materialized-main.ts");
+      mkdirSync(dirname(entry), { recursive: true });
+      writeFileSync(entry, [
+        `process.stderr.write(${JSON.stringify("x".repeat(5_000))});`,
+        "process.exitCode = 17;", "",
+      ].join("\n"));
+      git(["add", "--", "tools/packaging/pack-windows-materialized-main.ts"], repositoryRoot);
+      git(["commit", "--quiet", "-m", "refusing materialized child"], repositoryRoot);
+      const sourceSha = git(["rev-parse", "HEAD"], repositoryRoot);
+      const node = captureNativePackTool("node", process.execPath);
+      const lines: string[] = [];
+
+      const status = packWindowsFromCommit({
+        log: (line) => lines.push(line), outputRoot, repositoryRoot, sourceSha,
+      }, {
+        gitExecutable, tarExecutable, tarFlavor,
+        toolchain: Object.freeze({
+          node, pnpm: captureNativePackTool("pnpm", process.execPath),
+          powershell: captureNativePackTool(
+            "powershell", resolveProtectedWindowsPackExecutable("powershell"),
+          ),
+          schemaVersion: PACK_TOOLCHAIN_SCHEMA,
+        }),
+      });
+
+      expect(status).toBe(17);
+      expect(lines).toHaveLength(2);
+      expect(JSON.parse(lines[1] ?? "")).toEqual({
+        code: "PACK_SOURCE_IMMUTABILITY_FAILED", layer: "PACKAGING_SOURCE", ok: false,
+        status: 17, stderr: "x".repeat(4_096), stderrTruncated: true,
+      });
+      expect(lines).not.toContain("x".repeat(5_000));
+      expect(existsSync(join(outputRoot, "dist", "moe-windows.zip"))).toBe(false);
+    },
+    120_000,
+  );
+
   it.runIf(process.platform === "win32")("ignores PATH shadows for protected Git and tar", () => {
     const repositoryRoot = join(import.meta.dirname, "..", "..");
     const priorPath = process.env["PATH"];

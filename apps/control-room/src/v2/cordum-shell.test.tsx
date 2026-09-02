@@ -1,11 +1,12 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ClockProvider } from "../performance/command-latency.js";
 import { FactRow } from "./components/primitives.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import { CORDUM_NAV_ITEMS } from "./shell/shell-model.js";
+import type { NavDestination } from "./shell/shell-routes.js";
 import { CORDUM_TRUTH_CLASSES, cordumTruthPresentation, sayWho } from "./truth-class.js";
 
 /**
@@ -38,6 +39,28 @@ describe("the Cordum shell renders its frame", () => {
     render(<CordumShell activeNav="approvals" />);
     expect(screen.getByTestId("cr.nav.approvals").getAttribute("aria-current")).toBe("page");
     expect(screen.getByTestId("cr.nav.goals").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("exposes an unavailable destination's exact reason without navigating", async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    const approvals: NavDestination = Object.freeze({
+      id: "approvals", reason: "NAV_DESTINATION_NOT_BUILT", route: null,
+    });
+    render(<CordumShell navDestinations={[approvals]} onNavigate={onNavigate} />);
+
+    const button = screen.getByRole("button", { name: /Approvals.*not available yet/iu });
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.getAttribute("data-unavailable-reason")).toBe("NAV_DESTINATION_NOT_BUILT");
+    expect(button.getAttribute("title")).toBe("This destination is not built yet in this release.");
+    const descriptionId = button.getAttribute("aria-describedby") ?? "";
+    expect(descriptionId).not.toBe("");
+    expect(document.getElementById(descriptionId)?.textContent)
+      .toBe("This destination is not built yet in this release.");
+
+    await user.click(button);
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   it("shows the chip legend naming all five truth classes", () => {

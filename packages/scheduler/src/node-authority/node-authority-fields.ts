@@ -8,7 +8,8 @@
  */
 import { isGraphKey } from "../graph-key.js";
 import {
-  hasOnlyOwnStringKeys, isPlainArray, isPlainRecord, readOwnDataProperty,
+  hasExactDenseArrayShape, hasOnlyOwnStringKeys, isPlainArray, isPlainRecord,
+  readOwnArrayElement, readOwnDataProperty, readPlainArrayLength,
 } from "../runtime-shape.js";
 import { forbiddenBudgetKeyRefusal, readNodeAuthorityBudget } from "./node-authority-budget.js";
 import {
@@ -91,17 +92,34 @@ const scopeList = (value: unknown, field: string): Read<readonly string[]> => re
  * consumer binds the order this list states, so silently accepting two spellings
  * of one edge set would make that binding ambiguous.
  */
-function readEdges(value: unknown): Read<readonly NodeAuthorityEdgeInput[]> {
+export function readDirectHardDependencies(
+  value: unknown,
+): Read<readonly NodeAuthorityEdgeInput[]> {
   if (!isPlainArray(value)) {
     return refuse("NODE_AUTHORITY_FIELD_INVALID", "NODE_AUTHORITY_ADMISSION",
       "directHardDependencies is not a list");
   }
-  if (value.length > NODE_AUTHORITY_LIMITS.maxDependencyEntries) {
+  const length = readPlainArrayLength(value);
+  if (length === null) {
+    return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
+      "directHardDependencies has no admissible length");
+  }
+  if (length > NODE_AUTHORITY_LIMITS.maxDependencyEntries) {
     return refuse("NODE_AUTHORITY_LIMIT_EXCEEDED", "NODE_AUTHORITY_LIMITS",
       "directHardDependencies exceeds its bound");
   }
+  if (!hasExactDenseArrayShape(value, length)) {
+    return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
+      "directHardDependencies is not a dense data-property list");
+  }
   const entries: NodeAuthorityEdgeInput[] = [];
-  for (const entry of value) {
+  for (let index = 0; index < length; index += 1) {
+    const read = readOwnArrayElement(value, index);
+    if (!read.ok || !read.present) {
+      return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
+        "a direct-hard entry is not an own data property");
+    }
+    const entry = read.value;
     if (!isPlainRecord(entry) || !hasOnlyOwnStringKeys(entry, ["edgeKey", "requirement"])) {
       return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
         "a direct-hard entry is not an exact record");
@@ -182,7 +200,7 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
   const recipes = idList(read.get("verificationRecipeRevisions"), "verificationRecipeRevisions");
   const readScopes = scopeList(read.get("readScopes"), "readScopes");
   const writeScopes = scopeList(read.get("writeScopes"), "writeScopes");
-  const edges = readEdges(read.get("directHardDependencies"));
+  const edges = readDirectHardDependencies(read.get("directHardDependencies"));
   if (!objective.ok) return objective;
   if (!constraints.ok) return constraints;
   if (!resources.ok) return resources;

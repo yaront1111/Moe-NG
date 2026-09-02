@@ -7,11 +7,13 @@ import {
   createStoreDependencies, type StoreDependencyConfig, type StoreDependencyProvider,
 } from "./daemon-store-foundation-composition.js";
 import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "./operator-identity.js";
+
 /**
  * The command table itself lives in `./daemon-command-registry.js`. `agentCapabilitiesFor`
  * is re-exported here because the agent wrapper has always imported it from this module.
  */
 export { agentCapabilitiesFor } from "./daemon-command-registry.js";
+
 export { createStoreDependencies };
 export type { StoreDependencyConfig };
 
@@ -55,7 +57,9 @@ function fromEnv(): StoreDependencyProvider {
   return envProvider;
 }
 
-const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restore"> = Object.freeze({
+const provider: DaemonDependencyProvider & Pick<
+  StoreDependencyProvider, "restore" | "sourceSnapshotPublisher"
+> = Object.freeze({
   affordances: () => {
     const port = fromEnv().affordances;
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
@@ -110,6 +114,21 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: the pending reader is always wired");
     return port();
   },
+  productContractV2Current: () => {
+    const port = fromEnv().productContractV2Current;
+    if (port === undefined) throw new Error("unreachable: the v2 current reader is always wired");
+    return port();
+  },
+  productContractV2Pending: () => {
+    const port = fromEnv().productContractV2Pending;
+    if (port === undefined) throw new Error("unreachable: the v2 pending reader is always wired");
+    return port();
+  },
+  commandAuthorityPlane: () => {
+    const port = fromEnv().commandAuthorityPlane;
+    if (port === undefined) throw new Error("unreachable: the command plane reader is always wired");
+    return port();
+  },
   pairingOpenSessions: () => {
     const port = fromEnv().pairingOpenSessions;
     if (port === undefined) throw new Error("pairingOpenSessions is unavailable");
@@ -123,6 +142,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     return port();
   },
   provide: () => fromEnv().provide(),
+  provideV2: () => {
+    const port = fromEnv().provideV2;
+    if (port === undefined) throw new Error("unreachable: the v2 command plane is always wired");
+    return port();
+  },
   reconciliation: () => {
     const port = fromEnv().reconciliation;
     if (port === undefined) throw new Error("unreachable: reconciliation is always wired");
@@ -134,6 +158,7 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: the session handshake is always wired");
     return port();
   },
+  sourceSnapshotPublisher: () => fromEnv().sourceSnapshotPublisher(),
   subscriptions: () => {
     const port = fromEnv().subscriptions;
     if (port === undefined) throw new Error("unreachable: subscriptions is always wired");

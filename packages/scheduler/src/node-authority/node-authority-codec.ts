@@ -22,13 +22,17 @@ import {
 import {
   admitPlanning, applicable, composeEdges, pick, project, readDerived, requirementsOf,
 } from "./node-authority-compose.js";
+import { admitPlanningContent } from "./node-authority-planning-content.js";
 import { forbiddenKeyRefusal, readDraftFields } from "./node-authority-fields.js";
 import type {
   NodeAuthorityDraftResult, NodeAuthorityRefusal, NodeDefinition, Read,
 } from "./node-authority-contract.js";
+import type { AdmittedPlanning } from "./node-authority-compose.js";
 
 const CREATE_KEYS: readonly string[] =
   ["acceptanceContract", "draft", "planRevision", "predicateRegistry"];
+const CONTENT_CREATE_KEYS: readonly string[] =
+  ["acceptanceCriterionContent", "draft", "planExecutionContent", "predicateRegistry"];
 const ENVELOPE_KEYS: readonly string[] = ["body", "digest", "schema"];
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const encoder = new TextEncoder();
@@ -87,7 +91,10 @@ export function draftNodeAuthority(value: unknown): NodeAuthorityDraftResult {
   return readDraftFields(value);
 }
 
-export function createNodeDefinition(input: unknown): NodeAuthorityResult {
+type PlanningReader = (input: Record<string, unknown>) => Read<AdmittedPlanning>;
+function createWithPlanning(
+  input: unknown, keys: readonly string[], readPlanning: PlanningReader,
+): NodeAuthorityResult {
   if (!isPlainRecord(input)) {
     return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
       "creation input is not a plain record");
@@ -96,18 +103,30 @@ export function createNodeDefinition(input: unknown): NodeAuthorityResult {
   // stated digest as merely "unrecognised" and the specific code would be dead.
   const forbidden = forbiddenKeyRefusal(input);
   if (forbidden !== null) return forbidden;
-  if (!hasOnlyOwnStringKeys(input, CREATE_KEYS)) {
+  if (!hasOnlyOwnStringKeys(input, keys)) {
     return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
       "creation input is not an exact draft/planning/registry record");
   }
   const drafted = draftNodeAuthority(pick(input, "draft"));
   if (!drafted.ok) return drafted;
-  const planning = admitPlanning(pick(input, "planRevision"), pick(input, "acceptanceContract"));
+  const planning = readPlanning(input);
   if (!planning.ok) return planning;
   const mismatch = applicable(drafted.draft, planning.value);
   if (mismatch !== null) return mismatch;
   const edges = composeEdges(drafted.draft, pick(input, "predicateRegistry"));
   return edges.ok ? accept(project(drafted.draft, planning.value, edges.value)) : edges;
+}
+
+export function createNodeDefinition(input: unknown): NodeAuthorityResult {
+  return createWithPlanning(input, CREATE_KEYS, (record) => admitPlanning(
+    pick(record, "planRevision"), pick(record, "acceptanceContract"),
+  ));
+}
+
+export function createNodeDefinitionFromPlanningContent(input: unknown): NodeAuthorityResult {
+  return createWithPlanning(input, CONTENT_CREATE_KEYS, (record) => admitPlanningContent(
+    pick(record, "planExecutionContent"), pick(record, "acceptanceCriterionContent"),
+  ));
 }
 
 /**

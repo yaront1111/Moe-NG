@@ -4,8 +4,6 @@ import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-
 import {
   assertPackToolIdentity, captureNativePackTool, PACK_STEP_FAILED, pathInside,
   sameCanonicalPath, type PackToolLaunch,
@@ -109,19 +107,79 @@ function pinFromRecord(value: unknown, tracked: boolean): CargoToolchainPin {
 function boundedPinBytes(bytes: string | Uint8Array): Uint8Array {
   if (typeof bytes !== "string") {
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_PIN_BYTES) refuse();
-    return bytes;
+    return Uint8Array.from(bytes);
   }
   if (bytes.length === 0 || bytes.length > MAX_PIN_BYTES) refuse();
   const encoded = Buffer.from(bytes, "utf8");
   if (encoded.byteLength > MAX_PIN_BYTES) refuse();
   return encoded;
 }
+const pinDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+function skipJsonWhitespace(text: string, start: number): number {
+  let index = start;
+  while (index < text.length && " \t\r\n".includes(text[index] ?? "")) index += 1;
+  return index;
+}
+function readJsonString(
+  text: string, start: number,
+): Readonly<{ readonly next: number; readonly value: string }> {
+  if (text[start] !== "\"") refuse();
+  let escaped = false;
+  for (let index = start + 1; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x20) refuse();
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (code === 0x5c) {
+      escaped = true;
+      continue;
+    }
+    if (code !== 0x22) continue;
+    const value = JSON.parse(text.slice(start, index + 1)) as unknown;
+    if (typeof value !== "string") refuse();
+    return Object.freeze({ next: index + 1, value });
+  }
+  return refuse();
+}
+
+function parsePinDocument(bytes: Uint8Array): Readonly<Record<string, unknown>> {
+  const text = pinDecoder.decode(bytes);
+  let index = skipJsonWhitespace(text, 0);
+  if (text[index] !== "{") refuse();
+  index = skipJsonWhitespace(text, index + 1);
+  const value = Object.create(null) as Record<string, string>;
+  const keys = new Set<string>();
+  if (text[index] === "}") index += 1;
+  else {
+    while (true) {
+      const key = readJsonString(text, index);
+      if (keys.has(key.value)) refuse();
+      keys.add(key.value);
+      index = skipJsonWhitespace(text, key.next);
+      if (text[index] !== ":") refuse();
+      index = skipJsonWhitespace(text, index + 1);
+      const member = readJsonString(text, index);
+      Object.defineProperty(value, key.value, {
+        configurable: false, enumerable: true, value: member.value, writable: false,
+      });
+      index = skipJsonWhitespace(text, member.next);
+      if (text[index] === "}") {
+        index += 1;
+        break;
+      }
+      if (text[index] !== ",") refuse();
+      index = skipJsonWhitespace(text, index + 1);
+    }
+  }
+  if (skipJsonWhitespace(text, index) !== text.length) refuse();
+  return Object.freeze(value);
+}
 
 export function parseCargoToolchainPins(bytes: string | Uint8Array): CargoToolchainPin {
   return mapRefusal(() => {
-    const decoded = decodeBoundedJsonBytes(boundedPinBytes(bytes));
-    if (!decoded.ok) refuse();
-    return pinFromRecord(decoded.value, true);
+    return pinFromRecord(parsePinDocument(boundedPinBytes(bytes)), true);
   });
 }
 

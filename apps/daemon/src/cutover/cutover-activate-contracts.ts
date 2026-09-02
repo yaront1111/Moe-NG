@@ -32,6 +32,10 @@ import type { CutoverAttemptReadRefusal } from "./cutover-attempt-commit.js";
 import type { CutoverAttemptAdmittedRecord } from "./cutover-attempt-contracts.js";
 import type { CutoverAttemptPresent, CutoverAttemptReadResult } from "./cutover-attempt-reader.js";
 import type { CutoverGenerationFact, CutoverGenerationRefused } from "./cutover-generation-snapshot.js";
+import type {
+  V2ReadinessManifest,
+  V2ReadinessManifestRefused,
+} from "./v2-readiness-manifest.js";
 
 export const CUTOVER_ACTIVATE_LAYER = "DAEMON_CUTOVER_ACTIVATE" as const;
 export const CUTOVER_ACTIVATE_COMMAND_KIND = "cutover.activate" as const;
@@ -45,14 +49,16 @@ export const CUTOVER_ACTIVATE_CODES = Object.freeze([
   "CUTOVER_ACTIVATE_EXPECTED_VERSION_CONFLICT",
   "CUTOVER_ACTIVATE_STORE_UNAVAILABLE",
   "CUTOVER_ACTIVATE_FIELD_INVALID",
+  "CUTOVER_ACTIVATE_READINESS_DRIFT",
 ] as const);
 
 export type CutoverActivateCode = (typeof CUTOVER_ACTIVATE_CODES)[number];
+export type CutoverActivateDriftFact = CutoverGenerationFact | "sourceCommit";
 
 export interface CutoverActivateRefusal {
   readonly code: CutoverActivateCode;
   /** WHICH generation drifted, so an operator is not sent to the wrong evidence. */
-  readonly fact: CutoverGenerationFact | null;
+  readonly fact: CutoverActivateDriftFact | null;
   readonly layer: typeof CUTOVER_ACTIVATE_LAYER;
   readonly ok: false;
   readonly storeCode: DurableStoreErrorCode | null;
@@ -89,16 +95,29 @@ export type CutoverActivateResult =
   | CutoverActivateRefusal
   | CutoverAttemptReadRefusal
   | CutoverGenerationRefused
+  | V2ReadinessManifestRefused
   | CutoverActivationMarkerRefused
   | CutoverRejectedResult
   | Exclude<ActivationBindingAdmission, { readonly ok: true }>;
 
 export function refuse(
   code: CutoverActivateCode,
-  fact: CutoverGenerationFact | null = null,
+  fact: CutoverActivateDriftFact | null = null,
   storeCode: DurableStoreErrorCode | null = null,
 ): CutoverActivateRefusal {
   return Object.freeze({ code, fact, layer: CUTOVER_ACTIVATE_LAYER, ok: false as const, storeCode });
+}
+
+/** The durable readiness record must describe the exact admitted cutover evidence. */
+export function readinessDriftedFact(
+  binding: ActivationBinding,
+  readiness: V2ReadinessManifest,
+): CutoverActivateDriftFact | null {
+  if (readiness.sourceCommit !== binding.sourceCommit) return "sourceCommit";
+  for (const key of ACTIVATION_GENERATION_KEYS) {
+    if (readiness[key] !== binding.generations[key]) return key;
+  }
+  return null;
 }
 
 /** Forwards the fold's verdict with ITS code and layer; this module adds only the `ok` tag. */

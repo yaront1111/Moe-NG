@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   RUNTIME_COMMAND_ENVELOPE_VERSION,
   RUNTIME_ERROR_REGISTRY_VERSION,
@@ -16,6 +18,10 @@ import { CordumShell } from "./shell/cordum-shell.js";
 import { NAV_IDS } from "./shell/shell-model.js";
 import { PLAN_APPROVAL_LAYER } from "./goals/plan-approval.js";
 import {
+  GATE1_V2_CURRENT_BODY,
+  GATE1_V2_CURRENT_SLOT,
+} from "./goals/gate1-v2-test-fixture.js";
+import {
   CORDUM_ROUTE_KINDS, NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
 } from "./shell/shell-routes.js";
 
@@ -33,6 +39,8 @@ beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 afterEach(() => {
+  bootstrapPlane = "V1";
+  commandHook = null;
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -85,7 +93,12 @@ function liveAttempts(
   return Object.assign(initial, { initial, retry: vi.fn(retry) });
 }
 
+/** The plane the stubbed daemon states; V2 arms flip it, afterEach resets it. */
+let bootstrapPlane: "V1" | "V2" = "V1";
+/** Answers the transport's POST /command in the wired-app arms; null = not stubbed. */
+let commandHook: ((body: string) => unknown) | null = null;
 const BOOTSTRAP = Object.freeze({
+  commandAuthorityPlane: "V1",
   csrfToken: "csrf-live",
   projectId: "project-live",
   protocolVersion: WIRE,
@@ -175,7 +188,12 @@ const FEED_PROJECTION_CASES = Object.freeze([
 ] as const);
 
 function handshakeResponse(input: string, init?: RequestInit): Promise<Response> {
-  if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
+  if (input === "/command" && commandHook !== null) {
+    return Promise.resolve(jsonResponse(commandHook(String(init?.body ?? ""))));
+  }
+  if (input === "/bootstrap") {
+    return Promise.resolve(jsonResponse({ ...BOOTSTRAP, commandAuthorityPlane: bootstrapPlane }));
+  }
   if (input === "/session/pair/request") {
     return Promise.resolve(jsonResponse(PAIRING, 200, OPERATOR_PRESENT));
   }
@@ -248,6 +266,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
     expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(2);
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
 
     // The live path went through the runtime handshake: /bootstrap was fetched.
     expect(fetchMock).toHaveBeenCalled();
@@ -269,7 +288,8 @@ describe("CordumApp live path uses the runtime handshake", () => {
     window.history.replaceState(null, "", "/?v2=1#pair=ONE-TIME-SECRET");
     const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
       if (input === "/bootstrap") return Promise.resolve(jsonResponse({
-        csrfToken: "csrf-blue", projectId: "proj-blue", protocolVersion: WIRE,
+        commandAuthorityPlane: "V1", csrfToken: "csrf-blue", projectId: "proj-blue",
+        protocolVersion: WIRE,
       }));
       if (input === "/session/pair/request") return Promise.resolve(jsonResponse({
         confirmationLabel: "abcd-ef01-2345", ok: true, requestId: "a".repeat(64),
@@ -296,7 +316,8 @@ describe("CordumApp live path uses the runtime handshake", () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit): Promise<Response> => {
       if (input === "/bootstrap") {
         return Promise.resolve(jsonResponse({
-          csrfToken: "csrf-live", projectId: "project-live", protocolVersion: WIRE,
+          commandAuthorityPlane: "V1", csrfToken: "csrf-live", projectId: "project-live",
+          protocolVersion: WIRE,
         }));
       }
       if (input === "/session/pair/request") {
@@ -490,10 +511,13 @@ describe("CordumApp bounded live recovery", () => {
 
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("CONNECTED"); });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(false);
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("DISCONNECTED"); }, { timeout: 3_500 });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("CONNECTED"); }, { timeout: 3_500 });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(false);
     observed.push(connection() ?? "MISSING");
 
     expect(observed).toEqual(["OFFLINE", "CONNECTED", "DISCONNECTED", "CONNECTED"]);
@@ -752,11 +776,13 @@ const DURABLE_CATALOG = Object.freeze({
       brief: Object.freeze({ instructions: "Someone else's plan.", title: SIBLING.title }),
       goalId: SIBLING.goalRef,
       planningRunRef: SIBLING.runRef,
+      truthClass: "DAEMON_VERIFIED",
     }),
     Object.freeze({
       brief: Object.freeze({ instructions: "Restore from a fresh genesis.", title: DURABLE.title }),
       goalId: DURABLE.goalRef,
       planningRunRef: DURABLE.runRef,
+      truthClass: "DAEMON_VERIFIED",
     }),
   ]),
   nextCursor: null,
@@ -811,12 +837,45 @@ const SEALED_RUN = Object.freeze({
   submissionHash: "submission-hash-durable",
 });
 
+/** The `/1` pending answer as the daemon's V1 read composes it (product-contract-pending-read.ts). */
+const V1_PENDING_BODY = Object.freeze({
+  approval: {
+    affordance: Object.freeze({
+      commandEnvelopeVersion: "moe-command-envelope/1",
+      commandId: "gate1-cmd-1",
+      commandKind: "product_contract.approve_gate_1",
+      expectedVersion: 0,
+      inputSchemaVersion: "moe-product-contract-gate-1/1",
+      targetAggregateId: `product-contract-gate-1-${"a".repeat(64)}`,
+    }),
+    commandId: "gate1-cmd-1",
+    requestDigest: "b".repeat(64),
+  },
+  outcome: "PENDING",
+  ref: { contractId: "contract-1", revisionDigest: "c".repeat(64), revisionId: "rev-1" },
+  revision: {
+    contractId: "contract-1",
+    criteria: [{ criterionId: "crit-1", requirementId: "req-1", statement: "It works." }],
+    requirements: [{ requirementId: "req-1", statement: "Users can sign in." }],
+    revisionId: "rev-1",
+  },
+});
+
 interface WiredApp {
+  readonly pendingReads: string[];
   readonly planningReads: string[];
 }
 
 /** Attaches the app over a daemon that offers approval for exactly this run. */
-function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp {
+function renderWiredApp(
+  offers: readonly unknown[] = [APPROVAL_OFFER],
+  pendingBody: unknown = { outcome: "NONE" },
+  plane: "V1" | "V2" = "V1",
+  command?: (body: string) => unknown,
+): WiredApp {
+  bootstrapPlane = plane;
+  commandHook = command ?? null;
+  const pendingReads: string[] = [];
   const planningReads: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
     if (input === "/affordances/read") {
@@ -834,6 +893,11 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
+    if (input === "/v2/product-contract/pending/read"
+      || input === "/product-contract/pending/read") {
+      pendingReads.push(`${input} ${String(init?.body ?? "")}`);
+      return Promise.resolve(jsonResponse(pendingBody));
+    }
     if (input === "/planning/run/read") {
       planningReads.push(String(init?.body ?? ""));
       return Promise.resolve(jsonResponse(SEALED_RUN));
@@ -841,7 +905,35 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
     return handshakeResponse(input, init);
   }));
   render(<CordumApp liveSetup={attachedSetup()} />);
-  return { planningReads };
+  return { pendingReads, planningReads };
+}
+
+function currentBodyForProject(projectId: string): unknown {
+  const { slotDigest: _slotDigest, ...source } = { ...GATE1_V2_CURRENT_SLOT, projectId };
+  const canonicalText = (value: unknown): string => {
+    if (value === null) return "null";
+    if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+    if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+    if (Array.isArray(value)) return `[${value.map(canonicalText).join(",")}]`;
+    if (typeof value === "object") {
+      const row = value as Readonly<Record<string, unknown>>;
+      return `{${Object.keys(row).sort().map(
+        (key) => `${JSON.stringify(key)}:${canonicalText(row[key])}`,
+      ).join(",")}}`;
+    }
+    throw new TypeError("non-canonical current-slot test value");
+  };
+  return {
+    ...GATE1_V2_CURRENT_BODY,
+    slot: {
+      ...source,
+      slotDigest: createHash("sha256")
+        .update("moe-product-contract-current-revision-slot-digest/2", "utf8")
+        .update(Uint8Array.of(0))
+        .update(new TextEncoder().encode(canonicalText(source)))
+        .digest("hex"),
+    },
+  };
 }
 
 async function openTheDurableBoard(): Promise<void> {
@@ -851,6 +943,52 @@ async function openTheDurableBoard(): Promise<void> {
 }
 
 describe("CordumApp wires the durable run and the daemon's approval grant", () => {
+  it("binds CURRENT admission to the project attached by the runtime handshake", async () => {
+    const app = renderWiredApp(
+      [APPROVAL_OFFER], currentBodyForProject(BOOTSTRAP.projectId), "V2",
+    );
+    await openTheDurableBoard();
+
+    expect((await screen.findByTestId("cr.gate1.current")).textContent)
+      .toContain("reported current at the last read");
+    expect(screen.getByTestId("cr.gate1.current-slot").textContent)
+      .toContain(BOOTSTRAP.projectId);
+    // The V2 plane reads the `/2` route, and only that route.
+    expect(app.pendingReads).toEqual([
+      `/v2/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
+    ]);
+  });
+
+  it("reads the V1 pending contract and approves it on the plane the daemon states", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const app = renderWiredApp([APPROVAL_OFFER], V1_PENDING_BODY, "V1", (body) => {
+      posted.push(JSON.parse(body) as Record<string, unknown>);
+      return { ok: true };
+    });
+    await openTheDurableBoard();
+
+    // The V1 plane reads the `/1` route with the same goal ref, never `/v2/...`.
+    expect((await screen.findByTestId("cr.gate1.requirement.req-1")).textContent)
+      .toContain("Users can sign in.");
+    expect(app.pendingReads).toEqual([
+      `/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
+    ]);
+    const approve = await screen.findByTestId("cr.gate1.approve");
+    expect((approve as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(approve);
+
+    // The approval left on the V1 command route, presenting the daemon-minted identity.
+    await waitFor(() => { expect(posted).toHaveLength(1); });
+    expect(posted[0]?.["commandKind"]).toBe("product_contract.approve_gate_1");
+    expect(posted[0]?.["commandId"]).toBe(V1_PENDING_BODY.approval.commandId);
+    expect(posted[0]?.["targetAggregateId"])
+      .toBe(V1_PENDING_BODY.approval.affordance.targetAggregateId);
+    expect(screen.queryByTestId("cr.gate1.dispatchrefusal")).toBeNull();
+    // It re-read the SAME route after the accepted approval.
+    await waitFor(() => { expect(app.pendingReads).toHaveLength(2); });
+    expect(app.pendingReads[1]).toContain("/product-contract/pending/read ");
+  });
+
   it("reads the plan for the run the CARD carried, never a build-time run subject", async () => {
     const app = renderWiredApp();
     await openTheDurableBoard();

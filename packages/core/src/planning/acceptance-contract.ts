@@ -23,7 +23,7 @@ export const ACCEPTANCE_CONTRACT_LAYERS = Object.freeze([
 export const ACCEPTANCE_CONTRACT_LIMITS = Object.freeze({
   maxAggregateEntries: 20_000, maxBytes: MAX_JSON_BODY_BYTES, maxCriterionBytes: 32_768,
   maxEvidenceRequirementsPerObligation: 64, maxIdBytes: 512, maxNodeIds: 512,
-  maxObligations: 512, maxRecipeRefsPerObligation: 64,
+  maxObligations: 1_024, maxRecipeRefsPerObligation: 64,
 });
 
 export type AcceptanceContractNodeKind = (typeof ACCEPTANCE_CONTRACT_NODE_KINDS)[number];
@@ -57,7 +57,7 @@ export type AcceptanceContractDraftAdmission =
 export type AcceptanceContractAdmission =
   | Readonly<{ contract: AcceptanceContract; ok: true }> | AcceptanceContractRefusal;
 
-type ReadResult<T> = Readonly<{ ok: true; value: T }> | AcceptanceContractRefusal;
+export type AcceptanceContractReadResult<T> = Readonly<{ ok: true; value: T }> | AcceptanceContractRefusal;
 interface ParsedContract { readonly body: AcceptanceContractDraft; readonly criteriaDigest?: string; }
 const encoder = new TextEncoder();
 const FULL_KEYS = Object.freeze(["applicability", "authorRef", "contractId", "criteriaDigest", "obligations", "version"]);
@@ -108,18 +108,18 @@ function hostileObject(
   } catch { return malformed(); } finally { seen.delete(value); }
 }
 
-function readText(value: unknown, maximum: number): ReadResult<string> {
+function readText(value: unknown, maximum: number): AcceptanceContractReadResult<string> {
   if (!validRef(value)) return malformed();
   if (value.length > maximum) return exceeded();
   if (value.includes("\0") || !value.isWellFormed()
     || value.normalize("NFC") !== value) return malformed();
   return encoder.encode(value).byteLength > maximum ? exceeded() : success(value);
 }
-function readStatement(value: unknown): ReadResult<string> {
+function readStatement(value: unknown): AcceptanceContractReadResult<string> {
   if (typeof value !== "string" || value.length === 0) return contentRequired();
   return readText(value, ACCEPTANCE_CONTRACT_LIMITS.maxCriterionBytes);
 }
-function readSortedIds(value: unknown, maximum: number): ReadResult<readonly string[]> {
+function readSortedIds(value: unknown, maximum: number): AcceptanceContractReadResult<readonly string[]> {
   if (!Array.isArray(value) || value.length === 0) return malformed();
   if (value.length > maximum) return exceeded();
   const items: string[] = []; const ids = new Set<string>();
@@ -132,7 +132,7 @@ function readSortedIds(value: unknown, maximum: number): ReadResult<readonly str
   }
   return success(Object.freeze(items));
 }
-function readEvidence(value: unknown): ReadResult<AcceptanceEvidenceRequirement> {
+function readEvidence(value: unknown): AcceptanceContractReadResult<AcceptanceEvidenceRequirement> {
   if (!exact(value, EVIDENCE_KEYS)) return malformed();
   const evidenceRef = readText(value["evidenceRef"], ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes);
   const requirementId = readText(value["requirementId"], ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes);
@@ -145,7 +145,7 @@ function readEvidence(value: unknown): ReadResult<AcceptanceEvidenceRequirement>
   return success(Object.freeze({ evidenceRef: evidenceRef.value,
     kind: kind as AcceptanceContractEvidenceKind, requirementId: requirementId.value }));
 }
-function readEvidenceList(value: unknown): ReadResult<readonly AcceptanceEvidenceRequirement[]> {
+function readEvidenceList(value: unknown): AcceptanceContractReadResult<readonly AcceptanceEvidenceRequirement[]> {
   if (!Array.isArray(value) || value.length === 0) return malformed();
   if (value.length > ACCEPTANCE_CONTRACT_LIMITS.maxEvidenceRequirementsPerObligation) return exceeded();
   const items: AcceptanceEvidenceRequirement[] = []; const ids = new Set<string>();
@@ -158,7 +158,7 @@ function readEvidenceList(value: unknown): ReadResult<readonly AcceptanceEvidenc
   }
   return success(Object.freeze(items));
 }
-function readObligation(value: unknown): ReadResult<AcceptanceCriterionObligation> {
+function readObligation(value: unknown): AcceptanceContractReadResult<AcceptanceCriterionObligation> {
   const statementProperty = value !== null && typeof value === "object"
     ? Object.getOwnPropertyDescriptor(value, "statement") : undefined;
   if (statementProperty === undefined || !("value" in statementProperty)
@@ -175,7 +175,8 @@ function readObligation(value: unknown): ReadResult<AcceptanceCriterionObligatio
     evidenceRequirements: evidence.value, statement: statement.value,
     verificationRecipeRefs: recipes.value }));
 }
-function readObligations(value: unknown): ReadResult<readonly AcceptanceCriterionObligation[]> {
+export function readAcceptanceObligations(value: unknown):
+AcceptanceContractReadResult<readonly AcceptanceCriterionObligation[]> {
   if (!Array.isArray(value)) return malformed();
   if (value.length === 0) return emptyObligations();
   if (value.length > ACCEPTANCE_CONTRACT_LIMITS.maxObligations) return exceeded();
@@ -189,24 +190,29 @@ function readObligations(value: unknown): ReadResult<readonly AcceptanceCriterio
   }
   return success(Object.freeze(items));
 }
-function readApplicability(value: unknown): ReadResult<AcceptanceContractApplicability> {
+export function readAcceptanceNodeKind(value: unknown):
+AcceptanceContractReadResult<AcceptanceContractNodeKind> {
+  return typeof value === "string"
+    && ACCEPTANCE_CONTRACT_NODE_KINDS.includes(value as AcceptanceContractNodeKind)
+    ? success(value as AcceptanceContractNodeKind) : malformed();
+}
+function readApplicability(value: unknown): AcceptanceContractReadResult<AcceptanceContractApplicability> {
   if (!exact(value, APPLICABILITY_KEYS) || !validHex64(value["graphContentHash"])) return malformed();
   const revision = readText(value["graphRevisionRef"], ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes);
   const nodes = readSortedIds(value["nodeIds"], ACCEPTANCE_CONTRACT_LIMITS.maxNodeIds);
   if (!revision.ok) return revision; if (!nodes.ok) return nodes;
-  const kind = value["nodeKind"];
-  if (typeof kind !== "string"
-    || !ACCEPTANCE_CONTRACT_NODE_KINDS.includes(kind as AcceptanceContractNodeKind)) return malformed();
+  const kind = readAcceptanceNodeKind(value["nodeKind"]);
+  if (!kind.ok) return kind;
   return success(Object.freeze({ graphContentHash: value["graphContentHash"],
     graphRevisionRef: revision.value, nodeIds: nodes.value,
-    nodeKind: kind as AcceptanceContractNodeKind }));
+    nodeKind: kind.value }));
 }
 function aggregateEntries(body: AcceptanceContractDraft): number {
   return body.applicability.nodeIds.length + body.obligations.reduce(
     (sum, item) => sum + 1 + item.verificationRecipeRefs.length + item.evidenceRequirements.length, 0,
   );
 }
-function parseContract(value: unknown, full: boolean): ReadResult<ParsedContract> {
+function parseContract(value: unknown, full: boolean): AcceptanceContractReadResult<ParsedContract> {
   const hostile = hostileObject(value); if (hostile !== undefined) return hostile;
   const snapshot = snapshotData(value);
   if (!snapshot.ok || !exact(snapshot.value, full ? FULL_KEYS : DRAFT_KEYS)) return malformed();
@@ -217,7 +223,7 @@ function parseContract(value: unknown, full: boolean): ReadResult<ParsedContract
   const contractId = readText(record["contractId"], ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes);
   const authorRef = readText(record["authorRef"], ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes);
   const applicability = readApplicability(record["applicability"]);
-  const obligations = readObligations(record["obligations"]);
+  const obligations = readAcceptanceObligations(record["obligations"]);
   if (!contractId.ok) return contractId; if (!authorRef.ok) return authorRef;
   if (!applicability.ok) return applicability; if (!obligations.ok) return obligations;
   const body = Object.freeze({ applicability: applicability.value, authorRef: authorRef.value,

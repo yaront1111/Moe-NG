@@ -18,7 +18,6 @@ import {
   illegal,
   finalizing,
   unknownFailure,
-  unsupported,
   versionConflict,
 } from "./planning-results.js";
 import {
@@ -54,7 +53,7 @@ export const PLANNING_RUN_COMMAND_KINDS = Object.freeze([
   "plan.revise", "graph.approve", "goal.cancel", "planning.cancel",
 ] as const satisfies readonly PlanningRunCommandKind[]);
 
-/** Design section 8.1 rows 280-306, restricted to the Foundation Preview INITIAL subset. */
+/** Design section 8.1 rows 280-306 for compound INITIAL and REVISION submissions. */
 export const PLANNING_RUN_TRANSITIONS = Object.freeze({
   "planning.create_draft": Object.freeze([]),
   "planning.ready": Object.freeze(["DRAFT"]),
@@ -97,7 +96,6 @@ function create(command: PlanningCreateDraftCommand): PlanningRunReducerResult {
     return unknownFailure();
   }
   if (command.runKind === "EXPANSION") return createExpansion(command);
-  if (command.runKind !== "INITIAL") return unsupported("PLANNING_KIND_UNSUPPORTED");
   const state = deepFreeze({
     approvedHashes: null, attemptRef: null, facets: idle(), goalRef: command.goalRef,
     graphRevisionRef: null, leaseRef: null, lifecycle: "DRAFT" as const, runId: command.runId,

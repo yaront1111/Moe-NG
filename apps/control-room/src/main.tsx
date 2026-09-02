@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { resolveProjectManagerMode } from "./entry-project-manager.js";
+import { gateDevelopmentQuery } from "./entry-route.js";
 import { resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
 import type { LiveHandshakeResult } from "./live/live-handshake.js";
@@ -118,7 +119,10 @@ export function mountControlRoom(
   clock: Clock = BROWSER_CLOCK,
   hostname: string = globalThis.location?.hostname ?? "",
 ): Root {
-  const search = globalThis.location?.search ?? "";
+  const search = gateDevelopmentQuery(
+    globalThis.location?.search ?? "",
+    import.meta.env.DEV,
+  );
   // Fragments carry no authority. Remove any stale fragment before preparing
   // the request or constructing renderable state, without parsing or retaining it.
   if (window.location.hash !== "") {

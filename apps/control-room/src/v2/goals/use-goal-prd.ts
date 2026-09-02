@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 
-import type { GoalSource } from "@moe/contracts";
-
+import type { GoalDraftPrd } from "./goal-model.js";
 import { PRD_LOCAL_LAYER } from "./new-goal-form-model.js";
 import type { PrdReadState } from "./new-goal-form-model.js";
 
@@ -25,14 +24,6 @@ export interface PrdFile {
   readonly text: string;
 }
 
-interface SubmittedGoalPrd {
-  readonly localSha256: string;
-  readonly mediaType: GoalSource["mediaType"];
-  readonly name: string;
-  readonly size: number;
-  readonly text: string;
-}
-
 export type PrdFileReadRefusalCode =
   | "PRD_FILE_TOO_LARGE"
   | "PRD_FILE_UNREADABLE";
@@ -46,7 +37,7 @@ interface PrdFileReadRefusal {
 interface PrdFileReadSuccess {
   readonly prd: PrdFile;
   readonly status: "READ";
-  readonly submittedPrd: SubmittedGoalPrd;
+  readonly submittedPrd: GoalDraftPrd;
 }
 
 export type PrdFileReadResult = PrdFileReadRefusal | PrdFileReadSuccess;
@@ -64,7 +55,7 @@ const MARKDOWN_SUFFIXES = Object.freeze([".md", ".markdown"] as const);
  * recognisably markdown is offered as plain text, which the roster also admits;
  * the daemon's contract independently re-admits whatever is sent.
  */
-export function prdMediaType(name: string): SubmittedGoalPrd["mediaType"] {
+export function prdMediaType(name: string): GoalDraftPrd["mediaType"] {
   const lowered = name.toLowerCase();
   return MARKDOWN_SUFFIXES.some((suffix) => lowered.endsWith(suffix))
     ? "text/markdown"
@@ -76,7 +67,7 @@ interface GoalPrdState {
   readonly prd: PrdFile | null;
   readonly read: PrdReadState;
   /** Present only for a file this browser actually read; otherwise absent. */
-  readonly submittedPrd: SubmittedGoalPrd | undefined;
+  readonly submittedPrd: GoalDraftPrd | undefined;
 }
 
 function localError(code: PrdFileReadRefusalCode): PrdFileReadRefusal {
@@ -117,7 +108,7 @@ export async function readGoalPrdFile(file: File): Promise<PrdFileReadResult> {
 export function useGoalPrd(): GoalPrdState {
   const [prd, setPrd] = useState<PrdFile | null>(null);
   const [read, setRead] = useState<PrdReadState>(null);
-  const [submittedPrd, setSubmittedPrd] = useState<SubmittedGoalPrd | undefined>(undefined);
+  const [submittedPrd, setSubmittedPrd] = useState<GoalDraftPrd | undefined>(undefined);
   const generationRef = useRef(0);
 
   const acceptFile = (file: File | null | undefined): void => {

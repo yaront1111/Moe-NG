@@ -26,8 +26,10 @@
  */
 import { createHash } from "node:crypto";
 
+import type { AcceptanceContractCode, PlanRevisionCode } from "@moe/core";
+
 import type {
-  DependencyContract, MonotonicPredicateRegistryEntry,
+  DependencyContract, DependencyIssueCode, MonotonicPredicateRegistryEntry,
 } from "../dependencies/dependency-contract.js";
 import type { AdmissionAmount, AdmissionGate } from "../budget/budget-reservation.js";
 
@@ -98,6 +100,8 @@ export const NODE_AUTHORITY_CODES = Object.freeze([
   "NODE_AUTHORITY_TOO_LARGE", "NODE_AUTHORITY_UNREADABLE", "NODE_AUTHORITY_UNSUPPORTED_SCHEMA",
 ] as const);
 export type NodeAuthorityCode = (typeof NODE_AUTHORITY_CODES)[number];
+export type NodeAuthorityIssueCode = NodeAuthorityCode | AcceptanceContractCode
+  | DependencyIssueCode | PlanRevisionCode;
 const LAYER_NAMES = Object.freeze([
   "NODE_AUTHORITY_ADMISSION", "NODE_AUTHORITY_BUDGET", "NODE_AUTHORITY_CODEC", "NODE_AUTHORITY_DEPENDENCIES",
   "NODE_AUTHORITY_IDENTITY", "NODE_AUTHORITY_LIMITS", "NODE_AUTHORITY_PROOFS",
@@ -117,7 +121,7 @@ export const NODE_AUTHORITY_LIMITS = Object.freeze({
 });
 
 export interface NodeAuthorityIssue {
-  readonly code: NodeAuthorityCode | string;
+  readonly code: NodeAuthorityIssueCode;
   readonly layer: NodeAuthorityLayer;
   readonly message: string;
 }
@@ -178,7 +182,7 @@ export function refuse(
 /** Surface a foreign authority's verdict unchanged; only the layer is added. */
 export function passthrough(
   layer: NodeAuthorityLayer,
-  issues: readonly { readonly code: string; readonly message?: string }[],
+  issues: readonly { readonly code: NodeAuthorityIssueCode; readonly message?: string }[],
 ): NodeAuthorityRefusal {
   return Object.freeze({
     ok: false as const,

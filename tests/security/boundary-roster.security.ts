@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 25, integrity 25, durable-store 20, runtime-provider
- * 33, scheduler-activation 43 — sums to 146, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 26, integrity 41, durable-store 22, runtime-provider
+ * 33, scheduler-activation 46 — sums to 168, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -148,6 +148,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  // The Gate 1 card's mapping of a daemon answer into the browser model: a UI surface
+  // carrying authority between processes.
+  { constant: "GATE1_LAYER", file: "apps/control-room/src/v2/goals/gate1-pending-contract.ts", axis: "transport" },
   { constant: "PRD_LOCAL_LAYER", file: "apps/control-room/src/v2/goals/new-goal-form-model.ts", axis: "runtime-provider" },
   { constant: "PLAN_APPROVAL_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
   { constant: "PLAN_APPROVAL_BUILD_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
@@ -169,7 +172,19 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "CUTOVER_ACTIVATE_LAYER", file: "apps/daemon/src/cutover/cutover-activate-contracts.ts", axis: "scheduler-activation" },
   { constant: "CUTOVER_ATTEMPT_LAYER", file: "apps/daemon/src/cutover/cutover-attempt-contracts.ts", axis: "scheduler-activation" },
   { constant: "CUTOVER_GENERATION_SNAPSHOT_LAYER", file: "apps/daemon/src/cutover/cutover-generation-snapshot.ts", axis: "durable-store" },
+  // The `/2` activation authority: which plane a command may be admitted on, read from the
+  // durable marker. Approval authority, so integrity by SUBJECT.
+  { constant: "CUTOVER_V2_AUTHORITY_LAYER", file: "apps/daemon/src/cutover/cutover-v2-authority.ts", axis: "integrity" },
+  // The two immutable `/2` manifests: codecs with embedded digests.
+  { constant: "V2_READINESS_MANIFEST_LAYER", file: "apps/daemon/src/cutover/v2-readiness-manifest.ts", axis: "integrity" },
+  { constant: "V2_SURFACE_MANIFEST_LAYER", file: "apps/daemon/src/cutover/v2-surface-manifest.ts", axis: "integrity" },
   { constant: "DAEMON_ENTRY_LAYER", file: "apps/daemon/src/daemon-entry.ts", axis: "transport" },
+  // delivery-v2, by SUBJECT: persistence and readers are durable-store; the authority that
+  // admits a delivery command and the resolution-selection codec are integrity.
+  { constant: "DELIVERY_V2_PERSISTENCE_LAYER", file: "apps/daemon/src/delivery-v2/contracts.ts", axis: "durable-store" },
+  { constant: "DELIVERY_V2_READER_LAYER", file: "apps/daemon/src/delivery-v2/contracts.ts", axis: "durable-store" },
+  { constant: "DELIVERY_V2_AUTHORITY_LAYER", file: "apps/daemon/src/delivery-v2/contracts.ts", axis: "integrity" },
+  { constant: "DELIVERY_V2_RESOLUTION_SELECTION_LAYER", file: "apps/daemon/src/delivery-v2/resolution-selection-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_SERVICE_LAYERS", file: "apps/daemon/src/documents/document-work-service-contract.ts", axis: "scheduler-activation" },
   // Verification activation authority: FOUNDATION_* dispatch/verification family per the
   // subject-wins rule (governor entry 2026-08-16, producer task-44d4873e).
@@ -209,6 +224,16 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EXPANSION_REQUEST_CODE_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_REQUEST_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_BODY_RECORD_LAYER", file: "apps/daemon/src/planning/graph-body-record.ts", axis: "scheduler-activation" },
+  // The `/2` planning compiler: planning admission, scheduler-activation by SUBJECT.
+  { constant: "V2_COMPILER_LAYERS", file: "apps/daemon/src/planning/v2-compiler/contracts.ts", axis: "scheduler-activation" },
+  // The daemon's `/2` product-contract family. Codecs, a provenance validator and the
+  // goal/workflow bindings are integrity; the two command services that ADMIT a
+  // clarification or a proposed revision are planning admissions, scheduler-activation.
+  { constant: "PRODUCT_CONTRACT_CLARIFICATION_V2_LAYER", file: "apps/daemon/src/product-contract/product-contract-v2-clarification-contract.ts", axis: "scheduler-activation" },
+  { constant: "PRODUCT_CONTRACT_V2_GOAL_BINDING_LAYER", file: "apps/daemon/src/product-contract/product-contract-v2-goal-binding-contract.ts", axis: "integrity" },
+  { constant: "PRODUCT_CONTRACT_PROPOSE_REVISION_V2_LAYER", file: "apps/daemon/src/product-contract/product-contract-v2-propose-service.ts", axis: "scheduler-activation" },
+  { constant: "PRODUCT_CONTRACT_V2_REVISION_READER_LAYER", file: "apps/daemon/src/product-contract/product-contract-v2-provenance.ts", axis: "integrity" },
+  { constant: "PRODUCT_CONTRACT_V2_WORKFLOW_LAYER", file: "apps/daemon/src/product-contract/product-contract-v2-workflow-contract.ts", axis: "integrity" },
   // The project catalog is the manager's atomic durable identity file; filesystem/process
   // launch surfaces are runtime-provider, the request/IPC codecs are transport, and the
   // manager service is the admission state machine. Tag each by SUBJECT, not directory.
@@ -302,8 +327,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "CONTROL_ROOM_TRANSPORT_LAYER", file: "packages/control-room-client/src/client-transport.ts", axis: "transport" },
   { constant: "SESSION_KEY_LAYER", file: "packages/control-room-client/src/session-key.ts", axis: "runtime-provider" },
   { constant: "COORDINATION_LAYERS", file: "packages/coordination/src/coordination-contracts.ts", axis: "transport" },
+  // The versioned capability-catalog revision admission; a codec, integrity by SUBJECT.
+  { constant: "CAPABILITY_CATALOG_LAYERS", file: "packages/core/src/capability-catalog/capability-catalog-contract.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_CODEC_LAYERS", file: "packages/core/src/configuration/project-configuration-manifest.ts", axis: "integrity" },
   { constant: "LIVE_QUIESCE_EVIDENCE_LAYER", file: "packages/core/src/cutover/cutover-quiesce-evidence.ts", axis: "integrity" },
+  // Three more versioned revision admissions of the v2 delivery lineage, all codecs.
+  { constant: "DELIVERY_PROFILE_LAYERS", file: "packages/core/src/delivery-profile/delivery-profile-contract.ts", axis: "integrity" },
+  { constant: "EXECUTION_ISOLATION_PROFILE_LAYERS", file: "packages/core/src/execution-profile/execution-isolation-profile-contract.ts", axis: "integrity" },
+  { constant: "VERIFICATION_RECIPE_LAYERS", file: "packages/core/src/execution-profile/verification-recipe-contract.ts", axis: "integrity" },
   { constant: "EXPANSION_APPROVAL_LAYERS", file: "packages/core/src/expansion/expansion-approval.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_HOLD_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_PREPARATION_LAYERS", file: "packages/core/src/expansion/expansion-preparation.ts", axis: "scheduler-activation" },
@@ -318,6 +349,11 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "POLICY_SLICE_DIGEST_LAYERS", file: "packages/core/src/policy/policy-slice-digest.ts", axis: "integrity" },
   // A versioned canonical product-revision codec with an embedded content digest.
   { constant: "PRODUCT_CONTRACT_LAYERS", file: "packages/core/src/product-contract/product-contract-contract.ts", axis: "integrity" },
+  // The `/2` product-revision codec and the clarification-materiality digest, both codecs.
+  { constant: "PRODUCT_CONTRACT_V2_LAYERS", file: "packages/core/src/product-contract/product-contract-v2-contract.ts", axis: "integrity" },
+  { constant: "PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER", file: "packages/core/src/product-contract/product-contract-v2-materiality.ts", axis: "integrity" },
+  // The source-snapshot record admission and its canonical digest; a codec.
+  { constant: "SOURCE_SNAPSHOT_LAYERS", file: "packages/core/src/source-snapshot/source-snapshot-contract.ts", axis: "integrity" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
   { constant: "IMPORT_REFUSAL_LAYERS", file: "packages/import/src/import-contract.ts", axis: "transport" },
   { constant: "HTTP_SHUTDOWN_LAYER", file: "packages/mcp/src/http/http-shutdown.ts", axis: "transport" },
@@ -341,6 +377,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RECOVERY_INVENTORY_LAYERS", file: "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts", axis: "runtime-provider" },
   { constant: "RECOVERY_LAYERS", file: "packages/runner/src/recovery/recovery-contract.ts", axis: "runtime-provider" },
   { constant: "SCOPE_OBSERVER_LAYERS", file: "packages/runner/src/scope/scope-contract.ts", axis: "runtime-provider" },
+  // Binds a source snapshot's expected base revision to the repository HEAD it names.
+  // Integrity by SUBJECT (a revision-binding check over an injected port), not
+  // runtime-provider: the process it drives is git, not a provider runtime.
+  { constant: "RUNNER_SOURCE_SNAPSHOT_GIT_LAYER", file: "packages/runner/src/source-snapshot/source-snapshot-git-contract.ts", axis: "integrity" },
   { constant: "SUPERVISOR_LAYERS", file: "packages/runner/src/supervisor/effect-kernel.ts", axis: "runtime-provider" },
   { constant: "PROVIDER_EFFECT_SETTLEMENT_LAYER", file: "packages/runner/src/supervisor/provider-settlement-contracts.ts", axis: "runtime-provider" },
   { constant: "RUNNER_WORKTREE_LAYERS", file: "packages/runner/src/workspace/worktree-materializer-contract.ts", axis: "runtime-provider" },
@@ -463,8 +503,26 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * 130 -> 131 on 2026-08-29 for POLICY_RISK_LAYER, the durable policy-risk admission
  * record that binds an approved action to the active graph subject. `scheduler-activation`
  * by SUBJECT. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418.
+ *
+ * 146 -> 152 on 2026-09-02 for the six constants the v2/foundation lineage exported
+ * without rostering, caught by "names every scanned constant in the roster" on every
+ * host: CAPABILITY_CATALOG_LAYERS, DELIVERY_PROFILE_LAYERS,
+ * EXECUTION_ISOLATION_PROFILE_LAYERS, VERIFICATION_RECIPE_LAYERS and
+ * SOURCE_SNAPSHOT_LAYERS (five `packages/core` codecs) plus
+ * RUNNER_SOURCE_SNAPSHOT_GIT_LAYER (the runner's revision-binding observer). All six
+ * `integrity` by SUBJECT; eighteen arms in recent-core-contract-hostile-cases.ts.
+ *
+ * 152 -> 168 on 2026-09-02 when `DECLARATION_PATTERN` became digit-aware (`[A-Z0-9_]+`,
+ * the class the governor adopted on 2026-08-30): sixteen `V2`/`GATE1` constants the old
+ * class had never seen. By SUBJECT: ten integrity (the `/2` authority, both manifests,
+ * the delivery authority and resolution-selection codec, the product-contract `/2`
+ * codec, materiality digest, goal binding, workflow head and provenance validator),
+ * three scheduler-activation (the `/2` compiler and the two product-contract command
+ * services), two durable-store (delivery persistence and readers) and one transport
+ * (the Gate 1 card mapping). Forty-eight arms across recent-delivery-v2-,
+ * recent-product-contract-v2- and recent-v2-cutover-hostile-cases.ts.
  */
-const EXPECTED_ROSTER_SIZE = 146;
+const EXPECTED_ROSTER_SIZE = 168;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -472,13 +530,13 @@ const EXPECTED_ROSTER_SIZE = 146;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 68,
+  "apps/daemon": 81,
   "packages/benchmark": 5,
-  "packages/runner": 22,
-  "packages/core": 15,
+  "packages/runner": 23,
+  "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 10,
+  "apps/control-room": 11,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -498,7 +556,7 @@ const SCAN_ROOTS: readonly string[] = Object.freeze(["apps", "packages", "adapte
  * uncounted. Column-0 anchoring stops it matching prose in a doc comment; terminating on
  * `=` stops it matching a longer identifier by prefix.
  */
-const DECLARATION_PATTERN = /^export const ([A-Z_]+(?:LAYERS|LAYER|BOUNDARIES))\s*(?::[^=]+)?=/u;
+const DECLARATION_PATTERN = /^export const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))\s*(?::[^=]+)?=/u;
 
 /**
  * Find the repo root by SEARCHING for the workspace marker, never by hop-counting — a

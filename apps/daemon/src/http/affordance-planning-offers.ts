@@ -36,7 +36,7 @@ export interface PlanningOfferResolution {
 export interface PlanningOfferInput {
   readonly compilerLane: CompilerLanePort;
   readonly ledger: DurableLedger;
-  readonly mintId: () => string;
+  readonly mintId: (kind: string) => string;
   readonly projectId: string;
 }
 
@@ -100,7 +100,7 @@ function offer(
 ): NextAllowedCommand {
   return Object.freeze({
     commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-    commandId: input.mintId(),
+    commandId: input.mintId(kind),
     commandKind: kind,
     expectedVersion: versionOf(input.ledger, aggregateId),
     inputSchemaVersion: COMPILER_OFFER_KINDS.some((compiler) => compiler === kind)

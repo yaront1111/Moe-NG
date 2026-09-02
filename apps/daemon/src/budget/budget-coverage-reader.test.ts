@@ -14,10 +14,17 @@ import {
 } from "./budget-ledger-fixtures.js";
 import { authorizeBudgetRoot } from "./budget-ledger.js";
 import {
+  GOAL_ID as SETTLEMENT_GOAL_ID,
+  PROJECT_ID as SETTLEMENT_PROJECT_ID,
+  activatedStore,
+  applySettlement,
   openUnactivatedBudgetFixture,
   cleanupRestoreHarnesses,
   cleanupSettlementScratchRoots,
+  commitRun,
+  heldOf,
   storeWideEventHorizon,
+  usageRows,
 } from "./budget-settlement-fixtures.js";
 import {
   AGGREGATE,
@@ -29,17 +36,11 @@ import {
 /**
  * THE BUDGETS/COVERAGE READER the Foundation context matrix names (task-c320c34a's DoD 1).
  *
- * Populated worlds below use activation-free production writers. Open holds and applied
- * settlements are named TODOs rather than fixture-built authority: their only production route
- * is below effect admission, and production cannot currently mint an activation.
- *
- * MEASURED-COMPLETE REMAINS GATED, ON ONE WRITER ALONE. At commit 9c09252
- * `reconcileBudgetSettlement` (budget-ledger-holds.ts:284) had ZERO production callers:
- * `git grep -n "reconcileBudgetSettlement" -- apps/daemon/src | grep -v "\.test\.ts"` returned
- * only that definition and one prose line. Re-run that command rather than trusting this
- * sentence — it is anchored at a named commit precisely so it can be checked, and a gate written
- * against "this HEAD" silently goes false instead. The arm stays `it.todo` until a production
- * writer reaches that function.
+ * Every populated state below is now production-reachable. Open holds come from
+ * `runEffectActivateCommand`; provider rows pass through the durable provider-run writer and the
+ * scheduler's measurement normalizer; settlements pass through `applyProviderUsageToBudget`.
+ * COMPLETE is the terminal SETTLED path and is folded into `settledMeters` when the resolved
+ * reservation/settlement pair is pruned. PARTIAL and UNKNOWN stay retained and quarantined.
  */
 
 // The settlement world mints scratch roots and harness stores; this suite owns their teardown
@@ -110,9 +111,27 @@ describe("the budgets/coverage reader serves the durable current standing", () =
     });
   });
 
-  // No owner until production can mint a committed effect activation. Calling the reservation
-  // writer here would manufacture the state below its sole production caller.
-  it.todo("serves a real open hold as UNKNOWN once production can reach admission");
+  it("serves a real open hold as UNKNOWN once production can reach admission", () => {
+    const store = activatedStore("coverage-open-hold");
+    try {
+      const held = heldOf(store);
+      const [meter] = held.meters;
+      if (meter === undefined) throw new Error("the production reservation must hold a meter");
+      const coverage = readCurrentBudgetCoverage(
+        store, SETTLEMENT_PROJECT_ID, SETTLEMENT_GOAL_ID,
+      );
+      if (!coverage.ok) throw new Error(`coverage must be served, refused ${coverage.code}`);
+      const standing = meterOf(coverage, meter);
+
+      expect(standing.coverage).toBe("UNKNOWN");
+      expect(standing.openHoldCount).toBe(1);
+      expect(standing.refundable).toBeNull();
+      expect(standing.refundable).not.toBe(0);
+      expect(standing.buckets.reserved).toBeGreaterThan(0);
+    } finally {
+      store.close();
+    }
+  });
 
   it("appends nothing: a read is a read, on both the served and the refused path", () => {
     withBudgetStore("coverage-readonly", (store) => {
@@ -209,14 +228,58 @@ describe("the budgets/coverage reader refuses without ever inventing a standing"
     });
   });
 
-  // Owner task-f432799c. It remains gated until a production path can commit an activated hold
-  // and a provider run; the former fixture was not evidence of reachability.
-  it.todo("(task-f432799c) serves PARTIAL for a production-applied lower-bound receipt");
+  it("(task-f432799c) serves PARTIAL for a production-applied lower-bound receipt", () => {
+    const store = activatedStore("coverage-partial");
+    try {
+      const held = heldOf(store);
+      const [meter] = held.meters;
+      if (meter === undefined) throw new Error("the production reservation must hold a meter");
+      commitRun(store, held.attemptRef, usageRows(held.attemptRef,
+        held.meters.map((entry) => ({
+          coverage: "PARTIAL", meter: entry, quantity: 1,
+        } as const))));
+      const settled = applySettlement(store, held.attemptRef) as Record<string, unknown>;
+      expect(settled["ok"]).toBe(true);
 
-  // GATED at commit 9c09252, and the gate is measured, not remembered: `reconcileBudgetSettlement`
-  // (budget-ledger-holds.ts:284) has ZERO production callers — `git grep -n
-  // "reconcileBudgetSettlement" -- apps/daemon/src | grep -v "\.test\.ts"` returns only that
-  // definition and one prose line. Until a production writer reaches it, measured-COMPLETE cannot
-  // be produced by any path this suite is allowed to seed. Owner: task-f432799c.
-  it.todo("(task-f432799c) serves measured-COMPLETE after a production-applied settlement");
+      const coverage = readCurrentBudgetCoverage(
+        store, SETTLEMENT_PROJECT_ID, SETTLEMENT_GOAL_ID,
+      );
+      if (!coverage.ok) throw new Error(`coverage must be served, refused ${coverage.code}`);
+      const standing = meterOf(coverage, meter);
+      expect(standing.coverage).toBe("PARTIAL");
+      expect(standing.measuredCount).toBeGreaterThan(0);
+      expect(standing.buckets.quarantined).toBeGreaterThan(0);
+      expect(standing.refundable).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
+
+  it("(task-f432799c) serves measured-COMPLETE after a production-applied settlement", () => {
+    const store = activatedStore("coverage-measured-complete");
+    try {
+      const held = heldOf(store);
+      const [meter] = held.meters;
+      if (meter === undefined) throw new Error("the production reservation must hold a meter");
+      commitRun(store, held.attemptRef, usageRows(held.attemptRef,
+        held.meters.map((entry) => ({
+          coverage: "COMPLETE", meter: entry, quantity: 1,
+        } as const))));
+      const settled = applySettlement(store, held.attemptRef) as Record<string, unknown>;
+      expect(settled["ok"]).toBe(true);
+
+      const coverage = readCurrentBudgetCoverage(
+        store, SETTLEMENT_PROJECT_ID, SETTLEMENT_GOAL_ID,
+      );
+      if (!coverage.ok) throw new Error(`coverage must be served, refused ${coverage.code}`);
+      const standing = meterOf(coverage, meter);
+      expect(standing.coverage).toBe("COMPLETE");
+      expect(standing.measuredCount).toBeGreaterThan(0);
+      expect(standing.openHoldCount).toBe(0);
+      expect(standing.buckets.reserved).toBe(0);
+      expect(standing.refundable).toBe(standing.buckets.available);
+    } finally {
+      store.close();
+    }
+  });
 });
