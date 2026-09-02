@@ -188,7 +188,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T21:32:12.859Z",
-  "updatedAt": "2026-09-02T15:53:49.955Z",
+  "updatedAt": "2026-09-02T15:53:54.352Z",
   "metrics": {
     "firstClaimAt": "2026-09-01T22:10:53.620Z",
     "plannedStepCount": 8,
@@ -262,6 +262,33 @@
       "treeId": "04db5172029c7558495546342d41d7b157f340c1",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "dfc8ba2570710aabdafadd73f8d251576938422e",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-30d27a8d@2026-09-02T15:53:50Z",
+      "paths": [
+        ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+        ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+        "apps/daemon/src/cutover/cutover-generation-snapshot.test.ts",
+        "apps/daemon/src/cutover/cutover-generation-snapshot.ts",
+        "apps/daemon/src/cutover/cutover-quiesce-record-reader.js",
+        "apps/daemon/src/cutover/cutover-quiesce-record-reader.test.ts",
+        "apps/daemon/src/cutover/cutover-quiesce-record-reader.ts"
+      ],
+      "recordedBy": "qa-30d27a8d",
+      "recordedAt": "2026-09-02T15:53:54.352Z",
+      "treeId": "be2c41618810401712fd1a23f5b1d23c4e51d5e5",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/cutover/cutover-generation-snapshot.ts",
+          "taskId": "task-38ec450ae92d486f860c5801c0f28870"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -269,14 +296,16 @@
     "apps/daemon/src/cutover/cutover-generation-snapshot.test.ts",
     "apps/daemon/src/cutover/cutover-quiesce-record-reader.test.ts",
     "apps/daemon/src/cutover/cutover-quiesce-record-reader.ts",
-    "apps/daemon/src/cutover/cutover-quiesce-record-reader.js"
+    "apps/daemon/src/cutover/cutover-quiesce-record-reader.js",
+    ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+    ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-f06d587f@2026-09-02T15:16:25Z",
-    "at": "2026-09-02T15:16:28.849Z"
+    "sessionId": "qa-30d27a8d@2026-09-02T15:53:50Z",
+    "at": "2026-09-02T15:53:54.352Z"
   },
   "workStartedAt": "2026-09-02T15:16:51.524Z",
   "reviewStartedAt": "2026-09-02T15:53:34.934Z",
