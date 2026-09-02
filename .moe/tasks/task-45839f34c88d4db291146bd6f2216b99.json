@@ -22,7 +22,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human-authorized SPIDR re-split: measured reachability exceeds exact-10 path cap; see comment-cba6f6ea146e44dd8b9323dee20ac91e.",
   "createdBy": "WORKER",
   "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
   "dependsOn": [
@@ -31,24 +31,92 @@
     "task-272b09a7164f4b618dcf9a0f65272fd0",
     "task-59eaddfbf1e049bbab00290233a54284",
     "task-cb40f3d833f14c3089d812b9bf2d291f",
-    "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d"
+    "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+    "task-38ec450ae92d486f860c5801c0f28870"
   ],
   "priority": "CRITICAL",
   "order": 189.8,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-cba6f6ea146e44dd8b9323dee20ac91e",
+      "author": "governor-c11c29e2",
+      "content": "HUMAN/GOVERNOR REPLAN RULING (2026-09-01): measured reachability exceeds the exact-10 path cap. Return to architect planning and split via SPIDR: land the bounded integrity producer+arms leaf first, then a separate master-roster closure owning the transport count and full runtime-partition consumer set. Do not evade shape consumers or weaken counts.",
+      "timestamp": "2026-09-01T16:35:23.189Z"
+    },
+    {
+      "id": "comment-99191f3ce4234d1b8866b7b95d96bf34",
+      "author": "architect-db6a0906",
+      "content": "ARCHITECT RE-MEASUREMENT at delivered tree HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d: `git status --porcelain` over the proposed integrity leaf is empty; production lines are activation-record 160, cutover-quiesce-evidence 269, cutover-generation-snapshot 348. The focused boundary roster executes 1 file/34 tests and has exactly the expected two reds: scan 146 vs roster 131 and scan-minus-roster exactly 15. Fresh shape reachability found 13 consumers for the combined closure: seven roster/count surfaces plus six additional direct RUNTIME_PROVIDER_PARTITION consumers. Therefore the human two-concern split still needs a third path-cap slice; no count/caller may be hidden. Created leaf task-38ec450ae92d486f860c5801c0f28870 for the exact five producer/case paths and asked governor to append it to this row's dependencies after runtime misclassified the architect role. Proposed successor split: seven-path runtime-partition prerequisite, then seven-path final roster closure. Current dirty scheduler sheet belongs to blocked predecessor and must be adopted only after that dependency lands.",
+      "timestamp": "2026-09-01T17:38:31.512Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:57:15.097Z",
-  "updatedAt": "2026-09-01T00:57:12.816Z",
+  "updatedAt": "2026-09-01T20:09:47.586Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-5e59a71e",
-    "architect-1f97776b"
+    "architect-1f97776b",
+    "governor-c11c29e2",
+    "architect-db6a0906",
+    "qa-f2bd3efd"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T09:30:54.921Z"
   },
-  "blockedReason": "PLAN-TIME SHAPE/REACHABILITY BLOCK at delivered-tree anchor cb0be9e03a94a8a2b718a9f08e368eabb8013b55. The task's own rail says any eleventh path found by reachability or shape/count grep must stop/re-split. `git grep -l BOUNDARY_ROSTER -- apps packages tests` does name the five listed roster consumers, and the security-config Vitest scan executed 1 file/34 tests and measured exactly 146 scanned vs 131 rostered with the named 15-row delta. However the mandatory literal-shape search `git grep -n -E 'toHaveLength\\((131|31|38|24|20|18)\\)|RUNTIME_PROVIDER_PARTITION' -- tests/security` found an omitted asserting consumer: tests/security/transport-boundaries.security.ts:142 hard-pins the transport subset at 20; publishing the four transport rows requires 24, so the required full security lane cannot be green without editing an 11th path. The same search found that changing the exported exact RUNTIME_PROVIDER_PARTITION to include the Control Room pair reaches tests/security/runtime-provider-ledger.ts plus runtime-provider-evidence.security.ts, runtime-provider-launch.security.ts, runtime-provider-platform.security.ts, and runtime-provider-projects.security.ts, all outside the exact-ten roster; the landed Control Room suite also keeps its literal OWNED pair rather than consuming a CONTROL_ROOM partition. Rail 8 requires every reached caller in affectedFiles, while the plan cap is 10. The integrity production guards are already landed and need only six new production-surface arms/mutation drills; no source edit can legitimately hide these roster consumers. Submitting the advertised ten-path plan would either fabricate full-lane green, violate reachability ownership, or weaken the exact count/partition checks. Re-slice/amend ownership so the integrity producer+arms leaf lands first, then an atomic master-roster closure owns transport count and the full runtime-partition reachability set (or otherwise provide a compliant <=10-file decomposition). No files were edited.",
+  "blockedReason": "Build-order block on the five declared unmet dependencies: task-272b09a7164f4b618dcf9a0f65272fd0, task-59eaddfbf1e049bbab00290233a54284, task-cb40f3d833f14c3089d812b9bf2d291f, task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d, and task-38ec450ae92d486f860c5801c0f28870. Planning now would either omit six measured RUNTIME_PROVIDER_PARTITION consumers or knowingly make completeness red at 33 served versus 31 advertised. Auto-unblock when all are DONE; then remeasure and plan an atomic <=10-path seam.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T09:49:37.951Z"
+  "blockedAt": "2026-09-01T20:08:45.671Z",
+  "blockedOnTaskIds": [
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-59eaddfbf1e049bbab00290233a54284",
+    "task-cb40f3d833f14c3089d812b9bf2d291f",
+    "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+    "task-38ec450ae92d486f860c5801c0f28870"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read all prior handoffs, current task context, the human/governor split ruling, and task-38ec's new REVIEW completion record. Confirmed task-38ec is merged but not DONE and four other producer rows remain BLOCKED; this final row still has five unmet declared dependencies. No workspace files or task fields were changed.",
+      "whatRemains": "After task-272b, task-59e, task-cb40, task-f8ea, and task-38ec are DONE, remeasure all RUNTIME_PROVIDER_PARTITION direct consumers and roster/count shapes at the delivered tree. Create/plan the governor-approved atomic prerequisite only if it can keep its seven owned consumers green; then plan this final roster closure.",
+      "pitfalls": "Do not submit the stale exact-ten plan, omit Control Room, weaken bidirectional coverage, or land the runtime partition at 33 while the master roster stays 31. The final row is serialized specifically to avoid those intermediate false states.",
+      "openQuestions": "If no <=10-path atomic green seam exists once the producers land, return to governor/human for a revised serialization rather than staging owned-path red.",
+      "releasedAt": "2026-09-01T20:08:14.438Z",
+      "releasedBy": "architect-db6a0906",
+      "reason": "Build-order handoff: five declared producer dependencies remain unmet, so the serialized final roster row is not yet safe to plan."
+    },
+    {
+      "whatIsDone": "Re-read all three handoffs, current task/dependency records, and fresh runtime-partition search. Confirmed task-38ec is still WORKING; transport/scheduler/runtime-provider/parent producers remain BLOCKED; no runtime-partition child exists. The exact-ten description still cannot own a RUNTIME_PROVIDER_PARTITION shape change because six direct consumers remain outside its roster.",
+      "whatRemains": "After task-cb40f3d833f14c3089d812b9bf2d291f and the other declared producers land, remeasure the seven direct partition consumers and design the governor-approved seven-path prerequisite so its 33-entry union and the master roster remain atomically green. Then append that child to this row and plan the final roster closure.",
+      "pitfalls": "Do not submit the current exact-ten plan, conditionally exclude Control Room, or land a runtime partition whose completeness consumer goes red at 33 served vs 31 advertised. Preserve all seven dependency edges and foreign scheduler WIP.",
+      "openQuestions": "If no <=10-path atomic seam exists after cb40 lands, return to governor/human for a revised serialization rather than weakening bidirectional coverage.",
+      "releasedAt": "2026-09-01T18:54:41.646Z",
+      "releasedBy": "architect-db6a0906",
+      "reason": "Build-order release: five declared producers remain unmet and the governor-approved runtime-partition prerequisite still lacks an atomic green seam."
+    },
+    {
+      "whatIsDone": "Governor read and verified both architect handoffs, confirmed task-38ec is the active WORKING prerequisite, preserved all seven dependency edges, and retained the atomicity finding that forbids the stale ten-path plan.",
+      "whatRemains": "Leave task 458 unassigned in PLANNING until the declared producers land and an architect measures a genuinely atomic green seam; independent ec83 planning remains higher build-order value.",
+      "pitfalls": "Do not submit the stale plan, do not exclude served Control Room boundaries, and do not alter dependencies or source bytes from this governance correction.",
+      "releasedAt": "2026-09-01T18:29:55.880Z",
+      "releasedBy": "governor-c11c29e2",
+      "reason": "Immediate correction of an accidental governor-role claim while restoring governance registration; preserve the architect handoff and keep the row claimable."
+    },
+    {
+      "whatIsDone": "Integrity child task-38ec is approved and now WORKING with worker-d16b4297. Parent dependsOn includes it. Fresh 13-path reachability and the 31-to-33 partition/roster atomicity hazard are durable in comment-99191f3ce4234d1b8866b7b95d96bf34 and Serena handoff. Governor explicitly ruled not to file/land a known owned-path red and not to exclude served Control Room boundaries.",
+      "whatRemains": "After task-38ec and the other declared producers land, re-measure a genuinely atomic green seam for the seven runtime-partition consumers plus master-roster/count consumers. Split further if needed. Do not submit the stale ten-path plan. For now architect should claim independent ec83 PLANNING leaf.",
+      "pitfalls": "Adding CONTROL_ROOM to RUNTIME_PROVIDER_PARTITION before the roster moves makes runtime-provider-evidence completeness newly red at 33 union vs 31 roster after cb40 becomes green. Conditional pending exclusions violate bidirectional coverage. Preserve foreign scheduler WIP and all declared dependencies.",
+      "releasedAt": "2026-09-01T18:27:32.498Z",
+      "releasedBy": "architect-db6a0906",
+      "reason": "Governor-directed build-order handoff: integrity leaf is WORKING and the runtime-partition split lacks an atomic green seam; move to independent ec83 leaf."
+    },
+    {
+      "whatIsDone": "Fresh HEAD 5fe0fdde measurement recorded in comment-99191f3ce4234d1b8866b7b95d96bf34. Created exact five-path integrity leaf task-38ec450ae92d486f860c5801c0f28870 with DONE producer dependencies. Measured master closure union is 13 paths, not <=10; proposed seven-path runtime-partition prerequisite plus seven-path final roster closure. Asked governor to append leaf dependency because set_task_dependencies returned NOT_ALLOWED.",
+      "whatRemains": "Plan and land task-38ec450ae92d486f860c5801c0f28870 first. Governor must confirm/create the extra runtime-partition split and update this row dependencies/owned scope. Then re-claim this row only after prerequisites are represented and plan the final seven-path roster closure.",
+      "pitfalls": "Do not submit the stale ten-path plan. Completeness imports INTEGRITY_HOSTILE_CASES directly, so leaf cases must remain a dedicated pre-roster set until this successor composes them. Full RUNTIME_PROVIDER_PARTITION reachability is seven consumers (invariants, ledger, evidence, launch, platform, projects, control-room); omitting any is a shape-rail breach. Preserve foreign scheduler WIP.",
+      "releasedAt": "2026-09-01T17:38:41.926Z",
+      "releasedBy": "architect-db6a0906",
+      "reason": "Build-order handoff: human-authorized integrity dependency leaf must be planned first; combined successor still exceeds path cap on fresh shape reachability."
+    }
+  ]
 }

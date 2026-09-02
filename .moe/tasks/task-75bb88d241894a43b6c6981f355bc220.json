@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: because its exact rendered-shape consumer is owned by 28cd, which exhausted reopen budget. Unblock after 28cd completion lands and amend scope to include cordum-app.test.tsx.",
   "createdBy": "WORKER",
   "parentTaskId": "task-2c952438c41546b3a736623f3956c778",
   "priority": "HIGH",
@@ -36,21 +36,22 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:07:25.791Z",
-  "updatedAt": "2026-08-31T16:22:01.966Z",
+  "updatedAt": "2026-09-01T18:53:40.526Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:14:36.040Z"
   },
   "contextFetchedBy": [
-    "architect-5e59a71e"
+    "architect-5e59a71e",
+    "governor-c11c29e2"
   ],
   "dependsOn": [
     "task-28cd95db8bb6444b861eac4384c7fdc2"
   ],
-  "blockedReason": "Mandatory rendered-shape grep found an out-of-roster exact consumer: cordum-app.test.tsx pins two LIVE_BOOTSTRAP_UNAVAILABLE text occurrences, while exact createDisabledReason propagation necessarily renders a third. The file is dirty foreign WIP and explicitly owned by blocked task-28cd95db8bb6444b861eac4384c7fdc2, so this row cannot safely edit it; neutralizing notAttached().comingOnlineNote merely to evade the count would violate the shape-consumer rail and broaden presentation semantics. Root cause and options are recorded in comment-8dbd98399ac1453db2172c1c7e1c267e and governor msg-3cd16f5d26ec43a3b9afae3e07923d95. Recommended unblock: task-28cd lands, governor adds dependency/amends this row to include cordum-app.test.tsx, then replan exact semantic count; alternatively a human explicitly authorizes which refusal occurrence is canonical.",
+  "blockedReason": "Dependency wait: bootstrap-refusal UI leaf resumes after task-28cd95db8bb6444b861eac4384c7fdc2 lands; scope still must include cordum-app.test.tsx.",
   "blockedOnTaskIds": [
     "task-28cd95db8bb6444b861eac4384c7fdc2"
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T16:22:01.966Z"
+  "blockedAt": "2026-09-01T17:29:39.665Z"
 }

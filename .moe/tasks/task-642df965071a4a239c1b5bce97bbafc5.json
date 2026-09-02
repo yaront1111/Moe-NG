@@ -1,0 +1,61 @@
+{
+  "id": "task-642df965071a4a239c1b5bce97bbafc5",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[38ec-pre-daemon] Bound live-quiesce artifact acquisition",
+  "description": "Production consumer split from reopened task-38ec450ae92d486f860c5801c0f28870, after the core totality leaf task-1edf82770e3e447fb9086fb4e30792aa. Objective: prevent the daemon cutover snapshot from allocating/parsing an unbounded live-quiesce artifact while keeping the exported CutoverGenerationPorts/readCutoverGenerationSnapshot signatures and refusal vocabulary source-compatible. Deliverable: a focused Node bounded-byte reader and one-line bridge are called on the daemon-derived fixed evidence path; the snapshot decodes only those bytes with the landed bounded JSON codec and never invokes/falls back to the legacy readFileText compatibility member. Exact owned paths (5): apps/daemon/src/cutover/cutover-quiesce-record-reader.ts (new); apps/daemon/src/cutover/cutover-quiesce-record-reader.js (new one-line bridge); apps/daemon/src/cutover/cutover-quiesce-record-reader.test.ts (new); apps/daemon/src/cutover/cutover-generation-snapshot.ts; apps/daemon/src/cutover/cutover-generation-snapshot.test.ts. NOT in scope: registry/activation-service callers, security WIP, migration writer, manifests/lock, public barrels, new refusal codes, or caller-selectable paths/limits. Exact verification command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/daemon exec vitest run --root . --config package.json src/cutover/cutover-quiesce-record-reader.test.ts src/cutover/cutover-generation-snapshot.test.ts;x --filter @moe/daemon typecheck}`.",
+  "definitionOfDone": [
+    "Adopt the DONE/merged core totality leaf and daemon snapshot producer records, then re-measure the five paths, all CutoverGenerationPorts/readCutoverGenerationSnapshot callers and literal port shapes, physical lines, and the existing @moe/contracts/@moe/core dependency declarations plus pnpm-lock daemon importer entries. A deleted compiled probe inside @moe/daemon must import decodeBoundedJsonBytes/MAX_JSON_BODY_BYTES and deriveLiveQuiesceEvidenceDigest from their bare package specifiers and typecheck exit 0.",
+    "Red-first add real-file reader/snapshot arms with nonzero exact boundary cases: empty/at-limit bytes are read without requesting more than MAX_JSON_BODY_BYTES+1; one byte over refuses at the daemon file-reader layer and closes the descriptor; missing/read failure remains CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT; invalid UTF-8, JSON syntax and depth refuse CUTOVER_GENERATION_EVIDENCE_UNREADABLE with the exact bounded-json upstream; a valid JSON object rejected semantically preserves the exact core code/layer upstream. Every refusal carries no generations and the legacy readFileText function has an invocation count of zero.",
+    "Create a <=250-line Node reader plus exact one-line .js bridge using one opened descriptor, a bounded read loop capped at MAX_JSON_BODY_BYTES+1, and finally-close on success/refusal/error; never use stat-then-unbounded readFileSync. Move/delegate the quiesce record read so snapshot parses only decodeBoundedJsonBytes output, keeps the fixed storeRoot-derived path, maps missing versus unreadable versus semantic failure to the existing outer codes/layer, preserves CutoverGenerationPorts/readCutoverGenerationSnapshot source signatures and reason rosters, never falls back to readFileText, and leaves each edited production source <400 lines.",
+    "Use divergence fixtures where the file-size guard is the only named guard result: a real MAX_JSON_BODY_BYTES+1 file must report JSON_BODY_LIMIT_EXCEEDED at DAEMON_CUTOVER_GENERATION upstream, while loosening that guard by one reaches the independent bounded-json decoder and changes the observed upstream layer. Mutate the production reader to use an unbounded read, bypass the max+1 refusal, omit finally-close, call the compatibility readFileText fallback, and replace bounded decode with JSON.parse; each named size/layer/Windows delete-or-rename/zero-call assertion must red, followed by tracked diff+SHA or untracked out-of-tree SHA restore proof.",
+    "Run the exact foreground/unpiped verification command and require Daemon Test Files 2 passed with a nonzero Tests count plus typecheck success. Then run full @moe/daemon, root typecheck/test (label root Vitest apps-excluded), foundation and store lanes as merge-base-versus-HEAD path-attributed baselines; require no new failure intersecting the five owned paths, disclose foreign red verbatim, and record final line counts plus plain-Node bridge loadability."
+  ],
+  "taskRails": [
+    "Own exactly the five listed paths. Do not edit daemon-command-registry, cutover-activate-service, current task-38ec security files, migration files, barrels, manifests, lockfile, or foreign WIP.",
+    "The fixed Node reader is the production authority for this artifact path and byte ceiling. CutoverGenerationPorts.readFileText remains source-compatible only; the snapshot must never invoke it or fall back to it, so every measured caller receives the bounded production path without a flag day.",
+    "Reuse MAX_JSON_BODY_BYTES/decodeBoundedJsonBytes and the core digest through the already-declared bare package edges. Do not add a second JSON parser, canonicalizer, caller-selected limit/path, default artifact, or new public refusal code.",
+    "On Windows and POSIX, close the exact opened descriptor in finally on every path. A pre-stat followed by unbounded read, post-allocation Buffer.byteLength check, or test-only bounded fake does not close the production defect."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-38ec450ae92d486f860c5801c0f28870",
+  "dependsOn": [
+    "task-1edf82770e3e447fb9086fb4e30792aa",
+    "task-dcf0ce921b5b4ca59db32851ea711924"
+  ],
+  "priority": "CRITICAL",
+  "order": 189.52,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T21:32:12.859Z",
+  "updatedAt": "2026-09-01T22:23:19.827Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-01T22:10:53.620Z"
+  },
+  "contextFetchedBy": [
+    "architect-db6a0906"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Claimed, fetched full context, and read the core/daemon design memories. Confirmed dependsOn still gates WORKING on task-1edf82770e3e447fb9086fb4e30792aa; no plan submitted and no source or task scope changed.",
+      "whatRemains": "After core leaf lands or architect capacity returns, remeasure the five reader/snapshot paths and submit the bounded Node descriptor/decode plan already specified in the task DoD.",
+      "pitfalls": "Do not touch active daemon-command-registry ownership or current 38ec security WIP; preserve CutoverGenerationPorts/readFileText source compatibility while never invoking/falling back to it.",
+      "releasedAt": "2026-09-01T22:11:50.418Z",
+      "releasedBy": "architect-db6a0906",
+      "reason": "Explicit governor handoff to plan independent d36 first while core prerequisite 1edf is WORKING; keep daemon consumer gated and claimable."
+    }
+  ],
+  "blockedReason": "Build-order wait: the bounded daemon reader consumes the core safe-value/total-validation seam owned by task-1edf82770e3e447fb9086fb4e30792aa, which is not landed and is currently BLOCKED only on a measured non-vacuous verification-command amendment. Planning the consumer now would name unbuilt symbols and risk a clean-checkout hole. Preserve this row's five-path scope and auto-unblock after 1edf reaches DONE.",
+  "blockedOnTaskIds": [
+    "task-1edf82770e3e447fb9086fb4e30792aa"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T22:23:19.827Z"
+}

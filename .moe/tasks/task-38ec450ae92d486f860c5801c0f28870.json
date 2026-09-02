@@ -1,0 +1,218 @@
+{
+  "id": "task-38ec450ae92d486f860c5801c0f28870",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3 integrity leaf] Close GA activation-record and live-quiesce hostile arms",
+  "description": "Human/governor-authorized SPIDR dependency leaf of task-45839f34c88d4db291146bd6f2216b99 after fresh HEAD 5fe0fdde reachability proved the combined roster row exceeds the ten-path cap. This acceptance/implementation slice certifies the already-landed GA activation composer (task-09008b4cb39c4a15aa661540d20e9b9b) and core live-quiesce serializer (task-2bf8fa1a485146aa860bd0f50cbf8287) through their real production surfaces. It adds the six divergence-safe BEFORE/AFTER/RACE cases as a dedicated pre-roster integrity set; the parent master-roster successor is the declared consumer that will advertise and compose this set only after every producer axis lands. Exact owned paths (5): packages/benchmark/src/activation-record.ts; packages/core/src/cutover/cutover-quiesce-evidence.ts; apps/daemon/src/cutover/cutover-generation-snapshot.ts; tests/security/integrity-hostile-cases.ts; tests/security/integrity-boundaries.security.ts. No manifest, lock, master-roster, completeness, or unrelated security-lane edit.",
+  "definitionOfDone": [
+    "Adopt the two DONE/merged prerequisite delivery and review records, then re-measure the five exact paths, imports, guard tuples, and physical production-source lines at the delivered tree. Confirm composeActivationRecord, deriveLiveQuiesceEvidenceDigest, and readCutoverGenerationSnapshot exist; the daemon manifest/lock bare @moe/core edge remains intact; and no persistent production signature, export, reason-code vocabulary, manifest, or lock change is needed.",
+    "Red-first add a dedicated exported pre-roster integrity case set containing exactly six generated cases: GA_ACTIVATION_RECORD_LAYER and LIVE_QUIESCE_EVIDENCE_LAYER × BEFORE/AFTER/RACE. Activation uses a proven otherwise-admitted L1 fixture, changing only a 39-character source commit, only a non-pinned 64-hex spec digest, or those divergent left/right legs. Quiesce reaches the real daemon snapshot consumer with all shape, identity, ids, hosts, outcomes, and neighboring facts valid, changing only resolvedCount, only stoppedAt, or divergent count-only versus inventory-host-only legs.",
+    "Execute all six cases from integrity-boundaries.security.ts outside the current roster-derived COVERED union until the successor advertises them. Assert denominator=6, exact two-constant and three-arm set equality, zero activation admissions/accepted snapshots, activation codes ACTIVATION_RECORD_SOURCE_COMMIT_INVALID or ACTIVATION_RECORD_SPEC_MISMATCH at GA_ACTIVATION_RECORD, and daemon CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT at DAEMON_CUTOVER_GENERATION with preserved upstream LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH, STOP_MOMENT_MISSING, or INCOMPLETE at live-quiesce-evidence. Do not edit or soften the expected-red 146-versus-131 master-roster premise.",
+    "After exact-path `git status --porcelain` capture, independently mutate the tracked production surface to admit only the 39-character commit, admit only the hostile spec, bypass only the count check, bypass only the stop-moment check, bypass only the host-equality check, and default/drop the daemon upstream refusal. Each mutation must make its named production-surface assertion red; restore each separately and prove tracked bytes with `git diff --exit-code` plus SHA/blob equality. If any persistent production edit is required, stop and re-split to every measured caller rather than widening this row.",
+    "Run foreground/unpiped `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/security/tsconfig.json --noEmit;x exec vitest run --config tests/security/vitest.config.ts integrity-boundaries.security.ts;x exec vitest run packages/benchmark/src/activation-record.test.ts packages/core/src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/daemon exec vitest run --root . --config package.json src/cutover/cutover-generation-snapshot.test.ts}` and require nonzero Test Files/Tests counts (fresh baselines 1/112 security before six cases, 2/16 units, 1/14 daemon) plus typecheck exit 0. Then run full benchmark, core, daemon, security, and root lanes as merge-base-versus-HEAD path-attributed baselines; disclose the pre-existing roster red and all foreign failures verbatim, with no new red intersecting these five paths."
+  ],
+  "taskRails": [
+    "Own exactly the five listed paths; all are existing tracked files and were clean at HEAD 5fe0fdde. Do not edit BOUNDARY_ROSTER, completeness, manifests, lockfile, or any foreign dirty path.",
+    "This row is an acceptance slice only because it names the DONE capability rows in dependsOn and tests their production surfaces. Never copy/reimplement guard authority in a helper; assert the exact stable reason code and refusing layer, including the daemon wrapper and preserved core upstream tuple.",
+    "The divergence fixture is binding: every named hostile leg keeps all other fences valid so loosening exactly that guard reaches admission. Never delete a redundant downstream call to manufacture a red mutation.",
+    "Production files finish byte-identical unless a measured defect is found; any persistent signature/vocabulary/export change requires a new reachability split. Target 250 lines and never cross 400; preserve foreign WIP and use explicit owned pathspecs only.",
+    "The parent task-45839f34c88d4db291146bd6f2216b99 is the consumer row and must depend on this leaf before the leaf completes; it will compose the pre-roster case set into advertised coverage."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the pre-edit baseline and write the failing contract first. Confirm through current Moe context that both producer dependencies are DONE/merged and that parent task-45839 dependsOn this leaf; capture exact five-path porcelain, file lines/imports, and standalone pre-diff benchmark/core/daemon/security/root failure sets for later path attribution. In `integrity-boundaries.security.ts`, add a roster-independent import and describe block for a not-yet-existing frozen `PRE_ROSTER_INTEGRITY_HOSTILE_CASES`: assert exactly six generated entries, exact constant set `{GA_ACTIVATION_RECORD_LAYER,LIVE_QUIESCE_EVIDENCE_LAYER}`, exactly BEFORE/AFTER/RACE for each, and execute every entry through the shared production-surface refusal/race assertions while additionally requiring zero admissions and the quiesce wrapper/upstream facts. Do not add these entries to `HOSTILE_CASES`, `COVERED`, or the 24-entry roster assertions. Run only the focused integrity file and record a deliberate red caused by the missing export/cases; a red from any pre-existing fence does not satisfy TDD.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/integrity-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the three activation-record entries in the dedicated frozen pre-roster export, calling `composeActivationRecord` rather than reproducing validation. Build one measured positive control that returns `ok:true`, `BINDING_ADMITTED_ACT_PENDING`, rung L1, and a PASS property family: valid human GO_ACTIVATE gate/binding/workRef, four 64-hex generations, exact pinned spec, valid source commit, campaign `{G-L1:'PASS'}`, and a permitted fully populated L1 claim. Derive BEFORE by changing only the top-level source commit to 39 lowercase hex and expect `ACTIVATION_RECORD_SOURCE_COMMIT_INVALID@GA_ACTIVATION_RECORD`; derive AFTER by changing only the first nibble of the pinned spec digest and expect `ACTIVATION_RECORD_SPEC_MISMATCH@GA_ACTIVATION_RECORD`; RACE runs those exact left/right inputs with both tuples pinned. Keep the fixture immutable and ensure loosening either named guard reaches the positive result rather than family, rung, claim, or binding refusal. `activation-record.ts` is read/mutation surface only and receives no persistent edit.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/integrity-hostile-cases.ts",
+        "packages/benchmark/src/activation-record.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the three live-quiesce entries and finish the dedicated test runner. Construct one otherwise-valid nonempty LIVE evidence record and real `readCutoverGenerationSnapshot` ports with readable JSON, stable nonnegative horizon, valid ProjectActivated/ProjectQuiesced witnesses, and durable import generation so quiesce is the only failing fact. BEFORE changes only `resolvedCount`; AFTER removes only the successful item's `stoppedAt`; RACE uses separate immutable inputs whose left has only the count mismatch and right has only outer-versus-inventory host divergence while ids, shape, outcomes, witnesses, and every neighboring fact remain valid. Pin outer `CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT@DAEMON_CUTOVER_GENERATION`, `missing:'quiesceRecordSha256'`, and exact upstream `LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH`, `STOP_MOMENT_MISSING`, or `INCOMPLETE` at `live-quiesce-evidence` per leg. Assert neither refusal carries `generations`; both race legs refuse regardless of settlement order. Use the existing 2s race bound and openedStores/root cleanup. Core and daemon production files remain byte-identical.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/integrity-hostile-cases.ts",
+        "tests/security/integrity-boundaries.security.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "apps/daemon/src/cutover/cutover-generation-snapshot.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform the single adversarial-review step after implementation. Review null/huge/hostile inputs, immutable fixture reuse, race order/timing, file/store cleanup, exact refusal provenance, and accidental membership in the live roster union. Capture `git status --porcelain` for all five paths and out-of-tree SHA-256 backups before drilling. Independently mutate production to accept the 39-char commit, accept only the hostile spec, bypass only resolved-count, bypass only stop-moment, bypass only host equality, and suppress/default the daemon `upstream`; each run must make the specifically named code/layer or consumer-edge assertion red, not merely fail elsewhere. Separately delete one pre-roster hostile arm and require the exact denominator/arm-set assertion to red. Restore after each drill; in separate calls prove SHA equality to the pre-drill backup, `git diff --exit-code` for the three production files that must equal HEAD, and no leaked temp roots/probe files. A green mutant is a finding and must be fixed or reported, never banked.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/activation-record.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "apps/daemon/src/cutover/cutover-generation-snapshot.ts",
+        "tests/security/integrity-hostile-cases.ts",
+        "tests/security/integrity-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the one final verification gate in a fresh foreground, unpiped PowerShell process: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/security/tsconfig.json --noEmit;x exec vitest run --config tests/security/vitest.config.ts integrity-boundaries.security.ts;x exec vitest run packages/benchmark/src/activation-record.test.ts packages/core/src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/daemon exec vitest run --root . --config package.json src/cutover/cutover-generation-snapshot.test.ts}`. Require exit 0, security Test Files 1 passed with nonzero Tests including all six new cases, combined unit Test Files 2 passed/Tests >=16, daemon Test Files 1 passed/Tests >=14, and typecheck success. Then run `pnpm.exe --filter @moe/benchmark test`, `pnpm.exe --filter @moe/core test`, `pnpm.exe --filter @moe/daemon test`, `pnpm.exe test:security`, and root-lane-only `pnpm.exe test` as separate foreground legs; compare their HEAD failure paths with the captured pre-diff baseline, require no new failure intersecting the five owned paths, and quote every foreign/pre-existing red verbatim (including the unowned master-roster deficit). Record that no docs changed because no user-visible contract or production bytes changed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/activation-record.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "apps/daemon/src/cutover/cutover-generation-snapshot.ts",
+        "tests/security/integrity-hostile-cases.ts",
+        "tests/security/integrity-boundaries.security.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Human-confirmed governance handoff after QA identified a structural plan gap: persistent total-validation/bounded-read production fixes across measured callers are required, in addition to missing completion provenance.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-45839f34c88d4db291146bd6f2216b99",
+  "dependsOn": [
+    "task-09008b4cb39c4a15aa661540d20e9b9b",
+    "task-2bf8fa1a485146aa860bd0f50cbf8287",
+    "task-1edf82770e3e447fb9086fb4e30792aa",
+    "task-642df965071a4a239c1b5bce97bbafc5"
+  ],
+  "priority": "CRITICAL",
+  "order": 189.6,
+  "comments": [
+    {
+      "id": "comment-d3a911651dac46e7b9d50626b8e17efa",
+      "author": "worker-d16b4297",
+      "content": "Measured out-of-scope production finding during Step 4 adversarial review; this acceptance row does NOT retain the fix. `deriveLiveQuiesceEvidenceDigest` reaches `isJsonValue` before field validation in packages/core/src/cutover/cutover-quiesce-evidence.ts. Repro A: an exact-key evidence object whose `citationKey` is a 20,000-deep nested array throws `RangeError: Maximum call stack size exceeded` instead of returning the stable fail-closed invalid result. Repro B: an exact-key evidence object with an enumerable throwing getter for `citationKey` propagates the caller-controlled `Error` instead of returning a stable refusal. The daemon reader also performs an unbounded file read/JSON parse before this core validator. I red-tested a local try/catch around the recursive JSON-value walk, but task rail/DoD 4 requires any persistent production edit to be re-split across every measured caller, so I restored the core file byte-for-byte to HEAD SHA256 790D12D9D4595DDF5FCE671137252624AF738A428A2EEADA15AAD495F741B034 and removed the exploratory tests from this row. Architect/governor follow-up is required to measure all callers and own the bounded-read plus total-validation fix; this row remains limited to the planned six acceptance arms.",
+      "timestamp": "2026-09-01T18:53:04.626Z"
+    },
+    {
+      "id": "comment-1efa8d826dec4b24863d9af8d0c3d571",
+      "author": "architect-db6a0906",
+      "content": "QA RE-SPLIT MEASUREMENT at HEAD 5fe0fdde (read-only; preserved dirty acceptance bytes unchanged). Exact status: only tests/security/integrity-hostile-cases.ts and integrity-boundaries.security.ts are modified; core evidence.ts (269 lines, SHA256 790D12D9...) and daemon snapshot.ts (348 lines, SHA256 8C5B9BE1...) are clean. Production probes reproduced: 20,000-deep exact-key citationKey => caller-visible RangeError; enumerable throwing citationKey getter => caller Error with one invocation; revoked/ownKeys Proxy throws; symbol/non-enumerable/prototype extras and sparse arrays are accepted/canonicalized. Daemon readQuiesceRecord calls injected readFileText then JSON.parse with no byte ceiling. Reachability was measured across core barrel/tests/migration and daemon snapshot->activate service->registry plus security. No duplicate remediation row exists. Filed ordered production leaves task-1edf82770e3e447fb9086fb4e30792aa (total bounded own-data validation) and task-642df965071a4a239c1b5bce97bbafc5 (real bounded Node acquisition/decoder, depends on core). The daemon design preserves the exported port signature and bypasses the legacy readFileText member, avoiding collision with active registry owner task-4704a2981cf0443991a64273836da486. A separate measured producer-budget observation remains: tests/migration/cutover-live/live-quiesce-evidence.ts can pretty-write >MAX_JSON_BODY_BYTES; that path is currently owned by blocked live-run task-e60b874bac924a6b9c255cb8c924041f, so it is disclosed for final/live-run follow-up rather than overlapped or used to block this smallest production reader slice.",
+      "timestamp": "2026-09-01T21:32:33.182Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T17:38:05.987Z",
+  "updatedAt": "2026-09-01T21:33:08.720Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-01T17:38:46.256Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 5,
+    "rejectCount": 1,
+    "reopenCount": 1
+  },
+  "contextFetchedBy": [
+    "architect-db6a0906",
+    "governor-c11c29e2"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "Delivery/commit rail: the two-file pre-roster acceptance implementation is not backed by a recorded completion commit or landing.",
+      "rejectedAt": "2026-09-01T20:10:33.694Z",
+      "rejectedBy": "qa-f2bd3efd"
+    },
+    {
+      "item": "DoD 4: a persistent production total-validation/bounded-read defect was reproduced, but the required measured caller re-split/dependency was not created before completion.",
+      "rejectedAt": "2026-09-01T20:10:33.694Z",
+      "rejectedBy": "qa-f2bd3efd"
+    }
+  ],
+  "planSubmittedAt": "2026-09-01T17:42:59.746Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected keeping integrity arms inside task-45839 because fresh literal/count/type reachability expands the successor to thirteen paths. Rejected advertising these two identifiers early because completeness and the per-axis set equality would either fail or falsely claim other producer axes are ready. The bounded seam is a dedicated pre-roster case export exercised directly here; task-45839, now registered as a dependent consumer, composes and advertises it atomically later. No helper may reimplement activation or quiesce authority.",
+    "codebaseInsights": "Measured at HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d. Exact-path porcelain for all five files was empty; physical production lines were 160 (activation-record), 269 (quiesce evidence), and 348 (daemon snapshot), all below the 400 split ceiling. Per-file import grep found activation uses only benchmark siblings, core quiesce uses node:crypto, and daemon snapshot imports deriveLiveQuiesceEvidenceDigest from bare @moe/core. apps/daemon/package.json declares @moe/core/@moe/benchmark, pnpm-lock.yaml importer links ../../packages/core and ../../packages/benchmark, and a temporary in-package source `import { deriveLiveQuiesceEvidenceDigest } from \"@moe/core\"; void deriveLiveQuiesceEvidenceDigest;` compiled exit 0 with host pnpm.exe/tsc and was deleted (probePresent=False). Exact symbol grep found zero GA_ACTIVATION_RECORD_LAYER/LIVE_QUIESCE_EVIDENCE_LAYER cases in the two owned security files. Fresh baselines: integrity security 1 file/112 tests, activation unit 1/9, quiesce unit 1/7, daemon snapshot 1/14, and security tsc all exit 0. The separate boundary-roster test executes 1/34 and has only the known 146-vs-131 plus exact-fifteen scan-minus-roster reds; this leaf must not edit it. Governor repaired task-45839 dependsOn to include this leaf while preserving its six prior dependencies.",
+    "risks": "Completeness imports INTEGRITY_HOSTILE_CASES directly, so adding the new cases to that existing array now would create an intermediate roster mismatch; keep a separately exported, frozen pre-roster set. An activation fixture with null binding/UNKNOWN families would let the named-guard mutant hit a later fence and stay green; use the measured fully admitted L1 control. A daemon-only outer refusal can hide the core guard, so quiesce assertions must pin missing=quiesceRecordSha256 and the wrapper tuple plus exact upstream core code/layer. Race assertions must be bounded and order-independent. Reuse openedStores/root cleanup so no SQLite handle or temp root leaks. The three production files are mutation targets only and must finish byte-identical; any persistent production edit triggers a reachability re-split.",
+    "keyFiles": [
+      "tests/security/integrity-boundaries.security.ts",
+      "tests/security/integrity-hostile-cases.ts",
+      "packages/benchmark/src/activation-record.ts",
+      "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+      "apps/daemon/src/cutover/cutover-generation-snapshot.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-09-01T18:38:46.670Z",
+    "escalatedAt": "2026-09-01T18:55:06.007Z"
+  },
+  "planApprovedAt": "2026-09-01T17:43:01.861Z",
+  "workStartedAt": "2026-09-01T18:27:35.400Z",
+  "reviewStartedAt": "2026-09-01T19:02:22.177Z",
+  "verification": {
+    "command": "& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/security/tsconfig.json --noEmit;x exec vitest run --config tests/security/vitest.config.ts integrity-boundaries.security.ts;x exec vitest run packages/benchmark/src/activation-record.test.ts packages/core/src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/daemon exec vitest run --root . --config package.json src/cutover/cutover-generation-snapshot.test.ts}",
+    "exitCode": 0,
+    "outputTail": "Security: Test Files 1 passed (1); Tests 120 passed (120). Combined activation/core: Test Files 2 passed (2); Tests 16 passed (16). Daemon snapshot: Test Files 1 passed (1); Tests 14 passed (14). Security TypeScript compile completed before these legs with exit 0. Overall exact chained stop-on-first-error command exit 0.",
+    "reportedAt": "2026-09-01T19:02:22.177Z"
+  },
+  "filesModified": [
+    "tests/security/integrity-boundaries.security.ts",
+    "tests/security/integrity-hostile-cases.ts"
+  ],
+  "completionSummary": "Delivered the roster-independent integrity acceptance leaf: exactly six frozen production-surface arms (BEFORE/AFTER/RACE for GA activation record and live quiesce evidence), executed through composeActivationRecord and the real daemon cutover reader/file-backed store. Assertions pin stable code/layer plus the daemon outer/upstream envelope, nonzero denominators, no admissions, and no accidental advertised-roster membership. Seven independent mutation drills reddened the named guard/consumer assertions and were restored with SHA/diff proof. Only the two owned security test files persist; all three production mutation surfaces are byte-identical to claim/HEAD. Exact final gate: 120 security +16 combined unit +14 daemon tests, all green, security tsc clean. Broad benchmark/core/root lanes remain green; security retains the same 13 failures in three unowned paths, and daemon has baseline plus foreign-WIP failures, with zero failing-path intersection with this row. No docs changed. Out-of-scope total-validation/unbounded-read finding is recorded in comment-d3a911651dac46e7b9d50626b8e17efa for a measured reachability re-split.",
+  "reviewCompletedAt": "2026-09-01T20:10:33.694Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Delivery/commit rail: the two-file pre-roster acceptance implementation is not backed by a recorded completion commit or landing.",
+      "DoD 4: a persistent production total-validation/bounded-read defect was reproduced, but the required measured caller re-split/dependency was not created before completion."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "tests/security/integrity-hostile-cases.ts",
+        "line": 2795,
+        "description": "NO COMPLETION COMMIT: task.commits and landing are empty; HEAD 5fe0fdde has no task trailer and both security files remain modified. The exact gate is green and the test implementation should not be rewritten. Exit through the wrapper until a recorded kind=completion commit contains exactly the owned implementation paths, then QA can inspect that SHA."
+      },
+      {
+        "type": "security",
+        "file": "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "line": 131,
+        "description": "DoD-4 re-split is missing. The worker reproduced stack overflow on deeply nested exact-key evidence and propagation of an enumerable getter exception; daemon evidence reading is also unbounded. A comment alone does not satisfy the required stop-and-re-split. Measure every core/daemon caller and create or attach the production hardening row/dependency for bounded total validation before this acceptance row is resubmitted; do not widen this five-path row silently."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "The planned six-case acceptance slice is green and its assertions are sound, but two hard gates remain. Fresh exact verification exit 0: security tsc; integrity 1 file/120 tests; benchmark/core units 2 files/16 tests; daemon snapshot 1 file/14 tests. The diff has exactly six frozen two-boundary × BEFORE/AFTER/RACE production-surface cases, exact codes/layers/envelopes, zero admissions/roster membership, and clean production restores. First, no delivered commit contains it: task.commits=[] and landing={}, HEAD is 5fe0fdde, no task trailer exists, and both test files remain modified. Second, Step 4 reproduced a real total-validation/bounded-read defect but completed with only a comment. Core isJsonValue can stack-overflow or propagate an enumerable getter exception, and the daemon consumes unbounded evidence text. DoD 4 requires stopping and re-splitting a required persistent production fix across every measured caller. Preserve the green acceptance bytes, but obtain the measured production re-split/dependency and wrapper completion landing before returning to REVIEW.",
+      "rejectedAt": "2026-09-01T20:10:33.694Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Delivery/commit rail: the two-file pre-roster acceptance implementation is not backed by a recorded completion commit or landing.",
+        "DoD 4: a persistent production total-validation/bounded-read defect was reproduced, but the required measured caller re-split/dependency was not created before completion."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "tests/security/integrity-hostile-cases.ts",
+          "line": 2795,
+          "description": "NO COMPLETION COMMIT: task.commits and landing are empty; HEAD 5fe0fdde has no task trailer and both security files remain modified. The exact gate is green and the test implementation should not be rewritten. Exit through the wrapper until a recorded kind=completion commit contains exactly the owned implementation paths, then QA can inspect that SHA."
+        },
+        {
+          "type": "security",
+          "file": "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+          "line": 131,
+          "description": "DoD-4 re-split is missing. The worker reproduced stack overflow on deeply nested exact-key evidence and propagation of an enumerable getter exception; daemon evidence reading is also unbounded. A comment alone does not satisfy the required stop-and-re-split. Measure every core/daemon caller and create or attach the production hardening row/dependency for bounded total validation before this acceptance row is resubmitted; do not widen this five-path row silently."
+        }
+      ]
+    }
+  ],
+  "blockedReason": "QA-required build-order wait: task-38ec450ae92d486f860c5801c0f28870 preserves its green two-test WIP and is blocked on core total-validation producer task-1edf82770e3e447fb9086fb4e30792aa and daemon bounded-artifact consumer task-642df965071a4a239c1b5bce97bbafc5. Landing the acceptance row first would certify known throwing/unbounded production surfaces and create a permanent false-green cycle. No source edits were made during re-split.",
+  "blockedOnTaskIds": [
+    "task-1edf82770e3e447fb9086fb4e30792aa",
+    "task-642df965071a4a239c1b5bce97bbafc5"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T21:32:55.609Z"
+}

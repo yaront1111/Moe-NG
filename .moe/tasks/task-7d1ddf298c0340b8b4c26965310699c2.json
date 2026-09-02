@@ -16,12 +16,12 @@
     "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-590b698f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor authorization comment-49719405: comment-4ab52962 approved verbatim — file leaf S (4-path static-policy), amend this row to the 10-path listener/R3 roster, deps wired on S's id when posted. Re-claim and execute.",
+  "reopenReason": "Human-authorized one-for-one exact-10 scope correction; dependency on aa205 remains build-order gating. See comment-916532a1e0d24c79870d55ecf338eb41.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -50,24 +50,33 @@
       "author": "architect-5e59a71e",
       "content": "PLAN-TIME EXACT-SHAPE CONSUMER FOUND (HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55). apps/daemon/src/daemon-command-registry.test.ts:719-754 reads literal ./http/http-listener.ts and regex-matches the handleAsyncCommandRequest(..., \"HTTP_LISTENER\") call, then asserts the five-member served transport-origin set bidirectionally. The authorized extraction moves that call into NEW http-listener-command-stream-routes.ts, so leaving this unowned makes the registry suite fail; satisfying the regex with a comment or leaving the command handler in the facade would violate the binding extraction.\n\nRequested minimal roster correction, still exactly 10 paths: ADD apps/daemon/src/daemon-command-registry.test.ts; DROP apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts from ownership (continue to RUN it, plus product-contract-gate-1-command.test.ts, as signed Gate-1 regression; no edit is needed because public listener signatures and signed bytes remain unchanged). Retarget the scanner to enumerate the real production ingress modules and keep its nonempty bidirectional exact-set assertion. This is the sole functional source-path scanner found. Please authorize this one-for-one swap; all other comment-497194056a guardrails remain unchanged.",
       "timestamp": "2026-08-31T11:00:40.397Z"
+    },
+    {
+      "id": "comment-916532a1e0d24c79870d55ecf338eb41",
+      "author": "governor-c11c29e2",
+      "content": "HUMAN/GOVERNOR SCOPE RULING (2026-09-01): authorize the measured one-for-one exact-10 roster correction—add apps/daemon/src/daemon-command-registry.test.ts and drop ownership (retain run-only verification) of apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts. Re-plan against this overlay; dependency on aa205 remains a separate build-order gate.",
+      "timestamp": "2026-09-01T16:35:23.402Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.469Z",
-  "updatedAt": "2026-09-01T00:57:15.140Z",
+  "updatedAt": "2026-09-02T08:54:26.028Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "governor-943540d3",
     "architect-5e59a71e",
-    "architect-1f97776b"
+    "architect-1f97776b",
+    "governor-c11c29e2",
+    "architect-40358f2e",
+    "architect-590b698f"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-30T22:11:29.249Z"
   },
-  "blockedReason": "PLAN-TIME EXACT-SHAPE OWNERSHIP BLOCK at delivered HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. The authorized extraction moves handleAsyncCommandRequest(..., \"HTTP_LISTENER\") from http-listener.ts into the new command-stream module, but apps/daemon/src/daemon-command-registry.test.ts:719-754 hardcodes the old source path, regex-scans that exact call, and asserts the served transport-origin set bidirectionally. The binding exact-ten roster omits this asserting consumer, so the planned move would fail its 302-test production-source composition gate; leaving the call in the facade contradicts the governor-mandated extraction, and satisfying the scanner with a comment is forbidden. Comment comment-ebd87b607fac46d589959651bff5b164 requests the minimal still-ten-path correction: add daemon-command-registry.test.ts, drop ownership (but retain run-only verification) of http-listener-product-contract-gate-1.test.ts. No files were edited. Do not submit a speculative plan until that one-for-one roster amendment is authorized; the already-filed static leaf dependency still also needs governance wiring.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T11:07:13.214Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null,
   "dependsOn": [
     "task-aa205445cc564bec8044136348c5bc26"

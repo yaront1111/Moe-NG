@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: downstream of a73 wrapper-blocked candidate packing. Unblock after a73 is DONE and remeasure the manifest/PATH composition scope.",
   "createdBy": "WORKER",
   "parentTaskId": "task-f1f8ac7895e249b786817e9c2f611c0c",
   "dependsOn": [
@@ -46,21 +46,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:23:44.148Z",
-  "updatedAt": "2026-09-01T13:51:10.603Z",
+  "updatedAt": "2026-09-01T18:53:37.788Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:35.153Z"
   },
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-1f97776b",
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "governor-c11c29e2"
   ],
-  "blockedReason": "Plan-time reachability proved the current exact-seven rail cannot safely add the closed Cargo PackToolLaunch roster and strict materialized manifest: exported type/schema callers extend beyond the roster, and changing moe-toolchain-pins/1 would fan out into unrelated release readers. SPIDR interface leaf task-455f4139821b4b3caf03b2c7bdd859f6 now owns the separate Cargo pin/admission seam. This row must wait for task-a73b6872e13248768bc161d6059d6a0f and task-455f4139821b4b3caf03b2c7bdd859f6. Governor must set this row's dependsOn to both ids (moe.set_task_dependencies returns NOT_ALLOWED for architect-b2b16103) and amend/re-scope its exact owned roster/DoD to the manifest/PATH composition before it is replanned. No files were edited and no speculative plan was submitted.",
+  "blockedReason": "Dependency wait: Cargo toolchain boundary resumes only after task-a73b6872e13248768bc161d6059d6a0f lands.",
   "blockedOnTaskIds": [
-    "task-a73b6872e13248768bc161d6059d6a0f",
-    "task-455f4139821b4b3caf03b2c7bdd859f6"
+    "task-a73b6872e13248768bc161d6059d6a0f"
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-30T20:33:39.462Z"
+  "blockedAt": "2026-09-01T17:29:27.112Z"
 }

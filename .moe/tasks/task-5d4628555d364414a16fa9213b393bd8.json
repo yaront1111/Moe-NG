@@ -23,7 +23,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human operator directly instructed governance to unblock the four remaining tasks so they can finish (2026-08-30). Route this row to an architect now. This lifts the prior KEEP PARKED status only; it does not fabricate the six missing policy-waiver authority semantics. The architect must present concrete defaults for human ruling or obtain the authenticated action, immutable record, humanApprovalRef derivation, strict join keys, expiry, and revocation/supersession decision before implementation.",
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: integration parent pending 4704 and the product-authority decision for e91. Unblock after both child rows are DONE.",
   "createdBy": "WORKER",
   "parentTaskId": "task-064b97584aff4e07967738f79134a723",
   "priority": "HIGH",
@@ -86,7 +86,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-08-31T21:28:53.580Z",
+  "updatedAt": "2026-09-01T18:53:37.234Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-94dd67c9",
@@ -97,19 +97,20 @@
     "architect-5e59a71e",
     "governor-943540d3",
     "worker-620f90d0",
-    "qa-2062c6d0"
+    "qa-2062c6d0",
+    "governor-c11c29e2",
+    "architect-db6a0906"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-27T16:41:36.985Z"
   },
-  "blockedReason": "Build-order safety: measured split comment-6de2a0f9 created the production writer child task-4704a2981cf0443991a64273836da486 and strict reader child task-e91e505e1b794f7c925e448dbbe92fec, both downstream of immutable-ledger leaf task-ec83fa4a73954361839b236bc59656b8. This parent is the policy.validate consumer/integration and cannot produce working bytes until writer and reader land. moe.set_task_dependencies was attempted first but the daemon rejected this architect worker as not on the architect team; governor routing msg-90cf55bd9a04417c82de164431238ded requests the durable dependency fields. blockedOnTaskIds is the fail-safe ordering gate and will auto-unblock the parent after both consumers are DONE.",
+  "blockedReason": "Dependency wait: integration parent must remain blocked until task-4704a2981cf0443991a64273836da486 and task-e91e505e1b794f7c925e448dbbe92fec are DONE/ARCHIVED.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T13:10:36.686Z",
+  "blockedAt": "2026-09-01T17:29:23.857Z",
   "blockedOnTaskIds": [
     "task-4704a2981cf0443991a64273836da486",
-    "task-e91e505e1b794f7c925e448dbbe92fec",
-    "task-ec83fa4a73954361839b236bc59656b8"
+    "task-e91e505e1b794f7c925e448dbbe92fec"
   ],
   "priorHandoffs": [
     {

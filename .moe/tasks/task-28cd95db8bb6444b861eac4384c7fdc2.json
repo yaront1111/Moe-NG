@@ -19,7 +19,7 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "PHASE 0 — ADDRESS BOTH QA REOPENS WITHOUT SOURCE CHURN. Re-read rejectionDetails, current reopenReason, comment-91bf4079af6c49a2acabc7775b8f609e, and governor recovery audit comment-ef620f464fcb48aea72b89bc110c1c61. Record current HEAD, task.commits/landing, exact seven-path porcelain, physical lines, and SHA-256/blob comparisons against recovery/2026-08-31/worktree-code-ee1f9db3f915: require six exact matches and prove live-handshake.test.ts equality after CRLF/LF normalization; if any semantic byte differs, stop and recover only that owned path from the named ref, never the whole snapshot. Reconfirm the production edge with grep (live-handshake.ts consumes createLiveKeyedSession; unchanged main.tsx and cordum-handshake.tsx still consume resolveLiveSetupFromHandshake) and recheck no public result/body/header/log/storage shape contains privateKey. State the controlling size rule mechanically: 3 remaining steps, 7 paths, production 223/263 lines; aggregate +610 is not a split/rejection premise under the global rail and human reopenReason. Call moe.declare_files with exactly the seven paths before completion work; do not edit merely to refresh mtimes or line endings.",
+      "description": "PHASE 0 — REOPEN RECOVERY/DELIVERY RECONCILIATION AND FRESH EXPLORATION, WITH NO SOURCE CHURN. Re-read rejectionDetails, the human reopenReason, architect comment-91bf4079af6c49a2acabc7775b8f609e, governor recovery audit comment-ef620f464fcb48aea72b89bc110c1c61, and completion evidence comment-52278af42dc547ac9e5d6c676fe2bca3. From get_context verify dependencies task-d152f559bc2e4c9785f343ede125dcd8, task-1199836b41f943f7bf69c2614c40412d, and task-2f554e29d31d48e8a18027110a8e4d5c are DONE with merged completion landings. Re-measure HEAD, ancestry, task.commits/landing, and exact seven-path porcelain before acting: current planning measurement is HEAD e1e35a6c, the seven paths are clean and unchanged since recorded task checkpoint e384a6cd, and that mixed 37-path kind=checkpoint record is recovery transport only—not the required completion landing. Compare each seven-path HEAD blob with e384a6cd and recovery/2026-08-31/worktree-code-ee1f9db3f915; accept live-handshake.test.ts only after LF/CRLF-normalized equality, and stop rather than restoring if semantic bytes diverge. Never check out the whole checkpoint/recovery ref, normalize line endings, refresh mtimes, edit live .moe state, or manufacture a source diff. Re-run reachability/shape measurements: live-handshake.ts must import/call createLiveKeyedSession; main.tsx and v2/cordum-handshake.tsx must still consume resolveLiveSetupFromHandshake without edits; the public keyed result must remain exact {ok,sessionCredential}; and privateKey must remain closure-held only. Verify generateSessionKey/openSessionRequestDigest/signSessionChallenge and canonicalSessionProofBytes exports, apps/control-room/package.json workspace dependencies, and the apps/control-room importer links in pnpm-lock.yaml. In one PowerShell try/finally command create a temporary TypeScript probe inside apps/control-room/src that imports those four symbols from the two BARE package specifiers, run @moe/control-room tsc exit 0, delete the probe in finally, and assert its absence plus unchanged seven-path porcelain. Recount physical production lines and require live-keyed-session.ts <=250 and live-handshake.ts <400 (223/263 at planning). Call moe.declare_files with exactly the seven listed source/test paths; do not include any wrapper-added .moe entries already visible in the cumulative task record.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/live/live-keyed-session.ts",
@@ -33,7 +33,7 @@
     },
     {
       "stepId": "step-2",
-      "description": "ADVERSARIAL DELIVERY AUDIT — no mutation or behavior edit unless phase 0 found semantic drift. Inspect the current seven-path diff and prior durable drill records for the four named guards: required challenge's distinct no-later-call refusal, exact signed-open session/protocol admission, proof requestId operand reaching real daemon AUTHENTICATION_FAILED@PROOF, and exact public result roster excluding privateKey. Verify each drill's restored production assertion still exists and the current focused tests exercise nonzero cases; because the bytes are unchanged after their recorded SHA restores, do not repeat destructive mutations on the two untracked delivered files. Review retry/single-flight concurrency, abort/timeout/late settlement, hostile exact-key bodies, browser-only crypto imports, and no bearer fallback. Run git diff --check separately over the exact seven paths and record exit 0. Confirm no eighth path, manifest/lock/daemon edit, generated evidence, or recovery-snapshot foreign path is attributed to this row.",
+      "description": "ADVERSARIAL DELIVERY AUDIT — inspect the delivered seven-path change from its pre-feature parent cb0be9e0 through task checkpoint e384a6cd/current HEAD; do not change behavior unless phase 0 proves semantic drift. Verify the focused assertions still pin all four named guards and their refusing layer/code: missing exact three-scalar challenge is the only possible refusal and prevents signing/open; signed-open admission alone distinguishes exact session/protocol success from mismatches; changing the proof requestId operand reaches the real daemon and yields AUTHENTICATION_FAILED at PROOF rather than an earlier shared fence; and exact public-result/body/header/log/storage rosters exclude privateKey. Confirm the durable four production mutation drills recorded in the task completionSummary/comment still correspond to surviving assertions; because current bytes are tracked, clean, and SHA-anchored after those drills, do not repeat destructive mutations merely for provenance. Review key generation failure, hostile exact-key bodies, retry/single-flight/settled reuse, caller abort, request timeout, late settlement, claim/open refusal, browser-only crypto, and absence of bearer fallback. Run git diff --check over the seven-path task diff and require exit 0. Confirm this row reports no eighth source path, manifest/lock/daemon edit, recovery-foreign path, or .moe path; the wrapper-added mixed checkpoint is disclosed but never treated as owned implementation or completion evidence.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/live/live-keyed-session.ts",
@@ -47,7 +47,7 @@
     },
     {
       "stepId": "step-3",
-      "description": "FINAL VERIFICATION, COMPLETION, AND WRAPPER LANDING BOUNDARY. Run this EXACT 423-character command foreground/unpiped and persist it verbatim as moe.complete_task.verification.command: & {$p='pnpm.exe';function e{if($LASTEXITCODE){exit $LASTEXITCODE}};foreach($f in 'src/live/live-keyed-session.test.ts','src/live/live-handshake.test.ts','src/scaffold.test.tsx','src/v2/cordum-app.test.tsx'){&$p --filter @moe/control-room exec vitest run $f;e};&$p exec vitest run tests/integration/control-room/pairing-claim-parity.test.ts;e;&$p --filter @moe/control-room typecheck;e;&$p --filter @moe/control-room test;e} Read the output, not just exit 0: record nonzero Test Files/Tests for each standalone focused leg (fresh architect baseline 1/5, 1/18, 1/37, 1/32, integration 1/2), package typecheck success, and full @moe/control-room count (111 files/1502 tests at planning). Then rerun the previously anchored broad legs—pnpm typecheck, pnpm test (root lane only), pnpm verify:foundation, pnpm verify:store, and pnpm --filter @moe/daemon test—standalone; report merge-base-versus-HEAD failing-path delta and require no new failure intersecting these seven owned paths, disclosing daemon/foreign red verbatim. CompletionSummary cites comment-91bf4079..., the durable four-drill record, exact counts, 223/263 line caps, consumer/private-key audit, and all seven declared paths. Call complete_task only with the exact command above and fresh exit 0. On session exit the wrapper must create/record an explicit seven-path completion commit; the recovery ref is never a substitute. If task.commits is still empty afterward, QA/governor must treat it as the separate wrapper runtime blocker named by reopenReason, not request another source rewrite or manual foreign-path commit.",
+      "description": "FINAL VERIFICATION, COMPLETION RECORD, AND WRAPPER RECOVERY-LANDING REPLAY. Run this exact 423-character command foreground/unpiped and persist it verbatim as moe.complete_task.verification.command: & {$p='pnpm.exe';function e{if($LASTEXITCODE){exit $LASTEXITCODE}};foreach($f in 'src/live/live-keyed-session.test.ts','src/live/live-handshake.test.ts','src/scaffold.test.tsx','src/v2/cordum-app.test.tsx'){&$p --filter @moe/control-room exec vitest run $f;e};&$p exec vitest run tests/integration/control-room/pairing-claim-parity.test.ts;e;&$p --filter @moe/control-room typecheck;e;&$p --filter @moe/control-room test;e} Read output, not only exit 0: require nonzero Test Files/Tests lines for each focused leg (planning counts 1/5, 1/18, 1/37, 1/32, integration 1/2), package typecheck success, and full @moe/control-room nonzero counts (111 files/1504 tests at current HEAD). Then run pnpm typecheck, pnpm test (explicitly root lane only; apps/** excluded), pnpm verify:foundation, pnpm verify:store, and pnpm --filter @moe/daemon test as standalone foreground legs. Record merge-base versus HEAD failing-path sets and require no newly failing path intersecting these seven owned paths; disclose daemon/foreign red verbatim rather than calling it green. CompletionSummary must cite the current HEAD/checkpoint byte audit, comment-52278af42dc547ac9e5d6c676fe2bca3's durable four-drill record, exact fresh counts, 223/263 line caps, dependency/consumer/private-key audit, and exactly the seven implementation paths. Call complete_task only with the exact command above and fresh exit 0. On REVIEW exit the wrapper must record a kind=completion task commit/landing for the delivered seven-path implementation; current mixed kind=checkpoint e384a6cd and recovery ef7ac9e1 are not substitutes. Do not source-churn or manually commit to manufacture delivery. If the clean-tree recovery replay still produces no landing.lastCompletion/kind=completion record, or attributes .moe/foreign paths as implementation, QA/governor must treat that as the separate wrapper-runtime blocker authorized by reopenReason—not request another source rewrite, split, normalization, or hand-recorded recovery commit.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/live/live-keyed-session.ts",
@@ -60,12 +60,12 @@
       ]
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-1f97776b",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 3,
-  "reopenReason": "Human authorized unblock/push recovery. Restore to its prior PLANNING lane after the QA provenance loop so an architect can authorize the recovery/landing replay; preserve the seven task-owned bytes.",
+  "reopenCount": 9,
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: exhausted 8/3 reopen budget on wrapper completion provenance. Preserve seven paths; unpark only after kind=completion landing is repaired and a single no-churn delivery pass is authorized.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cb40f3d833f14c3089d812b9bf2d291f",
   "dependsOn": [
@@ -115,36 +115,29 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:25:58.933Z",
-  "updatedAt": "2026-08-31T21:13:35.087Z",
+  "updatedAt": "2026-09-01T22:13:57.450Z",
   "contextFetchedBy": [
-    "governor-943540d3",
-    "architect-5e59a71e",
-    "architect-1f97776b"
+    "governor-c11c29e2",
+    "architect-db6a0906"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T05:22:27.589Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 17,
-    "rejectCount": 3,
-    "reopenCount": 3
+    "executedStepCount": 26,
+    "rejectCount": 6,
+    "reopenCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [],
-  "failedDodItems": [
-    {
-      "item": "Delivery/commit rail: the completed seven-path implementation must be backed by a recorded task completion commit that QA can inspect.",
-      "rejectedAt": "2026-08-31T15:04:04.513Z",
-      "rejectedBy": "qa-a346939e"
-    }
-  ],
-  "planSubmittedAt": "2026-08-31T14:40:54.691Z",
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-31T21:25:06.134Z",
   "planningNotes": {
-    "approachesConsidered": "Accepted QA's command-mismatch finding and replaced the unpersistable old step-7 gate. Rejected reimplementing or re-testing the feature from scratch: all seven delivered bytes, consumer edge, focused/package gates, and four mutation drills already exist and remain recoverable. Rejected QA's aggregate +610 LOC split premise because the binding global rail and current human reopenReason explicitly say task-level LOC is not a rejection reason; sizing is 3 remaining steps/7 paths and production files are 223/263 lines. Rejected manually landing or recording recovery/2026-08-31/worktree-code-ee1f9db3f915: it contains foreign paths and no Moe task trailer, so it is recovery-only. Normal explicit-path wrapper landing remains mandatory.",
-    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. All seven delivered paths remain present as task dirt: five modified and two untracked. Recovery ref ef7ac9e1 matches six worktree blobs exactly; live-handshake.test.ts differs only by CRLF/LF normalization, as independently recorded by governor comment-ef620f46. task.commits and landing are still empty. The new exact PowerShell gate is 423 characters (below complete_task's 500-char cap), uses host executable pnpm.exe, runs four Control Room focused files separately plus the integration file separately, then package typecheck and full test. Fresh architect run exited 0 with counts 1/5, 1/18, 1/37, 1/32, 1/2, and full package 111 files/1502 tests. Production lines: live-keyed-session.ts 223, live-handshake.ts 263.",
-    "risks": "Do not normalize, restore, or rewrite the delivered files merely to make recovery-branch blob IDs match; the one mismatch is line-ending-only and current tests are green. Do not re-run behavior mutations unless a fresh byte audit finds drift; the four prior drills and SHA restores are durable, and new mutations would only risk the two untracked delivered files. The final completion command must be persisted verbatim—no prose and no shorter substitute. Declare all seven paths before complete_task so wrapper attribution is explicit. If wrapper post-flight still produces no task.commits entry, that remains a runtime blocker for governor/QA; never hand-commit foreign recovery bytes or fabricate landing evidence.",
+    "approachesConsidered": "Accepted the human-authorized recovery/landing replay and retained a no-source-churn plan because the complete keyed pairing implementation, hostile arms, and real consumer edge are already present. Rejected reimplementation, comment/line-ending edits to force a diff, destructive drill repetition, whole-ref checkout, manual commit/recording, and using recovery ef7ac9e1 or mixed checkpoint e384a6cd as completion evidence. Rejected aggregate +610 LOC as a split premise: the binding rule is per production file and the row is 3 steps/7 implementation paths.",
+    "codebaseInsights": "Freshly measured at HEAD e1e35a6c77a833d71447b5ad3d159a4a29589239. The seven implementation paths are clean and HEAD descends recorded task checkpoint e384a6cd; all seven are unchanged since that checkpoint. e384a6cd is kind=checkpoint/pathCount=37 and includes wrapper-recovered .moe state, so task.commits is no longer empty but landing.lastCompletion is still absent. Six seven-path blobs exactly match recovery ef7ac9e1; the handshake test has the previously governed LF/CRLF-only blob difference. Production reachability is live-handshake.ts:5/184 -> createLiveKeyedSession, main.tsx:8/99 and v2/cordum-handshake.tsx:4/65 -> resolveLiveSetupFromHandshake. The module imports canonicalSessionProofBytes from @moe/contracts and generateSessionKey/openSessionRequestDigest/signSessionChallenge from @moe/control-room-client; both dependencies are workspace:* in apps/control-room/package.json and link entries exist in the apps/control-room pnpm-lock importer. Physical production lines are 223 and 263. Fresh exact 423-character gate at current HEAD exited 0 with 1/5, 1/18, 1/37, 1/32, integration 1/2, package typecheck, and full Control Room 111 files/1504 tests.",
+    "risks": "The cumulative task record now contains wrapper-added .moe declared/filesModified entries and a mixed recovery checkpoint. The worker must never edit/report those paths or mistake that checkpoint for completion; QA must grade the eventual kind=completion landing and its implementation scope. The seven source/test paths are currently clean, so any recovery must be byte-driven and path-specific—never whole-ref checkout or artificial churn. Preserve the exact <=500-character verification command and use pnpm.exe with standalone argv legs on Windows. If the wrapper cannot replay/promote clean checkpointed bytes into a completion landing, that is a runtime provenance block outside source scope.",
     "keyFiles": [
       "apps/control-room/src/live/live-keyed-session.ts",
       "apps/control-room/src/live/live-keyed-session.test.ts",
@@ -156,18 +149,15 @@
     ]
   },
   "budget": {
-    "wallClockMs": 1800000,
-    "warnedAt": "2026-08-31T08:09:02.419Z",
-    "escalatedAt": "2026-08-31T08:09:02.419Z"
+    "wallClockMs": 1800000
   },
-  "planApprovedAt": "2026-08-31T14:40:56.809Z",
+  "planApprovedAt": "2026-09-01T14:33:00.494Z",
   "workStartedAt": "2026-08-31T08:11:23.997Z",
-  "reviewStartedAt": "2026-08-31T14:59:26.087Z",
   "verification": {
     "command": "& {$p='pnpm.exe';function e{if($LASTEXITCODE){exit $LASTEXITCODE}};foreach($f in 'src/live/live-keyed-session.test.ts','src/live/live-handshake.test.ts','src/scaffold.test.tsx','src/v2/cordum-app.test.tsx'){&$p --filter @moe/control-room exec vitest run $f;e};&$p exec vitest run tests/integration/control-room/pairing-claim-parity.test.ts;e;&$p --filter @moe/control-room typecheck;e;&$p --filter @moe/control-room test;e}",
     "exitCode": 0,
-    "outputTail": "live-keyed-session: Test Files 1 passed (1); Tests 5 passed (5)\nlive-handshake: Test Files 1 passed (1); Tests 18 passed (18)\nscaffold: Test Files 1 passed (1); Tests 37 passed (37)\ncordum-app: Test Files 1 passed (1); Tests 32 passed (32)\npairing-claim-parity: Test Files 1 passed (1); Tests 2 passed (2)\n@moe/control-room typecheck: tsc --project tsconfig.json (exit 0)\n@moe/control-room full: Test Files 111 passed (111); Tests 1502 passed (1502)\nExact 423-character command exit_code=0",
-    "reportedAt": "2026-08-31T14:59:26.087Z"
+    "outputTail": "live-keyed-session.test.ts: Test Files 1 passed; Tests 6 passed\nlive-handshake.test.ts: Test Files 1 passed; Tests 18 passed\nscaffold.test.tsx: Test Files 1 passed; Tests 37 passed\nv2/cordum-app.test.tsx: Test Files 1 passed; Tests 32 passed\npairing-claim-parity.test.ts: Test Files 1 passed; Tests 2 passed\n@moe/control-room typecheck: tsc --project tsconfig.json (exit 0)\n@moe/control-room test: Test Files 111 passed; Tests 1505 passed\noverall exit code 0",
+    "reportedAt": "2026-09-01T14:53:26.427Z"
   },
   "filesModified": [
     "apps/control-room/src/live/live-keyed-session.ts",
@@ -178,20 +168,79 @@
     "apps/control-room/src/v2/cordum-app.test.tsx",
     "tests/integration/control-room/pairing-claim-parity.test.ts"
   ],
-  "completionSummary": "Third completion attempt under architect replan comment-91bf4079, with no source churn. Delivered/declared exactly seven paths: live-keyed-session.ts/.test.ts, live-handshake.ts/.test.ts, scaffold.test.tsx, cordum-app.test.tsx, and pairing-claim-parity.test.ts. Production remains 223/263 lines; aggregate LOC is non-controlling. Consumer/private-key audit confirms live-handshake composes the keyed session, unchanged main/Cordum callers consume it, public result is exact {ok,sessionCredential}, and privateKey is closure-held only. Four prior production mutations remain red/restored: required challenge/no later call, exact signed-open session/protocol, proof requestId reaching real daemon AUTHENTICATION_FAILED@PROOF, and private-key leak. Fresh exact gate: focused 1/5,1/18,1/37,1/32, integration 1/2, Control Room typecheck, full 111/1502, exit0. Broad green: typecheck; root 401 passed/1 skipped files and 9778 passed/44 skipped tests; foundation 35/756; store 52/673. Daemon foreign red is 5 files/18 vs anchored 4/17; only added path daemon-command-registry-human-approver.test.ts, with no owned intersection. Recovery ref remains recovery-only. Full evidence: comment-52278af42dc547ac9e5d6c676fe2bca3. Wrapper must now land/record an explicit seven-path completion commit; empty task.commits remains a runtime blocker, never a source/split premise.",
-  "reviewCompletedAt": "2026-08-31T15:04:04.513Z",
+  "completionSummary": "Delivery-only replay completed with no source churn. The current correction admits retry only for HTTP 409 with an exact `{code,layer}` body, the fixed pairing-request layer, and `PAIRING_APPROVAL_REQUIRED` or `PAIRING_REQUEST_BUSY`; wrong-layer and surplus-key variants refuse locally without signed open, while same-key retry remains covered. The seven declared task paths compose the real Control Room live consumer through challenge, nonextractable closure-held key generation, proof signing, and exact signed session open; setup is unavailable until open succeeds and there is no bearer fallback. Production remains 222/263 lines. Fresh exact gate passed: keyed-session 6 tests, handshake 18, scaffold 37, Cordum 32, pairing parity 2, Control Room typecheck, and full Control Room 111 files/1505 tests. Fresh root typecheck, root test (401 passed files; 9783 passed tests), foundation (35/756), and store (52/673) also passed. Daemon test remains foreign red in two unowned daemon tests (`daemon-command-registry-human-approver`, `foundation-attempt-windows`); its owned seven-path intersection is empty. HEAD/checkpoint/recovery provenance was audited: `e384a6cd...` is only a mixed PLANNING checkpoint and `ef7ac9e1...` salvage, not delivery. Dependency completions are landed. Durable mutation-red evidence remains in `comment-52278af42dc547ac9e5d6c676fe2bca3`. This completion requests the Moe wrapper's authoritative `kind=completion` landing.",
   "rejectionDetails": {
     "failedDodItems": [
-      "Delivery/commit rail: the completed seven-path implementation must be backed by a recorded task completion commit that QA can inspect."
+      "Delivery/commit rail: the corrected retry-wire behavior and tests are not backed by a recorded kind=completion task commit/landing.",
+      "Delivered-tree retry DoD: committed HEAD still requires the invented ok:false key and cannot preserve the daemon's exact {code,layer} PAIRING_APPROVAL_REQUIRED/PAIRING_REQUEST_BUSY retry responses."
     ],
     "issues": [
       {
         "type": "other",
-        "description": "NO-COMPLETION-COMMIT: after a fresh exact gate and 65-second postflight wait, task.commits is empty, lastCommitOutcome is null, and landing is empty. HEAD cb0be9e0 is unrelated; the seven owned paths are still dirty/untracked. Fix the wrapper/runtime landing path so it creates and records an explicit seven-path completion commit; do not hand-record the foreign recovery snapshot."
+        "file": "apps/control-room/src/live/live-keyed-session.ts",
+        "line": 93,
+        "description": "NO POST-FIX COMPLETION COMMIT: task.commits has only checkpoint e384a6cd; HEAD 5fe0fdde and e384 still require exact {code,layer,ok} with ok:false, while the verified fix remains three modified paths. The exact gate is green and the source fix is correct. Do not rewrite it. The wrapper/runtime must record a kind=completion commit containing the current three corrected paths within the declared seven-path scope, then QA can inspect that SHA."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "The corrected retry wire is green and technically sound, but remains outside every delivered task commit. I reran task.verification exactly in the foreground: exit 0 with focused counts 1/6, 1/18, 1/37, 1/32, parity 1/2, Control Room typecheck, and full package 111 files/1505 tests. The three-path diff correctly admits only HTTP 409 plus exact {code,layer}, covers both retry codes with same-key reuse, and rejects four wrong-layer/surplus-key near misses before open. However task.commits still contains only mixed PLANNING checkpoint e384a6cd and landing has no completion. HEAD 5fe0fdde and e384 both retain the rejected exactKeys([code,layer,ok]) plus ok===false predicate, while the corrected production/test bytes remain three working-tree modifications. No delivered SHA can reproduce the verified behavior. This is the plan-authorized wrapper/runtime blocker: do not source-churn, split, normalize, or hand-commit; land and record a kind=completion commit containing the current three corrected paths within the declared seven-path scope.",
+      "rejectedAt": "2026-09-01T16:23:09.179Z",
+      "reopenCount": 8,
+      "failedDodItems": [
+        "Delivery/commit rail: the corrected retry-wire behavior and tests are not backed by a recorded kind=completion task commit/landing.",
+        "Delivered-tree retry DoD: committed HEAD still requires the invented ok:false key and cannot preserve the daemon's exact {code,layer} PAIRING_APPROVAL_REQUIRED/PAIRING_REQUEST_BUSY retry responses."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/control-room/src/live/live-keyed-session.ts",
+          "line": 93,
+          "description": "NO POST-FIX COMPLETION COMMIT: task.commits has only checkpoint e384a6cd; HEAD 5fe0fdde and e384 still require exact {code,layer,ok} with ok:false, while the verified fix remains three modified paths. The exact gate is green and the source fix is correct. Do not rewrite it. The wrapper/runtime must record a kind=completion commit containing the current three corrected paths within the declared seven-path scope, then QA can inspect that SHA."
+        }
+      ]
+    },
+    {
+      "reason": "The retry-wire fix itself is correct and independently verified, but the task remains undelivered. I reran the exact recorded foreground gate: exit 0 with focused counts 1/6, 1/18, 1/37, 1/32, integration 1/2, Control Room typecheck, and full package 111 files/1505 tests. Diff review confirms retryable now admits only HTTP 409 plus exact {code,layer}, both stable retry codes are covered with same-key reuse, and four wrong-layer/surplus-key near misses fail closed. However task.commits still contains only pre-fix PLANNING checkpoint e384a6cd; landing has no completion, HEAD ca1f05c8 contains the old broken ok:false predicate/fixture, and the three fix paths remain modified in the working tree. The corrected bytes cannot be reproduced from any delivered task SHA. Wrapper/runtime must land and record an explicit completion commit containing the three current fix paths (within the already-declared seven-path task scope); do not source-churn or hand-record recovery provenance.",
+      "rejectedAt": "2026-09-01T00:43:56.636Z",
+      "reopenCount": 6,
+      "failedDodItems": [
+        "Delivery/commit rail: the corrected retry-wire behavior and tests must exist in a recorded completion commit that QA can inspect and rerun at the delivered SHA.",
+        "Delivered-tree retry DoD: committed HEAD still requires the invented ok:false key and therefore does not preserve live PAIRING_APPROVAL_REQUIRED/PAIRING_REQUEST_BUSY retry semantics."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/control-room/src/live/live-keyed-session.ts",
+          "line": 93,
+          "description": "NO POST-FIX COMPLETION COMMIT: current working-tree fix is green and correct, but HEAD/task commit e384 still has the rejected three-key retry predicate. Land and record the three modified owned paths through the wrapper before resubmitting."
+        }
+      ]
+    },
+    {
+      "reason": "Rejected: the live retry parser is incompatible with the daemon's committed wire shape, so the normal pre-approval/busy journey does not preserve pending/same-key retry semantics. At current HEAD, http-listener-pairing-routes.ts:118-123 serializes claim refusals as exact {code, layer} (plus cause only when present), and http-listener-pairing-routes.test.ts:178-181 pins PAIRING_APPROVAL_REQUIRED as {code,layer} with no ok key. live-keyed-session.ts:93-100 instead requires exact {code,layer,ok:false}; therefore a real 409 falls through to LIVE_PAIRING_REFUSED. Independent clean-commit reproduction changed only the owned test fixture to the actual daemon body and the named retry arm failed: expected {status:'RETRY_CLAIM'}, received {code:'LIVE_PAIRING_REFUSED',detail:'session pairing claim refused',ok:false}; Test Files 1 failed, Tests 1 failed|4 skipped. Fix the production parser against the exact served wire roster, update the fixture to stop inventing ok:false, and pin both PAIRING_APPROVAL_REQUIRED and PAIRING_REQUEST_BUSY plus fail-closed wrong-layer/extra-key near misses. The otherwise-delivered keyed/open slice passed the exact focused/integration/typecheck/full-Control-Room gate in both current tree and clean e384 archive (clean full package 111 files/1497 tests); all four required mutation drills reddened and restored.",
+      "rejectedAt": "2026-08-31T22:15:27.385Z",
+      "reopenCount": 4,
+      "failedDodItems": [
+        "live-handshake.ts delegates keyed claim/open work to the new module, remains below 400 physical lines, preserves its exported input/result signatures, request timeout/caller abort/retry/single-flight semantics, and creates LiveSetup only after signed open returns success.",
+        "Update every measured asserting consumer in the seven-path roster: live-handshake.test.ts pins the four-stage bootstrap/request/keyed-claim/open progression, exact bodies, bounded timeouts and single-flight retries."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/control-room/src/live/live-keyed-session.ts",
+          "line": 93,
+          "description": "retryable() requires an invented ok:false key. The real listener's 409 PAIRING_APPROVAL_REQUIRED/PAIRING_REQUEST_BUSY wire body is exact {code,layer}, so production returns LIVE_PAIRING_REFUSED instead of RETRY_CLAIM. Admit the exact daemon-served shape and keep wrong layer/surplus keys fail-closed."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/control-room/src/live/live-keyed-session.test.ts",
+          "line": 172,
+          "description": "The retry fixture adds ok:false even though the real listener strips ok from refusal responses, masking the production incompatibility. Use the exact live {code,layer} body and cover both stable retry codes plus hostile near misses."
+        }
+      ]
+    },
     {
       "reason": "Rejected on delivery provenance only. I reran the task.verification.command verbatim in the foreground: exit 0 with nonzero counts 1/5, 1/18, 1/37, 1/32, 1/2, and full @moe/control-room 111 files/1502 tests; typecheck passed. After a 65-second wrapper postflight wait, get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}. Current HEAD is cb0be9e03a94a8a2b718a9f08e368eabb8013b55, an unrelated daemon commit, and all seven owned paths remain five modified plus two untracked. The recovery branch is explicitly recovery-only and is not admissible as task delivery. The wrapper/runtime must create and record a completion commit containing exactly the seven declared task paths before QA can inspect git show/git branch --contains and approve. No source behavior or task-level LOC finding is carried.",
       "rejectedAt": "2026-08-31T15:04:04.513Z",
@@ -263,9 +312,69 @@
     "apps/control-room/src/v2/cordum-app.test.tsx",
     "tests/integration/control-room/pairing-claim-parity.test.ts"
   ],
-  "blockedReason": null,
+  "blockedReason": "Still required; blocked rather than backlogged per human cleanup policy: exhausted 8/3 reopen budget on wrapper completion provenance. Preserve seven paths; unpark only after kind=completion landing is repaired and a single no-churn delivery pass is authorized.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T17:29:29.918Z",
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "e384a6cd078803f66f8df04b8a6eb3daf491e46a",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-1f97776b@2026-08-31T21:13:35Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-07474f919fba4701b0dd300d306800c6.json",
+        ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+        ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+        ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
+        ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+        ".moe/tasks/task-45839f34c88d4db291146bd6f2216b99.json",
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json",
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        ".moe/tasks/task-59eaddfbf1e049bbab00290233a54284.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-75bb88d241894a43b6c6981f355bc220.json",
+        ".moe/tasks/task-7ad453d0da2a4543935774e2fe8d894e.json",
+        ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+        ".moe/tasks/task-87f13cbaa8ee43208810abead90d5744.json",
+        ".moe/tasks/task-9d4aab86419d4ad6a10b531eb05de4ca.json",
+        ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+        ".moe/tasks/task-a73b6872e13248768bc161d6059d6a0f.json",
+        ".moe/tasks/task-a9c1fe620d2642cba3e3669a17ea1eac.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+        ".moe/tasks/task-bdbe0519073f4156b288abd230405bad.json",
+        ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json",
+        ".moe/tasks/task-cb40f3d833f14c3089d812b9bf2d291f.json",
+        ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+        ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+        ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json",
+        "apps/control-room/src/live/live-handshake.test.ts",
+        "apps/control-room/src/live/live-handshake.ts",
+        "apps/control-room/src/live/live-keyed-session.test.ts",
+        "apps/control-room/src/live/live-keyed-session.ts",
+        "apps/control-room/src/scaffold.test.tsx",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "tests/integration/control-room/pairing-claim-parity.test.ts"
+      ],
+      "recordedBy": "architect-1f97776b",
+      "recordedAt": "2026-08-31T21:13:41.564Z",
+      "treeId": "3382a6edd4db85ada9261df057d084e1bedba67a",
+      "status": "PLANNING",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-1f97776b@2026-08-31T21:13:35Z",
+    "at": "2026-08-31T21:13:41.564Z"
+  }
 }

@@ -107,7 +107,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Amendment comment-c3ad095e executed all four requested changes (deps set 20:58Z; boundary-roster.security.ts removed -> nine paths; DoD re-scoped off full-roster/full-green; safe-observation DoD preserved verbatim). Returning to PLANNING so a compliant plan can be submitted now — dependsOn [272b09a7, 59eaddfb, cb40f3d8] still gates the WORKING claim until the axis rows land.",
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: hardening consumer behind 272, 59, and cb40. Unblock after those prerequisites land and sync the exact-ten plan overlay.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -164,7 +164,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:57.545Z",
-  "updatedAt": "2026-09-01T00:57:11.372Z",
+  "updatedAt": "2026-09-01T18:53:39.047Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:43.597Z",
     "plannedStepCount": 7,
@@ -175,12 +175,13 @@
     "architect-b2b16103",
     "worker-76a8c4ac",
     "architect-5e59a71e",
-    "architect-1f97776b"
+    "architect-1f97776b",
+    "governor-c11c29e2"
   ],
-  "blockedReason": "Declared branch prerequisites are still unlanded (272 transport BLOCKED, 59 scheduler BLOCKED, cb40 runtime PLANNING), so step 1 cannot implement against durable prerequisite bytes. In addition, governor comment-de9a8ced added attempt-safe-boundary-lookup.test.ts after plan approval; active steps 1/2/6/7 and the exact focused gate must be synchronized from nine to ten paths before auto-unblock. See comment-efbf7efc. No source paths changed.",
+  "blockedReason": "Dependency wait: final hardening resumes after transport, scheduler, and runtime-provider prerequisites land.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-30T22:39:50.439Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T17:29:31.357Z",
   "blockedOnTaskIds": [
     "task-272b09a7164f4b618dcf9a0f65272fd0",
     "task-59eaddfbf1e049bbab00290233a54284",
