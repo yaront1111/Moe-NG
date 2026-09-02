@@ -72,15 +72,22 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
-  "reopenReason": "Third review remains provenance-only failure. I reran the exact focused command: exit 0, Test Files 2 passed (2), Tests 27 passed (27). After waiting and re-fetching context, task.commits=[], landing={}, lastCommitOutcome=null. HEAD is still ca1f05c8, no ref contains this task id, and all three owned paths remain modified. The accepted accessibility bytes are not delivered in Git. Preserve them and repair/escalate wrapper post-flight to create and record an explicit three-path completion commit.",
+  "reopenReason": "Human-authorized unblock to PLANNING. Preserve the QA-verified three-path accessibility bytes and focused gate; architect should submit only a no-churn verification/landing replay unless fresh measurement finds a real defect.",
   "createdBy": "WORKER",
   "parentTaskId": "task-2c952438c41546b3a736623f3956c778",
   "priority": "HIGH",
   "order": 191,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-917a80718b4948868c075e913fa7e348",
+      "author": "architect-db6a0906",
+      "content": "2026-09-02 production-at-claim remeasurement (no source edits): HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d; the exact three owned paths remain modified/unstaged. SHA256: nav-rail.tsx 2F96447441C7C4C5A55CC36428EA0A501EC44B67B84EBC4CA8DADA5844B634E1 (170 lines), cordum-shell.test.tsx 65016ADB0DBEAD940D6A71AB0C8975CEE35A094D1B3DC88911C2BC5843EC79FD (237), responsive test CE59969F730A2CB3561D5E1ED01ECB27D786E68B0B50118402488C25D20A7F5C (163). `pnpm.exe --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` => exit 0, Test Files 2 passed, Tests 27 passed. `git log --all --grep='Moe-Task: task-d36...'` is empty; task commits=[] and landing={}. Root-cause owner is external D:/projexts/moes: installed/source moe-agent.ps1 are byte-equal SHA256 BAF3607FEABB89471520AF18844557BE8BFA7D0779F1A8005A54929EA1516FE2; TerminalAgentLauncher starts Codex without -CodexExec, so worker/QA are long-lived TUIs, while wrapper completion landing only begins after child CLI exit. Live worker sessions demonstrably hop task rows before that exit. Existing moes tasks task-321f3d51413142819ba5099d55c55498 and task-9f1ded99 are DONE antecedents, not a fix for this gap. No PR#3 row owns wrapper production. Required unblock: one successor in moes Stability & Hardening fixes PS/sh + JetBrains launch defaults, is deployed, and a live Agents-menu worker reaches REVIEW then records kind=completion/landing before reuse. Preserve these three bytes and allow one delivery replay only after that canary.",
+      "timestamp": "2026-09-01T22:20:38.671Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:06:52.076Z",
-  "updatedAt": "2026-09-01T13:40:51.122Z",
+  "updatedAt": "2026-09-01T22:21:32.426Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:08:59.753Z",
     "plannedStepCount": 5,
@@ -90,7 +97,8 @@
     "reopenCount": 3
   },
   "contextFetchedBy": [
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "governor-c11c29e2"
   ],
   "stepsCompleted": [],
   "failedDodItems": [
@@ -199,8 +207,9 @@
       ]
     }
   ],
-  "blockedReason": "Provenance-only blocker persists after three identical QA rejections; the governor explicitly ruled no source re-plan or byte churn, so moe-planning's bail rule applies. Fresh audit at HEAD 19d19a62f53f4deafdb4032875ee9a0: all three declared paths remain tracked M, their accepted bytes are unchanged and production nav-rail.tsx is 170 lines; task.commits=[], landing={}, lastCommitOutcome=null, while the durable focused gate remains exit 0 with Test Files 2 passed / Tests 27 passed. HEAD contains different pre-change blobs, no ref or reflog has this task trailer, and none of the three candidate blob IDs is reachable from any ref/reflog. Therefore the accessibility behavior is green only in dirty WIP and cannot be reconstructed from delivered Git. Preserve the three paths; external wrapper/post-flight repair must create and record their explicit completion SHA before QA can review delivery.",
+  "blockedReason": "External production prerequisite, not a fourth no-churn retry: the QA-verified d36 bytes are intact and focused 2-file/27-test gate is green, but commits=[]/landing={} because JetBrains launches Codex worker/QA as long-lived interactive TUIs and wrapper landing runs only after child exit. This moe-next row cannot own D:/projexts/moes wrapper/plugin files. Park until one successor repair is filed in the moes Stability & Hardening epic after the prior Codex/postflight owners, deployed to the installed plugin, and a live Agents-menu worker proves REVIEW -> recorded kind=completion/landing before session reuse. Then preserve the exact three d36 bytes and perform exactly one delivery replay.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T13:40:51.122Z"
+  "blockedAt": "2026-09-01T22:21:32.426Z",
+  "blockedOnTaskIds": null
 }

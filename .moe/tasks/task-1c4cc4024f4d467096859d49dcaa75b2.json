@@ -96,15 +96,22 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
-  "reopenReason": "Functional gates pass: I reran the exact focused command (4/4 files, 22/22 tests, exit 0) and separately reran @moe/daemon typecheck (exit 0). Delivery is still absent. task.commits=[], landing={}, lastCommitOutcome=null; HEAD remains ca1f05c8 and no ref contains a task commit. The coordinator/test are modified and all four extracted TS/JS modules are untracked, so none of the repaired extraction is reviewable at committed HEAD. Preserve the six verified paths and repair/escalate wrapper post-flight to create and record an explicit six-path completion commit.",
+  "reopenReason": "Human-authorized unblock to PLANNING. Preserve the verified compiled-authority extraction and byte-identical public output; architect should submit only a no-churn verification/landing replay unless fresh measurement finds a real defect.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "HIGH",
   "order": 196,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0575a7d30a954290b097719d7d235a14",
+      "author": "architect-db6a0906",
+      "content": "2026-09-02 production-at-claim remeasurement; no edits. HEAD 5fe0fdde. Exact six paths remain two modified plus four untracked extraction/bridge files. Production line caps: coordinator 131, approval 128, policy 198 (all <250); bridges one line. SHA256 anchors: coordinator BFDE936D...C303; test 3DB4E64D...6F95; approval.ts DAD081A9...E24F + bridge 44B45566...45D6; policy.ts 18EB71DC...1DEB + bridge 94A50F1E...9A25. Fresh foreground gate exit 0: Test Files 4 passed, Tests 22 passed; @moe/daemon tsc exit 0. commits=[]/landing={}/lastCommitOutcome=null remains delivery-only. Shared root is D:/projexts/moes long-lived Codex worker/QA lifecycle; one six-file PS/sh+JetBrains one-shot repair has been specified to #governors. Preserve these exact six blobs; do not submit another no-churn plan before installed live canary.",
+      "timestamp": "2026-09-01T22:28:55.816Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.775Z",
-  "updatedAt": "2026-09-01T07:55:45.284Z",
+  "updatedAt": "2026-09-01T22:29:03.767Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:22:38.431Z",
     "plannedStepCount": 7,
@@ -114,12 +121,14 @@
     "reopenCount": 2
   },
   "contextFetchedBy": [
-    "worker-060beca2"
+    "worker-060beca2",
+    "governor-c11c29e2",
+    "architect-db6a0906"
   ],
-  "blockedReason": "Repeated wrapper/post-flight delivery failure after two provenance-only QA rejections; this third claim re-measured the same blocker before rewalking the reset plan. get_context still reports task.commits=[], lastCommitOutcome=null, landing={}, HEAD ca1f05c8 has no Moe-Task commit, and the exact six verified paths remain two modified + four untracked. Production sources remain compliant at 131/128/198 lines and QA already reran the exact focused gate green (4 files/22 tests) plus daemon typecheck. Another worktree-only REVIEW would knowingly reproduce the rejection. Worker rails and durable governor precedent forbid manual commit/record_commit without explicit authority. Preserve the six bytes; unblock only after wrapper landing is repaired/triggered or governance supplies durable authority for an explicit alternative.",
+  "blockedReason": "External production prerequisite: exact six-path authority extraction is intact, all production sources meet <250, and fresh focused gate is green (4 files/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-01T07:55:45.284Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T22:29:03.767Z",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."

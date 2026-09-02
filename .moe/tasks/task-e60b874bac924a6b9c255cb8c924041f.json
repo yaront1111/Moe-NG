@@ -70,7 +70,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human operator repeated the direct instruction to unblock the four remaining tasks so they can finish (2026-08-30). This is the explicit lift of the prior human deferral. Preserve safety ordering: dependsOn now names c289b8fb, so no WORKING claim or irreversible live quiesce may run until the PR #3 integration row is DONE/ARCHIVED. Route through PLANNING; do not bypass the existing plan or the external-session requirement.",
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: live quiesce cannot run from a PyCharm/plugin-descended agent process. Unblock only after a human provides an Explorer-descended external terminal PID with verified ancestry.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -193,10 +193,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:22:20.384Z",
-  "updatedAt": "2026-08-31T14:05:32.356Z",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-31T14:05:32.356Z",
-  "blockedReason": "Step 1 external-executor safety gate failed closed. Fresh Win32_Process ancestry proves this worker session is pwsh PID 3380 -> codex PID 26416 -> moe-agent PowerShell PID 60492 -> PyCharm terminal PowerShell PID 31024 -> pycharm64 PID 48776, so it is explicitly inside the population the live quiesce can terminate and cannot be the required human-opened external executor. No stop/deny/signal/kill, driver, test run, or repo edit occurred. Authority, all four DONE gates, the complete 199-row PR #3 census, and per-item/refusal host snapshot are durable in comments comment-6d0abd0067db43f39d5984e1ce8d76eb and comment-e150372279cc4bf7a6066d637b1e018f. Unblock only after a human opens a separate Explorer-descended Windows Terminal/PowerShell, records its PID, and its full parent chain proves neither pycharm64.exe nor the plugin daemon is an ancestor.",
+  "updatedAt": "2026-09-01T21:29:57.194Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T17:29:24.706Z",
+  "blockedReason": "Still required; blocked rather than backlogged per human cleanup policy: live quiesce cannot run from a PyCharm/plugin-descended agent process. Unblock only after a human provides an Explorer-descended external terminal PID with verified ancestry.",
   "contextFetchedBy": [
     "governor-c2f49231",
     "governor-7459dc6a",
@@ -209,7 +209,9 @@
     "worker-76a8c4ac",
     "architect-b2b16103",
     "architect-8b0f89f2",
-    "worker-841b4860"
+    "worker-841b4860",
+    "governor-c11c29e2",
+    "architect-db6a0906"
   ],
   "blockedResourceId": null,
   "metrics": {

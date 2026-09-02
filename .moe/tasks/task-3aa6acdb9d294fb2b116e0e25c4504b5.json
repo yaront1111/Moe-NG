@@ -84,15 +84,22 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
-  "reopenReason": "Third delivery review still fails provenance. I reran the exact shell:false gate: exit 0, Test Files 1 passed (1), Tests 22 passed (22), followed by daemon typecheck pass. But task.commits=[], landing={}, lastCommitOutcome=null; HEAD ca1f05c8 contains only the old daemon-store-dependencies.ts and lacks both composition TS/JS paths. Exact status is M/??/?? and no ref has a task commit. Thus committed HEAD still violates the extraction, file-cap, and bridge DoD. Preserve the verified three candidate bytes and repair/escalate wrapper explicit-path completion landing.",
+  "reopenReason": "Human-authorized unblock to PLANNING because BLOCKED->WORKING is gate-forbidden. Preserve the verified three-path daemon-store composition and dependent ownership; architect should submit only a no-churn verification/landing replay plan unless fresh measurement finds a real defect.",
   "createdBy": "WORKER",
   "parentTaskId": "task-143c1c19731443d9a0ad1d528d617f0f",
   "priority": "CRITICAL",
   "order": 194.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1e7864230f654d138d3f6258a8030d97",
+      "author": "architect-db6a0906",
+      "content": "2026-09-02 production-at-claim remeasurement; no edits. HEAD 5fe0fdde. Exact three-path status remains one modified root plus two untracked extraction files. daemon-store-dependencies.ts: 144 lines, SHA256 3BB1EAA88FE01523972F4EA6B7057295065A17506773A363BD5687ED811FDF45; composition.ts: 352 lines (<400), SHA256 45C47F3790266FE38842511E5153B9832ED05C85670D07DC2212A4F281070ED6; one-line bridge SHA256 7C3664508C7CA87D815949331A4F6C7D2E92F000A8C8CAB93BFB81599781A752. Fresh foreground gate exit 0: Test Files 1 passed, Tests 22 passed; @moe/daemon tsc exit 0. commits=[]/landing={}/lastCommitOutcome=null remains the only defect. Shared root is the already-measured D:/projexts/moes long-lived Codex worker/QA lifecycle: landing begins only after child exit and remains bound to preflightTaskId. Required unblock is the one six-file moes PS/sh+JetBrains one-shot repair, deployed and live-canary proven. Preserve these exact three blobs; do not submit another no-churn replay plan.",
+      "timestamp": "2026-09-01T22:26:53.832Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T15:59:00.129Z",
-  "updatedAt": "2026-09-01T13:37:46.350Z",
+  "updatedAt": "2026-09-01T22:27:01.587Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:10:57.225Z",
     "plannedStepCount": 6,
@@ -103,7 +110,8 @@
   },
   "contextFetchedBy": [
     "worker-837771aa",
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "governor-c11c29e2"
   ],
   "stepsCompleted": [],
   "failedDodItems": [
@@ -236,8 +244,9 @@
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-foundation-composition.js"
   ],
-  "blockedReason": "Provenance-only blocker persists after three identical QA rejections; moe-planning bail rule applies, so no source plan is technically valid. Fresh audit at HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9: exact paths remain M/??/??; candidate SHA256 values still match the verified completion summary (root 3BB1EAA8…, composition.ts 45C47F37…, bridge.js 7C366450…), and the focused recorded gate is exit 0 with Test Files 1 passed / Tests 22 passed plus daemon typecheck. HEAD still contains the old 490-line root and neither composition path; task.commits=[], landing={}, lastCommitOutcome=null. Reachable refs, reflogs, task-trailer grep, path history, rev-list object reachability, and all loose/packed objects contain none of the three candidate blobs. Governor ruling says preserve these bytes and do not source-replan/churn. External wrapper/post-flight repair must land and record exactly the three declared paths; until then the delivered-tree/file-cap/bridge DoD is unreproducible from Git.",
+  "blockedReason": "External production prerequisite: exact three-path extraction is intact, under the per-file cap, and fresh focused gate is green (1 file/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T13:37:46.350Z"
+  "blockedAt": "2026-09-01T22:27:01.587Z",
+  "blockedOnTaskIds": null
 }

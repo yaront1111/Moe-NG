@@ -18,78 +18,53 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Before editing, re-read task-9d4aab86419d4ad6a10b531eb05de4ca's durable completion/review from epicSiblings and record the worker-claim HEAD. Re-run per-file import/reachability and literal-shape/count greps over the exact five paths: prove createFoundationAttemptServiceWithProviderRun still delegates from the real-launch default and has no goal-closure consumer yet; prove the only GOAL proof/count assertions are the two owned security files; prove qualifyGoalClosure's exported signature/result keys and existing scanGlobalEvents/approveNodes/seedReviewAcceptance signatures will not change. Recheck apps/daemon package.json and the apps/daemon pnpm-lock importer for @moe/contracts, @moe/runner, and @moe/store, then create/typecheck/delete a temporary in-package bare-specifier probe in one command. Record `git status --porcelain` for the exact five paths and the forbidden untracked tests/security/goal-closure-verification-fixture.ts without opening or adopting it. Finally capture fresh pre-edit outputs for the focused goal and scheduler commands plus standalone `pnpm --filter @moe/daemon test` and full security Vitest, including nonzero Test Files/Tests counts and failing file paths, so the delivered broad result can be attributed rather than fabricated green.",
-      "status": "PENDING",
-      "affectedFiles": []
-    },
-    {
-      "stepId": "step-2",
-      "description": "Bank the existing production-surface red first: run the focused scheduler security file and require the measured 7-failed/182-passed cascade headed by GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE (do not accept a different earlier refusal). Then add a focused async test in goal-qualification.test.ts against the planned test-only seedProvenAttempt/seedVerifiedNode exports before implementing them, and run it red. The test must arrange approval and review for the actual activation-world execution node, require exactly one injected provider call, one committed activation, a read-back PROVEN attempt with non-null resultManifest, one canonical PASSED Foundation receipt naming that node, a positive/nonzero generated receipt count, and qualifyGoalClosure returning both derived witnesses. Keep every existing planted-row case as a negative reader test with its exact code, DAEMON_PREREQUISITE layer, message, and zero-mutation snapshot; a planted row must never satisfy the new accepted control.",
+      "description": "Adopt, do not reconstruct, the preserved goal-closure world. At worker claim, read the DONE/merged task-9d4aab86419d4ad6a10b531eb05de4ca completion/review record and remeasure the exact five path statuses and filter-aware blob/SHA-256 identities against the planning anchors; confirm goal-qualification.ts is still clean/248 lines, the other four paths are the preserved modifications, task.commits/landing are still absent, and the forbidden untracked tests/security/goal-closure-verification-fixture.ts is reported by status only and never opened. Re-audit imports and the exact diff to confirm the fixture remains test-tier (only *.test.ts/tests/security consumers, no .js bridge or root export), the accepted world still composes createFoundationAttemptServiceWithProviderRun plus createFoundationVerificationService/real process.execPath rather than raw writers, and the four hostile outcomes still pin their exact GOAL_PREREQUISITE codes/layer with positive denominators. Any drift or missing production edge requires report_blocked/re-plan; never normalize the WIP. Then add one focused regression in goal-qualification.test.ts that opens a real bootstrap store, seeds a verified node, spies on that instance's close using a bound call-through, asserts its candidateRoot still exists when close runs, invokes cleanupGoalClosureFixtures, and asserts one close plus root removal. Run that named test before implementation and require it to fail because current cleanup removes roots without closing stores; this is the fresh defect that permits the otherwise no-edit replay.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-qualification.test.ts"
       ]
     },
     {
-      "stepId": "step-3",
-      "description": "Implement the minimum additive test-only producer in goal-closure-test-fixtures.ts, reusing the already root-forbidden names cleanupGoalClosureFixtures, seedProvenAttempt, and seedVerifiedNode while preserving scanGlobalEvents/approveNodes/seedReviewAcceptance behavior. seedProvenAttempt must materialize a real SHA-256 Git candidate tree, compose real capture lifecycle/context/completion ports, and call createFoundationAttemptServiceWithProviderRun. Its typed provider callback must consume the supplied production grant and commit PREFLIGHT/STARTED registration through the supplied launcher authority, then return one bound PROVEN observation; the Foundation service itself must remain the sole caller of runEffectActivateCommand and the sole writer of reservation, provider telemetry, and FoundationAttemptRecorded. Read the attempt back through readFoundationAttemptRecord and throw with the exact upstream code/layer on any refusal or non-PROVEN/null-result state. seedVerifiedNode must call that attempt producer, use createFoundationVerificationService to seal an absolute `[process.execPath, \"-e\", \"process.exit(0)\"]` recipe over the same candidate bytes, run the real child process, require/read back a canonical PASSED receipt with matching graph identity, and return durable ids/digests for assertions. Use process-unique labels for repeat/parallel calls, register every candidate/worktree scratch root, and make cleanup close/remove all resources with bounded Windows retries even after a thrown setup. Remove the stale comments claiming activation/PASSED evidence is impossible, but do not publish the fixtures or touch the forbidden untracked file. Rerun the focused goal test to green as the TDD loop.",
+      "stepId": "step-2",
+      "description": "Make the minimum test-tier cleanup repair without touching production authority, contracts, result shapes, refusal vocabulary, or the clean goal-qualification.ts. Import closeStores into goal-closure-test-fixtures.ts from its already-consumed bootstrap fixture and make cleanupGoalClosureFixtures attempt closeStores before resetting its WeakMap/removing scratch roots, with root cleanup in finally so close failure cannot strand roots and an rmSync failure cannot skip handle closure; preserve bounded Windows rm retries. Remove the now-duplicated direct closeStores imports/calls from goal-qualification.test.ts afterEach and closeGoalPrerequisiteFixtures in scheduler-activation-hostile-cases.ts so both consumers have one ordering authority, and correct only the adjacent cleanup comments. Rerun the focused goal file and scheduler boundary file to green, requiring the new cleanup regression plus all preserved accepted/hostile assertions and nonzero counts. Do not alter scheduler-activation-boundaries.security.ts merely to raise its measured 15-second bound; record that slow-host risk for hardening unless it actually fails.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/goals/goal-qualification.test.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the single penultimate adversarial review over the exact five-path effective diff. Trace the served writer and receipt reader again: no direct runEffectActivateCommand, commitFoundationPhase, recordProvenFoundationAttempt, raw receipt write, fake authority, or planted-row accepted control; identities remain aligned; accepted control and four hostile outcomes retain exact code/refusedBy/denominator assertions; root exports and goal-qualification.ts remain unchanged. Adopt the durable prior prerequisite-reader drill only after proving goal-qualification.ts still has SHA-256 476A9C0602C1F91BBDC908FDF5C00BD418C6AA735858A2B56F10B9C392DB23A0 and the named AFTER arm is unchanged; otherwise repeat that drill exactly and restore it. Separately validate the new cleanup regression: record exact-path porcelain and SHA-256, back up goal-closure-test-fixtures.ts out of tree, temporarily move closeStores after root cleanup, run only the named regression and require it to go red because close observes a missing candidateRoot, restore from the backup, then in a separate command prove SHA-256 equality and rerun the focused goal test green. Never inspect or touch the forbidden untracked fixture; a green mutant is a finding, not proof.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/goals/goal-qualification.ts",
         "apps/daemon/src/goals/goal-qualification.test.ts"
       ]
     },
     {
       "stepId": "step-4",
-      "description": "Replace only the two verifiedNodeIsUnbuildable gaps in scheduler-activation-hostile-cases.ts with the tracked production-backed helper and wire cleanupGoalClosureFixtures into the existing close hook. Use the durable activation-world node identity consistently. The accepted control gets exactly one independently read-back PASSED receipt before the real goal.close and must remain ok:true/DECIDED/DURABLE_DECISION with one GoalCompleted and one new decision. The AFTER arm gets one PASSED receipt, records qualifyGoalClosure ok:true with both witnesses, then gets a second independently production-minted PASSED receipt for the same node before goal.close; this makes the receipt-ambiguity guard the sole target, while payload/version/approval/review/verdict/digest/authority fences are all valid. Leave BEFORE and the two distinct-command RACE outcomes at zero receipts so they still pin GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT@DAEMON_PREREQUISITE. In scheduler-activation-boundaries.security.ts retain roster length 38 and exact denominators (four hostile proofs [AFTER, BEFORE, RACE, RACE], one control, five combined), and add positive writer provenance assertions before the hostile properties: nonzero generated worlds/receipts, exact PASSED readbacks, matching node/attempt/activation identities, unchanged refused-command residue, production's raw refusedBy, and exact AFTER AMBIGUOUS code. Update only stale explanatory comments and run the focused scheduler file to green; these are four hostile outcomes closing the seven current failures, not seven invented arms.",
+      "description": "Run the final gate once after restoration, foreground/unpiped, using exactly: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/goals/goal-qualification.test.ts'],['exec','vitest','run','-c','tests/security/vitest.config.ts','tests/security/scheduler-activation-boundaries.security.ts']];for(const a of L){let r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`. Require exit 0, goal Test Files 1 passed/Tests 9 passed (the preserved 8 plus the cleanup regression), and scheduler Test Files 1 passed/Tests 190 passed. Then run standalone `pnpm --filter @moe/daemon test`, `pnpm exec vitest run --config tests/security/vitest.config.ts`, `pnpm typecheck`, `pnpm test` (state root lane only; apps/** excluded), `pnpm verify:foundation`, and `pnpm verify:store`; compare with the durable merge-base/pre-edit record in comment-35ae51edd0384d668496b852b710f829, require no new failing path intersecting the five owned paths, and disclose every foreign failure/count verbatim rather than calling raw-red green. Finish with diff --check, exact five-path status/hash/ownership, and confirmation that the forbidden untracked path was untouched. Report all four modified paths in complete_step.modifiedFiles (goal-qualification.ts is declared but must remain byte-clean), call complete_task with the exact gate/counts and a <=2000-character production-backed/mutation summary, then exit normally for wrapper explicit-path landing—never stage or commit manually. QA must verify a kind=completion task.commits SHA and landing.lastCompletion/merged bytes before approval; worktree green alone is not delivery.",
       "status": "PENDING",
       "affectedFiles": [
         "tests/security/scheduler-activation-hostile-cases.ts",
         "tests/security/scheduler-activation-boundaries.security.ts",
-        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
-      ]
-    },
-    {
-      "stepId": "step-5",
-      "description": "Perform the single adversarial-review step over the exact five-path diff. Confirm no import/call in goal-closure-test-fixtures.ts directly invokes runEffectActivateCommand, commitFoundationPhase, recordProvenFoundationAttempt, or a raw receipt writer; confirm the one-argument served factory remains real-launch, test-only helpers stay off the daemon root, existing fixture callers are source-compatible, ids cannot collide under retry/concurrency, failure paths clean stores/processes/temp Git roots, and goal-qualification.ts plus goal-qualification-reads.ts have no delivered change. Then run the required divergence drill: record `git status --porcelain` for goal-qualification.ts, copy it to an out-of-tree worker-suffixed backup and hash it; narrowly bypass only its `if (!indexed.ok) return refuse(indexed.code, indexed.message)` carry guard without deleting the receipt reader, run the full focused scheduler file, and require the named AFTER exact GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS@DAEMON_PREREQUISITE assertion to go red while the one-receipt precondition/control remains admitted. Restore from the backup, and in a separate command prove SHA-256 equality plus the pre-drill tracked diff; rerun focused scheduler green. A green mutant is a finding and must be reported, not counted as proof.",
-      "status": "PENDING",
-      "affectedFiles": [
-        "apps/daemon/src/goals/goal-qualification.ts",
-        "apps/daemon/src/goals/goal-qualification.test.ts",
-        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
-        "tests/security/scheduler-activation-hostile-cases.ts",
-        "tests/security/scheduler-activation-boundaries.security.ts"
-      ]
-    },
-    {
-      "stepId": "step-6",
-      "description": "Run the final verification once, foreground and unpiped, after drill restoration. The exact completion-evidence command is: `node -e 'const{spawnSync}=require(\"child_process\"),L=[{a:[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/goals/goal-qualification.test.ts\",\"--reporter\",\"verbose\"],t:1},{a:[\"exec\",\"vitest\",\"run\",\"--config\",\"tests/security/vitest.config.ts\",\"tests/security/scheduler-activation-boundaries.security.ts\",\"--reporter\",\"verbose\"],t:1},{a:[\"--filter\",\"@moe/daemon\",\"typecheck\"],t:0},{a:[\"exec\",\"tsc\",\"-p\",\"tests/security/tsconfig.json\",\"--noEmit\"],t:0}];for(const l of L){const r=spawnSync(\"pnpm\",l.a,{encoding:\"utf8\",shell:false}),o=(r.stdout||\"\")+(r.stderr||\"\");process.stdout.write(o);if(r.error||r.status!==0)process.exit(r.status||1);const x=o.replace(/\\x1b\\[[0-9;]*m/g,\"\");if(l.t&&(!/Test Files\\s+[1-9]\\d*\\s+passed/.test(x)||!/Tests\\s+[1-9]\\d*\\s+passed/.test(x)))process.exit(2)}'`. Require exit 0 and quote both nonzero Test Files and Tests lines. Also rerun, as separate foreground commands, `pnpm --filter @moe/daemon test`, the full security Vitest command, `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`; compare each failing-path set with the pre-edit baseline, require an empty new-failure intersection with the five owned paths and zero on all focused/owned legs, and disclose every surviving foreign failure verbatim. Full security is known raw-red outside this row at planning time, so never label its nonzero raw exit green; report its count line and path-attributed delta.",
-      "status": "PENDING",
-      "affectedFiles": [
         "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
         "apps/daemon/src/goals/goal-qualification.ts",
-        "apps/daemon/src/goals/goal-qualification.test.ts",
-        "tests/security/scheduler-activation-hostile-cases.ts",
-        "tests/security/scheduler-activation-boundaries.security.ts"
-      ],
-      "amendments": [
-        {
-          "amendmentId": "amend-1",
-          "description": "Run this exact completion-evidence command once, foreground and unpiped, after the restored drill: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/goals/goal-qualification.test.ts'],['exec','vitest','run','-c','tests/security/vitest.config.ts','tests/security/scheduler-activation-boundaries.security.ts']];for(const a of L){let r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`. It is 412 characters, invokes host pnpm with argv arrays and shell:false, stops on the first spawn/nonzero failure with the exact status, and must print both nonzero count pairs (goal: 1 file/8 tests; scheduler: 1 file/190 tests). Record exit 0. The already completed separate broad/typecheck legs remain governed by their durable step-6 row comment: compare them with the pre-edit baseline, require zero focused/owned failures and an empty new-failure intersection with the five owned paths, and disclose surviving foreign daemon/security red verbatim rather than calling raw-red green.",
-          "reason": "Architect-authored exact replacement from msg-890d73bc3bbc49e3a1493dccbd5956fe; proxy-applied because the daemon refused architect-5e59a71e with NOT_ALLOWED. Replaces the unpersistable 823-character completion command with the architect-verified 412-character command; no scope or source change.",
-          "amendedBy": "governor-943540d3",
-          "amendedAt": "2026-08-31T12:31:55.585Z"
-        }
-      ],
-      "activeAmendmentId": "amend-1"
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ]
     }
   ],
   "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Review fails mandatory size and delivery rails. I reran the active amend-1 verification command exactly: exit 0; goal qualification Test Files 1 passed/Tests 8 passed and scheduler boundary 1/190. However the delivered scope is oversized: the tracked diff is +696/-74, net +622 changed LOC, exceeding the QA >400 net-change bar. More importantly, `apps/daemon/src/goals/goal-closure-test-fixtures.ts` is 689 physical lines, which directly violates the repository's per-production-source split-before-400 rail (the fact that individual functions are <=50 lines does not cure the file cap). The architect must split the fixture responsibilities into focused modules/rows and amend ownership before REVIEW. Delivery is also uncommitted: after waiting and re-fetching context, task.commits=[], lastCommitOutcome=null, landing={}, and HEAD remains unrelated cb0be9e0 while four owned paths are modified. Split/re-plan first, rerun the amended exact gate for each delivered slice, and land recorded explicit-path completion commits.",
+  "reopenCount": 3,
+  "reopenReason": "Human-confirmed governance handoff after QA rejection #2 on the same delivery-provenance failure; implementation remains green, but task.commits/landing is absent and further worker retries would only repeat shared-tree verification.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -130,109 +105,128 @@
       "author": "governor-943540d3",
       "content": "GOVERNOR CORRECTION to comment-b040765ac912414e8e2c8d7b495ccb4f: withdraw the statement that goal-closure-test-fixtures.ts at 689 lines violates the per-production-source cap. Fresh task evidence in comment-e78650a318cc4d5d8b85c6f91de2c970 classifies it as test-tier: only *.test.ts/tests/security consumers import it, it has no runtime .js bridge, and index-surface.test.ts explicitly deny-lists its helpers from the daemon root. The global aggregate task-LOC rejection is also non-controlling. The only valid unresolved gate is recurring wrapper/post-flight delivery: task.commits=[], lastCommitOutcome=null, landing={}. The branch-audit portion of comment-b040 remains accurate: no other branch/rescue ref preserves the four modified blobs, so preserve the live paths and do not resubmit until runtime landing is repaired.",
       "timestamp": "2026-08-31T12:46:54.999Z"
+    },
+    {
+      "id": "comment-7f4e907e5d9848809e89a4b6b73ee216",
+      "author": "worker-d16b4297",
+      "content": "Step-1 technical adjustment to the approved cleanup regression: the literal `vi.spyOn(store, \"close\")` is impossible because `SqliteEventStore` freezes both every instance in its constructor and `SqliteEventStore.prototype` (`packages/store/src/sqlite-event-store.ts:100,397-398`). I ran both instance and prototype forms and each errored before exercising cleanup (`Cannot define property close` / `Cannot redefine property: close`), so neither is admissible TDD red. The committed regression instead hoist-wraps the already-planned `closeStores` import with a real call-through, scopes the observation to the `openStore()` world, records whether that world's candidate root exists when closure begins, and asserts the exact store is unusable afterward plus root removal. Current focused red is now the intended defect: `cleanupCloseProbe.calls` expected 1, received 0 at goal-qualification.test.ts:232. This preserves the approved behavior/mutation property without weakening frozen-store integrity or widening owned paths.",
+      "timestamp": "2026-09-01T19:16:31.215Z"
+    },
+    {
+      "id": "comment-f81558080507453caa63f561240ca449",
+      "author": "worker-d16b4297",
+      "content": "Penultimate adversarial review found two in-scope failure-path defects in the centralized cleanup and one pre-existing unowned helper defect. I fixed the owned defects red-first: (1) a bounded rmSync failure had popped and forgotten the root, so a later cleanup could not retry it; the new named regression failed at candidateRoot expected absent/received present, then passed after pop-after-success. (2) simultaneous closeStores and rmSync failures masked the close error; the new named regression failed because the thrown value was only the rm Error, then passed after cleanup aggregates both errors while retaining the root. The remaining pre-existing issue is apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:161-162: closeStores pops a store before close() and stops on its first throw, so that failing handle is no longer tracked and later stores wait for another call. That path is outside this task's exact-five ownership; I did not edit or reimplement it. It is test-fixture hardening rather than the goal-closure authority chain, and is disclosed for a separately owned follow-up rather than scope-crept here. Forbidden untracked goal-closure-verification-fixture.ts was not opened or touched.",
+      "timestamp": "2026-09-01T19:32:43.827Z"
+    },
+    {
+      "id": "comment-e50797933bc44445a8856089ce832408",
+      "author": "worker-d16b4297",
+      "content": "Fresh Step-4 foreground/unpiped verification record. Exact 412-character approved command exited 0: goal qualification Test Files 1 passed / Tests 11 passed; scheduler activation Test Files 1 passed / Tests 190 passed. The plan named 9 goal tests; the denominator is now 11 because penultimate adversarial review added two red-first cleanup failure-path regressions (retry after rm failure; preserve simultaneous close+rm errors), not because an arm was skipped.\n\nBroad daemon lane `pnpm --filter @moe/daemon test` exited 1: Test Files 1 failed | 341 passed (342), Tests 1 failed | 6982 passed | 12 todo (6995). Sole failure is foreign `apps/daemon/src/daemon-command-registry-human-approver.test.ts:135`, expected httpStatus 403 + OPERATOR_PRINCIPAL_REQUIRED but received 401. Pre-edit record was 4 failed files/16 failed tests; current failing-path intersection with this task's five owned paths is empty.\n\nFull security lane exited 1: Test Files 3 failed | 9 passed (12), Tests 13 failed | 695 passed (708). Foreign failures remain exactly boundary-roster.security.ts (2 roster scan/cardinality), durable-store-boundaries.security.ts (same 2 plus SAFE_BOUNDARY_OBSERVATION_LAYER race and whole-slice invariant = 4), and completeness.security.ts (7 coverage/partition diagnostics). Pre-edit record was the same 13 foreign failures plus seven owned scheduler failures; current owned scheduler is 190/190, so owned delta is empty.\n\nOther standalone legs: `pnpm typecheck` exit 0 (19/20 workspace projects); `pnpm test` exit 0, root lane only/apps excluded, Test Files 401 passed | 1 skipped, Tests 9783 passed | 44 skipped; `pnpm verify:foundation` exit 0, 35 files/756 tests; `pnpm verify:store` exit 0, 52 files/673 tests. Final diff --check exit 0. Exact status is four modified task paths, clean goal-qualification.ts SHA256 476A9C...23A0, forbidden untracked fixture still ?? and never opened/touched.",
+      "timestamp": "2026-09-01T19:44:11.605Z"
+    },
+    {
+      "id": "comment-fa6b0672aa2740a9b336b894e9e55857",
+      "author": "worker-d16b4297",
+      "content": "QA-reopen-2 delivery replay, source bytes unchanged. Fresh exact 412-character foreground command exited 0: goal qualification 1 file/11 tests; scheduler activation 1 file/190 tests. Fresh broad lanes reproduce the prior path-attributed baseline: daemon raw-red 1 foreign failure in daemon-command-registry-human-approver.test.ts:135, 341 passed files/6982 passed tests/12 todo; security raw-red 13 foreign failures across boundary-roster.security.ts, durable-store-boundaries.security.ts, completeness.security.ts, 9 passed files/695 passed tests. `pnpm typecheck` exit0; root lane (apps excluded) 401 pass+1 skip files/9783 pass+44 skip tests; verify:foundation 35 files/756 tests; verify:store 52 files/673 tests. Final diff-check exit0. Exact four modified blobs/SHA256 match the last verified handoff; goal-qualification.ts remains clean; forbidden untracked fixture remains status-only ?? and was never opened. No code change was made because QA's rejection is delivery-only. The next action is normal complete_task plus session exit so the wrapper can create/record the required kind=completion commit; no hand staging/commit/recording will be attempted.",
+      "timestamp": "2026-09-01T20:18:29.806Z"
+    },
+    {
+      "id": "comment-2b78ce0151564729bdd4d747b6e15e42",
+      "author": "architect-db6a0906",
+      "content": "2026-09-02 production-at-claim remeasurement; no source edits. HEAD 5fe0fdde. Exact owned roster: four modified/unstaged paths and goal-qualification.ts byte-equal to HEAD. WT SHA256/lines: scheduler-activation-hostile-cases.ts 4295CE241A2DFD66A650388875609505610DC06DB3EBAFAC6CE4698CCEDFDF56/2182; scheduler-activation-boundaries.security.ts 3418E65E125E98A1B60DE3E2D3A81E729789468DDF833745A35B369D6BDD5CD8/772; goal-closure-test-fixtures.ts C326E19B5BEF6D02ECC4039756B494BA5B358B8BAAD01B8947D7A48C3E0BCC55/736; goal-qualification.test.ts 4E5AF8C1412D2FB7AAAC037C77B06B9F12AF06FFFC409C3D685FF10DE05E9A89/500; goal-qualification.ts 476A9C0602C1F91BBDC908FDF5C00BD418C6AA735858A2B56F10B9C392DB23A0/248 and unchanged. Fresh foreground focused legs: daemon goal qualification Test Files 1 passed/Tests 11 passed, security scheduler activation Test Files 1 passed/Tests 190 passed, both exit 0. commits=[]/landing={}/lastCommitOutcome=null remains delivery-only. The shared cause is now measured in D:/projexts/moes: Codex worker/QA launch as long-lived TUIs; wrapper landing cannot run until child exit and remains keyed to preflightTaskId. No PR#3 path can repair that owner. Required unblock is the single moes six-file PS/sh+JetBrains one-shot repair already sent to #governors, installed and live-canary proven. Preserve these exact four dirty blobs; no further cleanup/source churn or no-churn retry before the canary.",
+      "timestamp": "2026-09-01T22:25:58.974Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.010Z",
-  "updatedAt": "2026-09-01T00:57:13.801Z",
+  "updatedAt": "2026-09-01T22:26:07.076Z",
   "contextFetchedBy": [
-    "worker-841b4860",
-    "governor-943540d3",
-    "architect-1f97776b"
+    "governor-c11c29e2",
+    "architect-db6a0906"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-30T20:34:01.849Z",
-    "plannedStepCount": 6,
+    "plannedStepCount": 4,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "executedStepCount": 14,
+    "rejectCount": 2,
+    "reopenCount": 2
   },
-  "blockedReason": "Valid blocker is repeated wrapper post-flight delivery failure, not QA's size findings. Current get_context shows active step-6 amendment amend-1 (exact 412-char command); it already passed goal 8/8 and scheduler 190/190, with durable broad evidence in comment-35ae51edd0384d668496b852b710f829. Yet after REVIEW, task.commits=[], lastCommitOutcome=null, landing={}, identical to the separately escalated aa205 wrapper failure. Worker rails forbid manual commit/record_commit/.moe edits. QA's aggregate +622 LOC premise contradicts the controlling global rail that task-level net LOC is never a rejection reason. The 689-line goal-closure-test-fixtures.ts is test-tier: fresh grep finds only *.test.ts/tests-security imports, it has no runtime .js bridge, and index-surface.test.ts explicitly deny-lists its helpers, so the production-source file cap does not apply. Technical evidence is in comment-e78650a318cc4d5d8b85c6f91de2c970. Preserve exact five paths; repair wrapper landing and record the explicit-path completion SHA before another REVIEW.",
+  "blockedReason": "External production prerequisite: the four implementation blobs remain exact and fresh focused gates are green (goal 1 file/11 tests; scheduler 1 file/190 tests), while commits=[]/landing={}/lastCommitOutcome=null is the measured long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own the D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact four blobs and perform one delivery replay only. Do not submit another source-cleanup or no-churn retry plan.",
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-31T12:45:38.951Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T22:26:07.076Z",
   "dependsOn": [
     "task-9d4aab86419d4ad6a10b531eb05de4ca"
   ],
   "stepsCompleted": [],
-  "failedDodItems": [
-    {
-      "item": "Source-size rail: apps/daemon/src/goals/goal-closure-test-fixtures.ts is 689 physical lines, above the mandatory split-before-400 production-file cap.",
-      "rejectedAt": "2026-08-31T12:43:56.809Z",
-      "rejectedBy": "qa-a346939e"
-    },
-    {
-      "item": "Task-size QA gate: the diff is +696/-74, net +622 changed LOC, above the >400 rejection threshold and requiring an architect split.",
-      "rejectedAt": "2026-08-31T12:43:56.809Z",
-      "rejectedBy": "qa-a346939e"
-    },
-    {
-      "item": "Delivered-tree verification: no completion commit/landing exists for the task bytes.",
-      "rejectedAt": "2026-08-31T12:43:56.809Z",
-      "rejectedBy": "qa-a346939e"
-    }
-  ],
-  "planSubmittedAt": "2026-08-31T10:20:24.436Z",
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-01T19:06:12.176Z",
   "planningNotes": {
-    "approachesConsidered": "Rejected the untracked tests/security/goal-closure-verification-fixture.ts and the former direct runEffectActivateCommand/commitFoundationPhase/recordProvenFoundationAttempt recipe: both bypass the served attempt writer and fabricate the authority this acceptance row must prove. Rejected raw RECEIPTED-row planting for the accepted world; it remains valid only in the existing hostile reader tests. Rejected changing qualifyGoalClosure, its result keys, refusal vocabulary, or goal-qualification-reads.ts because reachability escapes the exact five-path roster. Use the DONE typed provider-run seam to drive the same Foundation attempt service body the served handler uses, then the real Foundation verification service and real Node verifier process.",
-    "codebaseInsights": "Planning anchor HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. Epic sibling task-9d4aab86419d4ad6a10b531eb05de4ca is DONE/merged at b3a7551d and its completion/review prove the one-argument served factory remains the real-launch default while createFoundationAttemptServiceWithProviderRun injects only the physical provider call. Current consumer grep finds the companion only in its defining module and foundation-attempt-service.test.ts, so goal-closure-test-fixtures.ts is the intended first durable consumer. The served body performs runEffectActivateCommand, reservation, provider telemetry commit, and attempt settlement; createFoundationVerificationService seals/runs and commits PASSED receipts; qualifyGoalClosure reads those receipts plus exact attempt/activation/review facts. Exact focused baselines: scheduler-activation-boundaries.security.ts = 1 file, 189 tests, 7 failed/182 passed, cascading from two GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE calls; goal-qualification.test.ts = 1 file/7 passed. The GOAL group is four hostile outcomes, not seven arms: BEFORE, AFTER, and two RACE sides; the seven are failing assertions. Full security is presently foreign-red at 12 files/699 tests, 20 failed/679 passed: seven owned scheduler failures plus 13 failures in boundary-roster/completeness/durable-store suites, so the broad lane must use merge-base-versus-HEAD path attribution. All five owned paths were tracked and clean; tests/security/goal-closure-verification-fixture.ts was untracked and is forbidden. apps/daemon package.json declares @moe/contracts, @moe/runner, and @moe/store as workspace dependencies; pnpm-lock.yaml importer apps/daemon contains all three. A same-command temporary apps/daemon/src bare-specifier probe importing all three ran `pnpm --filter @moe/daemon typecheck` exit 0 and deleted itself (PROBE_REMOVED=true). Shape/reachability grep found no sixth permanent asserting consumer if existing scanGlobalEvents/approveNodes/seedReviewAcceptance exports and qualifyGoalClosure's signature/result shape remain unchanged.",
-    "risks": "Align one identity end to end: the approved node, durable active-graph execution node, dispatch graphSnapshot/binding, attempt nodeKey, and receipt.graphIdentity; a stale node-1 versus activation-world-node mismatch will refuse upstream and make the target guard unreachable. Give every attempt, grant, command, recipe, and verification a process-unique identity so retries/parallel tests cannot consume another run. The injected provider must use the authority object supplied by production and must never call activation/reservation/attempt writers itself. PASSED evidence must come from createFoundationVerificationService with an absolute process.execPath argv and a real candidate Git tree; always close SQLite handles and remove candidate/worktree roots with Windows retry handling on success and failure. goal-qualification.ts is already 248 lines and must remain byte-unchanged after the drill. Preserve the current test-only fixture exports and root-surface exclusion; update stale comments that claim the positive world is impossible without widening published exports. Never read, import, edit, delete, or stage the forbidden untracked fixture.",
+    "approachesConsidered": "The human-authorized default was a byte-preserving verification/landing replay. I rejected QA's requested SPIDR split: the controlling governor correction withdraws both size findings because there is no task-level LOC cap and the 721-line fixture is test-tier, not production. I also rejected reimplementation, adoption of the forbidden untracked fixture, widening the five-path roster, and manual staging/commit. Fresh adversarial measurement did find one real in-scope defect: both consumers call cleanupGoalClosureFixtures (rmSync can throw) before closeStores, so Windows cleanup failure skips every SQLite close. The plan therefore adds only a production-surface regression and centralizes handles-before-roots in the existing test-tier helper, then performs the authorized verification/landing replay.",
+    "codebaseInsights": "Planning anchor HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d. Exact state: modified goal-closure-test-fixtures.ts, goal-qualification.test.ts, scheduler-activation-hostile-cases.ts, scheduler-activation-boundaries.security.ts; goal-qualification.ts clean; forbidden goal-closure-verification-fixture.ts remains untracked. SHA-256 anchors respectively: 7FBD79B1704A68A6C0ACBDF47A5EB44B84F19E8E3AE5B06112D83214572D0, 4E5804B262445D623AF99D641FDC43316E14007C2876AFFE1036E79E96720554, 95ACC3B41DC7E772A3A3FEDD01C9BC54DCCDA4228F1ADFB172850AD5A429DF51, 3418E65E125E98A1B60DE3E2D3A81E729789468DDF833745A35B369D6BDD5CD8, and clean goal-qualification.ts 476A9C0602C1F91BBDC908FDF5C00BD418C6AA735858A2B56F10B9C392DB23A0. Filter-aware worktree blobs for the four edits are 6ac451146f81ef314781ba5bb45f71305b320cde, 4f062b51218a814dee245ac820b82028b465ee35, a9f28f4f61e02ec9f17ec2609051376d98f4c001, c7d3b769cc16e70e93fdcb2ae18027227f3f1c30; none is reachable from refs/reflogs. task.commits=[], lastCommitOutcome=null, landing={}. Prerequisite task-9d4aab86419d4ad6a10b531eb05de4ca is DONE/merged at b3a7551d. Fresh exact 412-character gate exited 0 with 1 file/8 goal tests and 1 file/190 scheduler tests. The real chain is createFoundationAttemptServiceWithProviderRun -> durable PROVEN readback -> createFoundationVerificationService -> real Node verifier -> canonical PASSED receipt -> qualifyGoalClosure. Fresh defect anchors: hostile-cases.ts lines 1204-1206 and goal-qualification.test.ts lines 194-196 delete scratch roots before closeStores despite the boundary hook's handles-first contract.",
+    "risks": "These four candidate blobs exist only in the shared worktree, so any unexplained drift is a preservation block, never something to normalize. Keep CRLF/filter bytes stable and never touch the forbidden untracked fixture. The cleanup regression must call through the real instance close so it does not leak the store it observes. The AFTER arm currently spawns two verifier children under CASE_BOUND_MS=15s while the one-child accepted control has 120s; it measured about 3s and is not a present defect, so disclose rather than scope-creep unless a fresh focused run fails. Full daemon/security lanes have known foreign red; use path-attributed deltas and exact paths/counts. The recurring wrapper issue is the remaining delivery gate: complete_task is not enough unless the exit hook records a completion commit and landing metadata.",
     "keyFiles": [
+      "tests/security/scheduler-activation-hostile-cases.ts",
+      "tests/security/scheduler-activation-boundaries.security.ts",
       "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
       "apps/daemon/src/goals/goal-qualification.ts",
-      "apps/daemon/src/goals/goal-qualification.test.ts",
-      "tests/security/scheduler-activation-hostile-cases.ts",
-      "tests/security/scheduler-activation-boundaries.security.ts"
+      "apps/daemon/src/goals/goal-qualification.test.ts"
     ]
   },
   "budget": {
     "wallClockMs": 5400000,
-    "warnedAt": "2026-08-31T10:41:53.465Z",
-    "escalatedAt": "2026-08-31T10:41:53.465Z"
+    "warnedAt": "2026-09-01T21:14:10.091Z",
+    "escalatedAt": "2026-09-01T21:14:10.091Z"
   },
-  "planApprovedAt": "2026-08-31T10:20:26.532Z",
+  "planApprovedAt": "2026-09-01T19:06:14.396Z",
   "workStartedAt": "2026-08-31T10:42:39.178Z",
-  "reviewStartedAt": "2026-08-31T12:40:13.203Z",
   "verification": {
     "command": "node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/goals/goal-qualification.test.ts'],['exec','vitest','run','-c','tests/security/vitest.config.ts','tests/security/scheduler-activation-boundaries.security.ts']];for(const a of L){let r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 1 passed (1)\nTests 8 passed (8)\nDuration 6.75s (transform 3.48s, import 4.23s, tests 2.42s)\nRUN v4.1.10 D:/projexts/moe-next/tests/security\nTest Files 1 passed (1)\nTests 190 passed (190)\nDuration 14.22s (transform 3.72s, import 4.53s, tests 9.57s)\nProcess exit 0",
-    "reportedAt": "2026-08-31T12:40:13.203Z"
+    "outputTail": "Fresh delivery replay: apps/daemon goal qualification — Test Files 1 passed (1), Tests 11 passed (11). tests/security scheduler activation — Test Files 1 passed (1), Tests 190 passed (190). Exact foreground sequential command exited 0.",
+    "reportedAt": "2026-09-01T20:19:52.667Z"
   },
   "filesModified": [
-    "apps/daemon/src/goals/goal-qualification.test.ts",
     "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+    "apps/daemon/src/goals/goal-qualification.test.ts",
     "tests/security/scheduler-activation-hostile-cases.ts",
-    "tests/security/scheduler-activation-boundaries.security.ts",
-    "apps/daemon/src/goals/goal-qualification.ts"
+    "tests/security/scheduler-activation-boundaries.security.ts"
   ],
-  "completionSummary": "Delivered a production-backed goal-closure acceptance world: the fixture composes the shipped Foundation attempt service, injecting only the typed physical provider-run port, then uses the shipped verification service and a real Node verifier process to persist a canonical PASSED receipt. Goal qualification now proves both DAEMON_VERIFIED closure witnesses from one aligned activation/attempt/receipt/review identity without changing goal-qualification.ts. Scheduler hostile arms retain BEFORE/AFTER/two-sided RACE coverage, now with a nonzero exact set of production-minted receipt readbacks and one provider-run call per verification. Cleanup closes stores and removes real candidate/worktree roots with bounded Windows retries. Active amendment amend-1 exact 412-character gate exited 0: goal qualification 1 file/8 tests; scheduler boundary 1 file/190 tests. Broad results remain honestly path-attributed per comment-35ae51edd0384d668496b852b710f829: daemon 4 failed/336 passed files and 16 failed/6919 passed/12 todo tests, all foreign; full security 3 failed/9 passed files and 13 failed/687 passed tests, all foreign after the owned scheduler lane became 190/190. Root typecheck/tests, verify:foundation, verify:store, and daemon/security tsc were green. Owned-path new-failure intersection is empty.",
-  "reviewCompletedAt": "2026-08-31T12:43:56.809Z",
+  "completionSummary": "Delivery-only QA reopen replay; implementation bytes were preserved exactly and no source change was made. The four explicit modified paths still contain the production-backed accepted goal world, exact BEFORE/AFTER/RACE DAEMON_PREREQUISITE hostile coverage, and centralized handles-first cleanup with rm retry and dual-error preservation. goal-qualification.ts remains byte-clean; the forbidden untracked fixture was status-reported only and never opened/touched. Fresh exact command: goal 11/11 plus scheduler 190/190, exit0. Fresh broad replay: typecheck exit0; root lane apps-excluded 9783 pass/44 skip; foundation 756; store 673. Disclosed unchanged foreign red: daemon 1 failure in daemon-command-registry-human-approver.test.ts (341 pass files/6982 pass tests/12 todo); security 13 failures in boundary-roster, durable-store-boundaries, completeness (9 pass files/695 pass tests); owned-path intersection empty. Prior restored red drills remain anchored by identical production/AFTER/fixture hashes. All four paths were reported in every step. This completion exists solely to trigger the wrapper's explicit-path kind=completion commit; QA must verify task.commits and landing.lastCompletion before approving.",
   "rejectionDetails": {
     "failedDodItems": [
-      "Source-size rail: apps/daemon/src/goals/goal-closure-test-fixtures.ts is 689 physical lines, above the mandatory split-before-400 production-file cap.",
-      "Task-size QA gate: the diff is +696/-74, net +622 changed LOC, above the >400 rejection threshold and requiring an architect split.",
-      "Delivered-tree verification: no completion commit/landing exists for the task bytes."
+      "Delivered-tree evidence for DoD 2-5 is missing: no task completion SHA contains the production-backed accepted control, seven exact hostile outcomes, green focused tests, or restored mutation results.",
+      "Completion/delivery rail: task.commits is empty, landing is empty, lastCommitOutcome is null, and delivered HEAD 5fe0fdde does not contain the four modified implementation blobs."
     ],
     "issues": [
       {
         "type": "other",
         "file": "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
-        "description": "PRODUCTION FILE OVER CAP: 689 physical lines. Split fixture composition, persistence/world setup, verifier execution, and cleanup into focused modules so every production source is below 400 (target <=250); obtain an ownership/plan amendment before adding paths."
-      },
-      {
-        "type": "other",
-        "description": "OVERSIZED TASK DIFF: +696/-74 (net +622). Architect must split the row into reviewable slices under the active QA >400 net changed-LOC bar."
-      },
-      {
-        "type": "other",
-        "description": "NO COMPLETION COMMIT: task.commits=[], lastCommitOutcome=null, landing={}; HEAD cb0be9e0 does not contain the owned changes. Each split slice must land and record an explicit-path completion SHA before QA."
+        "line": 1,
+        "description": "NO COMPLETION DELIVERY: current green bytes exist only as four modified paths over HEAD 5fe0fdde. task.commits=[], landing={}, no task trailer exists in git log, and HEAD's fixture blob differs from the worktree. Re-run completion and exit through the wrapper until get_context records a kind=completion commit and landing.lastCompletion for the exact four-path implementation; do not change the already-green source or hand-commit it."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Delivery-only rejection. I reran the persisted exact foreground command from task.verification at the current tree: exit 0 with goal qualification Test Files 1 passed/Tests 11 passed and scheduler activation Test Files 1 passed/Tests 190 passed. The implementation evidence remains green, and I am not carrying either prior size finding: aggregate task LOC is not a rejection basis, and goal-closure-test-fixtures.ts is test-tier under the controlling governor correction. However the required delivered-tree anchor is still absent more than twenty minutes after REVIEW: fresh get_context reports task.commits=[], landing={}, lastCommitOutcome=null; `git log --all --grep 'Moe-Task: task-a9c1fe620d2642cba3e3669a17ea1eac'` returns no commit; HEAD is 5fe0fdde and retains different blobs while all four implementation paths remain modified. The exact green run therefore exercised only shared dirty-tree bytes and cannot certify DoD 2-5 at a reproducible task SHA. Preserve the verified implementation unchanged, run the normal completion/exit path again, and do not hand-stage or hand-record provenance; QA needs a wrapper-recorded kind=completion SHA plus landing.lastCompletion containing exactly the four reported implementation paths.",
+      "rejectedAt": "2026-09-01T20:10:13.148Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "Delivered-tree evidence for DoD 2-5 is missing: no task completion SHA contains the production-backed accepted control, seven exact hostile outcomes, green focused tests, or restored mutation results.",
+        "Completion/delivery rail: task.commits is empty, landing is empty, lastCommitOutcome is null, and delivered HEAD 5fe0fdde does not contain the four modified implementation blobs."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+          "line": 1,
+          "description": "NO COMPLETION DELIVERY: current green bytes exist only as four modified paths over HEAD 5fe0fdde. task.commits=[], landing={}, no task trailer exists in git log, and HEAD's fixture blob differs from the worktree. Re-run completion and exit through the wrapper until get_context records a kind=completion commit and landing.lastCompletion for the exact four-path implementation; do not change the already-green source or hand-commit it."
+        }
+      ]
+    },
     {
       "reason": "Review fails mandatory size and delivery rails. I reran the active amend-1 verification command exactly: exit 0; goal qualification Test Files 1 passed/Tests 8 passed and scheduler boundary 1/190. However the delivered scope is oversized: the tracked diff is +696/-74, net +622 changed LOC, exceeding the QA >400 net-change bar. More importantly, `apps/daemon/src/goals/goal-closure-test-fixtures.ts` is 689 physical lines, which directly violates the repository's per-production-source split-before-400 rail (the fact that individual functions are <=50 lines does not cure the file cap). The architect must split the fixture responsibilities into focused modules/rows and amend ownership before REVIEW. Delivery is also uncommitted: after waiting and re-fetching context, task.commits=[], lastCommitOutcome=null, landing={}, and HEAD remains unrelated cb0be9e0 while four owned paths are modified. Split/re-plan first, rerun the amended exact gate for each delivered slice, and land recorded explicit-path completion commits.",
       "rejectedAt": "2026-08-31T12:43:56.809Z",
@@ -257,6 +251,17 @@
           "description": "NO COMPLETION COMMIT: task.commits=[], lastCommitOutcome=null, landing={}; HEAD cb0be9e0 does not contain the owned changes. Each split slice must land and record an explicit-path completion SHA before QA."
         }
       ]
+    }
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Governance moved the row to PLANNING after repeated QA delivery-provenance rejection and read the full reopen context; no plan or source work was performed.",
+      "whatRemains": "Architect must design an authoritative wrapper completion/rescue landing path without implementation churn; do not repeat shared-tree-only verification.",
+      "pitfalls": "task.commits=[], landing={}, lastCommitOutcome=null; current implementation is green but not reproducibly delivered.",
+      "openQuestions": "Whether wrapper post-flight needs a dedicated repair path before this task can produce kind=completion.",
+      "releasedAt": "2026-09-01T21:14:49.259Z",
+      "releasedBy": "governor-c11c29e2",
+      "reason": "Governor registration mistakenly routed through a PLANNING claim; release immediately to preserve the architect-only re-plan boundary."
     }
   ]
 }

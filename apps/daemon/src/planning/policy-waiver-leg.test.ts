@@ -1,4 +1,5 @@
 import type { EventDraft, SqliteEventStore, StoredEvent } from "@moe/store";
+import { types as nodeTypes } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { closeStores, openStore } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -41,12 +42,12 @@ function accepted(result: PolicyWaiverLegResult) {
 }
 
 function commit(store: SqliteEventStore, result: PolicyWaiverLegResult): void {
-  const built = accepted(result);
-  store.commit({ aggregateId: built.leg.aggregateId,
-    commandBytes: new TextEncoder().encode(built.leg.events[0]!.eventId),
-    commandId: `seed-${built.leg.events[0]!.eventId}`,
-    committedAt: "2026-08-30T21:00:00.000Z", events: built.leg.events,
-    expectedVersion: built.leg.expectedVersion });
+  const leg = accepted(result).leg;
+  store.commit({ aggregateId: leg.aggregateId,
+    commandBytes: new TextEncoder().encode(leg.events[0]!.eventId),
+    commandId: `seed-${leg.events[0]!.eventId}`,
+    committedAt: "2026-08-30T21:00:00.000Z", events: leg.events,
+    expectedVersion: leg.expectedVersion });
 }
 
 function event(draft: EventDraft, sequence: number, overrides: Partial<StoredEvent> = {}): StoredEvent {
@@ -72,8 +73,7 @@ function revokeDraft(value: PolicyWaiverRevokeInput, eventId = value.commandId):
   return Object.freeze({ eventId, eventType: built.eventType, payload: built.bytes });
 }
 
-function expectRefusal(result: PolicyWaiverLegResult | ReturnType<typeof foldPolicyWaiverEvents>,
-  code: string): void {
+function expectRefusal(result: { readonly ok: boolean }, code: string): void {
   expect(result).toEqual({ code, layer: "DAEMON_POLICY_WAIVER", ok: false });
 }
 
@@ -97,6 +97,48 @@ describe("policy-waiver history fold and same-read leg", () => {
     expect(Object.isFrozen(built)).toBe(true);
     expect(Object.isFrozen(built.leg)).toBe(true);
     expect(Object.isFrozen(built.leg.events)).toBe(true);
+  });
+
+  it("materializes detached legs and preserves committed bytes after caller mutation", () => {
+    const store = openStore();
+    const result = accepted(buildPolicyWaiverLeg(store, {
+      expectedVersion: 0, kind: "GRANT", value: grant(),
+    }));
+    const first = result.leg;
+    const second = result.leg;
+    const firstEvent = first.events[0]!;
+    const secondEvent = second.events[0]!;
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+    expect(first.events).not.toBe(second.events);
+    expect(firstEvent).not.toBe(secondEvent);
+    expect(firstEvent.payload).not.toBe(secondEvent.payload);
+    expect(firstEvent.payload.buffer).not.toBe(secondEvent.payload.buffer);
+    for (const value of [result, first, first.events, firstEvent]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+    expect(nodeTypes.isProxy(firstEvent.payload)).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(firstEvent, "payload")).toEqual({
+      configurable: false, enumerable: true, value: firstEvent.payload, writable: false,
+    });
+    const canonicalBytes = Uint8Array.from(secondEvent.payload);
+    firstEvent.payload[0] = 0xff;
+    expectRefusal(decodePolicyWaiverRecord(firstEvent.eventType as "PolicyWaiverGranted.v1",
+      firstEvent.payload), "POLICY_WAIVER_RECORD_UNREADABLE");
+    const fresh = result.leg;
+    expect(fresh.events[0]!.payload).toEqual(canonicalBytes);
+    const decoded = decodePolicyWaiverRecord("PolicyWaiverGranted.v1", fresh.events[0]!.payload);
+    if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+    store.commit({ aggregateId: fresh.aggregateId, commandBytes: new Uint8Array(),
+      commandId: "copy-owned-commit", committedAt: "2026-08-30T21:00:00.000Z",
+      events: fresh.events, expectedVersion: fresh.expectedVersion });
+    fresh.events[0]!.payload[0] = 0xff;
+    const persisted = store.readEvents(fresh.aggregateId);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.payload).toEqual(canonicalBytes);
+    const persistedRecord = decodePolicyWaiverRecord("PolicyWaiverGranted.v1", persisted[0]!.payload);
+    if (!persistedRecord.ok) throw new Error(`${persistedRecord.code}@${persistedRecord.layer}`);
+    expect(persistedRecord.record).toEqual(decoded.record);
   });
 
   it("snapshots the envelope and semantic value before reading history", () => {

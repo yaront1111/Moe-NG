@@ -20,8 +20,9 @@
     {
       "stepId": "step-1",
       "description": "Re-establish the execution baseline before editing. From moe.get_context require dependency task-ec83fa4a73954361839b236bc59656b8 to be DONE/landed and read its durable completionSummary, reviewSummary, and verification; then inspect only its landed public bridge/signatures to identify the exact exported codec, aggregate/tuple identity, current-state fold, grant/revoke record builder, and expected-version decision-leg builder. If any required capability is absent, report blocked on that exact prerequisite surface; never copy its WIP or implement a local substitute. Record `git status --porcelain` for the five owned paths, current physical line counts, every import in each owned production file, the existing literal shape/count consumers, and merge-base broad-lane failures before the diff. Confirm the already-measured @moe/contracts/@moe/store manifest+lock edges and retain the successful deleted compiled bare-specifier probe result in the step note. Re-run no generated output: shape tracing found only the owned .js bridge as fan-out.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-02T09:20:45.799Z"
     },
     {
       "stepId": "step-2",
@@ -98,7 +99,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-6a94d2a2",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -113,12 +114,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:08:06.720Z",
-  "updatedAt": "2026-09-01T14:29:21.398Z",
+  "updatedAt": "2026-09-02T09:33:07.641Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",
     "qa-2062c6d0",
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "worker-6a94d2a2"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T13:46:55.934Z",
@@ -146,7 +148,112 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-09-02T09:20:01.658Z",
+    "escalatedAt": "2026-09-02T09:20:01.658Z"
   },
-  "planApprovedAt": "2026-08-31T14:14:43.054Z"
+  "planApprovedAt": "2026-08-31T14:14:43.054Z",
+  "workStartedAt": "2026-09-02T09:20:45.799Z",
+  "commits": [
+    {
+      "sha": "4812300055fd392ccc828a26b44df9fb8a91f8de",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:20:02Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:29:53.866Z",
+      "treeId": "d141b3577e09243427cba05a12373ffa5bbda65e",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "09dd31fccaa96b0f95657f9e5d66854b60292fe6",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:30:26Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:30:33.063Z",
+      "treeId": "189ba4b27422f20b5eafd79f3060381e8f369339",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "034bfcd650038312c6f24b062117637f1d5edebc",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:31:04Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:31:10.812Z",
+      "treeId": "898663435134e890b8918a365d357cfa46a638e9",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "6df9dc3da6601f6042883d51f27545aa16fae659",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:31:41Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:31:48.728Z",
+      "treeId": "862e4d665fdf953cbda8796d1ac1d4f1ab2d883c",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "d82fa05c79a3a70eb653a040c8d7db0d686b4567",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:32:19Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:32:29.085Z",
+      "treeId": "0eff140f34e5d7afd334a59bcdb80b84cd715aeb",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "c4a8c30ac1a362d5bb4d5586cb534f88f2c7396b",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6a94d2a2@2026-09-02T09:33:00Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+      ],
+      "recordedBy": "worker-6a94d2a2",
+      "recordedAt": "2026-09-02T09:33:07.641Z",
+      "treeId": "2247fc9cc215dc545c907a8427be4616a2d7cadf",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-6a94d2a2@2026-09-02T09:33:00Z",
+    "at": "2026-09-02T09:33:07.641Z"
+  }
 }
