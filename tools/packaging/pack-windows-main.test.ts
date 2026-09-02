@@ -17,6 +17,10 @@ import {
   resolvePackExecutable,
 } from "./pack-windows-main.js";
 import {
+  stageArtifactBroker,
+  verifyArtifactBroker,
+} from "./pack-windows-materialized-main.js";
+import {
   PACK_TOOLCHAIN_SCHEMA, resolveProtectedWindowsPackExecutable,
 } from "./pack-command.js";
 import { withPrivateWindowsCandidate } from "./pack-windows-candidate.js";
@@ -679,5 +683,126 @@ describe("the production Windows pack source composition", () => {
     expect(existsSync(join(outputRoot, "dist", "moe-windows.zip"))).toBe(false);
     expect(candidateRoot).not.toBe("");
     expect(existsSync(candidateRoot)).toBe(false);
+  });
+});
+
+/**
+ * The broker's bytes are the one thing in this artifact that no source check can
+ * vouch for: `dist/` is git-ignored, so the binary is never in a commit and the
+ * commit-anchored source verification upstream cannot see it at all. What stands
+ * in for that is a pin measured on the bytes actually written, re-read from disk.
+ *
+ * The pin is measure-then-verify rather than a hard-coded digest ON PURPOSE, and
+ * the reason is measured rather than assumed: three locked release builds of the
+ * same sources produced three different SHA-256s (961b33ae…, 882e920b…, 23f665d1…)
+ * at identical size, differing in exactly 20 bytes — the PE TimeDateStamp at
+ * offset 257 and a contiguous 16-byte CodeView GUID at 152437-152452. A constant
+ * would therefore be stale on the next link, on any other machine, and in CI.
+ */
+describe("the Windows artifact's broker binary is copied and pinned", () => {
+  function brokerFixtureRoot(): string {
+    const root = mkdtempSync(join(tmpdir(), "moe-broker-pin-"));
+    roots.push(root);
+    return root;
+  }
+
+  function sourceBrokerOf(root: string, bytes: string): string {
+    const source = join(root, "built", "moe-windows-job-broker.exe");
+    mkdirSync(dirname(source), { recursive: true });
+    writeFileSync(source, bytes);
+    return source;
+  }
+
+  it("copies the built broker to the packaged path and pins the bytes it wrote", () => {
+    const root = brokerFixtureRoot();
+    const artifactRoot = join(root, "artifact");
+    const source = sourceBrokerOf(root, "broker-bytes-alpha");
+
+    const pin = stageArtifactBroker(source, artifactRoot);
+
+    // The location is the one PACKAGED_BROKER_RELATIVE_PATH resolves to, so an
+    // extracted artifact satisfies the packaged layout with no workspace marker.
+    expect(pin.path).toBe("packages/runner/bin/moe-windows-job-broker.exe");
+    const staged = join(artifactRoot, "packages", "runner", "bin", "moe-windows-job-broker.exe");
+    expect(existsSync(staged)).toBe(true);
+    expect(readFileSync(staged, "utf8")).toBe("broker-bytes-alpha");
+
+    // Pinned from the bytes RE-READ after writing, not from the source buffer: the
+    // manifest must name what shipped, not what was merely handed to the copier.
+    const independent = createHash("sha256").update(readFileSync(staged)).digest("hex");
+    expect(pin.sha256).toBe(independent);
+    expect(pin.bytes).toBe(statSync(staged).size);
+  });
+
+  it("refuses an unusable broker source with the exact code, layer and reason", () => {
+    const root = brokerFixtureRoot();
+    expect(() => stageArtifactBroker(join(root, "absent.exe"), join(root, "artifact")))
+      .toThrow(expect.objectContaining({
+        code: "PACK_STEP_FAILED",
+        layer: "PACKAGING_BROKER",
+        reason: "BROKER_SOURCE_UNUSABLE",
+      }));
+  });
+
+  it("verifies the staged broker when its bytes are intact", () => {
+    const root = brokerFixtureRoot();
+    const artifactRoot = join(root, "artifact");
+    const pin = stageArtifactBroker(sourceBrokerOf(root, "broker-bytes-alpha"), artifactRoot);
+
+    expect(() => verifyArtifactBroker(pin, artifactRoot)).not.toThrow();
+  });
+
+  it("reads the packaged location, not a path carried on the pin", () => {
+    const root = brokerFixtureRoot();
+    const artifactRoot = join(root, "artifact");
+    const pin = stageArtifactBroker(sourceBrokerOf(root, "broker-bytes-alpha"), artifactRoot);
+
+    // A pin is caller-supplied data. If verification located the file THROUGH it,
+    // a `..` segment would walk the read out of the artifact root entirely — and
+    // would read a decoy that hashes correctly while the shipped broker is never
+    // examined. The packaged location is a property of the layout, so it wins.
+    const decoy = join(root, "decoy.exe");
+    writeFileSync(decoy, "broker-bytes-alpha");
+    const hostile = { ...pin, path: `../../${"decoy.exe"}` };
+
+    // Still green: it read the real staged broker, ignoring the hostile path.
+    expect(() => verifyArtifactBroker(hostile, artifactRoot)).not.toThrow();
+
+    // And it is genuinely reading the staged file rather than the decoy —
+    // corrupting ONLY the staged copy must still refuse. The corruption is a
+    // DIFFERENT length on purpose: this arm grades WHICH FILE is read, and a
+    // same-length payload would also make it sensitive to the digest-versus-length
+    // axis that the substitution arm below exists to grade. One arm, one axis.
+    writeFileSync(join(artifactRoot, "packages", "runner", "bin", "moe-windows-job-broker.exe"),
+      "broker-bytes-omega-of-a-clearly-different-length");
+    expect(() => verifyArtifactBroker(hostile, artifactRoot)).toThrow(expect.objectContaining({
+      reason: "BROKER_DIGEST_MISMATCH",
+    }));
+  });
+
+  /**
+   * THE PIN IS THE ONLY MECHANISM THAT CAN REFUSE HERE, and the fixture is built to
+   * make that true rather than asserted to be true. The substitute is a regular
+   * file, non-symlink, non-empty, and EXACTLY THE SAME LENGTH as the pinned bytes —
+   * so every shape fence upstream (existence, file-ness, symlink, size) is satisfied
+   * and cannot answer first. Only the SHA-256 comparison distinguishes these bytes.
+   * Loosen the digest check and this arm goes green while nothing else moves.
+   */
+  it("refuses a same-length substituted binary with the pin's own reason", () => {
+    const root = brokerFixtureRoot();
+    const artifactRoot = join(root, "artifact");
+    const pin = stageArtifactBroker(sourceBrokerOf(root, "broker-bytes-alpha"), artifactRoot);
+    const staged = join(artifactRoot, "packages", "runner", "bin", "moe-windows-job-broker.exe");
+
+    const substitute = "broker-bytes-OMEGA";
+    expect(substitute).toHaveLength("broker-bytes-alpha".length);
+    writeFileSync(staged, substitute);
+    expect(statSync(staged).size).toBe(pin.bytes);
+
+    expect(() => verifyArtifactBroker(pin, artifactRoot)).toThrow(expect.objectContaining({
+      code: "PACK_STEP_FAILED",
+      layer: "PACKAGING_BROKER",
+      reason: "BROKER_DIGEST_MISMATCH",
+    }));
   });
 });
