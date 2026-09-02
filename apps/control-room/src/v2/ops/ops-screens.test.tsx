@@ -39,7 +39,7 @@ describe("verifierWords", () => {
 describe("PolicyScreen", () => {
   it("lists each slice by kind with its digest check and counts, the evaluations, and the waiver note", () => {
     render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
-    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 INSTALLED · 1 EVALUATIONS · VERSION 3");
+    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 INSTALLED · 1 EVALUATION · VERSION 3");
     const evaluation = screen.getByTestId(`cr.policy.slice.${"f".repeat(64)}`);
     expect(evaluation.textContent).toContain("Evaluation policy · installed 2 h ago · bytes match the ref");
     expect(evaluation.textContent).toContain("0 rules · 0 auto-approval opt-ins · 7 risk classifications");
@@ -64,7 +64,8 @@ describe("PolicyScreen", () => {
 describe("HealthScreen", () => {
   it("states the process and ledger facts in a person's words", () => {
     render(<HealthScreen nowMs={NOW} outcome={HEALTH} />);
-    expect(screen.getByTestId("cr.health.banner").textContent).toBe("The daemon answered just now · up since 2026-09-02T19:00:00.000Z · last decision 25 min ago");
+    expect(screen.getByTestId("cr.health.banner").textContent).toBe("The daemon answered just now · up for 1 h · last decision 25 min ago");
+    expect(screen.getByTestId("cr.health.since").textContent).toBe("2026-09-02T19:00:00.000Z");
     expect(screen.getByTestId("cr.health.project").textContent).toBe("unai");
     expect(screen.getByTestId("cr.health.plane").textContent).toBe("V1");
     expect(screen.getByTestId("cr.health.store").textContent).toBe("D:/store.sqlite");

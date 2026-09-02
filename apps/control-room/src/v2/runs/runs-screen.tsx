@@ -26,6 +26,17 @@ export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.free
   READY: "Ready for an agent",
 });
 
+/** Lifecycle tokens the daemon folds, in a person's words; an unknown token stays as it is. */
+const GOAL_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  CANCELLED: "Cancelled", CLOSING: "Closing", COMPLETED: "Done", DRAFT: "Draft",
+  EXECUTION_ENABLED: "Active", PLANNING: "Planning", PLAN_REVIEW: "Plan in review",
+});
+const RUN_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  ACTIVATED: "activated", APPROVED: "approved", CANCELLED: "cancelled", DRAFT: "draft",
+  PLANNING: "planning", PLAN_REVIEW: "plan in review", READY: "ready", REJECTED: "rejected",
+  SUBMISSION_DRAINING: "submitting",
+});
+
 const ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
   ACCEPT: "review passed",
   ESCALATE: "review escalated",
@@ -77,8 +88,11 @@ function NodeRow({ node, nowMs }: { readonly node: RunNodeView; readonly nowMs: 
       <div className="cr2-run-node-main">
         <p className="cr2-run-node-title">
           <span className="cr2-approve-mono">{node.nodeKey}</span>
-          <span className="cr2-run-node-objective">{node.objective}</span>
         </p>
+        <details className="cr2-run-node-objective">
+          <summary className="cr2-run-node-objective-summary">{node.objective}</summary>
+          <p className="cr2-run-node-objective-full">{node.objective}</p>
+        </details>
         <p className="cr2-run-node-evidence" data-testid={`cr.runs.node.${node.nodeKey}.evidence`}>
           {nodeEvidence(node, nowMs).join(` ${MIDDOT} `)}
         </p>
@@ -94,7 +108,7 @@ function runLine(goal: RunGoalView): string {
   if (goal.run === null) return "No plan has been run for this goal yet.";
   const approval = goal.run.approval === "BOUND" ? "approval bound"
     : goal.run.approval === "ABSENT" ? "awaiting approval" : "approval unreadable";
-  return `Run ${goal.run.runId} ${MIDDOT} ${goal.run.lifecycle} ${MIDDOT} ${approval}`;
+  return `Run ${goal.run.runId} ${MIDDOT} ${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
 }
 
 function GoalSection({ goal, nowMs, onOpenBoard }: {
@@ -106,7 +120,9 @@ function GoalSection({ goal, nowMs, onOpenBoard }: {
     <section className="cr2-run-goal" data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
         <div>
-          <p className="cr2-slot-kicker">{`GOAL ${MIDDOT} ${goal.lifecycle ?? "UNKNOWN"}`}</p>
+          <p className="cr2-slot-kicker">
+            {`GOAL ${MIDDOT} ${goal.lifecycle === null ? "lifecycle unknown" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}`}
+          </p>
           <h2 className="cr2-run-goal-title">
             <button
               className="cr2-goal-titlebutton"

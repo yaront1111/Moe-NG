@@ -1171,3 +1171,45 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* A node's objective is a mission brief: three lines by default, the whole text on request. */
+.cr2-run-node-objective {
+  margin: 0;
+  color: var(--cr-ink);
+}
+
+.cr2-run-node-objective-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cr2-run-node-objective-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cr2-run-node-objective[open] .cr2-run-node-objective-summary {
+  display: none;
+}
+
+.cr2-run-node-objective-full {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.cr2-run-node-objective-summary:focus-visible {
+  outline: 2px solid var(--cr-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Long identifiers break where they must, not in the middle of every word. */
+.cr2-ops-fact-value,
+.cr2-ops-ref {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}

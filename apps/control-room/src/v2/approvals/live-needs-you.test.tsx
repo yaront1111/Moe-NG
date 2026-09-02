@@ -68,7 +68,8 @@ describe("LiveNeedsYou", () => {
       expect(screen.getByTestId("cr.needsyou.item.gate-1.goal-gate")).toBeTruthy();
     });
     expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 DECISIONS · NEEDS YOU");
-    expect(onCount).toHaveBeenLastCalledWith(2);
+    // The badge count is a passive effect of the 2-item render: it lands after the DOM does.
+    await waitFor(() => { expect(onCount).toHaveBeenLastCalledWith(2); });
     expect(readCoverage).toHaveBeenCalledWith("goal-plan");
     expect(readCoverage).toHaveBeenCalledWith("goal-gate");
   });
@@ -99,6 +100,32 @@ describe("LiveNeedsYou", () => {
     button.click();
     await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed."); });
     expect(submit).toHaveBeenCalledWith(offer, "node-x");
+  });
+
+  it("closes a goal through the close port when the daemon offers goal.close", async () => {
+    const offer = {
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-close", commandKind: "goal.close",
+      expectedVersion: 7, inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: "goal-gate",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: [offer] }), status: 200 } as unknown as Response;
+      if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as unknown as Response;
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const verified: DocumentCoverageOutcome = {
+      ...gatePending,
+      contracts: [{ ...gatePending.contracts[0]!, gate1: "APPROVED", requirements: [{ criteria: [{ criterionId: "c", nodeKey: "n", statement: "s", status: "VERIFIED" }], requirementId: "r", statement: "r" }] }],
+      goals: [{ goalId: "goal-gate", lastActivityAt: null, lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-gate", title: "Gate me" }],
+      totals: { contracts: 1, criteria: 1, goals: 1, planned: 0, requirements: 1, verified: 1 },
+    };
+    const submit = vi.fn(async () => ({ commandId: "cmd-close", ok: true as const }));
+    render(<LiveNeedsYou closePort={{ submit }} onOpenBoard={vi.fn()} readCoverage={async () => verified} readRuns={async () => ({ code: "x", layer: "y", status: "ERROR" })} setup={SETUP} />);
+    const button = await screen.findByTestId("cr.needsyou.close.goal-gate");
+    button.click();
+    await waitFor(() => { expect(screen.getByTestId("cr.needsyou.close.goal-gate").textContent).toBe("Confirm: close the goal"); });
+    screen.getByTestId("cr.needsyou.close.goal-gate").click();
+    await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.goal-gate").textContent).toContain("Closed."); });
+    expect(submit).toHaveBeenCalledWith(offer, "goal-gate");
   });
 
   it("shows an honest empty queue without a coverage reader", async () => {

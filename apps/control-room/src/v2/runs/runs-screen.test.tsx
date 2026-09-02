@@ -63,7 +63,9 @@ describe("the runs screen", () => {
     const onOpenBoard = vi.fn();
     render(<RunsScreen nowMs={NOW} onOpenBoard={onOpenBoard} outcome={outcome} />);
     expect(screen.getByTestId("cr.runs.totals").textContent).toBe("2 goals · 2 nodes · 1 in progress · 1 ready for an agent");
-    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("Run run-1 · ACTIVATED · approval bound");
+    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("Run run-1 · activated · approval bound");
+    expect(screen.getByTestId("cr.runs.goal.goal-1").textContent).toContain("GOAL · Active");
+    expect(screen.getByTestId("cr.runs.goal.goal-2").textContent).toContain("GOAL · Draft");
     expect(screen.getByTestId("cr.runs.node.node-a.status").textContent).toBe(STATUS_WORDS.READY);
     expect(screen.getByTestId("cr.runs.node.node-b.status").textContent).toBe(STATUS_WORDS.IN_PROGRESS);
     expect(screen.getByTestId("cr.runs.node.node-b.evidence").textContent).toContain("held by sess-wrap-2");

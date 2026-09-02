@@ -8,27 +8,33 @@ import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
-import { createEscalationPort } from "./escalation-port.js";
-import type { EscalationPort } from "./escalation-port.js";
-import type { EscalationResult } from "./needs-you.js";
-import type { NeedsYouItem } from "./needs-you-model.js";
 import { useGoalCoverage } from "../goals/use-goal-coverage.js";
 import type { CoverageReader } from "../goals/use-goal-coverage.js";
-import { NeedsYou } from "./needs-you.js";
+import { createEscalationPort } from "./escalation-port.js";
+import type { EscalationPort } from "./escalation-port.js";
+import { createGoalClosePort } from "./goal-close-port.js";
+import type { GoalClosePort } from "./goal-close-port.js";
+import { NeedsYou, decisionKeyOf } from "./needs-you.js";
+import type { DecisionResult } from "./needs-you.js";
 import { deriveNeedsYou } from "./needs-you-model.js";
+import type { NeedsYouItem } from "./needs-you-model.js";
 
 /**
- * The LIVE Needs-you queue. Three daemon reads feed it and each answers one question: the
- * affordance surface says what this session is OFFERED (plan approvals), the durable goal
- * catalog says which goals exist, and the coverage read says where each goal's contract
- * stands. The queue is derived from those answers and nothing else; `onCount` hands the
- * derived count to the shell for the nav badge so the badge and the list cannot disagree.
+ * The LIVE Needs-you queue. Four daemon reads feed it and each answers one question: the
+ * affordance surface says what this session is OFFERED (plan approvals, escalations, goal
+ * closes), the durable goal catalog says which goals exist, the coverage read says where each
+ * goal's contract stands, and the runs read names the goal an exhausted node belongs to. The
+ * queue is derived from those answers and nothing else; `onCount` hands the derived count to
+ * the shell for the nav badge so the badge and the list cannot disagree. A decision spends
+ * the daemon's own offer through the matching port and keeps the answer beside its card.
  */
 
 const POLL_INTERVAL_MS = 2_000;
 const RUNS_POLL_MS = 5_000;
 
 export interface LiveNeedsYouProps {
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly closePort?: GoalClosePort | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly escalationPort?: EscalationPort | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
@@ -41,14 +47,15 @@ export interface LiveNeedsYouProps {
 }
 
 export function LiveNeedsYou({
-  escalationPort, onConnection, onCount, onOpenBoard, readCoverage, readRuns: readRunsProp, setup,
+  closePort, escalationPort, onConnection, onCount, onOpenBoard, readCoverage, readRuns: readRunsProp, setup,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [runs, setRuns] = useState<RunsOutcome | null>(null);
-  const [results, setResults] = useState<ReadonlyMap<string, EscalationResult>>(new Map());
+  const [results, setResults] = useState<ReadonlyMap<string, DecisionResult>>(new Map());
   const [runsReader] = useState(() => readRunsProp ?? ((): Promise<RunsOutcome> => readRuns(setup.headers)));
-  const [port] = useState(() => escalationPort ?? createEscalationPort(setup));
+  const [escalate] = useState(() => escalationPort ?? createEscalationPort(setup));
+  const [close] = useState(() => closePort ?? createGoalClosePort(setup));
 
   const feed = useMemo(() => createBoardFeed({
     headers: setup.headers,
@@ -81,19 +88,24 @@ export function LiveNeedsYou({
   const data = useMemo(
     () => deriveNeedsYou({ catalog, coverage, runs, surface }), [catalog, coverage, runs, surface],
   );
-  const onEscalate = useCallback((item: NeedsYouItem) => {
-    const facts = item.escalation;
-    if (facts === undefined) return;
-    setResults((previous) => new Map(previous).set(facts.nodeKey, { busy: true, outcome: null }));
-    void port.submit(facts.affordance, facts.nodeKey).then((outcome) => {
-      setResults((previous) => new Map(previous).set(facts.nodeKey, { busy: false, outcome }));
+  const onDecide = useCallback((item: NeedsYouItem) => {
+    const key = decisionKeyOf(item);
+    const spend = item.escalation !== undefined
+      ? escalate.submit(item.escalation.affordance, item.escalation.nodeKey)
+      : item.close !== undefined
+        ? close.submit(item.close.affordance, item.goalId)
+        : null;
+    if (spend === null) return;
+    setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
+    void spend.then((outcome) => {
+      setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
     }, () => {
-      setResults((previous) => new Map(previous).set(facts.nodeKey, {
-        busy: false, outcome: { code: "ESCALATION_DISPATCH_FAILED", layer: "CONTROL_ROOM_ESCALATION", ok: false },
+      setResults((previous) => new Map(previous).set(key, {
+        busy: false, outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
       }));
     });
-  }, [port]);
+  }, [close, escalate]);
   useEffect(() => { onCount?.(data.items.length); }, [data.items.length, onCount]);
 
-  return <NeedsYou data={data} escalationResults={results} onEscalate={onEscalate} onOpenBoard={onOpenBoard} />;
+  return <NeedsYou data={data} decisionResults={results} onDecide={onDecide} onOpenBoard={onOpenBoard} />;
 }

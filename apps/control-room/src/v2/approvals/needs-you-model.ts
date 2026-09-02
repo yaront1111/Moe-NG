@@ -6,21 +6,22 @@ import { MIDDOT } from "../glyphs.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
- * from things the daemon already states. Three sources, three kinds of item:
+ * from things the daemon already states. Four kinds of item:
  *
  *  - PLAN_APPROVAL: the affordance surface OFFERS `approval.decide_intent` for a goal's
  *    planning run. The offer is the daemon's own statement that the run is in review and
  *    this session may approve it; nothing here infers "reviewable" from a lifecycle word.
+ *  - ESCALATION: the surface OFFERS `escalation.decide` for a node, which the daemon does
+ *    only when three review rounds failed and the kernel refuses more until a human decides.
+ *    The runs read names the goal the node belongs to.
  *  - GATE_1: the coverage read says a Product Contract citing the goal's PRD is still
  *    PENDING at Gate 1 (the same fact the goal card's "Needs you" flag rests on).
  *  - READY_TO_CLOSE: every criterion the contract states is VERIFIED, every citing contract
- *    is past Gate 1, and the goal is still open. Closing stays the operator's call.
- *  - ESCALATION: the affordance surface OFFERS `escalation.decide` for a node, which the
- *    daemon does only when three review rounds failed and the kernel refuses more until a
- *    human decides. The runs read names the goal the node belongs to.
+ *    is past Gate 1, and the goal is still open. Closing stays the operator's call; when the
+ *    surface OFFERS `goal.close` for the goal the card carries that decision inline.
  *
- * Every item routes to the goal, where the plan, the contract and the close control already
- * live with their evidence. This screen is the queue, not a second place to decide blind.
+ * Every item routes to the goal, where the plan, the contract and the evidence live. An
+ * inline decision exists only where the daemon offered the command for it.
  */
 
 export const NEEDS_YOU_KINDS = ["PLAN_APPROVAL", "ESCALATION", "GATE_1", "READY_TO_CLOSE"] as const;
@@ -34,8 +35,15 @@ export interface EscalationFacts {
   readonly unsuccessfulRounds: number | null;
 }
 
+export interface CloseFacts {
+  /** The daemon's `goal.close` offer for this goal, spent verbatim by the close port. */
+  readonly affordance: Readonly<Record<string, unknown>>;
+}
+
 export interface NeedsYouItem {
   readonly actionLabel: string;
+  /** Present only for a READY_TO_CLOSE item the daemon offers goal.close for. */
+  readonly close?: CloseFacts | undefined;
   readonly detail: string;
   /** Present only for an ESCALATION item: the inline decision it carries. */
   readonly escalation?: EscalationFacts | undefined;
@@ -65,10 +73,12 @@ const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
-function planApprovalOffered(surface: SurfaceFrame | null, runId: string): boolean {
-  if (surface === null || surface.outcome !== "SURFACE") return false;
-  return surface.offers.some((offer) =>
-    offer["commandKind"] === "approval.decide_intent" && offer["targetAggregateId"] === runId);
+function offerFor(
+  surface: SurfaceFrame | null, commandKind: string, target: string,
+): Readonly<Record<string, unknown>> | undefined {
+  if (surface === null || surface.outcome !== "SURFACE") return undefined;
+  return surface.offers.find((offer) =>
+    offer["commandKind"] === commandKind && offer["targetAggregateId"] === target);
 }
 
 function itemsFor(
@@ -79,7 +89,7 @@ function itemsFor(
   const title = entry.brief?.title ?? entry.goalId;
   const base = { goalId: entry.goalId, planningRunRef: entry.planningRunRef, title };
   const items: NeedsYouItem[] = [];
-  if (planApprovalOffered(surface, entry.planningRunRef)) {
+  if (offerFor(surface, "approval.decide_intent", entry.planningRunRef) !== undefined) {
     items.push(Object.freeze({
       ...base,
       actionLabel: "Review the plan",
@@ -107,11 +117,15 @@ function itemsFor(
     const complete = criteria > 0 && verified === criteria && pending.length === 0
       && coverage.contracts.length > 0;
     if (complete && goal !== undefined && OPEN_LIFECYCLES.includes(goal.lifecycle ?? "")) {
+      const closeOffer = offerFor(surface, "goal.close", entry.goalId);
       items.push(Object.freeze({
         ...base,
         actionLabel: "Open the goal",
+        ...(closeOffer === undefined ? {} : { close: Object.freeze({ affordance: closeOffer }) }),
         detail: `All ${String(criteria)} acceptance criteria verified by the daemon's verifier.`
-          + " Close the goal when you are satisfied with the evidence.",
+          + (closeOffer === undefined
+            ? " The daemon is not offering to close it yet; open the goal to see why."
+            : " Close the goal when you are satisfied with the evidence."),
         headline: "Everything the contract states is verified",
         kind: "READY_TO_CLOSE",
       }));

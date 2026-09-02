@@ -28,6 +28,19 @@ function ago(iso: string | null, nowMs: number): string {
   return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`;
 }
 
+/** "2 h 15 min" from a start instant; the raw instant stays in the fact list. */
+function upFor(startedAt: string, nowMs: number): string {
+  const at = Date.parse(startedAt);
+  if (Number.isNaN(at)) return "an unknown time";
+  const minutes = Math.max(0, Math.round((nowMs - at) / 60_000));
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${String(minutes)} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours < 24) return rest === 0 ? `${String(hours)} h` : `${String(hours)} h ${String(rest)} min`;
+  return `${String(Math.floor(hours / 24))} d ${String(hours % 24)} h`;
+}
+
 function Refusal({ outcome, testId }: {
   readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>; readonly testId: string;
 }): JSX.Element {
@@ -75,7 +88,7 @@ export function PolicyScreen({ nowMs, outcome }: { readonly nowMs: number; reado
         {verifierWords(outcome.verifier)}
       </p>
       <span className="cr2-goals-count" data-testid="cr.policy.count">
-        {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATIONS ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
+        {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATION${outcome.evaluations.length === 1 ? "" : "S"} ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
       </span>
       {outcome.slices.length === 0 ? (
         <div className="cr2-goals-empty" data-testid="cr.policy.empty">
@@ -128,10 +141,11 @@ export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; reado
   return (
     <section className="cr2-ops" data-testid="cr.health.root">
       <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.health.banner">
-        {`The daemon answered ${ago(outcome.readAt, nowMs)} ${MIDDOT} up since ${daemon.startedAt} ${MIDDOT} last decision ${ago(ledger.lastDecidedAt, nowMs)}`}
+        {`The daemon answered ${ago(outcome.readAt, nowMs)} ${MIDDOT} up for ${upFor(daemon.startedAt, nowMs)} ${MIDDOT} last decision ${ago(ledger.lastDecidedAt, nowMs)}`}
       </p>
       <dl className="cr2-ops-facts" data-testid="cr.health.facts">
         <Fact label="Project" testId="cr.health.project" value={daemon.projectId} />
+        <Fact label="Up since" testId="cr.health.since" value={daemon.startedAt} />
         <Fact label="Process id" value={String(daemon.pid)} />
         <Fact label="Command plane" testId="cr.health.plane" value={daemon.commandAuthorityPlane} />
         <Fact label="Protocol" value={daemon.protocolVersion} />

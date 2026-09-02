@@ -101,7 +101,20 @@ describe("deriveNeedsYou", () => {
     expect(data.items[0]?.detail).toContain("contract-goal-p");
     expect(data.items[0]?.detail).toContain("4 acceptance criteria");
     expect(data.items[1]?.detail).toContain("All 3 acceptance criteria verified");
+    expect(data.items[1]?.detail).toContain("not offering to close it yet");
+    expect(data.items[1]?.close).toBeUndefined();
     expect(data.countLabel).toBe("2 DECISIONS · NEEDS YOU");
+  });
+
+  it("carries the close decision only when the daemon offers goal.close for that goal", () => {
+    const closeOffer = { ...approvalOffer("goal-d"), commandKind: "goal.close", targetAggregateId: "goal-d" };
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-d", "Done")]),
+      coverage: new Map([["goal-d", coverage("goal-d", 3, 3, "APPROVED", "EXECUTION_ENABLED")]]),
+      surface: surface([closeOffer]),
+    });
+    expect(data.items[0]).toMatchObject({ close: { affordance: closeOffer }, kind: "READY_TO_CLOSE" });
+    expect(data.items[0]?.detail).toContain("Close the goal when you are satisfied");
   });
 
   it("orders plans before contracts before closes, then by title", () => {

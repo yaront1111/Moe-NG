@@ -51,15 +51,47 @@ describe("the Needs-you queue", () => {
       goalId: "goal-1", headline: "A node's review is exhausted", kind: "ESCALATION" as const, planningRunRef: "run-1", title: "Alpha",
     };
     const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
-    const { rerender } = render(<NeedsYou data={data} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    const { rerender } = render(<NeedsYou data={data} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("REVIEW EXHAUSTED · Alpha");
     await userEvent.click(screen.getByTestId("cr.needsyou.escalate.node-x"));
     expect(onEscalate).toHaveBeenCalledWith(item);
-    rerender(<NeedsYou data={data} escalationResults={new Map([["node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
-    rerender(<NeedsYou data={data} escalationResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toBe("REFUSED · REVIEW_ESCALATION_NOT_REACHED · DAEMON_PREREQUISITE");
+  });
+
+  it("asks twice before closing a goal, then shows the daemon's answer", async () => {
+    const onDecide = vi.fn();
+    const item = {
+      actionLabel: "Open the goal", close: { affordance: { commandKind: "goal.close" } },
+      detail: "All 10 acceptance criteria verified by the daemon's verifier.",
+      goalId: "goal-1", headline: "Everything the contract states is verified", kind: "READY_TO_CLOSE" as const,
+      planningRunRef: "run-1", title: "Alpha",
+    };
+    const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
+    const { rerender } = render(<NeedsYou data={data} onDecide={onDecide} onOpenBoard={vi.fn()} />);
+    const button = screen.getByTestId("cr.needsyou.close.goal-1");
+    expect(button.textContent).toBe("Close the goal");
+    await userEvent.click(button);
+    // First click arms; nothing is sent, and the card offers a way back.
+    expect(onDecide).not.toHaveBeenCalled();
+    expect(screen.getByTestId("cr.needsyou.close.goal-1").textContent).toBe("Confirm: close the goal");
+    await userEvent.click(screen.getByTestId("cr.needsyou.close.goal-1.cancel"));
+    expect(screen.getByTestId("cr.needsyou.close.goal-1").textContent).toBe("Close the goal");
+    await userEvent.click(screen.getByTestId("cr.needsyou.close.goal-1"));
+    await userEvent.click(screen.getByTestId("cr.needsyou.close.goal-1"));
+    expect(onDecide).toHaveBeenCalledTimes(1);
+    expect(onDecide).toHaveBeenCalledWith(item);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onDecide} onOpenBoard={vi.fn()} />);
+    expect(screen.getByTestId("cr.needsyou.result.goal-1").textContent).toContain("Closed.");
+    expect((screen.getByTestId("cr.needsyou.close.goal-1") as HTMLButtonElement).disabled).toBe(true);
+    // Without the daemon's offer the card carries no close button at all.
+    const { close: _close, ...unoffered } = item;
+    cleanup();
+    render(<NeedsYou data={{ ...data, items: [unoffered] }} onDecide={onDecide} onOpenBoard={vi.fn()} />);
+    expect(screen.queryByTestId("cr.needsyou.close.goal-1")).toBeNull();
   });
 
   it("states the empty queue as an invitation and carries the daemon's note", () => {
