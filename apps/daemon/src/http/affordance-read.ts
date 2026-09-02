@@ -12,6 +12,8 @@ import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
+import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
+
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
@@ -346,6 +348,19 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // round remains blocked until the daemon consumes its receipt; an
         // unreadable ledger must never be staffed as writable work.
         const awaitingVerify = review.unreadable || latestRound?.routing.route === "ACCEPT";
+        // Three unsuccessful rounds and no escalation decision: the review kernel refuses
+        // every further round (REVIEW_ESCALATION_REQUIRED), so the node is BLOCKED on a human
+        // and the only command the surface offers for it is the escalation decision itself.
+        // Offering review.submit here would staff agents into a refusal loop.
+        if (!review.unreadable && !review.escalated
+          && review.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) {
+          offers.push(offer("escalation.decide", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+          steps.push(Object.freeze({
+            aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
+            missing: ["escalation"], status: "BLOCKED" as const, version: review.version,
+          }));
+          continue;
+        }
         offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
