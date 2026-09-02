@@ -46,11 +46,41 @@ const CARD_PREFIX = "cr.liveboard.card.";
 const DISPATCH_PREFIX = "cr.liveboard.dispatch.";
 const REPORT_PREFIX = "cr.liveboard.report.";
 const NODE_DELIVER_KIND = "node.deliver";
+const GOAL_CREATE_KIND = "goal.create";
+const GOAL_CLOSE_KIND = "goal.close";
+const PLAN_KIND = "plan.propose";
+const APPROVAL_KIND = "approval.decide";
 /** live-board.tsx writes "dispatching" + U+2026; the ASCII head tells it from an answer. */
 const PENDING_REPORT_HEAD = "dispatching";
 /** `${stage}: ${disposition} ${resultCode}` for a command the daemon committed. */
 const ACCEPTED_REPORT = "ANSWERED: DECIDED EFFECTS_COMMITTED";
 const POLL_INTERVAL_MS = 2_000;
+
+/**
+ * The one path a board dispatch posts to (client-transport.ts `COMMAND_PATH`, the
+ * V1 authority plane). The approval's budget commitment is read over a DIFFERENT
+ * path, `/budget/commitment/read`, so filtering on this one leaves exactly one
+ * witness per click and no background traffic to subtract.
+ */
+const COMMAND_PATH = "/command";
+/**
+ * The first command of a plan.propose sealing chain (live-planning-authorities.ts
+ * `proposeChain`), and the member that names the goal the draft is opened against.
+ */
+const CREATE_DRAFT_KIND = "planning.create_draft";
+/**
+ * The RETIRED fixed subjects, `DEFAULT_RUN_SUBJECT`/`DEFAULT_GOAL_SUBJECT` from
+ * apps/daemon/src/http/affordance-read.ts.
+ *
+ * They are written down only to be REFUSED. This lane deliberately omits the
+ * `fixedDemoGoal` provider, so the daemon runs its production composition and
+ * mints the goal - and therefore its run - per journey. Naming the old constants
+ * here is what stops a re-pinned fixture from passing as the repair: the browser's
+ * authority used to be cryptographically pinned to this one pair, and the whole
+ * point of the daemon's per-run planning material is that it no longer is.
+ */
+const DEFAULT_RUN_SUBJECT = "run-live-1";
+const DEFAULT_GOAL_SUBJECT = "goal-live-1";
 
 /** A round trip plus the poll that re-keys the card, with slack for a cold module graph. */
 const REPORT_BUDGET_MS = 20_000;
@@ -60,6 +90,60 @@ interface BoardReport {
   readonly ok: string;
   readonly testId: string;
   readonly text: string;
+}
+
+/**
+ * One `/command` POST as the BROWSER sent it, read back off the wire.
+ *
+ * Every member is nullable and nothing is defaulted: a body that carried no
+ * `runId` must read as absent rather than as some canonical value this test
+ * supplied, because "the board sent the wrong run" and "the board sent no run"
+ * are different defects and only the wire can tell them apart.
+ */
+interface CommandWitness {
+  readonly commandKind: string | null;
+  readonly draftGoalRef: string | null;
+  readonly draftKind: string | null;
+  readonly expectedVersion: number | null;
+  readonly runId: string | null;
+  readonly targetAggregateId: string | null;
+}
+
+function ownString(value: Readonly<Record<string, unknown>>, key: string): string | null {
+  const found = value[key];
+  return typeof found === "string" && found !== "" ? found : null;
+}
+
+function plainRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null;
+}
+
+/**
+ * Parses one POST body. An absent, unparseable or non-object body answers NULL
+ * for the whole witness, which the count assertions then catch - a witness that
+ * silently degraded to all-null members would satisfy every join below by
+ * comparing nothing to nothing.
+ */
+function witnessOf(body: string | null): CommandWitness | null {
+  if (body === null) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(body); } catch { return null; }
+  const envelope = plainRecord(parsed);
+  if (envelope === null) return null;
+  const payload = plainRecord(envelope["payload"]);
+  const commands = payload === null ? null : payload["commands"];
+  const draft = Array.isArray(commands) ? plainRecord(commands[0]) : null;
+  const version = envelope["expectedVersion"];
+  return {
+    commandKind: ownString(envelope, "commandKind"),
+    draftGoalRef: draft === null ? null : ownString(draft, "goalRef"),
+    draftKind: draft === null ? null : ownString(draft, "kind"),
+    expectedVersion: typeof version === "number" ? version : null,
+    runId: payload === null ? null : ownString(payload, "runId"),
+    targetAggregateId: ownString(envelope, "targetAggregateId"),
+  };
 }
 
 interface CardView {
@@ -230,8 +314,27 @@ const CHAIN: readonly ChainClick[] = [
   { becomes: "COMMITTED", kind: "approval.decide" },
 ];
 
+/**
+ * What one driven click leaves behind for the joins after the journey.
+ *
+ * `aggregateId` and `version` are the card's identity AT THE MOMENT IT WAS
+ * CLICKED - the identity the dispatch was authored from - so a POST that named
+ * anything else has a concrete expected value to be compared against. `after`
+ * retains the TRANSITIONED card, which is how the goal that the ledger actually
+ * committed is carried out of the loop: `goal.create` renews its aggregate on
+ * commit, so only the clicked one names the durable goal and only the retained
+ * pair can tell them apart.
+ */
+interface DrivenStep {
+  readonly afterAggregateId: string;
+  readonly aggregateId: string;
+  readonly kind: string;
+  readonly line: string;
+  readonly version: number | null;
+}
+
 /** One click: take the offer, dispatch it, read the answer, watch the ledger move. */
-async function driveClick(page: Page, step: ChainClick): Promise<string> {
+async function driveClick(page: Page, step: ChainClick): Promise<DrivenStep> {
   const before = await waitForCard(page, {
     dispatchable: true, kind: step.kind, notVersion: null, status: "READY",
   });
@@ -276,8 +379,14 @@ async function driveClick(page: Page, step: ChainClick): Promise<string> {
       `${step.keepsBlocked} must stay blocked until the run is reviewable`)
       .toBe(`${step.keepsBlocked} BLOCKED dispatchable=false`);
   }
-  return `${step.kind}@${before.aggregateId} v${String(before.version)}`
-    + ` -> ${after.status} v${String(after.version)}: ${report?.text ?? "(report re-keyed)"}`;
+  return {
+    afterAggregateId: after.aggregateId,
+    aggregateId: before.aggregateId,
+    kind: step.kind,
+    line: `${step.kind}@${before.aggregateId} v${String(before.version)}`
+      + ` -> ${after.status} v${String(after.version)}: ${report?.text ?? "(report re-keyed)"}`,
+    version: before.version,
+  };
 }
 
 test("an operator can click the whole bootstrap chain from an empty store", async ({ page }, testInfo) => {
@@ -285,9 +394,27 @@ test("an operator can click the whole bootstrap chain from an empty store", asyn
   // config's 180s is sized for a journey that reads a board the seed already
   // finished; every budget inside the lane still refuses well before this.
   test.setTimeout(300_000);
+  // THE WIRE RECORD, seated before the lane exists so nothing the page sends can
+  // predate it. It OBSERVES: there is no route handler, nothing is intercepted,
+  // aborted or fulfilled, and the daemon answers every one of these posts itself.
+  // An unparseable body is kept as a null entry rather than dropped, so a lost
+  // witness reds on the count instead of shrinking the sweep into a pass.
+  const posts: (CommandWitness | null)[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST") return;
+    let path: string;
+    try { path = new URL(request.url()).pathname; } catch { return; }
+    if (path !== COMMAND_PATH) return;
+    posts.push(witnessOf(request.postData()));
+  });
+  // `fixedDemoGoal` is DELIBERATELY ABSENT. It routes the daemon onto
+  // tests/e2e/control-room/fixed-demo-goal-dependencies.ts, which pins the first
+  // goal.create to the retired `goal-live-1`/`run-live-1` pair; this journey has
+  // to drive the daemon's PRODUCTION composition and a goal it minted itself,
+  // which is what the per-run planning authority exists to make possible.
   const driven = await withDaemonBackedControlRoom(
     {
-      approval: "HUMAN", fixedDemoGoal: true, liveCredentials: "ATTACHED", seed: "NONE",
+      approval: "HUMAN", liveCredentials: "ATTACHED", seed: "NONE",
     },
     async (lane: DaemonLane) => {
       // The lane's OWN contract, not evidence about the store: it must report no
@@ -306,8 +433,19 @@ test("an operator can click the whole bootstrap chain from an empty store", asyn
       // is already COMMITTED and offers no control - could never satisfy.
       const deliverTestId = `${CARD_PREFIX}${NODE_DELIVER_KIND}@${lane.nodeRef}`;
 
-      const evidence: string[] = [];
-      for (const step of CHAIN) evidence.push(await driveClick(page, step));
+      const steps: DrivenStep[] = [];
+      for (const step of CHAIN) steps.push(await driveClick(page, step));
+      const evidence: string[] = steps.map((entry) => entry.line);
+
+      // THE GOAL THIS OPERATOR CREATED, taken from the click rather than from the
+      // board's current frame: goal.create renews its aggregate the moment the
+      // commit lands, so the id on screen afterwards names the NEXT goal nobody
+      // has created. `find` may legitimately miss, and a missing one must stop
+      // the journey rather than let the joins below compare against `undefined`.
+      const created = steps.find((entry) => entry.kind === GOAL_CREATE_KIND);
+      if (created === undefined) {
+        throw new Error(`no ${GOAL_CREATE_KIND} was driven; CHAIN is not this journey`);
+      }
 
       // The node spec was on disk the whole time; only the approval made it a step.
       const deliver = page.getByTestId(deliverTestId);
@@ -320,13 +458,99 @@ test("an operator can click the whole bootstrap chain from an empty store", asyn
         + `${String(await deliver.getAttribute("data-status"))}`;
       evidence.push(line);
       console.log(`[board-chain] ${line}`);
+
+      // THE CLOSE IS OFFERED FOR THE GOAL THIS OPERATOR CREATED. goal.close is
+      // minted only once the goal reaches EXECUTION_ENABLED, so its presence is
+      // the approval's own effect - and asserting it by the EXACT testid is what
+      // stops an unrelated sibling goal from satisfying the journey, which a
+      // prefix wait would have accepted. The count then denies the reverse
+      // escape: two goals, one of them this operator's, is not this journey.
+      await expect(page.getByTestId(`${CARD_PREFIX}${GOAL_CLOSE_KIND}@${created.aggregateId}`),
+        "the approved goal must card its own close")
+        .toBeVisible({ timeout: POLL_INTERVAL_MS * 5 });
+      await expect(page.locator(`[data-testid^="${CARD_PREFIX}${GOAL_CLOSE_KIND}@"]`),
+        "and exactly one goal.close card, so no sibling goal can stand in for it")
+        .toHaveCount(1);
+
       testInfo.annotations.push({ description: evidence.join("; "), type: "board-chain" });
-      return { evidence, pids: lanePids(lane) };
+      return { created, evidence, pids: lanePids(lane), steps };
     },
   );
 
   expect(driven.ok ? "ok" : `${driven.code}: ${driven.detail}`).toBe("ok");
   if (!driven.ok) return;
-  expect(driven.value.evidence, "nine clicks and one node.deliver reading").toHaveLength(10);
+  const { created, evidence, steps } = driven.value;
+  expect(evidence, "nine clicks and one node.deliver reading").toHaveLength(10);
+  // KEPT AHEAD OF THE JOINS BELOW, where it already was. The joins read a record
+  // the journey finished writing, so they cannot become false later - but an
+  // orphan can only be observed now, and a failing join further down would
+  // otherwise silently retire the one check with a deadline on it.
   expect(await survivingPids(driven.value.pids), "teardown must leave no orphans").toEqual([]);
+
+  // THE CAPTURE IS NONVACUOUS AND ONE-FOR-ONE. Every join below is an `toEqual`
+  // over derived lists, and empty lists agree with each other - so the three
+  // counts are pinned first, in one assertion that prints all three, and only
+  // then is witness[i] allowed to stand for the i-th click.
+  expect(`chain=${String(CHAIN.length)} clicks=${String(steps.length)} `
+    + `posts=${String(posts.length)}`, "nine chain entries, nine driven clicks, nine posts")
+    .toBe("chain=9 clicks=9 posts=9");
+  const witnesses = posts.flatMap((entry) => entry === null ? [] : [entry]);
+  expect(witnesses, "every /command body must have parsed as an envelope").toHaveLength(9);
+
+  // EACH POST AGAINST THE CARD IT WAS DISPATCHED FROM, in click order. The
+  // expected side is the board's own rendered identity, so a dispatch that sent
+  // the card the operator merely happened to be looking at, a sibling's run, or a
+  // stale version reds here naming the click index that did it.
+  expect(
+    witnesses.map((witness, index) => `${String(index)} ${String(witness.commandKind)}`
+      + ` ${String(witness.targetAggregateId)} v${String(witness.expectedVersion)}`),
+    "every click must post its own card's kind, target and version",
+  ).toEqual(
+    steps.map((step, index) => `${String(index)} ${step.kind}`
+      + ` ${step.aggregateId} v${String(step.version)}`),
+  );
+
+  // THE THREE AUTHORITY-BEARING POSTS. Two plan.propose and one approval.decide,
+  // in that order and no others: a fourth planning post, or an approval that rode
+  // ahead of the finalize, is a different journey than the one this lane certifies.
+  const planning = witnesses.flatMap((witness, index) =>
+    witness.commandKind === PLAN_KIND || witness.commandKind === APPROVAL_KIND
+      ? [{ index, witness }]
+      : []);
+  expect(planning.map((entry) => entry.witness.commandKind),
+    "exactly two plan clicks and one approval, in click order")
+    .toEqual([PLAN_KIND, PLAN_KIND, APPROVAL_KIND]);
+  // The BODY's run against the OFFER's target, which the join above already
+  // pinned to the card. A payload naming another run - or naming none, which
+  // reads as "null" here - reds against a concrete aggregate id.
+  expect(planning.map((entry) => `${String(entry.witness.commandKind)}`
+    + ` run=${String(entry.witness.runId)}`),
+  "each planning body must name the run its own offer targeted")
+    .toEqual(planning.map((entry) => `${steps[entry.index]?.kind ?? "(no click)"}`
+      + ` run=${steps[entry.index]?.aggregateId ?? "(no click)"}`));
+  const runIds = planning.map((entry) => String(entry.witness.runId));
+  expect(new Set(runIds).size, `both plan clicks and the approval must ride ONE `
+    + `daemon-authored run, got ${runIds.join(", ")}`).toBe(1);
+
+  // MINTED, NOT THE RETIRED FIXED PAIR. Stated as two booleans rather than one
+  // compound comparison, because a pair inequality is satisfied by either half
+  // differing and this has to fail if EITHER subject is the old fixed one.
+  const [dynamicRun = "(no planning post)"] = runIds;
+  expect([dynamicRun === DEFAULT_RUN_SUBJECT, created.aggregateId === DEFAULT_GOAL_SUBJECT],
+    `run ${dynamicRun} and goal ${created.aggregateId} must both be daemon-minted, `
+    + `never the retired ${DEFAULT_RUN_SUBJECT}/${DEFAULT_GOAL_SUBJECT} pair`)
+    .toEqual([false, false]);
+  // And the commit really renewed the repeatable route, so the id above is the
+  // one the ledger took rather than whatever the board happened to be offering.
+  expect(created.afterAggregateId, "the created goal must not be the offer that replaced it")
+    .not.toBe(created.aggregateId);
+
+  // THE DRAFT IS OPENED AGAINST THAT SAME GOAL. Read off the first command of the
+  // first plan body, so a chain opened against a sibling goal - or a body that
+  // opened no draft at all - reds here rather than travelling on to be refused by
+  // the daemon under a code that names something else.
+  const [firstPlan] = planning;
+  expect(`${String(firstPlan?.witness.draftKind)} ${String(firstPlan?.witness.draftGoalRef)}`,
+    "the first plan.propose must open its draft against the created goal")
+    .toBe(`${CREATE_DRAFT_KIND} ${created.aggregateId}`);
 });
