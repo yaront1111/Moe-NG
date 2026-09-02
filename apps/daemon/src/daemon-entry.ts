@@ -278,6 +278,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.documentCoverage === undefined
       ? {} : { documentCoverage: resolved.documentCoverage }),
     ...(resolved.runs === undefined ? {} : { runs: resolved.runs }),
+    ...(resolved.policy === undefined ? {} : { policy: resolved.policy }),
+    ...(resolved.health === undefined ? {} : { health: resolved.health }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
     ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
     ...(resolved.planningRuns === undefined

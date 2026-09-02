@@ -913,3 +913,24 @@ it("refuses an absent runs port, a non-POST, and a body carrying any other key",
     runs: { boundProjectId: "proj-0001", readRuns: () => ({ code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }) },
   });
 });
+
+it("routes the policy and health reads through their ports and refuses them absent", async () => {
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: "{}", path: "/policy/read" })).toEqual({
+      body: { code: "POLICY_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: "{}", path: "/health/read" })).toEqual({
+      body: { code: "HEALTH_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/policy/read" }), "LISTENER_POLICY_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ x: 1 }), path: "/health/read" }), "LISTENER_HEALTH_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    health: { boundProjectId: "proj-0001", readHealth: () => ({ code: "HEALTH_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+    policy: { boundProjectId: "proj-0001", readPolicy: () => ({ code: "POLICY_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+  });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/policy/read" }), "LISTENER_POLICY_UNAVAILABLE");
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/health/read" }), "LISTENER_HEALTH_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+});

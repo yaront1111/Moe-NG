@@ -3,6 +3,8 @@ import type { CommandAuthorityPlanePort } from "./http/http-contract.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
+import type { PolicyReadPort } from "./http/policy-read.js";
+import type { HealthReadPort } from "./http/health-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -40,6 +42,10 @@ export interface OptionalDaemonPortProvider {
   documentCoverage?(): DocumentCoverageReadPort;
   /** The runs-and-leases read port, bound to this daemon own project. */
   runs?(): RunsReadPort;
+  /** Installed policy and evaluations, bound to this daemon own project. */
+  policy?(): PolicyReadPort;
+  /** The daemon process and ledger facts, bound to this daemon own project. */
+  health?(): HealthReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /** The budget commitment read port, bound to this daemon's own project. */
@@ -85,6 +91,8 @@ export interface ResolvedOptionalDaemonPorts {
   readonly affordances?: AffordancePort;
   readonly documentCoverage?: DocumentCoverageReadPort;
   readonly runs?: RunsReadPort;
+  readonly policy?: PolicyReadPort;
+  readonly health?: HealthReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -114,7 +122,7 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs",
+  "reconciliation", "runs", "policy", "health",
   "sessionHandshake",
 ] as const);
 
@@ -234,6 +242,24 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(runs, ["readRuns"]) || typeof Reflect.get(runs, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const policyFactory = provider.policy;
+    if (policyFactory !== undefined && typeof policyFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const policy = policyFactory?.call(provider);
+    if (policy !== undefined
+      && (!hasMethods(policy, ["readPolicy"]) || typeof Reflect.get(policy, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const healthFactory = provider.health;
+    if (healthFactory !== undefined && typeof healthFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const health = healthFactory?.call(provider);
+    if (health !== undefined
+      && (!hasMethods(health, ["readHealth"]) || typeof Reflect.get(health, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -320,6 +346,8 @@ export function resolveOptionalDaemonPorts(
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentCoverage === undefined ? {} : { documentCoverage }),
       ...(runs === undefined ? {} : { runs }),
+      ...(policy === undefined ? {} : { policy }),
+      ...(health === undefined ? {} : { health }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

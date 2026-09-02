@@ -36,6 +36,10 @@ import type { DocumentCoverageReadPort } from "./http/document-coverage-contract
 import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
 import { createRunsReadPort } from "./http/runs-read.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
+import { createPolicyReadPort } from "./http/policy-read.js";
+import type { PolicyReadPort } from "./http/policy-read.js";
+import { createHealthReadPort } from "./http/health-read.js";
+import type { HealthReadPort } from "./http/health-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -324,6 +328,18 @@ export function createStoreDependencies(
     createDocumentCoverageReadPort({ projectId: config.projectId, store });
   /** Runs and leases: every bound goal, its run, its sealed nodes and their durable state. */
   const runs = (): RunsReadPort => createRunsReadPort({ projectId: config.projectId, store });
+  /** Installed policy, its evaluations and the verifier standing, from this root store. */
+  const policy = (): PolicyReadPort => createPolicyReadPort({ projectId: config.projectId, store });
+  /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
+  const composedAt = (config.clock ?? (() => new Date().toISOString()))();
+  const health = (): HealthReadPort => createHealthReadPort({
+    nodeSpecsDir: config.nodeSpecsDir ?? null,
+    projectId: config.projectId,
+    readPlane: () => commandAuthorityPlane().readPlane(),
+    startedAt: composedAt,
+    store,
+    storePath: config.storePath,
+  });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -421,7 +437,9 @@ export function createStoreDependencies(
     graph,
     goalCatalog,
     goalSource,
+    health,
     planningRuns,
+    policy,
     productContractGate1,
     productContractPending,
     productContractV2Current,
