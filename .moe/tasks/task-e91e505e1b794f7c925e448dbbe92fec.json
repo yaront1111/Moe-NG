@@ -22,7 +22,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Still required; blocked on an explicit product-authority choice for a server-owned replay selector, history diagnostic, or corrected superseded-waiver DoD.",
   "createdBy": "WORKER",
   "parentTaskId": "task-5d4628555d364414a16fa9213b393bd8",
   "dependsOn": [
@@ -40,18 +40,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:09:27.335Z",
-  "updatedAt": "2026-09-01T14:29:21.717Z",
+  "updatedAt": "2026-09-01T17:29:10.373Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",
     "qa-2062c6d0",
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "governor-c11c29e2"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T14:18:42.103Z"
   },
-  "blockedReason": "Contract/API ambiguity prevents a non-speculative plan (details and measurements in comment-65035a8440934517bedad1b0040817ff). Under the authorized ref-less server inputs, GRANT1 and its superseding GRANT2 share every exact join operand; correct discovery selects current GRANT2, so POLICY_WAIVER_SUPERSEDED cannot be a reachable top-level result. Making it reachable requires an explicit choice: authorize a server-owned expectedWaiverRef/replay selector (recommended), return per-history diagnostics, or narrow the DoD. Separately, ref recomputation lives in prerequisite task-ec83's decoder/fold; this exact-three-path row cannot mutate it, while a reader-local rebuild is redundant and fails the divergence rail. Need explicit confirmation whether prerequisite-delegated recomputation satisfies the drill or whether the redundant rebuild is required. Do not invent caller ref authority or a test-only helper.",
+  "blockedReason": "Still required; blocked on an explicit product-authority choice for a server-owned replay selector, history diagnostic, or corrected superseded-waiver DoD.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T14:37:24.962Z"
+  "blockedAt": "2026-09-01T17:29:10.373Z",
+  "blockedOnTaskIds": null
 }

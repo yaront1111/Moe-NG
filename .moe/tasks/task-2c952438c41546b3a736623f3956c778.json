@@ -99,7 +99,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human directed governance to UNBLOCK TASKS. Return the row to architect planning because step-5 production journeys exposed two authority/presentation defects outside its exact four paths. Re-plan or SPIDR the honest disabled Approvals affordance and LIVE_BOOTSTRAP_UNAVAILABLE mutation disablement; do not weaken the already-green root fence or journey assertions.",
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: downstream of d36 and 75bb accessibility/bootstrap leaves. Unblock after both land.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "HIGH",
@@ -120,7 +120,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.394Z",
-  "updatedAt": "2026-08-31T16:08:47.955Z",
+  "updatedAt": "2026-09-01T18:53:41.491Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:58:26.538Z",
     "plannedStepCount": 5,
@@ -131,7 +131,8 @@
     "architect-8b0f89f2",
     "worker-620f90d0",
     "governor-943540d3",
-    "architect-5e59a71e"
+    "architect-5e59a71e",
+    "governor-c11c29e2"
   ],
   "stepsCompleted": [
     "step-1",
@@ -159,10 +160,10 @@
   },
   "planApprovedAt": "2026-08-31T12:18:22.262Z",
   "workStartedAt": "2026-08-31T12:19:56.992Z",
-  "blockedReason": "Parent must remain on its exact four-path root-fence scope while the two independently measured production defects land first: task-d36dda1396bf48de8caae3ebbd93731e owns the unavailable Approvals accessible-name seam, and task-75bb88d241894a43b6c6981f355bc220 owns LIVE_BOOTSTRAP_UNAVAILABLE create-disablement. Parent journeys are the served-build consumer edge and cannot honestly pass before both leaves. moe.set_task_dependencies returned NOT_ALLOWED for architect-5e59a71e despite architect context; requested the exact dependsOn correction in governor msg-6a684f821f63474181a419cce8cf24ad and parent comment-fcfde6609ee04d4d9bf2103304ec0257. Do not widen or weaken the parent in the interim.",
+  "blockedReason": "Dependency wait: legacy-root journey resumes after accessibility task-d36dda1396bf48de8caae3ebbd93731e and bootstrap-refusal task-75bb88d241894a43b6c6981f355bc220 land.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T16:08:47.955Z",
+  "blockedAt": "2026-09-01T17:29:40.619Z",
   "blockedOnTaskIds": [
     "task-d36dda1396bf48de8caae3ebbd93731e",
     "task-75bb88d241894a43b6c6981f355bc220"

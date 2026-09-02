@@ -1,0 +1,425 @@
+{
+  "id": "task-1edf82770e3e447fb9086fb4e30792aa",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[38ec-pre-core] Make live-quiesce evidence validation total",
+  "description": "Prerequisite production leaf split from reopened task-38ec450ae92d486f860c5801c0f28870 after QA's exact hostile probes reproduced caller-visible RangeError/accessor escape in the core serializer. Objective: make the existing public live-quiesce serializer/digest total, exact-own-data, bounded, and canonical for hostile JavaScript values without changing its signature, valid bytes, seven-code vocabulary, or barrel. Deliverable: a focused internal safe JSON snapshot module and one-line bridge are consumed by the existing serializer before schema/semantic validation. Exact owned paths (4): packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts (new); packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js (new one-line bridge); packages/core/src/cutover/cutover-quiesce-evidence.ts; packages/core/src/cutover/cutover-quiesce-evidence.test.ts. NOT in scope: daemon reads, migration writer, barrels, manifests/lock, reason vocabulary, or task-38ec's preserved security WIP. Exact verification command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/core exec vitest run src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/core typecheck}`.",
+  "definitionOfDone": [
+    "Adopt the DONE/merged task-2bf8fa1a485146aa860bd0f50cbf8287 record, then re-measure the four paths, every direct serializer/digest caller and literal exact-shape/count assertion, production line counts, and the existing @moe/contracts manifest plus pnpm-lock importer edge. A deleted compiled probe inside @moe/core must import the needed limits from the bare @moe/contracts specifier and typecheck exit 0 before implementation.",
+    "Red-first extend the real public serializer/digest test with a nonzero generated hostile matrix covering a 20,000-deep value, enumerable throwing getter, revoked and ownKeys-throwing Proxy, symbol/non-enumerable/prototype extras, sparse arrays and extra array keys. Both public surfaces must never throw or invoke an accessor and must return exactly LIVE_QUIESCE_EVIDENCE_INCOMPLETE at live-quiesce-evidence; independent exact case counts/sets must prove every case was generated and reached production.",
+    "Create a <=250-line internal safe-value module plus exact one-line .js bridge. It rejects proxies/exotic prototypes/accessors/symbol or non-enumerable keys/sparse or extra-index arrays/cycles, traverses iteratively through own data descriptors only, and bounds depth, work, scalar UTF-8 and final canonical bytes using existing contract limits before allocation can grow without bound. The public module validates and canonicalizes only the detached snapshot under a catch-all totality fence, preserves byte-identical canonical JSON/digests for valid evidence, keeps the seven-code roster/signatures unchanged, and remains <400 physical lines.",
+    "After exact-path status capture, mutate the production surface one mechanism at a time to restore recursive/Object.values traversal, permit an accessor, accept one hidden/prototype key or sparse hole, and bypass a depth/body bound. Each mutant must make its named production-surface code/layer, zero-accessor, exact-key/density, or bounded-totality assertion red; restore tracked paths with diff plus SHA equality and untracked paths from worker-suffixed out-of-tree backups with separate SHA256 equality proof.",
+    "Run the exact foreground/unpiped verification command and require Core Test Files 1 passed with a nonzero Tests count plus typecheck success. Then run the full @moe/core package and root lanes as merge-base-versus-HEAD path-attributed baselines, require no new failure intersecting the four owned paths, disclose foreign red verbatim, and record final line counts/bridge loadability."
+  ],
+  "taskRails": [
+    "Own exactly the four listed paths. Do not edit daemon, migration, security-lane, barrel/index, manifest, lockfile, or foreign WIP.",
+    "Preserve the public function arity/types, valid canonical JSON/digest bytes, LIVE_QUIESCE_EVIDENCE_LAYER and exact seven-code roster. All hostile failures use existing LIVE_QUIESCE_EVIDENCE_INCOMPLETE; do not mint a new public reason or repair/default caller data.",
+    "Validation must be total against arbitrary unknown values and must not invoke user accessors, proxy traps or iterators. A recursive walker, Object.values, JSON.stringify on unsnapshotted input, or try/catch without bounded detached traversal is not an acceptable fix.",
+    "The daemon bounded-reader child filed in the same split is the real production consumer and must declare this task in dependsOn before this leaf completes."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0 — establish the delivered baseline and dependency/caller facts before any edit. Read the DONE/merged task-2bf8fa1a485146aa860bd0f50cbf8287 completion/review/verification record and the declared consumer task-642df965071a4a239c1b5bce97bbafc5 dependsOn edge. Capture exact four-path porcelain, line counts, SHA-256, current public function arities, frozen seven-code roster, and a literal canonicalJson/digest golden for the existing valid fixture. Re-run per-file import reachability plus literal shape/count searches across apps/packages/tests, including core export-count 136 and migration roster-count 7, and stop rather than widen if a signature/export/roster change is actually required. Verify all three @moe/contracts edge facts: core manifest declaration, pnpm-lock packages/core importer, and a same-command-created/deleted compiled probe inside @moe/core importing MAX_JSON_BODY_BYTES, MAX_JSON_DEPTH and MAX_JSON_STRING_UTF8_BYTES from the bare specifier with exit 0. Record merge-base @moe/core/root failing-path sets for final path attribution; note but never touch foreign dirty security paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline at HEAD 5fe0fdde: exact four paths clean; safe-value TS/JS absent; evidence.ts 269 lines SHA256 790D12D9..., test 130 lines SHA256 3D545141.... Public arities 1/1; frozen seven-code roster unchanged. Valid fixture canonical JSON captured with digest a94be5b8f62ea25f49e469606d45c02134e6aaf23a42f661d86444903b94fee9. Reachability is exactly core source/test/barrel/surface, daemon snapshot TS/test, and migration TS/test; core export counts remain 136 and migration roster 7. DONE 2bf record read; consumer 642 declares this task. @moe/contracts manifest+lock edges confirmed; same-command bare-import probe typechecked and was deleted. Baseline @moe/core test: 47 files/1275 tests, exit 0; root lane: 401 passed +1 skipped files, 9783 passed +44 skipped tests, exit 0; baseline failing-path sets empty. No files modified.",
+      "startedAt": "2026-09-01T22:11:33.621Z",
+      "completedAt": "2026-09-01T22:16:22.414Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST — extend cutover-quiesce-evidence.test.ts against the real internal production snapshot seam and both public exports. Build each hostile value from an otherwise byte-identical valid evidence fixture and freeze a nonzero exact case roster covering: 20,000-deep nesting; enumerable throwing getter with invocation counter; revoked and ownKeys-throwing proxies; symbol, non-enumerable and inherited/prototype extras; sparse arrays and extra array keys; a schema-valid scalar above MAX_JSON_STRING_UTF8_BYTES; and a schema-valid aggregate above MAX_JSON_BODY_BYTES. Assert every case is actually constructed and exercised, neither public call throws, both return exactly LIVE_QUIESCE_EVIDENCE_INCOMPLETE at live-quiesce-evidence, no accessor/iterator is invoked, and no canonicalJson/digest escapes. For guards whose downstream schema would otherwise emit the same public tuple (notably deep invalid nesting/proxy catch), require the actual internal production seam's distinct frozen issue tag as the divergence oracle—never a test-side reimplementation. Pin the pre-edit literal canonical JSON/digest, insertion-order parity, arity 1 and seven-code identity for valid values. Run only this file and record named reds caused by missing safe seam/totality/bounds; an unrelated throw or zero generated cases is not TDD evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+      ],
+      "note": "TESTS FIRST — 11-case hostile roster in cutover-quiesce-evidence.test.ts (293 lines) exercises the real public exports plus the internal production seam (snapshotLiveQuiesceSafeValue/canonicalizeLiveQuiesceSafeValue). Roster asserted nonzero and exact: toHaveLength(11), unique-name set size 11, exercised counter ===11; getterReads===0 and iteratorReads===0 pin the zero-accessor/zero-iterator property. Internal frozen issue tags are the divergence oracle (DEPTH_LIMIT/ACCESSOR/PROXY x2/HOSTILE_SHAPE x5/STRING_LIMIT/BODY_LIMIT) because all 11 map to the identical public EXPECTED_INCOMPLETE tuple.\n\nImport-level red first (`Cannot find module './cutover-quiesce-evidence-safe-value.js'`, Test Files 1 failed, \"no tests\") is NOT admissible TDD evidence, so I landed a temporary identity/recursive STUB of the seam reproducing pre-hardening behaviour and re-ran: Test Files 1 failed (1), Tests 1 failed | 8 passed (9), `RangeError: Maximum call stack size exceeded` at the recursive canonicaliser.\n\nPer-case red roster (temporary probe; test file backed up to %TEMP%/qevid-test-worker-7973e36b.bak first, restored after, SHA256 3c4ddddc4198ad41266260e17271f7e66261dc2f318640156179d6fb88d2cfd3 equal on both sides, `grep -c REDROSTER` = 0):\n1 20,000-deep nesting :: RangeError: Maximum call stack size exceeded\n2 enumerable throwing getter :: Error: getter invoked (accessor reached)\n3 revoked proxy :: TypeError: Cannot perform 'IsArray' on a proxy that has been revoked\n4 ownKeys-throwing proxy :: Error: ownKeys trap invoked\n5 symbol extra :: expected {ok:true} to equal {issue:'HOSTILE_SHAPE',ok:false}\n6 non-enumerable extra :: same\n7 inherited array behavior :: same\n8 sparse array :: same\n9 extra array key :: same\n10 oversized scalar :: expected {ok:true} to equal {issue:'STRING_LIMIT',ok:false}\n11 oversized aggregate :: expected {ok:true} to equal {issue:'BODY_LIMIT',ok:false}\n\nCases 1-4 are caller-visible THROWS from the production surface; 5-9 are silent ok:true accepts; 10-11 are unbounded accepts. Valid-fixture golden (EXPECTED_CANONICAL_JSON, digest a94be5b8f62ea25f49e469606d45c02134e6aaf23a42f661d86444903b94fee9), arity 1/1, frozen seven-code roster and insertion-order parity all stayed GREEN throughout, so the red is attributable to the missing safe seam only. Test-side type fix: inspectSafeValue now returns LiveQuiesceSafeCanonicalResult (snapshot and canonicalize have distinct ok:true payloads). Stub is temporary and is replaced by the real module in step 3. Shared checkout has 77 foreign dirty paths (security WIP etc.) — untouched.",
+      "startedAt": "2026-09-01T22:16:28.022Z",
+      "completedAt": "2026-09-02T09:04:58.416Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM IMPLEMENTATION — create cutover-quiesce-evidence-safe-value.ts (<=250 physical lines) and the exact one-line LF bridge `export * from \"./cutover-quiesce-evidence-safe-value.ts\";`. Implement a non-barrel internal result/issue union, iterative own-data snapshot and iterative bounded canonicalizer. Reject node:util/types isProxy values before reflective work; inside a catch fence require Object.prototype/null records or Array.prototype arrays, inspect Reflect.ownKeys plus own descriptors without reading accessors, reject symbols/non-enumerables/accessors/exotic prototypes/cycles, and require dense 0..length-1 enumerable data array slots with no extras. Enforce MAX_JSON_DEPTH, bounded work/length, MAX_JSON_STRING_UTF8_BYTES for keys/scalars, and an exact MAX_JSON_BODY_BYTES canonical-output budget before joining output; copy only primitives into a detached graph. Refactor cutover-quiesce-evidence.ts to remove recursive isJsonValue/canonicalText, snapshot before any property/schema read, run existing exact-shape and semantic checks only on the detached value, canonicalize only after acceptance, and catch all remaining hostile failures into the existing INCOMPLETE code/layer without defaults. Keep valid canonical bytes/digests, public arities/types, seven-code roster and barrel untouched; keep evidence.ts <400 (target <=250 after extraction). Use the focused test as red/green feedback.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "note": "MINIMUM IMPLEMENTATION — all 11 hostile cases now green. Focused leg: Test Files 1 passed (1), Tests 9 passed (9), exit 0; `pnpm --filter @moe/core typecheck` echoed `$ tsc --project tsconfig.json`, exit 0.\n\nNEW packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts — 236 physical lines (<=250). Non-barrel internal module, two exported functions plus a result/issue union (PROXY|ACCESSOR|HOSTILE_SHAPE|CYCLE|DEPTH_LIMIT|WORK_LIMIT|STRING_LIMIT|BODY_LIMIT), all refusals Object.freeze'd. Order of operations is load-bearing and commented: node:util/types isProxy FIRST (Array.isArray and Object.getPrototypeOf both throw on a revoked proxy), then prototype identity (Object.prototype/null for records, Array.prototype for arrays), then Reflect.ownKeys + Reflect.getOwnPropertyDescriptor — a descriptor without a `value` slot is ACCESSOR and is never read; symbol keys, non-enumerables and functions are HOSTILE_SHAPE. Arrays require ownKeys.length === length + 1 and a present enumerable data descriptor at every 0..length-1 slot, which rejects sparse holes and extra own keys in one measurement. Traversal is an explicit Frame stack (no recursion) with an on-path Set for CYCLE. Bounds: DEPTH_LIMIT at MAX_JSON_DEPTH (64) checked before push; WORK_LIMIT at MAX_SAFE_VALUE_NODES = MAX_JSON_BODY_BYTES >> 1 = 524288 (every node costs >=2 canonical bytes, so this is derived, not invented); STRING_LIMIT via Buffer.byteLength on scalars AND keys before the copy grows. Only primitives are copied into the detached graph. Catch-all fence converts any residual reflective throw to HOSTILE_SHAPE. canonicalizeLiveQuiesceSafeValue is an iterative emission stack that accumulates UTF-8 bytes and returns BODY_LIMIT BEFORE pieces.join(\"\") — an over-budget value never materialises as one oversized string.\n\nNEW packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js — 58 bytes, exact one-line LF bridge `export * from \"./cutover-quiesce-evidence-safe-value.ts\";` matching the sibling cutover-quiesce-evidence.js pattern.\n\nMODIFIED cutover-quiesce-evidence.ts — 268 lines, DOWN from the 269-line baseline (<400 hard cap; the <=250 target would need a 5th owned path to split the schema predicates, which is out of scope). Deleted recursive isJsonValue (Object.values walker) and recursive canonicalText; `grep -n 'isJsonValue|canonicalText|Object.values'` now returns nothing. serializeLiveQuiesceEvidenceCanonical snapshots first, then runs the UNCHANGED exact-shape and semantic checks on the detached value only, canonicalizes only after acceptance, and wraps the whole body in a totality catch that returns the existing incomplete() tuple. `safe` (LiveQuiesceSafeJson) and `detached` (unknown, narrowed by isEvidence) are separate bindings so the interface-vs-index-signature assignability gap does not force a cast. deriveLiveQuiesceEvidenceDigest untouched. Public arities 1/1, the frozen seven-code roster, LIVE_QUIESCE_EVIDENCE_LAYER, all exported types and the package barrel are unchanged; the valid-fixture golden canonical JSON and digest a94be5b8f62ea25f49e469606d45c02134e6aaf23a42f661d86444903b94fee9 still assert green, so valid bytes are byte-identical. No new public reason code.\n\nMODIFIED cutover-quiesce-evidence.test.ts — 294 lines; the only step-3 change is the temporary stub's removal being reflected by the real seam (test content unchanged from the step-2 restore point apart from that step's own type fix).",
+      "startedAt": "2026-09-02T09:05:00.969Z",
+      "completedAt": "2026-09-02T09:07:40.533Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN/PARITY REVIEW — finish the focused tests without weakening the independent rosters or golden. Add schema-valid large-string/body controls immediately below each ceiling so the bounds are not refusing all large values, and keep semantic count/stop/host refusals on their pre-existing exact codes. Exercise both insertion orders and repeated calls to prove detached snapshots prevent caller mutation/TOCTOU from changing the accepted canonical bytes; accepted returned key rosters remain exactly `{ok,canonicalJson}` and `{ok,quiesceRecordSha256}`. Review the four-path diff for no public export/constant/format fan-out, no recursive traversal, no caller object mutation, no credential/value echo in refusal detail, exact LF one-line bridge, and explanatory invariant comments inside the new internal module. No user-facing docs change is appropriate because no public signature, reason vocabulary or valid wire bytes change.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+      ],
+      "note": "GREEN/PARITY REVIEW — focused leg exit 0, Test Files 1 passed (1), Tests 13 passed (13) (was 9); `pnpm --filter @moe/core typecheck` echoed `$ tsc --project tsconfig.json`, exit 0. No roster, golden or count assertion was weakened: the 11-case hostile roster keeps toHaveLength(11)/unique-name-set 11/exercised===11 and getterReads===0, iteratorReads===0.\n\nFOUR ARMS ADDED (test file 294 -> 369 lines):\n1. Below-ceiling controls, so the bounds are not simply refusing all large values. citationKey = \"x\".repeat(MAX_JSON_STRING_UTF8_BYTES) is asserted to encode to exactly 262144 UTF-8 bytes and is ACCEPTED, with the literal present in canonicalJson. A 3,000-difference manifestComparison is ACCEPTED and its canonical body asserted >800000 and <=MAX_JSON_BODY_BYTES — the same generator shape that is REFUSED with BODY_LIMIT at 4,096 entries, so the ceiling is proven two-sided.\n2. Semantic-code parity: stoppedAt:[] still yields LIVE_QUIESCE_EVIDENCE_STOP_MOMENT_MISSING and an inventory/top-level hostFingerprint mismatch still yields detail \"host evidence is internally inconsistent\", asserted `.not.toBe` the totality fence's detail — so a semantic refusal cannot be silently swallowed by the new catch-all despite sharing the INCOMPLETE code.\n3. No caller mutation / re-read on every call: a JSON-round-tripped mutable record is byte-identical (JSON.stringify before === after) across a serialize call and yields the exact golden; pushing a second item afterwards leaves the already-returned canonicalJson unchanged AND makes a fresh digest call refuse with the pre-existing LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH — bidirectional, so neither a caller-mutating nor a memoising implementation stays green.\n4. Accepted key rosters are exactly [\"canonicalJson\",\"ok\"] and [\"ok\",\"quiesceRecordSha256\"], both frozen, measured on REORDERED_EVIDENCE so insertion order is exercised.\n\nFOUR-PATH DIFF REVIEW. `git status --porcelain -- packages/core/src/cutover/` shows exactly the four owned paths (2 M, 2 ??) and nothing else. Production diff adds only the internal import, deletes recursive isJsonValue and recursive canonicalText, drops the isJsonValue call from isEvidence, and rewrites the serializer body; no export, constant, type, reason code or output format is added, removed or renamed, and deriveLiveQuiesceEvidenceDigest is untouched. Recursion audit: admit/admitScalar/admitArray/admitRecord/expand form a flat dispatch — no function in the new module calls itself; traversal and emission are both explicit stacks. Refusal payloads carry only an enum issue tag, so no caller value, key or credential is echoed. Bridge is the exact one-line LF form, 58 bytes, matching sibling cutover-quiesce-evidence.js. `grep -rn 'safe-value'` over the core barrel: not exported — the module stays internal, so the core export count is unchanged. Invariant comments are inside the new module (numbered 1-4, each stating why the ORDER matters, e.g. isProxy first because Array.isArray and Object.getPrototypeOf throw on a revoked proxy). Line counts: evidence.ts 268 (down from the 269 baseline, <400), safe-value.ts 236 (<=250). No user-facing docs change is appropriate: no public signature, reason vocabulary or valid wire byte changes.",
+      "startedAt": "2026-09-02T09:07:42.786Z",
+      "completedAt": "2026-09-02T09:09:38.610Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "PENULTIMATE — perform one adversarial review and mutation sheet over exactly the four paths. First record exact-path porcelain; back up each untracked new module/bridge to worker-suffixed out-of-tree files and hash them. One at a time: route through recursive/Object.values traversal; skip proxy rejection so the throwing/revoked fixture reaches the catch; accept an accessor; ignore a hidden/prototype key; allow a sparse hole/extra index; raise the depth issue while leaving downstream schema intact; and bypass scalar/body ceilings using the otherwise-valid large controls. Require the named public code/layer/zero-call or internal issue-tag assertion to red for each mutant (not merely some refusal), with exact nonzero case counts. Restore after each. For tracked paths prove saved diff plus SHA equality; for initially untracked paths restore, then in a separate call prove SHA256 equality to the out-of-tree backup. Re-run the affected focused file after each restore, inspect totality, allocation, canonical order and TOCTOU as an attacker, require safe-value.ts <=250 and evidence.ts <400, and record mutant/assertion/restore outcomes under the comment cap.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+      ],
+      "note": "PENULTIMATE — 11 mutants, ALL RED at the named assertion. Pre-drill porcelain (exact four paths): ` M ...evidence.test.ts`, ` M ...evidence.ts`, `?? ...safe-value.js`, `?? ...safe-value.ts`. Untracked modules backed up to %TEMP%/moe-drill-worker-7973e36b/{safe-value.ts,safe-value.js,evidence.ts,evidence.test.ts}.bak and hashed before drilling. Every mutant printed a DISTINCT mutant SHA256 prefix, so each mutation provably applied (an unapplied edit would repeat the baseline hash). Roster counts were nonzero and exact throughout: 13 cases, unique-name set 13, exercised===13.\n\nSHEET (mutant -> reddened assertion, all `Test Files 1 failed (1) / Tests 1 failed | 12 passed (13)`):\nM1 bypass detached traversal (return input verbatim) [1E74476FC5B0] -> \"20,000-deep nesting\": got {ok:true} vs {issue:'DEPTH_LIMIT'}\nM2 skip isProxy rejection [007C2342098A] -> \"revoked proxy\": got HOSTILE_SHAPE vs PROXY (public tuple identical both ways; the internal tag is the only oracle)\nM3 accept accessor descriptors [72CC04B9515B] -> \"enumerable throwing getter\": got HOSTILE_SHAPE vs ACCESSOR\nM4 ignore non-enumerable own keys [29E86E79C1FB] -> \"non-enumerable extra\": got {ok:true} vs HOSTILE_SHAPE\nM5a drop array own-key COUNT check [7553690D113C] -> \"extra array key\": got {ok:true} vs ARRAY_SHAPE\nM5b drop array per-slot PRESENCE check [3F1E1A065531] -> \"hole hidden behind a padded key count\": got HOSTILE_SHAPE vs ARRAY_SHAPE\nM6 raise depth bound to MAX_JSON_DEPTH*1000 [13E92654683F] -> \"20,000-deep nesting\": got {ok:true} vs DEPTH_LIMIT (downstream schema untouched, public tuple unchanged)\nM7a raise scalar ceiling x4 [117CA9ED91C1] -> \"oversized scalar\": got {ok:true} vs STRING_LIMIT\nM7b raise body ceiling x4 [B6E529F5E3F4] -> \"oversized aggregate\": got {ok:true} vs BODY_LIMIT\nM8 drop Array.prototype identity check [78F53A33418F] -> \"inherited array behavior\": got {ok:true} vs HOSTILE_SHAPE\nM9 drop cycle check [AD3C50057D86] -> \"self-referencing citation key\": got DEPTH_LIMIT vs CYCLE\n\nFINDING FOUND AND FIXED MID-DRILL. First pass of M5b came back GREEN (exit 0, Tests 13 passed). Cause: with `new Array(1)` the own-key COUNT fence fires first with the same HOSTILE_SHAPE tag, so the per-slot presence check was a redundant guard hidden by an identical downstream fence — and even when the hole survives, reading it yields `undefined`, which the scalar fence also refuses with HOSTILE_SHAPE. Fixed by DIVERGENCE, not by deleting the redundant call: (a) array density/extra-key refusals now emit a distinct ARRAY_SHAPE tag so a hole reaching the scalar fence (HOSTILE_SHAPE) is distinguishable; (b) added a divergence fixture the count fence CANNOT see — `[item]` with `length = 2` plus one enumerable padding key, asserted in-test to satisfy `Reflect.ownKeys().length === length + 1` while `getOwnPropertyDescriptor(a,\"1\")` is undefined. M5b then redded. Also added a CYCLE case (self-referencing citationKey) so the cycle guard is no longer unexercised; M9 confirms it diverges from the depth fence. Roster grew 11 -> 13 and the issue-set is asserted as an exact set: {CYCLE,DEPTH_LIMIT,ACCESSOR,PROXY,HOSTILE_SHAPE,ARRAY_SHAPE,STRING_LIMIT,BODY_LIMIT}.\n\nADVERSARIAL INSPECTION. Allocation: `new Array(length)` happens AFTER the ownKeys count check, so `new Array(1e9)` is refused (ownKeys=[\"length\"]) before any allocation; node count is capped at 524288; canonical `pieces` are byte-capped before each push, so neither the snapshot nor the emitter can grow unbounded. Prototype pollution: detached records are `Object.create(null)`, so an own `__proto__` data key is copied as an inert key and then rejected by the unchanged exact-key schema. Canonical order: keys sorted at emit time, verified by the golden and the both-insertion-orders arm. TOCTOU: the graph is detached before any schema read, and the caller-mutation arm is bidirectional. Byte accounting: BODY_LIMIT measures the ESCAPED emitted piece, so lone surrogates cannot undercount. NOT DRILLED / disclosed: WORK_LIMIT (needs >524288 nodes; too costly for a unit arm) — the bound is present and reachable but unexercised by the roster.\n\nRESTORE PROOF. All mutations were on the untracked safe-value.ts only. Separate-call SHA256 equality vs out-of-tree backups: safe-value.ts cf580e317e602f168629da85578a37c2cb6d93b46d7cb0d1cdff9eaca5865170, safe-value.js b855f3e7a79d4a777e06b31806d1fd25346dba7d1197e7c7e783678d847cab17, test f28e8b8d901d01e4438d32b946eb04cfa423c6b300cff6e889dac52eff6e5ebe — each equal on both sides. Tracked evidence.ts: `git diff --stat` unchanged at 27 insertions/28 deletions, SHA b0bc31fcda26a6d74adfb2d3745c3a8db3172fc830ff395902d8590ef213ce3a equals its backup. `grep` for every mutant literal returns \"no mutant residue\"; `active.has(source)` cycle guard is back at line 180. Post-restore porcelain identical to pre-drill. Post-restore green: Test Files 1 passed (1), Tests 13 passed (13), exit 0; typecheck `$ tsc --project tsconfig.json` exit 0. CAPS: safe-value.ts 245 (<=250), evidence.ts 2",
+      "startedAt": "2026-09-02T09:09:40.821Z",
+      "completedAt": "2026-09-02T09:15:38.150Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL VERIFICATION — run the task's exact foreground/unpiped PowerShell command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/core exec vitest run src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/core typecheck}`. Require exit 0, Core `Test Files 1 passed` and a nonzero `Tests` line; exit 0 without counts is unverified. Then, as standalone foreground legs, run `pnpm.exe --filter @moe/core test`, `pnpm.exe typecheck`, root-lane-only `pnpm.exe test` (explicitly note apps/** are excluded), `pnpm.exe verify:foundation`, and `pnpm.exe verify:store`. Compare HEAD failures with phase-0 merge-base sets, require the new-failing-path intersection with the four owned paths empty and all owned Core legs green, and disclose foreign red verbatim. Finish with exact-path status/hashes, plain-Node import of the one-line bridge, public arity/roster/golden parity, line caps, and report all four created/modified paths in complete_step/complete_task evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+      ],
+      "note": "FINAL VERIFICATION — exact AMENDED (amend-1) command run foreground/unpiped, exit 0, with EXECUTED counts, not just an exit code: `Test Files 1 passed (1)` / `Tests 13 passed (13)` and typecheck echo `$ tsc --project tsconfig.json`.\n\nSTANDALONE FOREGROUND LEGS (no piping into another command; each reports its own status):\n- `pnpm --filter @moe/core test` -> `$ vitest run --root ../.. packages/core/src`, Test Files 47 passed (47), Tests 1281 passed (1281), exit 0.\n- `pnpm typecheck` -> exit 0; every workspace echoed `tsc --project tsconfig.json ... Done`, INCLUDING apps/daemon and apps/control-room.\n- `pnpm test` (ROOT LANE ONLY — the root vitest include has NO apps/**, so this covers zero apps/** tests) -> Test Files 401 passed | 1 skipped (402), Tests 9789 passed | 44 skipped (9833), exit 0.\n- `pnpm verify:foundation` -> Test Files 35 passed (35), Tests 756 passed (756), exit 0.\n- `pnpm verify:store` -> Test Files 52 passed (52), Tests 673 passed (673), exit 0.\n\nAPPS/** COVERAGE (added beyond the plan because apps/daemon is a real consumer of the changed digest): `pnpm --filter @moe/daemon test` -> Test Files 1 failed | 341 passed (342), Tests 1 failed | 6982 passed | 12 todo (6995), exit 1.\n\nFOREIGN RED, DISCLOSED VERBATIM AND NOT ATTRIBUTED TO THIS ROW:\n  apps/daemon/src/daemon-command-registry-human-approver.test.ts (5 tests | 1 failed)\n  FAIL src/daemon-command-registry-human-approver.test.ts > paired HUMAN principal at the operator fence > keeps even the paired HUMAN behind the fence on goal.close (one kind, not a seat)\n  AssertionError: expected { error: { …(10) }, …(4) } to match object { httpStatus: 403, ok: false, …(1) }\nAttribution by import closure, not by tree: that file's imports are node:crypto/fs/os/path, @moe/contracts, @moe/store, vitest, ./daemon-store-dependencies.js, ./http/http-adapter.js, ./http/http-contract.js, ./daemon-command-vocabulary.js, ./identity/session-handshake.js, ./identity/human-approver.js, ./identity/session-test-fixtures.js — `grep` for cutover-quiesce-evidence/LiveQuiesceEvidence in it returns nothing, and `git diff --stat` on it and its production modules is EMPTY, so it is unmodified at HEAD and untouched by this diff. New-failing-path set intersected with the four owned paths is EMPTY; every owned Core leg is exit 0.\n\nDIRECT CONSUMER AND SURFACE PARITY (the reachability edge, not just the producer): `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/cutover/cutover-generation-snapshot.test.ts` -> Test Files 1 passed (1), Tests 14 passed (14), exit 0 — the daemon snapshot reader consumes deriveLiveQuiesceEvidenceDigest and is green. Core barrel: `src/index-surface.test.ts` -> Test Files 1 passed (1), Tests 158 passed (158), exit 0, so the export surface is unchanged.\n\nPLAIN-NODE BRIDGE LOAD (node v24.16.0, --experimental-strip-types): the 58-byte one-line LF bridge imports cleanly. Exports exactly `canonicalizeLiveQuiesceSafeValue,snapshotLiveQuiesceSafeValue`, both arity 1. Public parity from the same probe: serializeLiveQuiesceEvidenceCanonical.length=1, deriveLiveQuiesceEvidenceDigest.length=1, layer `live-quiesce-evidence`, roster length 7 and frozen, roster verbatim INCOMPLETE|COUNT_MISMATCH|RUNMODE_MISSING|AUTHORITY_MISSING|MANIFEST_REFUSED|STOP_MOMENT_MISSING|WRITE_FAILED. A throwing-getter value passed to BOTH public functions returned the identical INCOMPLETE tuple with no throw — the caller-visible defect this row exists to fix, proven at the real production surface outside vitest.\n\nFINAL STATE. Exact-path porcelain: ` M cutover-quiesce-evidence.test.ts`, ` M cutover-quiesce-evidence.ts`, `?? cutover-quiesce-evidence-safe-value.js`, `?? cutover-quiesce-evidence-safe-value.ts` — exactly the four owned paths, nothing else. SHA256: evidence.ts b0bc31fcda26a6d74adfb2d3745c3a8db3172fc830ff395902d8590ef213ce3a; test f28e8b8d901d01e4438d32b946eb04cfa423c6b300cff6e889dac52eff6e5ebe; safe-value.ts cf580e317e602f168629da85578a37c2cb6d93b46d7cb0d1cdff9eaca5865170; safe-value.js b855f3e7a79d4a777e06b31806d1fd25346dba7d1197e7c7e783678d847cab17. Lines: evidence.ts 268 (<400, down from the 269 baseline), safe-value.ts 245 (<=250), test 385. Golden digest a94be5b8f62ea25f49e469606d45c02134e6aaf23a42f661d86444903b94fee9 still asserted at test line 97. packages/core/package.json, packages/core/src/index.ts, pnpm-lock.yaml and packages/contracts/ show no modification from this row. NOTE (foreign, untouched, NOT reported as mine): `?? packages/contracts/src/index.js` is pre-existing untracked debris, plus the 77 other foreign dirty paths in this shared checkout.",
+      "startedAt": "2026-09-02T09:15:41.410Z",
+      "completedAt": "2026-09-02T09:24:24.086Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "FINAL VERIFICATION — run the task's exact foreground/unpiped PowerShell command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x -C packages/core exec vitest run --root=../.. packages/core/src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/core typecheck}`. Require exit 0, Core `Test Files 1 passed` and a nonzero `Tests` line; exit 0 without counts is unverified. Then, as standalone foreground legs, run `pnpm.exe --filter @moe/core test`, `pnpm.exe typecheck`, root-lane-only `pnpm.exe test` (explicitly note apps/** are excluded), `pnpm.exe verify:foundation`, and `pnpm.exe verify:store`. Compare HEAD failures with phase-0 merge-base sets, require the new-failing-path intersection with the four owned paths empty and all owned Core legs green, and disclose foreign red verbatim. Finish with exact-path status/hashes, plain-Node import of the one-line bridge, public arity/roster/golden parity, line caps, and report all four created/modified paths in complete_step/complete_task evidence.",
+          "reason": "Governor-verified mechanical command defect; only the first leg's invocation changed, every clause and threshold is byte-identical otherwise. Measured on 2026-09-02: the approved leg `pnpm.exe --filter @moe/core exec vitest run src/cutover/cutover-quiesce-evidence.test.ts` sets cwd to D:/projexts/moe-next/packages/core while the loaded root vitest.config.ts include is repo-relative (`packages/**/*.test.ts`) and packages/core has no config of its own; it exits 1 with `No test files found` and emits no Test Files/Tests counts, so the step's own `Test Files 1 passed` non-vacuity clause and the global verification rail are unsatisfiable as written. Positive control `pnpm.exe -C packages/core exec vitest run --root=../.. packages/core/src/cutover/cutover-quiesce-evidence.test.ts` discovers the file (`Test Files 1 failed (1)`) and reaches the intended Step-2 red (missing ./cutover-quiesce-evidence-safe-value.js). The root-qualified shape is the package's own convention: @moe/core's `test` script is already `vitest run --root ../.. packages/core/src`. Filed on behalf of architect-db6a0906, whose amend call was rejected by the known null-team-role bug.",
+          "amendedBy": "governor-517c10b5",
+          "amendedAt": "2026-09-02T08:58:31.406Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-fcc167f1",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-approved restore. The sole blockedReason was the step-6 verification-command defect; governor-517c10b5 verified it at HEAD (old leg exits 1 'No test files found' with zero counts; root-qualified control reaches 'Test Files 1 failed (1)' and the intended step-2 red) and amended step-6 (amend-1) to the root-qualified invocation that matches @moe/core's own test script. Plan is intact: step-1 COMPLETED, step-2 IN_PROGRESS with the 11-case hostile roster WIP preserved. No source bytes were changed by governance. Next claimer: read the AMENDED step-6 text, not the base description.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-38ec450ae92d486f860c5801c0f28870",
+  "dependsOn": [
+    "task-2bf8fa1a485146aa860bd0f50cbf8287"
+  ],
+  "priority": "CRITICAL",
+  "order": 189.51,
+  "comments": [
+    {
+      "id": "comment-94ecdeb829f44f6aae7c332830344770",
+      "author": "architect-db6a0906",
+      "content": "CONSUMER EDGE (planning-time, delivered-tree gate): daemon consumer task-642df965071a4a239c1b5bce97bbafc5 declares this leaf in dependsOn and will import/use the hardened public serializer/digest through the existing bare @moe/core edge. This closes the pure-package composition clause; export/loadability alone is not the claim.",
+      "timestamp": "2026-09-01T21:32:32.773Z"
+    },
+    {
+      "id": "comment-1d315cf6ddf043a4a3c4382bdbfbfd48",
+      "author": "worker-7973e36b",
+      "content": "MUTATION SHEET (step 5) — 11 mutants, ALL RED at the named assertion. Each printed a distinct mutant SHA256 prefix, proving the edit applied. Baseline roster: 13 cases, unique-name set 13, exercised===13. Every mutant produced `Test Files 1 failed (1) / Tests 1 failed | 12 passed (13)`.\n\nM1 bypass detached traversal (return input verbatim) [1E74476FC5B0] -> \"20,000-deep nesting\": {ok:true} vs {issue:'DEPTH_LIMIT'}\nM2 skip isProxy rejection [007C2342098A] -> \"revoked proxy\": HOSTILE_SHAPE vs PROXY\nM3 accept accessor descriptors [72CC04B9515B] -> \"enumerable throwing getter\": HOSTILE_SHAPE vs ACCESSOR\nM4 ignore non-enumerable own keys [29E86E79C1FB] -> \"non-enumerable extra\": {ok:true} vs HOSTILE_SHAPE\nM5a drop array own-key COUNT check [7553690D113C] -> \"extra array key\": {ok:true} vs ARRAY_SHAPE\nM5b drop array per-slot PRESENCE check [3F1E1A065531] -> \"hole hidden behind a padded key count\": HOSTILE_SHAPE vs ARRAY_SHAPE\nM6 depth bound x1000 [13E92654683F] -> \"20,000-deep nesting\": {ok:true} vs DEPTH_LIMIT\nM7a scalar ceiling x4 [117CA9ED91C1] -> \"oversized scalar\": {ok:true} vs STRING_LIMIT\nM7b body ceiling x4 [B6E529F5E3F4] -> \"oversized aggregate\": {ok:true} vs BODY_LIMIT\nM8 drop Array.prototype identity check [78F53A33418F] -> \"inherited array behavior\": {ok:true} vs HOSTILE_SHAPE\nM9 drop cycle check [AD3C50057D86] -> \"self-referencing citation key\": DEPTH_LIMIT vs CYCLE\n\nM2, M5b, M6 and M9 are the divergence arms: in all four the PUBLIC tuple is byte-identical either way (LIVE_QUIESCE_EVIDENCE_INCOMPLETE at live-quiesce-evidence), so the internal frozen issue tag is the only oracle that can see the guard.\n\nGREEN DRILL FOUND AND REPAIRED. M5b's first pass was GREEN (exit 0, Tests 13 passed). Root cause: with `new Array(1)` the own-key COUNT fence fires first with the same tag, and even if a hole survives, reading it yields `undefined`, which the scalar fence also refuses with the same tag — a redundant guard fully hidden by two identical downstream fences. Repaired by DIVERGENCE, never by deleting the redundant call: (a) array density/extra-key refusals now emit ARRAY_SHAPE so a hole reaching the scalar fence (HOSTILE_SHAPE) stays distinguishable; (b) a divergence fixture the count fence structurally cannot see — `[item]` with `length = 2` plus one enumerable padding key — asserted in-test to satisfy `Reflect.ownKeys().length === length + 1` while `getOwnPropertyDescriptor(a,\"1\")` is `undefined`. Roster grew 11 -> 13 (also added the CYCLE case, previously an unexercised guard) and the issue set is asserted as an exact set: {CYCLE, DEPTH_LIMIT, ACCESSOR, PROXY, HOSTILE_SHAPE, ARRAY_SHAPE, STRING_LIMIT, BODY_LIMIT}.\n\nNOT DRILLED, DISCLOSED: WORK_LIMIT (needs >524288 nodes; too costly for a unit arm). The bound exists and is reachable but no roster case generates it.\n\nRESTORE PROOF. All mutations landed on the untracked safe-value.ts only. Separate-call SHA256 equality against worker-suffixed out-of-tree backups in %TEMP%/moe-drill-worker-7973e36b/: safe-value.ts cf580e317e602f168629da85578a37c2cb6d93b46d7cb0d1cdff9eaca5865170, safe-value.js b855f3e7a79d4a777e06b31806d1fd25346dba7d1197e7c7e783678d847cab17, test f28e8b8d901d01e4438d32b946eb04cfa423c6b300cff6e889dac52eff6e5ebe — equal on both sides. Tracked evidence.ts proven by `git diff --stat` unchanged (27 insertions / 28 deletions) PLUS SHA equality b0bc31fcda26a6d74adfb2d3745c3a8db3172fc830ff395902d8590ef213ce3a. Grep for every mutant literal: \"no mutant residue\". Post-restore porcelain identical to pre-drill; post-restore focused run green.\n\nFOREIGN RED (apps/daemon lane, disclosed, not attributed here): apps/daemon/src/daemon-command-registry-human-approver.test.ts > \"keeps even the paired HUMAN behind the fence on goal.close (one kind, not a seat)\" — `AssertionError: expected { error: { …(10) }, …(4) } to match object { httpStatus: 403, ok: false, …(1) }`. That file is unmodified at HEAD (`git diff --stat` empty) and its import closure contains no reference to cutover-quiesce-evidence.",
+      "timestamp": "2026-09-02T09:25:05.157Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T21:31:41.431Z",
+  "updatedAt": "2026-09-02T09:33:09.723Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-01T21:33:01.475Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 6
+  },
+  "contextFetchedBy": [
+    "architect-db6a0906",
+    "worker-1e085af3",
+    "governor-517c10b5",
+    "worker-7973e36b",
+    "qa-3b52b1c3",
+    "qa-fcc167f1"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-01T21:36:14.408Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected a one-line public try/catch: it still invokes getters/proxy traps, preserves recursive stack overflow, and only converts unbounded work into a late generic refusal. Rejected recursive Object.values/JSON.stringify cloning for the same authority and allocation reasons. Rejected new public reason codes or a barrel export because the seven-code contract and all callers must remain source/byte compatible. Chosen design is a non-barrel internal production module with iterative descriptor-only snapshot plus bounded canonicalization; internal issue tags make otherwise-indistinguishable guard mutations observable while both public APIs continue mapping hostile input to the existing INCOMPLETE tuple. The daemon byte-reader is a separate declared consumer task so core lands first without widening subsystem ownership.",
+    "codebaseInsights": "Measured at delivered HEAD 5fe0fdde: `git status --porcelain -- <four paths>` was empty; safe-value TS/JS do not exist; cutover-quiesce-evidence.ts is 269 lines/SHA256 790D12D9D4595DDF5FCE671137252624AF738A428A2EEADA15AAD495F741B034 and its test is 130 lines. Inline calls to the real exports reproduced RangeError on a 20,000-deep citationKey and caller Error/getterReads=1 on an enumerable throwing getter; revoked/ownKeys proxies also throw. Symbol/non-enumerable/prototype extras and sparse arrays currently return ok:true, with sparse arrays canonicalized inconsistently with their counts. `git grep -n -E 'deriveLiveQuiesceEvidenceDigest|serializeLiveQuiesceEvidenceCanonical' -- apps packages tests` found the core unit/barrel surface, daemon snapshot TS/test, migration evidence tests, and current security WIP; exact shape/count grep found core export count 136 and migration refusal roster count 7, neither changes in this row. Dependency edge measured: packages/core/package.json:11 declares @moe/contracts workspace:*; pnpm-lock.yaml importer packages/core lines 187-191 links ../contracts; a same-command-created/deleted compiled probe inside packages/core imported MAX_JSON_BODY_BYTES/MAX_JSON_DEPTH/MAX_JSON_STRING_UTF8_BYTES from bare @moe/contracts and package tsc exited 0, with exact target status empty before/after. Consumer task-642df965071a4a239c1b5bce97bbafc5 declares this row in dependsOn.",
+    "risks": "Descriptor inspection itself can throw on proxies, Array.isArray can throw on revoked proxies, sparse arrays hide holes from every/map, and Object.keys ignores symbols/non-enumerables/prototypes. Reject proxies before traps and retain a public catch-all. Bound queue/work before allocating result arrays; check UTF-16 length before UTF-8 encoding and account for escaped key/value bytes plus punctuation before joining canonical output. Preserve canonical key ordering and the exact current valid fixture digest; do not make the internal issue tags part of the package barrel/public refusal roster. Current security files are foreign dirty WIP and must remain untouched. New untracked module/bridge require out-of-tree SHA restore proof during drills.",
+    "keyFiles": [
+      "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+      "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+      "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+      "packages/contracts/src/runtime/limits.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-01T21:36:16.564Z",
+  "workStartedAt": "2026-09-01T22:11:33.621Z",
+  "declaredFiles": [
+    "packages/core/src/cutover/cutover-quiesce-evidence.test.ts"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-02T09:25:32.496Z",
+  "verification": {
+    "command": "& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x -C packages/core exec vitest run --root=../.. packages/core/src/cutover/cutover-quiesce-evidence.test.ts;x --filter @moe/core typecheck}",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  1 passed (1)\n      Tests  13 passed (13)\n   Start at  12:23:48\n   Duration  310ms (transform 117ms, setup 0ms, import 151ms, tests 68ms, environment 0ms)\n\n$ tsc --project tsconfig.json\nVERIFICATION_EXIT=0",
+    "reportedAt": "2026-09-02T09:25:32.496Z"
+  },
+  "filesModified": [
+    "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+    "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+    "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+    "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+    ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+    ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json"
+  ],
+  "completionSummary": "Live-quiesce evidence validation is now TOTAL for hostile JavaScript values, with no public-surface change. Verified with the AMENDED step-6 command (amend-1, root-qualified): exit 0, `Test Files 1 passed (1)`, `Tests 13 passed (13)`, typecheck `$ tsc --project tsconfig.json`.\n\nFOUR OWNED PATHS, NOTHING ELSE. NEW cutover-quiesce-evidence-safe-value.ts (245 lines, <=250) — internal non-barrel seam: node:util/types isProxy FIRST (Array.isArray and getPrototypeOf both throw on a revoked proxy), then Object.prototype/null or Array.prototype identity, then Reflect.ownKeys + own descriptors, never reading an accessor. Iterative Frame-stack traversal (no recursion), on-path cycle Set, bounds DEPTH_LIMIT (MAX_JSON_DEPTH), WORK_LIMIT (MAX_JSON_BODY_BYTES>>1, derived: every node costs >=2 canonical bytes), STRING_LIMIT on keys and scalars, and BODY_LIMIT enforced BEFORE pieces.join(). Only primitives are copied into the detached graph; a catch fence converts any residual reflective throw to a refusal. NEW ...-safe-value.js — exact 58-byte one-line LF bridge. MODIFIED cutover-quiesce-evidence.ts (268 lines, DOWN from 269): recursive isJsonValue/canonicalText deleted; the serializer snapshots BEFORE any property or schema read, runs the unchanged exact-shape and semantic checks on the detached value only, canonicalizes after acceptance, all under a totality catch. MODIFIED the test (385 lines).\n\nREPRODUCED DEFECTS NOW FIXED. Step-2 red roster hit all 11 original cases at the real production surface: RangeError on 20,000-deep nesting, `Error: getter invoked` (getterReads=1), `TypeError: Cannot perform 'IsArray' on a proxy that has been revoked`, ownKeys-trap throw, plus silent ok:true accepts for symbol/non-enumerable/prototype extras, sparse arrays, extra array keys, and both ceilings. All now return exactly LIVE_QUIESCE_EVIDENCE_INCOMPLETE at live-quiesce-evidence with getterReads===0 and iteratorReads===0.\n\nPARITY PRESERVED. Golden canonical JSON and digest a94be5b8f62ea25f49",
+  "commits": [
+    {
+      "sha": "bfa0a6166c8eb491dd4475c2c6f876715c4f2a0f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-7973e36b@2026-09-02T09:00:11Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+        ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json",
+        "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js",
+        "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts"
+      ],
+      "recordedBy": "worker-7973e36b",
+      "recordedAt": "2026-09-02T09:26:04.049Z",
+      "treeId": "419798359491e0b67d258e50e1b1718f8273cd06",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+          "taskId": "task-38ec450ae92d486f860c5801c0f28870"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "773e63bfbcfaef81a3d0e8eaa5cf10c1963c6002",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:26:36Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:26:43.559Z",
+      "treeId": "0c9a2ed1e55db52974cf7cbd07712d6db3e1fe23",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "b4e46bd54e53144412e4db03557892bbe0f5045b",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:27:14Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:27:23.552Z",
+      "treeId": "5540bf0d6656ab8814f21e8c39d9fe203f5790eb",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "e9019ebfd627591d0ff9669803181fb28aa9407a",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:27:54Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:28:01.171Z",
+      "treeId": "7d16fdefbb88832cb737781a5c64493e67e7ba5b",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "b6de0e657598aa47fb4fe4574e37d3a519639c4d",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:28:32Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:28:38.596Z",
+      "treeId": "9f09eec3b9f0dff3a905e95f175f7bf243a1c98a",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "a18bfe67cc6e40b47972d25b285e1a2c2a3555bb",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:29:09Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:29:16.204Z",
+      "treeId": "bee57ea3a896b2cae4470292755b1452e536ed3c",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "94873024d0994fbf2b675dc78f3636e0db605510",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-fcc167f1@2026-09-02T09:30:28Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-fcc167f1",
+      "recordedAt": "2026-09-02T09:30:35.957Z",
+      "treeId": "696c27ba16ca123077d0ab939b818996b77e3ccf",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "beb7a1db2ae6b91b3f3aab9a9f851cced538f79f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-fcc167f1@2026-09-02T09:31:06Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-fcc167f1",
+      "recordedAt": "2026-09-02T09:31:13.767Z",
+      "treeId": "7dfcf230ac214616c62a6c28fe24723ee18f040c",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "7719f5c12ab3d3cbf8eb37840ea693a7641d03b1",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-fcc167f1@2026-09-02T09:31:44Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-fcc167f1",
+      "recordedAt": "2026-09-02T09:31:51.513Z",
+      "treeId": "263996a09187a6f7581d3be8d4384bc09bee314a",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "13e68eb6a27fc12f9f1ed11e4f3cee1e72758eab",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-fcc167f1@2026-09-02T09:32:23Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+      ],
+      "recordedBy": "qa-fcc167f1",
+      "recordedAt": "2026-09-02T09:32:30.689Z",
+      "treeId": "912525800a8143971166eb04ebb4e776a3c68342",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "a6da3350560505258a8b5a0e10d15d3fe126556c",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-fcc167f1@2026-09-02T09:33:01Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json"
+      ],
+      "recordedBy": "qa-fcc167f1",
+      "recordedAt": "2026-09-02T09:33:09.723Z",
+      "treeId": "e4efc6634b077db77101227925e8a2bcf5974b7b",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.ts",
+    "packages/core/src/cutover/cutover-quiesce-evidence.ts",
+    "packages/core/src/cutover/cutover-quiesce-evidence.test.ts",
+    "packages/core/src/cutover/cutover-quiesce-evidence-safe-value.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-fcc167f1@2026-09-02T09:33:01Z",
+    "at": "2026-09-02T09:33:09.723Z"
+  }
+}

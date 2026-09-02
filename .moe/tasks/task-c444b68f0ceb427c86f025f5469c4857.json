@@ -62,12 +62,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: browser acceptance consumer pending ed899 and d3 browser-core completion. Unblock after both land.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0169055cad324b7f84a2e90f0b46f8e0",
   "dependsOn": [
@@ -99,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:06:12.978Z",
-  "updatedAt": "2026-09-01T13:14:08.426Z",
+  "updatedAt": "2026-09-01T18:53:40.155Z",
   "metrics": {
     "firstClaimAt": "2026-09-01T08:06:55.109Z",
     "plannedStepCount": 5,
@@ -107,7 +107,8 @@
   },
   "contextFetchedBy": [
     "architect-1f97776b",
-    "architect-db6a0906"
+    "architect-db6a0906",
+    "governor-c11c29e2"
   ],
   "priorHandoffs": [
     {
@@ -137,5 +138,12 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-09-01T13:14:08.426Z"
+  "planApprovedAt": "2026-09-01T13:14:08.426Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T17:29:37.467Z",
+  "blockedReason": "Dependency wait: browser integration resumes after daemon authority and browser-core prerequisites land.",
+  "blockedOnTaskIds": [
+    "task-ed89967f396d4cb78ec65ba8188bfb19",
+    "task-d3bfc33e364d4dbab1ef02723d672263"
+  ]
 }

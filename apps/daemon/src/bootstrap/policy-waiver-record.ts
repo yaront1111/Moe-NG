@@ -54,8 +54,7 @@ export type PolicyWaiverRefusal<Code extends PolicyWaiverRefusalCode = PolicyWai
 export type PolicyWaiverAccepted<Record extends PolicyWaiverRecord = PolicyWaiverRecord,
   Event extends PolicyWaiverEventType = PolicyWaiverEventType> = Readonly<{
   readonly bytes: Uint8Array;
-  readonly eventType: Event;
-  readonly ok: true;
+  readonly eventType: Event; readonly ok: true;
   readonly record: Readonly<Record>;
 }>;
 export type PolicyWaiverRecordResult<Record extends PolicyWaiverRecord = PolicyWaiverRecord,
@@ -107,7 +106,7 @@ function instant(value: unknown): value is string {
 }
 function scopeSnapshot(value: unknown): readonly string[] | null {
   try {
-    if (!Array.isArray(value) || nodeTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    if (nodeTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
     const length = Object.getOwnPropertyDescriptor(value, "length");
     const keys = Reflect.ownKeys(value);
     if (length === undefined || !("value" in length) || length.value < 1
@@ -161,7 +160,8 @@ function waiverRef(value: PolicyWaiverCommonInput, approvalRef: string): string 
 function accepted<Record extends PolicyWaiverRecord, Event extends PolicyWaiverEventType>(
   eventType: Event, record: Readonly<Record>,
 ): PolicyWaiverAccepted<Record, Event> {
-  return Object.freeze({ bytes: encoder.encode(JSON.stringify(record)), eventType, ok: true as const, record });
+  const canonical = JSON.stringify(record);
+  return Object.freeze({ get bytes() { return encoder.encode(canonical); }, eventType, ok: true as const, record });
 }
 export function buildPolicyWaiverGrant(value: PolicyWaiverGrantInput):
 PolicyWaiverRecordResult<PolicyWaiverGrantRecord, "PolicyWaiverGranted.v1"> {

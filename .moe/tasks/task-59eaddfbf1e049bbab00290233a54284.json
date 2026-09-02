@@ -22,7 +22,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: scheduler-activation consumer because a9c completion provenance is unresolved and 272 remains blocked. Unblock after both prerequisites land.",
   "createdBy": "WORKER",
   "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
   "dependsOn": [
@@ -41,21 +41,22 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:55:55.476Z",
-  "updatedAt": "2026-09-01T00:57:07.200Z",
+  "updatedAt": "2026-09-01T18:53:38.435Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T22:10:33.042Z"
   },
   "contextFetchedBy": [
     "architect-21d05545",
     "architect-5e59a71e",
-    "architect-1f97776b"
+    "architect-1f97776b",
+    "governor-c11c29e2"
   ],
-  "blockedReason": "Build-order and live-ownership block, measured at HEAD b3a7551d and recorded in comment-4304dfd6bd3247f98809e6a74a86e499. task-272b09a7164f4b618dcf9a0f65272fd0 owns plan-approval.ts plus completeness.security.ts first; task-a9c1fe620d2642cba3e3669a17ea1eac owns the shared scheduler hostile/boundary files and must close the seven GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE focused failures. This row's exact paths cannot make its mandated scheduler file green before those rows land. moe.set_task_dependencies was attempted but rejected NOT_ALLOWED because the runtime does not recognize this architect worker on an architect/governor team, so blockedOnTaskIds carries the sequencing. No source paths changed.",
+  "blockedReason": "Dependency wait: scheduler hostile-arm consumer resumes after task-272b09a7164f4b618dcf9a0f65272fd0 and task-a9c1fe620d2642cba3e3669a17ea1eac land.",
   "blockedOnTaskIds": [
     "task-272b09a7164f4b618dcf9a0f65272fd0",
     "task-a9c1fe620d2642cba3e3669a17ea1eac"
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-30T22:14:00.431Z"
+  "blockedAt": "2026-09-01T17:29:28.968Z"
 }
