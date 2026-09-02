@@ -83,7 +83,7 @@
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS, ADVERSARIAL REVIEW, FINAL GATE AND LANDING (DoD 5).\n\n(a) Capture exact-path `git status --porcelain` for every mutation target FIRST. All ten owned paths are TRACKED and CLEAN, so `git diff --exit-code` plus sha256 equality is a valid restore proof; if any target is untracked at drill time, back it up out-of-tree under %TEMP% and prove the restore by SHA256 in a SEPARATE command.\n\n(b) FIVE drills, each reddening ITS OWN named assertion, one degree at a time:\n  1-4. Relax each of the four production guards in turn (live-budget-commitment.ts, plan-approval.ts build, plan-approval.ts transport, pairing-open-completion.ts). Each must red its OWN arm's exact code/layer assertion. **If loosening a guard reds a DIFFERENT arm, a downstream fence answered first and that fixture is wrong — report it as a FINDING rather than banking the red.** If a drill comes back GREEN, that is also a finding, not a pass.\n  5. Delete one generated case and require the CONSTANT#ARM denominator assertion from step 4 to red, naming the missing key rather than only reporting a count change.\nRestore each separately, prove the restore, and re-run green before the next.\n\n(c) Load `adversarial-self-review` and read the diff as an attacker: RACE ordering and timing, fixture cleanup on the refusal path as well as the success path, whether any arm would still pass against an empty result, and whether any assertion could be moved by a single edit on both its expected and actual sides.\n\n(d) FINAL GATE: run the four legs standalone and unpiped, quoting every count line, plus the merge-base-versus-HEAD path-attributed baseline. The delta intersected with the ten owned paths must be EMPTY. **DoD 4's known generated-client red is attributable ONLY by that delta and must NEVER be called green** — disclose it verbatim with its exact failing paths and do not fix it here.\n\n(e) LANDING. Declare the owned paths you actually changed with moe.declare_files and report them in complete_step.modifiedFiles. Preserve active generated-client and HTTP-ingress WIP (rail 2): no reset, stash, blanket add, `git clean -fd`, `git checkout -- .`, or foreign-path adoption — ~124 paths are dirty tree-wide from live sibling rows. Do not hand-commit; exit through the wrapper.\n\n(f) Completion record: all 12 arms with exact before/after counts, the pre-roster denominator, the drill sheet with red lines and mutant SHAs, and a plain statement that BOUNDARY_ROSTER was deliberately NOT edited because the serialized final roster-closure row adds all fifteen entries at once. Put overflow in row comments, each under ~4500 chars.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-budget-commitment.ts",
         "apps/control-room/src/v2/goals/plan-approval.ts",
@@ -91,11 +91,16 @@
         "tests/security/transport-hostile-cases.ts",
         "tests/security/transport-boundaries.security.ts"
       ],
-      "startedAt": "2026-09-02T18:44:04.920Z"
+      "modifiedFiles": [
+        "tests/security/transport-hostile-fixtures.ts"
+      ],
+      "note": "DRILLS, ADVERSARIAL REVIEW, FINAL GATE (DoD 5). Full drill sheet with red lines and mutants in comment-a57c6ed5.\n\nRESUME NOTE. This session inherited step-5 IN_PROGRESS from a prior seat and re-verified state from disk rather than trusting it. Two corrections to what the tree appeared to say at claim: (1) transport-hostile-cases.ts LOOKED mutated (`git diff` showed a deleted PAIRING_OPEN_LAYER#AFTER case) but had been restored at 21:48:31 before my first run — and the sha256 mismatch against `git show HEAD:` that seemed to confirm a mutation was a CRLF artifact (`git show` emits LF, the worktree is CRLF), NOT a content difference. `git diff --ignore-cr-at-eol HEAD` returned 0 lines. (2) HEAD moved TWICE under me, 14a842be -> 36d08b10, as the parallel seat exited; 36d08b10 is a wip checkpoint for THIS row carrying exactly the fixtures.ts change and my task JSON. Nothing was lost and nothing foreign was swept: `git diff --exit-code HEAD` over all three owned paths is exit 0, so the bytes I gated are the bytes on the branch.\n\nWHAT LANDED IN THIS STEP. One file, tests/security/transport-hostile-fixtures.ts (+10/-5): the two live-budget expectations stop importing BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE / BUDGET_COMMITMENT_INVALID_RESPONSE_CODE from the module under test and spell the codes as literals, with the reason in a comment. This is not a style change — importing the code from live-budget-commitment.ts let ONE edit move both the expected and the observed side of the assertion, so a renamed code would have stayed green. After the change all SEVEN divergence expectation codes are literals and only the LAYERS are read off production constants; the sole remaining production import used by expectations is a `type`. No production file was touched (168 / 196 / 164, `git diff --exit-code` exit 0), so rail 4 and the 400-line cap are untested here.\n\nFIVE DRILLS, ZERO GREEN. Pre-drill porcelain over the four exact targets was EMPTY (all TRACKED and CLEAN), so `git diff --exit-code` is a valid restore proof and the untracked/%TEMP%+SHA256 path was not required; every restore was proved in a call SEPARATE from the restore. D1 exactDataRecord exact-key clause -> the AFTER arm + RACE right leg red with `HostileHarnessMisuseError: refusal carries no string 'code'/'reasonCode'` at assertRefusedWith, i.e. the seam ADMITTED rather than the test passing vacuously; BEFORE stayed green. D2 build guard -> all three BUILD arms red. D3 transport guard -> six TRANSPORT arms red while the BUILD arms stayed GREEN, which is the load-bearing rail-7(A) result: two guards in one function behind one layer literal, each independently reachable, neither answering for the other. D4 byte cap -> BEFORE + RACE left red while the pre-existing ROSTERED pairing arms stayed green, independently confirming these arms are the FIRST coverage of PAIRING_OPEN_BODY_TOO_LARGE. D4b exactRoster arity -> AFTER + RACE right red while over-bound BEFORE stayed green, closing the divergence in both directions. D5 deleted one generated case -> the denominator red NAMES the key, `-   \"LIVE_BUDGET_COMMITMENT_LAYER#BEFORE\",`, not merely a count. No drill reddened an arm belonging to another boundary, so no downstream fence answered first.\n\nADVERSARIAL REVIEW (skill loaded, diff read as an attacker). Three checks worth recording. CONCURRENCY: the divergence block accumulates DIVERGENCE_RECORDED and a later describe asserts its length — a real cross-block coupling, but it is deterministic by COMMITTED config, not by luck: tests/security/vitest.config.ts pins sequence.concurrent false, sequence.shuffle false, maxConcurrency 1, fileParallelism false, retry 0, allowOnly false. It is also the convention the rostered block already uses for RECORDED. EMPTY-RESULT PASS: ruled out empirically, not by reading — D1 shows a non-refusing seam THROWS at assertRefusedWith rather than passing. BOTH-SIDES-MOVE: found and fixed, see above. RACE cleanup: these fixtures inject only `post`/`fetch`/the session port and touch no filesystem, so cleanupHostileRoots in afterAll is unaffected. `expect([\"left\",\"right\"]).toContain(firstSettled)` is deliberately weak — it catches `undefined` without pinning a winner — noted as intentional, not a defect.\n\nFINAL GATE, EACH LEG STANDALONE AND UNPIPED, COUNT LINES READ FROM OUTPUT NOT FROM EXIT CODE:\n  npx vitest run --config tests/security/vitest.config.ts                -> Test Files 12 passed (12),   Tests 885 passed (885),   exit 0\n  npx vitest run --config .../vitest.config.ts transport-boundaries...   -> Test Files 1 passed (1),     Tests 107 passed (107),   exit 0\n  pnpm --filter @moe/daemon test                                          -> Test Files 373 passed (373), Tests 7655 passed (7655), exit 0\n  pnpm --filter @moe/control-room test                                    -> RED, see attribution below\nEvery leg printed a nonzero count line, so none is a vacuous \"No test files found\" exit 0. The daemon leg matches the step-1 baseline EXACTLY",
+      "startedAt": "2026-09-02T18:44:04.920Z",
+      "completedAt": "2026-09-02T19:04:33.996Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-50445f7a",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-30d27a8d",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -141,16 +146,22 @@
       "author": "worker-4021bdde",
       "content": "HANDOFF to worker-50445f7a — THE WORK IS DONE; ONLY THE BOOKKEEPING IS LEFT. My seat was reaped mid-session (long daemon leg, ~4 min x2) and complete_step on step-5 returned NOT_ALLOWED. Do not redo any of this.\n\nSTATE ON DISK RIGHT NOW\n- steps 1-4 COMPLETED with full notes. step-5 IN_PROGRESS, note not written (that is the only gap).\n- commit 14a842be (wrapper checkpoint, under this task id) already carries tests/security/transport-hostile-cases.ts and tests/security/transport-boundaries.security.ts.\n- tests/security/transport-hostile-fixtures.ts is DIRTY in the working tree and carries the final adversarial fix. It is declared, so the wrapper commits it on exit. DO NOT revert or regenerate it.\n- declaredFiles is already the correct three paths.\n- NO PRODUCTION BYTES CHANGED by this row: `git diff --exit-code` over live-budget-commitment.ts, plan-approval.ts, pairing-open-completion.ts is EMPTY. All seven other paths in the row's declared ten are byte-identical.\n\nWHAT IS DELIVERED\n12 divergence arms (BEFORE/AFTER/RACE x 4 constants) as a separate frozen `DIVERGENCE_TRANSPORT_HOSTILE_CASES`, its own runner block, its own recorded array, its own denominator, plus 3 positive controls. Security lane 865 -> 885 executed tests (+20 = 12 arms + 5 denominator assertions + 3 controls); focused transport file 107 passed. Every arm drives the real production seam and asserts the exact code AND exact refusing layer, keyed on the constant IDENTIFIER.\n\nWHAT TO DO\n1. complete_step step-5 with modifiedFiles = the three tests/security paths. For the note, use comment-1eed76f1 (drill sheet) + comment-dc134d95 (final gate and red attribution) — both are complete and were written before the reap.\n2. complete_task with verification { command: \"npx vitest run --config tests/security/vitest.config.ts\", exitCode: 0, outputTail: \"Test Files  12 passed (12) / Tests  885 passed (885)\" }. Use the VITEST leg, NOT `pnpm test:security` — the latter's tsc leg exits 1 on a FOREIGN untracked file (see below), so it cannot be the verification command.\n\nTHREE THINGS THAT WILL LOOK WRONG AND ARE NOT\n1. `pnpm test:security` EXITS 1. The tsc leg fails on apps/control-room/src/live/live-planning-authorities.ts(181,3) TS2322 — an UNTRACKED file a sibling session created during my run. I proved it foreign by EXPERIMENT: I wrote the 5d214af9 versions of my three files back in place and the identical error still occurred with my diff entirely absent; files then restored and proven byte-identical with `cmp`. The import edge is pre-existing (recent-transport-hostile-cases.ts:13 -> plan-approval.ts:6 -> live-board-feed.ts:1 -> live-planning-authorities.js). Disclose it; do not fix it here.\n2. `pnpm --filter @moe/control-room test` is 3 failed | 110 passed, 7 failed | 1553 passed. All three failing files are in the same sibling's dirty live/ cluster and the count rose 1543 -> 1560 with no commit from me. That lane is rooted at apps/control-room and structurally cannot execute anything under tests/security/**.\n   Delta (HEAD failing paths minus baseline failing paths) intersected with the three owned paths = EMPTY. Baseline at 5d214af9 was fully green: 865 / 1543 / 7655.\n3. The plan's premise that these four constants are UNROSTERED is FALSE — all four are already at boundary-roster.security.ts:146/156/157/204 with landed (but reaching) arms. Full correction in comment-0be8eedb. The export is named `DIVERGENCE_TRANSPORT_HOSTILE_CASES`, not `PRE_ROSTER_...`, deliberately. BOUNDARY_ROSTER was NOT edited and needed no edit; :148/:154/:158/:162-168/:170-175 are untouched and still pass.\n\nDO NOT \"FIX\" THE FOLLOWING — each is load-bearing and drill-proven\n- Every AFTER arm's probeAfter EFFECT leg is a genuine ADMITTED interaction (budgetShapeValid / approvalDelivered / pairingAccepted), never a second hostile call. Reverting that to a repeated hostile call re-introduces the coupling drill D4a caught.\n- Expected CODES are literals; only LAYERS are imported from the boundary constant. Importing the code back lets one edit move both sides of the assertion (drill D6 exists to prove that).\n- The 12 arms must stay OUT of TRANSPORT_HOSTILE_CASES/RECORDED: :158 is exact equality and folding them in makes races 30 vs 26.",
       "timestamp": "2026-09-02T18:59:34.628Z"
+    },
+    {
+      "id": "comment-a57c6ed514d24940b39cb3ba40707fe6",
+      "author": "worker-50445f7a",
+      "content": "STEP 5 DRILL SHEET — 5 drills, every one red on its OWN named assertion, every one restored with proof. Anchor: mutants applied at HEAD 14a842be; final gate re-run at HEAD 36d08b10 (tree == HEAD for all three owned paths, verified `git diff --exit-code HEAD` exit 0).\n\nPRE-DRILL PORCELAIN (DoD 5a). `git status --porcelain` over the four exact mutation targets — live-budget-commitment.ts, plan-approval.ts, pairing-open-completion.ts, transport-hostile-cases.ts — returned EMPTY. All four TRACKED and CLEAN, so `git diff --exit-code` is a valid restore proof and the untracked/%TEMP%+SHA256 path was not needed. Every restore was proved in a Bash call SEPARATE from the restore command.\n\nD1 — LIVE_BUDGET_COMMITMENT_LAYER, exactDataRecord exact-key clause (live-budget-commitment.ts:75-76).\n  Mutant: `keys.length !== expectedKeys.length || keys.some(...)` -> `expectedKeys.some((key) => !keys.includes(key))` (exact-key relaxed to superset-allowed).\n  RED 2 failed | 105 passed (107). Failing arms: `LIVE_BUDGET_COMMITMENT_LAYER AFTER — a 200 frame carrying one surplus key is unreadable, not a commitment` and the RACE right leg.\n  Verbatim: `HostileHarnessMisuseError: hostile harness misuse: refusal carries no string 'code'/'reasonCode'` at readRefusal hostile-harness.ts:236 -> assertRefusedWith hostile-harness.ts:260 -> transport-boundaries.security.ts:243. The seam ADMITTED the frame; the arm did not silently pass.\n  DIVERGENCE: the BEFORE arm (transport throw) stayed GREEN — a different mechanism, and no other boundary moved.\n  RESTORE: `git diff --exit-code` exit 0, porcelain empty.\n\nD2 — PLAN_APPROVAL_BUILD_LAYER (plan-approval.ts:185). Mutant `if (!built.ok)` -> `if (false && !built.ok)`.\n  RED. All THREE divergence BUILD arms failed, plus the three pre-existing rostered BUILD arms and the aggregate counters. No other boundary's arm moved. RESTORE proof exit 0.\n\nD3 — PLAN_APPROVAL_TRANSPORT_LAYER (plan-approval.ts:190). Mutant `if (!sent.delivered)` -> `if (false && !sent.delivered)`.\n  RED 6 failed | 101 passed (107): the three divergence TRANSPORT arms + three rostered TRANSPORT arms. **The BUILD arms stayed GREEN** — this is the load-bearing result for rail 7(A): the two plan-approval guards sit in one function behind one layer literal, yet each is independently reachable and neither answers for the other. RESTORE proof exit 0.\n\nD4 — PAIRING_OPEN_LAYER byte cap (pairing-open-completion.ts:139). Mutant `> PAIRING_OPEN_MAX_BODY_BYTES` -> `> PAIRING_OPEN_MAX_BODY_BYTES * 4`.\n  RED 3 failed | 104 passed (107): `PAIRING_OPEN_LAYER BEFORE — an otherwise-valid body padded past the cap is refused on its size alone` + RACE left leg + the 16-outcome denominator.\n  The pre-existing ROSTERED pairing arms stayed GREEN, which independently confirms step 2's measurement that `PAIRING_OPEN_BODY_TOO_LARGE` had ZERO lane coverage before this row: the landed arms pass an empty body and are answered by the JSON.parse fence, so they cannot see the cap at all. RESTORE proof exit 0.\n\nD4b — PAIRING_OPEN_LAYER exactRoster arity clause (`keys.length === PAIRING_OPEN_KEYS.length` -> `>=`).\n  RED 3 failed | 104 passed (107): `PAIRING_OPEN_LAYER AFTER — an under-bound body with one surplus key drifts from the exact roster` + RACE right leg. **The over-bound BEFORE arm stayed GREEN.** Together with D4 this proves the two pairing clauses are separately isolated in both directions, not one fence answering twice. RESTORE proof exit 0.\n\nD5 — GENERATED-CASE DELETION. Removed the `LIVE_BUDGET_COMMITMENT_LAYER BEFORE` entry from DIVERGENCE_TRANSPORT_HOSTILE_CASES.\n  RED 3 failed | 103 passed (106), and it NAMES THE MISSING KEY rather than only reporting a count, exactly as DoD 5 requires:\n    `expected [ { arm: 'AFTER', ...(4) }, ...(10) ] to have a length of 12 but got 11`\n    key-set equality diff line: `-   \"LIVE_BUDGET_COMMITMENT_LAYER#BEFORE\",`\n    `expected [ ...(14) ] to have a length of 16 but got 15`\n  RESTORE proof exit 0.\n\nGREEN-DRILL COUNT: ZERO. No drill came back green, and no drill reddened an arm belonging to a boundary other than the one whose guard was loosened — so no downstream fence answered first and no fixture is a reaching fixture.",
+      "timestamp": "2026-09-02T19:03:50.360Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:55:34.713Z",
-  "updatedAt": "2026-09-02T18:59:34.628Z",
+  "updatedAt": "2026-09-02T19:05:43.674Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T22:10:29.290Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-b2b16103",
@@ -159,7 +170,8 @@
     "architect-1f97776b",
     "architect-dbf9e869",
     "worker-4021bdde",
-    "worker-50445f7a"
+    "worker-50445f7a",
+    "qa-30d27a8d"
   ],
   "priorHandoffs": [
     {
@@ -192,7 +204,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-02T18:12:52.089Z",
@@ -235,26 +248,60 @@
       "treeId": "0f17f0ec96af5ce8d15672fbf385b653dccd0797",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "36d08b10ffb194c03b7ad24208bfadcf9a8e1926",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4021bdde@2026-09-02T18:18:04Z",
+      "paths": [
+        ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
+        "tests/security/transport-hostile-fixtures.ts"
+      ],
+      "recordedBy": "worker-4021bdde",
+      "recordedAt": "2026-09-02T19:01:59.596Z",
+      "treeId": "b8b3618cba759fc98eb3e6e2a5f0538c4e8dd6e8",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
-    ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
-    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
-    "tests/security/transport-boundaries.security.ts",
+    "apps/control-room/src/live/live-budget-commitment.ts",
+    "apps/control-room/src/v2/goals/plan-approval.ts",
+    "apps/daemon/src/http/pairing-open-completion.ts",
     "tests/security/transport-hostile-cases.ts",
+    "tests/security/transport-boundaries.security.ts",
     "tests/security/transport-hostile-fixtures.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-50445f7a@2026-09-02T18:48:07Z",
-    "at": "2026-09-02T18:48:11.776Z"
+    "sessionId": "worker-4021bdde@2026-09-02T18:18:04Z",
+    "at": "2026-09-02T19:01:59.596Z"
   },
   "declaredFiles": [
     "tests/security/transport-hostile-cases.ts",
     "tests/security/transport-hostile-fixtures.ts",
     "tests/security/transport-boundaries.security.ts"
-  ]
+  ],
+  "touchedFiles": [
+    "tests/security/_frag3-4021bdde.txt",
+    "tests/security/transport-hostile-cases.ts",
+    "tests/security/zz-probe2-4021bdde.security.ts",
+    "tests/security/transport-hostile-fixtures.ts",
+    "tests/security/_frag4-4021bdde.txt",
+    "tests/security/transport-boundaries.security.ts",
+    "tests/security/_frag-4021bdde.txt",
+    "tests/security/_frag2-4021bdde.txt"
+  ],
+  "reviewStartedAt": "2026-09-02T19:05:38.150Z",
+  "verification": {
+    "command": "npx vitest run --config tests/security/vitest.config.ts",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n Test Files  12 passed (12)\n      Tests  885 passed (885)\n   Start at  22:04:40\n   Duration  23.02s (transform 4.52s, setup 0ms, import 9.56s, tests 12.36s, environment 1ms)\n\nEXIT=0 (run fresh at HEAD 8461a6c7, standalone and unpiped; count line is nonzero so the leg is not a vacuous 'No test files found' exit 0)",
+    "reportedAt": "2026-09-02T19:05:38.150Z"
+  },
+  "completionSummary": "TWELVE DIVERGENCE ARMS DELIVERED for LIVE_BUDGET_COMMITMENT_LAYER, PLAN_APPROVAL_BUILD_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER and PAIRING_OPEN_LAYER — BEFORE/AFTER/RACE each, all executing, all drilled. Counts: security lane 865 -> 885 (+20 = 12 arms + 5 denominator assertions + 3 positive controls); transport-boundaries.security.ts 107 tests. Owned set is 3 files, not the planned 10: transport-hostile-cases.ts (444->563), transport-hostile-fixtures.ts (445->698), transport-boundaries.security.ts (188->328). NO production file changed (168/196/164, `git diff --exit-code` exit 0).\n\nPLAN PREMISE WAS FALSE, DISCLOSED NOT SILENTLY RESCOPED (comment-0be8eedb). All four constants were ALREADY in BOUNDARY_ROSTER (boundary-roster.security.ts:146/156/157/204), so the roster-closure row this was told to wait behind was moot. The row stayed real because the LANDED arms in recent-transport-hostile-cases.ts are the reaching fixtures epic rail 7(A) names: casesFor() derives all three arms from ONE thunk, and two of them inject FAKE codes (APPROVAL_COMMAND_BUILD_REFUSED, APPROVAL_TRANSPORT_REFUSED) with ZERO production hits. PAIRING_OPEN_BODY_TOO_LARGE and readBudgetCommitment had ZERO lane coverage; these arms are the first to reach either. Export named DIVERGENCE_TRANSPORT_HOSTILE_CASES, not PRE_ROSTER_*, since the latter would be factually false.\n\nMECHANISM HELD ANYWAY: not appended to TRANSPORT_HOSTILE_CASES, because :158 `expect(races).toBe(ROSTER_TRANSPORT.length)` is EXACT — a second RACE for an already-rostered boundary reds it just as an unrostered one would. Separate frozen export, own runner, own DIVERGENCE_RECORDED, own denominator (literal 12 cases; exact set equality on the four boundaries, the three arms, and all twelve `${boundary}#${arm}` keys; 16 recorded outcomes derived AND literal; no-admission with a nonzero guard). :148's toHaveLength(26), :154, :158, :162-168, :170-175 byte-identical and green. BOUNDARY_ROSTER untouched (rail 1); no code added or restamped (r"
 }
