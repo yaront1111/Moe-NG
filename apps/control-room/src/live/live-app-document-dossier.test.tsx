@@ -17,6 +17,7 @@ function setupWith(
 ): LiveSetup {
   return {
     client: { commands: {} } as never,
+    commandAuthorityPlane: "V1",
     headers: Object.freeze({}),
     ok: true,
     projectId: null,

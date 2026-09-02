@@ -175,6 +175,7 @@ function makeSetup(context: BootstrapContext, input: HandshakeInput, credential:
   });
   return Object.freeze({
     client: context.client,
+    commandAuthorityPlane: context.commandAuthorityPlane,
     headers: Object.freeze({
       "content-type": "application/json", "x-moe-csrf": context.csrfToken,
       "x-moe-protocol-version": context.protocolVersion,

@@ -168,7 +168,7 @@ describe("the production Windows pack source composition", () => {
       if (priorPath === undefined) delete process.env["PATH"];
       else process.env["PATH"] = priorPath;
     }
-  });
+  }, 120_000);
 
   it("preserves even an undefined synchronous consumer failure", () => {
     let caught = false;

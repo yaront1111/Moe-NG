@@ -13,6 +13,8 @@ import { ApprovePlan } from "./goals/approve-plan.js";
 import type { PlanApprovalSurface } from "./goals/approve-plan-gate.js";
 import { createGate1ApprovalPort, readPendingContract } from "./goals/gate1-approval.js";
 import { Gate1Card } from "./goals/gate1-card.js";
+import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-v1-approval.js";
+import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -155,17 +157,34 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
    * The GATE 1 surface: pending-contract read + the approval dispatch. Both are
    * daemon-authored — the read answers the minted affordance and subject digest
    * the dispatch presents, so the browser composes no approval identity.
+   *
+   * WHICH card is the daemon's call, not the bundle's. The plane stated on
+   * `/bootstrap` selects the wire: on V1 (every installation until
+   * `cutover.activate` commits) agents propose on the `/1` plane and the pending
+   * revision is behind `/product-contract/pending/read`; on V2 it is the `/2`
+   * family. A card bound to the other plane reads a route that refuses by
+   * construction, which is exactly the dead Gate 1 this selection retires.
    */
+  const plane = attached === null ? null : attached.commandAuthorityPlane;
   const gate1Read = useMemo<((goalId: string) => ReturnType<typeof readPendingContract>) | null>(
-    () => (attached === null || projectId === null
+    () => (attached === null || projectId === null || plane !== "V2"
       ? null : (goalId: string) => readPendingContract(
         attached.headers, goalId, projectId,
       )),
-    [attached, projectId],
+    [attached, plane, projectId],
   );
   const gate1Port = useMemo(
-    () => (attached === null ? null : createGate1ApprovalPort(attached)),
-    [attached],
+    () => (attached === null || plane !== "V2" ? null : createGate1ApprovalPort(attached)),
+    [attached, plane],
+  );
+  const gate1ReadV1 = useMemo<((goalId: string) => ReturnType<typeof readPendingContractV1>) | null>(
+    () => (attached === null || plane !== "V1"
+      ? null : (goalId: string) => readPendingContractV1(attached.headers, goalId)),
+    [attached, plane],
+  );
+  const gate1PortV1 = useMemo(
+    () => (attached === null || plane !== "V1" ? null : createGate1ApprovalPortV1(attached)),
+    [attached, plane],
   );
   /**
    * The approval surface handed to the plan-review screen: the daemon's OWN verdict
@@ -191,9 +210,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         // WORK BOARD (UI-5) so the operator sees the plan and the current work
         // steps in one body. Both are read-only over the same attached session.
         <>
-          {gate1Read === null || gate1Port === null ? null : (
+          {gate1Read !== null && gate1Port !== null ? (
             <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
-          )}
+          ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
+            <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
+          ) : null}
           <ApprovePlan
             approval={approval}
             goalId={open.goalId}

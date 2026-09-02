@@ -19,6 +19,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/goals/read",
     "/graph/get",
     "/planning/run/read",
+    "/product-contract/pending/read",
     "/session/challenge-operands/read",
     "/session/pair",
     "/session/pair/claim",

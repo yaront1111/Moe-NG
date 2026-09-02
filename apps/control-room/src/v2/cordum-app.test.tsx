@@ -39,6 +39,8 @@ beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 afterEach(() => {
+  bootstrapPlane = "V1";
+  commandHook = null;
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -91,6 +93,10 @@ function liveAttempts(
   return Object.assign(initial, { initial, retry: vi.fn(retry) });
 }
 
+/** The plane the stubbed daemon states; V2 arms flip it, afterEach resets it. */
+let bootstrapPlane: "V1" | "V2" = "V1";
+/** Answers the transport's POST /command in the wired-app arms; null = not stubbed. */
+let commandHook: ((body: string) => unknown) | null = null;
 const BOOTSTRAP = Object.freeze({
   commandAuthorityPlane: "V1",
   csrfToken: "csrf-live",
@@ -182,7 +188,12 @@ const FEED_PROJECTION_CASES = Object.freeze([
 ] as const);
 
 function handshakeResponse(input: string, init?: RequestInit): Promise<Response> {
-  if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
+  if (input === "/command" && commandHook !== null) {
+    return Promise.resolve(jsonResponse(commandHook(String(init?.body ?? ""))));
+  }
+  if (input === "/bootstrap") {
+    return Promise.resolve(jsonResponse({ ...BOOTSTRAP, commandAuthorityPlane: bootstrapPlane }));
+  }
   if (input === "/session/pair/request") {
     return Promise.resolve(jsonResponse(PAIRING, 200, OPERATOR_PRESENT));
   }
@@ -826,6 +837,30 @@ const SEALED_RUN = Object.freeze({
   submissionHash: "submission-hash-durable",
 });
 
+/** The `/1` pending answer as the daemon's V1 read composes it (product-contract-pending-read.ts). */
+const V1_PENDING_BODY = Object.freeze({
+  approval: {
+    affordance: Object.freeze({
+      commandEnvelopeVersion: "moe-command-envelope/1",
+      commandId: "gate1-cmd-1",
+      commandKind: "product_contract.approve_gate_1",
+      expectedVersion: 0,
+      inputSchemaVersion: "moe-product-contract-gate-1/1",
+      targetAggregateId: `product-contract-gate-1-${"a".repeat(64)}`,
+    }),
+    commandId: "gate1-cmd-1",
+    requestDigest: "b".repeat(64),
+  },
+  outcome: "PENDING",
+  ref: { contractId: "contract-1", revisionDigest: "c".repeat(64), revisionId: "rev-1" },
+  revision: {
+    contractId: "contract-1",
+    criteria: [{ criterionId: "crit-1", requirementId: "req-1", statement: "It works." }],
+    requirements: [{ requirementId: "req-1", statement: "Users can sign in." }],
+    revisionId: "rev-1",
+  },
+});
+
 interface WiredApp {
   readonly pendingReads: string[];
   readonly planningReads: string[];
@@ -835,7 +870,11 @@ interface WiredApp {
 function renderWiredApp(
   offers: readonly unknown[] = [APPROVAL_OFFER],
   pendingBody: unknown = { outcome: "NONE" },
+  plane: "V1" | "V2" = "V1",
+  command?: (body: string) => unknown,
 ): WiredApp {
+  bootstrapPlane = plane;
+  commandHook = command ?? null;
   const pendingReads: string[] = [];
   const planningReads: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
@@ -854,8 +893,9 @@ function renderWiredApp(
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
-    if (input === "/v2/product-contract/pending/read") {
-      pendingReads.push(String(init?.body ?? ""));
+    if (input === "/v2/product-contract/pending/read"
+      || input === "/product-contract/pending/read") {
+      pendingReads.push(`${input} ${String(init?.body ?? "")}`);
       return Promise.resolve(jsonResponse(pendingBody));
     }
     if (input === "/planning/run/read") {
@@ -905,7 +945,7 @@ async function openTheDurableBoard(): Promise<void> {
 describe("CordumApp wires the durable run and the daemon's approval grant", () => {
   it("binds CURRENT admission to the project attached by the runtime handshake", async () => {
     const app = renderWiredApp(
-      [APPROVAL_OFFER], currentBodyForProject(BOOTSTRAP.projectId),
+      [APPROVAL_OFFER], currentBodyForProject(BOOTSTRAP.projectId), "V2",
     );
     await openTheDurableBoard();
 
@@ -913,8 +953,40 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
       .toContain("reported current at the last read");
     expect(screen.getByTestId("cr.gate1.current-slot").textContent)
       .toContain(BOOTSTRAP.projectId);
-    expect(app.pendingReads).toHaveLength(1);
-    expect(JSON.parse(app.pendingReads[0] ?? "null")).toEqual({ goalRef: DURABLE.goalRef });
+    // The V2 plane reads the `/2` route, and only that route.
+    expect(app.pendingReads).toEqual([
+      `/v2/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
+    ]);
+  });
+
+  it("reads the V1 pending contract and approves it on the plane the daemon states", async () => {
+    const posted: Record<string, unknown>[] = [];
+    const app = renderWiredApp([APPROVAL_OFFER], V1_PENDING_BODY, "V1", (body) => {
+      posted.push(JSON.parse(body) as Record<string, unknown>);
+      return { ok: true };
+    });
+    await openTheDurableBoard();
+
+    // The V1 plane reads the `/1` route with the same goal ref, never `/v2/...`.
+    expect((await screen.findByTestId("cr.gate1.requirement.req-1")).textContent)
+      .toContain("Users can sign in.");
+    expect(app.pendingReads).toEqual([
+      `/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
+    ]);
+    const approve = await screen.findByTestId("cr.gate1.approve");
+    expect((approve as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(approve);
+
+    // The approval left on the V1 command route, presenting the daemon-minted identity.
+    await waitFor(() => { expect(posted).toHaveLength(1); });
+    expect(posted[0]?.["commandKind"]).toBe("product_contract.approve_gate_1");
+    expect(posted[0]?.["commandId"]).toBe(V1_PENDING_BODY.approval.commandId);
+    expect(posted[0]?.["targetAggregateId"])
+      .toBe(V1_PENDING_BODY.approval.affordance.targetAggregateId);
+    expect(screen.queryByTestId("cr.gate1.dispatchrefusal")).toBeNull();
+    // It re-read the SAME route after the accepted approval.
+    await waitFor(() => { expect(app.pendingReads).toHaveLength(2); });
+    expect(app.pendingReads[1]).toContain("/product-contract/pending/read ");
   });
 
   it("reads the plan for the run the CARD carried, never a build-time run subject", async () => {
