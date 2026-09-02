@@ -527,13 +527,27 @@ describe("createBoardFeed", () => {
     });
 });
 
+/** The daemon's goal bindings for one or more approval runs, and their material. */
+function approvalRefs(runIds: readonly string[]): Record<string, string> {
+  return Object.fromEntries(runIds.map((runId) => [runId, `goal-${runId}`]));
+}
+
+function approvalMaterial(runIds: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(runIds.map((runId) => [runId, materialOf({
+    bytes: "YXBwcm92YWwtZ3JhcGg=", criteriaDigest: "c1".repeat(32), goalRef: `goal-${runId}`,
+    graphHash: "7c".repeat(32), runId, submissionHash: "5e".repeat(32),
+  })]));
+}
+
 describe("LiveBoard", () => {
   afterEach(cleanup);
 
   /**
    * `approval.decide` throughout as the representative kind; the per-kind
    * dispatch sweep lives in live-board-dispatch.test.tsx, so these arms only
-   * need one card whose control certainly renders.
+   * need one card whose control certainly renders. An approval control renders
+   * only for a run the daemon bound to a goal AND stated material for, so every
+   * surface below states both — the VALID wire facts, never a weaker expectation.
    */
   const READY_SURFACE = frameOfSurface({
     nextAllowedCommands: [{
@@ -542,6 +556,8 @@ describe("LiveBoard", () => {
       inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: "approval-x",
     }],
     outcome: "SURFACE",
+    planningAuthorityByRun: approvalMaterial(["approval-x"]),
+    planningGoalRefs: approvalRefs(["approval-x"]),
     steps: [
       {
         aggregateId: "approval-x", kind: "approval.decide", missing: [],
@@ -669,6 +685,8 @@ describe("LiveBoard", () => {
         },
       ],
       outcome: "SURFACE",
+      planningAuthorityByRun: approvalMaterial(["approval-a", "approval-b"]),
+      planningGoalRefs: approvalRefs(["approval-a", "approval-b"]),
       steps: [
         {
           aggregateId: "approval-a", kind: "approval.decide", missing: [],
@@ -733,10 +751,50 @@ describe("LiveBoard", () => {
       connection: "CONNECTED" as const,
       detail: "",
       offers: [{
-        commandId: "afford-old", commandKind: "approval.decide", expectedVersion: 1,
-        targetAggregateId: "approval-x",
+        commandId: "afford-old", commandKind: "project.register", expectedVersion: 1,
+        targetAggregateId: "proj-x",
       }],
       outcome: "SURFACE",
+      steps: [{
+        aggregateId: "proj-x", claim: null, kind: "project.register", missing: [],
+        status: "READY" as const, version: 2,
+      }],
+    };
+    render(
+      <LiveBoard
+        client={{ commands: {} } as never}
+        frame={mismatched}
+        readBudgetCommitment={readsCommitment}
+        sessionCredential="cred"
+        transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.project.register"));
+
+    expect(screen.getByTestId("cr.liveboard.report.project.register@proj-x").textContent)
+      .toBe("the daemon offers no command for this move");
+  });
+
+  it("renders no PLANNING control at all when no offer binds the card's exact version", () => {
+    // Stricter than the arm above, and deliberately so: an authority-bearing kind reads its
+    // material off the exact offer, so a card no offer binds has none and gets no control.
+    // The version-mismatch report path above still exists for every other kind.
+    const mismatched = {
+      connection: "CONNECTED" as const,
+      detail: "",
+      offers: frameOfSurface({
+        nextAllowedCommands: [{
+          commandId: "afford-old", commandKind: "approval.decide", expectedVersion: 1,
+          targetAggregateId: "approval-x",
+        }],
+        outcome: "SURFACE",
+        planningAuthorityByRun: approvalMaterial(["approval-x"]),
+        planningGoalRefs: approvalRefs(["approval-x"]),
+        steps: [],
+      }).offers,
+      outcome: "SURFACE",
+      planningGoalRefs: approvalRefs(["approval-x"]),
       steps: [{
         aggregateId: "approval-x", claim: null, kind: "approval.decide", missing: [],
         status: "READY" as const, version: 2,
@@ -752,10 +810,9 @@ describe("LiveBoard", () => {
       />,
     );
 
-    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.approval.decide"));
-
-    expect(screen.getByTestId("cr.liveboard.report.approval.decide@approval-x").textContent)
-      .toBe("the daemon offers no command for this move");
+    expect(screen.queryByTestId("cr.liveboard.dispatch.approval.decide")).toBeNull();
+    // The card itself still renders: the fact is readable, only the click is withheld.
+    expect(screen.getByTestId("cr.liveboard.card.approval.decide@approval-x")).toBeTruthy();
   });
 
   it("renders a daemon refusal verbatim on the card", async () => {
@@ -822,6 +879,83 @@ const PLURAL_GOAL_B = "goal-sibling-b-9c02";
 const PLURAL_RUN_A = "run-sibling-a-3f11";
 const PLURAL_RUN_B = "run-sibling-b-9c02";
 
+/**
+ * THE DAEMON'S PER-RUN PLANNING AUTHORITY (`planningAuthorityByRun`), spelled exactly as
+ * `apps/daemon/src/http/affordance-planning-authorities.ts` puts it on the wire: seven keys,
+ * no more and no fewer. Sibling A and sibling B differ in EVERY bound member — goal, run,
+ * revision ref, graph hash, graph bytes, submission hash and the whole authority body — so a
+ * production module that picked the map's FIRST entry rather than the offer's own would author
+ * A's operands on B's card and be caught, rather than producing a value both siblings share.
+ */
+const PLURAL_GRAPH_HASH_A = "a1".repeat(32);
+const PLURAL_GRAPH_HASH_B = "b2".repeat(32);
+const PLURAL_SUBMISSION_A = "a3".repeat(32);
+const PLURAL_SUBMISSION_B = "b4".repeat(32);
+const PLURAL_CRITERIA_A = "a5".repeat(32);
+const PLURAL_CRITERIA_B = "b6".repeat(32);
+const PLURAL_BYTES_A = "c2libGluZy1hLWdyYXBo";
+const PLURAL_BYTES_B = "c2libGluZy1iLWdyYXBo";
+
+interface MaterialFacts {
+  readonly bytes: string;
+  readonly criteriaDigest: string;
+  readonly goalRef: string;
+  readonly graphHash: string;
+  readonly runId: string;
+  readonly submissionHash: string;
+}
+
+/** One run's wire material: the producer's exact seven keys, and nothing else. */
+function materialOf(facts: MaterialFacts): Record<string, unknown> {
+  const revisionRef = `${facts.runId}-graph-revision`;
+  const graphBinding = { graphContentHash: facts.graphHash, graphRevisionRef: revisionRef };
+  return {
+    authority: {
+      acceptanceContract: {
+        applicability: { ...graphBinding, nodeIds: [`${facts.runId}-node`], nodeKind: "LEAF" },
+        authorRef: `${facts.runId}-author`,
+        contractId: `${facts.runId}-contract`,
+        criteriaDigest: facts.criteriaDigest,
+        obligations: [{
+          criterionId: `${facts.goalRef}-criterion`,
+          statement: `the run satisfies ${facts.goalRef}-criterion`,
+        }],
+        version: "moe-acceptance-contract/1",
+      },
+      planRevision: {
+        affectedCriterionIds: [`${facts.goalRef}-criterion`],
+        affectedNodeIds: [`${facts.runId}-node`],
+        approvalState: "PENDING_APPROVAL",
+        authorRef: `${facts.runId}-author`,
+        graphBinding,
+        parentRevisionId: null,
+        planHash: facts.submissionHash,
+        rejectionRef: null,
+        revisionId: `${facts.runId}-revision`,
+        version: "moe-plan-revision/1",
+      },
+    },
+    goalRef: facts.goalRef,
+    graphContentBytesBase64: facts.bytes,
+    graphContentHash: facts.graphHash,
+    graphRevisionRef: revisionRef,
+    runId: facts.runId,
+    submissionHash: facts.submissionHash,
+  };
+}
+
+const MATERIAL_A = materialOf({
+  bytes: PLURAL_BYTES_A, criteriaDigest: PLURAL_CRITERIA_A, goalRef: PLURAL_GOAL_A,
+  graphHash: PLURAL_GRAPH_HASH_A, runId: PLURAL_RUN_A, submissionHash: PLURAL_SUBMISSION_A,
+});
+const MATERIAL_B = materialOf({
+  bytes: PLURAL_BYTES_B, criteriaDigest: PLURAL_CRITERIA_B, goalRef: PLURAL_GOAL_B,
+  graphHash: PLURAL_GRAPH_HASH_B, runId: PLURAL_RUN_B, submissionHash: PLURAL_SUBMISSION_B,
+});
+/** A first, B second: the ORDER is the point of the two-sibling arm. */
+const BOTH_MATERIAL: Readonly<Record<string, unknown>> =
+  Object.freeze({ [PLURAL_RUN_A]: MATERIAL_A, [PLURAL_RUN_B]: MATERIAL_B });
+
 /** The frame every arm below reads, with only `planningGoalRefs` varying. */
 function surfaceWithRefs(refs: unknown, present = true): unknown {
   return {
@@ -833,12 +967,154 @@ function surfaceWithRefs(refs: unknown, present = true): unknown {
   };
 }
 
+function siblingPlanningFrame(
+  refs: Readonly<Record<string, string>>,
+  authorities: unknown = BOTH_MATERIAL,
+  authoritiesPresent = true,
+): SurfaceFrame {
+  return frameOfSurface({
+    ...(authoritiesPresent ? { planningAuthorityByRun: authorities } : {}),
+    nextAllowedCommands: [
+      {
+        commandId: "plan-sibling-a", commandKind: "plan.propose", expectedVersion: 0,
+        targetAggregateId: PLURAL_RUN_A,
+      },
+      {
+        commandId: "plan-sibling-b", commandKind: "plan.propose", expectedVersion: 0,
+        targetAggregateId: PLURAL_RUN_B,
+      },
+    ],
+    outcome: "SURFACE",
+    planningGoalRefs: refs,
+    steps: [
+      {
+        aggregateId: PLURAL_RUN_A, kind: "plan.propose", missing: [],
+        status: "READY", version: 0,
+      },
+      {
+        aggregateId: PLURAL_RUN_B, kind: "plan.propose", missing: [],
+        status: "READY", version: 0,
+      },
+    ],
+  });
+}
+
+const SIBLING_PLANNING_CLIENT = {
+  commands: {
+    "plan.propose": (affordance: unknown, caller: unknown) => ({
+      envelope: {
+        ...(affordance as Record<string, unknown>),
+        ...(caller as Record<string, unknown>),
+      } as unknown as RuntimeCommandEnvelope,
+      ok: true,
+    }),
+  },
+} as never;
+
+function siblingPlanningTransport(
+  sent: RuntimeCommandEnvelope[],
+): Pick<ControlRoomTransport, "sendCommand"> {
+  return {
+    sendCommand: (envelope) => {
+      sent.push(envelope);
+      return Promise.resolve({
+        delivered: true,
+        response: {
+          decision: {
+            commandId: "plan-sibling-b", disposition: "DECIDED", effectId: null,
+            resultCode: "EFFECTS_COMMITTED",
+          },
+          httpStatus: 200, ok: true, outcome: "ACCEPTED",
+        },
+        status: 200,
+      });
+    },
+  };
+}
+
 const UNREADABLE_FRAME = Object.freeze({
   connection: "LAGGING", detail: "LIVE_SURFACE_UNREADABLE",
   offers: [], outcome: "UNREADABLE", planningGoalRef: null, steps: [],
 });
 
 describe("the plural per-run planning binding", () => {
+  afterEach(cleanup);
+
+  it("dispatches sibling B with only sibling B's durable goal binding", async () => {
+    const sent: RuntimeCommandEnvelope[] = [];
+    const transport = siblingPlanningTransport(sent);
+    const { rerender } = render(
+      <LiveBoard
+        client={SIBLING_PLANNING_CLIENT}
+        frame={siblingPlanningFrame({
+          [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B,
+        })}
+        readBudgetCommitment={readsCommitment}
+        sessionCredential="cred"
+        transport={transport}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", {
+      name: `Dispatch plan.propose for ${PLURAL_RUN_B}, version 0`,
+    }));
+    await waitFor(() => { expect(sent).toHaveLength(1); });
+    expect(sent[0]?.targetAggregateId).toBe(PLURAL_RUN_B);
+    expect(sent[0]?.payload).toMatchObject({ runId: PLURAL_RUN_B });
+    const commands = sent[0]?.payload["commands"];
+    expect(Array.isArray(commands)).toBe(true);
+    const draft = Array.isArray(commands)
+      ? commands.find((entry) => (entry as Record<string, unknown>)["kind"]
+        === "planning.create_draft")
+      : undefined;
+    expect(draft).toMatchObject({
+      goalRef: PLURAL_GOAL_B, kind: "planning.create_draft", runId: PLURAL_RUN_B,
+    });
+    const authored = JSON.stringify(sent[0]?.payload);
+    expect(authored).not.toContain(PLURAL_RUN_A);
+    expect(authored).not.toContain(PLURAL_GOAL_A);
+    expect(authored).not.toContain("run-live-1");
+    expect(authored).not.toContain("goal-live-1");
+
+    // EXACT B-ONLY GRAPH AND PLAN OPERANDS. Every one is read off the daemon's material for
+    // the run the OFFER named; none may come from a module constant, and none may come from
+    // sibling A, whose entry is FIRST in the map the surface answered with.
+    const propose = Array.isArray(commands)
+      ? commands.find((entry) => (entry as Record<string, unknown>)["kind"] === "plan.propose")
+      : undefined;
+    expect(propose).toMatchObject({
+      graphContentBytesBase64: PLURAL_BYTES_B,
+      submissionHash: PLURAL_SUBMISSION_B,
+    });
+    const sealed = (propose as Record<string, unknown>)["authority"] as Record<string, unknown>;
+    const revision = sealed["planRevision"] as Record<string, unknown>;
+    const contract = sealed["acceptanceContract"] as Record<string, unknown>;
+    expect(revision["graphBinding"]).toEqual({
+      graphContentHash: PLURAL_GRAPH_HASH_B, graphRevisionRef: `${PLURAL_RUN_B}-graph-revision`,
+    });
+    expect(revision["planHash"]).toBe(PLURAL_SUBMISSION_B);
+    expect(contract["criteriaDigest"]).toBe(PLURAL_CRITERIA_B);
+    expect(contract["contractId"]).toBe(`${PLURAL_RUN_B}-contract`);
+    // A's operands are distinct in every one of those fields, so the swap is detectable.
+    expect(authored).not.toContain(PLURAL_BYTES_A);
+    expect(authored).not.toContain(PLURAL_GRAPH_HASH_A);
+    expect(authored).not.toContain(PLURAL_SUBMISSION_A);
+    expect(authored).not.toContain(PLURAL_CRITERIA_A);
+
+    rerender(
+      <LiveBoard
+        client={SIBLING_PLANNING_CLIENT}
+        frame={siblingPlanningFrame({ [PLURAL_RUN_A]: PLURAL_GOAL_A })}
+        readBudgetCommitment={readsCommitment}
+        sessionCredential="cred"
+        transport={transport}
+      />,
+    );
+    expect(screen.queryByRole("button", {
+      name: `Dispatch plan.propose for ${PLURAL_RUN_B}, version 0`,
+    })).toBeNull();
+  });
+
   it("carries a present map exactly and frozen, beside the singular seed binding", () => {
     const wire = { [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B };
     const frame = frameOfSurface(surfaceWithRefs(wire));
@@ -908,5 +1184,241 @@ describe("the plural per-run planning binding", () => {
     // the frame is refused whole and the accessor is never called to decide that.
     expect(frameOfSurface(surfaceWithRefs(hostile))).toEqual(UNREADABLE_FRAME);
     expect(getterCalls).toBe(0);
+  });
+});
+
+/**
+ * THE PER-RUN PLANNING AUTHORITY MATERIAL (`planningAuthorityByRun`).
+ *
+ * The daemon is the sole producer of graph and plan identity; the board only validates the
+ * bounded transport shape and the bindings. So a WHOLLY ABSENT map is optional — a legacy
+ * surface still reads, it is simply not authoritative for planning — while any PRESENT value
+ * this reader cannot vouch for refuses the frame whole, without ever invoking an accessor.
+ * Reading a getter to decide is the answered body computing itself against this board.
+ */
+function surfaceWithAuthorities(authorities: unknown, present = true): unknown {
+  return {
+    nextAllowedCommands: [
+      {
+        commandId: "plan-sibling-a", commandKind: "plan.propose", expectedVersion: 0,
+        targetAggregateId: PLURAL_RUN_A,
+      },
+      {
+        commandId: "plan-sibling-b", commandKind: "plan.propose", expectedVersion: 0,
+        targetAggregateId: PLURAL_RUN_B,
+      },
+    ],
+    outcome: "SURFACE",
+    ...(present ? { planningAuthorityByRun: authorities } : {}),
+    planningGoalRef: PLURAL_GOAL_A,
+    planningGoalRefs: { [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B },
+    steps: [],
+  };
+}
+
+/** B's entry with one member replaced or removed; A's entry always stays valid and first. */
+function withEntryB(patch: Record<string, unknown>, dropped: readonly string[] = []): unknown {
+  const entry: Record<string, unknown> = { ...MATERIAL_B, ...patch };
+  for (const key of dropped) delete entry[key];
+  return { [PLURAL_RUN_A]: MATERIAL_A, [PLURAL_RUN_B]: entry };
+}
+
+/** A run's material under a run key of its own, for the bound sweeps. */
+function bulkMaterial(runId: string): Record<string, unknown> {
+  return materialOf({
+    bytes: PLURAL_BYTES_A, criteriaDigest: PLURAL_CRITERIA_A, goalRef: PLURAL_GOAL_A,
+    graphHash: PLURAL_GRAPH_HASH_A, runId, submissionHash: PLURAL_SUBMISSION_A,
+  });
+}
+
+describe("the per-run planning authority material", () => {
+  afterEach(cleanup);
+
+  it("leaves a WHOLLY ABSENT map optional: the frame still reads as a surface", () => {
+    for (const legacy of [surfaceWithAuthorities(null, false), surfaceWithAuthorities(undefined)]) {
+      const frame = frameOfSurface(legacy);
+      expect(frame.outcome).toBe("SURFACE");
+      expect(frame.connection).toBe("CONNECTED");
+      expect(frame.offers).toHaveLength(2);
+      // The material rides no exported member: SurfaceFrame's shape is unchanged, so the
+      // v2 surfaces that only import this type cannot be reached by this row at all.
+      expect(Object.keys(frame).sort()).toEqual([
+        "connection", "detail", "offers", "outcome",
+        "planningGoalRef", "planningGoalRefs", "steps",
+      ]);
+    }
+  });
+
+  it("carries a well-formed map without widening the exported frame", () => {
+    const frame = frameOfSurface(surfaceWithAuthorities({
+      [PLURAL_RUN_A]: MATERIAL_A, [PLURAL_RUN_B]: MATERIAL_B,
+    }));
+    expect(frame.outcome).toBe("SURFACE");
+    expect(frame.connection).toBe("CONNECTED");
+    expect(Object.keys(frame)).not.toContain("planningAuthorityByRun");
+  });
+
+  it("refuses every malformed PRESENT value with exactly LIVE_SURFACE_UNREADABLE", () => {
+    const cyclicAuthority: Record<string, unknown> = { acceptanceContract: {}, planRevision: {} };
+    cyclicAuthority["loop"] = cyclicAuthority;
+    const extraKeyed: unknown[] = [1, 2];
+    (extraKeyed as unknown as Record<string, unknown>)["injected"] = "yes";
+    const sparse: unknown[] = [1, 2, 3];
+    delete sparse[1];
+    const oversizedId = "z".repeat(513);
+    const tooMany: Record<string, unknown> = {};
+    for (let index = 0; index <= 256; index += 1) {
+      tooMany[`run-overflow-${String(index)}`] = bulkMaterial(`run-overflow-${String(index)}`);
+    }
+
+    const malformed: readonly (readonly [string, unknown])[] = [
+      ["not a record", "planningAuthorityByRun"],
+      ["a number", 7],
+      ["an array", []],
+      ["entry pairs", [[PLURAL_RUN_B, MATERIAL_B]]],
+      ["an empty run key", { "": MATERIAL_B }],
+      ["a non-record entry", { [PLURAL_RUN_B]: "material" }],
+      ["a six-key entry", withEntryB({}, ["submissionHash"])],
+      ["an eight-key entry", withEntryB({ policyHash: "c7".repeat(32) })],
+      ["a mapKey/runId mismatch", { [PLURAL_RUN_B]: MATERIAL_A }],
+      ["a goalRef the daemon never bound", withEntryB({ goalRef: PLURAL_GOAL_A })],
+      ["an uppercase hash", withEntryB({ graphContentHash: "A1".repeat(32) })],
+      ["a short hash", withEntryB({ submissionHash: "b4".repeat(31) })],
+      ["non-canonical base64", withEntryB({ graphContentBytesBase64: "c2libGluZy1iLWdyYXBo=" })],
+      ["base64 outside the alphabet", withEntryB({ graphContentBytesBase64: "c2li_Gluzy1i" })],
+      ["an empty graph body", withEntryB({ graphContentBytesBase64: "" })],
+      ["an over-long id", withEntryB({ graphRevisionRef: oversizedId })],
+      ["a non-string goalRef", withEntryB({ goalRef: 7 })],
+      ["a non-record authority", withEntryB({ authority: "sealed" })],
+      ["a nonfinite number in the authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: { decompositionBudget: Infinity } },
+      })],
+      ["a NaN in the authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: { decompositionBudget: NaN } },
+      })],
+      ["a cycle in the authority", withEntryB({ authority: cyclicAuthority })],
+      ["a sparse array in the authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: { steps: sparse } },
+      })],
+      ["an extra-keyed array in the authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: { steps: extraKeyed } },
+      })],
+      ["a function in the authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: { steps: () => undefined } },
+      })],
+      ["257 entries", tooMany],
+    ];
+
+    // A swept set that produced zero cases passes vacuously; its size is pinned first.
+    expect(malformed.length).toBeGreaterThan(20);
+    for (const [label, authorities] of malformed) {
+      expect(frameOfSurface(surfaceWithAuthorities(authorities)), label)
+        .toEqual(UNREADABLE_FRAME);
+    }
+  });
+
+  it("admits a null-prototype map and exactly 256 entries, the bound itself", () => {
+    const bare = Object.create(null) as Record<string, unknown>;
+    bare[PLURAL_RUN_B] = MATERIAL_B;
+    expect(frameOfSurface(surfaceWithAuthorities(bare)).outcome).toBe("SURFACE");
+
+    const full: Record<string, unknown> = {};
+    const bounds: Record<string, string> = {};
+    for (let index = 0; index < 256; index += 1) {
+      const runId = `run-bound-${String(index)}`;
+      full[runId] = bulkMaterial(runId);
+      bounds[runId] = PLURAL_GOAL_A;
+    }
+    expect(Object.keys(full)).toHaveLength(256);
+    // The bound is INCLUSIVE: 256 reads, and the 257-entry case above refuses.
+    expect(frameOfSurface({
+      ...(surfaceWithAuthorities(full) as Record<string, unknown>),
+      planningGoalRefs: bounds,
+    }).outcome).toBe("SURFACE");
+  });
+
+  it("never invokes an accessor, at any of the three depths one can hide at", () => {
+    const counts = { authority: 0, entry: 0, map: 0 };
+
+    const hostileMap: Record<string, unknown> = { [PLURAL_RUN_A]: MATERIAL_A };
+    Object.defineProperty(hostileMap, PLURAL_RUN_B, {
+      configurable: true, enumerable: true,
+      get: () => { counts.map += 1; return MATERIAL_B; },
+    });
+
+    const hostileEntry: Record<string, unknown> = { ...MATERIAL_B };
+    delete hostileEntry["submissionHash"];
+    Object.defineProperty(hostileEntry, "submissionHash", {
+      configurable: true, enumerable: true,
+      get: () => { counts.entry += 1; return PLURAL_SUBMISSION_B; },
+    });
+
+    const hostileRevision: Record<string, unknown> = {};
+    Object.defineProperty(hostileRevision, "planHash", {
+      configurable: true, enumerable: true,
+      get: () => { counts.authority += 1; return PLURAL_SUBMISSION_B; },
+    });
+
+    const cases: readonly (readonly [keyof typeof counts, unknown])[] = [
+      ["map", hostileMap],
+      ["entry", { [PLURAL_RUN_A]: MATERIAL_A, [PLURAL_RUN_B]: hostileEntry }],
+      ["authority", withEntryB({
+        authority: { acceptanceContract: {}, planRevision: hostileRevision },
+      })],
+    ];
+    expect(cases).toHaveLength(3);
+    for (const [depth, authorities] of cases) {
+      expect(frameOfSurface(surfaceWithAuthorities(authorities)), depth)
+        .toEqual(UNREADABLE_FRAME);
+    }
+    expect(counts).toEqual({ authority: 0, entry: 0, map: 0 });
+  });
+
+  it("refuses a symbol-keyed map, and a symbol-keyed authority body", () => {
+    const symbolMap: Record<string, unknown> = { [PLURAL_RUN_A]: MATERIAL_A };
+    Object.defineProperty(symbolMap, Symbol("run"), {
+      configurable: true, enumerable: true, value: MATERIAL_B,
+    });
+    const symbolAuthority: Record<string, unknown> = { acceptanceContract: {}, planRevision: {} };
+    Object.defineProperty(symbolAuthority, Symbol("planHash"), {
+      configurable: true, enumerable: true, value: PLURAL_SUBMISSION_B,
+    });
+
+    expect(frameOfSurface(surfaceWithAuthorities(symbolMap))).toEqual(UNREADABLE_FRAME);
+    expect(frameOfSurface(surfaceWithAuthorities(withEntryB({ authority: symbolAuthority }))))
+      .toEqual(UNREADABLE_FRAME);
+  });
+
+  it("refuses a present map when the surface bound no goals to compare it against", () => {
+    const surface = surfaceWithAuthorities(BOTH_MATERIAL) as Record<string, unknown>;
+    delete surface["planningGoalRefs"];
+    // Material whose goalRef nothing can be checked against is material this board cannot
+    // vouch for, so the frame refuses rather than carrying an unverifiable binding.
+    expect(frameOfSurface(surface)).toEqual(UNREADABLE_FRAME);
+  });
+
+  it("renders NO planning control for an offered, goal-bound run with no material at all", () => {
+    render(
+      <LiveBoard
+        client={SIBLING_PLANNING_CLIENT}
+        frame={siblingPlanningFrame(
+          { [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B },
+          undefined,
+          false,
+        )}
+        readBudgetCommitment={readsCommitment}
+        sessionCredential="cred"
+        transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
+      />,
+    );
+
+    // The goal binding alone is not enough: without the daemon's material the board has no
+    // graph bytes and no sealed plan to propose, so it renders no click that cannot author one.
+    expect(screen.queryByRole("button", {
+      name: `Dispatch plan.propose for ${PLURAL_RUN_B}, version 0`,
+    })).toBeNull();
+    expect(screen.queryByRole("button", {
+      name: `Dispatch plan.propose for ${PLURAL_RUN_A}, version 0`,
+    })).toBeNull();
   });
 });

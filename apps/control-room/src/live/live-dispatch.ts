@@ -6,6 +6,9 @@ import type { BudgetCommitmentOutcome } from "./live-budget-commitment.js";
 import { dispatchPreparedPayload } from "./live-command-dispatch.js";
 import { recordDispatchEffort } from "./live-effort-edge.js";
 import { payloadFor } from "./live-dispatch-payloads.js";
+import {
+  PLANNING_AUTHORITY_KINDS, hasPlanningMaterial, planningPayloadFor,
+} from "./live-planning-authorities.js";
 
 /**
  * Dispatch = the daemon's affordance handed back through the generated builder.
@@ -50,6 +53,16 @@ const PLANNING_BINDING_ABSENT = "PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LI
  */
 const BUDGET_COMMITMENT_UNREADABLE =
   "BUDGET_COMMITMENT_READER_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
+
+/**
+ * What the board answers when the daemon offered an authority-bearing planning command for a
+ * run it stated NO planning material for. A DIFFERENT repair from a missing goal binding, so a
+ * different code at the same layer: "this run is bound to no goal" sends an operator somewhere
+ * else entirely from "the daemon offered no sealed plan for it". The material is carried by
+ * the daemon and read off the OFFER the surface minted, so a caller cannot supply one.
+ */
+const PLANNING_AUTHORITY_ABSENT =
+  "PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
 
 export interface DispatchInput {
   readonly affordance: Record<string, unknown>;
@@ -103,7 +116,9 @@ interface PlanningTarget {
 function planningTargetOf(input: DispatchInput): PlanningTarget | null {
   const target = ownNonEmptyString(input.affordance, "targetAggregateId");
   if (target === null) return null;
-  if (input.kind !== "plan.propose") return { goalRef: null, target };
+  // goal.close names the GOAL aggregate, so it is target-only; the two authority-bearing
+  // kinds additionally need the goal the daemon bound to that exact run.
+  if (!PLANNING_AUTHORITY_KINDS.includes(input.kind)) return { goalRef: null, target };
   const goalRef = boundGoalOf(input.planningGoalRefs, target);
   return goalRef === null ? null : { goalRef, target };
 }
@@ -154,10 +169,23 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   if (planning === null && PLANNING_KINDS.includes(input.kind)) {
     return { detail: PLANNING_BINDING_ABSENT, ok: false, stage: "BUILD_REFUSED" };
   }
-  const payload = payloadFor(
-    input.kind, planning?.target ?? input.aggregateId, input.version ?? null,
-    planning?.goalRef ?? null,
-  );
+  // BEFORE the budget reader, the builder and the transport: an offer the daemon stated no
+  // planning material for cannot be authored at all, so it must not cost a commitment read
+  // and must never reach a seam that would answer for a body this board never assembled.
+  if (PLANNING_AUTHORITY_KINDS.includes(input.kind)
+    && !hasPlanningMaterial(input.affordance)) {
+    return { detail: PLANNING_AUTHORITY_ABSENT, ok: false, stage: "BUILD_REFUSED" };
+  }
+  // The authority-bearing kinds are authored from the OFFER's own material; every other kind
+  // from its identity alone. Exactly one seam answers for each, and neither serves the other's.
+  const payload = PLANNING_AUTHORITY_KINDS.includes(input.kind)
+    ? planningPayloadFor(
+      input.kind, input.affordance, input.version ?? null, planning?.goalRef ?? null,
+    )
+    : payloadFor(
+      input.kind, planning?.target ?? input.aggregateId, input.version ?? null,
+      planning?.goalRef ?? null,
+    );
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }

@@ -7,6 +7,7 @@ import type { BudgetCommitmentOutcome } from "./live-budget-commitment.js";
 import { dispatchAffordance, payloadFor } from "./live-dispatch.js";
 import { boundGoalOf } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
+import { PLANNING_AUTHORITY_KINDS, planningPayloadFor } from "./live-planning-authorities.js";
 
 /**
  * The chain board: what the daemon offers, blocks, and has committed — and the
@@ -73,13 +74,19 @@ const COLUMNS = [
 const NO_BINDINGS: Readonly<Record<string, string>> = Object.freeze({});
 
 export function boardMayDispatch(
-  step: SurfaceStep, planningGoalRefs: Readonly<Record<string, string>> = NO_BINDINGS,
+  step: SurfaceStep,
+  planningGoalRefs: Readonly<Record<string, string>> = NO_BINDINGS,
+  offer: Record<string, unknown> | null = null,
 ): boolean {
-  return step.status === "READY"
-    && payloadFor(
-      step.kind, step.aggregateId, step.version,
-      boundGoalOf(planningGoalRefs, step.aggregateId ?? ""),
-    ) !== null;
+  if (step.status !== "READY") return false;
+  const goalRef = boundGoalOf(planningGoalRefs, step.aggregateId ?? "");
+  // THE AUTHORITY-BEARING KINDS NEED BOTH BINDINGS. A goal binding alone leaves the board with
+  // no graph bytes and no sealed plan to propose, so the predicate asks the very seam the click
+  // path will author through — and it reads the material off the OFFER, never off the card.
+  if (PLANNING_AUTHORITY_KINDS.includes(step.kind)) {
+    return planningPayloadFor(step.kind, offer, step.version, goalRef) !== null;
+  }
+  return payloadFor(step.kind, step.aggregateId, step.version, goalRef) !== null;
 }
 
 function stepIdentity(step: SurfaceStep): string {
@@ -206,7 +213,9 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                       needs {step.missing.join(", ")}
                     </small>
                   ) : null}
-                  {boardMayDispatch(step, frame.planningGoalRefs ?? NO_BINDINGS) ? (
+                  {boardMayDispatch(
+                    step, frame.planningGoalRefs ?? NO_BINDINGS, offerFor(frame, step),
+                  ) ? (
                     <button
                       aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}

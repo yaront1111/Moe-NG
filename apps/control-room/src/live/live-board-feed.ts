@@ -1,3 +1,5 @@
+import { bindPlanningAuthorities } from "./live-planning-authorities.js";
+
 /**
  * Polls the daemon's affordance surface and shapes what it says — verbatim.
  *
@@ -262,6 +264,13 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
     const offer = offerOf(rawOffer);
     if (offer === null) return unreadable();
     offers.push(offer);
+  }
+  // The daemon's per-run planning authority. Absent is optional — a legacy surface still
+  // reads — but a PRESENT value this reader cannot vouch for refuses the frame whole, exactly
+  // as a malformed binding map does, and without ever invoking an accessor to decide.
+  // The material rides a sidecar keyed by these offers, so SurfaceFrame's shape is unchanged.
+  if (!bindPlanningAuthorities(offers, planningGoalRefs, response["planningAuthorityByRun"])) {
+    return unreadable();
   }
   return frame(
     "CONNECTED", outcome, "", steps, offers,

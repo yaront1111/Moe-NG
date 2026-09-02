@@ -7,6 +7,52 @@ import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import { LiveBoard } from "./live-board.js";
 import { frameOfSurface } from "./live-board-feed.js";
 
+/**
+ * The daemon's per-run planning authority, spelled with its exact seven keys
+ * (apps/daemon/src/http/affordance-planning-authorities.ts). An `approval.decide` control only
+ * renders for a run the surface bound to a goal AND handed material for, so these are the
+ * VALID wire facts this file's surface now has to state — the expectations below are unchanged.
+ */
+function materialFor(runId: string, goalRef: string): Record<string, unknown> {
+  const graphRevisionRef = `${runId}-graph-revision`;
+  const graphContentHash = "7c".repeat(32);
+  const graphBinding = { graphContentHash, graphRevisionRef };
+  return {
+    authority: {
+      acceptanceContract: {
+        applicability: { ...graphBinding, nodeIds: [`${runId}-node`], nodeKind: "LEAF" },
+        authorRef: `${runId}-author`,
+        contractId: `${runId}-contract`,
+        criteriaDigest: "c1".repeat(32),
+        obligations: [{ criterionId: `${goalRef}-criterion` }],
+        version: "moe-acceptance-contract/1",
+      },
+      planRevision: {
+        affectedCriterionIds: [`${goalRef}-criterion`],
+        affectedNodeIds: [`${runId}-node`],
+        approvalState: "PENDING_APPROVAL",
+        authorRef: `${runId}-author`,
+        graphBinding,
+        parentRevisionId: null,
+        planHash: "5e".repeat(32),
+        rejectionRef: null,
+        revisionId: `${runId}-revision`,
+        version: "moe-plan-revision/1",
+      },
+    },
+    goalRef,
+    graphContentBytesBase64: "ZGV2LWdyYXBoLWJvZHk=",
+    graphContentHash,
+    graphRevisionRef,
+    runId,
+    submissionHash: "5e".repeat(32),
+  };
+}
+
+const APPROVAL_REFS = Object.freeze({
+  "approval-a": "goal-approval-a", "approval-b": "goal-approval-b",
+});
+
 describe("LiveBoard accessibility", () => {
   afterEach(cleanup);
 
@@ -22,6 +68,11 @@ describe("LiveBoard accessibility", () => {
       },
     ],
     outcome: "SURFACE",
+    planningAuthorityByRun: {
+      "approval-a": materialFor("approval-a", "goal-approval-a"),
+      "approval-b": materialFor("approval-b", "goal-approval-b"),
+    },
+    planningGoalRefs: APPROVAL_REFS,
     steps: [
       {
         aggregateId: "approval-a", kind: "approval.decide", missing: [],

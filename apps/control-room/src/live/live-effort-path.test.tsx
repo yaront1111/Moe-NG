@@ -51,7 +51,69 @@ function card(kind: string, commandId: string, aggregateId: string): Card {
   return { aggregateId, commandId, kind };
 }
 
+/**
+ * The daemon's per-run planning authority, with its exact seven keys
+ * (apps/daemon/src/http/affordance-planning-authorities.ts). The board renders an
+ * `approval.decide` control only for a run the surface bound to a goal AND handed material
+ * for, so the surface this file answers with now states both — VALID wire facts, added
+ * because the render fence moved; no expectation below is weakened for them.
+ */
+function materialFor(runId: string, goalRef: string): Record<string, unknown> {
+  const graphRevisionRef = `${runId}-graph-revision`;
+  const graphContentHash = "8d".repeat(32);
+  const graphBinding = { graphContentHash, graphRevisionRef };
+  return {
+    authority: {
+      acceptanceContract: {
+        applicability: { ...graphBinding, nodeIds: [`${runId}-node`], nodeKind: "LEAF" },
+        authorRef: `${runId}-author`,
+        contractId: `${runId}-contract`,
+        criteriaDigest: "c1".repeat(32),
+        obligations: [{ criterionId: `${goalRef}-criterion` }],
+        version: "moe-acceptance-contract/1",
+      },
+      planRevision: {
+        affectedCriterionIds: [`${goalRef}-criterion`],
+        affectedNodeIds: [`${runId}-node`],
+        approvalState: "PENDING_APPROVAL",
+        authorRef: `${runId}-author`,
+        graphBinding,
+        parentRevisionId: null,
+        planHash: "5e".repeat(32),
+        rejectionRef: null,
+        revisionId: `${runId}-revision`,
+        version: "moe-plan-revision/1",
+      },
+    },
+    goalRef,
+    graphContentBytesBase64: "ZWZmb3J0LWdyYXBo",
+    graphContentHash,
+    graphRevisionRef,
+    runId,
+    submissionHash: "5e".repeat(32),
+  };
+}
+
+/** The kinds the daemon keys planning material by; `goal.close` targets the goal, not a run. */
+const AUTHORITY_KINDS: readonly string[] = Object.freeze(["approval.decide", "plan.propose"]);
+
+function planningFactsFor(cards: readonly Card[]): {
+  authorities: Record<string, unknown>;
+  refs: Record<string, string>;
+} {
+  const authorities: Record<string, unknown> = {};
+  const refs: Record<string, string> = {};
+  for (const entry of cards) {
+    if (!AUTHORITY_KINDS.includes(entry.kind)) continue;
+    const goalRef = `goal-${entry.aggregateId}`;
+    refs[entry.aggregateId] = goalRef;
+    authorities[entry.aggregateId] = materialFor(entry.aggregateId, goalRef);
+  }
+  return { authorities, refs };
+}
+
 function surfaceBody(cards: readonly Card[]): string {
+  const { authorities, refs } = planningFactsFor(cards);
   return JSON.stringify({
     nextAllowedCommands: cards.map((entry) => ({
       commandId: entry.commandId,
@@ -60,6 +122,8 @@ function surfaceBody(cards: readonly Card[]): string {
       targetAggregateId: entry.aggregateId,
     })),
     outcome: "SURFACE",
+    planningAuthorityByRun: authorities,
+    planningGoalRefs: refs,
     steps: cards.map((entry) => ({
       aggregateId: entry.aggregateId,
       kind: entry.kind,

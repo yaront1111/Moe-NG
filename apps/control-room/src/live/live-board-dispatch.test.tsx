@@ -8,6 +8,7 @@ import { LiveBoard, boardMayDispatch } from "./live-board.js";
 import { frameOfSurface } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
 import { DEV_PAYLOADS, dispatchAffordance, payloadFor } from "./live-dispatch.js";
+import { PLANNING_AUTHORITY_KINDS, planningPayloadFor } from "./live-planning-authorities.js";
 
 /**
  * The board is the OPERATING SURFACE: every READY step the dispatch module can
@@ -61,9 +62,58 @@ function refsFor(kinds: readonly string[]): Readonly<Record<string, string>> {
   return refs;
 }
 
+/**
+ * ONE RUN'S PLANNING AUTHORITY, spelled as the daemon's own seven-key wire record
+ * (apps/daemon/src/http/affordance-planning-authorities.ts). Every graph and plan operand a
+ * proposal or an approval carries is read off this material for the OFFER's own run; the board
+ * mints none of it, so a fixture is the only place these bytes can come from in a unit test.
+ */
+function materialFor(runId: string, goalRef: string): Record<string, unknown> {
+  const graphRevisionRef = `${runId}-graph-revision`;
+  const graphContentHash = `${runId.length % 10}f`.repeat(32).slice(0, 64);
+  const graphBinding = { graphContentHash, graphRevisionRef };
+  return {
+    authority: {
+      acceptanceContract: {
+        applicability: { ...graphBinding, nodeIds: [`${runId}-node`], nodeKind: "LEAF" },
+        authorRef: `${runId}-author`,
+        contractId: `${runId}-contract`,
+        criteriaDigest: "c1".repeat(32),
+        obligations: [{ criterionId: `${goalRef}-criterion` }],
+        version: "moe-acceptance-contract/1",
+      },
+      planRevision: {
+        affectedCriterionIds: [`${goalRef}-criterion`],
+        affectedNodeIds: [`${runId}-node`],
+        approvalState: "PENDING_APPROVAL",
+        authorRef: `${runId}-author`,
+        graphBinding,
+        parentRevisionId: null,
+        planHash: "5e".repeat(32),
+        rejectionRef: null,
+        revisionId: `${runId}-revision`,
+        version: "moe-plan-revision/1",
+      },
+    },
+    goalRef,
+    graphContentBytesBase64: "ZGV2LWdyYXBoLWJvZHk=",
+    graphContentHash,
+    graphRevisionRef,
+    runId,
+    submissionHash: "5e".repeat(32),
+  };
+}
+
+function authoritiesFor(refs: Readonly<Record<string, string>>): Record<string, unknown> {
+  const map: Record<string, unknown> = {};
+  for (const [runId, goalRef] of Object.entries(refs)) map[runId] = materialFor(runId, goalRef);
+  return map;
+}
+
 /** One READY card per payload kind PLUS the agent's step, each with an offer. */
 function everyKindReady(): SurfaceFrame {
   const kinds = [...PAYLOAD_KINDS, AGENT_KIND];
+  const refs = refsFor(kinds);
   return frameOfSurface({
     nextAllowedCommands: kinds.map((kind, index) => ({
       commandId: `afford-${kind}`,
@@ -72,10 +122,46 @@ function everyKindReady(): SurfaceFrame {
       targetAggregateId: `target-${String(index)}`,
     })),
     outcome: "SURFACE",
+    planningAuthorityByRun: authoritiesFor(refs),
     planningGoalRef: "goal-daemon-offer-7",
-    planningGoalRefs: refsFor(kinds),
+    planningGoalRefs: refs,
     steps: kinds.map((kind, index) => step(kind, "READY", index)),
   });
+}
+
+/**
+ * THE PARSED OFFER, which is the ONLY thing the sidecar binds material to.
+ *
+ * `frameOfSurface` mints the frozen offer records and binds the daemon's material to those
+ * exact objects. A structurally identical literal the caller built is a DIFFERENT object and
+ * carries none: that is what makes caller-supplied authority unrepresentable rather than
+ * merely discouraged, and `unboundOffer` below is the same shape with no binding at all.
+ */
+function boundOffer(
+  kind: string, runId: string, goalRef: string, version: number,
+  material: Readonly<Record<string, unknown>> | undefined = undefined,
+): Record<string, unknown> {
+  const refs = { [runId]: goalRef };
+  const frame = frameOfSurface({
+    nextAllowedCommands: [{
+      commandId: `afford-${kind}-${runId}`, commandKind: kind,
+      expectedVersion: version, targetAggregateId: runId,
+    }],
+    outcome: "SURFACE",
+    planningAuthorityByRun: material ?? authoritiesFor(refs),
+    planningGoalRefs: refs,
+    steps: [],
+  });
+  const offer = frame.offers[0];
+  if (offer === undefined) throw new Error(`no parsed offer for ${kind}@${runId}`);
+  return offer;
+}
+
+/** The same wire shape with NO material bound to it: goal binding present, sidecar empty. */
+function unboundOffer(
+  kind: string, runId: string, goalRef: string, version: number,
+): Record<string, unknown> {
+  return boundOffer(kind, runId, goalRef, version, Object.freeze({}));
 }
 
 function builderFor(kinds: readonly string[]): unknown {
@@ -158,10 +244,12 @@ describe("what the board may hand back", () => {
 
   it.each(PAYLOAD_KINDS)("%s is dispatchable when the daemon says READY", (kind) => {
     // The production predicate, not a restatement of it: the board renders its
-    // control through this exact function.
+    // control through this exact function. The planning kinds additionally need the
+    // daemon's material, which rides the parsed offer and nothing else.
     expect(boardMayDispatch({
       aggregateId: "target-0", claim: null, kind, missing: [], status: "READY", version: 0,
-    }, { "target-0": "goal-daemon-offer-7" })).toBe(true);
+    }, { "target-0": "goal-daemon-offer-7" },
+    boundOffer(kind, "target-0", "goal-daemon-offer-7", 0))).toBe(true);
   });
 
   it("never authors the staffed agent's step", () => {
@@ -183,17 +271,20 @@ describe("what the board may hand back", () => {
 });
 
 describe("plan.propose is two commits on one card", () => {
+  const OFFER = boundOffer("plan.propose", "run-live-1", "goal-daemon-offer-7", 0);
+  const MATERIAL = materialFor("run-live-1", "goal-daemon-offer-7");
+
   const chainOf = (version: number | null): readonly Record<string, unknown>[] => {
-    const payload = payloadFor(
-      "plan.propose", "run-live-1", version, "goal-daemon-offer-7",
+    const payload = planningPayloadFor(
+      "plan.propose", OFFER, version, "goal-daemon-offer-7",
     );
     if (payload === null) throw new Error("plan.propose has no payload");
     return payload["commands"] as readonly Record<string, unknown>[];
   };
 
   it("dispatches the sealing planning chain at version 0 and the finalize after it", () => {
-    const planningPayload = payloadFor(
-      "plan.propose", "run-live-1", 0, "goal-daemon-offer-7",
+    const planningPayload = planningPayloadFor(
+      "plan.propose", OFFER, 0, "goal-daemon-offer-7",
     );
     if (planningPayload === null) throw new Error("bound plan.propose has no payload");
     const planning = planningPayload["commands"] as readonly Record<string, unknown>[];
@@ -202,12 +293,16 @@ describe("plan.propose is two commits on one card", () => {
     ]);
     expect(planning[0]?.["goalRef"]).toBe("goal-daemon-offer-7");
     expect(planning[0]?.["goalRef"]).not.toBe("goal-live-1");
-    expect(payloadFor("plan.propose", "run-live-1", 0, null)).toBeNull();
+    expect(planningPayloadFor("plan.propose", OFFER, 0, null)).toBeNull();
+    // The AUTHORITY-LESS half of the same rule: `payloadFor` holds no planning material at
+    // all any more, so it authors neither of the two authority-bearing kinds.
+    expect(payloadFor("plan.propose", "run-live-1", 0, "goal-daemon-offer-7")).toBeNull();
+    expect(payloadFor("approval.decide", "run-live-1", 2)).toBeNull();
     // The propose terminal seals authority bodies; a bare proposal never reaches PLAN_REVIEW.
     const propose = planning[planning.length - 1];
-    expect(propose?.["authority"]).toMatchObject({
-      acceptanceContract: expect.anything(), planRevision: expect.anything(),
-    });
+    expect(propose?.["authority"]).toEqual(MATERIAL["authority"]);
+    expect(propose?.["submissionHash"]).toBe(MATERIAL["submissionHash"]);
+    expect(propose?.["graphContentBytesBase64"]).toBe(MATERIAL["graphContentBytesBase64"]);
     expect(chainOf(null)).toEqual(planning);
 
     const finalize = chainOf(1);
@@ -215,10 +310,29 @@ describe("plan.propose is two commits on one card", () => {
     // The finalize is judged against the sealed plan's own hash, and approval against the same.
     const revision = finalize[0]?.["revision"] as Record<string, unknown>;
     expect(revision["planHash"]).toBe(propose?.["submissionHash"]);
-    const approval = payloadFor("approval.decide", "run-live-1", 2) as Record<string, unknown>;
+    expect(revision["graphContentHash"]).toBe(MATERIAL["graphContentHash"]);
+    expect(revision["graphRevisionRef"]).toBe(MATERIAL["graphRevisionRef"]);
+    // The finalize carries the graph HASH and never the bytes: that key is in the daemon's
+    // FORBIDDEN_BODY_KEYS and a finalize holding it is refused whole at DAEMON_INGRESS.
+    expect(finalize[0]).not.toHaveProperty("graphContentBytesBase64");
+    const approvalOffer = boundOffer(
+      "approval.decide", "run-live-1", "goal-daemon-offer-7", 2,
+    );
+    const approval = planningPayloadFor(
+      "approval.decide", approvalOffer, 2, "goal-daemon-offer-7",
+    ) as Record<string, unknown>;
     expect((approval["record"] as Record<string, unknown>)["exactRevisionHash"])
       .toBe(propose?.["submissionHash"]);
     expect(approval["graphRevisionRef"]).toBe(revision["graphRevisionRef"]);
+    // Every approval identity DoD 4 names comes off the same snapshotted authority.
+    const contract = (MATERIAL["authority"] as Record<string, unknown>)["acceptanceContract"];
+    expect(approval["record"]).toMatchObject({
+      actor: (contract as Record<string, unknown>)["authorRef"],
+      approvedNodeScope: ["run-live-1-node"],
+      criteriaRef: (contract as Record<string, unknown>)["criteriaDigest"],
+    });
+    expect((approval["activation"] as Record<string, unknown>)["graphHash"])
+      .toBe(MATERIAL["graphContentHash"]);
   });
 
   it("keeps the card dispatchable at both versions, through the production predicate", () => {
@@ -226,8 +340,81 @@ describe("plan.propose is two commits on one card", () => {
       expect(boardMayDispatch({
         aggregateId: "run-live-1", claim: null, kind: "plan.propose", missing: [],
         status: "READY", version,
-      }, { "run-live-1": "goal-daemon-offer-7" }), `version ${String(version)}`).toBe(true);
+      }, { "run-live-1": "goal-daemon-offer-7" },
+      boundOffer("plan.propose", "run-live-1", "goal-daemon-offer-7", version)),
+      `version ${String(version)}`).toBe(true);
     }
+  });
+
+  /**
+   * RAIL 3, PINNED IN A TEST rather than only in prose. The daemon's producer carries NO
+   * dependencyHash, qualityHash or policyHash — a journeyAuthority probe measured that — so
+   * this row must NOT re-derive them or relabel an unrelated digest as one. Their existing,
+   * internally consistent placeholders survive the move verbatim, and this arm reddens if a
+   * later hand quietly binds one to producer material it was never given.
+   */
+  it("leaves the three non-producer digests exactly where they were", () => {
+    const finalize = chainOf(1)[0] as Record<string, unknown>;
+    const revision = finalize["revision"] as Record<string, unknown>;
+    expect(revision["dependencyHash"]).toBe(`d1${"0".repeat(62)}`);
+    expect(revision["qualityHash"]).toBe(`dd${"0".repeat(62)}`);
+    // The producer's seven keys never held any of these three names.
+    for (const absent of ["dependencyHash", "qualityHash", "policyHash"]) {
+      expect(MATERIAL).not.toHaveProperty(absent);
+    }
+    const approval = planningPayloadFor(
+      "approval.decide",
+      boundOffer("approval.decide", "run-live-1", "goal-daemon-offer-7", 2),
+      2, "goal-daemon-offer-7",
+    ) as Record<string, unknown>;
+    const activation = approval["activation"] as Record<string, unknown>;
+    expect(activation["policyHash"]).toBe(`b1${"0".repeat(62)}`);
+    expect(activation["qualityHash"]).toBe(`dd${"0".repeat(62)}`);
+  });
+});
+
+/**
+ * THE PLANNING-KIND ROSTER, ASSERTED IN BOTH DIRECTIONS.
+ *
+ * A test that iterates the advertised roster alone can only see one direction: deleting an
+ * entry shrinks its own iteration and stays green while the capability silently vanishes. So
+ * the SERVED set is enumerated from the implementation seams themselves — what `payloadFor`
+ * authors and what `planningPayloadFor` authors — and compared for set equality.
+ */
+describe("the planning-kind roster is bidirectional", () => {
+  const RUN = "run-roster-1";
+  const GOAL = "goal-roster-1";
+  const ALL_KINDS: readonly string[] = Object.freeze([
+    ...PAYLOAD_KINDS, AGENT_KIND, "review.submit", "integration.accept_output",
+  ]);
+
+  it("serves exactly the kinds it advertises, and advertises exactly the kinds it serves", () => {
+    expect(ALL_KINDS.length).toBeGreaterThan(PAYLOAD_KINDS.length);
+
+    const servedByPlanning = ALL_KINDS.filter((kind) => planningPayloadFor(
+      kind, boundOffer(kind, RUN, GOAL, 0), 0, GOAL,
+    ) !== null).sort();
+    // Direction 1: every ADVERTISED kind is actually served.
+    for (const advertised of PLANNING_AUTHORITY_KINDS) {
+      expect(servedByPlanning, `advertised ${advertised}`).toContain(advertised);
+    }
+    // Direction 2: every SERVED kind is advertised. Set equality, not a subset check.
+    expect(servedByPlanning).toEqual([...PLANNING_AUTHORITY_KINDS].sort());
+    expect(servedByPlanning.length).toBeGreaterThan(1);
+  });
+
+  it("splits the whole vocabulary between the two seams, with no kind served twice", () => {
+    const byPayload = ALL_KINDS.filter((kind) => payloadFor(kind, RUN, 0, GOAL) !== null);
+    const byPlanning = ALL_KINDS.filter((kind) => planningPayloadFor(
+      kind, boundOffer(kind, RUN, GOAL, 0), 0, GOAL,
+    ) !== null);
+
+    // Disjoint: an authority-bearing kind is authored by the sidecar seam and NOWHERE else,
+    // so a `payloadFor` that quietly regrew a static planning chain reddens here.
+    expect(byPayload.filter((kind) => byPlanning.includes(kind))).toEqual([]);
+    // And together they are the whole authorable vocabulary, minus the staffed agent's step.
+    expect([...byPayload, ...byPlanning].sort())
+      .toEqual(ALL_KINDS.filter((kind) => kind !== AGENT_KIND).sort());
   });
 });
 
@@ -334,6 +521,8 @@ describe("an active claim renders as a fact beside the dispatch decision", () =>
       targetAggregateId: "run-claimed",
     }],
     outcome: "SURFACE",
+    planningAuthorityByRun: authoritiesFor({ "run-claimed": "goal-claimed" }),
+    planningGoalRefs: { "run-claimed": "goal-claimed" },
     steps: [
       {
         aggregateId: "run-claimed",
@@ -372,6 +561,8 @@ describe("a dispatch is credentialed and carries the daemon's own affordance", (
       targetAggregateId: "approval-9",
     }],
     outcome: "SURFACE",
+    planningAuthorityByRun: authoritiesFor({ "approval-9": "goal-approve-9" }),
+    planningGoalRefs: { "approval-9": "goal-approve-9" },
     steps: [{
       aggregateId: "approval-9", kind: "approval.decide", missing: [],
       status: "READY", version: 4,
@@ -429,11 +620,14 @@ const SIB_REFS: Readonly<Record<string, string>> =
 const PLANNING_KINDS: readonly string[] =
   Object.freeze(["approval.decide", "goal.close", "plan.propose"]);
 
-/** The offer the daemon minted for goal B, the one the operator clicked. */
+/**
+ * The offer the daemon minted for goal B, the one the operator clicked — PARSED through
+ * `frameOfSurface`, because the sidecar binds material to the exact parsed record and to
+ * nothing a caller could hand it.
+ */
 function offerForB(kind: string, target: string, expectedVersion: number): Record<string, unknown> {
-  return {
-    commandId: `afford-${kind}-b`, commandKind: kind, expectedVersion, targetAggregateId: target,
-  };
+  const goalRef = SIB_REFS[target] ?? SIB_GOAL_B;
+  return boundOffer(kind, target, goalRef, expectedVersion);
 }
 
 interface Recorder {
@@ -509,8 +703,10 @@ describe("the approval carries the commitment the daemon read back", () => {
     const record = (DEV_PAYLOADS["approval.decide"] as Record<string, unknown>)["record"];
 
     expect(record).not.toHaveProperty("budgetRef");
-    expect((payloadFor("approval.decide", SIB_RUN_B, 2) as Record<string, unknown>)["record"])
-      .not.toHaveProperty("budgetRef");
+    const authored = planningPayloadFor(
+      "approval.decide", offerForB("approval.decide", SIB_RUN_B, 2), 2, SIB_GOAL_B,
+    ) as Record<string, unknown>;
+    expect(authored["record"]).not.toHaveProperty("budgetRef");
   });
 
   it("merges the READ ref into the record it hands the builder, for the OFFERED run", async () => {
@@ -747,4 +943,143 @@ describe("the offer's target decides the planning identity", () => {
     expect(getterCalls).toBe(0);
     expect(rec.sent).toHaveLength(0);
   });
+});
+
+/**
+ * THE TWO PLANNING REFUSALS ARE DISTINCT, AND EACH FIXTURE LEAVES ONLY ITS OWN GUARD ABLE
+ * TO ANSWER.
+ *
+ * A missing GOAL BINDING and missing AUTHORITY MATERIAL are different repairs — "the daemon
+ * bound this run to no goal" sends an operator somewhere else entirely from "the daemon
+ * offered no sealed plan for it" — so they carry different codes at the same layer. Proving
+ * that needs divergence, not merely a refusal: in the missing-goal arm the material IS bound,
+ * so loosening the goal guard would let the dispatch through the authority guard and reach the
+ * builder; in the missing-authority arm the goal IS bound, so loosening the authority guard
+ * would reach the builder too. Every downstream seam accepts, and each arm pins ZERO calls to
+ * the budget reader, the builder and the transport — the three things a refusal must precede.
+ */
+interface GuardProbe extends Recorder {
+  readonly reads: string[];
+}
+
+function guardProbe(): GuardProbe {
+  const base = recorder();
+  return { ...base, reads: [] };
+}
+
+async function dispatchThrough(
+  probe: GuardProbe, kind: string, offer: Record<string, unknown>,
+  version: number, refs: Readonly<Record<string, string>> | undefined,
+) {
+  return await dispatchAffordance({
+    affordance: offer,
+    aggregateId: SIB_RUN_A,
+    client: probe.client as never,
+    kind,
+    planningGoalRefs: refs,
+    readBudgetCommitment: (runId) => {
+      probe.reads.push(runId);
+      return Promise.resolve({ ref: "4d".repeat(32), status: "COMMITMENT" as const });
+    },
+    sessionCredential: "cred",
+    transport: probe.transport as never,
+    version,
+  });
+}
+
+describe("the two planning bindings refuse under their own names", () => {
+  it("names the GOAL binding when the material is present but no goal is bound", async () => {
+    const probe = guardProbe();
+    // Material for B IS bound to this exact offer, so the authority guard would accept.
+    // The map handed to the dispatch binds only sibling A, so only the goal guard can answer.
+    const report = await dispatchThrough(
+      probe, "plan.propose", offerForB("plan.propose", SIB_RUN_B, 0), 0,
+      { [SIB_RUN_A]: SIB_GOAL_A },
+    );
+
+    expect(report).toEqual({
+      detail: "PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH",
+      ok: false,
+      stage: "BUILD_REFUSED",
+    });
+    expect(probe.reads).toEqual([]);
+    expect(probe.built).toHaveLength(0);
+    expect(probe.sent).toHaveLength(0);
+  });
+
+  it("names the AUTHORITY binding when the goal is bound but no material was offered", async () => {
+    const probe = guardProbe();
+    // The goal binding IS present and readable, so the goal guard accepts; the surface simply
+    // carried no material for this run, and only the authority guard can answer.
+    const report = await dispatchThrough(
+      probe, "plan.propose", unboundOffer("plan.propose", SIB_RUN_B, SIB_GOAL_B, 0), 0, SIB_REFS,
+    );
+
+    expect(report).toEqual({
+      detail: "PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH",
+      ok: false,
+      stage: "BUILD_REFUSED",
+    });
+    expect(probe.reads).toEqual([]);
+    expect(probe.built).toHaveLength(0);
+    expect(probe.sent).toHaveLength(0);
+  });
+
+  it("refuses an APPROVAL the same way, at the same layer, under both names", async () => {
+    const missingGoal = guardProbe();
+    expect((await dispatchThrough(
+      missingGoal, "approval.decide", offerForB("approval.decide", SIB_RUN_B, 2), 2,
+      { [SIB_RUN_A]: SIB_GOAL_A },
+    )).detail).toBe("PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+    expect(missingGoal.reads).toEqual([]);
+    expect(missingGoal.built).toHaveLength(0);
+    expect(missingGoal.sent).toHaveLength(0);
+
+    const missingMaterial = guardProbe();
+    expect((await dispatchThrough(
+      missingMaterial, "approval.decide",
+      unboundOffer("approval.decide", SIB_RUN_B, SIB_GOAL_B, 2), 2, SIB_REFS,
+    )).detail).toBe("PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+    // The budget reader sits BEHIND both guards: an approval that cannot be authored must
+    // never cost the daemon a commitment read.
+    expect(missingMaterial.reads).toEqual([]);
+    expect(missingMaterial.built).toHaveLength(0);
+    expect(missingMaterial.sent).toHaveLength(0);
+  });
+
+  it("refuses a caller-minted twin of an offer that really does carry material", async () => {
+    const genuine = offerForB("plan.propose", SIB_RUN_B, 0);
+    // Byte-identical by structure, and a DIFFERENT object. The sidecar is keyed by the parsed
+    // record itself, so no caller can hand the board authority it was never given.
+    const forged = { ...genuine };
+    expect(forged).toEqual(genuine);
+
+    const probe = guardProbe();
+    const report = await dispatchThrough(probe, "plan.propose", forged, 0, SIB_REFS);
+
+    expect(report.detail).toBe("PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+    expect(probe.built).toHaveLength(0);
+    expect(probe.sent).toHaveLength(0);
+
+    // The genuine record still authors, so the arm above is about the BINDING and not about
+    // some unrelated shape refusal both objects would have tripped.
+    const accepted = guardProbe();
+    expect((await dispatchThrough(accepted, "plan.propose", genuine, 0, SIB_REFS)).stage)
+      .toBe("ANSWERED");
+    expect(accepted.sent).toHaveLength(1);
+  });
+
+  it("keeps goal.close target-only: no goal binding, no material, and it still dispatches",
+    async () => {
+      const probe = guardProbe();
+      const report = await dispatchThrough(
+        probe, "goal.close", unboundOffer("goal.close", SIB_GOAL_B, SIB_GOAL_B, 1), 1, undefined,
+      );
+
+      // goal.close names the GOAL aggregate, which is why the daemon's own eligible-kind
+      // roster omits it: keying it would put a goal id in a map whose keys are runs.
+      expect(report.stage).toBe("ANSWERED");
+      expect(probe.built[0]?.payload["goalId"]).toBe(SIB_GOAL_B);
+      expect(probe.reads).toEqual([]);
+    });
 });
