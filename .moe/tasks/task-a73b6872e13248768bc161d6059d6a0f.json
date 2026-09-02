@@ -79,12 +79,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-authorized unblock to PLANNING because BLOCKED->WORKING is gate-forbidden. Recover the recorded checkpoint/path state and plan the smallest safe resume through verification and explicit-path landing; do not pack unreachable bytes.",
+  "reopenReason": "UNPARKED 2026-09-02 by governor-6ddb8f93, owner-authorized. The block was correct when written and is now factually void — every anchor it named has been invalidated by the owner-authorized merge 61471143 of origin/main. Carried verbatim, since this hop nulls blockedReason:\n\n\"Effective Step 1 hard-gates all packing on a new recorded wrapper-produced task checkpoint reachable from resumed HEAD, containing nested-harness blob 6c42f97f9e701ac90377510b1b551f9717964755, with all exact-ten paths clean; it explicitly says to report BLOCKED immediately if none exists. Fresh anchor: HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d, 13f2ed68 is an ancestor, task.commits/landing and `git log --all --grep Moe-Task: task-a73...` still contain only stale checkpoint 13f. Exact-ten porcelain is ` M tests/integration/release/release-supply-chain.test.mjs`; its worktree blob/SHA-256 are 6c42f97f9e701ac90377510b1b551f9717964755 / F05777B747BC656661573953BFDCFFE6B74F22EEB86FC20FF61FE28D8DD3BFAC, while HEAD has 77bd18b9580fb5ef53a9052014b656e35abda0ca.\"\n\nWHY IT IS VOID, measured at HEAD e889712f:\n  - Anchor HEAD 5fe0fdde is NO LONGER AN ANCESTOR of HEAD. `git merge-base --is-ancestor` fails. The branch was rewritten by the merge.\n  - The blob the block was waiting to see checkpointed, 6c42f97f, IS GONE from the worktree. release-supply-chain.test.mjs is now a3dc5cdd at HEAD and a3dc5cdd in the worktree — identical.\n  - The porcelain the block quoted, ` M tests/integration/release/release-supply-chain.test.mjs`, is now EMPTY. That file is clean.\nSo the condition \"wait for a checkpoint containing blob 6c42f97f\" can never be satisfied: the bytes it describes no longer exist anywhere in the tree. Waiting longer cannot help.\n\nSCOPE: RE-ANCHOR FROM SCRATCH, DO NOT RESUME THE OLD STEP 1. Every measurement in the old plan is against a rewritten branch and must be discarded, not adapted. Plan to re-measure the exact-ten paths at current HEAD, re-derive the anchor commit, and only then decide whether the packing work is still required — the merge brought 834 commits of main in, and the release lane may already do some of it. Check that before planning any packing.\n\nUNBLOCKS: bed2e4d5 and f1f8ac78 both wait directly on this row.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -159,7 +159,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:17:30.427Z",
-  "updatedAt": "2026-09-02T11:44:58.032Z",
+  "updatedAt": "2026-09-02T18:02:18.093Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T18:58:36.057Z",
     "plannedStepCount": 4,
@@ -280,10 +280,10 @@
     "sessionId": "worker-b5bb4e0f@2026-08-30T22:05:27Z",
     "at": "2026-08-30T22:05:53.926Z"
   },
-  "blockedReason": "Effective Step 1 hard-gates all packing on a new recorded wrapper-produced task checkpoint reachable from resumed HEAD, containing nested-harness blob 6c42f97f9e701ac90377510b1b551f9717964755, with all exact-ten paths clean; it explicitly says to report BLOCKED immediately if none exists. Fresh anchor: HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d, 13f2ed68 is an ancestor, task.commits/landing and `git log --all --grep Moe-Task: task-a73...` still contain only stale checkpoint 13f. Exact-ten porcelain is ` M tests/integration/release/release-supply-chain.test.mjs`; its worktree blob/SHA-256 are 6c42f97f9e701ac90377510b1b551f9717964755 / F05777B747BC656661573953BFDCFFE6B74F22EEB86FC20FF61FE28D8DD3BFAC, while HEAD has 77bd18b9580fb5ef53a9052014b656e35abda0ca. Optional pack-source-release-roster.ts remains absent. 13f..HEAD changes only release-workflow-contract among the ten, so 13f cannot be selected. No bytes were edited, packed, staged, committed, pushed, or published. The blocked-session wrapper should checkpoint the already-declared harness path; governance must resume only after task.commits records that reachable checkpoint, then Step 1 can reselect it.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-01T18:55:01.058Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null,
   "dependsOn": [
     "task-07474f919fba4701b0dd300d306800c6",
