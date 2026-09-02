@@ -76,9 +76,16 @@ describe("HealthScreen", () => {
 describe("LivePolicy / LiveHealth", () => {
   it("read through the injected reader on mount and render the answer", async () => {
     const read = vi.fn(async () => HEALTH);
-    render(<LiveHealth headers={{}} pollMs={60_000} read={read} />);
+    const onConnection = vi.fn();
+    render(<LiveHealth headers={{}} onConnection={onConnection} pollMs={60_000} read={read} />);
     expect(await screen.findByTestId("cr.health.banner")).toBeTruthy();
     expect(read).toHaveBeenCalledTimes(1);
+    expect(onConnection).toHaveBeenLastCalledWith("CONNECTED");
+    cleanup();
+    const down = vi.fn();
+    render(<LiveHealth headers={{}} onConnection={down} pollMs={60_000} read={async () => ({ code: "TRANSPORT_REQUEST_FAILED", layer: "CONTROL_ROOM_LIVE_OPS", status: "ERROR" as const })} />);
+    await screen.findByTestId("cr.health.refusal");
+    expect(down).toHaveBeenLastCalledWith("DISCONNECTED");
     cleanup();
     render(<LivePolicy headers={{}} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.policy.refusal")).textContent).toContain("POLICY_READ_FAILED");

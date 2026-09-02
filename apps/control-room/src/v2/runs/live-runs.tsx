@@ -15,12 +15,14 @@ const POLL_MS = 5_000;
 
 export interface LiveRunsProps {
   readonly headers: Readonly<Record<string, string>>;
+  /** The shell connection word this read measures: the daemon answered, or the transport failed. */
+  readonly onConnection?: ((connection: "CONNECTED" | "DISCONNECTED") => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   readonly pollMs?: number | undefined;
   readonly read?: (() => Promise<RunsOutcome>) | undefined;
 }
 
-export function LiveRuns({ headers, onOpenBoard, pollMs, read }: LiveRunsProps): JSX.Element {
+export function LiveRuns({ headers, onConnection, onOpenBoard, pollMs, read }: LiveRunsProps): JSX.Element {
   const [outcome, setOutcome] = useState<RunsOutcome | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const generation = useRef(0);
@@ -38,6 +40,7 @@ export function LiveRuns({ headers, onOpenBoard, pollMs, read }: LiveRunsProps):
         if (generation.current !== run) return;
         setOutcome(next);
         setNowMs(Date.now());
+        onConnection?.(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED" ? "DISCONNECTED" : "CONNECTED");
       }, () => {
         inFlight = false;
         if (generation.current === run) {
@@ -48,7 +51,7 @@ export function LiveRuns({ headers, onOpenBoard, pollMs, read }: LiveRunsProps):
     tick();
     const timer = setInterval(tick, pollMs ?? POLL_MS);
     return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [headers, pollMs, read]);
+  }, [headers, onConnection, pollMs, read]);
 
   return <RunsScreen nowMs={nowMs} onOpenBoard={onOpenBoard} outcome={outcome} />;
 }

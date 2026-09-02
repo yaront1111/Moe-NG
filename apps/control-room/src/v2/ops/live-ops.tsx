@@ -13,7 +13,11 @@ import { HealthScreen, PolicyScreen } from "./ops-screens.js";
 
 const POLL_MS = 5_000;
 
-function useOpsRead<T>(read: () => Promise<T>, failure: T, pollMs: number): { readonly nowMs: number; readonly outcome: T | null } {
+type Connection = "CONNECTED" | "DISCONNECTED";
+
+function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
+  read: () => Promise<T>, failure: T, pollMs: number, onConnection: ((connection: Connection) => void) | undefined,
+): { readonly nowMs: number; readonly outcome: T | null } {
   const [outcome, setOutcome] = useState<T | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const generation = useRef(0);
@@ -29,6 +33,7 @@ function useOpsRead<T>(read: () => Promise<T>, failure: T, pollMs: number): { re
         if (generation.current !== run) return;
         setOutcome(next);
         setNowMs(Date.now());
+        onConnection?.(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED" ? "DISCONNECTED" : "CONNECTED");
       }, () => {
         inFlight = false;
         if (generation.current === run) setOutcome(failure);
@@ -37,7 +42,7 @@ function useOpsRead<T>(read: () => Promise<T>, failure: T, pollMs: number): { re
     tick();
     const timer = setInterval(tick, pollMs);
     return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [failure, pollMs, read]);
+  }, [failure, onConnection, pollMs, read]);
   return { nowMs, outcome };
 }
 
@@ -46,18 +51,19 @@ const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED"
 
 export interface LiveOpsProps<T> {
   readonly headers: Readonly<Record<string, string>>;
+  readonly onConnection?: ((connection: Connection) => void) | undefined;
   readonly pollMs?: number | undefined;
   readonly read?: (() => Promise<T>) | undefined;
 }
 
-export function LivePolicy({ headers, pollMs, read }: LiveOpsProps<PolicyOutcome>): JSX.Element {
+export function LivePolicy({ headers, onConnection, pollMs, read }: LiveOpsProps<PolicyOutcome>): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<PolicyOutcome> => readPolicy(headers)));
-  const { nowMs, outcome } = useOpsRead(reader, POLICY_FAILURE, pollMs ?? POLL_MS);
+  const { nowMs, outcome } = useOpsRead(reader, POLICY_FAILURE, pollMs ?? POLL_MS, onConnection);
   return <PolicyScreen nowMs={nowMs} outcome={outcome} />;
 }
 
-export function LiveHealth({ headers, pollMs, read }: LiveOpsProps<HealthOutcome>): JSX.Element {
+export function LiveHealth({ headers, onConnection, pollMs, read }: LiveOpsProps<HealthOutcome>): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<HealthOutcome> => readHealth(headers)));
-  const { nowMs, outcome } = useOpsRead(reader, HEALTH_FAILURE, pollMs ?? POLL_MS);
+  const { nowMs, outcome } = useOpsRead(reader, HEALTH_FAILURE, pollMs ?? POLL_MS, onConnection);
   return <HealthScreen nowMs={nowMs} outcome={outcome} />;
 }

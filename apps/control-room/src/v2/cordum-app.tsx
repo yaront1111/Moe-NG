@@ -275,11 +275,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       })()
       : "Actions require an attached daemon session.";
     body = view === "runs" && live.setup.ok
-      ? <LiveRuns headers={live.setup.headers} onOpenBoard={openBoard} />
+      ? <LiveRuns headers={live.setup.headers} onConnection={reportConnection} onOpenBoard={openBoard} />
       : view === "policy" && live.setup.ok
-      ? <LivePolicy headers={live.setup.headers} />
+      ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} />
       : view === "health" && live.setup.ok
-      ? <LiveHealth headers={live.setup.headers} />
+      ? <LiveHealth headers={live.setup.headers} onConnection={reportConnection} />
       : view === "approvals" && live.setup.ok
       ? (
         <LiveNeedsYou
