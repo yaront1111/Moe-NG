@@ -58,15 +58,20 @@
     {
       "stepId": "step-4",
       "description": "Run the exact completion-evidence command, foreground and unpiped: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/e2e/control-room/tsconfig.json;x exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts}`. Require TypeScript exit 0 and the literal Playwright `1 passed` count (exit 0 alone is not evidence). Then, as separate stop-on-failure legs, rerun the landed daemon affordance tests, the Control Room focused live-board/dispatch tests, and c444's two real-handler integration tests and require each Vitest `Test Files N passed`/nonzero `Tests` line; run full `pnpm --filter @moe/daemon test`, full `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (explicitly root lane only; apps/** excluded), `pnpm verify:foundation`, and `pnpm verify:store` as path-attributed baselines. Compare failures with the pre-diff baseline, require no new failure intersecting the one owned path, and disclose foreign red verbatim. In completion evidence record the dynamic goal/run exemplars, nine POST and ten journey-evidence counts, exact kind+target+version+run and post-approval goal joins, prerequisite mutation outcomes/reason layers, literal suite count lines, and zero surviving PIDs; do not claim orphan cleanup for a journey that failed before returning its success value.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/board-chain.spec.ts"
       ],
-      "startedAt": "2026-09-02T20:54:49.419Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ],
+      "note": "RESUMED (step was already IN_PROGRESS from a dead session). Nothing edited this session; owned bytes re-verified from disk. Root D:/projexts/moe-next, branch moe/work-2026-09-02, HEAD 388f776e, merge-base fa8dd402.\n\nDELIVERED TREE. `git status --porcelain -- tests/e2e/control-room/board-chain.spec.ts` EMPTY (tracked, clean). Bytes landed in 5ec2f186. `git diff --stat dd991fdc HEAD -- <owned>` = 1 file changed, 232 insertions(+), 8 deletions(-); `git diff --check` exit 0. Non-.moe paths in 5ec2f186 = ONLY board-chain.spec.ts. NO production source changed by this row; the >400-line file (556 lines) is test-only.\n\nNAMED COMMAND, foreground, unpiped, EXIT=0.\n`& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/e2e/control-room/tsconfig.json;x exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts}`\nPlaywright: `1 passed (21.0s)`, `ok 1 [chromium] > board-chain.spec.ts:392:1 > an operator can click the whole bootstrap chain from an empty store (20.6s)`.\n\nTYPECHECK EXECUTION CONTROL (tsc prints nothing on success, so exit 0 alone is not evidence). Planted `const __TSC_EXEC_PROBE: number = \"not-a-number\";`, reran tsc -> exit 1 with `tests/e2e/control-room/board-chain.spec.ts(557,7): error TS2322: Type 'string' is not assignable to type 'number'.` The leg demonstrably compiles the owned file. RESTORE PROOF (separate call from the restore): porcelain EMPTY, SHA256 66B56869CC2482A82EC36F137AD484B0BF3B96C167D4D6957ECB5BCB09F40FDC == out-of-tree backup %TEMP%\\w962f77bb-board-chain.bak, EQUAL=True, `__TSC_EXEC_PROBE` grep returns 0 hits.\n\nDYNAMIC IDENTITY EXEMPLARS (nothing static). project e2e-proj-sx0jw6 / e2e-proj-sx0jw6-provider / e2e-proj-sx0jw6-policy, goal-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8, run-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8, node-e2e-sx0jw6.\nNINE driven clicks, all `ok=true ANSWERED: DECIDED EFFECTS_COMMITTED`, in order: project.register@e2e-proj-sx0jw6 v0; project.bind_repository@e2e-proj-sx0jw6 v1; provider.probe@e2e-proj-sx0jw6-provider v0; project.activate@e2e-proj-sx0jw6 v2; policy.install@e2e-proj-sx0jw6-policy v0; goal.create@goal-1a3a3dc4... v0; plan.propose@run-1a3a3dc4... v0; plan.propose@run-1a3a3dc4... v1; approval.decide@run-1a3a3dc4... v2. TENTH journey evidence: node.deliver@node-e2e-sx0jw6 = READY. Both plan clicks and the approval land on the SAME daemon-authored run aggregate at strictly increasing versions 0/1/2.\n\nFOCUSED LANDED LEGS, standalone, each with a nonzero count line:\n- daemon affordance (ed899/4451675e): `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-planning-offers.test.ts` -> `Test Files 3 passed (3)` / `Tests 43 passed (43)`, exit 0.\n- Control Room focused (d3bfc33/4942111b): `--filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx` -> `Test Files 2 passed (2)` / `Tests 95 passed (95)`, exit 0.\n- c444 real-handler integration: `pnpm exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts` -> `Test Files 2 passed (2)` / `Tests 8 passed (8)`, exit 0.\n\nPATH-ATTRIBUTED BASELINES (foreign red disclosed verbatim; delta INTERSECT owned paths = EMPTY).\n- `pnpm --filter @moe/control-room test` -> exit 0, `Test Files 113 passed (113)` / `Tests 1564 passed (1564)`.\n- `pnpm typecheck` -> exit 0, per-package `$ tsc --project tsconfig.json` ... `apps/daemon typecheck: Done` echoes prove execution.\n- `pnpm verify:foundation` -> exit 0, `Test Files 35 passed (35)` / `Tests 756 passed (756)`.\n- `pnpm --filter @moe/daemon test` -> exit 1, `Test Files 2 failed | 377 passed (379)` / `Tests 3 failed | 7762 passed (7765)`. FOREIGN: src/work/attempt-release-disposition.test.ts \"composes NO second truth when a SECOND releaser runs over the same attempt\" (:889); src/work/attempt-finalization-service.test.ts \"rebinds a pre-receipt release: NO_OP...\" (:451) and \"fences at the DISPATCH version read by the finalizer, not a later re-read\" (:607). Both test files are BYTE-IDENTICAL to merge-base (`git diff fa8dd402 HEAD --` empty); their production dep apps/daemon/src/work/safe-boundary-observation.ts changed +50/-117 since merge-base (in-flight task-f8ea0a2f, HEAD wip commits).\n- `pnpm test` (ROOT LANE ONLY; root include is adapters/packages/tests/tools -- apps/** NOT covered) -> exit 1, `Test Files 3 failed | 422 passed | 1 skipped (426)` / `Tests 4 failed | 10258 passed | 44 skipped (10306)`. FOREIGN: packages/store/src/command-decision-replay-bytes.test.ts:76 \"exports the correlation identity helper used by provenance readers\" expected 'function' got 'undefined' (identifyCorrelation absent from the store barrel); tests/e2e/control-room/journey-coverage.test.ts:261 \"binds the served-root roster to every chooseRoot production arm\" -- `main.tsx imports ShellModeRoot: exp",
+      "startedAt": "2026-09-02T20:54:49.419Z",
+      "completedAt": "2026-09-02T22:29:11.878Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-962f77bb",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-d109461f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -115,12 +120,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.931Z",
-  "updatedAt": "2026-09-02T21:59:01.548Z",
+  "updatedAt": "2026-09-02T22:29:47.359Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:08:14.451Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-5e59a71e",
@@ -134,7 +139,8 @@
     "worker-6fab73fa",
     "worker-9801b4a8",
     "worker-7d91321b",
-    "worker-962f77bb"
+    "worker-962f77bb",
+    "qa-d109461f"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -150,7 +156,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-02T20:39:20.479Z",
@@ -300,10 +307,6 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
-    ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
-    ".moe/tasks/task-a26f5c690ddb484885dbad9a4b21e5ff.json",
-    ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json",
     "tests/e2e/control-room/board-chain.spec.ts"
   ],
   "touchedFiles": [
@@ -315,5 +318,13 @@
     "kind": "checkpoint",
     "sessionId": "worker-7d91321b@2026-09-02T21:51:02Z",
     "at": "2026-09-02T21:51:10.738Z"
-  }
+  },
+  "reviewStartedAt": "2026-09-02T22:29:35.754Z",
+  "verification": {
+    "command": "& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/e2e/control-room/tsconfig.json;x exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts}",
+    "exitCode": 0,
+    "outputTail": "[board-chain] project.register@e2e-proj-sx0jw6 v0 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] project.bind_repository@e2e-proj-sx0jw6 v1 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] provider.probe@e2e-proj-sx0jw6-provider v0 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] project.activate@e2e-proj-sx0jw6 v2 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] policy.install@e2e-proj-sx0jw6-policy v0 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] goal.create@goal-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8 v0 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] plan.propose@run-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8 v0 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] plan.propose@run-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8 v1 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] approval.decide@run-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8 v2 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n[board-chain] node.deliver@node-e2e-sx0jw6 = READY\n  ok 1 [chromium] > tests\\e2e\\control-room\\board-chain.spec.ts:392:1 > an operator can click the whole bootstrap chain from an empty store (20.6s)\n\n  1 passed (21.0s)\nEXIT=0",
+    "reportedAt": "2026-09-02T22:29:35.754Z"
+  },
+  "completionSummary": "Real-browser acceptance for the board chain. Delivered tree = ONE test-only path, tests/e2e/control-room/board-chain.spec.ts (+232/-8, 556 lines), landed in 5ec2f186; NO production source changed by this row. All five prerequisites DONE; their durable records were read, not re-measured.\n\nNAMED GATE exit 0: tsc clean + Playwright `1 passed (21.0s)`. tsc prints nothing on success, so I proved the leg executes: planted `const __TSC_EXEC_PROBE: number = \"not-a-number\";` -> exit 1, `board-chain.spec.ts(557,7): error TS2322`. Restored and proved in a SEPARATE call: porcelain empty, SHA256 66B56869...F40FDC == %TEMP% backup (EQUAL=True), probe grep 0 hits.\n\nIDENTITIES ARE DYNAMIC, not fixtures: goal-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8, run-1a3a3dc4-afad-4892-86e7-8bbe3a11a0a8, project e2e-proj-sx0jw6, node-e2e-sx0jw6. Nine driven clicks, all ok=true/DECIDED/EFFECTS_COMMITTED, tenth journey evidence node.deliver=READY. Both plan.propose clicks and approval.decide bind the SAME daemon-authored run at strictly increasing v0/v1/v2.\n\nFOCUSED LEGS, nonzero counts: daemon affordance 3 files/43 tests; Control Room live-board+dispatch 2/95; c444 real-handler integration 2/8. All exit 0.\n\nBASELINES: control-room full 113/1564 exit 0; typecheck exit 0; verify:foundation 35/756 exit 0. Foreign red disclosed: daemon full 2 failed|377 passed, 3 failed|7762 passed (src/work/attempt-release-disposition + attempt-finalization-service; both test files byte-identical to merge-base, their dep safe-boundary-observation.ts changed +50/-117 by in-flight task-f8ea0a2f). Root lane only (apps/** excluded) 3 failed|422 passed, 4 failed|10258 passed; verify:store repeats the store-barrel red (identifyCorrelation undefined; barrel AND test both unchanged since merge-base = pre-existing).\n\nDelta INTERSECT owned paths = EMPTY by import closure: nothing imports board-chain.spec.ts, daemon vitest scopes apps/daemon/src, root include has no *.spec.ts glob. Zero surviving playwright PIDs; 9876 is the pre-e"
 }
