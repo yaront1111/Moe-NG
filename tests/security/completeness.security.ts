@@ -73,6 +73,7 @@ import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cas
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
+import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
 import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
 import {
   RECENT_SCHEDULER_CASES,
@@ -119,8 +120,10 @@ const transportPairs = (): readonly CoveredPair[] =>
     .map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
-  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES, ...RECENT_INTEGRITY_HOSTILE_CASES]
-    .map((entry) => [entry.constant, entry.arm] as const);
+  [
+    ...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES,
+    ...RECENT_INTEGRITY_HOSTILE_CASES, ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
+  ].map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the
  *  wrong export resolves to the arm it actually declares. Race cases carry no phase field. */

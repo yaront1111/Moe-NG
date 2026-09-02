@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 25, integrity 25, durable-store 20, runtime-provider
- * 33, scheduler-activation 43 — sums to 146, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 25, integrity 31, durable-store 20, runtime-provider
+ * 33, scheduler-activation 43 — sums to 152, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -302,8 +302,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "CONTROL_ROOM_TRANSPORT_LAYER", file: "packages/control-room-client/src/client-transport.ts", axis: "transport" },
   { constant: "SESSION_KEY_LAYER", file: "packages/control-room-client/src/session-key.ts", axis: "runtime-provider" },
   { constant: "COORDINATION_LAYERS", file: "packages/coordination/src/coordination-contracts.ts", axis: "transport" },
+  // The versioned capability-catalog revision admission; a codec, integrity by SUBJECT.
+  { constant: "CAPABILITY_CATALOG_LAYERS", file: "packages/core/src/capability-catalog/capability-catalog-contract.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_CODEC_LAYERS", file: "packages/core/src/configuration/project-configuration-manifest.ts", axis: "integrity" },
   { constant: "LIVE_QUIESCE_EVIDENCE_LAYER", file: "packages/core/src/cutover/cutover-quiesce-evidence.ts", axis: "integrity" },
+  // Three more versioned revision admissions of the v2 delivery lineage, all codecs.
+  { constant: "DELIVERY_PROFILE_LAYERS", file: "packages/core/src/delivery-profile/delivery-profile-contract.ts", axis: "integrity" },
+  { constant: "EXECUTION_ISOLATION_PROFILE_LAYERS", file: "packages/core/src/execution-profile/execution-isolation-profile-contract.ts", axis: "integrity" },
+  { constant: "VERIFICATION_RECIPE_LAYERS", file: "packages/core/src/execution-profile/verification-recipe-contract.ts", axis: "integrity" },
   { constant: "EXPANSION_APPROVAL_LAYERS", file: "packages/core/src/expansion/expansion-approval.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_HOLD_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_PREPARATION_LAYERS", file: "packages/core/src/expansion/expansion-preparation.ts", axis: "scheduler-activation" },
@@ -318,6 +324,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "POLICY_SLICE_DIGEST_LAYERS", file: "packages/core/src/policy/policy-slice-digest.ts", axis: "integrity" },
   // A versioned canonical product-revision codec with an embedded content digest.
   { constant: "PRODUCT_CONTRACT_LAYERS", file: "packages/core/src/product-contract/product-contract-contract.ts", axis: "integrity" },
+  // The source-snapshot record admission and its canonical digest; a codec.
+  { constant: "SOURCE_SNAPSHOT_LAYERS", file: "packages/core/src/source-snapshot/source-snapshot-contract.ts", axis: "integrity" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
   { constant: "IMPORT_REFUSAL_LAYERS", file: "packages/import/src/import-contract.ts", axis: "transport" },
   { constant: "HTTP_SHUTDOWN_LAYER", file: "packages/mcp/src/http/http-shutdown.ts", axis: "transport" },
@@ -341,6 +349,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RECOVERY_INVENTORY_LAYERS", file: "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts", axis: "runtime-provider" },
   { constant: "RECOVERY_LAYERS", file: "packages/runner/src/recovery/recovery-contract.ts", axis: "runtime-provider" },
   { constant: "SCOPE_OBSERVER_LAYERS", file: "packages/runner/src/scope/scope-contract.ts", axis: "runtime-provider" },
+  // Binds a source snapshot's expected base revision to the repository HEAD it names.
+  // Integrity by SUBJECT (a revision-binding check over an injected port), not
+  // runtime-provider: the process it drives is git, not a provider runtime.
+  { constant: "RUNNER_SOURCE_SNAPSHOT_GIT_LAYER", file: "packages/runner/src/source-snapshot/source-snapshot-git-contract.ts", axis: "integrity" },
   { constant: "SUPERVISOR_LAYERS", file: "packages/runner/src/supervisor/effect-kernel.ts", axis: "runtime-provider" },
   { constant: "PROVIDER_EFFECT_SETTLEMENT_LAYER", file: "packages/runner/src/supervisor/provider-settlement-contracts.ts", axis: "runtime-provider" },
   { constant: "RUNNER_WORKTREE_LAYERS", file: "packages/runner/src/workspace/worktree-materializer-contract.ts", axis: "runtime-provider" },
@@ -463,8 +475,16 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * 130 -> 131 on 2026-08-29 for POLICY_RISK_LAYER, the durable policy-risk admission
  * record that binds an approved action to the active graph subject. `scheduler-activation`
  * by SUBJECT. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418.
+ *
+ * 146 -> 152 on 2026-09-02 for the six constants the v2/foundation lineage exported
+ * without rostering, caught by "names every scanned constant in the roster" on every
+ * host: CAPABILITY_CATALOG_LAYERS, DELIVERY_PROFILE_LAYERS,
+ * EXECUTION_ISOLATION_PROFILE_LAYERS, VERIFICATION_RECIPE_LAYERS and
+ * SOURCE_SNAPSHOT_LAYERS (five `packages/core` codecs) plus
+ * RUNNER_SOURCE_SNAPSHOT_GIT_LAYER (the runner's revision-binding observer). All six
+ * `integrity` by SUBJECT; eighteen arms in recent-core-contract-hostile-cases.ts.
  */
-const EXPECTED_ROSTER_SIZE = 146;
+const EXPECTED_ROSTER_SIZE = 152;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -474,8 +494,8 @@ const EXPECTED_ROSTER_SIZE = 146;
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 68,
   "packages/benchmark": 5,
-  "packages/runner": 22,
-  "packages/core": 15,
+  "packages/runner": 23,
+  "packages/core": 20,
   "packages/scheduler": 10,
   "packages/store": 5,
   "apps/control-room": 10,

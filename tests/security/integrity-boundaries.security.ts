@@ -49,6 +49,7 @@ import {
   policySliceDigestPositiveControl,
 } from "./policy-slice-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
+import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -68,6 +69,7 @@ const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...PROJECT_INTEGRITY_HOSTILE_CASES,
   ...POLICY_SLICE_HOSTILE_CASES,
   ...RECENT_INTEGRITY_HOSTILE_CASES,
+  ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
 ]);
 const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
@@ -141,7 +143,13 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // integrity codecs. Product Contract also carries a production re-seal control.
     // 23 -> 24 for POLICY_SLICE_DIGEST_LAYERS, the canonical policy-slice identity
     // derivation. Its public production call supplies the positive control below.
-    expect(ROSTER_INTEGRITY).toHaveLength(25);
+    // 25 -> 31 on 2026-09-02 for the six v2/foundation contract boundaries the ratchet caught
+    // unrostered (CAPABILITY_CATALOG_LAYERS, DELIVERY_PROFILE_LAYERS,
+    // EXECUTION_ISOLATION_PROFILE_LAYERS, VERIFICATION_RECIPE_LAYERS, SOURCE_SNAPSHOT_LAYERS
+    // and the runner's RUNNER_SOURCE_SNAPSHOT_GIT_LAYER): codecs and a revision-binding
+    // check, `integrity` by SUBJECT, whose eighteen arms land with this bump in
+    // recent-core-contract-hostile-cases.ts.
+    expect(ROSTER_INTEGRITY).toHaveLength(31);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
