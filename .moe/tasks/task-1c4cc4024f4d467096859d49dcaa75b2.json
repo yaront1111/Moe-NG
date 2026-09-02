@@ -91,12 +91,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
-  "reopenReason": "Human-authorized unblock to PLANNING. Preserve the verified compiled-authority extraction and byte-identical public output; architect should submit only a no-churn verification/landing replay unless fresh measurement finds a real defect.",
+  "reopenReason": "UNPARKED 2026-09-02 by governor-6ddb8f93, owner-authorized. This hop NULLS blockedReason, so the premise is carried verbatim here as the only surviving copy:\n\n\"External production prerequisite: exact six-path authority extraction is intact, all production sources meet <250, and fresh focused gate is green (4 files/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.\"\n\nTHE PARK'S OWN RELEASE CONDITION IS MET, by a different route than it predicted. It asked for a live canary proving REVIEW -> recorded kind=completion/landing. Five rows have now done exactly that in this repo with NO moes repair: ec83 (f40efeb3), aa205 (completion deb68771, approved DONE), 3aa6acdb (DONE), 642df965 (DONE), 4704a298 (DONE).\n\nAND THE BYTES ARE ALREADY LANDED. Measured at HEAD 7f0ee691 after the owner-authorized merge 61471143 of origin/main, all tracked:\n  apps/daemon/src/planning/compiled-approval-authority-body.ts   128 lines\n  apps/daemon/src/planning/compiled-policy-authority-body.ts     198 lines\n  apps/daemon/src/planning/compiled-authority-bodies.ts          131 lines\nAll three meet the <250 target this row set, not merely the 400 cap. They were byte-identical to blobs already on main before the merge; verified with git rev-parse.\n\nSCOPE: VERIFY AT HEAD, NO SOURCE REWRITE. Honour the original instruction. Plan only to re-measure the six paths at HEAD, re-run the focused gate, and confirm the byte-identical-output claim in the title still holds against main's version of the producer. If a DoD clause is unsatisfiable because main's implementation differs from what this row planned, report that and route it back rather than editing sources to fit a stale DoD — precedent 3aa6acdb, comment-7625dc5de39b42ec80fae63b131446e8.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "HIGH",
@@ -111,7 +111,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.775Z",
-  "updatedAt": "2026-09-01T22:29:03.767Z",
+  "updatedAt": "2026-09-02T17:41:18.746Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:22:38.431Z",
     "plannedStepCount": 7,
@@ -125,10 +125,10 @@
     "governor-c11c29e2",
     "architect-db6a0906"
   ],
-  "blockedReason": "External production prerequisite: exact six-path authority extraction is intact, all production sources meet <250, and fresh focused gate is green (4 files/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T22:29:03.767Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."

@@ -109,12 +109,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
-  "reopenReason": "Human-authorized unblock to PLANNING. Preserve the verified orchestrator lifecycle/staffing split, export identity, file-cap results, and focused gate; architect should submit only a no-churn verification/landing replay unless fresh measurement finds a real defect.",
+  "reopenReason": "UNPARKED 2026-09-02 by governor-6ddb8f93, owner-authorized. This hop NULLS blockedReason, so the premise is carried verbatim here as the only surviving copy:\n\n\"External production prerequisite: the seven changed orchestrator extraction blobs remain within file caps and fresh focused gate is green (4 files/81 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve exact blobs and run one delivery replay only. Do not submit another no-churn reimplementation plan.\"\n\nTHE PARK'S OWN RELEASE CONDITION IS MET, by a different route than it predicted. It asked for a live canary proving REVIEW -> recorded kind=completion/landing. Five rows have now done exactly that in this repo with NO moes repair: ec83 (f40efeb3), aa205 (completion deb68771, approved DONE), 3aa6acdb (DONE), 642df965 (DONE), 4704a298 (DONE). The postflight lifecycle works.\n\nAND THE BYTES ARE ALREADY LANDED. Measured at HEAD 7f0ee691 after the owner-authorized merge 61471143 of origin/main, all tracked, all under the 400 cap:\n  apps/daemon/src/orchestrator/process-runner-lifecycle.ts    158 lines\n  apps/daemon/src/orchestrator/agent-wrapper-staffing.ts      145 lines\n  apps/daemon/src/orchestrator/agent-wrapper.ts               390 lines\n  apps/daemon/src/orchestrator/verifier-process-runner.ts     395 lines\nThese were byte-identical to blobs already on main before the merge; I verified with git rev-parse, not by eye.\n\nSCOPE: VERIFY AT HEAD, DO NOT RE-IMPLEMENT. The extraction exists. Honour the original instruction not to submit another no-churn reimplementation plan — plan only to re-measure the seven paths at HEAD, re-run the focused gate, and grade against DoD. If everything holds, this row completes on verification alone. If a DoD clause is now unsatisfiable because main's implementation differs from what this row planned, say so and route it back rather than editing sources to fit a stale DoD. Precedent: 3aa6acdb, whose line-cap clause I amended in comment-7625dc5de39b42ec80fae63b131446e8 for exactly that reason.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "HIGH",
@@ -135,7 +135,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.316Z",
-  "updatedAt": "2026-09-01T22:28:14.888Z",
+  "updatedAt": "2026-09-02T17:41:09.926Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:15:59.807Z",
     "plannedStepCount": 7,
@@ -148,10 +148,10 @@
     "governor-c11c29e2",
     "architect-db6a0906"
   ],
-  "blockedReason": "External production prerequisite: the seven changed orchestrator extraction blobs remain within file caps and fresh focused gate is green (4 files/81 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve exact blobs and run one delivery replay only. Do not submit another no-churn reimplementation plan.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T22:28:14.888Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."

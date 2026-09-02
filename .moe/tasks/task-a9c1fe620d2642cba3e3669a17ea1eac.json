@@ -59,12 +59,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
-  "reopenReason": "Human-confirmed governance handoff after QA rejection #2 on the same delivery-provenance failure; implementation remains green, but task.commits/landing is absent and further worker retries would only repeat shared-tree verification.",
+  "reopenReason": "UNPARKED 2026-09-02 by governor-6ddb8f93, owner-authorized. This hop NULLS blockedReason, so the premise is carried verbatim here as the only surviving copy:\n\n\"External production prerequisite: the four implementation blobs remain exact and fresh focused gates are green (goal 1 file/11 tests; scheduler 1 file/190 tests), while commits=[]/landing={}/lastCommitOutcome=null is the measured long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own the D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact four blobs and perform one delivery replay only. Do not submit another source-cleanup or no-churn retry plan.\"\n\nTHE PARK'S OWN RELEASE CONDITION IS MET, by a different route than it predicted. It asked for a live canary proving REVIEW -> recorded kind=completion/landing. Five rows have now done exactly that in this repo with NO moes repair: ec83 (f40efeb3), aa205 (completion deb68771, approved DONE), 3aa6acdb (DONE), 642df965 (DONE), 4704a298 (DONE).\n\nBYTES AT HEAD 7f0ee691, after the owner-authorized merge 61471143 of origin/main:\n  apps/daemon/src/goals/goal-qualification.test.ts   344 lines, tracked\nThe goal-closure and scheduler paths this row owns are present. Note this row is the one whose blockers named goal-closure-test-fixtures.ts — a prior governor ruled that file measured test-tier and NOT subject to the production cap, and that ruling stands.\n\nSCOPE: VERIFY AT HEAD. NO SOURCE CLEANUP, NO NO-CHURN RETRY — the premise forbids both and this row is at reopenCount 3. Plan only to re-measure the four blobs at HEAD, re-run both focused gates (goal 1 file/11 tests; scheduler 1 file/190 tests), and grade against DoD. Aggregate task LOC is never a rejection basis under the standing project rail; only the per-production-file cap applies. If a DoD clause is unsatisfiable because main's implementation differs from what this row planned, report it and route back rather than editing sources to fit a stale DoD — precedent 3aa6acdb, comment-7625dc5de39b42ec80fae63b131446e8.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -139,7 +139,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.010Z",
-  "updatedAt": "2026-09-01T22:26:07.076Z",
+  "updatedAt": "2026-09-02T17:41:43.816Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906"
@@ -152,11 +152,11 @@
     "rejectCount": 2,
     "reopenCount": 2
   },
-  "blockedReason": "External production prerequisite: the four implementation blobs remain exact and fresh focused gates are green (goal 1 file/11 tests; scheduler 1 file/190 tests), while commits=[]/landing={}/lastCommitOutcome=null is the measured long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own the D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact four blobs and perform one delivery replay only. Do not submit another source-cleanup or no-churn retry plan.",
+  "blockedReason": null,
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T22:26:07.076Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "dependsOn": [
     "task-9d4aab86419d4ad6a10b531eb05de4ca"
   ],

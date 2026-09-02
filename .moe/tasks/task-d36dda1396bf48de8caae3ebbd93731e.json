@@ -67,12 +67,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
-  "reopenReason": "Human-authorized unblock to PLANNING. Preserve the QA-verified three-path accessibility bytes and focused gate; architect should submit only a no-churn verification/landing replay unless fresh measurement finds a real defect.",
+  "reopenReason": "UNPARKED 2026-09-02 by governor-6ddb8f93, owner-authorized. This hop NULLS blockedReason, so the premise is carried verbatim here as the only surviving copy:\n\n\"External production prerequisite, not a fourth no-churn retry: the QA-verified d36 bytes are intact and focused 2-file/27-test gate is green, but commits=[]/landing={} because JetBrains launches Codex worker/QA as long-lived interactive TUIs and wrapper landing runs only after child exit. This moe-next row cannot own D:/projexts/moes wrapper/plugin files. Park until one successor repair is filed in the moes Stability & Hardening epic after the prior Codex/postflight owners, deployed to the installed plugin, and a live Agents-menu worker proves REVIEW -> recorded kind=completion/landing before session reuse. Then preserve the exact three d36 bytes and perform exactly one delivery replay.\"\n\nTHE PARK'S OWN RELEASE CONDITION IS MET, by a different route than it predicted. It asked for a live worker proving REVIEW -> recorded kind=completion/landing before session reuse. Five rows have now done exactly that in this repo with NO moes repair and NO plugin change: ec83 (f40efeb3), aa205 (completion deb68771, approved DONE), 3aa6acdb (DONE), 642df965 (DONE), 4704a298 (DONE). The root-cause diagnosis in the premise — that landing only runs after child exit — was accurate; the conclusion that this repo therefore could not land was not.\n\nAND THE BYTES ARE ALREADY LANDED. Measured at HEAD 7f0ee691 after the owner-authorized merge 61471143 of origin/main:\n  apps/control-room/src/v2/shell/nav-rail.tsx   170 lines, tracked, clean in porcelain\nIt was byte-identical to the blob already on main before the merge; verified with git rev-parse, not by eye.\n\nSCOPE: VERIFY AT HEAD. THIS IS NOT A FOURTH RETRY. The premise is explicit that the bytes were already QA-verified with a green 2-file/27-test gate, and this row is at reopenCount 3 — do not re-implement, do not re-plan the accessibility behaviour, do not touch the three d36 bytes. Plan only to re-measure them at HEAD, re-run the focused gate, and grade against DoD. If a DoD clause is now unsatisfiable because main's version differs from what this row planned, report it and route back rather than editing sources to fit a stale DoD — precedent 3aa6acdb, comment-7625dc5de39b42ec80fae63b131446e8.",
   "createdBy": "WORKER",
   "parentTaskId": "task-2c952438c41546b3a736623f3956c778",
   "priority": "HIGH",
@@ -87,7 +87,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:06:52.076Z",
-  "updatedAt": "2026-09-01T22:21:32.426Z",
+  "updatedAt": "2026-09-02T17:41:34.674Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:08:59.753Z",
     "plannedStepCount": 5,
@@ -207,9 +207,9 @@
       ]
     }
   ],
-  "blockedReason": "External production prerequisite, not a fourth no-churn retry: the QA-verified d36 bytes are intact and focused 2-file/27-test gate is green, but commits=[]/landing={} because JetBrains launches Codex worker/QA as long-lived interactive TUIs and wrapper landing runs only after child exit. This moe-next row cannot own D:/projexts/moes wrapper/plugin files. Park until one successor repair is filed in the moes Stability & Hardening epic after the prior Codex/postflight owners, deployed to the installed plugin, and a live Agents-menu worker proves REVIEW -> recorded kind=completion/landing before session reuse. Then preserve the exact three d36 bytes and perform exactly one delivery replay.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T22:21:32.426Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null
 }
