@@ -842,3 +842,41 @@ it("closes the listener even when a request handler throws", async () => {
   expect(reused.ok).toBe(true);
   if (reused.ok) await reused.close();
 });
+
+it("routes the PRD coverage read through its port and forwards either selector", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }),
+      path: "/documents/coverage/read" })).toEqual({
+      body: { code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" },
+      status: 200,
+    });
+    expect(await send(listener, { body: JSON.stringify({ contentSha256: "a".repeat(64) }),
+      path: "/documents/coverage/read" })).toMatchObject({ status: 200 });
+    expect(seen).toEqual([{ goalRef: "goal-1" }, { contentSha256: "a".repeat(64) }]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    documentCoverage: { boundProjectId: "proj-0001", readCoverage: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" };
+    } },
+  });
+});
+
+it("refuses an absent coverage port, a non-POST, and a body that is not one selector", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }),
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET",
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, {
+      body: JSON.stringify({ goalRef: "goal-1", projectId: "proj-0002" }),
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    documentCoverage: { boundProjectId: "proj-0001", readCoverage: () => ({
+      code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" }) },
+  });
+});

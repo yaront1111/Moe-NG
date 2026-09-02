@@ -10,6 +10,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/v2/command",
   "/v2/product-contract/current",
   "/v2/product-contract/pending/read",
+  "/documents/coverage/read",
   "/documents/dossier/read",
   "/documents/ingest",
   "/events/ack",

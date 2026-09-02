@@ -11,6 +11,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/v2/command",
     "/v2/product-contract/current",
     "/v2/product-contract/pending/read",
+    "/documents/coverage/read",
     "/documents/dossier/read",
     "/documents/ingest",
     "/events/ack",

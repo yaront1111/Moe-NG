@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import "./cordum-fonts.js";
 import type { SurfaceFrame } from "../live/live-board-feed.js";
+import { readDocumentCoverage } from "../live/live-document-coverage.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
 import {
   LiveRefusalNotice, NoOperatorChannel, useLiveHandshake,
@@ -21,6 +22,7 @@ import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
+import { PrdCoverage } from "./goals/prd-coverage.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
@@ -165,6 +167,12 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
    * family. A card bound to the other plane reads a route that refuses by
    * construction, which is exactly the dead Gate 1 this selection retires.
    */
+  /** PRD coverage over the opened goal: read-only, the daemon alone decides what is VERIFIED. */
+  const readCoverage = useMemo<((goalId: string) => ReturnType<typeof readDocumentCoverage>) | null>(
+    () => (attached === null
+      ? null : (goalId: string) => readDocumentCoverage(attached.headers, goalId)),
+    [attached],
+  );
   const plane = attached === null ? null : attached.commandAuthorityPlane;
   const gate1Read = useMemo<((goalId: string) => ReturnType<typeof readPendingContract>) | null>(
     () => (attached === null || projectId === null || plane !== "V2"
@@ -215,6 +223,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
           ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
             <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
           ) : null}
+          {readCoverage === null ? null : (
+            <PrdCoverage goalId={open.goalId} read={readCoverage} />
+          )}
           <ApprovePlan
             approval={approval}
             goalId={open.goalId}

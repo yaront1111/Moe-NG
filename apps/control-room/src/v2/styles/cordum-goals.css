@@ -842,3 +842,62 @@
     transition: none;
   }
 }
+
+/* PRD coverage card (goal detail): the daemon-proven share of the contract that is built. */
+.cr2-coverage-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cr-line, rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+
+.cr2-coverage-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--cr-ink);
+  transition: width 240ms ease;
+}
+
+.cr2-coverage-criteria {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 2px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-coverage-criterion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cr2-coverage-status {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-coverage-criterion[data-status="VERIFIED"] .cr2-coverage-status {
+  color: var(--cr-ink);
+  font-weight: 600;
+}
+
+.cr2-coverage-criterion[data-status="UNPLANNED"] .cr2-coverage-status {
+  opacity: 0.6;
+}
+
+.cr2-coverage-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cr2-coverage-section[data-cited="false"] {
+  opacity: 0.6;
+}

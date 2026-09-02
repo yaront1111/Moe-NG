@@ -32,6 +32,8 @@ import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
+import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
+import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -315,6 +317,9 @@ export function createStoreDependencies(
    */
   const budgetCommitment = (): BudgetCommitmentReadPort =>
     createBudgetCommitmentReadPort({ projectId: config.projectId, store });
+  /** PRD coverage: the bound goals, contracts and verified criteria of one source document. */
+  const documentCoverage = (): DocumentCoverageReadPort =>
+    createDocumentCoverageReadPort({ projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -406,6 +411,7 @@ export function createStoreDependencies(
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     commandAuthorityPlane,
+    documentCoverage,
     documentDossiers,
     documentIngest,
     graph,
