@@ -151,6 +151,7 @@ describe("the production Windows pack source composition", () => {
       expect(lines).not.toContain("x".repeat(5_000));
       expect(existsSync(join(outputRoot, "dist", "moe-windows.zip"))).toBe(false);
     },
+    120_000,
   );
 
   it.runIf(process.platform === "win32")("ignores PATH shadows for protected Git and tar", () => {
@@ -168,7 +169,7 @@ describe("the production Windows pack source composition", () => {
       if (priorPath === undefined) delete process.env["PATH"];
       else process.env["PATH"] = priorPath;
     }
-  }, 120_000);
+  });
 
   it("preserves even an undefined synchronous consumer failure", () => {
     let caught = false;
