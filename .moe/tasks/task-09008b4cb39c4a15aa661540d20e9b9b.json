@@ -336,10 +336,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.962Z",
-  "updatedAt": "2026-08-28T17:08:11.388Z",
+  "updatedAt": "2026-08-30T20:42:53.354Z",
   "contextFetchedBy": [
     "worker-7474490a",
-    "qa-98bb373e"
+    "qa-98bb373e",
+    "architect-b2b16103"
   ],
   "blockedFromStatus": null,
   "blockedAt": null,

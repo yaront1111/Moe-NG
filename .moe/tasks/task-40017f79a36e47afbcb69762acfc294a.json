@@ -261,7 +261,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:03:09.576Z",
-  "updatedAt": "2026-08-29T20:15:10.162Z",
+  "updatedAt": "2026-08-30T20:42:53.800Z",
   "metrics": {
     "firstClaimAt": "2026-08-25T12:30:34.814Z",
     "plannedStepCount": 7,
@@ -283,7 +283,8 @@
     "worker-9fe78697",
     "qa-a1b5393b",
     "qa-cc876c7b",
-    "architect-dba58d99"
+    "architect-dba58d99",
+    "architect-b2b16103"
   ],
   "blockedReason": null,
   "blockedResourceId": null,

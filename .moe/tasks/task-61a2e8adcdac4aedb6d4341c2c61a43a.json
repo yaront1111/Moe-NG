@@ -187,7 +187,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:45:57.472Z",
-  "updatedAt": "2026-08-29T20:07:44.527Z",
+  "updatedAt": "2026-08-30T20:42:53.915Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:51:19.447Z",
     "plannedStepCount": 7,
@@ -232,7 +232,8 @@
     "worker-8d70fe57",
     "worker-57c90511",
     "worker-39362c3a",
-    "qa-cc876c7b"
+    "qa-cc876c7b",
+    "architect-b2b16103"
   ],
   "workStartedAt": "2026-08-29T17:55:52.280Z",
   "priorHandoffs": [
