@@ -766,14 +766,35 @@ it("keeps the retired resume route closed even for a malformed body", async () =
   );
 });
 
-const affordancePort = (boundProjectId: string) => ({
-  boundProjectId,
-  readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE" as const, steps: [] }),
-});
+/**
+ * REACHABILITY IS OBSERVABLE, not assumed. Every affordance arm counts the surface calls,
+ * and the two REFUSAL arms take the `"THROW"` variant so that reaching the surface fails
+ * LOUDLY (the handler rejects and the socket answers LISTENER_REQUEST_FAILED) instead of
+ * passing quietly on a frame that merely happens to carry the word REFUSED. Without the
+ * counter, a refusal arm cannot tell "the gate stopped short of the port" from "the port
+ * itself refused".
+ */
+function countingAffordancePort(boundProjectId: string, behavior: "SURFACE" | "THROW" = "SURFACE") {
+  let calls = 0;
+  return {
+    calls: () => calls,
+    port: {
+      boundProjectId,
+      readSurface: () => {
+        calls += 1;
+        if (behavior === "THROW") {
+          throw new Error("readSurface reached on an arm whose gate must refuse before the port");
+        }
+        return { nextAllowedCommands: [], outcome: "SURFACE" as const, steps: [] };
+      },
+    },
+  };
+}
 
 it("answers the affordance surface for an absent or matching projectId", async () => {
   // The bound project must be the FIXTURE PRINCIPAL's ("proj-0001"): the route
   // refuses a principal from any other project before it reads a body byte.
+  const affordances = countingAffordancePort("proj-0001");
   await withListener(
     async (listener) => {
       const empty = await send(listener, { body: "{}", path: "/affordances/read" });
@@ -784,37 +805,61 @@ it("answers the affordance surface for an absent or matching projectId", async (
       });
       expect(matching.status).toBe(200);
       expect(matching.body).toMatchObject({ outcome: "SURFACE" });
+      // "Answers the surface" means the PORT was consulted, once per sub-case - not that
+      // a frame carrying outcome SURFACE was synthesised short of it.
+      expect(affordances.calls()).toBe(2);
     },
-    { affordances: affordancePort("proj-0001") },
+    { affordances: affordances.port },
   );
 });
 
 it("refuses an affordance request naming a project this daemon does not serve", async () => {
+  // The BODY gate's own arm. Its mechanism is distinguishable from the principal gate's
+  // below in BOTH coordinates - code LISTENER_AFFORDANCE_REQUEST_INVALID at layer
+  // CONTROL_ROOM_LISTENER, versus code AFFORDANCE_PROJECT_MISMATCH at layer
+  // AFFORDANCE_SURFACE - so neither fence can stand in for the other and answer this arm.
+  const affordances = countingAffordancePort("proj-0001", "THROW");
   await withListener(
     async (listener) => {
       // The daemon must not silently answer for proj-0001 a request that asked
       // for proj-B: the surface names no project, so that would read as proj-B.
-      expectListenerRefusal(
-        await send(listener, {
-          body: JSON.stringify({ projectId: "proj-B" }), path: "/affordances/read",
-        }),
-        "LISTENER_AFFORDANCE_REQUEST_INVALID",
-      );
+      const refused = await send(listener, {
+        body: JSON.stringify({ projectId: "proj-B" }), path: "/affordances/read",
+      });
+      expectListenerRefusal(refused, "LISTENER_AFFORDANCE_REQUEST_INVALID");
+      // The LITERAL layer, not the imported constant expectListenerRefusal compares
+      // against: a rename of CONTROL_ROOM_LISTENER_LAYER moves both sides of that
+      // comparison at once, and this line does not move with it. `toEqual` also pins that
+      // refuseRequest's wire frame stays exactly {code, layer} with no detail leak.
+      expect(refused.body).toEqual({
+        code: "LISTENER_AFFORDANCE_REQUEST_INVALID", layer: "CONTROL_ROOM_LISTENER",
+      });
+      expect(affordances.calls()).toBe(0);
     },
-    { affordances: affordancePort("proj-0001") },
+    { affordances: affordances.port },
   );
 });
 
 it("answers a FOREIGN principal's affordance read with the project refusal", async () => {
   // The principal-project gate's own arm: a principal authenticated for another
   // project gets the 200 refusal frame, never that project's surface.
+  const affordances = countingAffordancePort("proj-elsewhere", "THROW");
   await withListener(
     async (listener) => {
       const foreign = await send(listener, { body: "{}", path: "/affordances/read" });
+      // Exact: the status, the frozen wire code and the refusing layer, as STRING
+      // LITERALS. The body carries no projectId, so the body gate cannot fire here -
+      // only the principal gate can produce this answer.
       expect(foreign.status).toBe(200);
-      expect(foreign.body).toMatchObject({ outcome: "REFUSED" });
+      expect(foreign.body).toMatchObject({
+        code: "AFFORDANCE_PROJECT_MISMATCH",
+        layer: "AFFORDANCE_SURFACE",
+        outcome: "REFUSED",
+      });
+      expect(Object.keys(foreign.body).sort()).toEqual(["code", "detail", "layer", "outcome"]);
+      expect(affordances.calls()).toBe(0);
     },
-    { affordances: affordancePort("proj-elsewhere") },
+    { affordances: affordances.port },
   );
 });
 

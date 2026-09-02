@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T17:38:05.987Z",
-  "updatedAt": "2026-09-02T17:08:46.455Z",
+  "updatedAt": "2026-09-02T17:09:35.287Z",
   "metrics": {
     "firstClaimAt": "2026-09-01T17:38:46.256Z",
     "plannedStepCount": 5,
@@ -290,6 +290,21 @@
       "treeId": "4cd16dce087510e727403e0289bd0fdf38e0dd71",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "51201119455aea23d1c75a322432425a86a16631",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-30d27a8d@2026-09-02T16:51:42Z",
+      "paths": [
+        ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json"
+      ],
+      "recordedBy": "qa-30d27a8d",
+      "recordedAt": "2026-09-02T17:09:35.286Z",
+      "treeId": "88dc341c489bf7db720c0e7c19168898a045da89",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -300,9 +315,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-f06d587f@2026-09-02T16:13:15Z",
-    "at": "2026-09-02T16:51:36.620Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-30d27a8d@2026-09-02T16:51:42Z",
+    "at": "2026-09-02T17:09:35.286Z"
   },
   "completedAt": "2026-09-02T17:08:14.972Z",
   "reviewSummary": "APPROVED. Both prior rejection items closed. Full evidence sheet in my row comment.\n\nDELIVERY (item 1, the blocker): commit 86fd4998 kind=completion, Moe-Task trailer, paths = exactly the two owned test files + two board JSONs. No production path in the commit.\n\nGATE RE-RUN BY ME, verbatim DoD-5 command, foreground/unpiped: tsc 0; security 1 file/192 tests; units 2/22; daemon 1/20; exit 0 — identical to task.verification. Full security lane 12 files/865 tests, exit 0.\n\nDoD1: the 3 production sources are blob-identical between claim anchor dd1c227d and HEAD (e9199288/22e567b2/c006dbaf); sha256 c30a9bab/35d5d960 match the worker sheet. 160/268/372 lines, all <400. Rejection item 2 (bounded-read re-split) verified ON DISK as landed sibling work, correctly not re-filed: readCutoverQuiesceRecordBytes :9/:242 + decodeBoundedJsonBytes(read.bytes) :260.\n\nDoD2/3: consumer edge closed — PRE_ROSTER_INTEGRITY_HOSTILE_CASES imported and executed at integrity-boundaries.security.ts:40. Literal denominator 6 (4/2 split), two-constant + three-arm set equality, per-leg non-admission, COVERED separation pinned as an assertion. Quiesce legs assert the forwarded upstream {code,layer}, not just the outer code — correct, since missing-file and semantic-core rejection share CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT.\n\nDoD4: two drills reproduced INDEPENDENTLY by me. D6 (drop forwarded upstream, snapshot :271) -> 4 red, exactly the named upstream assertions, outer tuple green. D1 (COMMIT_HEX {40}->{39,40}) -> 3 red incl. the 39-hex leg. Both restored; git diff --exit-code clean + sha256 equal.\n\nDEVIATIONS ACCEPTED: security delta is +12 not the plan's +6 (6 arms + 6 structural assertions DoD3 itself mandates); DoD3's \"expected-red 146-vs-131\" premise is STALE — EXPECTED_ROSTER_SIZE is 168 and boundary-roster.security.ts is green and untouched."

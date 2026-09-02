@@ -1,6 +1,7 @@
+import { generateKeyPairSync, sign } from "node:crypto";
 import { request as httpRequest } from "node:http";
 
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { CommandAdapterDeps } from "./http-contract.js";
@@ -9,6 +10,10 @@ import {
   PAIRING_REQUEST_PATH,
 } from "./pairing-approval-handshake.js";
 import { PAIRING_APPROVAL_LAYER } from "./pairing-approval-window.js";
+import { PAIRING_OPEN_PATH } from "./pairing-open-completion.js";
+import {
+  createSessionChallengeOperandsReadPort,
+} from "./session-challenge-operands-read.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
   startControlRoomListener,
@@ -21,7 +26,27 @@ import {
   recordingHandler,
   registryOf,
 } from "./http-test-fixtures.js";
+import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
+import {
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_PROTOCOL_VERSION,
+} from "../identity/session-authority-contracts.js";
+import {
+  canonicalSessionProofBytes,
+  sessionAuthorityRequestDigest,
+  sessionClientKeyId,
+} from "../identity/session-authority-protocol.js";
+import { createSessionAuthority } from "../identity/session-authority.js";
+import { readPrincipalRecord } from "../identity/session-authority-store.js";
+import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import type { SessionHandshakePort } from "../identity/session-handshake.js";
+import {
+  PROJECT_ID as STORE_PROJECT_ID,
+  closeStores,
+  openStore,
+} from "../identity/session-test-fixtures.js";
+
+afterAll(() => { closeStores(); });
 
 const CSRF = "pairing-approval-csrf";
 const CREDENTIAL = "credential-returned-only-to-the-winning-claim";
@@ -235,6 +260,169 @@ it("applies Host, Origin, CSRF, method, protocol, and exact-path guards in order
       cacheControl: "no-store",
       status: 403,
     });
+  } finally {
+    await listener.close();
+  }
+});
+
+const TRANSPORT_IDS = Object.freeze(["coordination.v1", "terminal.v1"]);
+
+/** A browser's own Ed25519 key, minted here so no daemon code ever holds the secret. */
+function clientKey(): {
+  readonly clientKeyId: string;
+  readonly privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
+  readonly publicKeySpkiHex: string;
+} {
+  const pair = generateKeyPairSync("ed25519");
+  const publicKeySpkiHex = pair.publicKey.export({ format: "der", type: "spki" }).toString("hex");
+  const clientKeyId = sessionClientKeyId(publicKeySpkiHex);
+  if (clientKeyId === null) throw new Error("production rejected Node's canonical Ed25519 SPKI");
+  return Object.freeze({ clientKeyId, privateKey: pair.privateKey, publicKeySpkiHex });
+}
+
+/**
+ * R3-1 PROVENANCE, task-82c28bf1, driven end to end over ONE request identity and ONE
+ * real store. The retired self-approval is pinned by what the SOCKET answers, not by a
+ * comment: the browser-facing `/session/pair/approve` is a tombstone, the claim behind it
+ * refuses until the OPERATOR approves in-process, and only the signed open mints the
+ * durable authority.
+ *
+ * The tombstone assertion is deliberately FIRST. Its drill (step 7) grafts the existing
+ * operator approval window onto the retired branch so that route can mint; a drill that
+ * merely DELETED the branch would fall through to the unhosted asset fallback, which
+ * emits the same LISTENER_ROUTE_UNKNOWN at the same layer and would stay green.
+ */
+it("answers the retired approve route with a tombstone while only in-process approval can mint", async () => {
+  const key = clientKey();
+  const store = openStore();
+  const authority = createSessionAuthority(store, {
+    clock: () => Date.now(), projectId: STORE_PROJECT_ID,
+  });
+  const listener = await startControlRoomListener({
+    csrfToken: CSRF,
+    deps: deps(),
+    log: () => undefined,
+    pairing: createOperatorSessionHandshakePort({
+      capabilities: OPERATOR_CAPABILITIES,
+      clock: () => Date.now(),
+      operatorPrincipalId: "operator-r3-1-provenance",
+      projectId: STORE_PROJECT_ID,
+      reservedPrincipalIds: ["operator-r3-1-provenance"],
+      sessionTtlMs: 60_000,
+      store,
+    }),
+    pairingMonotonicNow: () => Date.now(),
+    // The SAME store the mint writes into, so step 7 below reads the authority the
+    // socket actually created rather than one a fixture handed back.
+    pairingOpenSessions: createSessionAuthority(store, {
+      clock: () => Date.now(), projectId: STORE_PROJECT_ID,
+    }),
+    sessionChallengeOperands: createSessionChallengeOperandsReadPort({
+      projectId: STORE_PROJECT_ID, store,
+    }),
+  });
+  if (!listener.ok) throw new Error(`listener refused: ${listener.code}`);
+  try {
+    const requested = await post(listener, PAIRING_REQUEST_PATH, {});
+    if (requested.status !== 200) {
+      throw new Error(`pairing request refused: ${JSON.stringify(requested.body)}`);
+    }
+    const requestId = String(requested.body["requestId"]);
+    const confirmationLabel = String(requested.body["confirmationLabel"]);
+
+    // 1. THE TOMBSTONE. Exact status, exact code, exact layer, and an EXACT body roster:
+    // a route that had minted anything would have to carry a field beyond {code, layer}.
+    const tombstone = await post(listener, "/session/pair/approve", { confirmationLabel });
+    expect(tombstone.status).toBe(404);
+    expect(tombstone.body).toEqual({
+      code: "LISTENER_ROUTE_UNKNOWN", layer: CONTROL_ROOM_LISTENER_LAYER,
+    });
+
+    // 2. The keyed claim still refuses: the HTTP probe above minted NOTHING.
+    const preApproval = await post(listener, PAIRING_CLAIM_PATH, {
+      publicKeySpkiHex: key.publicKeySpkiHex, requestId,
+    });
+    expect(preApproval.status).toBe(409);
+    expect(preApproval.body).toEqual({
+      code: "PAIRING_APPROVAL_REQUIRED", layer: PAIRING_APPROVAL_LAYER,
+    });
+
+    // 3. THE POSITIVE CONTROL. In-process approval works, so step 1's refusal is a
+    // statement about the ROUTE and not about a listener that refuses everything.
+    expect(listener.approvePairing(confirmationLabel)).toEqual({ ok: true, state: "APPROVED" });
+
+    // 4. The SAME keyed claim now issues the challenge and mints the principal.
+    const claimed = await post(listener, PAIRING_CLAIM_PATH, {
+      publicKeySpkiHex: key.publicKeySpkiHex, requestId,
+    });
+    expect(claimed.status).toBe(200);
+    const principalId = String(claimed.body["principalId"]);
+    const challenge = claimed.body["challenge"] as Record<string, string>;
+    expect(Object.keys(challenge).sort())
+      .toEqual(["keyEpochRef", "profileRevisionId", "recoveryIncarnationRef"]);
+    expect(readPrincipalRecord(store, principalId).status).toBe("FOUND");
+    const sessionId = "session-r3-1-provenance";
+    // The authority does not exist yet: approval and a claim mint a principal, never a session.
+    expect(authority.readSessionAuthority(sessionId)).toEqual({ status: "ABSENT" });
+
+    // 5. THE CLIENT SIGNS what the claim disclosed, through the PRODUCTION digest and
+    // canonical-bytes helpers and node:crypto. No daemon code signs anything.
+    const credentialId = "credential-r3-1-provenance";
+    const commandId = "command-r3-1-provenance";
+    const requestDigest = sessionAuthorityRequestDigest({
+      kind: "OPEN_SESSION", projectId: STORE_PROJECT_ID, principalId,
+      profileRevisionId: challenge["profileRevisionId"]!,
+      sessionId, credentialId, generation: 1,
+      clientKeyId: key.clientKeyId, publicKeySpkiHex: key.publicKeySpkiHex,
+      transportId: TRANSPORT_IDS[0]!, transportIds: TRANSPORT_IDS,
+    });
+    const issuedAt = Date.now();
+    const nonce = "56".repeat(16);
+    const signable = canonicalSessionProofBytes({
+      principalId, projectId: STORE_PROJECT_ID,
+      recoveryIncarnationRef: challenge["recoveryIncarnationRef"]!,
+      keyEpochRef: challenge["keyEpochRef"]!,
+      sessionId, credentialId, generation: 1,
+      clientKeyId: key.clientKeyId, transportId: TRANSPORT_IDS[0]!,
+      requestId: commandId, requestDigest, issuedAt, nonce,
+    });
+
+    // 6. THE COMPLETION over the raw socket. The reply roster is asserted by
+    // SET-EQUALITY, so a route that started leaking a credential back would red here.
+    const completed = await post(listener, PAIRING_OPEN_PATH, {
+      clientKeyId: key.clientKeyId,
+      commandId,
+      correlationId: "correlation-r3-1-provenance",
+      credentialId,
+      principalId,
+      proof: {
+        algorithm: SESSION_PROOF_ALGORITHM, issuedAt, nonce,
+        protocolVersion: SESSION_PROOF_PROTOCOL_VERSION,
+        signatureHex: sign(null, signable, key.privateKey).toString("hex"),
+      },
+      publicKeySpkiHex: key.publicKeySpkiHex,
+      requestDigest,
+      sessionId,
+      transportId: TRANSPORT_IDS[0]!,
+      transportIds: TRANSPORT_IDS,
+    });
+    expect(completed.status).toBe(200);
+    // The WIRE roster, not the port's: the completion port answers {ok, sessionId} and
+    // the route stamps `protocolVersion` onto it (http-listener-pairing-routes.ts:101).
+    // Asserting the port's roster here would have been a subset check wearing an
+    // exactness costume.
+    expect(Object.keys(completed.body).sort()).toEqual(["ok", "protocolVersion", "sessionId"]);
+    expect(completed.body).toEqual({
+      ok: true, protocolVersion: WIRE_PROTOCOL_VERSION, sessionId,
+    });
+
+    // 7. The durable authority is FOUND in the SAME store the listener was wired with,
+    // bound to the key the browser proved possession of.
+    const opened = authority.readSessionAuthority(sessionId);
+    expect(opened.status).toBe("FOUND");
+    if (opened.status !== "FOUND") throw new Error("unreachable");
+    expect(opened.authority.publicKey.clientKeyId).toBe(key.clientKeyId);
+    expect(opened.authority.principal.principalId).toBe(principalId);
   } finally {
     await listener.close();
   }

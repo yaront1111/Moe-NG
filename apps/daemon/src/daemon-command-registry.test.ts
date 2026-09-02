@@ -722,7 +722,7 @@ describe("production command transport stamps", () => {
     const cases = [
       {
         expected: ["HTTP_LISTENER"],
-        file: "./http/http-listener.ts",
+        file: "./http/http-listener-command-stream-routes.ts",
         pattern: /handleAsyncCommandRequest\(options\.deps,\s*\{[\s\S]*?protocolVersion:\s*protocolVersionOf\(request\),?\s*\},\s*"([A-Z_]+)"\s*\)/,
       },
       {
