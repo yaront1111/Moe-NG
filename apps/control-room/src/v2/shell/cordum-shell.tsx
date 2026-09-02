@@ -60,7 +60,7 @@ const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
   board: "Board projection",
   graph: "Graph projection",
   timeline: "Timeline projection",
-  approvals: "Go to Approvals",
+  approvals: "Go to Needs you",
   search: "Focus search",
   help: "Toggle this help",
   "collapse-inspector": "Collapse proof inspector",

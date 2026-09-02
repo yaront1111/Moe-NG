@@ -981,3 +981,135 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Runs & leases: each goal's plan as a ladder of nodes with the daemon's facts beside them. */
+.cr2-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 4px 24px;
+}
+
+.cr2-run-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-run-goal-title {
+  margin: 4px 0 2px;
+  font-size: var(--cr-fs-title, 18px);
+  font-weight: 600;
+}
+
+.cr2-run-goal-title button {
+  font: inherit;
+  color: var(--cr-ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cr2-run-goal-title button:disabled {
+  cursor: default;
+}
+
+.cr2-run-goal-title button:focus-visible {
+  outline: 2px solid var(--cr-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.cr2-run-goal-run {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cr2-run-node {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+  background: var(--cr-ground, transparent);
+}
+
+.cr2-run-status {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  padding-top: 2px;
+}
+
+.cr2-run-node[data-status="ACCEPTED"] .cr2-run-status {
+  color: var(--cr-accent);
+  font-weight: 600;
+}
+
+.cr2-run-node[data-status="IN_PROGRESS"] .cr2-run-status,
+.cr2-run-node[data-status="DELIVERED"] .cr2-run-status {
+  color: var(--cr-ink);
+}
+
+.cr2-run-node[data-status="ESCALATION_REQUIRED"] .cr2-run-status,
+.cr2-run-node[data-status="ESCALATED"] .cr2-run-status,
+.cr2-run-node[data-status="BLOCKED"] .cr2-run-status {
+  color: var(--cr-danger);
+  font-weight: 600;
+}
+
+.cr2-run-node-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cr2-run-node-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--cr-ink);
+}
+
+.cr2-run-node-evidence,
+.cr2-run-node-criteria {
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-node-criteria {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+}
+
+@media (max-width: 720px) {
+  .cr2-run-node {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

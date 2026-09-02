@@ -101,7 +101,7 @@ export interface NavItem {
 export const CORDUM_NAV_ITEMS: readonly NavItem[] = Object.freeze([
   { id: "goals", label: "Goals", icon: "M12 4a8 8 0 1 0 8 8 M12 7a5 5 0 1 0 5 5 M12 10a2 2 0 1 0 2 2" },
   {
-    id: "approvals", label: "Approvals",
+    id: "approvals", label: "Needs you",
     icon: "M5.5 12.5 9.5 16.5 18.5 7.5 M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17Z",
   },
   {
