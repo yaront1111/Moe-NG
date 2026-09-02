@@ -1,0 +1,43 @@
+{
+  "id": "task-3f75f0e6a37645a08b48f628a2514239",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-016 consumer leaf] State valid planning authority in the shell-mode-view fixture",
+  "description": "Successor leaf of task-d3bfc33e364d4dbab1ef02723d672263, filed by architect-99fe366f under the governor's ARCHITECT AMENDMENT HANDOFF on that row. Created as a successor rather than an eleventh owned path because moe.submit_plan rejects a plan with more than 10 distinct affectedFiles and all ten of the parent's paths carry delivered work across its completed steps 2-5, so no path is droppable and no swap is available.\n\nOBJECTIVE: bring exactly one stale test fixture in line with the parent's correct, delivered production behaviour. The parent now renders an approval dispatch control ONLY for a run the daemon bound to a goal AND stated planning material for. apps/control-room/src/shell-mode-view.test.tsx (208 lines, tracked, clean) contains ZERO occurrences of planningAuthorityByRun - measured with `git grep -c planningAuthorityByRun` - so its wire fixture never states that material and the control correctly stops rendering. This is a stale fixture, NOT a production defect; the parent's own 436-char gate passes at the delivered tree (Test Files 4 passed / Tests 106 passed, tsc clean, NODE_BRIDGE_OK, exit 0).\n\nExact owned paths (1): apps/control-room/src/shell-mode-view.test.tsx\n\nTHE FAILING ASSERTIONS, verbatim, at shell-mode-view.test.tsx:198-200:\n    expect(screen.getAllByRole(\"button\", { name: /^Dispatch /u })).toHaveLength(1);\n    expect(screen.getByTestId(\"cr.liveboard.dispatch.approval.decide\")).toBeTruthy();\n\nTHE FIX, which is specified and must not be weakened: supply VALID seven-key planningAuthorityByRun wire facts to this fixture's affordance material, with mapKey == runId and goalRef matching planningGoalRefs - the same DoD 4(f) shape the parent already applied to two other consumers. The exemplar is live-board.test.tsx:535-541 `approvalMaterial(runIds)`, which maps each runId to materialOf({bytes, criteriaDigest, goalRef: `goal-${runId}`, graphHash, runId, submissionHash}); note it is LOCAL to that file and NOT exported, so construct the equivalent facts here rather than importing it. The rule is stated in that file's own comment: an approval control renders only for a run the daemon bound to a goal AND stated material for, so a surface must state BOTH - the valid wire facts, never a weaker expectation.\n\nEXPLICITLY FORBIDDEN: replacing the assertions with queryByTestId(...).toBeNull() or any other weakened form. That would retire the capability the parent row exists to add and is barred by the parent's DoD 3.\n\nNOT IN SCOPE: any of the parent's ten owned paths, any production source, the dependencyHash/qualityHash/policyHash placeholders the parent measured as not returned by this producer, or re-implementing anything the parent delivered.\n\nWHY THIS IS THE CRITICAL PATH: task-28cd95db8bb6444b861eac4384c7fdc2 changed zero bytes, already has its completion commit recorded (1729c4299d50), and six of its seven gate legs are green; its seventh leg is red only through this same fixture. That row now declares this leaf in dependsOn so it does not unblock into a still-red lane, and three further rows wait behind it.",
+  "definitionOfDone": [
+    "Re-measure before editing and record it: `git status --porcelain -- apps/control-room/src/shell-mode-view.test.tsx` is empty, `wc -l` is 208, and `git grep -c planningAuthorityByRun -- apps/control-room/src/shell-mode-view.test.tsx` returns 0. If any of those has changed, or if the parent's behaviour has moved underneath this leaf, report rather than editing to fit a stale premise.",
+    "Red-first: run the failing arm at the delivered tree and quote the failure, confirming both shell-mode-view.test.tsx:198 (getAllByRole button /^Dispatch /u toHaveLength(1)) and :199-200 (getByTestId cr.liveboard.dispatch.approval.decide) fail because the fixture states no planning material - not for some other reason. A red for the wrong reason is not a red-first.",
+    "The fixture states VALID seven-key planningAuthorityByRun wire facts with mapKey == runId and goalRef matching planningGoalRefs, constructed locally in the mirror of live-board.test.tsx:535-541 approvalMaterial. The two named assertions are restored to their original strength; no assertion is weakened, negated, skipped, or replaced with queryByTestId(...).toBeNull(), and the surrounding arms (the BLOCKED goal.create census, the cr.liveboard.missing.goal.create project.activate text, and the /affordances/read wire check at :204) still pass unchanged.",
+    "A mutation drill proves the new arm is not vacuous: break ONE key of the supplied material - use a mapKey that does not equal its runId, and separately a goalRef absent from planningGoalRefs - and confirm the approval.decide assertion goes red each time while the BLOCKED-card arms stay green, so the fixture is pinned to the binding rule and not merely to the control's presence. Restore in a call separate from the mutation and prove it with an empty `git diff` on the one owned path, which is tracked.",
+    "Final verification standalone and unpiped with nonzero counts: the focused file, then `pnpm --filter @moe/control-room typecheck` exiting 0, then the full `pnpm --filter @moe/control-room test` lane showing the previously failing file now passing and the total at 113 files with no remaining failure attributable to this path. Root `pnpm test` has no apps/** in its include and cannot evidence this row. Disclose any foreign red verbatim."
+  ],
+  "taskRails": [
+    "Own exactly one path: apps/control-room/src/shell-mode-view.test.tsx. Do not edit any of the parent's ten owned paths, any production source, or any other test.",
+    "Never weaken, negate, skip or delete the two named assertions. The fix is to supply valid wire facts, not to lower the bar; a weakened assertion retires the capability the parent row shipped.",
+    "The supplied planning material must be VALID and complete - seven keys, mapKey == runId, goalRef matching planningGoalRefs. Do not invent a shortcut shape, and do not import the parent's local approvalMaterial helper, which is not exported.",
+    "Preserve all foreign WIP in this shared checkout; never revert, stash, git add -A, or commit paths you do not own."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-dbf9e869",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-d3bfc33e364d4dbab1ef02723d672263",
+  "dependsOn": [
+    "task-d3bfc33e364d4dbab1ef02723d672263"
+  ],
+  "priority": "CRITICAL",
+  "order": 198,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-02T19:28:11.847Z",
+  "updatedAt": "2026-09-02T19:28:26.840Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-02T19:28:22.440Z"
+  },
+  "contextFetchedBy": [
+    "architect-dbf9e869"
+  ]
+}
