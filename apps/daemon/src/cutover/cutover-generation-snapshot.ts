@@ -6,6 +6,8 @@ import { deriveLiveQuiesceEvidenceDigest } from "@moe/core";
 import { readDurableImportGeneration } from "../projections/import-generation-reader.js";
 import type { ImportGenerationStorePort } from "../projections/import-generation-reader.js";
 
+import { readCutoverQuiesceRecordBytes } from "./cutover-quiesce-record-reader.js";
+
 /**
  * The four-value cutover generation snapshot: the evidence a cutover activation is measured
  * against, read from durable state and composed, never derived here.
@@ -118,6 +120,18 @@ export interface CutoverGenerationRequest {
 
 const PAGE_LIMIT = 256;
 
+/**
+ * The provenance stamped on a refusal that came from the contracts bounded-JSON decoder.
+ *
+ * NOT a refusal code and NOT part of any exported roster: it is a label naming WHICH
+ * mechanism answered. The daemon's own bounded reader and this decoder both emit
+ * `JSON_BODY_LIMIT_EXCEEDED`, and no input can reach one without the other - the reader caps
+ * its read at the ceiling plus one, so the decoder can never see a body the reader refused.
+ * Without two distinguishable labels a caller could only learn that the SYSTEM refused, and
+ * the reader's guard could be loosened or removed with every assertion still green.
+ */
+const BOUNDED_JSON_CODEC_LAYER = "CONTRACTS_BOUNDED_JSON";
+
 function refuse(
   missing: CutoverGenerationFact,
   code: CutoverGenerationRefusalCode,
@@ -222,26 +236,36 @@ function readBackupGeneration(
  */
 function readQuiesceRecord(ports: CutoverGenerationPorts): string | CutoverGenerationRefused {
   const path = join(ports.config.storeRoot, LIVE_QUIESCE_EVIDENCE_FILENAME);
-  let text: string;
-  try {
-    text = ports.readFileText(path);
-  } catch {
+  // The BOUNDED reader, never ports.readFileText. That member stays on the port for the
+  // consumers that construct one, but it hands back a whole unbounded string, which is the
+  // allocation this path exists to prevent; there is deliberately no fallback to it.
+  const read = readCutoverQuiesceRecordBytes(path);
+  if (!read.ok && read.reason === "UNREADABLE") {
     return refuse(
       "quiesceRecordSha256", "CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT",
       `no live-quiesce evidence record is readable at ${path};`
         + " no live run has written one, and a seeded record would not be evidence",
     );
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
+  if (!read.ok) {
+    // The DAEMON READER refused, before the bytes were ever materialised. It shares its code
+    // with the contracts codec below, so the layer is what tells an operator which of the two
+    // mechanisms answered - and it is the only thing that can.
     return refuse(
       "quiesceRecordSha256", "CUTOVER_GENERATION_EVIDENCE_UNREADABLE",
-      `the live-quiesce evidence record at ${path} is not valid JSON`,
+      `the live-quiesce evidence record at ${path} is larger than the readable ceiling`,
+      Object.freeze({ code: read.code, layer: read.layer }),
     );
   }
-  const derived = deriveLiveQuiesceEvidenceDigest(parsed);
+  const decoded = decodeBoundedJsonBytes(read.bytes);
+  if (!decoded.ok) {
+    return refuse(
+      "quiesceRecordSha256", "CUTOVER_GENERATION_EVIDENCE_UNREADABLE",
+      `the live-quiesce evidence record at ${path} is not valid bounded JSON`,
+      Object.freeze({ code: decoded.code, layer: BOUNDED_JSON_CODEC_LAYER }),
+    );
+  }
+  const derived = deriveLiveQuiesceEvidenceDigest(decoded.value);
   if (!derived.ok) {
     return refuse(
       "quiesceRecordSha256", "CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT",

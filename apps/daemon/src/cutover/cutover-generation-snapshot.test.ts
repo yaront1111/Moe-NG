@@ -1,7 +1,13 @@
+import { Buffer } from "node:buffer";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  MAX_JSON_BODY_BYTES,
+  MAX_JSON_DEPTH,
+  MAX_JSON_STRING_UTF8_BYTES,
+} from "@moe/contracts";
 import { deriveLiveQuiesceEvidenceDigest } from "@moe/core";
 import type { LiveQuiesceEvidence } from "@moe/core";
 import { SqliteEventStore } from "@moe/store";
@@ -161,21 +167,51 @@ function withHarness(seed: Seed, run: (harness: Harness) => void): void {
         "utf8",
       );
     }
+    readFileTextCalls = 0;
     run({
       evidencePath,
       ports: {
         config: { storeRoot },
-        readFileText: (path: string) => readFileSync(path, "utf8"),
+        // THE ZERO-INVOCATION FENCE. `readFileText` survives on the port for source
+        // compatibility with six measured consumers, but the snapshot must never reach it:
+        // it is unbounded by construction, which is the whole defect this row closes. The
+        // sentinel throws so a reader that fell back to it could not quietly succeed either.
+        readFileText: (path: string): string => {
+          readFileTextCalls += 1;
+          throw new Error(`SENTINEL: the compatibility readFileText was invoked for ${path}`);
+        },
         store,
       },
       store,
       storePath,
       storeRoot,
     });
+    // Asserted on EVERY arm, accepted and refused alike, rather than on a chosen few: a
+    // fallback that only fires on one path is exactly the one a per-arm assertion misses.
+    expect(readFileTextCalls).toBe(0);
   } finally {
     store.close();
     rmSync(directory, { force: true, recursive: true });
   }
+}
+
+/** Counts invocations of the compatibility port member the snapshot must never call. */
+let readFileTextCalls = 0;
+
+/**
+ * A syntactically valid JSON body of EXACTLY `size` bytes. The padding is sized from the
+ * contracts limits, never from a typed 1048576, so a change to either constant moves the
+ * fixture with it. Mirrors packages/contracts/src/bounded-json-boundary.test.ts:44-55.
+ */
+function jsonBodyOfExactBytes(size: number): string {
+  const full = MAX_JSON_STRING_UTF8_BYTES;
+  const tail = size - 13 - 3 * full;
+  const body = `["${"a".repeat(full)}","${"b".repeat(full)}",`
+    + `"${"c".repeat(full)}","${"d".repeat(tail)}"]`;
+  if (Buffer.byteLength(body, "utf8") !== size) {
+    throw new Error(`fixture is ${Buffer.byteLength(body, "utf8")} bytes, wanted ${size}`);
+  }
+  return body;
 }
 
 function expectRefused(answer: CutoverGenerationSnapshot): CutoverGenerationRefused {
@@ -225,6 +261,11 @@ describe("the cutover generation snapshot names four durable facts", () => {
       expect(refusal.missing).toBe("quiesceRecordSha256");
       expect(refusal.code).toBe("CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT");
       expect(refusal.layer).toBe(CUTOVER_GENERATION_SNAPSHOT_LAYER);
+      // NO upstream: nothing downstream answered, because there was nothing to read. That is
+      // what separates this ABSENT from the semantically-rejected ABSENT below, which
+      // forwards @moe/core's own diagnosis.
+      expect(refusal.upstream).toBeNull();
+      expect("generations" in refusal).toBe(false);
     });
   });
 
@@ -372,6 +413,11 @@ describe("the snapshot round-trips through real durable bytes", () => {
       // The core authority's own diagnosis is forwarded, not restamped as ours.
       expect(refusal.upstream?.layer).toBe("live-quiesce-evidence");
       expect(refusal.upstream?.code).not.toBe(refusal.code);
+      // Neither the daemon reader nor the contracts codec answered here, so neither label
+      // may appear: a restamped provenance would send an operator to the wrong mechanism.
+      expect(refusal.upstream?.layer).not.toBe(CUTOVER_GENERATION_SNAPSHOT_LAYER);
+      expect(refusal.upstream?.layer).not.toBe("CONTRACTS_BOUNDED_JSON");
+      expect("generations" in refusal).toBe(false);
     });
   });
 
@@ -384,6 +430,13 @@ describe("the snapshot round-trips through real durable bytes", () => {
       // answers, and an operator chases them differently.
       expect(refusal.code).toBe("CUTOVER_GENERATION_EVIDENCE_UNREADABLE");
       expect(refusal.code).not.toBe("CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT");
+      // The bounded codec answered, and says so. The layer is the oracle: the daemon reader
+      // emits the SAME JSON_BODY_LIMIT_EXCEEDED code as this codec does, so only the
+      // provenance label can tell an operator which mechanism refused.
+      expect(refusal.upstream).toEqual({
+        code: "JSON_SYNTAX_INVALID", layer: "CONTRACTS_BOUNDED_JSON",
+      });
+      expect("generations" in refusal).toBe(false);
     });
   });
 
@@ -490,6 +543,124 @@ describe("the snapshot names ONE store state or none", () => {
       );
       expect(Object.keys(generations).sort()).toEqual([...CUTOVER_GENERATION_FACTS].sort());
       expect(calls).toBeGreaterThanOrEqual(2);
+    });
+  });
+});
+
+/**
+ * THE ARTIFACT IS ACQUIRED UNDER A BYTE CEILING (task-642df965).
+ *
+ * WHY THE LAYER, NOT THE CODE, IS THE ORACLE. `decodeBoundedJsonBytes` already refuses
+ * `JSON_BODY_LIMIT_EXCEEDED` for a body over the limit, so an oversize arm that asserted only
+ * the CODE would prove the SYSTEM refuses while saying nothing about the daemon reader that
+ * exists to refuse BEFORE the bytes are allocated: loosen that reader's guard and such an arm
+ * stays green. No divergence INPUT is constructible either - the reader caps its own read at
+ * MAX_JSON_BODY_BYTES + 1, so the codec can never observe a body the reader did not admit.
+ * The seam therefore PRODUCES distinguishable results instead: the reader forwards its
+ * refusal at "DAEMON_CUTOVER_GENERATION", the codec's at "CONTRACTS_BOUNDED_JSON". Loosening
+ * the reader guard by one reds the layer assertion in the first arm below, which is the
+ * drill this fixture exists to make possible.
+ */
+describe("the live-quiesce artifact is acquired under a byte ceiling", () => {
+  it("refuses ONE BYTE OVER the ceiling at the DAEMON READER, not at the contracts codec", () => {
+    withHarness(COMPLETE, ({ evidencePath, ports }) => {
+      writeFileSync(evidencePath, Buffer.alloc(MAX_JSON_BODY_BYTES + 1, 0x61));
+      const refusal = expectRefused(readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }));
+
+      expect(refusal.missing).toBe("quiesceRecordSha256");
+      expect(refusal.code).toBe("CUTOVER_GENERATION_EVIDENCE_UNREADABLE");
+      expect(refusal.layer).toBe(CUTOVER_GENERATION_SNAPSHOT_LAYER);
+      // THE DIVERGENCE ORACLE. Both mechanisms emit this code; only the daemon reader emits
+      // it at this layer. `toEqual` on the whole upstream pins both halves at once.
+      expect(refusal.upstream).toEqual({
+        code: "JSON_BODY_LIMIT_EXCEEDED", layer: "DAEMON_CUTOVER_GENERATION",
+      });
+      expect(refusal.upstream?.layer).not.toBe("CONTRACTS_BOUNDED_JSON");
+      expect("generations" in refusal).toBe(false);
+    });
+  });
+
+  it("admits a file of EXACTLY MAX_JSON_BODY_BYTES, which reaches the core authority", () => {
+    withHarness(COMPLETE, ({ evidencePath, ports }) => {
+      const body = jsonBodyOfExactBytes(MAX_JSON_BODY_BYTES);
+      writeFileSync(evidencePath, body, "utf8");
+      // Precondition asserted, so a mis-sized fixture reads as a fixture problem rather than
+      // as the reader refusing: the file really is AT the ceiling, not one byte under it.
+      expect(Buffer.byteLength(body, "utf8")).toBe(MAX_JSON_BODY_BYTES);
+
+      const refusal = expectRefused(readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }));
+      expect(refusal.missing).toBe("quiesceRecordSha256");
+      // It got PAST the reader AND PAST the codec: the answer comes from @moe/core, which
+      // refuses a four-string array as evidence on SEMANTIC grounds, not on size grounds.
+      expect(refusal.code).toBe("CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT");
+      expect(refusal.upstream).toEqual({
+        code: "LIVE_QUIESCE_EVIDENCE_INCOMPLETE", layer: "live-quiesce-evidence",
+      });
+      expect(refusal.upstream?.code).not.toBe("JSON_BODY_LIMIT_EXCEEDED");
+      expect("generations" in refusal).toBe(false);
+    });
+  });
+
+  it("treats an EMPTY evidence file as corrupt evidence, never as missing evidence", () => {
+    withHarness(COMPLETE, ({ evidencePath, ports }) => {
+      writeFileSync(evidencePath, Buffer.alloc(0));
+      const refusal = expectRefused(readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }));
+
+      expect(refusal.missing).toBe("quiesceRecordSha256");
+      expect(refusal.code).toBe("CUTOVER_GENERATION_EVIDENCE_UNREADABLE");
+      // Zero bytes is a file that EXISTS and does not decode. Calling it ABSENT would send an
+      // operator to look for a run that never happened, when one happened and wrote garbage.
+      expect(refusal.code).not.toBe("CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT");
+      expect(refusal.upstream).toEqual({
+        code: "JSON_SYNTAX_INVALID", layer: "CONTRACTS_BOUNDED_JSON",
+      });
+      expect("generations" in refusal).toBe(false);
+    });
+  });
+
+  it("refuses bytes that are not valid UTF-8 at the codec, with the codec's own code", () => {
+    withHarness(COMPLETE, ({ evidencePath, ports }) => {
+      // 0xff/0xfe can never begin a UTF-8 sequence, so this file is undecodable before it is
+      // unparseable - a distinction a reader that went through a lossy string would erase.
+      writeFileSync(evidencePath, Buffer.from([0xff, 0xfe, 0x7b, 0x7d]));
+      const refusal = expectRefused(readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }));
+
+      expect(refusal.missing).toBe("quiesceRecordSha256");
+      expect(refusal.code).toBe("CUTOVER_GENERATION_EVIDENCE_UNREADABLE");
+      expect(refusal.upstream).toEqual({
+        code: "JSON_UTF8_INVALID", layer: "CONTRACTS_BOUNDED_JSON",
+      });
+      expect("generations" in refusal).toBe(false);
+    });
+  });
+
+  it("refuses nesting past MAX_JSON_DEPTH at the codec rather than recursing on it", () => {
+    withHarness(COMPLETE, ({ evidencePath, ports }) => {
+      const depth = MAX_JSON_DEPTH + 1;
+      writeFileSync(evidencePath, `${"[".repeat(depth)}null${"]".repeat(depth)}`, "utf8");
+      const refusal = expectRefused(readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }));
+
+      expect(refusal.missing).toBe("quiesceRecordSha256");
+      expect(refusal.code).toBe("CUTOVER_GENERATION_EVIDENCE_UNREADABLE");
+      expect(refusal.upstream).toEqual({
+        code: "JSON_DEPTH_LIMIT_EXCEEDED", layer: "CONTRACTS_BOUNDED_JSON",
+      });
+      expect("generations" in refusal).toBe(false);
+    });
+  });
+
+  it("still ACCEPTS the pretty-printed record the live lane writes, digest unmoved", () => {
+    withHarness(COMPLETE, ({ ports }) => {
+      // The tripwire for the prototype change: the codec yields deep-frozen NULL-PROTOTYPE
+      // objects where JSON.parse yielded Object.prototype ones. If @moe/core's shape checks
+      // were not prototype-agnostic, the golden would move and this arm would red.
+      const generations = expectAccepted(
+        readCutoverGenerationSnapshot(ports, { projectId: PROJECT_ID }),
+      );
+      const independent = deriveLiveQuiesceEvidenceDigest(EVIDENCE);
+      expect(independent.ok).toBe(true);
+      expect(generations.quiesceRecordSha256)
+        .toBe(independent.ok ? independent.quiesceRecordSha256 : "");
     });
   });
 });
