@@ -21,9 +21,13 @@ import { assertRefusedWith, cleanupHostileRoots, hostileRoot, probeRacing } from
 import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 import {
   DURABLE_BOUNDARY_NAMES,
+  DURABLE_CLOSURE_PHASES,
+  DURABLE_STORE_CLOSURE_NAMES,
+  durableClosureCases,
   hostileAfterCases,
   hostileBeforeCases,
   hostileRaceCases,
+  runClosureCase,
   runRefusalCase,
   safeBoundaryLookupRace,
 } from "./durable-store-boundary-scenarios.js";
@@ -600,3 +604,80 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
     && result.durableEvents === hostileCase.expectedDurableEvents
     && result.winnerPayloads.length === 1 && result.winnerPayloads[0] === result.winner)).toBe(true);
 }, 30_000);
+
+/**
+ * task-f8ea0a2f — the three durable-store CLOSURE subjects.
+ *
+ * They are deliberately NOT in `DURABLE_BOUNDARY_NAMES`: that tuple is the ADVERTISED
+ * roster the master boundary scan is compared against, and task-45839f34 is the declared
+ * downstream consumer that will publish these three names there once these arms exist. The
+ * arms land first, so the advertisement is never ahead of the coverage. The set assertions
+ * below are what makes that separation mechanical rather than a comment.
+ */
+describe("TASK-F8 durable-store closure subjects", { timeout: 120_000 }, () => {
+  it("TASK-F8 pins the closure tuple and its generated cases as exact bidirectional sets", () => {
+    expect(Object.isFrozen(DURABLE_STORE_CLOSURE_NAMES)).toBe(true);
+    // THREE subjects, exactly: a fourth would be an unarmed advertisement and a missing one
+    // would shrink this suite's own iteration while staying green.
+    expect(DURABLE_STORE_CLOSURE_NAMES).toHaveLength(3);
+    expect([...DURABLE_STORE_CLOSURE_NAMES].sort()).toStrictEqual([
+      "CUTOVER_ATTEMPT_LAYER", "CUTOVER_GENERATION_SNAPSHOT_LAYER", "IMPORT_GENERATION_READ_LAYER",
+    ]);
+    // BOTH directions between the tuple and what the case table actually generated: a
+    // one-way subset check cannot see a subject that generated no arm at all.
+    const generated = [...new Set(durableClosureCases.map((entry) => entry.boundary))].sort();
+    expect(generated).toStrictEqual([...DURABLE_STORE_CLOSURE_NAMES].sort());
+    expect([...DURABLE_STORE_CLOSURE_NAMES].sort()).toStrictEqual(generated);
+    // Still unadvertised, so task-45839f34's 18-name comparison above stays exactly as it is.
+    for (const name of DURABLE_STORE_CLOSURE_NAMES) {
+      expect(DURABLE_BOUNDARY_NAMES).not.toContain(name);
+    }
+  });
+
+  it("TASK-F8 generates one nonzero arm per subject per phase and nothing else", () => {
+    expect(DURABLE_CLOSURE_PHASES).toStrictEqual(["BEFORE", "AFTER", "RACE"]);
+    expect(durableClosureCases).toHaveLength(9);
+    for (const phase of DURABLE_CLOSURE_PHASES) {
+      const arms = durableClosureCases.filter((entry) => entry.phase === phase);
+      // Nonzero AND exact: a sweep that silently yielded zero cases passes every `for`
+      // loop below without executing one of them.
+      expect([phase, arms.length]).toStrictEqual([phase, 3]);
+      for (const boundary of DURABLE_STORE_CLOSURE_NAMES) {
+        expect([phase, boundary,
+          arms.filter((entry) => entry.boundary === boundary).length]).toStrictEqual([
+          phase, boundary, 1,
+        ]);
+      }
+    }
+    // Every generated arm names a distinct code within its subject: one code reused across
+    // a subject's three phases would be green whichever phase actually ran.
+    for (const boundary of DURABLE_STORE_CLOSURE_NAMES) {
+      const codes = durableClosureCases
+        .filter((entry) => entry.boundary === boundary).map((entry) => entry.expected.code);
+      expect([boundary, new Set(codes).size]).toStrictEqual([boundary, 3]);
+    }
+  });
+
+  for (const hostileCase of durableClosureCases) {
+    it(`TASK-F8 ${hostileCase.phase} ${hostileCase.boundary}: ${hostileCase.question}`, () => {
+      const result = runClosureCase(hostileCase);
+      // The exact code AND the answering layer, from production's own refusal object.
+      assertRefusedWith(result.refusal, hostileCase.expected);
+      // The divergence control: the SAME production call with the one hostile input removed
+      // ADMITS. Without it a reader that refused everything would satisfy the line above.
+      expect(result.controlAdmitted).toBe(true);
+      // Durable readback: a refused read neither fabricates nor destroys rows, and the
+      // horizon moves only where a rival writer really landed inside the call.
+      expect(result.durableComplete).toBe(true);
+      expect(result.durableDelta).toBe(hostileCase.durableDelta);
+      expect(result.horizonMoved).toBe(hostileCase.horizonMoved);
+      expect(result.durableRecords).toBeGreaterThanOrEqual(hostileCase.minimumRecords);
+      if (hostileCase.phase === "RACE" && hostileCase.boundary === "CUTOVER_ATTEMPT_LAYER") {
+        // The store's own diagnosis is retained rather than restamped as the daemon's.
+        expect(result.upstream).toStrictEqual({
+          code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE",
+        });
+      }
+    });
+  }
+});
