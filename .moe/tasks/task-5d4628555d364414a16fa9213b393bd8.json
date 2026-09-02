@@ -101,8 +101,8 @@
       "completedAt": "2026-09-02T23:25:47.641Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d109461f",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -189,11 +189,17 @@
       "author": "worker-17897c78",
       "content": "FOREIGN RED DISCLOSURE + PATH ATTRIBUTION (global rail 3), for the reopen-cycle completion. Measurement anchor: delivered tree at branch moe/work-2026-09-02, HEAD c5f0a45f \"Merge origin/main (07c45d44, PR #15)\". Root D:/projexts/moe-next.\n\n(2) REPO-WIDE FAILURES AT HEAD, verbatim, reproduced identically on two consecutive fresh foreground runs of `pnpm --filter @moe/daemon test` (starts 02:16:47 and 02:21:01):\n  Test Files  2 failed | 388 passed (390)\n       Tests  3 failed | 7823 passed (7826)\n  Exit status 1\n\n  FAIL src/work/attempt-finalization-service.test.ts > attempt finalization (task-48c79a29) - the four outcomes are distinct > rebinds a pre-receipt release: NO_OP, first row untouched, current binding receipted\n    Error: finalization refused: ATTEMPT_FINALIZATION_RELEASE_REFUSED\n    at apps/daemon/src/work/attempt-finalization-service.test.ts:451:28\n\n  FAIL src/work/attempt-finalization-service.test.ts > attempt finalization - task-922c3b3d59894c90925e85c7a0564355 carries fence provenance > fences at the DISPATCH version read by the finalizer, not a later re-read\n    AssertionError: expected [ 1, +0 ] to deeply equal [ 1, 1 ]\n    at apps/daemon/src/work/attempt-finalization-service.test.ts:607:47\n\n  FAIL src/work/attempt-release-disposition.test.ts > attempt release disposition - the safe boundary is DERIVED, never relayed > composes NO second truth when a SECOND releaser runs over the same attempt\n    AssertionError: expected false to be 'NO_OP' // Object.is equality\n    at apps/daemon/src/work/attempt-release-disposition.test.ts:889:41\n\n(3) FAILING-PATH SET MINUS BASELINE, INTERSECTED WITH THIS ROW'S OWNED PATHS = EMPTY. Four independent measurements, each a command anyone can re-run at the delivered tree:\n  a. `git show --stat --name-only --oneline dd991fdc 1c7e24e5 | grep src/work` -> no output. This row's two commits touch ZERO paths under src/work.\n  b. `git diff --stat dd991fdc^ HEAD -- apps/daemon/src/work/` -> exactly 3 files: attempt-safe-boundary-lookup.test.ts, safe-boundary-observation.test.ts, and the production module safe-boundary-observation.ts (167 changed, 133 deletions). All three belong to foreign row task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d \"Harden safe-observation, budget, and worktree commit boundaries\", whose wip commits sit between this row's work and HEAD. attempt-release-disposition.test.ts:72 imports SAFE_BOUNDARY_OBSERVATION_LAYER from that rewritten module directly; attempt-finalization-service reaches it through attempt-release-store.ts / attempt-release-boundary.ts.\n  c. Reverse-import proof that no failing file can reach this row's code: `grep -rln \"<module>.js\" apps/daemon/src/ | grep -v \"^apps/daemon/src/bootstrap/\"` for each owned production module returns - policy-fact-resolver: nothing outside src/bootstrap; bootstrap-policy-services: src/http/policy-read.ts, src/planning/run-policy-selection-snapshot.ts; bootstrap-policy-authority: src/activation/policy-allowance-fixtures.ts, src/planning/approval-policy-digest.ts, src/planning/run-policy-evaluation.ts, src/planning/run-policy-record.ts. NOTHING under src/work. Every file in that closure passes in the final run.\n  d. `git diff --stat dd991fdc^ HEAD -- apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts` -> empty. The one src/work file that does import from src/bootstrap (foundation-attempt-windows.test.ts, via bootstrap-test-fixtures.js) reaches a file this row never touched - and that file PASSES in both final runs, having been red earlier in the session as a known parallel-spawn flake.\n\nOWNED-SCOPE LEG, exit 0 with a nonzero executed count line (run from apps/daemon, foreground, PIPESTATUS captured):\n  npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/bootstrap-services.test.ts\n  Test Files  2 passed (2)\n       Tests  90 passed (90)\n  OWNED_LEG_EXIT=0\nThis is what complete_task.verification carries, because the daemon refuses a nonzero exitCode and the row's named repo-wide command exits 1 for the foreign reason above. The red is disclosed, not hidden; no command was narrowed to turn a red leg green, and the repo-wide leg's true result is quoted verbatim above.\n\nTYPECHECK: `pnpm --filter @moe/daemon typecheck` printed `$ tsc --project tsconfig.json` (script echo = execution evidence) and exited 0. Re-run fresh at c5f0a45f after the merge; still exit 0.\n\nSHARED-CHECKOUT INFRASTRUCTURE NOISE, all foreign, none acted on, recorded so the next session does not re-diagnose it:\n  1. The first suite run hung 60 minutes at ZERO CPU delta with no output. Cause: another session re-hashed the pnpm store mid-run, so every vitest worker died at preload with `Cannot find module '.../node_modules/.pnpm/vitest@4.1.10_@types+node@2_4acbc07aff98e4e50b4711283ed0caa2/node_modules/vitest/suppress-warnings.cjs'` while the main thread waited forever. The identical file exists at the CURRENT store path vitest@4.1.10_@types+node@24.13.3_jsdom@30.0.1_yaml@2.9.0. A plain re-run fixed it; node_modules was not repaired or reinstalled.\n  2. That hung run was launched as `pnpm ... | tail -60`, and after the process was killed the harness reported \"exit code 0\" - tail's status, not vitest's. The log's own last line read `Exit status 4294967295`. Every subsequent leg used a direct redirect plus an explicit `$?` capture. Flagging because an exit-0 report from a piped gate is worthless here.\n  3. A run at 02:11:57 collapsed to 24 failed files, all with `[PARSE_ERROR] Encountered diff marker` at apps/daemon/src/http/http-listener.ts:9:1 - a foreign session had unresolved `<<<<<<< HEAD` conflict markers in the shared checkout. Its owner resolved them before 02:16; the file was not touched, reverted, or committed by this row.",
       "timestamp": "2026-09-02T23:26:20.444Z"
+    },
+    {
+      "id": "comment-cfbde9925e3d4d0789f505e21e7957ff",
+      "author": "qa-d109461f",
+      "content": "QA REVIEW ROUND 2 — APPROVED. Full evidence (reviewSummary is capped at 2000, this is the detail).\n\nMEASURED AT HEAD 03b708d5, branch moe/work-2026-09-02, root D:/projexts/moe-next. apps/daemon/src/bootstrap clean in `git status --porcelain`.\n\nREOPEN FIX, re-measured not trusted. SERVER_SOURCED_KEYS (bootstrap-policy-authority.ts:34-43) now has 8 members: the original five plus approvalRef, humanApprovalRef, waiverRef, APPENDED. `callerSuppliedKey` (:107-110) is a `find`, so order is load-bearing and appending is the correct choice. The three refs fall to the catch-all `if (supplied !== null)` at bootstrap-policy-services.ts:130-132 -> BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE @ DAEMON_INGRESS, which sits BEFORE `stateOf(ledger, aggregateId)` at :137. No new refusal vocabulary, no new layer constant. Exactly the fix comment-e2d28055 prescribed.\n\nMY OWN MUTATION DRILLS (not the worker's — re-derived independently). Both PRODUCTION, both RED, both restored by SHA256 equality in a call SEPARATE from the restore, plus empty `git diff --stat` and clean porcelain:\n- A. Deleted \"waiverRef\" from SERVER_SOURCED_KEYS -> `Error: waiverRef was accepted instead of refused` at bootstrap-services.test.ts:1383. The failure mode is worth naming: the request is ACCEPTED, not differently-refused. That is the proof these keys were genuinely reachable-to-accept at ingress before this fix, and that the per-key loop (rather than a bag assertion) localizes WHICH key regressed.\n- B. Swapped the catch-all code to BOOTSTRAP_PAYLOAD_INVALID -> `AssertionError: expected 'BOOTSTRAP_PAYLOAD_INVALID' to be 'BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE'`. Grades the reason-code rail, not merely \"refused\".\nHashes: bootstrap-policy-authority.ts 4f8ad3c8f55bc58914c63f331623133385d861f12e44e6be38112307769e793b; bootstrap-policy-services.ts e6b4bbf1c3bb415d00714b7960eb7723dfddb038a8ad3f2719f33eb827014bc1. Both identical before and after.\n\nGATES RE-RUN, foreground, standalone, unpiped, output read rather than exit code:\n- Owned leg from apps/daemon: `npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/bootstrap-services.test.ts` -> `Test Files 2 passed (2)` / `Tests 90 passed (90)`, exit 0.\n- `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json`, exit 0. Script echo present as execution evidence.\n- `pnpm --filter @moe/daemon test` -> exit 1. `Test Files 2 failed | 388 passed (390)`, `Tests 3 failed | 7823 passed (7826)`.\n\nFOREIGN RED, DISCLOSED VERBATIM AND ATTRIBUTED BY IMPORT CLOSURE:\n  FAIL src/work/attempt-finalization-service.test.ts:451 — rebinds a pre-receipt release: NO_OP, first row untouched, current binding receipted\n  FAIL src/work/attempt-finalization-service.test.ts:607 — fences at the DISPATCH version read by the finalizer, not a later re-read\n  FAIL src/work/attempt-release-disposition.test.ts:889 — composes NO second truth when a SECOND releaser runs over the same attempt\nAttribution, three independent checks: (1) `grep -n 'from \"\\.\\./bootstrap' ` over BOTH failing files returns NONE — worth stating precisely, because other src/work tests DO import ../bootstrap/bootstrap-test-fixtures.js and ../bootstrap/bootstrap-ledger.js, so a directory-level \"src/work never imports bootstrap\" claim would be FALSE; (2) attempt-release-disposition.test.ts:72 imports SAFE_BOUNDARY_OBSERVATION_LAYER from ./safe-boundary-observation.js, the module rewritten by task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d in 5738043b; (3) `git diff --stat dd991fdc^ HEAD -- apps/daemon/src/work/` returns exactly 3 safe-boundary files, none owned by this row. New-failing-paths INTERSECT owned-paths = EMPTY, so the path-attributed-baseline rail permits completion and DoD 6 is satisfied at owned scope with the repo-wide red disclosed rather than hidden.\n\nCOMMIT AUDIT. The completion commit 03b708d5 (Moe-Kind: completion, Moe-Session worker-17897c78) carries ONLY .moe/tasks/task-5d46….json — 1 path, ZERO production bytes. Deliverable bytes live in dd991fdc (round 0, hand-landed by qa-ee158f8f) and 1c7e24e5 (the reopen fix, landed as kind=checkpoint). So `git show <completion sha>` shows nothing here; I verified at the tree with `git show HEAD:<path>`. HEAD also moved from 255f4fe3 to 03b708d5 during this QA session — the wrapper's commit landed mid-review — so I re-resolved HEAD immediately before approving.\n\nDoD VERDICTS. 1 PASS (authority = comment-27fb9e2e operator ruling by delegation over Contract A, comment-0301e564; this row chose none of the six semantics). 2 PASS (fixed + drilled above). 3 PASS (REFUSAL_CASES exact 15, 11 distinct codes, per-code denominator map NOT_SOFT 3 / RECORD_UNREADABLE 2 / SCOPE_FOREIGN 2). 4 PASS (consumer edge live: sole production caller bootstrap-policy-services.ts:164 -> resolvePolicyWaivers(store, …) -> readPolicyWaiver; RESOLVED_EMPTY_WAIVERS returned on every refusal; the HARD-never-suppressed and required-fact arms assert RESOLVED_VERIFIED AND DENY, so they are non-vacuous — a real waiver was applied to a soft obligation in the same rule; \"never lets a waiver reach ALLOW: HOLD_UNKNOWN still dominates\" at bootstrap-services.test.ts:1316). 5 PASS (per-key exact code AND exact layer over a frozen 3-member roster with an exact toHaveLength(3), plus zero durable PolicyEvaluated events — that last clause is what pins \"before any authority read\" rather than merely \"refused\"; the :1397 order fence protects the four dedicated refusals from a future prepend). 6 PASS at owned scope, typecheck exit 0.\n\nROUND-1 NON-BLOCKING ISSUE 3 CLOSED. policy-fact-resolver.test.ts now carries soft=1/hard=1 (\"declared both SOFT and HARD\") and soft=2/hard=0 (\"SOFT twice\"), so each conjunct of the reader's `soft === 1 && hard === 0` (policy-waiver-reader.ts:175) is independently load-bearing in this row's own arms rather than only in task-e91e505e's.\n\nPER-FILE CAPS at HEAD, all compliant: bootstrap-policy-authority.ts 124, bootstrap-policy-services.ts 238, policy-fact-resolver.ts 165, policy-waiver-reader.ts 243, policy-waiver-record.ts 250.",
+      "timestamp": "2026-09-02T23:36:43.972Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-02T23:27:17.339Z",
+  "updatedAt": "2026-09-02T23:37:23.512Z",
   "contextFetchedBy": [
     "worker-1ff24286",
     "worker-17aab223",
@@ -206,7 +212,9 @@
     "plannedDistinctFileCount": 4,
     "executedStepCount": 10,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-02T23:37:23.512Z",
+    "wallClockMs": 543346527
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -403,15 +411,30 @@
       "treeId": "2cb47d5e3616199b373a2fa2127af9c9fabfc991",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "03b708d5f676d68399a43a23f74d941643561d06",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-17897c78@2026-09-02T21:59:10Z",
+      "paths": [
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json"
+      ],
+      "recordedBy": "worker-17897c78",
+      "recordedAt": "2026-09-02T23:27:58.348Z",
+      "treeId": "eb31055e5f5006a74c51f5442c16be4b9589ce96",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-d109461f@2026-09-02T23:27:13Z",
-    "at": "2026-09-02T23:27:17.339Z"
+    "kind": "completion",
+    "sessionId": "worker-17897c78@2026-09-02T21:59:10Z",
+    "at": "2026-09-02T23:27:58.348Z"
   },
-  "reviewCompletedAt": "2026-09-02T20:38:14.948Z",
+  "reviewCompletedAt": "2026-09-02T23:37:23.512Z",
   "rejectionDetails": {
     "failedDodItems": [
       "2. Production code creates waiver authority only from an authenticated human action and a durable immutable record; caller-carried waiver fields or approval references are refused before any authority read with exact stable reason code and refusing layer."
@@ -470,5 +493,14 @@
   "declaredFiles": [
     "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts"
   ],
-  "unattributedPaths": []
+  "unattributedPaths": [],
+  "touchedFiles": [
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "apps/daemon/src/bootstrap/policy-fact-resolver.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts",
+    "apps/daemon/src/bootstrap/policy-fact-resolver.ts"
+  ],
+  "completedAt": "2026-09-02T23:37:23.512Z",
+  "reviewSummary": "APPROVED at HEAD 03b708d5. Full evidence: comment-cfbde992.\n\nDoD 2 clause 2 (the only failed clause) FIXED and re-measured: SERVER_SOURCED_KEYS (bootstrap-policy-authority.ts:34-43) now rosters approvalRef/humanApprovalRef/waiverRef, APPENDED, falling to the catch-all at bootstrap-policy-services.ts:130-132 -> BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE @ DAEMON_INGRESS, before stateOf(ledger) at :137. No new vocabulary or layer.\n\nMY OWN DRILLS, both RED, both restored (SHA256 equality in a call separate from the restore, empty git diff, clean porcelain): (A) delete \"waiverRef\" -> `waiverRef was accepted instead of refused` (:1383) - failure mode is ACCEPTED, proving the refs were reachable-to-accept before the fix; (B) code swap -> `expected 'BOOTSTRAP_PAYLOAD_INVALID' to be 'BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE'`.\n\nGATES RE-RUN foreground/standalone/unpiped: owned leg (npx vitest, 2 owned files, from apps/daemon) -> Test Files 2 passed, Tests 90 passed, exit 0. typecheck -> `$ tsc --project tsconfig.json`, exit 0. `pnpm --filter @moe/daemon test` -> exit 1: 3 failed | 7823 passed. All 3 FOREIGN in src/work (attempt-finalization-service.test.ts:451,:607; attempt-release-disposition.test.ts:889), owner task-f8ea0a2f. Import closure: both failing files import ZERO bootstrap modules (per-file check; other src/work tests DO import bootstrap-test-fixtures.js, so a directory claim would be false). New-failing INTERSECT owned = EMPTY.\n\nCOMMIT AUDIT: completion commit 03b708d5 carries ONLY the board JSON, ZERO production bytes; deliverable is dd991fdc + checkpoint 1c7e24e5, verified at the tree via `git show HEAD:<path>`. HEAD moved 255f4fe3 -> 03b708d5 mid-review; re-resolved before approving.\n\nDoD 1/3/4/5/6 PASS: consumer edge live at bootstrap-policy-services.ts:164 -> readPolicyWaiver; RESOLVED_EMPTY on every refusal; HARD/required-fact arms assert RESOLVED_VERIFIED AND DENY; HOLD_UNKNOWN dominates at :1316; REFUSAL_CASES exact 15/11 codes. Caps 124/238/165/243/250."
 }
