@@ -131,15 +131,71 @@ describe("the LIVE arm", () => {
  * the daemon through them and paints what it read.
  */
 describe("the LIVE arm reads the daemon through the unchanged polling feeds", () => {
+  /**
+   * THE DAEMON'S PER-RUN PLANNING AUTHORITY, spelled exactly as
+   * `apps/daemon/src/http/affordance-planning-authorities.ts` puts it on the wire: the
+   * producer's seven top-level keys, no more and no fewer, with the map keyed by the run the
+   * record names and the goal the daemon separately bound to it.
+   *
+   * Built here rather than imported: live-board.test.tsx's `materialOf`, `approvalMaterial`
+   * and `approvalRefs` are local to that file and unexported. An approval control renders
+   * only for a run the daemon bound to a goal AND stated material for, so this surface states
+   * BOTH — the valid wire facts, never a weaker expectation.
+   */
+  const APPROVAL_RUN = "approval-live";
+  const APPROVAL_GOAL = `goal-${APPROVAL_RUN}`;
+  const GRAPH_HASH = "7c".repeat(32);
+  const SUBMISSION_HASH = "5e".repeat(32);
+  const CRITERIA_DIGEST = "c1".repeat(32);
+  /** Reused in both nested places, exactly as the producer emits it. */
+  const GRAPH_BINDING = {
+    graphContentHash: GRAPH_HASH, graphRevisionRef: `${APPROVAL_RUN}-graph-revision`,
+  };
+  const APPROVAL_MATERIAL = {
+    authority: {
+      acceptanceContract: {
+        applicability: { ...GRAPH_BINDING, nodeIds: [`${APPROVAL_RUN}-node`], nodeKind: "LEAF" },
+        authorRef: `${APPROVAL_RUN}-author`,
+        contractId: `${APPROVAL_RUN}-contract`,
+        criteriaDigest: CRITERIA_DIGEST,
+        obligations: [{
+          criterionId: `${APPROVAL_GOAL}-criterion`,
+          statement: `the run satisfies ${APPROVAL_GOAL}-criterion`,
+        }],
+        version: "moe-acceptance-contract/1",
+      },
+      planRevision: {
+        affectedCriterionIds: [`${APPROVAL_GOAL}-criterion`],
+        affectedNodeIds: [`${APPROVAL_RUN}-node`],
+        approvalState: "PENDING_APPROVAL",
+        authorRef: `${APPROVAL_RUN}-author`,
+        graphBinding: GRAPH_BINDING,
+        parentRevisionId: null,
+        planHash: SUBMISSION_HASH,
+        rejectionRef: null,
+        revisionId: `${APPROVAL_RUN}-revision`,
+        version: "moe-plan-revision/1",
+      },
+    },
+    goalRef: APPROVAL_GOAL,
+    graphContentBytesBase64: "YXBwcm92YWwtZ3JhcGg=",
+    graphContentHash: GRAPH_HASH,
+    graphRevisionRef: GRAPH_BINDING.graphRevisionRef,
+    runId: APPROVAL_RUN,
+    submissionHash: SUBMISSION_HASH,
+  };
+
   const SURFACE_BODY = {
     nextAllowedCommands: [{
       commandId: "afford-live-1", commandKind: "approval.decide",
-      expectedVersion: 3, targetAggregateId: "approval-live",
+      expectedVersion: 3, targetAggregateId: APPROVAL_RUN,
     }],
     outcome: "SURFACE",
+    planningAuthorityByRun: { [APPROVAL_RUN]: APPROVAL_MATERIAL },
+    planningGoalRefs: { [APPROVAL_RUN]: APPROVAL_GOAL },
     steps: [
       {
-        aggregateId: "approval-live", kind: "approval.decide", missing: [],
+        aggregateId: APPROVAL_RUN, kind: "approval.decide", missing: [],
         status: "READY", version: 3,
       },
       {
