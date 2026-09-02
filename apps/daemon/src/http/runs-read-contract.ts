@@ -1,12 +1,15 @@
 /**
  * RUNS & LEASES, the wire contract: for every source-bound goal (or one named goal), the
  * planning run, the sealed nodes of its activated plan, and for each node the durable facts
- * that say where the work stands: who holds its claim, what its review ledger recorded, and
- * whether the daemon's own acceptance is on it.
+ * that say where the work stands: who holds its claim, what its review ledger recorded
+ * (rounds, the latest round's findings), the verifier's execution receipt, and whether the
+ * daemon's own acceptance is on it.
  *
  * `status` is a derived word for the card, spelled from those facts in one fixed order
  * (see `runs-read.ts`); every fact it was derived from travels beside it, so the card can
- * show the evidence and never has to trust the word.
+ * show the evidence and never has to trust the word. A node whose key is carried by more
+ * than one activated plan is UNATTRIBUTABLE: the review ledger is keyed by bare node key,
+ * so nothing durable says which plan's work a round or an acceptance belongs to.
  */
 import type { PlanningRunApprovalState } from "./planning-run-read.js";
 
@@ -23,6 +26,7 @@ export type RunsReadCode = (typeof RUNS_READ_CODES)[number];
 
 export const RUN_NODE_STATUSES = Object.freeze([
   "ACCEPTED", "BLOCKED", "DELIVERED", "ESCALATED", "ESCALATION_REQUIRED", "IN_PROGRESS", "READY",
+  "UNATTRIBUTABLE",
 ] as const);
 export type RunNodeStatus = (typeof RUN_NODE_STATUSES)[number];
 
@@ -33,8 +37,24 @@ export interface RunNodeClaim {
   readonly expiresAt: string;
   readonly status: "OPEN" | "RELEASED";
 }
+export interface RunNodeFinding {
+  readonly detail: string;
+  readonly round: number;
+  readonly ruleId: string;
+  readonly severity: string;
+  readonly subject: string;
+}
+export interface RunNodeReceipt {
+  readonly byteCount: number;
+  readonly exitCode: number;
+  readonly outputSha256: string;
+  readonly test: string;
+  readonly workspace: string;
+}
 export interface RunNodeReview {
   readonly escalated: boolean;
+  /** The latest round's findings, in the reviewer's order, at most a handful. */
+  readonly findings: readonly RunNodeFinding[];
   /** The latest round's routing route (ACCEPT, REJECT_IMPLEMENTATION, ...), or null. */
   readonly latestRoute: string | null;
   readonly rounds: number;
@@ -51,7 +71,11 @@ export interface RunNodeView {
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
   readonly objective: string;
+  /** The verifier's own execution evidence, when its receipt decision decodes. */
+  readonly receipt: RunNodeReceipt | null;
   readonly review: RunNodeReview;
+  /** True when another activated plan carries the same node key (see the header). */
+  readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }
 export interface RunGoalView {

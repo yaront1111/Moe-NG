@@ -1,8 +1,8 @@
 /**
  * ADVISORY section map for a PRD: which of the document's own headings the approved
- * requirements cite, and how many of the criteria under those requirements are
- * VERIFIED. "Cites" means the statement carries a `§<number>` reference whose number
- * is the heading's number or a descendant of it (`§11.1` counts for `11` and `11.1`).
+ * requirements cite, how many criteria sit under those requirements, and how many of
+ * them are VERIFIED. "Cites" means the statement carries a `§<number>` reference whose
+ * number is the heading's number or a descendant of it (`§11.1` counts for `11` and `11.1`).
  *
  * This is derived from prose, so it is advisory by construction: a requirement that
  * covers a section without naming it stays invisible here, and a heading with no
@@ -13,10 +13,12 @@
 export interface SectionCoverage {
   /** Requirements whose statements cite this section (directly or a subsection). */
   readonly cited: number;
+  /** Criteria under the citing requirements, or whose own statement cites the section. */
+  readonly criteria: number;
   readonly heading: string;
   /** The heading's leading number ("11", "11.1"), or null when the heading has none. */
   readonly number: string | null;
-  /** VERIFIED criteria whose requirement or own statement cites this section. */
+  /** Of those criteria, the VERIFIED ones. */
   readonly verified: number;
 }
 
@@ -80,23 +82,26 @@ export function sectionCoverage(
 ): readonly SectionCoverage[] {
   const headings = documentHeadings(text);
   const requirementCitations = requirements.map((requirement) => citedSections(requirement.statement));
-  const verifiedCitations = requirements.flatMap((requirement, index) =>
-    requirement.criteria
-      .filter((criterion) => criterion.status === "VERIFIED")
-      .map((criterion) => new Set([
+  const criterionCitations = requirements.flatMap((requirement, index) =>
+    requirement.criteria.map((criterion) => Object.freeze({
+      citations: new Set([
         ...(requirementCitations[index] ?? new Set<string>()),
         ...citedSections(criterion.statement),
-      ])));
+      ]),
+      verified: criterion.status === "VERIFIED",
+    })));
   return Object.freeze(headings.map((entry) => {
     if (entry.number === null) {
-      return Object.freeze({ cited: 0, heading: entry.heading, number: null, verified: 0 });
+      return Object.freeze({ cited: 0, criteria: 0, heading: entry.heading, number: null, verified: 0 });
     }
     const number = entry.number;
+    const under = criterionCitations.filter((criterion) => cites(criterion.citations, number));
     return Object.freeze({
       cited: requirementCitations.filter((citations) => cites(citations, number)).length,
+      criteria: under.length,
       heading: entry.heading,
       number,
-      verified: verifiedCitations.filter((citations) => cites(citations, number)).length,
+      verified: under.filter((criterion) => criterion.verified).length,
     });
   }));
 }

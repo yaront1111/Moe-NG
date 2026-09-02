@@ -8,6 +8,7 @@
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { GOAL_CREATED_EVENT_TYPE, decodeGoalCatalogEntry } from "./goal-catalog-entry.js";
 
 const MAX_GOAL_PAGES = 16;
@@ -26,9 +27,15 @@ const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>> : null;
 
-/** Every source-bound goal in the catalog, or null when a GoalCreated row does not decode. */
-export function catalogBoundGoals(store: SqliteEventStore, projectId: string): BoundGoalRow[] | null {
-  const ledger = readDurableLedger(store, projectId);
+/**
+ * Every source-bound goal in the catalog, or null when a GoalCreated row does not decode or
+ * the catalog is larger than this walk is willing to page (a truncated catalog would report a
+ * document as less built than it is, so it is refused instead).
+ */
+export function catalogBoundGoals(
+  store: SqliteEventStore, projectId: string, folded?: DurableLedger,
+): BoundGoalRow[] | null {
+  const ledger = folded ?? readDurableLedger(store, projectId);
   const goals: BoundGoalRow[] = [];
   let after = 0n;
   for (let page = 0; page < MAX_GOAL_PAGES; page += 1) {
@@ -48,9 +55,9 @@ export function catalogBoundGoals(store: SqliteEventStore, projectId: string): B
         title: entry.brief?.title ?? null,
       }));
     }
-    if (!events.hasMore) break;
+    if (!events.hasMore) return goals.sort((left, right) => left.goalId.localeCompare(right.goalId));
   }
-  return goals.sort((left, right) => left.goalId.localeCompare(right.goalId));
+  return null;
 }
 
 /**

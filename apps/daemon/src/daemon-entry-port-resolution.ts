@@ -5,6 +5,8 @@ import type { DocumentCoverageReadPort } from "./http/document-coverage-contract
 import type { RunsReadPort } from "./http/runs-read-contract.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
+import type { ActivityReadPort } from "./http/activity-read.js";
+import type { SessionsReadPort } from "./http/sessions-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -46,6 +48,10 @@ export interface OptionalDaemonPortProvider {
   policy?(): PolicyReadPort;
   /** The daemon process and ledger facts, bound to this daemon own project. */
   health?(): HealthReadPort;
+  /** What the daemon decided, bound to this daemon own project. */
+  activity?(): ActivityReadPort;
+  /** Who holds a seat, bound to this daemon own project. */
+  sessions?(): SessionsReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /** The budget commitment read port, bound to this daemon's own project. */
@@ -93,6 +99,8 @@ export interface ResolvedOptionalDaemonPorts {
   readonly runs?: RunsReadPort;
   readonly policy?: PolicyReadPort;
   readonly health?: HealthReadPort;
+  readonly activity?: ActivityReadPort;
+  readonly sessions?: SessionsReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -122,7 +130,7 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs", "policy", "health",
+  "reconciliation", "runs", "policy", "health", "activity", "sessions",
   "sessionHandshake",
 ] as const);
 
@@ -260,6 +268,24 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(health, ["readHealth"]) || typeof Reflect.get(health, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const activityFactory = provider.activity;
+    if (activityFactory !== undefined && typeof activityFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const activity = activityFactory?.call(provider);
+    if (activity !== undefined
+      && (!hasMethods(activity, ["readActivity"]) || typeof Reflect.get(activity, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessionsFactory = provider.sessions;
+    if (sessionsFactory !== undefined && typeof sessionsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessions = sessionsFactory?.call(provider);
+    if (sessions !== undefined
+      && (!hasMethods(sessions, ["readSessions"]) || typeof Reflect.get(sessions, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -348,6 +374,8 @@ export function resolveOptionalDaemonPorts(
       ...(runs === undefined ? {} : { runs }),
       ...(policy === undefined ? {} : { policy }),
       ...(health === undefined ? {} : { health }),
+      ...(activity === undefined ? {} : { activity }),
+      ...(sessions === undefined ? {} : { sessions }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

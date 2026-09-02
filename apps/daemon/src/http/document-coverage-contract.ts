@@ -3,10 +3,11 @@
  * bound to it) everything the daemon can say DURABLY about how far its product is built.
  *
  * A criterion is UNPLANNED (no sealed node carries it), PLANNED (a sealed node carries it,
- * not yet accepted) or VERIFIED (the node's review ledger holds the daemon's own
- * acceptance, the verifier receipt `integration.accept_output` consumed). The section map
- * is derived from prose and travels as `advisoryOnly: true`; "the whole PRD is done" stays
- * the human's call, made over these facts instead of over memory.
+ * not yet accepted), VERIFIED (the node's review ledger holds the daemon's own acceptance,
+ * the verifier receipt `integration.accept_output` consumed) or UNATTRIBUTABLE (the node's
+ * key is carried by another activated plan too, or its review ledger does not read, so no
+ * durable fact says which plan's acceptance it would be). The section map is derived from
+ * prose and travels as `advisoryOnly: true`; "the whole PRD is done" stays the human's call.
  */
 import type { SectionCoverage } from "./document-coverage-sections.js";
 
@@ -24,7 +25,10 @@ export const DOCUMENT_COVERAGE_READ_CODES = Object.freeze([
 ] as const);
 export type DocumentCoverageReadCode = (typeof DOCUMENT_COVERAGE_READ_CODES)[number];
 
-export type CriterionCoverageStatus = "PLANNED" | "UNPLANNED" | "VERIFIED";
+export const CRITERION_COVERAGE_STATUSES = Object.freeze([
+  "PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED",
+] as const);
+export type CriterionCoverageStatus = (typeof CRITERION_COVERAGE_STATUSES)[number];
 
 export interface CriterionCoverage {
   readonly criterionId: string;
@@ -41,6 +45,8 @@ export interface RequirementCoverage {
 export interface ContractCoverage {
   readonly contractId: string;
   readonly gate1: "APPROVED" | "PENDING";
+  /** The wire the revision was proposed on: the `/1` writer or the `/2` family. */
+  readonly plane: "V1" | "V2";
   readonly requirements: readonly RequirementCoverage[];
   readonly revisionDigest: string;
   readonly revisionId: string;
@@ -71,6 +77,7 @@ export interface DocumentCoverageView {
     readonly goals: number;
     readonly planned: number;
     readonly requirements: number;
+    readonly unattributable: number;
     readonly verified: number;
   };
 }

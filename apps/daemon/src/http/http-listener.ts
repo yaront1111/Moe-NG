@@ -31,6 +31,10 @@ import { POLICY_READ_PATH, handlePolicyReadRequest } from "./policy-read.js";
 import type { PolicyReadPort } from "./policy-read.js";
 import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import type { HealthReadPort } from "./health-read.js";
+import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
+import type { ActivityReadPort } from "./activity-read.js";
+import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
+import type { SessionsReadPort } from "./sessions-read.js";
 import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
 import {
   PRODUCT_CONTRACT_PENDING_READ_PATH, handleProductContractPendingReadRequest,
@@ -206,6 +210,10 @@ export interface StartListenerOptions {
   readonly policy?: PolicyReadPort;
   /** Absent means the health read refuses as unavailable. */
   readonly health?: HealthReadPort;
+  /** Absent means the activity read refuses as unavailable. */
+  readonly activity?: ActivityReadPort;
+  /** Absent means the sessions read refuses as unavailable. */
+  readonly sessions?: SessionsReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */
@@ -282,6 +290,8 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   RUNS_READ_PATH,
   POLICY_READ_PATH,
   HEALTH_READ_PATH,
+  ACTIVITY_READ_PATH,
+  SESSIONS_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
   V2_COMMAND_PATH,
 ]);
@@ -699,6 +709,26 @@ function serveHealth(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveActivity(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleActivityReadRequest({
+    activity: options.activity, authenticator: options.deps.authenticator,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveSessions(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleSessionsReadRequest({
+    authenticator: options.deps.authenticator, sessions: options.sessions,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveProductContractPending(
   response: ServerResponse,
   request: IncomingMessage,
@@ -1058,6 +1088,14 @@ async function serve(
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
     return;
   }
+  if (path === ACTIVITY_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ACTIVITY_REQUEST_INVALID");
+    return;
+  }
+  if (path === SESSIONS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_SESSIONS_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -1114,6 +1152,10 @@ async function serve(
     serveBudgetCommitmentRead(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
     serveProductContractGate1(response, request, options, body);
+  } else if (path === ACTIVITY_READ_PATH) {
+    serveActivity(response, request, options, body);
+  } else if (path === SESSIONS_READ_PATH) {
+    serveSessions(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
     servePolicy(response, request, options, body);
   } else if (path === HEALTH_READ_PATH) {

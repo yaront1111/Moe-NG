@@ -79,3 +79,31 @@ it("refuses both routes as unavailable when the provider offers no readers", asy
     await started.shutdown();
   }
 });
+
+it("resolves and forwards the project-bound activity and sessions readers", async () => {
+  const started = await startDaemon({
+    csrfToken: CSRF,
+    dependencies: {
+      activity: () => ({
+        boundProjectId: "proj-0001",
+        readActivity: () => ({ code: "ACTIVITY_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" as const }),
+      }),
+      provide: () => ({ ...fixtureDependencies(), authenticator: authenticator([CAPABILITIES.GOAL]) }),
+      sessions: () => ({
+        boundProjectId: "proj-0001",
+        readSessions: () => ({ code: "SESSIONS_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" as const }),
+      }),
+    },
+  });
+  if (!started.ok) throw new Error(`daemon failed: ${started.code}`);
+  try {
+    expect(await post(started, "/activity/read")).toEqual({
+      body: { code: "ACTIVITY_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await post(started, "/sessions/read")).toEqual({
+      body: { code: "SESSIONS_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" }, status: 200,
+    });
+  } finally {
+    await started.shutdown();
+  }
+});

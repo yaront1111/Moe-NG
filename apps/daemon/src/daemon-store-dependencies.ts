@@ -89,6 +89,16 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the policy reader is always wired");
     return port();
   },
+  activity: () => {
+    const port = fromEnv().activity;
+    if (port === undefined) throw new Error("unreachable: the activity reader is always wired");
+    return port();
+  },
+  sessions: () => {
+    const port = fromEnv().sessions;
+    if (port === undefined) throw new Error("unreachable: the sessions reader is always wired");
+    return port();
+  },
   documentDossiers: () => {
     const port = fromEnv().documentDossiers;
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");

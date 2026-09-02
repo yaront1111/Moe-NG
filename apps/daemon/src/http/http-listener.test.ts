@@ -934,3 +934,29 @@ it("routes the policy and health reads through their ports and refuses them abse
     expectListenerRefusal(await send(listener, { body: "{}", path: "/health/read" }), "LISTENER_HEALTH_UNAVAILABLE");
   }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
 });
+
+it("routes the activity and sessions reads through their ports and refuses them absent", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/activity/read" })).toEqual({
+      body: { code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: "{}", path: "/sessions/read" })).toEqual({
+      body: { code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(seen).toEqual([{ goalRef: "goal-1" }]);
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/activity/read" }), "LISTENER_ACTIVITY_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ x: 1 }), path: "/sessions/read" }), "LISTENER_SESSIONS_REQUEST_INVALID");
+  }, {
+    activity: { boundProjectId: "proj-0001", readActivity: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" };
+    } },
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    sessions: { boundProjectId: "proj-0001", readSessions: () => ({ code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+  });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/activity/read" }), "LISTENER_ACTIVITY_UNAVAILABLE");
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/sessions/read" }), "LISTENER_SESSIONS_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+});

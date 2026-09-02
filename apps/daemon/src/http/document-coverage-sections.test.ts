@@ -64,7 +64,9 @@ describe("sectionCoverage", () => {
     expect(map.get("11.1 Minimum fields")).toMatchObject({ cited: 1, verified: 1 });
     expect(map.get("11.2 Source anchors")).toMatchObject({ cited: 1, verified: 1 });
     expect(map.get("40. Functional requirements")).toMatchObject({ cited: 1, verified: 1 });
-    expect(map.get("Appendix")).toEqual({ cited: 0, heading: "Appendix", number: null, verified: 0 });
+    expect(map.get("Appendix")).toEqual({ cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 });
+    // Three criteria sit under the two requirements that cite section 11 (11.1 and 11.2).
+    expect(map.get("11. Evidence")?.criteria).toBe(3);
     expect(map.get("Uai — Personal AI Chief of Staff")?.cited).toBe(0);
   });
 

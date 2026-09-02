@@ -40,6 +40,10 @@ import { createPolicyReadPort } from "./http/policy-read.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
 import { createHealthReadPort } from "./http/health-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
+import { createActivityReadPort } from "./http/activity-read.js";
+import type { ActivityReadPort } from "./http/activity-read.js";
+import { createSessionsReadPort } from "./http/sessions-read.js";
+import type { SessionsReadPort } from "./http/sessions-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -340,6 +344,10 @@ export function createStoreDependencies(
     store,
     storePath: config.storePath,
   });
+  /** What the daemon decided, latest first, for the project or one goal. */
+  const activity = (): ActivityReadPort => createActivityReadPort({ projectId: config.projectId, store });
+  /** Who holds a seat, with the work each seat claims, at this root clock. */
+  const sessions = (): SessionsReadPort => createSessionsReadPort({ projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -427,6 +435,7 @@ export function createStoreDependencies(
   });
 
   return Object.freeze({
+    activity,
     affordances,
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
@@ -451,6 +460,7 @@ export function createStoreDependencies(
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,
     sessionChallengeOperands,
+    sessions,
     sessionHandshake,
     sourceSnapshotPublisher: () => sourceSnapshotPublisher,
     subscriptions,
