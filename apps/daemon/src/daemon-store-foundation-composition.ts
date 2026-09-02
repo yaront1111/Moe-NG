@@ -32,6 +32,18 @@ import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
+import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
+import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
+import { createRunsReadPort } from "./http/runs-read.js";
+import type { RunsReadPort } from "./http/runs-read-contract.js";
+import { createPolicyReadPort } from "./http/policy-read.js";
+import type { PolicyReadPort } from "./http/policy-read.js";
+import { createHealthReadPort } from "./http/health-read.js";
+import type { HealthReadPort } from "./http/health-read.js";
+import { createActivityReadPort } from "./http/activity-read.js";
+import type { ActivityReadPort } from "./http/activity-read.js";
+import { createSessionsReadPort } from "./http/sessions-read.js";
+import type { SessionsReadPort } from "./http/sessions-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -316,6 +328,27 @@ export function createStoreDependencies(
    */
   const budgetCommitment = (): BudgetCommitmentReadPort =>
     createBudgetCommitmentReadPort({ projectId: config.projectId, store });
+  /** PRD coverage: the bound goals, contracts and verified criteria of one source document. */
+  const documentCoverage = (): DocumentCoverageReadPort =>
+    createDocumentCoverageReadPort({ projectId: config.projectId, store });
+  /** Runs and leases: every bound goal, its run, its sealed nodes and their durable state. */
+  const runs = (): RunsReadPort => createRunsReadPort({ projectId: config.projectId, store });
+  /** Installed policy, its evaluations and the verifier standing, from this root store. */
+  const policy = (): PolicyReadPort => createPolicyReadPort({ projectId: config.projectId, store });
+  /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
+  const composedAt = (config.clock ?? (() => new Date().toISOString()))();
+  const health = (): HealthReadPort => createHealthReadPort({
+    nodeSpecsDir: config.nodeSpecsDir ?? null,
+    projectId: config.projectId,
+    readPlane: () => commandAuthorityPlane().readPlane(),
+    startedAt: composedAt,
+    store,
+    storePath: config.storePath,
+  });
+  /** What the daemon decided, latest first, for the project or one goal. */
+  const activity = (): ActivityReadPort => createActivityReadPort({ projectId: config.projectId, store });
+  /** Who holds a seat, with the work each seat claims, at this root clock. */
+  const sessions = (): SessionsReadPort => createSessionsReadPort({ projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -403,16 +436,20 @@ export function createStoreDependencies(
   });
 
   return Object.freeze({
+    activity,
     affordances,
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     commandAuthorityPlane,
+    documentCoverage,
     documentDossiers,
     documentIngest,
     graph,
     goalCatalog,
     goalSource,
+    health,
     planningRuns,
+    policy,
     productContractGate1,
     productContractPending,
     productContractV2Current,
@@ -420,9 +457,11 @@ export function createStoreDependencies(
     provide,
     provideV2,
     reconciliation,
+    runs,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,
     sessionChallengeOperands,
+    sessions,
     sessionHandshake,
     sourceSnapshotPublisher: () => sourceSnapshotPublisher,
     subscriptions,

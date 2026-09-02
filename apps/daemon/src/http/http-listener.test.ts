@@ -887,3 +887,121 @@ it("closes the listener even when a request handler throws", async () => {
   expect(reused.ok).toBe(true);
   if (reused.ok) await reused.close();
 });
+
+it("routes the PRD coverage read through its port and forwards either selector", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }),
+      path: "/documents/coverage/read" })).toEqual({
+      body: { code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" },
+      status: 200,
+    });
+    expect(await send(listener, { body: JSON.stringify({ contentSha256: "a".repeat(64) }),
+      path: "/documents/coverage/read" })).toMatchObject({ status: 200 });
+    expect(seen).toEqual([{ goalRef: "goal-1" }, { contentSha256: "a".repeat(64) }]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    documentCoverage: { boundProjectId: "proj-0001", readCoverage: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" };
+    } },
+  });
+});
+
+it("refuses an absent coverage port, a non-POST, and a body that is not one selector", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }),
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET",
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, {
+      body: JSON.stringify({ goalRef: "goal-1", projectId: "proj-0002" }),
+      path: "/documents/coverage/read" }), "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    documentCoverage: { boundProjectId: "proj-0001", readCoverage: () => ({
+      code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" }) },
+  });
+});
+
+it("routes the runs read through its port with an empty or a one-goal selector", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: "{}", path: "/runs/read" })).toEqual({
+      body: { code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/runs/read" }))
+      .toMatchObject({ status: 200 });
+    expect(seen).toEqual([{}, { goalRef: "goal-1" }]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    runs: { boundProjectId: "proj-0001", readRuns: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" };
+    } },
+  });
+});
+
+it("refuses an absent runs port, a non-POST, and a body carrying any other key", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/runs/read" }), "LISTENER_RUNS_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/runs/read" }), "LISTENER_RUNS_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, {
+      body: JSON.stringify({ goalRef: "goal-1", projectId: "proj-0002" }), path: "/runs/read" }),
+    "LISTENER_RUNS_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    runs: { boundProjectId: "proj-0001", readRuns: () => ({ code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }) },
+  });
+});
+
+it("routes the policy and health reads through their ports and refuses them absent", async () => {
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: "{}", path: "/policy/read" })).toEqual({
+      body: { code: "POLICY_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: "{}", path: "/health/read" })).toEqual({
+      body: { code: "HEALTH_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/policy/read" }), "LISTENER_POLICY_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ x: 1 }), path: "/health/read" }), "LISTENER_HEALTH_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    health: { boundProjectId: "proj-0001", readHealth: () => ({ code: "HEALTH_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+    policy: { boundProjectId: "proj-0001", readPolicy: () => ({ code: "POLICY_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+  });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/policy/read" }), "LISTENER_POLICY_UNAVAILABLE");
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/health/read" }), "LISTENER_HEALTH_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+});
+
+it("routes the activity and sessions reads through their ports and refuses them absent", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/activity/read" })).toEqual({
+      body: { code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: "{}", path: "/sessions/read" })).toEqual({
+      body: { code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(seen).toEqual([{ goalRef: "goal-1" }]);
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/activity/read" }), "LISTENER_ACTIVITY_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ x: 1 }), path: "/sessions/read" }), "LISTENER_SESSIONS_REQUEST_INVALID");
+  }, {
+    activity: { boundProjectId: "proj-0001", readActivity: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" };
+    } },
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    sessions: { boundProjectId: "proj-0001", readSessions: () => ({ code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
+  });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/activity/read" }), "LISTENER_ACTIVITY_UNAVAILABLE");
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/sessions/read" }), "LISTENER_SESSIONS_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+});

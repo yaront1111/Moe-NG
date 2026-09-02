@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
-import { deriveGoalCatalog } from "./goal-catalog-model.js";
+import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import { deriveGoalCatalog, relativeActivityLabel } from "./goal-catalog-model.js";
 
 function catalog(
   goals: GoalCatalogFrame["goals"],
@@ -236,4 +237,125 @@ describe("deriveGoalCatalog", () => {
       expect(data.comingOnlineNote).toContain(frame.detail);
     },
   );
+});
+
+describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
+  const entry = {
+    binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-cov",
+    planningRunRef: "run-cov", truthClass: "DAEMON_VERIFIED",
+  } as const;
+  const coverage = (
+    verified: number, criteria: number, gate1: "APPROVED" | "PENDING",
+  ): DocumentCoverageOutcome => ({
+    contracts: [{
+      contractId: "contract-1", gate1, requirements: [], revisionDigest: "d".repeat(64),
+      revisionId: "rev-1",
+    }],
+    document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
+    goals: [{ goalId: "goal-cov", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-cov", title: "Build it" }],
+    sections: null,
+    status: "COVERAGE",
+    totals: { contracts: 1, criteria, goals: 1, planned: 0, requirements: 1, verified },
+  });
+
+  it("turns the daemon's verified count into the card's progress bar and headline", () => {
+    const [card] = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(3, 10, "APPROVED")]])).goals;
+    expect(card).toMatchObject({
+      headline: "3 of 10 acceptance criteria verified \u00b7 contract approved",
+      headlineTone: "accent",
+      needsYou: false,
+      progress: { done: 3, noun: "acceptance criteria verified", total: 10 },
+      progressComingOnline: undefined,
+      state: "ACTIVE",
+    });
+  });
+
+  it("marks a fully verified, approved contract as verified and a pending gate as needing you", () => {
+    const done = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(10, 10, "APPROVED")]])).goals[0];
+    expect(done).toMatchObject({
+      headline: "All 10 acceptance criteria verified \u00b7 contract approved",
+      headlineTone: "verified", needsYou: false, progress: { done: 10, total: 10 },
+    });
+    const pending = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(10, 10, "PENDING")]])).goals[0];
+    expect(pending).toMatchObject({
+      headline: "10 of 10 acceptance criteria verified \u00b7 Gate 1 pending",
+      headlineTone: "accent", needsYou: true,
+    });
+  });
+
+  it("leaves the card untouched without coverage, or with a refusal, or with no contract", () => {
+    const plain = deriveGoalCatalog(catalog([entry])).goals[0];
+    expect(plain?.progress).toBeUndefined();
+    const refused = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      code: "DOCUMENT_COVERAGE_READ_CAPABILITY_DENIED", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
+    }]])).goals[0];
+    expect(refused).toStrictEqual(plain);
+    const unbound = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
+    }]])).goals[0];
+    expect(unbound?.progress).toBeUndefined();
+    expect(unbound?.progressComingOnline).toBe("No PRD is bound to this goal.");
+    expect(unbound?.progressNote).toBe("No PRD bound to this goal");
+    const uncontracted = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      ...coverage(0, 0, "APPROVED"), contracts: [],
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+    }]])).goals[0];
+    expect(uncontracted?.progress).toBeUndefined();
+    expect(uncontracted?.progressComingOnline).toBe("No Product Contract cites this goal PRD yet.");
+    expect(uncontracted?.progressNote).toBe("No contract cites the PRD yet");
+  });
+});
+
+describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the state pill", () => {
+  const entry = {
+    binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-cov",
+    planningRunRef: "run-cov", truthClass: "DAEMON_VERIFIED",
+  } as const;
+  const withLifecycle = (lifecycle: string | null): DocumentCoverageOutcome => ({
+    contracts: [{
+      contractId: "contract-1", gate1: "APPROVED", requirements: [], revisionDigest: "d".repeat(64),
+      revisionId: "rev-1",
+    }],
+    document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
+    goals: [{ goalId: "goal-cov", lastActivityAt: null, lifecycle, planningRunRef: "run-cov", title: "Build it" }],
+    sections: null,
+    status: "COVERAGE",
+    totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 2 },
+  });
+  it.each([
+    ["COMPLETED", "DONE"], ["EXECUTION_ENABLED", "ACTIVE"], ["CLOSING", "ACTIVE"],
+    ["PLAN_REVIEW", "DRAFT"], ["DRAFT", "DRAFT"], [null, "DRAFT"],
+  ])("lifecycle %s renders as %s", (lifecycle, state) => {
+    const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", withLifecycle(lifecycle)]])).goals[0];
+    expect(card?.state).toBe(state);
+  });
+});
+
+
+describe("relativeActivityLabel", () => {
+  const NOW = Date.parse("2026-09-02T20:00:00.000Z");
+  it("speaks the age of the last decision in the unit a person would use", () => {
+    expect(relativeActivityLabel("2026-09-02T19:59:40.000Z", NOW)).toBe("Last activity just now");
+    expect(relativeActivityLabel("2026-09-02T19:35:00.000Z", NOW)).toBe("Last activity 25 min ago");
+    expect(relativeActivityLabel("2026-09-02T14:00:00.000Z", NOW)).toBe("Last activity 6 h ago");
+    expect(relativeActivityLabel("2026-08-30T20:00:00.000Z", NOW)).toBe("Last activity 3 d ago");
+    expect(relativeActivityLabel(null, NOW)).toBeUndefined();
+    expect(relativeActivityLabel("not a time", NOW)).toBeUndefined();
+  });
+
+  it("reaches the card as lastEventLabel from the coverage read's goal row", () => {
+    const entry = {
+      binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-1",
+      planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED",
+    } as const;
+    const outcome: DocumentCoverageOutcome = {
+      contracts: [], document: { byteLength: null, contentSha256: "b".repeat(64), displayPath: null },
+      goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:35:00.000Z", lifecycle: "PLANNING",
+        planningRunRef: "run-1", title: "Build it" }],
+      sections: null, status: "COVERAGE",
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+    };
+    const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-1", outcome]]), NOW).goals[0];
+    expect(card?.lastEventLabel).toBe("Last activity 25 min ago");
+  });
 });

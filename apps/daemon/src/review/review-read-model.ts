@@ -8,6 +8,8 @@ import { DELTA_CLASSIFICATIONS, isPlainJsonObject } from "./review-contracts.js"
 import type { DeltaNodeClassification } from "./review-contracts.js";
 import { parseStoredPackageItems } from "./review-round-items.js";
 import type { StoredPackageItems } from "./review-round-items.js";
+import { VERIFIER_RECEIPT_COMMAND_KIND, decodeVerifierReceiptBytes } from "./verifier-receipt-contracts.js";
+import type { VerifierExecutionEvidence } from "./verifier-receipt-contracts.js";
 
 /**
  * The read half of the review composition: every committed decision for one reviewed subject,
@@ -186,18 +188,94 @@ function parseRound(
  * the round counter. `decisionCount` deliberately counts BOTH, because "nothing was written" has
  * to be provable against audit rows too.
  */
-export function readReviewLedger(
+interface Accumulator {
+  accepted: AcceptanceRecord | undefined;
+  delta: DeltaRecord | undefined;
+  escalated: boolean;
+  receipt: VerifierExecutionEvidence | undefined;
+  readonly rounds: ReviewRoundRecord[];
+  unreadable: boolean;
+  version: number;
+}
+
+const freshAccumulator = (): Accumulator => ({
+  accepted: undefined, delta: undefined, escalated: false, receipt: undefined, rounds: [],
+  unreadable: false, version: 0,
+});
+
+/** One committed decision on the subject, folded exactly as the single-subject read folds it. */
+function fold(
+  acc: Accumulator,
+  decision: Readonly<{
+    commandKind: string; currentVersion: number; decisionId: string;
+    key: Readonly<{ principalId: string }>; resultBytes: Uint8Array; resultSha256: string;
+  }>,
+): void {
+  acc.version = decision.currentVersion;
+  if (decision.commandKind === "escalation.decide") acc.escalated = true;
+  if (decision.commandKind === "integration.accept_output") {
+    const parsed = parseAcceptance(decodeResult(decision.resultBytes));
+    if (parsed === undefined) acc.unreadable = true;
+    else acc.accepted = parsed;
+    return;
+  }
+  if (decision.commandKind === "qualification.replan") {
+    const parsed = parseDelta(decodeResult(decision.resultBytes));
+    if (parsed === undefined) acc.unreadable = true;
+    else acc.delta = parsed;
+    return;
+  }
+  if (decision.commandKind === VERIFIER_RECEIPT_COMMAND_KIND) {
+    // The daemon's own execution evidence for the node; a receipt that does not decode is
+    // simply absent here (the acceptance that consumed it is the fact that counts).
+    const decoded = decodeVerifierReceiptBytes(decodeResult(decision.resultBytes));
+    if (decoded.ok) acc.receipt = decoded.receipt.execution;
+    return;
+  }
+  if (decision.commandKind !== "review.submit") return;
+  const round = parseRound(decodeResult(decision.resultBytes), {
+    aggregateVersion: decision.currentVersion,
+    decisionId: decision.decisionId,
+    principalId: decision.key.principalId,
+    resultSha256: decision.resultSha256,
+  });
+  if (round === undefined) acc.unreadable = true;
+  else acc.rounds.push(round);
+}
+
+function ledgerOf(acc: Accumulator, decisionCount: number): ReviewLedger {
+  const latest = acc.rounds[acc.rounds.length - 1];
+  return Object.freeze({
+    accepted: acc.accepted,
+    decisionCount,
+    delta: acc.delta,
+    escalated: acc.escalated,
+    lineage: latest === undefined ? EMPTY_REVIEW_LINEAGE : latest.lineage,
+    rounds: Object.freeze(acc.rounds),
+    unreadable: acc.unreadable,
+    version: acc.version,
+  });
+}
+
+export interface ReviewLedgers {
+  readonly ledgers: ReadonlyMap<string, ReviewLedger>;
+  /** The verifier's execution evidence per subject, where its receipt decision decodes. */
+  readonly receipts: ReadonlyMap<string, VerifierExecutionEvidence>;
+}
+
+/**
+ * ONE walk of the decision ledger for MANY subjects: every subject named gets a ledger (an
+ * empty one when nothing was decided on it), folded exactly as `readReviewLedger` folds one.
+ * A board of N nodes reads its review facts in one pass instead of N.
+ */
+export function readReviewLedgers(
   store: SqliteEventStore,
   projectId: string,
-  subjectRef: string,
-): ReviewLedger {
-  const rounds: ReviewRoundRecord[] = [];
-  let accepted: AcceptanceRecord | undefined;
+  subjectRefs: ReadonlySet<string>,
+): ReviewLedgers {
+  const accumulators = new Map<string, Accumulator>();
+  for (const subjectRef of subjectRefs) accumulators.set(subjectRef, freshAccumulator());
   let decisionCount = 0;
-  let delta: DeltaRecord | undefined;
-  let escalated = false;
-  let unreadable = false;
-  let version = 0;
   let cursor = 0n;
   for (;;) {
     const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
@@ -205,43 +283,27 @@ export function readReviewLedger(
       if (decision.key.projectId !== projectId) continue;
       decisionCount += 1;
       if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      if (decision.targetAggregateId !== subjectRef) continue;
-      version = decision.currentVersion;
-      if (decision.commandKind === "escalation.decide") escalated = true;
-      if (decision.commandKind === "integration.accept_output") {
-        const parsed = parseAcceptance(decodeResult(decision.resultBytes));
-        if (parsed === undefined) unreadable = true;
-        else accepted = parsed;
-        continue;
-      }
-      if (decision.commandKind === "qualification.replan") {
-        const parsed = parseDelta(decodeResult(decision.resultBytes));
-        if (parsed === undefined) unreadable = true;
-        else delta = parsed;
-        continue;
-      }
-      if (decision.commandKind !== "review.submit") continue;
-      const round = parseRound(decodeResult(decision.resultBytes), {
-        aggregateVersion: decision.currentVersion,
-        decisionId: decision.decisionId,
-        principalId: decision.key.principalId,
-        resultSha256: decision.resultSha256,
-      });
-      if (round === undefined) unreadable = true;
-      else rounds.push(round);
+      const acc = accumulators.get(decision.targetAggregateId);
+      if (acc !== undefined) fold(acc, decision);
     }
     if (!page.hasMore || page.nextCursor === null) break;
     cursor = page.nextCursor;
   }
-  const latest = rounds[rounds.length - 1];
-  return Object.freeze({
-    accepted,
-    decisionCount,
-    delta,
-    escalated,
-    lineage: latest === undefined ? EMPTY_REVIEW_LINEAGE : latest.lineage,
-    rounds: Object.freeze(rounds),
-    unreadable,
-    version,
-  });
+  const ledgers = new Map<string, ReviewLedger>();
+  const receipts = new Map<string, VerifierExecutionEvidence>();
+  for (const [subjectRef, acc] of accumulators) {
+    ledgers.set(subjectRef, ledgerOf(acc, decisionCount));
+    if (acc.receipt !== undefined) receipts.set(subjectRef, acc.receipt);
+  }
+  return Object.freeze({ ledgers, receipts });
+}
+
+export function readReviewLedger(
+  store: SqliteEventStore,
+  projectId: string,
+  subjectRef: string,
+): ReviewLedger {
+  const ledger = readReviewLedgers(store, projectId, new Set([subjectRef])).ledgers.get(subjectRef);
+  if (ledger === undefined) throw new Error("unreachable: the named subject is always folded");
+  return ledger;
 }

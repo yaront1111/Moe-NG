@@ -27,6 +27,7 @@ import type { GraphRevisionContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
@@ -82,15 +83,18 @@ const ENABLED_LIFECYCLES = new Set(["EXECUTION_ENABLED", "CLOSING"]);
  * chain does not re-prove contributes NOTHING (an unreadable plan is never
  * staffed), it does not take the listing down.
  */
-function activeCompiledGraphs(
+export function activeCompiledGraphs(
   store: SqliteEventStore, projectId: string,
+  lifecycles: ReadonlySet<string> = ENABLED_LIFECYCLES,
+  /** A ledger the caller already folded; absent, this walk folds its own. */
+  folded?: DurableLedger,
 ): readonly ActiveCompiledGraph[] {
-  const ledger = readDurableLedger(store, projectId);
+  const ledger = folded ?? readDurableLedger(store, projectId);
   const active: ActiveCompiledGraph[] = [];
   for (const [aggregateId] of ledger.aggregates) {
     const goal = dataRecord(stateOf(ledger, aggregateId));
     if (goal?.["goalId"] !== aggregateId || goal["projectId"] !== projectId) continue;
-    if (!ENABLED_LIFECYCLES.has(String(goal["lifecycle"]))) continue;
+    if (!lifecycles.has(String(goal["lifecycle"]))) continue;
     const planningRunRef = goal["planningRunRef"];
     if (typeof planningRunRef !== "string") continue;
     const run = dataRecord(stateOf(ledger, planningRunRef));

@@ -83,6 +83,9 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
  * A token belongs here only when the daemon actually emits it.
  */
 export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
+  // affordance-read.ts - three review rounds failed; the kernel refuses more until a human
+  // records escalation.decide, which the Needs-you screen offers as "Allow more attempts".
+  escalation: "a human's decision to allow more review attempts (Needs you)",
   // affordance-read.ts - a delivered node awaiting the daemon's verifier.
   verification: "the daemon's verification",
   // affordance-read.ts - the verifier's standing slices this project never installed; the

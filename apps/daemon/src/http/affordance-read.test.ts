@@ -28,7 +28,8 @@ import {
   reviewerCalibrationSlice, verifierPolicySlice,
 } from "../orchestrator/demo-seed-policy.js";
 import { runReviewCommand } from "../review/review-services.js";
-import { packageItems } from "../review/review-test-fixtures.js";
+import { finding, packageItems } from "../review/review-test-fixtures.js";
+import { readReviewLedger } from "../review/review-read-model.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
@@ -601,5 +602,70 @@ describe("planningAuthorityByRun on an unconfigured port (task-ed89967f / R3-016
       "nextAllowedCommands", "outcome", "planningAuthorityByRun", "planningGoalRef",
       "planningGoalRefs", "steps",
     ]);
+  });
+});
+
+describe("a node whose review is exhausted waits on a human escalation", () => {
+  let escalationMinted = 0;
+  const escalationPort = createAffordancePort({
+    mintId: () => `afford-escalation-${String(escalationMinted += 1)}`,
+    nodes: () => [{ nodeRef: "node-code-1", title: "Implement add()" }],
+    projectId: PROJECT,
+    store,
+  });
+  function nodeSurface() {
+    const result = escalationPort.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result;
+  }
+
+  function submitFailingRound(label: string): void {
+    const ledger = readReviewLedger(store, PROJECT, "node-code-1");
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: `cmd-affordance-fail-${label}`,
+      correlationId: "corr-affordance-escalation",
+      decidedAt: "2026-08-09T12:30:00.000Z",
+      expectedVersion: ledger.version,
+      kind: "review.submit",
+      payload: {
+        findings: [finding({ ruleId: `rule-${label}`, subject: { kind: "NODE", locator: `locator-${label}` } })],
+        packageItems: packageItems(), round: ledger.lineage.highestRound + 1, subjectRef: "node-code-1",
+      },
+      principalId: "sess-agent-affordance",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    if (!outcome.ok) throw new Error(`failing round ${label} refused: ${outcome.code}`);
+  }
+
+  it("blocks the node on escalation and offers only escalation.decide after three failed rounds", () => {
+    submitFailingRound("a");
+    submitFailingRound("b");
+    submitFailingRound("c");
+    const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(node).toMatchObject({ aggregateId: "node-code-1", missing: ["escalation"], status: "BLOCKED" });
+    const offered = nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1");
+    expect(offered.map((entry) => entry.commandKind)).toEqual(["escalation.decide"]);
+    expect(offered[0]?.expectedVersion).toBe(readReviewLedger(store, PROJECT, "node-code-1").version);
+  });
+
+  it("returns the node to READY with review.submit offered once a human escalates", () => {
+    const ledger = readReviewLedger(store, PROJECT, "node-code-1");
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: "cmd-affordance-escalate",
+      correlationId: "corr-affordance-escalation",
+      decidedAt: "2026-08-09T12:31:00.000Z",
+      expectedVersion: ledger.version,
+      kind: "escalation.decide",
+      payload: { escalationRef: "ui-escalation-node-code-1", subjectRef: "node-code-1" },
+      principalId: "operator-local",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    expect(outcome.ok).toBe(true);
+    const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(node).toMatchObject({ aggregateId: "node-code-1", missing: [], status: "READY" });
+    expect(nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1")
+      .map((entry) => entry.commandKind)).toEqual(["review.submit"]);
   });
 });

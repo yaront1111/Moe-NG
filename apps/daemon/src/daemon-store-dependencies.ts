@@ -69,6 +69,36 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
     return port();
   },
+  documentCoverage: () => {
+    const port = fromEnv().documentCoverage;
+    if (port === undefined) throw new Error("unreachable: the coverage reader is always wired");
+    return port();
+  },
+  runs: () => {
+    const port = fromEnv().runs;
+    if (port === undefined) throw new Error("unreachable: the runs reader is always wired");
+    return port();
+  },
+  health: () => {
+    const port = fromEnv().health;
+    if (port === undefined) throw new Error("unreachable: the health reader is always wired");
+    return port();
+  },
+  policy: () => {
+    const port = fromEnv().policy;
+    if (port === undefined) throw new Error("unreachable: the policy reader is always wired");
+    return port();
+  },
+  activity: () => {
+    const port = fromEnv().activity;
+    if (port === undefined) throw new Error("unreachable: the activity reader is always wired");
+    return port();
+  },
+  sessions: () => {
+    const port = fromEnv().sessions;
+    if (port === undefined) throw new Error("unreachable: the sessions reader is always wired");
+    return port();
+  },
   documentDossiers: () => {
     const port = fromEnv().documentDossiers;
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");

@@ -3,6 +3,7 @@
  * Manager routes deliberately use a separate origin and cookie authority.
  */
 export const DEV_PROXY_PATHS = Object.freeze([
+  "/activity/read",
   "/affordances/read",
   "/bootstrap",
   "/budget/commitment/read",
@@ -10,15 +11,19 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/v2/command",
   "/v2/product-contract/current",
   "/v2/product-contract/pending/read",
+  "/documents/coverage/read",
   "/documents/dossier/read",
   "/documents/ingest",
   "/events/ack",
   "/events/read",
   "/events/resume",
   "/goals/read",
+  "/health/read",
   "/graph/get",
   "/planning/run/read",
+  "/policy/read",
   "/product-contract/pending/read",
+  "/runs/read",
   // The browser reads the three OPEN_SESSION operands and completes the signed open on
   // the daemon's own origin; without these two the dev server answers them itself and the
   // page pairs against Vite instead of against a daemon.
@@ -27,6 +32,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/session/pair/claim",
   "/session/pair/open",
   "/session/pair/request",
+  "/sessions/read",
 ] as const);
 
 export interface DevProxyEntry {

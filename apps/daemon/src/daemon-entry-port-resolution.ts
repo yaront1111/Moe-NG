@@ -1,6 +1,12 @@
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { CommandAuthorityPlanePort } from "./http/http-contract.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
+import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
+import type { RunsReadPort } from "./http/runs-read-contract.js";
+import type { PolicyReadPort } from "./http/policy-read.js";
+import type { HealthReadPort } from "./http/health-read.js";
+import type { ActivityReadPort } from "./http/activity-read.js";
+import type { SessionsReadPort } from "./http/sessions-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -34,6 +40,18 @@ export interface OptionalDaemonPortProvider {
   graph?(): GraphQueryPort;
   /** The strict durable GoalCreated catalog, bound to this daemon's own project. */
   goalCatalog?(): GoalCatalogReadPort;
+  /** The PRD coverage read port, bound to this daemon own project. */
+  documentCoverage?(): DocumentCoverageReadPort;
+  /** The runs-and-leases read port, bound to this daemon own project. */
+  runs?(): RunsReadPort;
+  /** Installed policy and evaluations, bound to this daemon own project. */
+  policy?(): PolicyReadPort;
+  /** The daemon process and ledger facts, bound to this daemon own project. */
+  health?(): HealthReadPort;
+  /** What the daemon decided, bound to this daemon own project. */
+  activity?(): ActivityReadPort;
+  /** Who holds a seat, bound to this daemon own project. */
+  sessions?(): SessionsReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /** The budget commitment read port, bound to this daemon's own project. */
@@ -77,6 +95,12 @@ export interface OptionalDaemonPortProvider {
 
 export interface ResolvedOptionalDaemonPorts {
   readonly affordances?: AffordancePort;
+  readonly documentCoverage?: DocumentCoverageReadPort;
+  readonly runs?: RunsReadPort;
+  readonly policy?: PolicyReadPort;
+  readonly health?: HealthReadPort;
+  readonly activity?: ActivityReadPort;
+  readonly sessions?: SessionsReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -100,12 +124,13 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "budgetCommitment", "documentDossiers", "documentIngest",
+  "subscriptions", "affordances", "budgetCommitment", "documentCoverage", "documentDossiers",
+  "documentIngest",
   "graph", "goalCatalog",
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation",
+  "reconciliation", "runs", "policy", "health", "activity", "sessions",
   "sessionHandshake",
 ] as const);
 
@@ -206,6 +231,61 @@ export function resolveOptionalDaemonPorts(
       && !hasMethods(productContractGate1, ["readGate"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const coverageFactory = provider.documentCoverage;
+    if (coverageFactory !== undefined && typeof coverageFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const documentCoverage = coverageFactory?.call(provider);
+    if (documentCoverage !== undefined
+      && (!hasMethods(documentCoverage, ["readCoverage"])
+        || typeof Reflect.get(documentCoverage, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const runsFactory = provider.runs;
+    if (runsFactory !== undefined && typeof runsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const runs = runsFactory?.call(provider);
+    if (runs !== undefined
+      && (!hasMethods(runs, ["readRuns"]) || typeof Reflect.get(runs, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const policyFactory = provider.policy;
+    if (policyFactory !== undefined && typeof policyFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const policy = policyFactory?.call(provider);
+    if (policy !== undefined
+      && (!hasMethods(policy, ["readPolicy"]) || typeof Reflect.get(policy, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const healthFactory = provider.health;
+    if (healthFactory !== undefined && typeof healthFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const health = healthFactory?.call(provider);
+    if (health !== undefined
+      && (!hasMethods(health, ["readHealth"]) || typeof Reflect.get(health, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const activityFactory = provider.activity;
+    if (activityFactory !== undefined && typeof activityFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const activity = activityFactory?.call(provider);
+    if (activity !== undefined
+      && (!hasMethods(activity, ["readActivity"]) || typeof Reflect.get(activity, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessionsFactory = provider.sessions;
+    if (sessionsFactory !== undefined && typeof sessionsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessions = sessionsFactory?.call(provider);
+    if (sessions !== undefined
+      && (!hasMethods(sessions, ["readSessions"]) || typeof Reflect.get(sessions, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -290,6 +370,12 @@ export function resolveOptionalDaemonPorts(
     }
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
+      ...(documentCoverage === undefined ? {} : { documentCoverage }),
+      ...(runs === undefined ? {} : { runs }),
+      ...(policy === undefined ? {} : { policy }),
+      ...(health === undefined ? {} : { health }),
+      ...(activity === undefined ? {} : { activity }),
+      ...(sessions === undefined ? {} : { sessions }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

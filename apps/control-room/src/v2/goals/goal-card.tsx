@@ -110,7 +110,7 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
           <div className="cr2-goal-progress-top">
             <span className="cr2-goal-progress-label" data-testid={`cr.goals.card.${goal.goalId}.progress`}>
               {goal.progress === undefined
-                ? "Progress coming online"
+                ? goal.progressNote ?? "Progress coming online"
                 : `${String(goal.progress.done)} of ${String(goal.progress.total)} ${goal.progress.noun}`}
             </span>
             {goal.lastEventLabel === undefined

@@ -8,6 +8,12 @@ import type { BudgetCommitmentReadPort } from "./budget-commitment-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
 import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
+import type { DocumentCoverageReadPort } from "./document-coverage-contract.js";
+import type { RunsReadPort } from "./runs-read-contract.js";
+import type { PolicyReadPort } from "./policy-read.js";
+import type { HealthReadPort } from "./health-read.js";
+import type { ActivityReadPort } from "./activity-read.js";
+import type { SessionsReadPort } from "./sessions-read.js";
 import type {
   ProductContractV2CurrentReadPort,
 } from "./product-contract-v2-current-read.js";
@@ -126,6 +132,18 @@ export interface StartListenerOptions {
    * unattested gate: a missing port can never read as a satisfied one.
    */
   readonly productContractGate1?: ProductContractGate1ReadPort;
+  /** Absent means the PRD coverage read refuses as unavailable rather than inventing zeros. */
+  readonly documentCoverage?: DocumentCoverageReadPort;
+  /** Absent means the runs read refuses as unavailable rather than inventing an empty board. */
+  readonly runs?: RunsReadPort;
+  /** Absent means the policy read refuses as unavailable. */
+  readonly policy?: PolicyReadPort;
+  /** Absent means the health read refuses as unavailable. */
+  readonly health?: HealthReadPort;
+  /** Absent means the activity read refuses as unavailable. */
+  readonly activity?: ActivityReadPort;
+  /** Absent means the sessions read refuses as unavailable. */
+  readonly sessions?: SessionsReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */

@@ -64,6 +64,23 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // the resolver is asked), and a daemon composed without the gate 1 port.
   "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE",
+  // The PRD coverage read: same transport pair (a body that is not exactly one string-valued
+  // selector, and a daemon composed without the coverage port).
+  "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID",
+  "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE",
+  // The runs read: same transport pair.
+  "LISTENER_RUNS_REQUEST_INVALID",
+  "LISTENER_RUNS_UNAVAILABLE",
+  // The policy and health reads: same transport pairs.
+  "LISTENER_POLICY_REQUEST_INVALID",
+  "LISTENER_POLICY_UNAVAILABLE",
+  "LISTENER_HEALTH_REQUEST_INVALID",
+  "LISTENER_HEALTH_UNAVAILABLE",
+  // The activity and sessions reads: same transport pairs.
+  "LISTENER_ACTIVITY_REQUEST_INVALID",
+  "LISTENER_ACTIVITY_UNAVAILABLE",
+  "LISTENER_SESSIONS_REQUEST_INVALID",
+  "LISTENER_SESSIONS_UNAVAILABLE",
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
@@ -175,6 +192,18 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_BUDGET_COMMITMENT_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_RUNS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_RUNS_UNAVAILABLE") return 503;
+  if (code === "LISTENER_POLICY_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_POLICY_UNAVAILABLE") return 503;
+  if (code === "LISTENER_HEALTH_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_HEALTH_UNAVAILABLE") return 503;
+  if (code === "LISTENER_ACTIVITY_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_ACTIVITY_UNAVAILABLE") return 503;
+  if (code === "LISTENER_SESSIONS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_SESSIONS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;

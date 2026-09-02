@@ -610,7 +610,7 @@ describe("Cordum navigation drives one typed route source of truth", () => {
   it("pins the route roster and the nav destination roster to exact nonzero counts", () => {
     expect(Object.isFrozen(CORDUM_ROUTE_KINDS)).toBe(true);
     expect(CORDUM_ROUTE_KINDS.length).toBeGreaterThan(0);
-    expect(CORDUM_ROUTE_KINDS).toHaveLength(2);
+    expect(CORDUM_ROUTE_KINDS).toHaveLength(6);
 
     const destinations = resolveNavDestinations();
     // One destination per nav id, in the rail's order, and nothing else claimed.
@@ -624,8 +624,8 @@ describe("Cordum navigation drives one typed route source of truth", () => {
     // navigation arm vacuous.
     expect(reachable.length).toBeGreaterThan(0);
     expect(unavailable.length).toBeGreaterThan(0);
-    expect(reachable).toHaveLength(1);
-    expect(unavailable).toHaveLength(NAV_IDS.length - 1);
+    expect(reachable).toHaveLength(5);
+    expect(unavailable).toHaveLength(NAV_IDS.length - 5);
     // A reachable destination carries a route; an unavailable one carries none and
     // states a reason drawn from the stable roster.
     for (const destination of reachable) expect(destination.route).not.toBeNull();

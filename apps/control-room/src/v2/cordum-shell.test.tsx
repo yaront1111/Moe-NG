@@ -31,7 +31,7 @@ describe("the Cordum shell renders its frame", () => {
     }
     // The six the design names, in order, and nothing else claimed as a destination.
     expect(CORDUM_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Goals", "Approvals", "Runs & leases", "Resources", "Health", "Policy",
+      "Goals", "Needs you", "Runs & leases", "Resources", "Health", "Policy",
     ]);
   });
 
@@ -49,7 +49,7 @@ describe("the Cordum shell renders its frame", () => {
     });
     render(<CordumShell navDestinations={[approvals]} onNavigate={onNavigate} />);
 
-    const button = screen.getByRole("button", { name: /Approvals.*not available yet/iu });
+    const button = screen.getByRole("button", { name: /Needs you.*not available yet/iu });
     expect(button).toBeInstanceOf(HTMLButtonElement);
     expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(button.getAttribute("data-unavailable-reason")).toBe("NAV_DESTINATION_NOT_BUILT");

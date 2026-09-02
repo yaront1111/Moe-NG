@@ -343,6 +343,12 @@
   border: 1px solid color-mix(in srgb, var(--cr-accent) 28%, transparent);
 }
 
+.cr2-goal-state[data-state="DONE"] {
+  color: var(--cr-accent);
+  background: color-mix(in srgb, var(--cr-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cr-accent) 32%, transparent);
+}
+
 .cr2-goal-state[data-state="BLOCKED"] {
   color: var(--cr-danger);
   background: color-mix(in srgb, var(--cr-danger) 12%, transparent);
@@ -887,5 +893,459 @@
   .cr2-newgoal {
     animation: none;
     transition: none;
+  }
+}
+
+/* PRD coverage card (goal detail): the daemon-proven share of the contract that is built. */
+.cr2-coverage-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cr-line, rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+
+.cr2-coverage-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--cr-ink);
+  transition: width 240ms ease;
+}
+
+.cr2-coverage-criteria {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 2px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-coverage-criterion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cr2-coverage-status {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-coverage-criterion[data-status="VERIFIED"] .cr2-coverage-status {
+  color: var(--cr-ink);
+  font-weight: 600;
+}
+
+.cr2-coverage-criterion[data-status="UNPLANNED"] .cr2-coverage-status {
+  opacity: 0.6;
+}
+
+.cr2-coverage-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cr2-coverage-section[data-cited="false"] {
+  opacity: 0.6;
+}
+
+
+/* Needs you: the queue of decisions the daemon is waiting on. */
+.cr2-needs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 24px;
+}
+
+.cr2-needs-bar {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.cr2-needs-note {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-needs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cr2-needs-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+  border-left: 4px solid var(--cr-accent);
+}
+
+.cr2-needs-card[data-kind="READY_TO_CLOSE"] {
+  border-left-color: var(--cr-ink-soft);
+}
+
+.cr2-needs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cr2-needs-headline {
+  margin: 0;
+  font-size: var(--cr-fs-title, 18px);
+  font-weight: 600;
+  color: var(--cr-ink);
+}
+
+.cr2-needs-detail {
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink-soft);
+}
+
+@media (max-width: 720px) {
+  .cr2-needs-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* Runs & leases: each goal's plan as a ladder of nodes with the daemon's facts beside them. */
+.cr2-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 4px 24px;
+}
+
+.cr2-run-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-run-goal-title {
+  margin: 4px 0 2px;
+  font-size: var(--cr-fs-title, 18px);
+  font-weight: 600;
+}
+
+.cr2-run-goal-title button {
+  font: inherit;
+  color: var(--cr-ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cr2-run-goal-title button:disabled {
+  cursor: default;
+}
+
+.cr2-run-goal-title button:focus-visible {
+  outline: 2px solid var(--cr-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.cr2-run-goal-run {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cr2-run-node {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+  background: var(--cr-ground, transparent);
+}
+
+.cr2-run-status {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  padding-top: 2px;
+}
+
+.cr2-run-node[data-status="ACCEPTED"] .cr2-run-status {
+  color: var(--cr-accent);
+  font-weight: 600;
+}
+
+.cr2-run-node[data-status="IN_PROGRESS"] .cr2-run-status,
+.cr2-run-node[data-status="DELIVERED"] .cr2-run-status {
+  color: var(--cr-ink);
+}
+
+.cr2-run-node[data-status="ESCALATION_REQUIRED"] .cr2-run-status,
+.cr2-run-node[data-status="ESCALATED"] .cr2-run-status,
+.cr2-run-node[data-status="BLOCKED"] .cr2-run-status {
+  color: var(--cr-danger);
+  font-weight: 600;
+}
+
+.cr2-run-node-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cr2-run-node-title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  color: var(--cr-ink);
+}
+
+.cr2-run-node-evidence,
+.cr2-run-node-criteria {
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-node-criteria {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+}
+
+.cr2-run-node-findings {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--cr-danger);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cr2-run-node-finding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink);
+}
+
+.cr2-run-node[data-status="UNATTRIBUTABLE"] .cr2-run-status {
+  color: var(--cr-danger);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .cr2-run-node {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* Policy and Health: the daemon's own facts, listed. */
+.cr2-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 24px;
+  max-width: 880px;
+}
+
+.cr2-ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-ops-ref {
+  margin: 0;
+  word-break: break-all;
+}
+
+.cr2-ops-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+}
+
+.cr2-ops-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cr2-ops-fact-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-ops-fact-value {
+  margin: 0;
+  color: var(--cr-ink);
+  word-break: break-all;
+}
+
+@media (max-width: 720px) {
+  .cr2-ops-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* A node's objective is a mission brief: three lines by default, the whole text on request. */
+.cr2-run-node-objective {
+  margin: 0;
+  color: var(--cr-ink);
+}
+
+.cr2-run-node-objective-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cr2-run-node-objective-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cr2-run-node-objective[open] .cr2-run-node-objective-summary {
+  display: none;
+}
+
+.cr2-run-node-objective-full {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.cr2-run-node-objective-summary:focus-visible {
+  outline: 2px solid var(--cr-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Long identifiers break where they must, not in the middle of every word. */
+.cr2-ops-fact-value,
+.cr2-ops-ref {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+
+/* Activity and seats: the ledger in a person's words, one row per decision or seat. */
+.cr2-ops-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 4px 8px;
+  max-width: 880px;
+}
+
+.cr2-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr2-activity-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-activity-when {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  padding-top: 2px;
+}
+
+.cr2-activity-what {
+  color: var(--cr-ink);
+}
+
+.cr2-activity-target {
+  grid-column: 2;
+  color: var(--cr-ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.cr2-activity-row[data-disposition="VERSION_CONFLICT"] .cr2-activity-what,
+.cr2-activity-row[data-liveness="EXPIRED"] .cr2-activity-when,
+.cr2-activity-row[data-liveness="CLOSED"] .cr2-activity-when {
+  color: var(--cr-ink-soft);
+}
+
+.cr2-activity-row[data-liveness="LIVE"] .cr2-activity-when {
+  color: var(--cr-accent);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .cr2-activity-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cr2-activity-target {
+    grid-column: 1;
   }
 }

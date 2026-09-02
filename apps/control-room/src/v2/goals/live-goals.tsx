@@ -10,6 +10,9 @@ import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { createGoalDispatcher } from "./live-goal-create.js";
 import { GoalsHome } from "./goals-home.js";
+import { deriveNeedsYou } from "../approvals/needs-you-model.js";
+import { useGoalCoverage } from "./use-goal-coverage.js";
+import type { CoverageReader } from "./use-goal-coverage.js";
 
 /**
  * The LIVE goals home.
@@ -57,6 +60,15 @@ export interface LiveGoalsHomeProps {
   readonly createDisabledReason?: string | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
+  /**
+   * The PRD coverage read for one goal, when the shell attaches one. Absent, the cards keep
+   * saying progress is coming online; present, each card bar is the daemon verified-criteria
+   * count. Injected rather than derived from `setup` so the wire is the shell choice and a
+   * test can drive it without a second fetch stub.
+   */
+  readonly readCoverage?: CoverageReader | undefined;
+  /** The number of decisions waiting on a human, for the shell's Needs-you badge. */
+  readonly onNeedsYouCount?: ((count: number) => void) | undefined;
 }
 
 export function LiveGoalsHome({
@@ -64,9 +76,12 @@ export function LiveGoalsHome({
   createDisabledReason,
   onConnection,
   onOpenBoard,
+  readCoverage,
+  onNeedsYouCount,
 }: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
+  const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => (setup.ok
@@ -75,6 +90,7 @@ export function LiveGoalsHome({
       intervalMs: POLL_INTERVAL_MS,
       onFrame: (next) => {
         frameRef.current = next;
+        setSurface(next);
         onConnection?.(next.connection);
       },
     })
@@ -94,7 +110,15 @@ export function LiveGoalsHome({
     return (): void => { feed?.stop(); catalogFeed?.stop(); };
   }, [catalogFeed, feed]);
 
-  const data = setup.ok ? deriveGoalCatalog(catalog) : notAttached(setup);
+  const coverage = useGoalCoverage(catalog, readCoverage);
+  // The same derivation the Needs-you screen renders, so the badge and the queue agree.
+  const needsYouCount = useMemo(
+    () => deriveNeedsYou({ catalog, coverage, surface }).items.length,
+    [catalog, coverage, surface],
+  );
+  useEffect(() => { onNeedsYouCount?.(needsYouCount); }, [needsYouCount, onNeedsYouCount]);
+
+  const data = setup.ok ? deriveGoalCatalog(catalog, coverage) : notAttached(setup);
 
   // A refused bootstrap closes goal creation on THIS component's own authority,
   // never on its caller's memory to pass a reason. On refusal the derived

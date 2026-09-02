@@ -22,6 +22,14 @@ import {
 import {
   SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
 } from "./session-challenge-operands-read.js";
+import { DOCUMENT_COVERAGE_READ_PATH } from "./document-coverage-contract.js";
+import { handleDocumentCoverageReadRequest } from "./document-coverage-route.js";
+import { RUNS_READ_PATH } from "./runs-read-contract.js";
+import { handleRunsReadRequest } from "./runs-read-route.js";
+import { POLICY_READ_PATH, handlePolicyReadRequest } from "./policy-read.js";
+import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
+import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
+import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
 } from "./http-listener-guards.js";
@@ -55,6 +63,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   AFFORDANCE_PATH,
   BUDGET_COMMITMENT_READ_PATH,
   COMMAND_PATH,
+  DOCUMENT_COVERAGE_READ_PATH,
   DOCUMENT_DOSSIER_PATH,
   DOCUMENT_INGEST_PATH,
   EVENT_ACKNOWLEDGE_PATH,
@@ -69,6 +78,11 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   PRODUCT_CONTRACT_V2_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
   V2_COMMAND_PATH,
+  RUNS_READ_PATH,
+  POLICY_READ_PATH,
+  HEALTH_READ_PATH,
+  ACTIVITY_READ_PATH,
+  SESSIONS_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -248,6 +262,66 @@ function serveSessionChallengeOperands(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveDocumentCoverage(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleDocumentCoverageReadRequest({
+    authenticator: options.deps.authenticator, documentCoverage: options.documentCoverage,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveRuns(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleRunsReadRequest({
+    authenticator: options.deps.authenticator, runs: options.runs,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function servePolicy(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handlePolicyReadRequest({
+    authenticator: options.deps.authenticator, policy: options.policy,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveHealth(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleHealthReadRequest({
+    authenticator: options.deps.authenticator, health: options.health,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveActivity(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleActivityReadRequest({
+    activity: options.activity, authenticator: options.deps.authenticator,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveSessions(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleSessionsReadRequest({
+    authenticator: options.deps.authenticator, sessions: options.sessions,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveDocumentIngest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -338,6 +412,30 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
   }
+  if (path === ACTIVITY_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ACTIVITY_REQUEST_INVALID");
+    return;
+  }
+  if (path === SESSIONS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_SESSIONS_REQUEST_INVALID");
+    return;
+  }
+  if (path === POLICY_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
+    return;
+  }
+  if (path === HEALTH_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_HEALTH_REQUEST_INVALID");
+    return;
+  }
+  if (path === RUNS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_RUNS_REQUEST_INVALID");
+    return;
+  }
+  if (path === DOCUMENT_COVERAGE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
+    return;
+  }
   if (path === V2_COMMAND_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_V2_COMMAND_REQUEST_INVALID");
     return;
@@ -362,6 +460,18 @@ export async function serveReadDispatch(
     serveBudgetCommitmentRead(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
     serveProductContractGate1(response, request, options, body);
+  } else if (path === ACTIVITY_READ_PATH) {
+    serveActivity(response, request, options, body);
+  } else if (path === SESSIONS_READ_PATH) {
+    serveSessions(response, request, options, body);
+  } else if (path === POLICY_READ_PATH) {
+    servePolicy(response, request, options, body);
+  } else if (path === HEALTH_READ_PATH) {
+    serveHealth(response, request, options, body);
+  } else if (path === RUNS_READ_PATH) {
+    serveRuns(response, request, options, body);
+  } else if (path === DOCUMENT_COVERAGE_READ_PATH) {
+    serveDocumentCoverage(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_PENDING_READ_PATH) {
     serveProductContractPending(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_V2_CURRENT_READ_PATH) {
