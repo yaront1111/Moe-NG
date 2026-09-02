@@ -176,3 +176,31 @@ export function createVerifierAuthorityProvider(
     }
   };
 }
+
+/** The STANDING half of verifier authority: the two installed slices, independent of any round. */
+export interface VerifierStandingAuthority {
+  /** `moe-reviewer-calibration/1` is installed and reads back. */
+  readonly calibration: boolean;
+  /** `moe-verifier-policy/1` is installed and evaluates to ALLOW for the verifier's acceptance. */
+  readonly policy: boolean;
+}
+
+/**
+ * What the board can say BEFORE a round exists. The provider above answers one `null` for every
+ * missing fact by design; a project whose seed never installed these slices then sits with every
+ * delivered node "awaiting verification" forever and nothing durable names the cause (measured on
+ * the first real project, 2026-09-02). The affordance surface reads this so the stall is legible.
+ */
+export function readVerifierStandingAuthority(
+  store: SqliteEventStore,
+  projectId: string,
+): VerifierStandingAuthority {
+  try {
+    return Object.freeze({
+      calibration: readReviewerCalibration(store, projectId).ok,
+      policy: readVerifierPolicy(store, projectId) !== null,
+    });
+  } catch {
+    return Object.freeze({ calibration: false, policy: false });
+  }
+}

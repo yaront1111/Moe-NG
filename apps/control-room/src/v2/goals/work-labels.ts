@@ -83,8 +83,14 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
  * A token belongs here only when the daemon actually emits it.
  */
 export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
-  // affordance-read.ts:275 - a delivered node awaiting the daemon's verifier.
+  // affordance-read.ts - a delivered node awaiting the daemon's verifier.
   verification: "the daemon's verification",
+  // affordance-read.ts - the verifier's standing slices this project never installed; the
+  // verifier refuses VERIFICATION_AUTHORITY_UNAVAILABLE until an operator installs them.
+  "verifier-calibration":
+    "the reviewer calibration slice (moe-reviewer-calibration/1) an operator installs with policy.install",
+  "verifier-policy":
+    "the host verifier policy slice (moe-verifier-policy/1) an operator installs with policy.install",
 });
 
 export interface KindReading {

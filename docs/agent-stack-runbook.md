@@ -356,6 +356,22 @@ agent exits, and the directory goes when the wrapper process does. The wrapper
 also closes the durable scoped session after the child exits; expiry is the
 fallback if cleanup cannot reach the daemon.
 
+### Verifier authority (why a delivered node can wait forever)
+
+The wrapper's verifier pass runs `MOE_NODE_TEST_COMMAND` in `MOE_NODE_WORKSPACE`
+for every node whose latest review round is clean, then records the receipt
+that lets `integration.accept_output` mark it COMMITTED. It refuses
+`VERIFICATION_AUTHORITY_UNAVAILABLE` (wrapper stdout only) unless the project's
+policy aggregate carries two standing slices: `moe-verifier-policy/1` and
+`moe-reviewer-calibration/1`. The demo seed installs both; a project registered
+any other way does not have them, and its delivered nodes sit BLOCKED. The board
+now names the absent slice on the step (`missing: verifier-policy` /
+`verifier-calibration`); install them with two `policy.install` commands on the
+project's policy aggregate at its current versions. The seed's builders
+(`verifierPolicySlice`, `reviewerCalibrationSlice` in
+`src/orchestrator/demo-seed-policy.ts`) are the declared defaults; a real
+deployment installs its own slices at the same refs.
+
 ## Code-node specs
 
 A node spec is one JSON file in `MOE_NODE_SPECS_DIR`:

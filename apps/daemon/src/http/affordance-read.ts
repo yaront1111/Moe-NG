@@ -13,6 +13,7 @@ import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
@@ -314,6 +315,21 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     // sat EXECUTION_ENABLED with zero node.deliver steps behind this gate.
     if (config.nodes !== undefined
       && (ledger.kinds.has("approval.decide") || ledger.kinds.has("approval.decide_intent"))) {
+      // "verification" alone hides WHY a clean round waits. The verifier refuses
+      // VERIFICATION_AUTHORITY_UNAVAILABLE to its own stdout when the project's standing
+      // slices were never installed, so the board names each absent slice as a prerequisite.
+      let verificationMissing: readonly string[] | null = null;
+      const missingForVerification = (): readonly string[] => {
+        if (verificationMissing === null) {
+          const standing = readVerifierStandingAuthority(config.store, config.projectId);
+          verificationMissing = Object.freeze([
+            "verification",
+            ...(standing.policy ? [] : ["verifier-policy"]),
+            ...(standing.calibration ? [] : ["verifier-calibration"]),
+          ]);
+        }
+        return verificationMissing;
+      };
       for (const spec of config.nodes()) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
@@ -333,7 +349,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
-          missing: awaitingVerify ? ["verification"] : [],
+          missing: awaitingVerify ? missingForVerification() : [],
           status: awaitingVerify ? ("BLOCKED" as const) : ("READY" as const),
           version: review.version,
         }));

@@ -99,6 +99,45 @@ describe("runProductContractProposeRevision", () => {
     expect(replay.ref).toEqual(first.ref);
   });
 
+  it("canonicalizes draft order: the agent's listing order is not a contract fact", () => {
+    const requirements = [
+      {
+        requirementId: "req-api", statement: "Operators can read the record over the API.",
+        supersedesRequirementId: null,
+      },
+      {
+        requirementId: "req-ui", statement: "Operators can see the record on the page.",
+        supersedesRequirementId: null,
+      },
+    ];
+    const criteria = [
+      {
+        criterionId: "crit-api", requirementId: "req-api",
+        statement: "The API answers a signed request with the record.", supersedesCriterionId: null,
+      },
+      {
+        criterionId: "crit-ui", requirementId: "req-ui",
+        statement: "The page renders the record.", supersedesCriterionId: null,
+      },
+    ];
+    const canonical = runProductContractProposeRevision(
+      boundWorld(), inputOf({ draft: draftOf({ criteria, requirements }), goalRef: GOAL_ID }),
+    );
+    if (!canonical.ok) throw new Error(`canonical refused: ${canonical.code}`);
+    const reversed = runProductContractProposeRevision(boundWorld(), inputOf({
+      draft: draftOf({
+        criteria: [...criteria].reverse(), requirements: [...requirements].reverse(),
+      }),
+      goalRef: GOAL_ID,
+    }));
+    if (!reversed.ok) throw new Error(`reversed refused: ${reversed.code}`);
+    expect(reversed.ref).toEqual(canonical.ref);
+    expect(reversed.revision.requirements.map((item) => item.requirementId))
+      .toEqual(["req-api", "req-ui"]);
+    expect(reversed.revision.criteria.map((item) => item.criterionId))
+      .toEqual(["crit-api", "crit-ui"]);
+  });
+
   it("refuses a draft that quietly omits the goal's PRD sha", () => {
     const store = boundWorld();
     const outcome = runProductContractProposeRevision(store, inputOf({
@@ -135,17 +174,15 @@ describe("runProductContractProposeRevision", () => {
 
   it("forwards core admission refusals unrestamped", () => {
     const store = boundWorld();
-    // Criteria out of ascending order - core's admission owns this refusal.
+    // A criterion superseding itself - core's admission owns this refusal. (Listing
+    // order is no longer a refusal: the writer canonicalizes it, see the order test.)
     const outcome = runProductContractProposeRevision(store, inputOf({
       draft: draftOf({
         criteria: [
           {
-            criterionId: "crit-z", requirementId: "req-api",
-            statement: "z first", supersedesCriterionId: null,
-          },
-          {
             criterionId: "crit-api", requirementId: "req-api",
-            statement: "a second", supersedesCriterionId: null,
+            statement: "The API answers a signed request with the record.",
+            supersedesCriterionId: "crit-api",
           },
         ],
       }),
