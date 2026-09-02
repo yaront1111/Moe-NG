@@ -21,22 +21,26 @@
     {
       "stepId": "step-1",
       "description": "PHASE 0/1 — DEPENDENCY, OWNERSHIP, SHAPE AND BASELINE GATE (DoD 1). No edits.\n\n(a) Record `git rev-parse HEAD` (measured f0abbd39; branch is moving).\n\n(b) Both dependencies are DONE — task-ed89967f and task-4942111b. Read their completionSummary/reviewSummary from epicSiblings rather than re-measuring their work, then INSPECT DELIVERED BYTES at HEAD: apps/daemon/src/http/affordance-planning-authorities.ts (+ its .js bridge) exists, affordance-contract.ts:69 declares `planningAuthorityByRun`, and affordance-read-planning.test.ts:587 carries the producer's own bidirectional arms (:736/:741). Confirm entries are EXACT SEVEN-KEY records and write the key list into the step note — the browser parser must pin that exact roster.\n\n(c) Confirm the Control Room selector still joins kind+target+version, per DoD 1.\n\n(d) CONTRACTS EDGE: apps/control-room/package.json already declares `\"@moe/contracts\": \"workspace:*\"` (measured). Verify the pnpm-lock importer entry for apps/control-room, then create, typecheck and DELETE in ONE PowerShell command a temporary Control Room probe importing the JSON types/limits you will use from the BARE specifier `@moe/contracts`; require typecheck exit 0 and RECORD THE FULL PROBE SOURCE in the step note (a deleted probe's transcript alone is a lead, not evidence).\n\n(e) Record `git status --porcelain`, line counts and blob hashes for the ten owned paths. Measured: eight clean, two MISSING (the new module and bridge), and live-board.test.tsx DIRTY at 1024 lines. That dirty file is the parent-016 WIP — rail 4 says ADOPT it without restore or normalization; hash it now and never recover it from a pre-WIP ref.\n\n(f) Record the reachability finding before touching live-dispatch-payloads.ts: GRAPH_CONTENT_BYTES (:51), SUBMISSION_HASH (:72), sealedAuthorityFor (:74) and planningChainFor (:122) are ALL module-private (no `export`) and used only within that file (:106/:143/:147/:153/:186/:228/:361). The daemon's SUBMISSION_HASH at bootstrap-test-fixtures.ts:123 is an UNRELATED exported symbol — do not touch it (rail 1 forbids daemon edits). Re-run the grep to confirm before deleting.\n\n(g) Pre-diff baselines, standalone and unpiped with count lines recorded: the four focused Control Room files, `--filter @moe/control-room typecheck`, and the full control-room lane. Read the OUTPUT, not the exit code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-board.test.tsx",
         "apps/control-room/src/live/live-dispatch-payloads.ts",
         "apps/control-room/src/live/live-board-feed.ts",
         "apps/control-room/src/live/live-dispatch.ts"
-      ]
+      ],
+      "note": "PHASE 0/1 GATE — no edits. HEAD b3b93d51 (plan measured f0abbd39; branch moved).\n\n(b) BOTH DEPS DONE, PRODUCER BYTES INSPECTED AT HEAD.\napps/daemon/src/http/affordance-planning-authorities.ts (7515 B) + .js bridge (54 B, `export * from \"./affordance-planning-authorities.ts\";`) present.\naffordance-contract.ts:69 `readonly planningAuthorityByRun: PlanningAuthorityByRun;` present.\nEXACT SEVEN-KEY ROSTER (PlanningAuthorityEntry, producer :45-53), alphabetical:\n  authority (Record<string,unknown>), goalRef, graphContentBytesBase64,\n  graphContentHash, graphRevisionRef, runId, submissionHash.\nProducer :35 `PLANNING_AUTHORITY_ELIGIBLE_KINDS = [\"approval.decide\",\"plan.propose\"]` (goal.close deliberately absent). `authority` = journeyAuthority's own two-key body { acceptanceContract, planRevision } (journey-authority-bodies.ts:44-45,119). planHash lives at authority.planRevision.planHash; criteria identity at acceptanceContract.obligations[].criterionId; node scope at acceptanceContract.applicability.nodeIds; actor at acceptanceContract.authorRef.\n\n(c) SELECTOR STILL JOINS kind+target+version — live-board.tsx:98-101 `offerFor` matches commandKind && targetAggregateId && expectedVersion. Confirmed.\n\n(d) CONTRACTS EDGE PROVEN, all three legs.\n - manifest: apps/control-room/package.json declares `\"@moe/contracts\": \"workspace:*\"`.\n - lock: pnpm-lock.yaml importer `apps/control-room:` carries a `'@moe/contracts':` entry.\n - compiled bare-specifier probe, created+typechecked+deleted in ONE PowerShell command; `pnpm --filter @moe/control-room typecheck` printed `$ tsc --project tsconfig.json` and PROBE_TYPECHECK_EXIT=0, PROBE_STILL_EXISTS=False.\nFULL PROBE SOURCE (apps/control-room/src/live/__contracts-edge-probe-f06d587f.ts):\n```ts\nimport { MAX_JSON_BODY_BYTES, MAX_JSON_DEPTH, MAX_JSON_STRING_UTF8_BYTES } from \"@moe/contracts\";\nimport type { JsonObject, JsonValue, NextAllowedCommand } from \"@moe/contracts\";\n\nconst bodyBytes: number = MAX_JSON_BODY_BYTES;\nconst depth: number = MAX_JSON_DEPTH;\nconst stringBytes: number = MAX_JSON_STRING_UTF8_BYTES;\nconst object: JsonObject = { probe: \"ok\" };\nconst value: JsonValue = object;\nconst offer: Pick<NextAllowedCommand, \"commandKind\" | \"targetAggregateId\"> = {\n  commandKind: \"plan.propose\", targetAggregateId: \"run-1\",\n};\n\nexport const PROBE = [bodyBytes, depth, stringBytes, JSON.stringify(value), offer.commandKind];\n```\nMeasured limit values: MAX_JSON_BODY_BYTES=1_048_576, MAX_JSON_DEPTH=64, MAX_JSON_STRING_UTF8_BYTES=262_144 (packages/contracts/src/input-limits.ts:1-3, re-exported index.ts:56-58).\n\n(e) OWNED-TEN STATE at HEAD (path | lines | blob | status):\n  live-planning-authorities.ts   MISSING (new)\n  live-planning-authorities.js   MISSING (new)\n  live-board-feed.ts              361 ad25ea8f155d70e30fe7328ed1bf87c41ca5a5af clean\n  live-board.tsx                  239 d29f0bb7a024c98972e254a311fbb302db2f3b28 clean\n  live-board.test.tsx            1024 4f9988cc1bf911d87339f65cf4dd78ff36aa0180 DIRTY (adopted parent-016 WIP, +112 lines over 9a0e2cf2; NOT restored/normalized)\n  live-dispatch.ts                178 a5b6d05d0f54ee1079c9eec63a1ca9a2edb54dba clean\n  live-dispatch-payloads.ts       397 a646be43a5b501723f5bcdb8d8fdd42c91f9acf8 clean\n  live-board-dispatch.test.tsx    750 876889aad7aed73ff69906cf163c80bfef256f37 clean\n  live-board.a11y.test.tsx        133 b9dd0eb7ce10b269bb1be221b82aeb9d95582111 clean\n  live-effort-path.test.tsx       308 1cd92dffbe2c24e7b1cfa2fadda46c03efa23fbd clean\nAdopted WIP content: siblingPlanningFrame/SIBLING_PLANNING_CLIENT/siblingPlanningTransport + the A-first/B-dispatched arm at :904. Extended in step 2, never reverted.\n113 foreign dirty paths in the shared checkout (.moe/*, .serena/memories/*, live-keyed-session.ts, etc.) — noted, untouched.\n\n(f) REACHABILITY RE-RUN, REMOVAL IS CONTAINED TO ONE FILE.\n`grep -n \"^const GRAPH_CONTENT_BYTES|^const SUBMISSION_HASH|^function sealedAuthorityFor|^function planningChainFor\"` → :51, :72, :74, :122, all bare const/function, NO `export`. Cross-file grep over apps/control-room, packages, adapters, tests finds zero other references to these four inside control-room. Daemon's exported SUBMISSION_HASH at bootstrap-test-fixtures.ts:123 and packages/core's planning-*-fixtures SUBMISSION_HASH/GRAPH_CONTENT_HASH are UNRELATED symbols — not touched (rail 1).\n\n(f-extra) NEW REACHABILITY FINDING, disclosed now rather than at step 5. Root vitest `include` carries `tests/**/*.test.ts`, and THREE integration files consume this row's producers:\n  tests/integration/control-room/dev-payload-parity.test.ts   (payloadFor + DEV_PAYLOADS; asserts the static authority chain)\n  tests/integration/control-room/live-approval-activation.test.ts (payloadFor + DEV_PAYLOADS)\n  tests/integration/control-room/live-policy-validation.test.ts   (DEV_PAYLOADS[\"policy.validate\"] only — untouched by this row)\nThe first two are OWNED BY PARENT task-c444b68f (verified in its description's exact-ten roster) and are exactly its \"two real-daemon inte",
+      "startedAt": "2026-09-02T18:33:57.060Z",
+      "completedAt": "2026-09-02T18:38:23.880Z"
     },
     {
       "stepId": "step-2",
       "description": "RED-FIRST PRODUCTION-SURFACE TESTS (DoD 5). Edit the four test files only; no production code yet.\n\nIn live-board.test.tsx extend the adopted two-sibling wire fixture:\n1. NONZERO TWO-SIBLING SELECTION: sibling A first in the map, sibling B the one dispatched. Assert the dispatched operands are B's EXACTLY — this is the arm that catches a first-entry pick. The two siblings must differ in every bound field, or the assertion cannot detect a swap.\n2. EXACT B-ONLY graph/plan operands: assert the specific graph bytes, graphContentHash, graphRevisionRef and submissionHash come from B's material, not from any static constant.\n3. HOSTILE/ACCESSOR UNREADABILITY: a map value carrying an accessor, a symbol key, a cycle, a sparse or extra-key array, a nonfinite number, or a mapKey/runId/goalRef mismatch maps to exactly `LIVE_SURFACE_UNREADABLE` — and the accessor MUST NOT FIRE. Install a getter that records invocation and assert the recorded count is ZERO.\n4. WHOLLY-ABSENT map stays optional (no refusal) — distinct from a present-but-malformed map, which refuses.\n\nIn live-board-dispatch.test.tsx add the two DISTINCT dispatch fixtures, each with every OTHER seam accepting so only the named guard can answer, and each asserting ZERO calls to the budget reader, builder and transport:\n  - missing goal binding -> `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`. **This code ALREADY EXISTS** (live-dispatch.ts:42) and is already asserted at :672/:695/:718 — reuse it, do not re-mint a parallel spelling.\n  - absent or misaligned material -> `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`, the one genuinely new code (zero hits repo-wide today).\n  - goal.close remains target-only.\n5. BIDIRECTIONAL planning-kind roster equality for DEV_PAYLOADS: assert every advertised kind is served AND every served kind is advertised. A test iterating the roster alone sees one direction and stays green when an entry vanishes.\n\nRun the four focused files and capture the named production-surface red.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/live/live-board.test.tsx",
         "apps/control-room/src/live/live-board-dispatch.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-09-02T18:40:08.260Z"
     },
     {
       "stepId": "step-3",
@@ -105,17 +109,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:31:06.576Z",
-  "updatedAt": "2026-09-02T18:17:16.739Z",
+  "updatedAt": "2026-09-02T18:40:08.260Z",
   "contextFetchedBy": [
     "governor-425e4c88",
     "architect-1f97776b",
     "governor-c11c29e2",
-    "architect-dbf9e869"
+    "architect-dbf9e869",
+    "worker-f06d587f"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-01T08:31:29.385Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 1
   },
   "declaredFiles": [
     "apps/control-room/src/live/live-planning-authorities.ts",
@@ -132,7 +138,9 @@
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-02T18:17:14.633Z",
   "planningNotes": {
@@ -148,12 +156,15 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-09-02T18:33:42.194Z",
+    "escalatedAt": "2026-09-02T18:33:42.194Z"
   },
   "planApprovedAt": "2026-09-02T18:17:16.739Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
   "blockedOnTaskIds": null,
-  "blockedResourceId": null
+  "blockedResourceId": null,
+  "workStartedAt": "2026-09-02T18:33:57.060Z"
 }
