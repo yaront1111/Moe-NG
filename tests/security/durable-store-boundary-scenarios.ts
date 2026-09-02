@@ -263,9 +263,10 @@ export interface RaceCase {
  * The import-shadow read owns no writer at all, so its race is the one a pure READER can
  * lose: a commit landing between the horizon it opened on and the horizon it closed on.
  *
- * The safe-boundary observation owns a writer and converges a byte-identical competing caller
- * on the standing observation. One caller reports COMMITTED and one REPLAYED, while the
- * durable count remains one observation.
+ * The safe-boundary observation owns a writer and races two callers for one durable identity
+ * like the majority — but its refusal is its OWN code, not the store's: it wraps the declined
+ * commit as SAFE_BOUNDARY_COMMIT_CONFLICT and keeps EXPECTED_VERSION_CONFLICT upstream
+ * (task-f8ea0a2f), so the shared literal below would grade the wrong layer.
  */
 function raceFor(boundary: DurableBoundaryName): RaceCase {
   if (boundary === "IMPORT_SHADOW_READ_LAYER") {
@@ -279,8 +280,11 @@ function raceFor(boundary: DurableBoundaryName): RaceCase {
   if (boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") {
     return {
       boundary,
+      expected: {
+        code: "SAFE_BOUNDARY_COMMIT_CONFLICT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER,
+      },
       expectedDurableEvents: 1,
-      question: `two ${boundary} writers converge on one durable identity`,
+      question: `two ${boundary} writers cannot both own one durable identity`,
     };
   }
   if (boundary === "SAFE_BOUNDARY_LOOKUP_LAYER") {

@@ -29,7 +29,9 @@ import type {
   ProviderFactUnknown, ProviderRunRef,
 } from "../../packages/runner/src/providers/telemetry/provider-telemetry-contracts.js";
 import { SqliteEventStore } from "../../packages/store/src/index.js";
-import type { CommandDecisionKey } from "../../packages/store/src/index.js";
+import type {
+  CommandDecisionKey, CommitExpectedVersionDecisionInput,
+} from "../../packages/store/src/index.js";
 
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
@@ -422,13 +424,14 @@ export interface SafeBoundaryRaceOutcome extends SafeBoundaryOutcome {
 /**
  * RACE — two independent callers, on two independent connections to one durable file,
  * deriving the SAME observation identity from the SAME durable run. The identity is a pure
- * function of the durable facts, so both land on one aggregate. The first caller commits and
- * the second must converge on that byte-identical standing observation as a replay. Exactly
- * one durable row may exist even though both callers receive a successful observation.
+ * function of the durable facts, so both land on one aggregate at `expectedVersion 0`.
  *
- * The callers use different command ids deliberately: convergence is based on the derived
- * observation bytes, not command-id idempotency. A second commit or divergent reference is
- * the race defect this arm catches.
+ * EXACTLY ONE IS ADMITTED (task-f8ea0a2f). The callers hold different command keys, and a
+ * different key is a different caller: the durable decision store is the sole authority for
+ * replay, so the loser is refused SAFE_BOUNDARY_COMMIT_CONFLICT with the store's own
+ * EXPECTED_VERSION_CONFLICT retained upstream. Byte agreement is not ownership — a second
+ * caller that re-derived the same bytes still never wrote them. One durable row either way;
+ * what this arm catches is a SECOND admission, which is what byte-equality replay produced.
  */
 export function safeBoundaryRace(): SafeBoundaryRaceOutcome {
   const { path, store } = openBoundaryStore("race");
@@ -438,10 +441,83 @@ export function safeBoundaryRace(): SafeBoundaryRaceOutcome {
     recordSafeBoundaryObservation(store, inputFor("race-left")),
     recordSafeBoundaryObservation(rival, inputFor("race-right")),
   ] as const;
+  const refusal = sides.find((side) => !side.ok) ?? null;
   return {
     admittedSides: sides.filter((side) => side.ok).length,
     durableComplete: observationsComplete(store), durableRecords: observationCount(store),
-    refusal: null, sides,
+    refusal, sides, upstreamCode: upstreamOf(refusal),
+  };
+}
+
+export interface SafeBoundaryKeyDivergenceOutcome extends SafeBoundaryOutcome {
+  readonly admittedSides: number;
+  /** The two `commitExpectedVersionDecision` inputs production actually built, captured at
+   *  the seam rather than restated, so the grader can prove the arm varied ONE field. */
+  readonly commitInputs: readonly CommitExpectedVersionDecisionInput[];
+  readonly sides: readonly [unknown, unknown];
+  readonly winnerDisposition: unknown;
+}
+
+/** The real store with ONE method observed. Every other member forwards, so a case that
+ *  needed a second connection or a run page is not answered by a stub instead. */
+function recordingStore(
+  store: SqliteEventStore, sink: CommitExpectedVersionDecisionInput[],
+): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property) {
+      if (property === "commitExpectedVersionDecision") {
+        return (input: CommitExpectedVersionDecisionInput) => {
+          sink.push(input);
+          return target.commitExpectedVersionDecision(input);
+        };
+      }
+      // Receiver is the TARGET, never the proxy: SqliteEventStore holds private fields, and
+      // a method invoked with the proxy as `this` throws on the first private read.
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+    },
+  });
+}
+
+const DIVERGENCE_SLUG = "key-divergence";
+
+/**
+ * THE DIVERGENCE FIXTURE (task-f8ea0a2f) — ONE degree of freedom, and it is the guard's own.
+ *
+ * Both callers share the project, the attempt, the durable provider-run record, the
+ * correlation id and the request bytes; both derive the same observation, the same ref, the
+ * same aggregate and the same `expectedVersion`. `key.commandId` is the ONLY field that
+ * differs, and the two commit inputs are captured at the store seam so the grader can prove
+ * that rather than believe this comment.
+ *
+ * WHY IT REACHES NOTHING ELSE. The input is canonical, so INPUT_MALFORMED cannot answer; the
+ * run is seeded, readable and observed, so RUN_UNREADABLE cannot; nothing is read back, so
+ * neither OBSERVATION_ABSENT nor OBSERVATION_UNREADABLE can. Only cross-key ownership can
+ * separate the two calls — loosen that one guard and the single admission becomes two.
+ */
+export function safeBoundaryKeyDivergence(): SafeBoundaryKeyDivergenceOutcome {
+  const { path, store } = openBoundaryStore(DIVERGENCE_SLUG);
+  seedRun(store, DIVERGENCE_SLUG, observedRecord(DIVERGENCE_SLUG));
+  const rival = openSecondConnection(path);
+  const commitInputs: CommitExpectedVersionDecisionInput[] = [];
+  const inputOf = (commandId: string): Record<string, unknown> => ({
+    ...inputFor(DIVERGENCE_SLUG),
+    key: { commandId, principalId: SESSION, projectId: PROJECT_ID },
+  });
+  const sides = [
+    recordSafeBoundaryObservation(
+      recordingStore(store, commitInputs), inputOf(`cmd-${DIVERGENCE_SLUG}-left`)),
+    recordSafeBoundaryObservation(
+      recordingStore(rival, commitInputs), inputOf(`cmd-${DIVERGENCE_SLUG}-right`)),
+  ] as const;
+  const refusal = sides.find((side) => !side.ok) ?? null;
+  const winner = sides.find((side) => side.ok);
+  return {
+    admittedSides: sides.filter((side) => side.ok).length,
+    commitInputs: Object.freeze([...commitInputs]),
+    durableComplete: observationsComplete(store), durableRecords: observationCount(store),
+    refusal, sides, upstreamCode: upstreamOf(refusal),
+    winnerDisposition: winner === undefined ? undefined : winner.disposition,
   };
 }
 

@@ -11,23 +11,21 @@ import type { ProviderRunReadStore } from "../telemetry/provider-run-reader.js";
 /**
  * The durable safe-boundary observation: a FACT ABOUT WHAT THE HOST SAW.
  *
- * The producer for `ExpansionReleaseEvidence`'s `safeBoundaryObserved` and `observationRef`.
- * The field exists separately from the terminality flags for exactly one reason — an agent
- * must not be able to declare its own boundary safe — so the input carries attempt IDENTITY
- * and decision metadata only and every boundary fact is DERIVED from the durable
- * provider-run record the host committed.
+ * The producer for `ExpansionReleaseEvidence`'s `safeBoundaryObserved` and `observationRef`. The field
+ * exists separately from the terminality flags for exactly one reason — an agent must not be able to
+ * declare its own boundary safe — so the input carries attempt IDENTITY and decision metadata only and
+ * every boundary fact is DERIVED from the durable provider-run record the host committed.
  *
  * THE PREDICATE, and the arm that makes it subtle: TRUE only when the record decodes AND
  * `launch.truthClass === "PROVEN"` AND `launch.exit` is `EXITED` or `SIGNALLED` AND
- * `terminal !== "UNKNOWN"` AND `launch.completedAt !== null`. `ClaudeLaunchExit` has a THIRD
- * arm, `{kind: "UNOBSERVED"}`, which is NON-NULL and whose entire meaning is that the host
- * did NOT see the process cross its boundary — so `exit !== null` would answer TRUE on the
- * one value that denies observation.
+ * `terminal !== "UNKNOWN"` AND `launch.completedAt !== null`. `ClaudeLaunchExit` has a THIRD arm,
+ * `{kind: "UNOBSERVED"}`, which is NON-NULL and whose entire meaning is that the host did NOT see the
+ * process cross its boundary — so `exit !== null` would answer TRUE on the one value that denies it.
  *
- * FAIL CLOSED TWO WAYS, because they demand opposite repairs. A record that exists but does
- * not prove the crossing yields a RECORDED `false` naming the clause that failed — a fact,
- * and one that blocks the release. A record absent or unreadable yields a typed UNKNOWN and
- * records NOTHING: an unknown is not a false, and writing one would manufacture evidence.
+ * FAIL CLOSED TWO WAYS, because they demand opposite repairs. A record that exists but does not prove
+ * the crossing yields a RECORDED `false` naming the clause that failed — a fact, and one that blocks
+ * the release. A record absent or unreadable yields a typed UNKNOWN and records NOTHING: an unknown is
+ * not a false, and writing one would manufacture evidence.
  */
 
 const LAYER = "DAEMON_SAFE_BOUNDARY_OBSERVATION";
@@ -49,27 +47,24 @@ export const SAFE_BOUNDARY_REASON_CODES = Object.freeze([
 ] as const);
 export type SafeBoundaryReasonCode = (typeof SAFE_BOUNDARY_REASON_CODES)[number];
 
-/** Identity and decision metadata ONLY. No `decidedAt`: the release path is clock-free by
- *  design, so `derivedAt` comes off the DURABLE record — a time the host observed. */
+/** Identity and decision metadata ONLY. No `decidedAt`: the release path is clock-free by design, so
+ *  `derivedAt` comes off the DURABLE record — a time the host observed. */
 export interface SafeBoundaryObservationInput {
-  readonly attemptRef: string; readonly correlationId: string;
-  readonly key: CommandDecisionKey; readonly projectId: string;
-  readonly requestBytes: Uint8Array;
+  readonly attemptRef: string; readonly correlationId: string; readonly key: CommandDecisionKey;
+  readonly projectId: string; readonly requestBytes: Uint8Array;
 }
 
-/** Exactly the keys the writer accepts. Any other — above all a boundary claim, a ref or
- *  a flag — is REFUSED, never ignored: a dropped claim is indistinguishable from an
- *  honoured one at the call site. */
+/** Exactly the keys the writer accepts. Any other — above all a boundary claim, a ref or a flag — is
+ *  REFUSED, never ignored: a dropped claim is indistinguishable from an honoured one at the call site. */
 const INPUT_KEYS = Object.freeze([
   "attemptRef", "correlationId", "key", "projectId", "requestBytes",
 ] as const);
 
 export interface SafeBoundaryObservation {
   readonly attemptRef: string; readonly derivedAt: string; readonly observationRef: string;
-  readonly observationVersion: typeof SAFE_BOUNDARY_OBSERVATION_VERSION;
-  readonly projectId: string; readonly providerRunRef: ProviderRunRef;
-  readonly reasonCode: SafeBoundaryReasonCode | null; readonly recordDigest: string;
-  readonly safeBoundaryObserved: boolean;
+  readonly observationVersion: typeof SAFE_BOUNDARY_OBSERVATION_VERSION; readonly projectId: string;
+  readonly providerRunRef: ProviderRunRef; readonly reasonCode: SafeBoundaryReasonCode | null;
+  readonly recordDigest: string; readonly safeBoundaryObserved: boolean;
 }
 
 /** `upstreamCode` preserves the refusing layer's OWN code rather than flattening it. */
@@ -83,27 +78,23 @@ export interface SafeBoundaryWritten {
   readonly observation: SafeBoundaryObservation; readonly ok: true;
 }
 export type SafeBoundaryWriteResult = SafeBoundaryRefused | SafeBoundaryWritten;
-export type SafeBoundaryReadResult =
-  | SafeBoundaryRefused | { readonly observation: SafeBoundaryObservation; readonly ok: true };
+export type SafeBoundaryReadResult = SafeBoundaryRefused
+  | { readonly observation: SafeBoundaryObservation; readonly ok: true };
 
 export interface SafeBoundaryStore extends ProviderRunReadStore {
   commitExpectedVersionDecision(input: CommitExpectedVersionDecisionInput): CommandDecisionResponse;
 }
-export interface SafeBoundaryReadRequest {
-  readonly observationRef: string; readonly projectId: string;
-}
+export interface SafeBoundaryReadRequest { readonly observationRef: string; readonly projectId: string }
 
 const SAFE_BOUNDARY_COMMAND_KIND = "safe_boundary.observe";
 const SAFE_BOUNDARY_EVENT_TYPE = "SafeBoundaryObserved";
-/** EXPORTED so the attempt-keyed lookup (`./attempt-safe-boundary-lookup.js`)
- *  scans THIS stream rather than a second literal that would drift from it. The
- *  ref and aggregate DOMAINS stay private: a locator may name the vocabulary, but
- *  only this module may derive an observation ref. */
+/** EXPORTED so the attempt-keyed lookup (`./attempt-safe-boundary-lookup.js`) scans THIS stream rather
+ *  than a second literal that would drift from it. The ref and aggregate DOMAINS stay private: a
+ *  locator may name the vocabulary, but only this module may derive an observation ref. */
 export const SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE = SAFE_BOUNDARY_EVENT_TYPE;
 const AGGREGATE_DOMAIN = "moe.safe-boundary.aggregate-id.v1";
 const REF_DOMAIN = "moe.safe-boundary.observation-ref.v1", EXPECTED_VERSION = 0;
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+const encoder = new TextEncoder(), decoder = new TextDecoder();
 const refuse = (code: SafeBoundaryRefusalCode, upstreamCode: string): SafeBoundaryRefused =>
   Object.freeze({ code, layer: LAYER, ok: false as const, upstreamCode });
 
@@ -123,9 +114,8 @@ function admit(value: unknown): SafeBoundaryObservationInput | null {
   const allowed = new Set<string | symbol>(INPUT_KEYS);
   if (keys.length !== INPUT_KEYS.length || keys.some((key) => !allowed.has(key))) return null;
   const record = value as Record<string, unknown>;
-  if (["attemptRef", "correlationId", "projectId"].some(
-    (key) => typeof record[key] !== "string" || record[key] === "",
-  )) return null;
+  const named = ["attemptRef", "correlationId", "projectId"];
+  if (named.some((key) => typeof record[key] !== "string" || record[key] === "")) return null;
   if (!(record["requestBytes"] instanceof Uint8Array)) return null;
   if (typeof record["key"] !== "object" || record["key"] === null) return null;
   return value as SafeBoundaryObservationInput;
@@ -134,9 +124,9 @@ interface Derived {
   readonly reasonCode: SafeBoundaryReasonCode | null; readonly safeBoundaryObserved: boolean;
 }
 
-/** The predicate, one clause at a time so a weakening reddens exactly one arm — a COVERAGE
- *  claim, true only while every arm has a test: flipping `failed()` to TRUE must redden FIVE
- *  named tests (it reddened three until TERMINAL_UNCLASSIFIED and END_UNRECORDED were added). */
+/** The predicate, one clause at a time so a weakening reddens exactly one arm — a COVERAGE claim, true
+ *  only while every arm has a test: flipping `failed()` to TRUE must redden FIVE named tests (it
+ *  reddened three until TERMINAL_UNCLASSIFIED and END_UNRECORDED were added). */
 function deriveBoundary(record: {
   readonly launch: { readonly completedAt: string | null;
     readonly exit: { readonly kind: string } | null; readonly truthClass: string };
@@ -145,9 +135,8 @@ function deriveBoundary(record: {
   const { launch } = record;
   const failed = (r: SafeBoundaryReasonCode): Derived => ({ reasonCode: r, safeBoundaryObserved: false });
   if (launch.truthClass !== "PROVEN") return failed("SAFE_BOUNDARY_TRUTH_INADEQUATE");
-  if (launch.exit === null || launch.exit.kind === "UNOBSERVED") {
-    return failed("SAFE_BOUNDARY_EXIT_UNOBSERVED");
-  }
+  const unseen = launch.exit === null || launch.exit.kind === "UNOBSERVED";
+  if (unseen) return failed("SAFE_BOUNDARY_EXIT_UNOBSERVED");
   if (record.terminal === "UNKNOWN") return failed("SAFE_BOUNDARY_TERMINAL_UNCLASSIFIED");
   if (launch.completedAt === null) return failed("SAFE_BOUNDARY_END_UNRECORDED");
   return { reasonCode: null, safeBoundaryObserved: true };
@@ -157,62 +146,33 @@ function deriveBoundary(record: {
 function upstreamCodeOf(result: object): string {
   const record = result as Record<string, unknown>;
   if (typeof record["code"] === "string") return record["code"];
-  if (typeof record["status"] === "string") return record["status"];
-  return "UNKNOWN";
+  return typeof record["status"] === "string" ? record["status"] : "UNKNOWN";
 }
 
-const aggregateOf = (observationRef: string): string =>
-  digestOf(AGGREGATE_DOMAIN, [observationRef]);
+const aggregateOf = (ref: string): string => digestOf(AGGREGATE_DOMAIN, [ref]);
 
 /**
- * THE ROW THIS CALL WOULD HAVE WRITTEN, ALREADY STANDING.
- *
- * The commit pins `expectedVersion: 0` on a ref-derived aggregate, so a SECOND
- * observation of the same run under a DIFFERENT decision key is declined by the
- * store even though it derived byte-for-byte the same record. Two production
- * paths legitimately observe one attempt — the dispatch-time release and the
- * post-verification finalization — and they cannot share a command id, so
- * treating that decline as a conflict would make the later one unable to proceed
- * over a row it agrees with completely. This is the replay-idempotence this
- * module's header already claims, made true across callers.
- *
- * IT IS BYTE EQUALITY, NOT SHAPE AGREEMENT, AND IT IS FAIL-CLOSED. The standing
- * payload must be byte-identical to what this call derived; anything else — a
- * different row, an unreadable one, a store that will not answer — returns `null`
- * and the caller refuses SAFE_BOUNDARY_COMMIT_CONFLICT exactly as before. No
- * observation is ever overwritten, and nothing is invented.
+ * ONE COMMAND KEY OWNS ONE OBSERVATION. The commit pins `expectedVersion: 0` on a ref-derived aggregate,
+ * so the FIRST caller owns that row and a SECOND observation of the same run under a DIFFERENT decision
+ * key is declined by the store even though it derived byte-for-byte the same record. That decline is a
+ * CONFLICT and is returned as one: byte agreement is not ownership, and a caller that re-derived a row
+ * it never wrote has no standing to be told it succeeded. Replay idempotence stays exactly where the
+ * durable decision store puts it — SAME key, same request bytes — and this module adds nothing.
  */
-function standingObservation(
-  store: SafeBoundaryStore, aggregateId: string, bytes: Uint8Array,
-  observation: SafeBoundaryObservation,
-): SafeBoundaryWritten | null {
-  let events: readonly StoredEvent[];
-  try { events = store.readEvents(aggregateId); } catch { return null; }
-  const event = events.find((candidate) => candidate.eventType === SAFE_BOUNDARY_EVENT_TYPE);
-  if (event === undefined) return null;
-  if (Buffer.compare(Buffer.from(event.payload), Buffer.from(bytes)) !== 0) return null;
-  return Object.freeze({
-    aggregateId, disposition: "REPLAYED" as const, observation, ok: true as const,
-  });
-}
-
 export function recordSafeBoundaryObservation(
   store: SafeBoundaryStore, value: unknown,
 ): SafeBoundaryWriteResult {
   const input = admit(value);
   if (input === null) return refuse("SAFE_BOUNDARY_INPUT_MALFORMED", "EXACT_RECORD");
 
-  const run = readCurrentProviderRun(store, {
-    attemptRef: input.attemptRef, projectId: input.projectId,
-  });
-  if (!("ok" in run) || run.ok !== true) {
-    return refuse("SAFE_BOUNDARY_RUN_UNREADABLE", upstreamCodeOf(run));
-  }
+  const run = readCurrentProviderRun(store, { attemptRef: input.attemptRef, projectId: input.projectId });
+  const unread = !("ok" in run) || run.ok !== true;
+  if (unread) return refuse("SAFE_BOUNDARY_RUN_UNREADABLE", upstreamCodeOf(run));
 
   const derived = deriveBoundary(run.record);
-  // A DURABLE instant, never a clock read: end recorded, else start observed, else the wall
-  // reading CONVERTED (arithmetic on evidence, not a sample). It must be CANONICAL — the store
-  // refuses a non-canonical `decidedAt`, so a merely descriptive fallback costs the observation.
+  // A DURABLE instant, never a clock read: end recorded, else start observed, else the wall reading
+  // CONVERTED (arithmetic on evidence, not a sample). It must be CANONICAL — the store refuses a
+  // non-canonical `decidedAt`, so a merely descriptive fallback costs the observation.
   const wall = run.record.observedStart?.serverWallSeconds;
   const derivedAt = run.record.launch.completedAt ?? run.record.launch.startedAt
     ?? (typeof wall === "number" && Number.isFinite(wall)
@@ -233,23 +193,18 @@ export function recordSafeBoundaryObservation(
   let response: CommandDecisionResponse;
   try {
     response = store.commitExpectedVersionDecision({
-      commandKind: SAFE_BOUNDARY_COMMAND_KIND,
-      committedResultBytes: bytes,
-      correlationId: input.correlationId,
-      decidedAt: derivedAt,
+      commandKind: SAFE_BOUNDARY_COMMAND_KIND, committedResultBytes: bytes,
+      correlationId: input.correlationId, decidedAt: derivedAt,
       events: [{ eventId: observationRef, eventType: SAFE_BOUNDARY_EVENT_TYPE, payload: bytes }],
-      expectedVersion: EXPECTED_VERSION,
-      key: input.key,
-      requestBytes: input.requestBytes,
-      targetAggregateId: aggregateId,
+      expectedVersion: EXPECTED_VERSION, key: input.key,
+      requestBytes: input.requestBytes, targetAggregateId: aggregateId,
     });
   } catch (error) {
-    return standingObservation(store, aggregateId, bytes, observation)
-      ?? refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", error instanceof Error ? error.message : "T");
+    return refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", error instanceof Error ? error.message : "T");
   }
-  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return standingObservation(store, aggregateId, bytes, observation)
-      ?? refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", response.decision.resultCode);
+  const { decision } = response;
+  if (decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", decision.resultCode);
   }
   const disposition = response.disposition === "REPLAYED" ? "REPLAYED" : "COMMITTED";
   return Object.freeze({ aggregateId, disposition, observation, ok: true as const });
@@ -262,8 +217,8 @@ function decodeObservation(event: StoredEvent): SafeBoundaryObservation | null {
   const candidate = parsed as SafeBoundaryObservation;
   if (candidate.observationVersion !== SAFE_BOUNDARY_OBSERVATION_VERSION) return null;
   if (typeof candidate.safeBoundaryObserved !== "boolean") return null;
-  // Re-encoded and byte-compared: bytes that differ from the durable ones are not the
-  // record that was committed, and answering from them would echo the reader.
+  // Re-encoded and byte-compared: bytes that differ from the durable ones are not the record that
+  // was committed, and answering from them would echo the reader.
   const reencoded = encoder.encode(JSON.stringify(candidate));
   if (Buffer.compare(Buffer.from(reencoded), Buffer.from(event.payload)) !== 0) return null;
   return Object.freeze(candidate);
@@ -280,11 +235,11 @@ export function readSafeBoundaryObservation(
   try {
     events = store.readEvents(aggregateOf(observationRef));
   } catch (error) {
-    return refuse("SAFE_BOUNDARY_OBSERVATION_UNREADABLE",
-      error instanceof Error ? error.message : "T");
+    const detail = error instanceof Error ? error.message : "T";
+    return refuse("SAFE_BOUNDARY_OBSERVATION_UNREADABLE", detail);
   }
-  const event = events.find((candidate) => candidate.eventType === SAFE_BOUNDARY_EVENT_TYPE);
   // A ref that names nothing is REFUSED, never accepted as an identifier.
+  const event = events.find((candidate) => candidate.eventType === SAFE_BOUNDARY_EVENT_TYPE);
   if (event === undefined) return refuse("SAFE_BOUNDARY_OBSERVATION_ABSENT", "NO_EVENT");
   const observation = decodeObservation(event);
   if (observation === null) return refuse("SAFE_BOUNDARY_OBSERVATION_UNREADABLE", "DECODE");

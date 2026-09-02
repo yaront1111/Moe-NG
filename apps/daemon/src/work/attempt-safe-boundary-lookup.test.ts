@@ -85,11 +85,17 @@ describe("attempt safe-boundary lookup (task-48c79a29) — the producer-owned re
    * aggregate, so the FIRST observation of a run is the only row that aggregate
    * can ever hold. A re-observation under a DIFFERENT decision key — which is what
    * the dispatch-time release and the post-verification finalization necessarily
-   * are — derives byte-for-byte the same record and REPLAYS onto it rather than
-   * conflicting. Exactly ONE raw row either way, which is what makes "the current
-   * observation" a single answer rather than a choice between two.
+   * are — derives byte-for-byte the same record and is REFUSED (task-f8ea0a2f):
+   * the durable decision store is the sole authority for replay and it answers
+   * only to the SAME key. Exactly ONE raw row either way, which is what makes "the
+   * current observation" a single answer rather than a choice between two — and
+   * the lookup below still resolves it, so the refusal costs no reader anything.
+   *
+   * SAME-KEY REPLAY IS UNCHANGED and is asserted first: without it this arm could
+   * be satisfied by a producer that refuses every second call, which is a different
+   * rule with the same colour.
    */
-  it("replays a different-key re-observation onto the one standing row", () => {
+  it("refuses a different-key re-observation and leaves the one standing row", () => {
     const { store } = finalizationWorld("lookup-replay");
     const first = observe(store, "lookup-replay");
     expect(observe(store, "lookup-replay")).toBe(first);
@@ -98,10 +104,11 @@ describe("attempt safe-boundary lookup (task-48c79a29) — the producer-owned re
       key: { commandId: "cmd-lookup-replay-2", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
       projectId: PROJECT_ID, requestBytes: encoder.encode("second"),
     });
-    if (!again.ok) throw new Error(`an agreeing re-observation was refused: ${again.code}`);
-    // REPLAYED, not COMMITTED: nothing was written, the standing row answered.
-    expect(again.disposition).toBe("REPLAYED");
-    expect(again.observation.observationRef).toBe(first);
+    expect(again.ok).toBe(false);
+    if (again.ok) throw new Error("a different-key re-observation was admitted");
+    expect(again.code).toBe("SAFE_BOUNDARY_COMMIT_CONFLICT");
+    expect(again.layer).toBe(SAFE_BOUNDARY_OBSERVATION_LAYER);
+    expect(again.upstreamCode).toBe("EXPECTED_VERSION_CONFLICT");
 
     const rows = store.readEventsByTypeAfter(SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, 0n, 200);
     expect(rows.items).toHaveLength(1);
@@ -111,12 +118,14 @@ describe("attempt safe-boundary lookup (task-48c79a29) — the producer-owned re
   });
 
   /**
-   * AND THE CONFLICT REFUSAL IS STILL ALIVE. The replay above is byte equality
-   * against the STANDING row, so a store that cannot hand that row back has not
-   * agreed with anything: it refuses COMMIT_CONFLICT exactly as before. Without
-   * this arm the replay would have quietly retired the refusal.
+   * TASK-F8 — THE REFUSAL IS DECIDED, NEVER READ BACK. This arm blinds the READ of
+   * the standing row while leaving the commit authority intact: the answer must not
+   * move. It is what separates ownership from byte agreement — under the removed
+   * fallback this input was the ONLY different-key case that still refused, because
+   * the readback failed; now every different-key case refuses and this one proves
+   * the readback plays no part in deciding it.
    */
-  it("still refuses COMMIT_CONFLICT when the standing row cannot be read back", () => {
+  it("TASK-F8 refuses COMMIT_CONFLICT identically when the standing row cannot be read back", () => {
     const { store } = finalizationWorld("lookup-conflict");
     const standing = recordSafeBoundaryObservation(store, {
       attemptRef: FINAL_ATTEMPT_REF, correlationId: "corr-lookup-conflict",
@@ -141,6 +150,11 @@ describe("attempt safe-boundary lookup (task-48c79a29) — the producer-owned re
     if (conflicting.ok) throw new Error("an unverifiable re-observation was admitted");
     expect(conflicting.code).toBe("SAFE_BOUNDARY_COMMIT_CONFLICT");
     expect(conflicting.layer).toBe(SAFE_BOUNDARY_OBSERVATION_LAYER);
+    // IDENTICAL to the readable case above, upstream included: the commit authority
+    // decided this, so blinding the readback changed nothing.
+    expect(conflicting.upstreamCode).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(store.readEventsByTypeAfter(SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, 0n, 200).items)
+      .toHaveLength(1);
   });
 });
 

@@ -42,12 +42,13 @@ import {
 import {
   REASON_VARIANTS,
   closeSafeBoundaryStores,
+  safeBoundaryKeyDivergence,
   safeBoundaryObservedControl,
   safeBoundaryRace,
   safeBoundaryReasonSweep,
 } from "./safe-boundary-observation-scenarios.js";
 import {
-  SAFE_BOUNDARY_REASON_CODES,
+  SAFE_BOUNDARY_OBSERVATION_LAYER, SAFE_BOUNDARY_REASON_CODES,
 } from "../../apps/daemon/src/work/safe-boundary-observation.js";
 import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
 import { RECENT_DELIVERY_V2_DURABLE_CASES } from "./recent-delivery-v2-hostile-cases.js";
@@ -234,20 +235,22 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
 
 /**
  * The safe-boundary race, graded on the DURABLE state rather than on what either caller was
- * told. Both callers derive the same observation identity from the same durable run, so the
- * second must converge on the byte-identical standing observation. The defect worth catching
- * is a second durable observation or a divergent replay reference.
+ * told. Both callers derive the same observation identity from the same durable run and race
+ * for `expectedVersion 0` on one aggregate; EXACTLY ONE may own it (task-f8ea0a2f). The
+ * defect this replaced was the opposite of a lost write — a SECOND ADMISSION, handed out by
+ * byte-equality replay to a caller that had written nothing.
  */
 function gradeSafeBoundaryRace(hostileCase: RaceCase): void {
   const outcome = safeBoundaryRace();
-  // Both callers succeed through exactly one commit and one convergence replay.
   // Order-independent: the assertion is on the multiset, never which caller committed.
   expect(outcome.sides).toHaveLength(2);
-  expect(outcome.admittedSides).toBe(2);
-  const admitted = outcome.sides as readonly Record<string, unknown>[];
-  expect(admitted.map((side) => side["disposition"]).sort()).toEqual(["COMMITTED", "REPLAYED"]);
-  expect(new Set(admitted.map((side) =>
-    (side["observation"] as Record<string, unknown>)["observationRef"])).size).toBe(1);
+  expect(outcome.admittedSides).toBe(1);
+  const winner = (outcome.sides as readonly Record<string, unknown>[])
+    .find((side) => side["ok"] === true);
+  expect(winner?.["disposition"]).toBe("COMMITTED");
+  assertRefusedWith(outcome.refusal, requiredRaceRefusal(hostileCase));
+  // The store's OWN code survives the wrap: a flattened refusal names no upstream authority.
+  expect(outcome.upstreamCode).toBe("EXPECTED_VERSION_CONFLICT");
   expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.durableComplete).toBe(true);
 }
@@ -411,6 +414,53 @@ describe("the safe-boundary observation records what it should", () => {
     const control = safeBoundaryObservedControl();
     expect(control.observed).toBe(true);
     expect(control.reasonCode).toBeNull();
+  });
+});
+
+/**
+ * TASK-F8 — THE DIVERGENCE ARM: command-key ownership is the ONLY thing separating these two
+ * calls, and the fixture proves that at the seam instead of asserting it in prose.
+ *
+ * Every other fence is arranged OPEN. The input is canonical (INPUT_MALFORMED cannot answer),
+ * the run is seeded readable and observed (RUN_UNREADABLE cannot), nothing is read back
+ * (OBSERVATION_ABSENT/UNREADABLE cannot). Loosen the one guard — let byte equality stand in
+ * for ownership — and the single admission below becomes two.
+ */
+describe("TASK-F8 distinct command keys cannot both own one observation", () => {
+  const divergence = safeBoundaryKeyDivergence();
+  const commitInputs = divergence.commitInputs as unknown as readonly Record<string, unknown>[];
+  const keyOf = (input: Record<string, unknown>): Record<string, unknown> =>
+    input["key"] as Record<string, unknown>;
+  /** Everything EXCEPT the one varied field, so a fixture that drifted a second field is a
+   *  failure here rather than a silent second explanation for the refusal below. */
+  const normalized = (input: Record<string, unknown>): Record<string, unknown> =>
+    ({ ...input, key: { ...keyOf(input), commandId: "NORMALIZED" } });
+
+  it("TASK-F8 varies exactly one field of the two production commit inputs", () => {
+    // Nonzero first: a fixture that reached the store ZERO times would satisfy every
+    // set comparison below while proving nothing.
+    expect(commitInputs).toHaveLength(2);
+    const [left, right] = commitInputs as [Record<string, unknown>, Record<string, unknown>];
+    expect(keyOf(left)["commandId"]).not.toStrictEqual(keyOf(right)["commandId"]);
+    // Same aggregate, same expectedVersion, same request bytes, same committed bytes, same
+    // events, same correlation id — read off what production built, never restated here.
+    expect(normalized(left)).toStrictEqual(normalized(right));
+  });
+
+  it("TASK-F8 admits exactly one caller and writes exactly one durable observation", () => {
+    expect(divergence.admittedSides).toBe(1);
+    const winner = (divergence.sides as readonly Record<string, unknown>[])
+      .find((side) => side["ok"] === true);
+    expect(winner?.["disposition"]).toBe("COMMITTED");
+    expect(divergence.durableRecords).toBe(1);
+    expect(divergence.durableComplete).toBe(true);
+  });
+
+  it("TASK-F8 refuses the loser under its own layer, keeping the store conflict upstream", () => {
+    assertRefusedWith(divergence.refusal, {
+      code: "SAFE_BOUNDARY_COMMIT_CONFLICT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER,
+    });
+    expect(divergence.upstreamCode).toBe("EXPECTED_VERSION_CONFLICT");
   });
 });
 

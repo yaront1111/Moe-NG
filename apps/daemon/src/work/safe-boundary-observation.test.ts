@@ -45,7 +45,8 @@ import {
 import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
 import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
 import {
-  SAFE_BOUNDARY_OBSERVATION_LAYER, readSafeBoundaryObservation, recordSafeBoundaryObservation,
+  SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, SAFE_BOUNDARY_OBSERVATION_LAYER,
+  readSafeBoundaryObservation, recordSafeBoundaryObservation,
 } from "./safe-boundary-observation.js";
 import type {
   SafeBoundaryObservationInput, SafeBoundaryStore,
@@ -513,26 +514,60 @@ describe("replay is byte-stable and appends nothing", () => {
       // A DIFFERENT caller over the SAME durable facts lands on the SAME aggregate, because
       // the ref identifies the OBSERVATION and not the request — and a ref that varied with
       // caller metadata would land on a fresh aggregate and commit happily, which is the
-      // drift this pins. It therefore COMMITS NOTHING: the row count is unmoved and the ref
-      // is the first caller's.
+      // drift this pins.
       //
-      // IT REPLAYS RATHER THAN CONFLICTING (task-48c79a29). Two production paths observe one
-      // attempt — the dispatch-time release and the post-verification finalization — and
-      // they cannot share a command id, so a caller that re-derived this row BYTE FOR BYTE is
-      // told it already exists instead of being stopped by evidence it fully agrees with. The
-      // second truth this arm was written to prevent is still prevented, by the row count
-      // below and by the byte equality the replay demands.
+      // IT IS REFUSED, NOT REPLAYED (task-f8ea0a2f, replacing the byte-equality fallback of
+      // task-48c79a29). The aggregate pins `expectedVersion 0`, so the FIRST caller owns it;
+      // the durable decision store is the sole authority for replay and it answers only to
+      // the SAME command key. Byte agreement is not ownership: a second caller that
+      // re-derived these bytes still never wrote them, and telling it otherwise handed a
+      // successful observation to a caller with no durable row of its own.
       const other = recordSafeBoundaryObservation(store, {
         ...inputFor("replay"), correlationId: "corr-boundary-replay-other",
         key: { commandId: "cmd-boundary-other", principalId: SESSION, projectId: PROJECT_ID },
       });
 
-      expect(other.ok).toBe(true);
-      if (!other.ok) throw new Error("an agreeing second caller was refused");
-      expect(other.disposition).toBe("REPLAYED");
-      expect(other.observation.observationRef).toBe(first.observation.observationRef);
-      expect(other.aggregateId).toBe(first.aggregateId);
+      expect(other.ok).toBe(false);
+      if (other.ok) throw new Error("a different-key re-observation was admitted");
+      expect(other.code).toBe("SAFE_BOUNDARY_COMMIT_CONFLICT");
+      expect(other.layer).toBe(SAFE_BOUNDARY_OBSERVATION_LAYER);
+      // The refusing store's OWN code, preserved rather than flattened into this layer's.
+      expect(other.upstreamCode).toBe("EXPECTED_VERSION_CONFLICT");
+      // And the refusal wrote NOTHING: the standing row is exactly the first caller's.
       expect(countEvents(store, first.aggregateId)).toBe(before);
+    } finally {
+      store.close();
+    }
+  });
+
+  /**
+   * TASK-F8 — THE OTHER COMMIT BRANCH. A store that THROWS has not declined a version, it has
+   * failed; production still owes the same fail-closed answer, and the thrown detail is what
+   * an operator needs. Without this arm the removed fallback's `catch` path would be graded
+   * only by the branch that returns a decision.
+   */
+  it("TASK-F8 refuses a thrown commit under its own code, keeping the thrown detail", () => {
+    const store = openStore("thrown-commit");
+    try {
+      seedActivation(store, "thrown-commit");
+      seedRun(store, "thrown-commit", observedRecord("thrown-commit"));
+      const thrower: SafeBoundaryStore = {
+        ...delegate(store),
+        commitExpectedVersionDecision: () => {
+          throw new Error("COMMIT_TRANSPORT_DOWN");
+        },
+      };
+
+      const refused = recordSafeBoundaryObservation(thrower, inputFor("thrown-commit"));
+
+      expect(refused.ok).toBe(false);
+      if (refused.ok) throw new Error("a store that committed nothing was admitted");
+      expect(refused.code).toBe("SAFE_BOUNDARY_COMMIT_CONFLICT");
+      expect(refused.layer).toBe(SAFE_BOUNDARY_OBSERVATION_LAYER);
+      expect(refused.upstreamCode).toBe("COMMIT_TRANSPORT_DOWN");
+      // Nothing durable exists to replay onto: the refusal is decided, never read back.
+      expect(store.readEventsByTypeAfter(SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, 0n, 100).items)
+        .toHaveLength(0);
     } finally {
       store.close();
     }
