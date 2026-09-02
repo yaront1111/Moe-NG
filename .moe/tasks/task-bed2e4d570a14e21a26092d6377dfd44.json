@@ -139,7 +139,7 @@
       "completedAt": "2026-09-02T19:27:51.277Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -165,23 +165,32 @@
       "author": "architect-b2b16103",
       "content": "PLAN-TIME SPIDR SPLIT (HEAD 6b5c776c): `git grep -l PackToolLaunch` reaches pack-command, pack-windows-archive, pack-windows-candidate and pack-windows-process-lease beyond the closed kind declaration; `git grep -l WindowsPackToolchain` reaches pack-command/test, pack-windows-main, pack-windows-materialized-main and pack-windows; toolchain-pins/1 also reaches authenticate-node.ps1 and release readers. Thus the exact-seven roster cannot both add kind:\"cargo\" and activate the strict manifest without violating epic rail 8 or changing an exact schema under /1. Created interface leaf task-455f4139821b4b3caf03b2c7bdd859f6 with a separate Cargo pin schema and nine-path reachability roster. This parent must depend on that leaf plus a73 before composition. `moe.set_task_dependencies` was retried and again returned NOT_ALLOWED because worker architect-b2b16103 is incorrectly resolved as on neither architect nor governor team. Governor: set dependsOn=[task-a73b6872e13248768bc161d6059d6a0f, task-455f4139821b4b3caf03b2c7bdd859f6], then amend/re-scope this row’s exact roster/DoD before replanning; no speculative plan was submitted.",
       "timestamp": "2026-08-30T20:33:30.882Z"
+    },
+    {
+      "id": "comment-60260a4504fa467a920881216e43e32e",
+      "author": "qa-ee158f8f",
+      "content": "QA REVIEW EVIDENCE (qa-ee158f8f) — full detail; the approval summary is the compressed form.\n\nANCHOR. All measurements at completion commit `1511f427e81bf1e323164a8f5d507da05a23c696` (kind=completion, ref refs/heads/moe/work-2026-09-02, recorded 19:29:46Z, 10s after reviewStartedAt). `git branch --contains 1511f427` = moe/work-2026-09-02 only, i.e. ON-BRANCH, not shipped to origin/main — correct bar for this board. Sha re-resolved immediately before qa_approve and is unamended. Working tree `git diff --stat 1511f427 -- tools/packaging/` EMPTY, so the bytes I graded are the delivered bytes, not a dirty-tree illusion.\n\nGATES I RE-RAN MYSELF, each foreground and standalone.\n- task.verification `pnpm exec vitest run tools/packaging/{pack-command,pack-windows-main,pack-cargo-tool}.test.ts` -> `Test Files 3 passed (3)` / `Tests 82 passed (82)`, exit 0. Reproduces the recorded tail exactly.\n- Full owned lane `pnpm exec vitest run tools/packaging/` -> `Test Files 10 passed (10)` / `Tests 260 passed | 2 skipped (262)`, exit 0. Nonzero count line on both, so neither is a vacuous zero-test exit 0.\n- `pnpm typecheck:packaging` exit 0, with the `$ tsc --noEmit --strict …` echo as execution evidence.\n\nMY OWN DRILLS — three, none inherited from the worker's step-5 record.\nD1 CODEC REACHABILITY CONTROL. `typecheck:packaging` names a fixed file list that does NOT include pack-toolchain-codec.ts; it can only reach it transitively via pack-windows-materialized-main.ts:8. Planted `const _qaDrill: number = \"not-a-number\";` -> `tools/packaging/pack-toolchain-codec.ts(124,7): error TS2322`, exit 1. So the new module is genuinely inside the gate and its green is real, not the unreferenced-file false green.\nD2 CARRIER INDEPENDENCE. Removed `dirname(toolchain.cargo.executable.path)` from `trustedDirectories()`. Result: exactly ONE red — \"carries only the pinned Cargo directory into the materialized child PATH\", `AssertionError: expected [ 'C:\\Program Files\\Git\\cmd', …(3) ] to include 'C:\\Users\\Yaron\\.rustup\\toolchains\\1.9…'` — with `Tests 1 failed | 81 passed (82)`. pack-command.test.ts stayed fully green, so the PATH carrier and the manifest roster are independently pinned rather than one arm covering both.\nD3 DIGEST, DIVERGENT. The obvious drill (one hex char in cargo-toolchain-pins.json alone) is inadmissible here: the digest is pinned TWICE, and the `TRACKED_PIN` literal at pack-cargo-tool.ts:32 refuses at module load, yielding exit 1 with ZERO tests executed — an identical redundant fence answering first. I mutated BOTH loci to the same wrong 64-hex value, length-preserving, which disarms the tracked-pin fence and leaves `tool.executable.sha256 !== pin.cargoSha256` inside `admitCargoPackTool` as the only mechanism that can refuse. Result: `Tests 2 failed | 30 passed (32)`, `PackCargoToolError: PACK_STEP_FAILED` thrown from `refuse()` at pack-cargo-tool.ts:70. Nonzero denominator, correct layer, named arms.\nRESTORES: every mutation restored in a call SEPARATE from the drill. D1 proven by sha256 equality against `git show 1511f427:` bytes (6f44f634…9abb9 both sides). D2 same method (c95678ef…2039e both sides), which also independently corroborates the worker's recorded D-C sha. D3 proven by empty `git status --porcelain -- tools/packaging/` AND empty `git diff 1511f427 -- tools/packaging/`, plus the pin literal grepping back to …77ae5 in both files. Final state of the whole directory is byte-identical to the delivered commit.\n\nWHY THE REFUSAL ARMS ARE NOT VACUOUS. `cargoRefusal()` asserts `toBeInstanceOf(PackCargoToolError)` plus `{code, layer, message}` — not merely \"threw\". The divergence is real and documented in the test: every sibling fence inside `resolveWindowsPackToolchain` throws a plain Error with a `\": <detail>\"` suffix, so only the Cargo guard can produce this shape. The worker's own drill A (replacing `resolveCargoPackTool` with a bare `captureNativePackTool`) is the proof that this matters — a \"threw\"/\"PACK_STEP_FAILED\"-only assertion would have stayed GREEN with the entire Cargo authority deleted, and this arm went red on the error TYPE. The 7-case counterfeit matrix carries `expect(cases).toHaveLength(7)` and `toBeGreaterThan(0)`, so a sweep that silently yields zero cases cannot pass. The digest assertion pairs the pin-derived comparison with a HARD literal `122f18d2…77ae5`, so no single edit to cargo-toolchain-pins.json can move both sides. The roster arm compares `Object.keys(served)` — enumerated from the production seam — against a TEST-LOCAL frozen literal, in both directions plus `parsed` vs `served`, so a member vanishing from either the served or the advertised side reddens it; it does not iterate the production roster and shrink with it.\nWRONG-VERSION, the one DoD-2 case with no arm in this row's files: covered by the ADOPTED dependency task-455f4139, verified on disk at the delivered tree — pack-cargo-tool.test.ts:245 \"refuses a version-only mismatch with exactly one stdout byte wrong\". Adopting rather than duplicating is what DoD item 1 asked for.\n\nSECURITY READ OF THE DIFF. `packChildEnvironment`'s allowlist is CI/NUMBER_OF_PROCESSORS/PATHEXT/PROCESSOR_*/SYSTEMROOT/TEMP/TMP/TMPDIR/WINDIR — USERPROFILE, CARGO_HOME, RUSTUP_HOME and inbound PATH are all excluded, and PATH is REBUILT from trusted directories that must be absolute, realpath-canonical, a directory, and NOT inside the repository. `shell: false` and argv arrays are unchanged; no command string was introduced. `pinnedCargoExecutable` reads RUSTUP_HOME/USERPROFILE only in the HOST process to derive a candidate path — a location hint — and every byte of authority comes from the landed admission (not-in-repo, canonical, basename cargo.exe, parent bin, grandparent == pinned toolchain, great-grandparent toolchains, exact sha256, exact --version line, empty stderr). An attacker who controls USERPROFILE can only redirect the resolver at something that must still match the pinned digest. `RUSTUP_HOME=\"\"` falls through `??` (nullish-only) to the explicit `=== \"\"` guard and fails closed — the \"no pinned location carried at all\" arm drives exactly that. The child-PATH arm asserts SET EQUALITY on the rebuilt PATH, which is the real fence, and correctly does NOT assert USERPROFILE is absent (Windows re-injects it into any child); it asserts the property that matters instead — the host Cargo under `<USERPROFILE>/.cargo/bin` never enters the rebuilt PATH.\n\nEXTRACTION. pack-command.ts 395 -> 306 by moving the codec block verbatim; PACK_TOOLCHAIN_SCHEMA, MAX_MANIFEST_BYTES and the interface had to move with it because parse reads the schema as a runtime value. pack-command.ts re-exports all four, so its public surface is byte-equivalent and pack-windows.ts needed no edit — I confirmed that rather than taking it on the note's word (`git show 1511f427 --stat` lists no pack-windows.ts).\n\nDISCLOSED, NOT REJECTED. (a) The completion commit also carries three `.moe/tasks/*.json`, two of them foreign (task-28cd95db, task-d3bfc33e) — wrapper board-state harvest, zero source impact. (b) pack-toolchain-codec.ts, pack-toolchain-codec.js and pack-windows-materialized-main.ts sit outside the description's seven-path roster; all three are authorized by plan step 2 and planningNotes, and the .js bridge is forced (every tools/packaging .ts needs one or the spawn-based arms die with ERR_MODULE_NOT_FOUND). (c) pack-windows-main.ts is 399 lines — ONE under the cap. Compliant today; the next editor of that file must split it first.\nLINE CAPS at the delivered commit: pack-command.ts 306, pack-toolchain-codec.ts 123, pack-windows-main.ts 399, pack-tool-identity.ts 286, pack-cargo-tool.ts 248, pack-windows.ts 264, pack-windows-materialized-main.ts 70. All under 400.\nConsumer edge: task-f1f8ac7895e249b786817e9c2f611c0c declares this row in dependsOn (verified on disk), and this row is not a pure package anyway — it lands a real call site in pack-windows-main.ts.",
+      "timestamp": "2026-09-02T19:37:48.076Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:23:44.148Z",
-  "updatedAt": "2026-09-02T19:29:36.028Z",
+  "updatedAt": "2026-09-02T19:39:42.148Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:35.153Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-02T19:39:42.148Z",
+    "wallClockMs": 256506995
   },
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-1f97776b",
     "architect-db6a0906",
     "governor-c11c29e2",
-    "worker-6fab73fa"
+    "worker-6fab73fa",
+    "qa-ee158f8f"
   ],
   "blockedReason": null,
   "blockedOnTaskIds": null,
@@ -236,7 +245,59 @@
     "tools/packaging/pack-toolchain-codec.js",
     "tools/packaging/pack-windows-materialized-main.ts",
     "tools/packaging/pack-command.test.ts",
-    "tools/packaging/pack-windows-main.test.ts"
+    "tools/packaging/pack-windows-main.test.ts",
+    ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+    ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
+    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json"
   ],
-  "completionSummary": "Cargo now rides the Windows pack toolchain boundary end to end. Measured at HEAD 8c305e8f (not the planning HEAD).\n\nDoD1 VERIFY-OR-BLOCK settled: the gap was real. Zero cargo refs in the five carrier files; WindowsPackToolchain was node/pnpm/powershell only; the exact key set was the single literal at pack-command.ts:369; trustedDirectories built PATH from git/tar/node/pnpm/powershell only. The ADMISSION half from task-455f4139 was ADOPTED verbatim, never duplicated: resolveCargoPackTool stays the sole Cargo authority and PackCargoToolError/PACK_STEP_FAILED the only vocabulary.\n\nDELIVERED (7 paths). NEW pack-toolchain-codec.ts (123L): verbatim extraction of pack-command.ts:282-385, proven line by line with grep -Fxq at 104/104. PACK_TOOLCHAIN_SCHEMA, MAX_MANIFEST_BYTES and the interface moved too — required, not cosmetic: parse reads the schema as a runtime value, so leaving it behind creates an ESM cycle with a TDZ hazard. pack-command.ts re-exports all four, so its public surface is byte-equivalent and pack-windows.ts needed no edit (verified, not assumed). NEW pack-toolchain-codec.js: the one-line bridge every tools/packaging module needs — omitting it killed the spawn-based arms with ERR_MODULE_NOT_FOUND. Not in the plan roster; forced, disclosed, declared.\n\npack-command.ts 395->306: CARGO_PINS read ONCE at module load, resolveCargoPackTool keeps arity 2 (a landed test pins that), new cargoExecutable seam, new pinnedCargoExecutable(environment). Codec roster -> [\"cargo\",\"node\",\"pnpm\",\"powershell\",\"schemaVersion\"], decoded through the same decodeTool path. pack-windows-main.ts 398->399: cargo dirname in trustedDirectories, cargo leased at the child launch.\n\nSECURITY. RUSTUP_HOME/USERPROFILE are a LOCATION HINT only — the same trust model pnpm already uses here. Authority is the landed admission: not-in-repo, canonical (no symlink/junction), basename cargo.exe, parent bin, grandparent == pinned toolchain, great-grandparent toolchains, exact sha256, --version equal"
+  "completionSummary": "Cargo now rides the Windows pack toolchain boundary end to end. Measured at HEAD 8c305e8f (not the planning HEAD).\n\nDoD1 VERIFY-OR-BLOCK settled: the gap was real. Zero cargo refs in the five carrier files; WindowsPackToolchain was node/pnpm/powershell only; the exact key set was the single literal at pack-command.ts:369; trustedDirectories built PATH from git/tar/node/pnpm/powershell only. The ADMISSION half from task-455f4139 was ADOPTED verbatim, never duplicated: resolveCargoPackTool stays the sole Cargo authority and PackCargoToolError/PACK_STEP_FAILED the only vocabulary.\n\nDELIVERED (7 paths). NEW pack-toolchain-codec.ts (123L): verbatim extraction of pack-command.ts:282-385, proven line by line with grep -Fxq at 104/104. PACK_TOOLCHAIN_SCHEMA, MAX_MANIFEST_BYTES and the interface moved too — required, not cosmetic: parse reads the schema as a runtime value, so leaving it behind creates an ESM cycle with a TDZ hazard. pack-command.ts re-exports all four, so its public surface is byte-equivalent and pack-windows.ts needed no edit (verified, not assumed). NEW pack-toolchain-codec.js: the one-line bridge every tools/packaging module needs — omitting it killed the spawn-based arms with ERR_MODULE_NOT_FOUND. Not in the plan roster; forced, disclosed, declared.\n\npack-command.ts 395->306: CARGO_PINS read ONCE at module load, resolveCargoPackTool keeps arity 2 (a landed test pins that), new cargoExecutable seam, new pinnedCargoExecutable(environment). Codec roster -> [\"cargo\",\"node\",\"pnpm\",\"powershell\",\"schemaVersion\"], decoded through the same decodeTool path. pack-windows-main.ts 398->399: cargo dirname in trustedDirectories, cargo leased at the child launch.\n\nSECURITY. RUSTUP_HOME/USERPROFILE are a LOCATION HINT only — the same trust model pnpm already uses here. Authority is the landed admission: not-in-repo, canonical (no symlink/junction), basename cargo.exe, parent bin, grandparent == pinned toolchain, great-grandparent toolchains, exact sha256, --version equal",
+  "commits": [
+    {
+      "sha": "1511f427e81bf1e323164a8f5d507da05a23c696",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6fab73fa@2026-09-02T19:00:25Z",
+      "paths": [
+        ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+        ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
+        ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+        "tools/packaging/pack-command.test.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-toolchain-codec.js",
+        "tools/packaging/pack-toolchain-codec.ts",
+        "tools/packaging/pack-windows-main.test.ts",
+        "tools/packaging/pack-windows-main.ts",
+        "tools/packaging/pack-windows-materialized-main.ts"
+      ],
+      "recordedBy": "worker-6fab73fa",
+      "recordedAt": "2026-09-02T19:29:46.054Z",
+      "treeId": "5c31fcfda91f7c9ea6e8221c12f408e4a3975c39",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    ".moe-tmp-block2-6fab73fa.txt",
+    ".moe-tmp-block-6fab73fa.txt",
+    "tools/packaging/pack-toolchain-codec.js",
+    "tools/packaging/pack-windows-materialized-main.ts",
+    ".moe-tmp-patch-6fab73fa.py",
+    "tools/packaging/pack-command.test.ts",
+    ".moe-tmp-patch2-6fab73fa.py",
+    "tools/packaging/pack-windows-main.ts",
+    "tools/packaging/pack-windows-main.test.ts",
+    "tools/packaging/pack-toolchain-codec.ts",
+    "tools/packaging/pack-command.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-6fab73fa@2026-09-02T19:00:25Z",
+    "at": "2026-09-02T19:29:46.054Z"
+  },
+  "completedAt": "2026-09-02T19:39:42.148Z",
+  "reviewCompletedAt": "2026-09-02T19:39:42.148Z",
+  "reviewSummary": "APPROVED at completion commit 1511f427 (kind=completion, on-branch moe/work-2026-09-02, re-resolved unamended); `git diff 1511f427 -- tools/packaging/` EMPTY, so tree == commit.\n\nRE-RAN MYSELF, standalone: task.verification cmd -> 3 files / Tests 82 passed (82) exit 0, reproducing the recorded tail. Owned lane `vitest run tools/packaging/` -> 10 files / 260 passed | 2 skipped exit 0. `pnpm typecheck:packaging` exit 0 with the `$ tsc` echo.\n\nTHREE DRILLS OF MY OWN, each restored separately, tree byte-identical after (sha256 + empty status/diff):\n(1) REACHABILITY - typecheck:packaging never names pack-toolchain-codec.ts; a planted error gave `pack-toolchain-codec.ts(124,7): error TS2322` exit 1, so its green is real.\n(2) CARRIER - dropping cargo's dirname from trustedDirectories() reds exactly ONE arm (1 failed | 81 passed), the child-PATH one; manifest arms stay green.\n(3) DIGEST, DIVERGENT - JSON-only mutation is inadmissible (pinned twice; TRACKED_PIN refuses at module load, ZERO tests run). Mutating BOTH loci gave Tests 2 failed | 30 passed (32), PackCargoToolError PACK_STEP_FAILED from refuse() at pack-cargo-tool.ts:70.\n\nDoD: (1) gap real; admission ADOPTED, resolveCargoPackTool sole authority. (2) 7-case matrix with toHaveLength(7); cargoRefusal asserts instanceOf+code+layer+message, naming the refusing layer (siblings throw plain Error with a \": detail\" suffix); wrong-version covered by the adopted dependency at pack-cargo-tool.test.ts:245. (3) packChildEnvironment excludes USERPROFILE/CARGO_HOME/RUSTUP_HOME and rebuilds PATH from canonical non-repo dirs, shell:false intact; RUSTUP_HOME/USERPROFILE are a host-side hint only. (4) roster set-equality both ways vs a TEST-LOCAL literal; digest paired with a hard literal. (5) production all <400 (pack-windows-main.ts 399).\n\nDISCLOSED: commit swept 3 .moe/tasks/*.json, 2 foreign. Codec .ts/.js + materialized-main outside the 7-path roster, authorized by plan step 2. Detail: comment-60260a45."
 }

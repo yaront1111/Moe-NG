@@ -18,7 +18,7 @@
     "TDD, exact refusal code and layer, per-production-file size caps, and explicit-pathspec commits apply."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -86,7 +86,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-01T18:53:37.234Z",
+  "updatedAt": "2026-09-02T19:39:43.900Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-94dd67c9",
@@ -104,14 +104,11 @@
   "metrics": {
     "firstClaimAt": "2026-08-27T16:41:36.985Z"
   },
-  "blockedReason": "Dependency wait: integration parent must remain blocked until task-4704a2981cf0443991a64273836da486 and task-e91e505e1b794f7c925e448dbbe92fec are DONE/ARCHIVED.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T17:29:23.857Z",
-  "blockedOnTaskIds": [
-    "task-4704a2981cf0443991a64273836da486",
-    "task-e91e505e1b794f7c925e448dbbe92fec"
-  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Architect-dba58d99 wrote the full six-decision HUMAN DECISION PROPOSAL (comment-0301e564, HEAD 88218d96): typed approval.decide arm SOFT_POLICY_WAIVER GRANT|REVOKE (HTTP/control-room only, ADMIN capability, self-bound, reason + step-up), PolicyWaiverGranted.v1/Revoked.v1 immutable records with exact canonical fields, domain-separated SHA-256 refs recomputed by the reader, exact-tuple joins with scope set-equality, explicit human expiry <= 24h no default, revoke/supersede with expected-version fencing. Fresh measurements included.",

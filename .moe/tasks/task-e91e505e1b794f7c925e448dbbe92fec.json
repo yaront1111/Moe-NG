@@ -102,8 +102,8 @@
       "completedAt": "2026-09-02T19:28:19.872Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-368df350",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -139,11 +139,17 @@
       "author": "worker-9801b4a8",
       "content": "DELIVERY RECORD 2/2 — DRILL LEDGER, DENOMINATORS AND GATE EVIDENCE.\n\nMUTATION DRILLS. Six mutations, each restored, each restore proven in a call SEPARATE from the restore. Drills 1 and 4 were RE-RUN after the adversarial fix changed the comparator and the test file, so the numbers below are the final ones.\n1. EXPIRY `<=` -> `<`: RED 2 named arms — \"treats expiry as exclusive at exact equality\" (`expected refusal POLICY_WAIVER_EXPIRED, got an accepted waiver`) and \"keeps a predecessor in force when the successor expires at the evaluation instant\". 2 failed | 43 passed.\n2. SCOPE set-equality -> positional (`granted.every((m,i) => m === requested[i])`): RED exactly 1 — \"accepts a scope that is the same set in a different order\" (`expected an accepted waiver, got POLICY_WAIVER_SCOPE_FOREIGN`). 1 failed | 34 passed (pre-adversarial denominator).\n3. SOFT uniqueness `soft === 1 && hard === 0` -> `soft >= 1`: RED exactly 2, both NOT_SOFT — the ambiguity arm and the SOFT+HARD arm. The HARD-only and absent arms correctly stayed green because the mutation cannot reach them, which is what makes the two reds specific. 2 failed | 33 passed.\n4. SUPERSESSION -> trust the fold's lineage flag (carry `superseded` into LoadedGrant, select `findLast(!superseded)`): RED 3 — both trap arms (\"successor itself EXPIRED\" -> got POLICY_WAIVER_EXPIRED; \"successor itself REVOKED\" -> got POLICY_WAIVER_REVOKED) plus the successor-expires-at-instant arm. 3 failed | 42 passed. NOT green, so the validity-aware path is genuinely exercised — this is the pass the governor asked for by name, not the finding.\n5. REF DRILL — VACUITY CHECKED BEFORE BANKING, AND THE CLAIM IS NARROWED HONESTLY. A mutation to a reader-local RECOMPUTATION of humanApprovalRef / waiverRef / aggregate id is NOT CONSTRUCTIBLE inside this row's ownership: by the architect's ruling the reader delegates all three to the prerequisite (`decodePolicyWaiverRecord` recomputes the refs at policy-waiver-record.ts:232-234; the fold re-derives the aggregate id at policy-waiver-leg.ts:127 and enforces ref uniqueness at :128-129/:134), so there is no reader-local copy to diverge and any such drill would red because the PREREQUISITE refused — grading the prerequisite, not this reader. What the reader owns exclusively is the BINDING of those already-verified values into the returned surface, where nothing upstream or downstream can answer. Two separate mutations:\n   5a. `waiverRef: record.waiverRef` -> `record.humanApprovalRef`: RED 7 arms including the named accepted-shape arm (`expected 'approval:policy-waiver:sha256:874b221...' to be 'policy-waiver:sha256:d5f0683530d25450...'`). Both values are valid verified bytes of the SAME record, so the prerequisite accepts both — the reader's binding is the only mechanism that can refuse.\n   5b. `aggregateId: current.aggregateId` -> `current.record.waiverRef`: RED exactly 1, the accepted-shape arm. 1 failed | 34 passed.\n   PRECISE CLAIM: proven is the reader-owned ref/aggregate-id BINDING. The recomputation itself is the prerequisite's and is covered by its own suite. Not dressed up as more than that.\n6. EPIC RAIL 7 ROSTER DRILL, added because the plan has no numbered step for it and the rail binds every role. Deleted \"POLICY_WAIVER_NOT_SOFT\" from POLICY_WAIVER_READER_CODES in the TRACKED prerequisite file: RED exactly 1 with nonzero execution — `AssertionError: expected 11 to be 12`. Restored with `git restore --`, proven three ways (git diff --stat empty, git status --porcelain empty, SHA-256 back to e79b639a464085776c43d40c7b6f0a9c45e2424ae6ead863ad06c7ae12f8ebef).\n\nRESTORE PROOFS. The three owned paths are UNTRACKED (`??`), so git diff certifies nothing about them; every restore was proven by SHA-256 against out-of-tree backups at /tmp/moe-drill-worker-9801b4a8 (worker-id suffixed). Final SHAs, re-measured after the last drill: reader.ts f774aeff6ad1c39c8d3a47407be5e8a236fbee8867550b3046e33e7c03f0e007, reader.js 2716704e459a9fe959db4cae89ee40f7b24cbd599605f99487ba98fb7ab3b300, reader.test.ts 4d4d95c0fd0afefe16fddbbd1898c88050aa6b196f7e7878aad6ffcf9ed43871.\n\nDENOMINATORS, all exact and nonzero, none using `length > 0`: reader roster 12 (plus full ordered set-equality against a test-owned literal), record codes 3, event types 2, JOIN_MATRIX 6, SOFT_MATRIX 4, UNREADABLE_MATRIX 5, HOSTILE_INSTANTS 4, supersession sweep 4.\n\nGATE EVIDENCE. Exact command, foreground and unpiped, exit captured directly: exit 0, \" Test Files  2 passed (2)\", \"      Tests  50 passed (50)\", \"$ tsc --project tsconfig.json\". Non-vacuous against the step-1 baseline of 1 file / 5 tests. Broader lane `pnpm --filter @moe/daemon test`: \"Test Files  374 passed (374)\" / \"Tests  7700 passed (7700)\", exit 0 — fully green, so the path-attributed delta is empty and there is no foreign red to disclose. Bridge loads under plain node v24.16.0: exports [\"DAEMON_POLICY_WAIVER\",\"POLICY_WAIVER_READER_CODES\",\"readPolicyWaiver\"], roster length 12. Sizes: reader.ts 243 lines (cap 250), bridge exactly 1 line, test 535.",
       "timestamp": "2026-09-02T19:29:18.629Z"
+    },
+    {
+      "id": "comment-2963e7164f554b8cb3d1307fcdd1d921",
+      "author": "qa-368df350",
+      "content": "QA REVIEW EVIDENCE (qa-368df350, 2026-09-02) — APPROVED. Overflow detail for the 2000-char reviewSummary.\n\nMY OWN DRILLS, not a re-read of the worker's ledger. Backup out-of-tree at %TEMP%/qa-368df350-reader.bak.ts; the three owned paths are TRACKED since 64fe2558, so git diff is a valid restore proof and I took BOTH it and SHA-256, in a call separate from each restore.\n1. `record.expiresAtEpochMs <= evaluatedAtEpochMs` -> `<` : RED 2 named arms — \"treats expiry as exclusive at exact equality\" (`Error: expected refusal POLICY_WAIVER_EXPIRED, got an accepted waiver`) and \"keeps a predecessor in force when the successor expires at the evaluation instant\". `Tests  2 failed | 43 passed (45)`. Reproduces the worker's drill 1 exactly.\n2. `selectCurrent` stripped of its validity search (`return survivors[survivors.length - 1]`) : RED 3 — both trap arms plus the successor-at-instant arm. `3 failed | 42 passed (45)`. This is a STRICTER mutant than the worker's drill 4 (which carried the fold's flag through the type); same 3 reds, so the validity-aware path is genuinely exercised and not merely type-protected.\n3. THE ARM I SUSPECTED OF VACUITY, settled by drill rather than by argument. `it(\"never emits POLICY_WAIVER_SUPERSEDED...\")` guards its negative behind `if (!result.ok)`, and 3 of its 4 histories return ok:true at HEAD — so the assertion body executes ONCE. That is the shape of a tautological status-guarded negative. Mutant: `if (joined.survivors.length > 1) return refuse(\"POLICY_WAIVER_SUPERSEDED\")` before the accept. RESULT: `7 failed | 38 passed (45)`, and the sweep arm was red BY NAME. It is a real detector, because SUPERSEDED can only ever occur on the `!ok` branch, so any mutant emitting it necessarily opens the guard. Not a finding.\nFinal SHA f774aeff6ad1c39c8d3a47407be5e8a236fbee8867550b3046e33e7c03f0e007, `git diff --stat` and `git status --porcelain` both empty on all three paths.\n\nTHE STRUCTURAL PREMISE, RE-DERIVED FROM SOURCE rather than adopted from the completion record, because the whole SUPERSEDED deviation rests on it:\n- policy-waiver-record.ts:237-241 `policyWaiverAggregateIdFor` digests exactly [projectId, approvedBy, actionKind, policyRevisionRef].\n- :244-247 `policyWaiverTupleKeyFor` is those four PLUS namedObligationId and scope.\n- The reader's JOIN_ORDER is exactly those six, in the DoD-2 order.\nTwo consequences, both load-bearing and both confirmed: (a) survivors can never span two aggregates, so the flat cross-aggregate `grants` array cannot reorder them and \"last survivor\" is genuine durable event order; (b) any later grant satisfying every join is itself a survivor, so the displaced predecessor is never the returned grant and POLICY_WAIVER_SUPERSEDED has no reachable emission site that does not permanently fail every renewal.\n\nON THE RULING, stated plainly so no later row re-opens it on a misquote. comment-3179250312934a0ba29cf11e57fd2eb1 is internally inconsistent: it selects \"option three / CORRECT THE SUPERSEDED-WAIVER DoD\" (which is architect option C verbatim, \"remove/narrow the direct SUPERSEDED requirement\") and its amendment text then says the clause \"stands unchanged in meaning\". The worker's records describe the ruling as unambiguously option C; it is not, and that overstatement is the one thing I corrected rather than accepted. I approve anyway, because the only readings that emit the code are an unreachable branch (fabricated evidence, epic rail 4) or a reader that breaks renewals, and the amendment's own UNREADABLE fallback does not apply — the single fold does establish supersession, which is precisely what selectCurrent consumes. The semantic is implemented; only the emission is absent, and it is absent because it is unreachable.\n\nFOLLOW-UPS FOR THE EPIC-FINAL HARDENING ROW, not defects of this row (per the delivery-bias rail):\n1. `obligationRefusal` walks `slice.rules` unguarded, so a structurally invalid installedSliceChain throws a TypeError instead of returning a stable code. No authority is granted, so it is fail-closed in effect, but a raw throw is not an epic-rail-4 stable reason code. The worker disclosed this deliberately rather than shipping unreachable defensive code; the input is typed and core-validated upstream.\n2. Enumeration is O(all waiver aggregates) per read.\n3. `policyWaiverTupleKeyFor` compares scope by JSON.stringify (ORDER-SENSITIVE) while the reader's `sameScopeSet` is SET equality. Same-set/different-order grants are therefore two independent lineage chains to the fold and one authority to the reader. Correct per DoD 2, which mandates canonical set-equality, but it is an asymmetry worth a note where the two surfaces meet.\n\nCOMMIT ATTRIBUTION, disclosed. The recorded completion commit 1355b743 carries ONLY .moe/tasks/task-e91e505e...json. The three source files landed in 64fe2558, a wrapper CHECKPOINT recorded under my own qa session id, which also swept a foreign .moe/tasks/task-3f75f0e6...json. Delivered bytes verified independently: `git cat-file -e HEAD:` succeeds for all three, worktree == HEAD (empty diff), none present on origin/main. On-branch, not shipped. Not a worker defect and not grounds for the NO-COMPLETION-COMMIT reject path.",
+      "timestamp": "2026-09-02T19:37:54.808Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:09:27.335Z",
-  "updatedAt": "2026-09-02T19:30:43.788Z",
+  "updatedAt": "2026-09-02T19:39:43.785Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",
@@ -158,7 +164,9 @@
     "firstClaimAt": "2026-08-31T14:18:42.103Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-02T19:39:43.785Z",
+    "wallClockMs": 192061682
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -227,13 +235,36 @@
       "treeId": "2746d6d713b5b9faf3e19b8b3a8fbf3d59bd3b1e",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "1355b7432c635449436bd4dafde750b09d9c25fe",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-9801b4a8@2026-09-02T19:00:57Z",
+      "paths": [
+        ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json"
+      ],
+      "recordedBy": "worker-9801b4a8",
+      "recordedAt": "2026-09-02T19:31:06.815Z",
+      "treeId": "ecbcfe71c861e69ed8c85ca82bb35ff4c41dfc28",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-368df350@2026-09-02T19:30:39Z",
-    "at": "2026-09-02T19:30:43.788Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-9801b4a8@2026-09-02T19:00:57Z",
+    "at": "2026-09-02T19:31:06.815Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/bootstrap/policy-waiver-reader.test.ts",
+    "apps/daemon/src/bootstrap/policy-waiver-reader.js",
+    "apps/daemon/src/bootstrap/policy-waiver-reader.ts"
+  ],
+  "completedAt": "2026-09-02T19:39:43.785Z",
+  "reviewCompletedAt": "2026-09-02T19:39:43.785Z",
+  "reviewSummary": "APPROVED. Evidence: comment-2963e7164f554b8cb3d1307fcdd1d921.\n\nGATE RE-RUN BY ME, exact command, foreground/unpiped, PIPESTATUS[0]=0: `Test Files 2 passed (2)` / `Tests 50 passed (50)` / `$ tsc`. Non-vacuous vs the 1-file/5-test baseline.\n\nTHREE DRILLS OF MY OWN, each restored, restore proven by SHA-256 + empty git diff in a separate call. (1) expiry `<=`->`<`: 2 failed|43 passed, reds the exact-equality arm. (2) selectCurrent stripped of its validity search: 3 failed|42 passed, reds both trap arms - stricter mutant than the worker's drill 4, same reds. (3) I suspected `it(\"never emits POLICY_WAIVER_SUPERSEDED\")` was a tautological status-guarded negative (3 of its 4 histories return ok:true). Mutant `if (survivors.length>1) refuse(SUPERSEDED)` => 7 failed|38 passed, that arm red by name. Genuine detector; SUPERSEDED only occurs on the !ok branch. Not a finding.\n\nUnreachability premise re-derived from source: aggregate id = tuple's first four (record.ts:237-241), tuple key = those + obligation/scope (:244-247), JOIN_ORDER = exactly those six. Survivors never span aggregates and any later joining grant is itself a survivor, so SUPERSEDED has no reachable emission site that does not break every renewal.\n\nCorrection recorded: the ruling is inconsistent - it picks option three (architect's C, \"remove/narrow\") then says the clause \"stands unchanged in meaning\". The worker overstates it as unambiguously C. Approved anyway; the alternatives are an unreachable branch (rail-4 fabrication) or a renewal-breaking reader.\n\nDoD 1-6 evidenced. Denominators exact/nonzero (12,3,2,6,4,5,4,4), no `length > 0`; rosters imported as subjects, literals test-owned; refusals pin code + literal DAEMON_POLICY_WAIVER, keys code/layer/ok only. reader.ts 243<=250, bridge 1 line, no debris. Rail-3 edge in parent task-5d462855 dependsOn FIELD. Completion commit 1355b743 holds only the task json; the 3 sources landed in wrapper checkpoint 64fe2558, bytes verified on-branch, worktree==HEAD."
 }

@@ -16,7 +16,7 @@
     "Run Cargo and daemon/package gates foreground with nonzero count evidence."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -41,7 +41,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:17:46.446Z",
-  "updatedAt": "2026-09-01T18:53:38.044Z",
+  "updatedAt": "2026-09-02T19:39:42.270Z",
   "contextFetchedBy": [
     "worker-2a834a38",
     "architect-b2b16103",
@@ -51,12 +51,9 @@
   "metrics": {
     "firstClaimAt": "2026-08-30T20:05:52.175Z"
   },
-  "blockedReason": "Dependency wait: Windows broker prerequisite resumes after task-a73b6872e13248768bc161d6059d6a0f and task-bed2e4d570a14e21a26092d6377dfd44 land.",
-  "blockedOnTaskIds": [
-    "task-a73b6872e13248768bc161d6059d6a0f",
-    "task-bed2e4d570a14e21a26092d6377dfd44"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T17:29:27.922Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
