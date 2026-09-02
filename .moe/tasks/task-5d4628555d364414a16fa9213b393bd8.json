@@ -193,7 +193,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-02T23:27:13.160Z",
+  "updatedAt": "2026-09-02T23:27:17.339Z",
   "contextFetchedBy": [
     "worker-1ff24286",
     "worker-17aab223",
@@ -270,7 +270,9 @@
     "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
     "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
     "apps/daemon/src/bootstrap/policy-fact-resolver.test.ts",
-    "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts"
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts",
+    ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json"
   ],
   "completionSummary": "Reopen cycle closed: DoD 2 clause 2, the only clause QA failed (comment-e2d28055). DoD 1/3/4/5/6 already passed and were not re-touched.\n\nFIX. SERVER_SOURCED_KEYS (bootstrap-policy-authority.ts:34-43) now rosters approvalRef, humanApprovalRef and waiverRef, APPENDED after the original five. They were silently IGNORED before; they now fall through callerSuppliedKey to the existing catch-all at bootstrap-policy-services.ts:130-132 and are REFUSED with BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE at DAEMON_INGRESS, before any store read. No new refusal vocabulary, no new layer constant.\n\nTESTS. bootstrap-services.test.ts:1374 replaces the old decisionDigest-identity arm (which proved IGNORED, the wrong property) with a per-key assertion of the exact code AND exact layer over a frozen 3-member roster with an exact toHaveLength(3), plus zero durable PolicyEvaluated events - that last assertion is what pins \"before any authority read\" rather than merely \"refused\". Asserted per key so one key silently dropped later cannot hide behind the other two. Added :1397, a fence on roster ORDER: callerSuppliedKey is a find, so prepending the refs would retarget the four dedicated refusals to the vaguer waiver code with nothing going red.\n\nQA issue 3 (non-blocking) also closed: policy-fact-resolver.test.ts now carries the SOFT+HARD (soft=1,hard=1) and SOFT-twice (soft=2,hard=0) cases, so each conjunct of the reader's `soft === 1 && hard === 0` guard is independently load-bearing in this row's own arms. REFUSAL_CASES pins an exact 15 with a per-code denominator map.\n\nAUTHORITY. Implemented against comment-27fb9e2e (governor-0134a004) \"OPERATOR RULING BY DELEGATION - CONTRACT A ACCEPTED AS AUTHORITY\" over comment-0301e564. The six Contract A semantics were ruled by operator delegation; this row chose none of them. The get_handoff_history note claiming the gate is still open predates that ruling by five minutes and is stale.\n\nVERIFICATION. Owned-scope leg exit 0, Test Files 2 passed, Tests 90 p",
   "commits": [
@@ -385,13 +387,29 @@
       "treeId": "2f8f17e82fd1aaef6413d83dfda54b0c1442a5ff",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "255f4fe3b4257ddcdd2fcce5b65ee5579d02b671",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d109461f@2026-09-02T23:27:13Z",
+      "paths": [
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json"
+      ],
+      "recordedBy": "qa-d109461f",
+      "recordedAt": "2026-09-02T23:27:17.339Z",
+      "treeId": "2cb47d5e3616199b373a2fa2127af9c9fabfc991",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-17aab223@2026-09-02T21:51:04Z",
-    "at": "2026-09-02T21:51:12.475Z"
+    "sessionId": "qa-d109461f@2026-09-02T23:27:13Z",
+    "at": "2026-09-02T23:27:17.339Z"
   },
   "reviewCompletedAt": "2026-09-02T20:38:14.948Z",
   "rejectionDetails": {
