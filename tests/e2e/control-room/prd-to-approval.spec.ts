@@ -40,6 +40,17 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
   expect(root, "repo root (package.json + pnpm-workspace.yaml)").not.toBeNull();
   if (root === null) return;
 
+  // Structural retirement canary, fail-closed BEFORE any child starts: the durable
+  // harness for this lane is `daemon-ports.ts`, and the scratch-named module it
+  // superseded must not come back under any name. Asserted on the path's existence
+  // rather than on an import, so a re-added module is caught even if nothing here
+  // imports it yet. Scoped to this one path — unrelated provider/native probe
+  // capabilities that merely contain the word are none of this lane's business.
+  expect(
+    existsSync(join(root, "tests", "e2e", "control-room", "daemon-scratch.ts")),
+    "retired module: tests/e2e/control-room/daemon-scratch.ts must not exist (its helpers live in daemon-ports.ts)",
+  ).toBe(false);
+
   const dist = join(root, "apps", "control-room", "dist");
   const scratch = createLaneScratch();
   const children: ChildProcess[] = [];
