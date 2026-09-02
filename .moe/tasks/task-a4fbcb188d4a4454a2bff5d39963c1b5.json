@@ -135,7 +135,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.316Z",
-  "updatedAt": "2026-09-02T17:41:09.926Z",
+  "updatedAt": "2026-09-02T18:14:07.825Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:15:59.807Z",
     "plannedStepCount": 7,
@@ -179,11 +179,6 @@
       "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
       "apps/daemon/src/orchestrator/agent-authority-cleanup.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 3600000,
-    "warnedAt": "2026-09-01T22:27:06.546Z",
-    "escalatedAt": "2026-09-01T22:27:06.546Z"
   },
   "planApprovedAt": "2026-08-31T16:25:18.908Z",
   "workStartedAt": "2026-08-31T16:26:37.459Z",

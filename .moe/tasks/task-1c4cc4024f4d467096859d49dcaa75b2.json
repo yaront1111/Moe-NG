@@ -111,7 +111,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.775Z",
-  "updatedAt": "2026-09-02T17:41:18.746Z",
+  "updatedAt": "2026-09-02T18:14:09.675Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:22:38.431Z",
     "plannedStepCount": 7,
@@ -163,11 +163,6 @@
       "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
       "apps/daemon/src/runtime-entrypoint.test.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 6300000,
-    "warnedAt": "2026-08-31T16:50:00.427Z",
-    "escalatedAt": "2026-08-31T16:50:00.427Z"
   },
   "planApprovedAt": "2026-08-31T16:47:23.869Z",
   "workStartedAt": "2026-08-31T16:51:08.925Z",

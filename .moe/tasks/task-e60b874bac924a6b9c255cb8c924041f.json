@@ -199,7 +199,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:22:20.384Z",
-  "updatedAt": "2026-09-02T18:07:10.431Z",
+  "updatedAt": "2026-09-02T18:14:21.289Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -249,11 +249,6 @@
       "tests/migration/cutover-live/live-quiesce-inventory.ts",
       "tests/migration/cutover-live/live-quiesce-evidence.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 3600000,
-    "warnedAt": "2026-08-28T06:38:51.387Z",
-    "escalatedAt": "2026-08-28T06:38:51.387Z"
   },
   "planApprovedAt": "2026-08-31T13:53:28.276Z",
   "workStartedAt": "2026-08-28T06:39:38.429Z",

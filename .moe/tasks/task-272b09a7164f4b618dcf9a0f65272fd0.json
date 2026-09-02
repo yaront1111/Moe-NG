@@ -16,8 +16,62 @@
     "Do not add or restamp refusal codes. Tests pin identifier, exact code, and exact refusing layer; a literal layer collision grants no coverage.",
     "Production files remain below 400 physical lines, target 250; split a production module before crossing 400 rather than hiding logic in fixtures."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-ANCHOR, CONFIRM THE PARK IS RELEASED, AND RE-MEASURE (DoD 1). No edits.\n\n(a) Record `git rev-parse HEAD`. The description anchors 438caef3 and is stale; measured HEAD is f0abbd39 and the branch is moving.\n\n(b) Confirm the build-order block is discharged: task-7d1ddf29 is DONE with completion commit `7f0ee691` landed, and ALL FIVE dependsOn rows (task-952564b3, task-40017f79, task-2f554e29, task-922c839a, task-7d1ddf29) are DONE. Two prior architect seats released this row rather than plan against pre-leaf pairing-open bytes; that hazard is now gone, so pairing-open fixtures are written against LANDED bytes.\n\n(c) DoD 1's block condition: verify pairing-open-completion and generated-client bytes are NOT still owned by a live row despite the dependency records. Check get_context.epicSiblings. If either is still owned elsewhere, BLOCK rather than adopt them. Also check specifically for a live row touching plan-approval.ts or completeness.security.ts — the prior handoff warns this row overlaps later scheduler-hostile work on both, and those must be serialized, not raced.\n\n(d) Record `git status --porcelain` and line counts for all ten owned paths. Measured all CLEAN: 168 / 176 / 196 / 421 / 164 / 482 / 445 / 444 / 188 / 353.\n\n(e) Confirm the four constants and that their arms are genuinely absent:\n  live-budget-commitment.ts:25 LIVE_BUDGET_COMMITMENT_LAYER; plan-approval.ts:48 PLAN_APPROVAL_BUILD_LAYER (\"CONTROL_ROOM_COMMAND_BUILD\"); plan-approval.ts:50 PLAN_APPROVAL_TRANSPORT_LAYER (\"CONTROL_ROOM_TRANSPORT\"); pairing-open-completion.ts:34 PAIRING_OPEN_LAYER (\"CONTROL_ROOM_PAIRING_OPEN\").\n  `grep` all four in transport-hostile-cases.ts and transport-hostile-fixtures.ts — measured ZERO hits, so the 12 arms are unwritten. If hits now exist, stop and re-scope rather than duplicating.\n\n(f) Pre-diff baselines, each standalone and unpiped with its count line recorded: focused control-room, daemon, transport-security and completeness legs. Record the exact failing set — DoD 4's known generated-client red must be attributable by merge-base-versus-HEAD delta later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-budget-commitment.ts",
+        "apps/control-room/src/v2/goals/plan-approval.ts",
+        "apps/daemon/src/http/pairing-open-completion.ts",
+        "tests/security/transport-hostile-cases.ts",
+        "tests/security/transport-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE 12 ARMS AS A SEPARATE PRE-ROSTER SET (DoD 2). Red-first. Edit transport-hostile-cases.ts and transport-hostile-fixtures.ts.\n\n**DO NOT APPEND TO `TRANSPORT_HOSTILE_CASES`.** transport-boundaries.security.ts couples that table to the roster in ways the four new constants would immediately violate, because rail 1 forbids adding them to BOUNDARY_ROSTER in this row:\n  :158 `expect(races).toBe(ROSTER_TRANSPORT.length)` — EXACT equality; four new RACE cases make races 30 against a roster of 26 and this REDS.\n  :162-168 bidirectional sweep — `covered minus roster` must be empty; the four new boundaries are not rostered and this REDS.\nDo NOT 'fix' either by editing BOUNDARY_ROSTER, by bumping the `toHaveLength(26)` literal at :148, or by relaxing an exact-set assertion. Rails 1 and 2 forbid all three, and the serialized final roster-closure row adds all fifteen entries at once.\n\nINSTEAD export a separate frozen `PRE_ROSTER_TRANSPORT_HOSTILE_CASES` alongside the existing table, mirroring the pattern task-38ec used for PRE_ROSTER_INTEGRITY_HOSTILE_CASES. Exactly 12 cases: BEFORE, AFTER and RACE for each of the four constants.\n\nKEY EVERY CASE ON THE IDENTIFIER, NOT THE LAYER LITERAL. `PLAN_APPROVAL_TRANSPORT_LAYER` is the string \"CONTROL_ROOM_TRANSPORT\", which is already asserted at live-app-document-dossier.test.tsx:31/37/42, live-document-dossier.test.ts:61/66, live-effort-path.test.tsx:100, live-event-feed.test.ts:35, live-timing-path.test.tsx:100/117 and gate1-approval.test.ts:515. An arm keyed on that literal passes on a collision and proves nothing about plan-approval's seam — rail 3: 'a literal layer collision grants no coverage'. Import each constant from its production module and key the case on the identifier; assert the exact stable code AND the exact refusing layer.\n\nEvery arm invokes the PRODUCTION seam — never a helper that reimplements the guard. Reuse the existing case shape `{ arm, boundary, expected, name, run }` with `both(a, b)` for RACE expectations. Add no new refusal codes and restamp none (rail 3).\n\nRun the security lane and capture the named red (the cases exist but nothing executes them yet).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/transport-hostile-cases.ts",
+        "tests/security/transport-hostile-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "BUILD THE FOUR DIVERGENCE FIXTURES (DoD 3). Edit transport-hostile-fixtures.ts; touch the three production files only if a seam genuinely cannot be reached without a change.\n\nEach fixture must isolate its NAMED guard so that loosening ONLY that guard reds ONLY its arm. Keep every other fence valid — a fixture that also trips a downstream fence proves the system refuses, not that this guard refuses. The four are prescribed by DoD 3 and must not be improvised:\n1. LIVE_BUDGET_COMMITMENT_LAYER — BEFORE: a transport throw. AFTER: a response that is exact-shape-invalid. Both must reach live-budget-commitment.ts's own guard.\n2. PLAN_APPROVAL_BUILD_LAYER — a GENUINE foreign-run approval affordance with send unreachable, so the BUILD guard is what refuses rather than a transport failure.\n3. PLAN_APPROVAL_TRANSPORT_LAYER — a VALID built request whose `delivered:false` result is the ONLY transport refusal. The request must genuinely pass the build layer first, or the arm grades the build guard instead.\n4. PAIRING_OPEN_LAYER — an otherwise-valid whitespace-padded OVER-bound body, plus the exact UNDER-bound roster drift case. Written against task-7d1ddf29's landed pairing-open bytes.\n\nThe RACE arm for each contributes TWO recorded outcomes; assert per-leg, never on an aggregate, and never pin which leg wins.\n\nImplement the minimum needed to turn each arm green. If a production file must change to expose a seam, keep it under 400 lines (currently 168 / 196 / 164) and do NOT move logic into fixtures to keep a production file small — rail 4 forbids that trade.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/transport-hostile-fixtures.ts",
+        "apps/control-room/src/live/live-budget-commitment.ts",
+        "apps/control-room/src/v2/goals/plan-approval.ts",
+        "apps/daemon/src/http/pairing-open-completion.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE THE PRE-ROSTER RUNNER WITH ITS OWN DENOMINATOR (DoD 2 + 4). Edit transport-boundaries.security.ts, and completeness.security.ts only if it must acknowledge the pre-roster set.\n\nAdd a SELF-CONTAINED describe block that executes PRE_ROSTER_TRANSPORT_HOSTILE_CASES. It must NOT feed the existing `HOSTILE_CASES`, `RECORDED` or `COVERED` values — those are bidirectionally equated with the roster at :158 and :162-168, and any contribution from unrostered boundaries reds them. Use a separate recorded array.\n\nAssertions, each exact and nonzero:\n- Denominator: the set has EXACTLY 12 cases. Assert the literal 12 — a table that silently produced zero would make every other assertion vacuous.\n- Exact set equality on the four constants: the distinct `boundary` values are exactly the four identifiers.\n- Exact set equality on the three arms, and each constant carries all three — assert the `${constant}#${arm}` key set has all 12 members, mirroring :170-175.\n- Recorded-outcome count: 12 cases with four RACE arms yield 12 + 4 = 16 outcomes, since a RACE records two. Assert that exact total so a dropped leg reds here rather than passing on the half it kept.\n- No admission: no case yields a command, a grant, or a truth class above UNKNOWN.\n- Per case: the exact stable code and the exact refusing layer, via the shared assertion helper.\n\nLeave every existing rostered assertion untouched — :148's `toHaveLength(26)`, :154, :158, :162-168 and :170-175 must all still pass unchanged. Re-run the lane and confirm the pre-existing block is unaffected.\n\nRun the focused control-room, daemon, transport-security and completeness legs standalone and unpiped; each Vitest leg must print a nonzero Test Files/Tests count. Read the OUTPUT, not the exit code — 'No test files found' exits 0.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/transport-boundaries.security.ts",
+        "tests/security/completeness.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS, ADVERSARIAL REVIEW, FINAL GATE AND LANDING (DoD 5).\n\n(a) Capture exact-path `git status --porcelain` for every mutation target FIRST. All ten owned paths are TRACKED and CLEAN, so `git diff --exit-code` plus sha256 equality is a valid restore proof; if any target is untracked at drill time, back it up out-of-tree under %TEMP% and prove the restore by SHA256 in a SEPARATE command.\n\n(b) FIVE drills, each reddening ITS OWN named assertion, one degree at a time:\n  1-4. Relax each of the four production guards in turn (live-budget-commitment.ts, plan-approval.ts build, plan-approval.ts transport, pairing-open-completion.ts). Each must red its OWN arm's exact code/layer assertion. **If loosening a guard reds a DIFFERENT arm, a downstream fence answered first and that fixture is wrong — report it as a FINDING rather than banking the red.** If a drill comes back GREEN, that is also a finding, not a pass.\n  5. Delete one generated case and require the CONSTANT#ARM denominator assertion from step 4 to red, naming the missing key rather than only reporting a count change.\nRestore each separately, prove the restore, and re-run green before the next.\n\n(c) Load `adversarial-self-review` and read the diff as an attacker: RACE ordering and timing, fixture cleanup on the refusal path as well as the success path, whether any arm would still pass against an empty result, and whether any assertion could be moved by a single edit on both its expected and actual sides.\n\n(d) FINAL GATE: run the four legs standalone and unpiped, quoting every count line, plus the merge-base-versus-HEAD path-attributed baseline. The delta intersected with the ten owned paths must be EMPTY. **DoD 4's known generated-client red is attributable ONLY by that delta and must NEVER be called green** — disclose it verbatim with its exact failing paths and do not fix it here.\n\n(e) LANDING. Declare the owned paths you actually changed with moe.declare_files and report them in complete_step.modifiedFiles. Preserve active generated-client and HTTP-ingress WIP (rail 2): no reset, stash, blanket add, `git clean -fd`, `git checkout -- .`, or foreign-path adoption — ~124 paths are dirty tree-wide from live sibling rows. Do not hand-commit; exit through the wrapper.\n\n(f) Completion record: all 12 arms with exact before/after counts, the pre-roster denominator, the drill sheet with red lines and mutant SHAs, and a plain statement that BOUNDARY_ROSTER was deliberately NOT edited because the serialized final roster-closure row adds all fifteen entries at once. Put overflow in row comments, each under ~4500 chars.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-budget-commitment.ts",
+        "apps/control-room/src/v2/goals/plan-approval.ts",
+        "apps/daemon/src/http/pairing-open-completion.ts",
+        "tests/security/transport-hostile-cases.ts",
+        "tests/security/transport-boundaries.security.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -44,15 +98,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:55:34.713Z",
-  "updatedAt": "2026-09-02T18:02:38.102Z",
+  "updatedAt": "2026-09-02T18:12:54.226Z",
   "metrics": {
-    "firstClaimAt": "2026-08-30T22:10:29.290Z"
+    "firstClaimAt": "2026-08-30T22:10:29.290Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 7
   },
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-21d05545",
     "architect-5e59a71e",
-    "architect-1f97776b"
+    "architect-1f97776b",
+    "architect-dbf9e869"
   ],
   "priorHandoffs": [
     {
@@ -77,5 +134,27 @@
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-02T18:12:52.089Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — appending the 12 arms to TRANSPORT_HOSTILE_CASES. Mechanically reddens transport-boundaries.security.ts:158 (races would be 30 vs a roster of 26) and :165 (covered-minus-roster non-empty), because the four constants are deliberately not in BOUNDARY_ROSTER yet. This is the trap the row's own description anticipates.\nREJECTED — adding the four constants to BOUNDARY_ROSTER to make the sweep pass. Rail 1 forbids it outright; the serialized final roster-closure row owns that shape and every asserting consumer, and will add all fifteen rows at once. Editing it here also breaks boundary-roster.security.ts's own count assertions and collides with that row.\nREJECTED — bumping `expect(ROSTER_TRANSPORT).toHaveLength(26)` to 30. Same violation by another route, and rail 2 forbids weakening exact-set assertions to obtain green.\nREJECTED — keying the plan-approval transport arm on the layer LITERAL \"CONTROL_ROOM_TRANSPORT\". Seven-plus other sites assert that same literal, so the arm would pass on a collision rather than on plan-approval's own seam. Rail 3 names this exactly.\nREJECTED — planning before the leaf landed, which is what two prior seats correctly refused to do. That constraint is now satisfied rather than bypassed.\nCHOSEN — a separate frozen pre-roster export of exactly 12 cases, a self-contained runner block with its own recorded array and denominator, identifier-keyed assertions, and four divergence fixtures that isolate each named guard.",
+    "codebaseInsights": "MEASURED 2026-09-02 at HEAD f0abbd39 (the row's description anchors 438caef3 — stale; re-anchor).\n\n### THE PARK IS RELEASED AND BOTH PRIOR RELEASES WERE CORRECT\nThis row was parked BLOCKED on dependency leaf task-7d1ddf29, which owns the pairing-open/HTTP-ingress seam. Two architect seats (b2b16103, 21d05545) each measured that and released rather than plan against pre-leaf bytes — correctly. **task-7d1ddf29 is now DONE**, completion commit `7f0ee691` ('Decompose HTTP ingress and static hosting while restoring R3-1 provenance') landed. ALL FIVE dependsOn rows are DONE. The build-order hazard is gone; pairing-open fixtures can be written against landed bytes.\n\n### ALL TEN OWNED PATHS EXIST AND ARE CLEAN\nlive-budget-commitment.ts 168 / .test.ts 176; plan-approval.ts 196; approve-plan.test.tsx 421; pairing-open-completion.ts 164 / .test.ts 482; transport-hostile-fixtures.ts 445; transport-hostile-cases.ts 444; transport-boundaries.security.ts 188; completeness.security.ts 353. All three production sources are well under 400.\n\n### THE FOUR CONSTANTS EXIST; THE TWELVE ARMS DO NOT\n  live-budget-commitment.ts:25  `export const LIVE_BUDGET_COMMITMENT_LAYER = LIVE_BUDGET_COMMITMENT_LAYER_VALUE;`\n  plan-approval.ts:48          `export const PLAN_APPROVAL_BUILD_LAYER = \"CONTROL_ROOM_COMMAND_BUILD\";`\n  plan-approval.ts:50          `export const PLAN_APPROVAL_TRANSPORT_LAYER = \"CONTROL_ROOM_TRANSPORT\";`\n  pairing-open-completion.ts:34 `export const PAIRING_OPEN_LAYER = \"CONTROL_ROOM_PAIRING_OPEN\" as const;`\n`grep` for all four across transport-hostile-cases.ts and transport-hostile-fixtures.ts returns **NOTHING**. The work is genuinely unstarted — this is not a stale-premise row.\n\n### THE CRUX: THE RUNNER BIDIRECTIONALLY EQUATES CASES WITH THE ROSTER, AND RAIL 1 FORBIDS EDITING THE ROSTER\ntransport-boundaries.security.ts couples `TRANSPORT_HOSTILE_CASES` to `ROSTER_TRANSPORT` four ways:\n  :148  `expect(ROSTER_TRANSPORT).toHaveLength(26)`            — hard-coded roster count\n  :154  `expect(HOSTILE_CASES.length).toBeGreaterThanOrEqual(ROSTER_TRANSPORT.length * 3)`\n  :158  `expect(races).toBe(ROSTER_TRANSPORT.length)`           — EXACT equality, not >=\n  :162-168 'sweeps exactly the roster's transport entries, in BOTH directions' — covered-minus-roster AND roster-minus-covered both asserted empty\n  :170-175 every roster boundary needs BEFORE+AFTER+RACE via `${name}#${arm}` keys\nSo APPENDING the 12 new arms to `TRANSPORT_HOSTILE_CASES` REDDENS THE RUNNER IMMEDIATELY: the four new boundaries are not in the roster, so :165 fails, and four new RACE cases make `races` 30 against a roster of 26, so :158 fails.\nRail 1 says 'No BOUNDARY_ROSTER edit in this row; the final roster closure owns that exported shape', and the description says the serialized final integrity/roster row 'will add all fifteen rows after every producer arm lands'.\n**THEREFORE the 12 arms MUST live in a SEPARATE pre-roster export with its own runner block and its own denominator, exactly as task-38ec did with PRE_ROSTER_INTEGRITY_HOSTILE_CASES.** Appending to the existing table is the single most likely worker mistake here, and it is mechanically wrong, not stylistically.\n\n### THE IDENTIFIER-VERSUS-LITERAL TRAP (DoD 2, rail 3)\n`PLAN_APPROVAL_TRANSPORT_LAYER` is the string `\"CONTROL_ROOM_TRANSPORT\"`, and that literal is already asserted in at least seven other places — live-app-document-dossier.test.tsx:31/37/42, live-document-dossier.test.ts:61/66, live-effort-path.test.tsx:100, live-event-feed.test.ts:35, live-timing-path.test.tsx:100/117, gate1-approval.test.ts:515. An arm keyed on the LITERAL is satisfied by any of those and proves nothing about plan-approval's transport seam. Rail 3: 'a literal layer collision grants no coverage'. Key the case on the IDENTIFIER `PLAN_APPROVAL_TRANSPORT_LAYER` and import the constant from plan-approval.ts rather than writing the string.\n\n### EXISTING CASE SHAPE TO MIRROR\nTRANSPORT_HOSTILE_CASES (transport-hostile-cases.ts:82+) entries are `{ arm, boundary, expected, name, run }` with `both(a, b)` for RACE expectations (:75) and `csrf(token)` (:79) for headers. Arms run at transport-boundaries.security.ts:113-138, and a RACE contributes TWO recorded outcomes (:158 comment).",
+    "risks": "THE ROSTER COUPLING IS THE ROW'S MAIN HAZARD — see codebaseInsights. A worker who appends to the existing table gets an immediate red and will be tempted to 'fix' it by editing the roster or the 26 literal, both of which violate rail 1/2. The plan forecloses this in step 2.\nDIVERGENCE IS BINDING (DoD 3, rail 3): each arm must isolate its NAMED guard so that loosening only that guard reds only that arm. The four prescribed fixtures are specific and must not be improvised — live-budget BEFORE transport throw / AFTER exact-shape-invalid response; plan-build genuine foreign-run approval affordance with send unreachable; plan-transport a VALID built request whose `delivered:false` is the only transport refusal; pairing-open an otherwise-valid whitespace-padded over-bound body plus exact under-bound roster drift. If loosening a guard reds a DIFFERENT arm, a downstream fence is answering first and the fixture is wrong — that is a FINDING, not a pass.\nKNOWN FOREIGN RED: DoD 4 names a generated-client red that is attributable ONLY by merge-base-versus-HEAD failing-path delta and 'never called green'. Disclose it verbatim; do not fix it, and do not let it be attributed to this row.\nSERIALIZATION WITH OTHER ROWS: the prior handoff warns this row overlaps plan-approval.ts and completeness.security.ts with later scheduler-hostile work. Check get_context.epicSiblings for a live row touching those two before editing, and preserve active generated-client and HTTP-ingress WIP (rail 2). ~124 foreign dirty paths tree-wide; never reset, stash, blanket-add, or adopt a foreign path.\nRACE ARMS RECORD TWO OUTCOMES EACH. Any denominator you write must account for that, as :158-159 does for the rostered set. A pre-roster denominator of 12 cases yields 12 + 4 = 16 recorded outcomes if all four RACE arms are present.\nDO NOT ADD OR RESTAMP REFUSAL CODES (rail 3). Every arm asserts an EXISTING exact code and the exact refusing layer.\nPRODUCTION FILES STAY UNDER 400 (rail 4), currently 168/196/164 — ample headroom, but do not hide logic in fixtures to keep a production file small; rail 4 forbids that trade explicitly.",
+    "keyFiles": [
+      "tests/security/transport-boundaries.security.ts",
+      "tests/security/transport-hostile-cases.ts",
+      "tests/security/transport-hostile-fixtures.ts",
+      "apps/control-room/src/v2/goals/plan-approval.ts",
+      "apps/daemon/src/http/pairing-open-completion.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-09-02T18:12:54.225Z"
 }
