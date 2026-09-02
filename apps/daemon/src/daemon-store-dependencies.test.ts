@@ -709,7 +709,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "pairingOpenSessions",
         "planningRuns", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
-        "provide", "provideV2", "reconciliation", "restore",
+        "provide", "provideV2", "reconciliation", "restore", "runs",
         "sessionChallengeOperands", "sessionHandshake", "sourceSnapshotPublisher",
         "subscriptions",
       ],

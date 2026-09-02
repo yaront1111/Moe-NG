@@ -24,6 +24,9 @@ import {
 import { DOCUMENT_COVERAGE_READ_PATH } from "./document-coverage-contract.js";
 import type { DocumentCoverageReadPort } from "./document-coverage-contract.js";
 import { handleDocumentCoverageReadRequest } from "./document-coverage-route.js";
+import { RUNS_READ_PATH } from "./runs-read-contract.js";
+import type { RunsReadPort } from "./runs-read-contract.js";
+import { handleRunsReadRequest } from "./runs-read-route.js";
 import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
 import {
   PRODUCT_CONTRACT_PENDING_READ_PATH, handleProductContractPendingReadRequest,
@@ -193,6 +196,8 @@ export interface StartListenerOptions {
   readonly productContractGate1?: ProductContractGate1ReadPort;
   /** Absent means the PRD coverage read refuses as unavailable rather than inventing zeros. */
   readonly documentCoverage?: DocumentCoverageReadPort;
+  /** Absent means the runs read refuses as unavailable rather than inventing an empty board. */
+  readonly runs?: RunsReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */
@@ -266,6 +271,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   PRODUCT_CONTRACT_PENDING_READ_PATH,
   PRODUCT_CONTRACT_V2_CURRENT_READ_PATH,
   PRODUCT_CONTRACT_V2_PENDING_READ_PATH,
+  RUNS_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
   V2_COMMAND_PATH,
 ]);
@@ -645,6 +651,24 @@ function serveDocumentCoverage(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveRuns(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleRunsReadRequest({
+    authenticator: options.deps.authenticator, runs: options.runs,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveProductContractPending(
   response: ServerResponse,
   request: IncomingMessage,
@@ -1004,6 +1028,10 @@ async function serve(
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
     return;
   }
+  if (path === RUNS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_RUNS_REQUEST_INVALID");
+    return;
+  }
   if (path === DOCUMENT_COVERAGE_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID");
     return;
@@ -1048,6 +1076,8 @@ async function serve(
     serveBudgetCommitmentRead(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
     serveProductContractGate1(response, request, options, body);
+  } else if (path === RUNS_READ_PATH) {
+    serveRuns(response, request, options, body);
   } else if (path === DOCUMENT_COVERAGE_READ_PATH) {
     serveDocumentCoverage(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_PENDING_READ_PATH) {

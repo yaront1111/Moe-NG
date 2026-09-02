@@ -880,3 +880,36 @@ it("refuses an absent coverage port, a non-POST, and a body that is not one sele
       code: "DOCUMENT_COVERAGE_READ_MALFORMED", layer: "TEST", outcome: "REFUSED" }) },
   });
 });
+
+it("routes the runs read through its port with an empty or a one-goal selector", async () => {
+  const seen: unknown[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: "{}", path: "/runs/read" })).toEqual({
+      body: { code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/runs/read" }))
+      .toMatchObject({ status: 200 });
+    expect(seen).toEqual([{}, { goalRef: "goal-1" }]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    runs: { boundProjectId: "proj-0001", readRuns: (selector: unknown) => {
+      seen.push(selector);
+      return { code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" };
+    } },
+  });
+});
+
+it("refuses an absent runs port, a non-POST, and a body carrying any other key", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/runs/read" }), "LISTENER_RUNS_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET", path: "/runs/read" }), "LISTENER_RUNS_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, {
+      body: JSON.stringify({ goalRef: "goal-1", projectId: "proj-0002" }), path: "/runs/read" }),
+    "LISTENER_RUNS_REQUEST_INVALID");
+  }, {
+    deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    runs: { boundProjectId: "proj-0001", readRuns: () => ({ code: "RUNS_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" }) },
+  });
+});

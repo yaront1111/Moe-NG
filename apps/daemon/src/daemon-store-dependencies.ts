@@ -74,6 +74,11 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the coverage reader is always wired");
     return port();
   },
+  runs: () => {
+    const port = fromEnv().runs;
+    if (port === undefined) throw new Error("unreachable: the runs reader is always wired");
+    return port();
+  },
   documentDossiers: () => {
     const port = fromEnv().documentDossiers;
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");

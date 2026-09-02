@@ -68,6 +68,9 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // selector, and a daemon composed without the coverage port).
   "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID",
   "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE",
+  // The runs read: same transport pair.
+  "LISTENER_RUNS_REQUEST_INVALID",
+  "LISTENER_RUNS_UNAVAILABLE",
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
@@ -181,6 +184,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
   if (code === "LISTENER_DOCUMENT_COVERAGE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DOCUMENT_COVERAGE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_RUNS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_RUNS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;

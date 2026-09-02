@@ -34,6 +34,8 @@ import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
 import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
+import { createRunsReadPort } from "./http/runs-read.js";
+import type { RunsReadPort } from "./http/runs-read-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -320,6 +322,8 @@ export function createStoreDependencies(
   /** PRD coverage: the bound goals, contracts and verified criteria of one source document. */
   const documentCoverage = (): DocumentCoverageReadPort =>
     createDocumentCoverageReadPort({ projectId: config.projectId, store });
+  /** Runs and leases: every bound goal, its run, its sealed nodes and their durable state. */
+  const runs = (): RunsReadPort => createRunsReadPort({ projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -425,6 +429,7 @@ export function createStoreDependencies(
     provide,
     provideV2,
     reconciliation,
+    runs,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,
     sessionChallengeOperands,
