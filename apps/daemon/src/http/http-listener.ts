@@ -261,9 +261,14 @@ export async function startControlRoomListener(
         request, response, requestOptions, authority, origin, assets, pairingApproval,
         pairingCompletion,
       );
-      void served.catch(() => {
+      void served.catch((error: unknown) => {
         // A throw from the handler must still answer and must still leave the
-        // listener closable; it may never surface as a hung socket.
+        // listener closable; it may never surface as a hung socket. The cause is
+        // logged host-side (never sent to the client) so a 500 stays diagnosable.
+        const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        requestOptions.log?.(
+          `LISTENER_REQUEST_FAILED ${request.method ?? "?"} ${request.url ?? "?"} ${cause}`,
+        );
         if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
         else response.end();
       });

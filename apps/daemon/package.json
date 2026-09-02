@@ -20,6 +20,7 @@
     "@moe/benchmark": "workspace:*",
     "@moe/context": "workspace:*",
     "@moe/contracts": "workspace:*",
+    "@moe/control-room-client": "workspace:*",
     "@moe/coordination": "workspace:*",
     "@moe/core": "workspace:*",
     "@moe/import": "workspace:*",

@@ -8,6 +8,7 @@ import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { cutoverActivationWiringOf } from "./daemon-store-cutover-wiring.js";
 import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import {
@@ -69,6 +70,9 @@ export interface StoreDependencyConfig {
   readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
   readonly credential: string;
+  /** OPTIONAL. Where `cutover.activate` reads the live-quiesce evidence; absent means the
+   *  kind refuses CUTOVER_ACTIVATE_UNCONFIGURED (see daemon-store-cutover-wiring.ts). */
+  readonly cutoverEvidenceRoot?: string | undefined;
   readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
   readonly projectConfigurationDigest?: string | undefined;
@@ -138,8 +142,10 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId, operatorSubscriberId: DEFAULT_READER, store,
     projectId: config.projectId,
   });
+  const cutoverWiring = cutoverActivationWiringOf(config.cutoverEvidenceRoot);
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
+    ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,
     foundationCatalogSource: foundation.foundationCatalogSource,
     ...(foundation.foundationContextSeal === undefined
@@ -150,6 +156,7 @@ export function createStoreDependencies(
   });
   const v2Ports = createDaemonV2CommandPorts({
     clock,
+    ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,
     foundationCatalogSource: foundation.foundationCatalogSource,
     ...(foundation.foundationContextSeal === undefined

@@ -12,7 +12,9 @@ import {
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
-import { createVerifierAuthorityProvider } from "../review/verifier-authority-provider.js";
+import {
+  createVerifierAuthorityProvider, readVerifierStandingAuthority,
+} from "../review/verifier-authority-provider.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
@@ -247,6 +249,21 @@ async function main(): Promise<void> {
         store: verifierStore,
       }),
     });
+
+    // Say at startup what the verifier would otherwise only say per node, after a delivery:
+    // without both standing slices every delivered node waits on verification forever.
+    const standing = readVerifierStandingAuthority(verifierStore, config.projectId);
+    if (!standing.policy || !standing.calibration) {
+      const absent = [
+        ...(standing.policy ? [] : ["moe-verifier-policy/1"]),
+        ...(standing.calibration ? [] : ["moe-reviewer-calibration/1"]),
+      ].join(", ");
+      process.stdout.write(
+        `[verifier] standing authority incomplete: ${absent} not installed for project `
+        + `${config.projectId}; delivered nodes wait on verification until policy.install `
+        + "lands them (docs/agent-stack-runbook.md, Verifier authority)\n",
+      );
+    }
 
     // Agents connect to this trusted parent over loopback. The host retains store/operator
     // authority; the per-agent config contains only its scoped bearer and this origin.

@@ -64,6 +64,10 @@ export interface PlanningRunAcceptanceView {
   readonly criteriaDigest: string;
 }
 
+/** The decision bound to a run, as the daemon reports it beside `reviewable`. */
+export const PLANNING_RUN_APPROVAL_STATES = ["ABSENT", "BOUND", "UNREADABLE"] as const;
+export type PlanningRunApprovalState = (typeof PLANNING_RUN_APPROVAL_STATES)[number];
+
 export type PlanningRunOutcome =
   | {
     readonly status: "RUN";
@@ -71,6 +75,7 @@ export type PlanningRunOutcome =
     readonly lifecycle: string;
     readonly submissionHash: string;
     readonly reviewable: boolean;
+    readonly approval: PlanningRunApprovalState;
     readonly sealed: boolean;
     readonly plan: PlanningRunPlanView | null;
     readonly acceptance: PlanningRunAcceptanceView | null;
@@ -80,8 +85,15 @@ export type PlanningRunOutcome =
 
 /** The exact key set of the route's success frame (PlanningRunView on the wire). */
 const RUN_KEYS = [
-  "acceptance", "authority", "lifecycle", "outcome", "plan", "reviewable", "runId", "submissionHash",
+  "acceptance", "approval", "authority", "lifecycle", "outcome", "plan", "reviewable", "runId",
+  "submissionHash",
 ] as const;
+
+function approvalStateOf(value: unknown): PlanningRunApprovalState | null {
+  return typeof value === "string"
+    && (PLANNING_RUN_APPROVAL_STATES as readonly string[]).includes(value)
+    ? (value as PlanningRunApprovalState) : null;
+}
 
 function refused(code: string, layer: string): PlanningRunOutcome {
   return Object.freeze({ code, layer, status: "REFUSED" as const });
@@ -281,7 +293,8 @@ export function mapPlanningRunAnswer(status: number, response: unknown): Plannin
   if (refusal !== null) return refusal;
   if (status !== 200) return invalidResponse();
   const record = exactDataRecord(response, RUN_KEYS);
-  if (record === null || record.outcome !== "RUN"
+  const approval = record === null ? null : approvalStateOf(record.approval);
+  if (record === null || record.outcome !== "RUN" || approval === null
     || !nonEmptyString(record.runId) || !nonEmptyString(record.lifecycle)
     || !nonEmptyString(record.submissionHash) || typeof record.reviewable !== "boolean") {
     return invalidResponse();
@@ -302,6 +315,7 @@ export function mapPlanningRunAnswer(status: number, response: unknown): Plannin
   }
   return Object.freeze({
     acceptance,
+    approval,
     lifecycle: record.lifecycle,
     plan,
     reviewable: record.reviewable,

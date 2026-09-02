@@ -728,7 +728,7 @@ describe("production command transport stamps", () => {
       {
         expected: ["MCP_STDIO", "MCP_HTTP"],
         file: "./mcp-dispatch-port.ts",
-        pattern: /handleAsyncCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*context === undefined\s*\?\s*"([A-Z_]+)"\s*:\s*"([A-Z_]+)"\s*\)/,
+        pattern: /handleAsyncCommandRequest\(plane\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*context === undefined\s*\?\s*"([A-Z_]+)"\s*:\s*"([A-Z_]+)"\s*\)/,
       },
       {
         expected: ["AGENT_WRAPPER"],

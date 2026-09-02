@@ -3,6 +3,7 @@ import {
   VERIFICATION_CATALOG_ENV_KEY,
 } from "./daemon-context-seal-wiring.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
+import { CUTOVER_EVIDENCE_ROOT_ENV_KEY } from "./daemon-store-cutover-wiring.js";
 import {
   createStoreDependencies, type StoreDependencyConfig, type StoreDependencyProvider,
 } from "./daemon-store-foundation-composition.js";
@@ -15,6 +16,7 @@ import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "./operator-identity.js";
 export { agentCapabilitiesFor } from "./daemon-command-registry.js";
 
 export { createStoreDependencies };
+export { CUTOVER_EVIDENCE_ROOT_ENV_KEY };
 export type { StoreDependencyConfig };
 
 export const STORE_DEPENDENCIES_ENV_MISSING = "STORE_DEPENDENCIES_ENV_MISSING" as const;
@@ -35,8 +37,10 @@ export function readStoreDependencyEnv(
   const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
   const verificationCatalogPath = env[VERIFICATION_CATALOG_ENV_KEY];
   const projectConfigurationDigest = env[PROJECT_CONFIGURATION_DIGEST_ENV_KEY];
+  const cutoverEvidenceRoot = env[CUTOVER_EVIDENCE_ROOT_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
+    cutoverEvidenceRoot: cutoverEvidenceRoot === "" ? undefined : cutoverEvidenceRoot,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
     principalId: principalId === undefined || principalId === ""
       ? DEFAULT_OPERATOR_PRINCIPAL_ID

@@ -361,7 +361,7 @@ describe("POST /planning/run/read", () => {
     const reply = await send();
     expect(reply.status).toBe(200);
     expect(reply.body).toMatchObject({
-      lifecycle: "PLAN_REVIEW", outcome: "RUN", reviewable: true,
+      approval: "ABSENT", lifecycle: "PLAN_REVIEW", outcome: "RUN", reviewable: true,
       runId: DEFAULT_RUN_SUBJECT, submissionHash: sealed.submissionHash,
     });
     const authority = reply.body["authority"] as Record<string, unknown>;
@@ -411,8 +411,9 @@ describe("POST /planning/run/read", () => {
     const reply = await send({ body: JSON.stringify({ runId: "run-mismatch-1" }) });
     expect(reply.status).toBe(200);
     expect(reply.body).toStrictEqual({
-      acceptance: null, authority: null, lifecycle: "PLANNING", outcome: "RUN",
-      plan: null, reviewable: false, runId: "run-mismatch-1", submissionHash: otherHash,
+      acceptance: null, approval: "ABSENT", authority: null, lifecycle: "PLANNING",
+      outcome: "RUN", plan: null, reviewable: false, runId: "run-mismatch-1",
+      submissionHash: otherHash,
     });
   });
 
@@ -421,8 +422,9 @@ describe("POST /planning/run/read", () => {
     const reply = await send({ body: JSON.stringify({ runId: "run-tamper-1" }) });
     expect(reply.status).toBe(200);
     expect(reply.body).toStrictEqual({
-      acceptance: null, authority: null, lifecycle: "PLANNING", outcome: "RUN",
-      plan: null, reviewable: false, runId: "run-tamper-1", submissionHash: sealed.submissionHash,
+      acceptance: null, approval: "ABSENT", authority: null, lifecycle: "PLANNING",
+      outcome: "RUN", plan: null, reviewable: false, runId: "run-tamper-1",
+      submissionHash: sealed.submissionHash,
     });
   });
 });

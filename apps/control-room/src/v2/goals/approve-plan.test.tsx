@@ -55,6 +55,7 @@ const SEALED_REVIEWABLE: PlanningRunOutcome = Object.freeze({
       verificationRecipeRefs: ["recipe-1"],
     }],
   },
+  approval: "ABSENT",
   lifecycle: "PLAN_REVIEW",
   plan: {
     affectedCriterionIds: ["crit-1"],
@@ -71,6 +72,7 @@ const SEALED_REVIEWABLE: PlanningRunOutcome = Object.freeze({
 
 const UNSEALED: PlanningRunOutcome = Object.freeze({
   acceptance: null,
+  approval: "ABSENT",
   lifecycle: "PLANNING",
   plan: null,
   reviewable: false,
@@ -378,7 +380,8 @@ describe("the Approve control against a daemon grant", () => {
   it("dispatches the grant once and renders the state the DURABLE re-read reports", async () => {
     const refreshed: PlanningRunOutcome = Object.freeze({
       ...(SEALED_REVIEWABLE as Extract<PlanningRunOutcome, { status: "RUN" }>),
-      lifecycle: "EXECUTION_ENABLED",
+      approval: "BOUND",
+      lifecycle: "PLAN_REVIEW",
       reviewable: false,
     });
     const offer = offerFor(DURABLE.runRef);
@@ -397,6 +400,13 @@ describe("the Approve control against a daemon grant", () => {
     expect(applied.textContent).toContain(
       (refreshed as Extract<PlanningRunOutcome, { status: "RUN" }>).lifecycle,
     );
+    expect(applied.textContent).toContain("approval BOUND");
+    // The durable run still reads PLAN_REVIEW by design; the banner must say APPROVED, never
+    // "still planning", once the daemon reports the decision bound (measured live 2026-09-02).
+    const banner = screen.getByTestId("cr.approve.banner");
+    expect(banner.getAttribute("data-approval")).toBe("BOUND");
+    expect(banner.textContent).toMatch(/^Approved - /u);
+    expect(banner.textContent).not.toContain("Still planning");
   });
 
   it("keeps a refusal visible with its exact code and layer, and refreshes nothing", async () => {

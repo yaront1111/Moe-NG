@@ -840,6 +840,7 @@ const SEALED_RUN = Object.freeze({
     ]),
   }),
   reviewable: true,
+  approval: "ABSENT",
   runId: DURABLE.runRef,
   submissionHash: "submission-hash-durable",
 });

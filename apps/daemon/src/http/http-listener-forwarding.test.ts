@@ -263,9 +263,11 @@ it("normalizes an unexpected dependency throw to the listener-owned refusal", as
   await started.shutdown();
 
   const exploding = await import("./http-listener.js");
+  const logged: string[] = [];
   const listener = await exploding.startControlRoomListener({
     csrfToken: CSRF,
     deps: wired.deps,
+    log: (line) => { logged.push(line); },
     onRequest: () => { throw new Error("secret dependency failure"); },
   });
   if (!listener.ok) throw new Error(`listener refused: ${listener.code}`);
@@ -277,6 +279,10 @@ it("normalizes an unexpected dependency throw to the listener-owned refusal", as
       status: 500,
     });
     expect(JSON.stringify(reply)).not.toContain("secret dependency failure");
+    // The cause stays host-side: one log line names the failed request and the error.
+    const failures = logged.filter((line) => line.startsWith("LISTENER_REQUEST_FAILED "));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/^LISTENER_REQUEST_FAILED POST \/\S* Error: secret dependency failure$/u);
   } finally {
     await listener.close();
   }

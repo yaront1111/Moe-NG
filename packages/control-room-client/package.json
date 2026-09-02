@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./contract-digest": "./src/contract-digest.ts"
+    "./contract-digest": "./src/contract-digest.ts",
+    "./contract-pins": "./src/contract-pins.ts"
   },
   "dependencies": {
     "@moe/contracts": "workspace:*"

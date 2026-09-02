@@ -91,6 +91,12 @@ export {
   GA_ACTIVATION_RECORD_CODES, GA_ACTIVATION_RECORD_LAYER, GA_ACTIVATION_RECORD_SCHEMA_VERSION,
   composeActivationRecord,
 } from "./activation-record.js";
+/** The gate-family grading rule, so release tooling grades a lane run the way the record does. */
+export { resolveAll, resolveFamily } from "./gate-family-resolver.js";
+export type {
+  GateFamilyEvidence, GateFamilyRefusal, GateFamilyResolution, GateFamilyVerdict,
+  GateFamilyVerdictRow,
+} from "./gate-family-resolver.js";
 export type {
   ActivationBindingAdmitted, ActivationNotActivated, ActivationOutcome, ActivationRecord,
   ActivationRecordCode, ActivationRecordInput, ActivationRecordLayer, ActivationRecordRefusal,

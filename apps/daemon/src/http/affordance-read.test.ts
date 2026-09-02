@@ -24,6 +24,9 @@ import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import {
+  reviewerCalibrationSlice, verifierPolicySlice,
+} from "../orchestrator/demo-seed-policy.js";
 import { runReviewCommand } from "../review/review-services.js";
 import { packageItems } from "../review/review-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
@@ -40,6 +43,8 @@ process.env[APPROVAL_MODE_ENV_KEY] ??= SPEED_APPROVAL_MODE;
 process.env[SPEED_MODE_DELAY_ENV_KEY] ??= "0";
 
 const PROJECT = "proj-affordance";
+/** The two slice builders read only `projectId`; the rest of the seed input is irrelevant here. */
+const SEED_INPUT = { projectId: PROJECT } as Parameters<typeof verifierPolicySlice>[0];
 const directory = mkdtempSync(join(tmpdir(), "moe-affordance-"));
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
 installTestRecoveryBinding(store);
@@ -402,13 +407,31 @@ describe("code node steps", () => {
     expect(outcome.ok).toBe(true);
 
     const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    // This world installed the evaluation and classifying slices only, so the board names the
+    // two standing verifier slices the daemon's verifier would refuse without.
     expect(node).toMatchObject({
-      aggregateId: "node-code-1", missing: ["verification"], status: "BLOCKED", version: 1,
+      aggregateId: "node-code-1",
+      missing: ["verification", "verifier-policy", "verifier-calibration"],
+      status: "BLOCKED", version: 1,
     });
     const kinds = nodeSurface().nextAllowedCommands
       .filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind);
     expect(kinds).toEqual(["review.submit"]);
+  });
+
+  it("names only the daemon's verification once both standing verifier slices are installed", () => {
+    commitBootstrap("policy.install", { slice: verifierPolicySlice(SEED_INPUT) }, 2);
+    const stillMissing = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(stillMissing?.missing).toEqual(["verification", "verifier-calibration"]);
+
+    commitBootstrap(
+      "policy.install", { slice: reviewerCalibrationSlice(SEED_INPUT) }, 3,
+    );
+    const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(node).toMatchObject({
+      aggregateId: "node-code-1", missing: ["verification"], status: "BLOCKED",
+    });
   });
 });
 

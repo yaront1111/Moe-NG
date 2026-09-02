@@ -251,6 +251,25 @@ describe("task-4dd05f0c served/advertised parity", () => {
     }
   });
 
+  it("C3 names the ONE advertised kind the /2 plane withholds, so the gap stays visible", () => {
+    // The MCP port now follows the plane per dispatch (mcp-dispatch-port.ts), so after
+    // `cutover.activate` every advertised command is answered by the /2 registry. That
+    // registry withholds `planning.submit_decomposition` on purpose until its /2 service
+    // lands; an agent calling it then gets the registry's exact REGISTRY refusal rather
+    // than a fallback. This arm pins that set to exactly one kind, in both directions: a
+    // second withheld kind, or the withheld kind quietly served, reddens here.
+    const v2 = provider.provideV2?.();
+    if (v2 === undefined) throw new Error("the /2 plane is always composed");
+    const servedOnV2 = new Set<string>([...v2.registry.keys()]);
+    const advertisedCommands = wiredMcpToolKinds()
+      .filter((kind) => !(MCP_SERVED_QUERY_KINDS as readonly string[]).includes(kind));
+    expect(advertisedCommands.filter((kind) => !servedOnV2.has(kind)))
+      .toEqual(["planning.submit_decomposition"]);
+    // And nothing /2 serves is missing from the advertisement, minus the excluded kinds.
+    expect([...servedOnV2].filter((kind) => !MCP_EXCLUDED_COMMAND_KINDS.includes(kind))
+      .filter((kind) => !advertisedCommands.includes(kind))).toEqual([]);
+  });
+
   it("Q1 advertises exactly the queries the production port serves", () => {
     const served = [...servedMcpQueryKinds()].sort();
     const advertised = [...MCP_SERVED_QUERY_KINDS].sort();

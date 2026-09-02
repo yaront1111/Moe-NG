@@ -117,6 +117,36 @@ export function commitEvent(store: SqliteEventStore, eventId: string, eventType:
   });
 }
 
+/**
+ * The three durable generations the snapshot reads off the store: the ProjectActivated and
+ * ProjectQuiesced witnesses on the PROJECT aggregate and the committed import. Exported so a
+ * composition-level arm can seed a store the SHIPPED provider opens, not only this harness's.
+ */
+export function seedDurableGenerations(store: SqliteEventStore): void {
+  commitEvent(store, "project-activated", "ProjectActivated", {
+    witness: {
+      artifactPathRef: "artifact/ref", backupPathRef: "backup/ref", credentialRef: "credential/ref",
+      distributionManifestHash: DISTRIBUTION_MANIFEST_HASH, policyRevisionHash: "p3".repeat(32),
+      providerMinimumProfileRef: "profile/ref", signingKeyRef: "signing/ref",
+      storeDriverRef: "driver/ref", truthClass: "DAEMON_VERIFIED",
+    },
+  });
+  commitEvent(store, "project-quiesced", "ProjectQuiesced", {
+    witness: {
+      backupGenerationHash: BACKUP_GENERATION_HASH,
+      recoveryIncarnationRef: "incarnation/ref", truthClass: "DAEMON_VERIFIED",
+    },
+  });
+  seedImport(store, DIGEST, [recordOf()]);
+}
+
+/** The live-quiesce evidence file the generation snapshot reads under `storeRoot`. */
+export function writeLiveQuiesceEvidence(storeRoot: string): void {
+  writeFileSync(
+    join(storeRoot, LIVE_QUIESCE_EVIDENCE_FILENAME), `${JSON.stringify(EVIDENCE, null, 2)}\n`, "utf8",
+  );
+}
+
 /** A REAL file-backed store: an in-memory double cannot express the one-transaction property. */
 export function withHarness(
   run: (harness: Harness) => void,
@@ -129,26 +159,8 @@ export function withHarness(
   const databasePath = join(directory, "store.sqlite");
   let store = SqliteEventStore.openForProject(databasePath, PROJECT_ID);
   try {
-    commitEvent(store, "project-activated", "ProjectActivated", {
-      witness: {
-        artifactPathRef: "artifact/ref", backupPathRef: "backup/ref", credentialRef: "credential/ref",
-        distributionManifestHash: DISTRIBUTION_MANIFEST_HASH, policyRevisionHash: "p3".repeat(32),
-        providerMinimumProfileRef: "profile/ref", signingKeyRef: "signing/ref",
-        storeDriverRef: "driver/ref", truthClass: "DAEMON_VERIFIED",
-      },
-    });
-    commitEvent(store, "project-quiesced", "ProjectQuiesced", {
-      witness: {
-        backupGenerationHash: BACKUP_GENERATION_HASH,
-        recoveryIncarnationRef: "incarnation/ref", truthClass: "DAEMON_VERIFIED",
-      },
-    });
-    seedImport(store, DIGEST, [recordOf()]);
-    if (withEvidence) {
-      writeFileSync(
-        join(storeRoot, LIVE_QUIESCE_EVIDENCE_FILENAME), `${JSON.stringify(EVIDENCE, null, 2)}\n`, "utf8",
-      );
-    }
+    seedDurableGenerations(store);
+    if (withEvidence) writeLiveQuiesceEvidence(storeRoot);
     // Getters, not captured values: after `reopen()` every reference must see the NEW handle,
     // or an "it survived the reopen" arm would silently keep reading the pre-close object.
     const harness: Harness = {

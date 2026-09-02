@@ -166,6 +166,22 @@ describe("wrapper binary staffing wiring", () => {
       .toThrow();
   });
 
+  it("announces incomplete standing verifier authority at startup, from the real store", () => {
+    // The per-node VERIFICATION_AUTHORITY_UNAVAILABLE verdict only prints after a delivery;
+    // the first real project sat silent for days. The preflight must read the store, not a
+    // constant, and name both slices.
+    expect(SOURCE).toContain("readVerifierStandingAuthority(verifierStore, config.projectId)");
+    expect(SOURCE).toContain("standing authority incomplete:");
+    expect(SOURCE).toContain("moe-verifier-policy/1");
+    expect(SOURCE).toContain("moe-reviewer-calibration/1");
+  });
+
+  it("scans the preflight slice that can actually fail (positive control)", () => {
+    const silent = SOURCE.replace("readVerifierStandingAuthority(verifierStore, config.projectId)", "");
+    expect(() => expect(silent).toContain("readVerifierStandingAuthority(verifierStore, config.projectId)"))
+      .toThrow();
+  });
+
   it("reads a live pid as alive and a vanished pid as dead", () => {
     const gone = Object.assign(new Error("no such process"), { code: "ESRCH" });
     expect(probeProcessAlive(1, () => undefined)).toBe(true);

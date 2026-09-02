@@ -7,3 +7,13 @@ autoInstallPeers: false
 engineStrict: true
 saveExact: true
 strictPeerDependencies: true
+
+# Security floors for advisories `pnpm audit` reports (2026-09-02): the release recorder refuses
+# DEPENDENCY_AUDIT_FAILED on ANY advisory, so every vulnerable transitive range is lifted to its
+# patched line (same majors). Re-run `pnpm audit` after touching these.
+overrides:
+  "fast-uri@<3.1.6": ">=3.1.6"
+  "nanoid@<3.3.18": ">=3.3.18"
+  "qs@<6.16.0": ">=6.16.0"
+  "tar@<7.5.21": ">=7.5.21"
+  "undici@>=7.0.0 <7.29.0": ">=7.29.0"

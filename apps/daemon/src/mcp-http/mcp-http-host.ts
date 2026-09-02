@@ -6,7 +6,7 @@ import type { HttpMcpAdapter } from "@moe/mcp";
 
 import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
-import type { CommandAdapterDeps } from "../http/http-contract.js";
+import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
 import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
@@ -36,7 +36,12 @@ export interface McpHttpHostOptions {
   readonly documents?: GoalSourceReadPort | undefined;
   /** The current-active-graph reader; absent means graph.get refuses. */
   readonly graph?: GraphQueryPort | undefined;
+  /** The `/1` command plane; its authenticator also screens every MCP session. */
   readonly deps: CommandAdapterDeps;
+  /** The `/2` command plane. Absent means a V2 dispatch refuses; it never falls back to `deps`. */
+  readonly v2Deps?: CommandAdapterDeps | undefined;
+  /** Read per dispatch to choose between `deps` and `v2Deps`. Absent means V1. */
+  readonly commandAuthorityPlane?: CommandAuthorityPlanePort | undefined;
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
   readonly host?: string;
@@ -132,10 +137,12 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     adapter ??= createHttpMcpAdapter({
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
+        commandAuthorityPlane: options.commandAuthorityPlane,
         deps: options.deps,
         documents: options.documents,
         graph: options.graph,
         subscriptions: options.subscriptions,
+        v2Deps: options.v2Deps,
       }),
       ...(options.enableJsonResponse === undefined
         ? {}
