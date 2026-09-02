@@ -220,7 +220,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T11:31:01.803Z",
-  "updatedAt": "2026-08-30T13:54:41.487Z",
+  "updatedAt": "2026-08-30T13:55:42.487Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T11:31:28.452Z",
     "plannedStepCount": 4,
@@ -297,7 +297,8 @@
     "apps/daemon/src/work/expansion-release-authority.test.ts",
     "apps/daemon/src/work/resource-confirm-released-command.test.ts",
     "apps/daemon/src/work/resource-reconcile-command.test.ts",
-    "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+    "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts",
+    ".moe/tasks/task-2446feed210d46899e35d632e049a4c3.json"
   ],
   "completionSummary": "Stamped the private transport-origin carrier across the complete Row-B daemon/test/fixture census (28 modified paths): 108 live stamped callers plus the four intentional daemon-command-registry omissions. Preserved the exact two-argument public handleCommandRequest surface; the approved plan amendment rejects the stale third-parameter wording. Direct Gate-1 witnesses now distinguish MCP_STDIO from HTTP_LISTENER, with fixture rationale comments and no assertion weakening. Fresh focused verification passed 25 files / 608 tests; daemon typecheck and the owned root e2e also pass. Broader repository/daemon gates remain red only in foreign paths and that attribution is recorded in task comments.",
   "commits": [
@@ -343,15 +344,31 @@
       "status": "REVIEW",
       "recoveredBy": "qa-85c12129",
       "message": "test(task-2446feed): stamp the transport origin at every non-production command-entry caller. HAND-LANDED BY QA: the worker session's wrapper exit-commit did not fire (task.commits empty 7 min past REVIEW, no stash, no rescue ref), leaving 28 verified paths unstaged in the shared checkout. Explicit pathspec, zero foreign paths, peer WIP preserved."
+    },
+    {
+      "sha": "2d49f269906cdcddcda45b98d561e2d4869585f0",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T13:44:55Z",
+      "paths": [
+        ".moe/tasks/task-2446feed210d46899e35d632e049a4c3.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T13:55:42.486Z",
+      "treeId": "20878f983aeda4bb3b152960e29006a256358f0f",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-85c12129@2026-08-30T13:45:00.000Z",
-    "at": "2026-08-30T13:53:28.152Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-85c12129@2026-08-30T13:44:55Z",
+    "at": "2026-08-30T13:55:42.486Z"
   },
   "completedAt": "2026-08-30T13:54:41.487Z",
   "reviewCompletedAt": "2026-08-30T13:54:41.487Z",
-  "reviewSummary": "APPROVED. Full evidence: comment-552cd0ce. Delivered tree 9055d9e2 (tree f4c5fe64), 28 files, +101/-98.\n\nCOMMIT GAP FIXED, NOT WAIVED: task.commits empty 7 min past reviewStartedAt, landing {}, no stash/rescue ref, 28 owned paths unstaged - the worker's wrapper exit-commit never fired. Per qa.reference.md:26 I reviewed the tree AND acted on the warning: hand-landed by explicit pathspec (staged set diffed EXACT_MATCH vs step-4 modifiedFiles first), then record_commit. Zero foreign paths; peer WIP left dirty. Wrapper defect, not worker defect.\n\nGATES RE-RUN BY ME, standalone/unpiped: daemon typecheck EXIT 0, `$ tsc --project tsconfig.json` echoed (re-run at delivered tree after HEAD moved, still 0); 25 owned daemon suites + index-surface --maxWorkers=1 EXIT 0, `Test Files 25 passed (25)`, `Tests 802 passed (802)`; owned e2e r3-4 EXIT 0, 1 file / 2 tests.\n\nDoD-2 verified by my OWN paren-balancing census plus hand-reading every flagged site, not the worker's count. Every caller carries an explicit roster literal except the four named omissions (registry.test.ts :542, :543, :558, :620); :623 correctly passes non-roster \"WIRE_FIELD\" as TransportOrigin. Three fixtures carry rationale comments. No defaulting helper, no assertion weakened, no production bytes.\n\nDoD-3 under governor amendment comment-099dd4dd (2-tuple invariant, index-surface untouched and cited). MUTATION DRILL: mutated :577 to a 3-tuple, typecheck EXIT 1 `index-surface.test.ts(577,22): error TS2344`. Restored; `git diff --exit-code` EXIT 0, separate call.\n\nFOREIGN RED disclosed: first serial run reddened http-listener-product-contract-gate-1.test.ts:413 (expected PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED, got REPLAYED/200/ACCEPTED). FFA-owned, caught mid-peer-edit; peer landed it as 9f958309. Passes standalone. Zero owned-path failures.\n\nFOLLOW-UP for Row C: handleAsyncCommandRequest has NO Parameters pin anywhere (git grep EXIT 1)."
+  "reviewSummary": "APPROVED. Full evidence: comment-552cd0ce. Delivered tree 9055d9e2 (tree f4c5fe64), 28 files, +101/-98.\n\nCOMMIT GAP FIXED, NOT WAIVED: task.commits empty 7 min past reviewStartedAt, landing {}, no stash/rescue ref, 28 owned paths unstaged - the worker's wrapper exit-commit never fired. Per qa.reference.md:26 I reviewed the tree AND acted on the warning: hand-landed by explicit pathspec (staged set diffed EXACT_MATCH vs step-4 modifiedFiles first), then record_commit. Zero foreign paths; peer WIP left dirty. Wrapper defect, not worker defect.\n\nGATES RE-RUN BY ME, standalone/unpiped: daemon typecheck EXIT 0, `$ tsc --project tsconfig.json` echoed (re-run at delivered tree after HEAD moved, still 0); 25 owned daemon suites + index-surface --maxWorkers=1 EXIT 0, `Test Files 25 passed (25)`, `Tests 802 passed (802)`; owned e2e r3-4 EXIT 0, 1 file / 2 tests.\n\nDoD-2 verified by my OWN paren-balancing census plus hand-reading every flagged site, not the worker's count. Every caller carries an explicit roster literal except the four named omissions (registry.test.ts :542, :543, :558, :620); :623 correctly passes non-roster \"WIRE_FIELD\" as TransportOrigin. Three fixtures carry rationale comments. No defaulting helper, no assertion weakened, no production bytes.\n\nDoD-3 under governor amendment comment-099dd4dd (2-tuple invariant, index-surface untouched and cited). MUTATION DRILL: mutated :577 to a 3-tuple, typecheck EXIT 1 `index-surface.test.ts(577,22): error TS2344`. Restored; `git diff --exit-code` EXIT 0, separate call.\n\nFOREIGN RED disclosed: first serial run reddened http-listener-product-contract-gate-1.test.ts:413 (expected PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED, got REPLAYED/200/ACCEPTED). FFA-owned, caught mid-peer-edit; peer landed it as 9f958309. Passes standalone. Zero owned-path failures.\n\nFOLLOW-UP for Row C: handleAsyncCommandRequest has NO Parameters pin anywhere (git grep EXIT 1).",
+  "unattributedPaths": []
 }

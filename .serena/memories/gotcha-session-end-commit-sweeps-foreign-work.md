@@ -66,6 +66,108 @@ attribution so the other task's reviewer reviews at the PATHS. Note the rail
 binds agents, not the wrapper's own commit, so this recurs until the wrapper is
 fixed.
 
+## Fifth incident (2026-08-26): the sweep BROKE HEAD's compile and REVERTED the row's own approved work
+
+Worst observed shape. task-3e3ca3b4 (fourth broker refusal layer `BROKER_STORE_LOCK`)
+committed cleanly by pathspec as `53b83b1c`, was verified clean by a peer in chat,
+and was QA-approved. **Then the session-end autocommit ran and produced a SECOND
+commit bearing the same task id** — `66c1a3f7`, titled differently
+(`... (wire vocabulary only)`), two paths, +48/-19.
+
+That commit took `broker/src/refusal.rs` and `broker/tests/frame_sweep.rs` **from the
+worktree**. Both were deliberately left dirty by mode-2 index-only staging precisely
+because they carry other rows' bytes. Result:
+
+- It committed `use crate::store_lock::StoreLockError;` and `Refused::store_lock`
+  (task-b6cae247's bytes) while `store_lock.rs` is still `??` untracked and HEAD's
+  `lib.rs` has **no `mod store_lock;`**. `error[E0432]: unresolved import
+  crate::store_lock`, EXIT 101. **It is the LIB that fails, so every test target in
+  the crate fails with it** — every runner/cargo leg in the fleet reds until fixed.
+- **It reverted the row's own approved assertions.** `RefusalLayer::ALL == [.., StoreLock]`,
+  `StoreLock.wire() == 4` and by-name `from_wire(4) == Some(RefusalLayer::StoreLock)`
+  were present at `53b83b1c:582/589/595/599`; at HEAD only `ALL.len() == 4` survives
+  (:614). The by-name form was downgraded back to the weaker `.map(wire) == Some(4)`,
+  which passes even if byte 4 resolves to the wrong variant.
+- It landed a THIRD row's WIP (task-913bce17 opcode-3 arms) under this task's id.
+
+**The generalisable finding: mode 2 protects the COMMIT, not the FILE.** A row can
+stage index-only flawlessly and still have its deliberately-dirty worktree swept
+afterwards under its own task id. The dirt mode 2 exists to keep out is exactly what
+the sweep then commits. No commit rule can reach it, because the sweeping commit is
+not one a worker chose to run. Mitigation is on the *worker's last action*, not the
+commit: **a row whose plan deliberately leaves shared files dirty must either restore
+them to HEAD before session end, or record in its handoff that the worktree is
+intentionally dirty so a sweep is expected.**
+
+**Diagnostic:** two commits carrying the same task id, the later one with a different
+title, is the signature. `git log --oneline -4` then `git show --stat <later sha>`.
+Structural proof of a compile break needs no cargo run: `git show HEAD:<file> | grep
+use crate::<mod>` hitting while `git show HEAD:lib.rs | grep "^mod"` misses it, and
+`git ls-tree HEAD -- <mod>.rs` empty, is E0432 by construction.
+
+### Carve-out to "never unwind the foreign commit"
+
+The standing guidance (do not unwind; it carries live foreign work) holds while the
+sweep merely misattributes. **It does not hold when the sweep breaks the build for the
+whole fleet.** But the repair must dodge three traps at once — no worktree write (the
+swept files' worktree copies hold peer bytes, rule: never `git checkout --` a file you
+did not write), no shared-index write, and no bare `git commit` (the shared index
+routinely holds a foreign staged blob; verify with `git diff --cached --numstat`
+first). `git revert` and pathspec commits both write the worktree, so both are wrong
+here. The shape that satisfies all three is a **detached-index forward commit**:
+
+```
+GIT_INDEX_FILE=$TMP/idx git read-tree HEAD
+GIT_INDEX_FILE=$TMP/idx git update-index --cacheinfo 100644,<good blob>,<path>
+TREE=$(GIT_INDEX_FILE=$TMP/idx git write-tree)
+git commit-tree $TREE -p HEAD -m "revert(<task>): unbreak <what> swept by <sha>"
+git update-ref HEAD <new sha>
+```
+
+Forward commit, not a history rewrite; shared index and worktree both untouched. The
+swept files correctly read ` M` again afterwards, which is the pre-sweep state.
+Prefer restoring only the paths the bad commit already touched — "just land the missing
+module instead" looked smaller here and was not: the untracked `store_lock.rs` came
+with a second untracked `session_accept.rs` and a shared `lib.rs` hunk spanning two
+other rows. **Disposition is a governor/architect call; a worker should measure it,
+post the recipe, and wait for authorization rather than move shared HEAD unprompted.**
+
+### Three more facts established while the fifth incident was being repaired
+
+**The WORKTREE compiled the whole time; only the COMMIT was broken.** `cargo check -p
+moe-windows-job-broker --lib` and `cargo test --no-run` both EXIT 0 in the shared tree,
+because the worktree `lib.rs` declares `mod store_lock;` and both untracked modules are
+on disk. Only `git archive <sha>` materializations red. So "attribute every cargo red to
+the bad commit" is TRUE for archive-at-sha and CI runs and FALSE for anything run in the
+worktree — a blanket advisory would wave through real, attributable reds. Always say
+which of the two a red came from.
+
+**`git revert` is wrong here for a second, stronger reason than "it writes the worktree".**
+Restoring the old `refusal.rs` blob deletes `Refused::store_lock`, and the worktree has
+live callers (`session.rs:137`, `:210`) plus 8 files referencing `store_lock`/
+`StoreLockError`, four of them dirty or untracked. A worktree-writing restore would
+E0599 the currently-GREEN tree for the whole fleet. The general rule: on a shared
+worktree the question is not *"is this file dirty"* but *"does anything on disk depend on
+these bytes"*.
+
+**"`update-index --cacheinfo` + a BARE `git commit`" still carries the original defect.**
+A bare commit commits the WHOLE index, and the shared index routinely holds foreign
+staged blobs. Only the DETACHED index (`GIT_INDEX_FILE=… read-tree` / `update-index` /
+`write-tree` / `commit-tree` / `update-ref`) is safe under both hazards at once. Also
+re-read HEAD at execution time — HEAD moves mid-thread, and parenting on the bad commit
+instead of current HEAD silently drops whatever landed in between.
+
+**The index-only repair recreates its own precondition.** After the sweep, the swept file
+reads CLEAN in the worktree (the sweep committed its dirty content). Moving the commit
+back while leaving the worktree alone necessarily makes it DIRTY again — correct and
+intended, and also exactly the state that produced the incident. So recurrence follows
+from ordinary operation, not from anyone's mistake, and "one is an incident, two is
+systemic" gets crossed by doing the right thing. The only mitigation that reaches it is
+on the worker's LAST ACTION, not on any commit rule.
+
 ## Related
 
 `mem:pattern-verifying-type-facade-refactors`
+`mem:gotcha-shared-index-race-defeats-pathspec-commit`
+`mem:gotcha-peer-stages-files-in-the-shared-index`
+`mem:convention-commit-by-pathspec-in-a-shared-index`

@@ -1,0 +1,332 @@
+{
+  "id": "task-ffa05408a22b4456b4594b3c06d1206d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.10a-hardening-c] Stage-E bearer disposition: retire or fence the bearer branch once every human transport signs",
+  "description": "CARVED from parent task-2f554e29d31d48e8a18027110a8e4d5c's DoD-5 by architect-fa5d746b (re-scope comment-a24e3fd5 under the sizing grant in governor ruling comment-d3a24ac8). The browser slice is task-1199836b (WORKING, filed earlier — it does NOT carry this clause); the daemon slice is the parent. This row owns the ONE remaining decision+edit: once the Control Room signs Gate 1 requests (task-1199836b) and the key-bound open exists (parent), the bearer admission at stage E (apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts) is either RETIRED (removed, with every remaining bearer consumer enumerated by reachability grep and migrated in the same change) or explicitly FENCED (kept for named non-browser transports behind a fence with its own stable refusal code+layer). The disposition is decided at planning against the measured consumer set at that HEAD — retire if the reachability grep proves zero remaining legitimate bearer consumers; fence naming each survivor otherwise. Options (i)/(iii) from the governor ruling stay rejected with prejudice.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: both prerequisites DONE on disk (parent's open-completion route present; the Control Room signing path present per task-1199836b's completion record); the stage-E bearer admission still live (grep the bearer symbol in apps/daemon/src/product-contract EXIT 0); ENUMERATE every bearer consumer by reachability grep (x-moe-session-credential senders + stage-E bearer callers) across apps adapters packages tests — the enumeration decides the disposition.",
+    "THE DISPOSITION IS STATED WITH ITS REASON in a row comment before any edit: RETIRE when the enumeration shows zero remaining legitimate bearer consumers (then every listed consumer is migrated in the SAME change and the bearer module is removed); FENCE otherwise (the fence names its admitted transports, refuses everything else with ONE new stable code + layer, and each surviving consumer is listed with why it cannot sign yet).",
+    "An arm proves the decided branch: retired — a bearer-authenticated Gate 1 request refuses with the exact post-retirement code+layer and zero bearer symbols remain (grep EXIT 1); fenced — a non-admitted bearer refuses with the fence's code+layer while each named surviving transport still authenticates; either way a SIGNED request still authenticates HUMAN unchanged.",
+    "Mutation drills with restore proofs: re-admit a retired/unfenced bearer -> the disposition arm reds; widen the fence by one transport -> the fence roster arm reds. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck`, the product-contract suites from apps/daemon (`--root . --config package.json` form), `pnpm --filter @moe/daemon test` path-attributed; every production source <= 250 lines; explicit-pathspec commit; completion comment references comment-d3a24ac8 and comment-a24e3fd5 and states the disposition verbatim."
+  ],
+  "taskRails": [
+    "The disposition is a measured decision, not a preference: retire on a proven-empty consumer set, fence otherwise — never leave the bearer branch silently unbounded once signing lands.",
+    "session-authority*.ts unedited; stage E's signed-proof path untouched; no second verifier.",
+    "One new stable refusal code at most (the fence's); every refusal asserts code AND layer.",
+    "Sequenced after task-2f554e29 and task-1199836b (dependsOn declared). Explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source; TDD red-first."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted, greps UNPIPED with exit codes + positive control. (a) Ruling comment-9431831c still the newest authority (fence arm; retire deferred). (b) dependsOn landed: task-5b6c0261 DONE — quote the landed TRANSPORT_ORIGIN roster spellings, the witness field name, and the gate-1 witness construction (`git grep -n 'transportOrigin' HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/product-contract/` EXIT 0 for the registry, and note whether the bearer seam already receives it); parents 2f554e29 + 1199836b DONE (banked in comment-b88fc5fc — cite, do not re-run). (c) The fence gap open: no origin check in product-contract-gate-1-bearer.ts (`git grep -n 'ORIGIN' HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts` EXIT 1; EXIT 0 = adopt/verify/report duplicate); the seven-code roster still exactly seven (quote it). (d) Re-measure gate-1-command.ts's bearer plumbing lines (:23-25,:47-48,:157,:210-217,:313,:334-era) — confirm where the witness flows into authorizeBearerPresentation and whether the origin rides it already or needs one surgical pass-through (list the exact lines the edit will touch). (e) porcelain on owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts"
+      ],
+      "note": "Read-only preflight is durable in comment-c0c23381fcfe403d9b51a6f226330166. HEAD a4ff8db2; task-5b6c origin roster/registry witness construction landed; bearer origin grep EXIT 1 with code-roster positive control EXIT 0; origin already rides registry -> command -> authority -> bearer object unchanged, so command.ts needs no runtime pass-through edit. Exact owned porcelain empty. Stale cap premise disclosed: command.ts is already 352 but remains byte-identical/below hard 400; bearer.ts 142.",
+      "startedAt": "2026-08-30T12:51:22.342Z",
+      "completedAt": "2026-08-30T12:53:02.764Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — THE FENCE (the ruling's operative sentence: bearer permitted iff origin is a named non-browser survivor). Arms in product-contract-gate-1-bearer.test.ts: (i) SURVIVOR ROSTER, frozen and BIDIRECTIONAL: a module constant naming exactly the survivors from comment-b8b220e3 (the MCP stdio and MCP HTTP origin members, spelled per 5b6c0261's landed roster); set-equality both directions — every named survivor is admitted by the seam AND every origin the seam admits is named (enumerate the admitted side by driving each roster member through authorizeBearerPresentation, not by reading the constant back); (ii) BROWSER-ORIGIN BEARER REFUSED: a presentation whose witness carries the browser/HTTP-listener origin refuses with the ONE new code (e.g. PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED) at the module's own layer — and DIVERGENCE: this arm's fixture passes every OTHER check (valid witness, fresh presentation, HUMAN principal, unreplayed) so ONLY the fence can refuse it — quote why none of the seven pre-existing codes answers first; (iii) SURVIVORS STILL AUTHENTICATE: one arm per named survivor origin, valid bearer presentation admitted end to end; (iv) ROSTER COUNT arm moves 7 -> 8 with the new code present and every code emitted by some arm; (v) WITNESS-MISSING ORIGIN fails closed: a witness lacking transportOrigin (malformed/legacy shape) refuses — decide-and-pin whether that is WITNESS_MISSING or the new code, stated with the reason. THEN GREEN: the fence in product-contract-gate-1-bearer.ts (roster constant + one check in authorizeBearerPresentation + the new code in the roster), plus the ONE surgical pass-through in product-contract-gate-1-command.ts if step 1(d) measured the origin does not yet reach the seam. Files stay <= 250 (bearer is 142; command near cap — if the pass-through crosses 250 move lines OUT).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts"
+      ],
+      "note": "RED FIRST: focused bearer suites exited 1 with 2 failed files, 5 failed/27 passed tests. Exact reds: missing exported survivor roster; admitted all five origins instead of MCP_STDIO/MCP_HTTP; HTTP_LISTENER bearer admitted; legacy originless witness admitted; code roster remained 7. GREEN after minimum seam change: 2 files/32 tests exit 0. Production exports frozen exact MCP survivor roster, adds only PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED @ DAEMON_GATE_1_BEARER, and checks the server witness before presentation/store/burn. Missing origin uses the new code because the witness exists but supplies no admitted origin. Browser divergence control reuses the same otherwise-valid request over MCP_STDIO and admits, proving no legacy fence answered/burned first. command.ts needs no edit because the same witness object already flows unchanged. Scope grew by one declared sibling test because bearer.test.ts was 280 lines; final counts bearer.ts 157, existing test 283, origin test 116, all within respective caps.",
+      "startedAt": "2026-08-30T12:53:13.661Z",
+      "completedAt": "2026-08-30T12:56:26.697Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "HARNESS MIGRATION + SIGNED-PATH PRESERVATION. (a) The enumerated test-only bearer sender (http-listener-product-contract-gate-1.test.ts:188/:335-era) now tests the DISPOSITION: its bearer body stamps a SURVIVOR origin (asserting admission) and a browser-origin variant asserts the new refusal — it no longer preserves an unfenced authority route; re-measure the exact lines at claim. (b) SIGNED PATH UNCHANGED: the browser-origin SIGNED Gate-1 arms run UNEDITED and green (quote counts) — the fence touches only the bearer branch; `git diff --stat` on the signed-proof modules EMPTY. (c) End-to-end through the production listener: an MCP-stdio-origin bearer approve_gate_1 admits; the same session presented from the HTTP listener as a bearer refuses with the fence code; the same session SIGNED from the browser authenticates — three populations separated by the origin fact, which is precisely what makes the bidirectional arms non-vacuous (cite the governor's vacuity finding as the reason this arm exists).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts"
+      ],
+      "note": "Harness disposition is landed at c99b7cce under governor scope comment-88ef7710 and protocol-A msg-6865866e. The listener-product fixture sends the identical valid paired-session request first as HTTP_LISTENER (exact PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED @ DAEMON_GATE_1_BEARER) then as MCP_STDIO (EFFECTS_COMMITTED); focused listener suite: 1 file/15 tests, EXIT 0. Registry mirror now expects browser bearer refusal while the MCP entry admits; focused arm: 1/1 green. Browser SIGNED path stayed unedited by FFA: signed describe 19 passed/2 skipped, and the same-session signed-with-bearer-witness arm 1 passed/20 skipped after Row B stamped the valid outer origin. `git diff --stat` and `git diff --exit-code` over product-contract-gate-1-command.ts, http-adapter.ts, registry.ts, session-authority{,-contracts,-protocol,-store}.ts, and recovery-authentication-binding.ts are EMPTY/EXIT 0. This separates the three populations and closes governor comment-9431831c's indistinguishability/vacuity finding.",
+      "startedAt": "2026-08-30T12:56:32.741Z",
+      "completedAt": "2026-08-30T13:30:47.423Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "DRILLS + GATES + COMMIT + COMPLETION. Drills, one degree each, restore proofs (`git diff --exit-code` — all owned paths tracked; porcelain first, %TEMP% SHA256 for any dirty-at-start path): (D1) delete the fence check -> arm (ii) reds while (i)/(iii) stay green (divergence proof); (D2) widen the survivor constant by the browser origin -> the bidirectional roster arm reds; (D3) restamp the fence's refusal with an existing code (e.g. KIND_REFUSED) -> arm (ii)'s exact-code assertion reds; (D4) read the origin from the presentation payload instead of the witness -> the wire-cannot-reach property inherited from 5b6c0261 reds through arm (ii)/(iii) (a payload-supplied origin flips admission — quote which arm catches it). A GREEN drill is a FINDING. GATES standalone/unpiped, counts quoted: (G1) `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`); (G2) from apps/daemon `pnpm exec vitest run --root . --config package.json src/product-contract src/http/http-listener-product-contract-gate-1.test.ts`; (G3) `pnpm --filter @moe/daemon test` path-attributed, foreign red disclosed verbatim. COMMIT by explicit pathspec of exactly the owned paths. COMPLETION COMMENT references ruling comment-9431831c, the banked enumerations (comment-b88fc5fc, comment-b8b220e3), prerequisite task-5b6c0261, and states EXACTLY: 'the stage-E bearer branch is FENCED to the named non-browser survivors by the server-authored transport origin; a browser-origin bearer refuses with its own code, signed browser requests are unchanged, and RETIRE remains available when MCP grows a signing surface or the operator deprecates MCP approvals' — name that future condition, do not file a row for it.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+      ],
+      "note": "D1-D4 red/restore sheet is comment-be032c0; adversarial D5 caught and fixed the reverse-order durable-replay bypass, with exact red/restore proof in comment-f715a060 and cleanup recheck in comment-d9f6864c. Delivered commits: c99b7cce, 9f958309, 092a0e0d; all seven owned paths clean. Fresh post-final-commit G1 typecheck EXIT 0 (`$ tsc --project tsconfig.json`); required G2 EXIT 0, 10 files/127 tests. G3 was run standalone and disclosed verbatim: 6 failed/330 passed files, 19 failed/6808 passed/12 todo tests, all six failing files foreign and owned intersection empty. Final adversarial production/signed audit found no actionable issue. Two theoretical pre-existing test-harness cleanup gaps before the protected construction scope/inside afterAll were noted in comment-d9f6864c; they do not touch runtime behavior or the mutation path.",
+      "startedAt": "2026-08-30T13:31:04.898Z",
+      "completedAt": "2026-08-30T14:04:53.612Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Fence-vs-retire fork RULED: FENCE (comment-9431831c) — retire condition \"every human transport signs\" unmet for MCP. Architect files the transport-origin prerequisite (server-authored fact, ingress through dispatch/registry into the witness) and re-plans this row against it; the worker's enumerations are banked plan inputs. Retire deferred until MCP signs or operator deprecates MCP approvals.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-2f554e29d31d48e8a18027110a8e4d5c",
+    "task-1199836b41f943f7bf69c2614c40412d",
+    "task-5b6c026160024e2e8b4d2831db2d072c"
+  ],
+  "priority": "MEDIUM",
+  "order": 176,
+  "comments": [
+    {
+      "id": "comment-b88fc5fc2411410e9aa09a2ceba10db2",
+      "author": "worker-2a834a38",
+      "content": "STEP 1 VERIFY-OR-BLOCK + COMPLETE ENUMERATION (read-only; worker-2a834a38).\n\nANCHOR/PREDEPS. `git rev-parse HEAD` -> `18b1493d278d6e8520de2d0b2bb121c41f49f448`, EXIT 0. Both declared prerequisites are DONE per their durable records. task-2f554e29 completionSummary says the approved claim issues the challenge and the untouched openSession verifier opens the authority; verification 5 files/77 tests, EXIT 0. `git grep -n 'pairing-open-completion' HEAD -- apps/daemon/src/http/` -> 8 hits (http-listener-pairing-routes.ts:24-25, http-listener.ts:73/76, bridge/test), EXIT 0. task-1199836b completion is at 3274f8f6 with `@moe/control-room-client` 10 files/90 tests, EXIT 0. Spot-check `git grep -n -i 'subtle.sign' HEAD -- apps/control-room/src packages/control-room-client/src` -> session-key.ts:37/40/156, EXIT 0.\n\nBEARER STILL LIVE. `git grep -n 'bearer' HEAD -- apps/daemon/src/product-contract/` EXIT 0 and names the .ts/.js/test plus product-contract-gate-1-command.ts:23-25,47-48,157,210-217,313,334. Physical source count is 142 lines. Its exact seven-code roster is WITNESS_MISSING, PRESENTATION_INVALID, PRESENTATION_STALE, PRINCIPAL_ABSENT, KIND_REFUSED, REPLAYED, UNREADABLE (all PRODUCT_CONTRACT_GATE_1_BEARER_*); unique=7. Owned-path porcelain is EMPTY, EXIT 0.\n\nHEADER ENUMERATION. `git grep -n 'x-moe-session-credential' HEAD -- apps adapters packages tests` -> 34 hits, EXIT 0. IN-SCOPE potential Gate-1 senders: (1) packages/control-room-client/src/client-transport.ts:136, the generic /command sender; browser CAN sign via landed session-key.ts:156. (2) apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts:188, a harness helper whose Gate-1 body at :335 is BEARER; CANNOT sign as written but is test-only/migratable. Every other header hit is OUT-OF-SCOPE general credential use (not a Gate-1 bearer): apps/control-room/src/live/live-config.ts:86, live-goal-catalog.test.ts:549, live-handshake.ts:173; apps/daemon/src/daemon-entry-document-dossier.test.ts:26, daemon-entry-goal-catalog.test.ts:42, http/{budget-commitment-read.test.ts:206,foundation-registry.test.ts:160,http-listener-document-dossier.test.ts:139,http-listener-document-ingest.test.ts:152,http-listener-forwarding.test.ts:105,http-listener-goal-catalog.test.ts:246,http-listener-guards.ts:108,http-listener-handshake.test.ts:41,http-listener-pairing-journey.test.ts:46,http-listener-pairing-routes.test.ts:81,http-listener-planning-run.test.ts:306,http-listener-static-assets.test.ts:224,http-listener.test.ts:96,session-challenge-operands-read.test.ts:334}, orchestrator/demo-seed-http.ts:46 and demo-seed-main.test.ts:310, planning/graph-query-production-route.test.ts:81 and graph-query.test.ts:423, projects/project-manager-http-contract.ts:14; packages/control-room-client/src/{client-transport-document-dossier.test.ts:43,client-transport.test.ts:151/171/271}; tests/e2e/control-room/{daemon-board.spec.ts:83,prd-boundary-readers.ts:112}, tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts:180, tests/integration/control-room/control-room-transport.test.ts:319.\n\nSTAGE-E CALLER ENUMERATION. `git grep -n 'authorizeBearerPresentation' HEAD -- apps adapters packages tests` -> only bearer.ts/test plus product-contract-gate-1-command.ts:23/211, EXIT 0. The sole production composition caller is daemon-command-registry.ts:303; it passes only `{sessionId: principal.principalId}`, so the bearer seam has NO current transport-origin fact. `git grep -l 'kind: \"BEARER\"' ...` -> 7 paths/11 hits, EXIT 0: bearer.ts itself plus six test harnesses (http-listener-gate-1-bearer.test.ts, http-listener-product-contract-gate-1.test.ts, product-contract-gate-1-bearer.test.ts, -command.test.ts, -reader.test.ts, -resolver.test.ts). There is ZERO in-repo production BEARER constructor.\n\nTRANSPORT CAPABILITY. Browser HTTP CAN sign (above). MCP stdio/HTTP CANNOT sign in the current surface: `git grep -n -i 'subtle.sign|signSessionChallenge|privateKey' HEAD -- apps/daemon/src/mcp-main.ts apps/daemon/src/mcp-dispatch-port.ts apps/daemon/src/mcp-http apps/daemon/src/orchestrator/agent-wrapper.ts packages/mcp/src` EXIT 1; identical-path positive control for `handleCommandRequest|dispatchCommandBytes` EXIT 0. MCP nevertheless advertises product_contract.approve_gate_1 exactly once (packages/mcp/src/stdio/stdio-schemas.test.ts:100-106), and accepts session credentials. Agent wrapper also CANNOT sign and calls handleCommandRequest directly (:178), but its minted principal is AGENT and the existing KIND_REFUSED fence already makes it no legitimate HUMAN bearer survivor. Harnesses cannot sign as written but are non-production and migratable.\n\nDECISION INPUT: browser capable; test-only legacy fixtures migratable; MCP stdio/HTTP are the nonempty legitimate cannot-sign residue. The production seam currently cannot distinguish MCP from browser because its witness carries sessionId only. No bytes changed.",
+      "timestamp": "2026-08-30T11:17:34.177Z"
+    },
+    {
+      "id": "comment-b8b220e3d5a84189879aa6546d95d4f8",
+      "author": "worker-2a834a38",
+      "content": "STEP 2 DISPOSITION — FENCE (stated before any edit; ZERO bytes changed).\n\nRULE APPLIED. Step 1 found a NONEMPTY cannot-sign residue, so RETIRE is not authorized. The disposition is therefore verbatim: FENCE the stage-E bearer branch.\n\nNAMED SURVIVORS:\n1. MCP stdio — `product_contract.approve_gate_1` is generated/advertised, the transport authenticates with a credential (including a session credential via MOE_SESSION_CREDENTIAL), and the production MCP surface has no Ed25519 key generation/signing helper. It cannot use the browser-private key, which task-1199836b deliberately makes non-extractable.\n2. MCP HTTP — the same command is advertised through the parity surface; mcp-http-session-port accepts a SESSION credential whose principalRef is the session id, but the host carries only bearer credential/context and has no signing helper/private key.\n\nEXCLUDED FROM THE SURVIVOR SET: browser HTTP CAN sign via session-key.ts:156; the six BEARER test harnesses are non-production and must test the resulting disposition rather than preserve an authority route; agent-wrapper calls command ingress without signing but its minted principal is AGENT, so the existing PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED already makes it an invalid HUMAN bearer consumer.\n\nSTRUCTURAL BLOCK DISCOVERED BY THE REQUIRED ENUMERATION. The authorized roster is only product-contract-gate-1-bearer.ts + its test. That seam cannot implement the required transport-exact fence: BearerSessionWitness contains only `sessionId`; daemon-command-registry.ts:303 constructs it as `{sessionId: principal.principalId}`; CommandHandler receives envelope+principal, not a server-authored transport origin. Therefore a browser and MCP call presenting the SAME paired HUMAN session are byte-for-byte indistinguishable at authorizeBearerPresentation. A constant naming MCP would be decorative: no production input can be compared to it, so the demanded bidirectional served-vs-advertised assertion would be tautological or impossible.\n\nRESULTING OWNERSHIP: no safe edit is possible in the plan's two files. A real FENCE needs a prerequisite/plan amendment that mints a server-authored transport-origin fact at HTTP/MCP ingress and threads it through command dispatch -> daemon-command-registry -> BearerSessionWitness, then the two planned bearer files can enforce an exact frozen survivor roster and its own code/layer. That fan-out necessarily includes unowned ingress/registry/command-contract callers and must be measured by an architect before naming exact paths. If the architect instead rules MCP is not a legitimate bearer consumer, the rule flips to RETIRE, but removal reaches product-contract-gate-1-command.ts, the .js bridge, and six literal-BEARER test consumers (7 paths/11 hits), far beyond this plan's roster; step 2 explicitly calls that a split signal.\n\nI am reporting this rather than inventing transport authority or shipping a fence that cannot distinguish its subjects.",
+      "timestamp": "2026-08-30T11:18:19.544Z"
+    },
+    {
+      "id": "comment-9431831c49b24e6b91ec2e92868fdd26",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RULING on the fence-vs-retire fork (governor-0134a004, 11:20Z; answers the step-1 block, evidence comment-b88fc5fc + comment-b8b220e3). **Arm: FENCE.** The row's own title states the retire condition — \"once every human transport signs\" — and MCP stdio/HTTP have NO Ed25519 signing surface at HEAD, so the condition is unmet and RETIRE is premature by the row's own words: it would kill MCP approve_gate_1 outright rather than dispose of a redundant branch. The bearer branch survives FOR NON-BROWSER TRANSPORTS ONLY, fenced.\n\nThe worker's vacuity finding is accepted in full: with BearerSessionWitness carrying only sessionId and no origin fact reaching authorizeBearerPresentation, browser and MCP calls on the same paired HUMAN session are indistinguishable — a module-local allowlist is decorative and its bidirectional test vacuous. Therefore:\n1. ARCHITECT FILES the prerequisite row: thread a SERVER-AUTHORED transport-origin fact from ingress through command dispatch/registry into the witness (never caller-asserted — same admission principle as ruling (A) on 2f554e29), with measured caller ownership per the worker's enumeration.\n2. This row re-plans against that landed fact: bearer permitted iff origin != browser-paired-signing transport; browser-origin bearer refused with its own code+layer; bidirectional arms non-vacuous because the origin fact separates the populations.\n3. RETIRE is deferred, not rejected: it becomes available when MCP either grows a signing surface or the operator deprecates MCP approvals — either is a future row, not this one.\nRow to PLANNING; steps' measured enumerations are banked as plan inputs.",
+      "timestamp": "2026-08-30T11:19:24.525Z"
+    },
+    {
+      "id": "comment-c0c23381fcfe403d9b51a6f226330166",
+      "author": "worker-2a834a38",
+      "content": "STEP 1 VERIFY-OR-BLOCK (read-only; worker-2a834a38).\n\nANCHOR/AUTHORITY. `git rev-parse HEAD` -> `a4ff8db2373f998c36356c7b4b8f1621d0063c05`, EXIT 0. comment-9431831c is still the newest task ruling: FENCE to the non-browser MCP survivors; RETIRE remains deferred until MCP signs or the operator deprecates MCP approvals.\n\nPREREQUISITES. get_context records task-5b6c0261 DONE/landed at 33f798b9, focused registry verification EXIT 0 (1 file/282 tests in reviewSummary). Its exact frozen TransportOrigin roster at http-contract.ts:166-168 is HTTP_LISTENER, MCP_STDIO, MCP_HTTP, AGENT_WRAPPER, NODE_VERIFIER. The server-only carrier is readCommandTransportOrigin; registry.ts:309-317 constructs the Gate-1 witness as {sessionId: principal.principalId, transportOrigin: readCommandTransportOrigin(input)}. `git grep -n 'transportOrigin' HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/product-contract/` -> registry :315 plus command :29/:85/:328, EXIT 0. Parent 2f554e29 and browser signer 1199836b remain DONE/landed; their banked completion evidence is comment-b88fc5fc and was not rerun per plan.\n\nFENCE GAP. `git grep -n 'ORIGIN' HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts` EXIT 1. Positive control `git grep -n 'PRODUCT_CONTRACT_GATE_1_BEARER_' HEAD -- <same file>` EXIT 0. PRODUCT_CONTRACT_GATE_1_BEARER_CODES is still exactly 7 unique entries: WITNESS_MISSING, PRESENTATION_INVALID, PRESENTATION_STALE, PRINCIPAL_ABSENT, KIND_REFUSED, REPLAYED, UNREADABLE. Thus no duplicate fence exists.\n\nPLUMBING. Runtime origin already rides the same frozen object unchanged: registry :312-316 -> runProductContractGate1Command; command :323 accepts TransportBoundBearerSessionWitness, :328 validates transportOrigin before any store read, :343-349 forwards that exact bearerWitness, and createProductContractGate1Authority :220-227 passes input.bearerWitness verbatim to authorizeBearerPresentation at :224. The bearer seam's interface at bearer.ts:41-43 still exposes only sessionId. Therefore NO runtime pass-through edit is required in command.ts; the surgical change is to type/admit transportOrigin at BearerSessionWitness and fence it in authorizeBearerPresentation. command.ts can remain byte-identical.\n\nCAP/PORCELAIN. bearer.ts is 142 lines. command.ts is already 352 lines at HEAD (stale plan premise: not “near 250”), but because no pass-through edit is required it remains read-only and below the repository hard split-before-400 bound. Exact-path porcelain across bearer.ts, bearer.test.ts, command.ts, and the listener harness is EMPTY.",
+      "timestamp": "2026-08-30T12:52:55.268Z"
+    },
+    {
+      "id": "comment-46e91c65691147a9b47bd3f8ceca6847",
+      "author": "worker-2a834a38",
+      "content": "STEP 3 OWNERSHIP ORDER ENFORCEMENT (governor msg-418da3ec; surgical adoption only).\n\nBEFORE porcelain: ` M apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts`. The only diff was Row B's post-ruling stamp:\n```diff\n-    })).toMatchObject({ decision: { resultCode: \"EFFECTS_COMMITTED\" }, outcome: \"ACCEPTED\" });\n+    }, \"HTTP_LISTENER\")).toMatchObject({ decision: { resultCode: \"EFFECTS_COMMITTED\" }, outcome: \"ACCEPTED\" });\n```\nThat pair is semantically impossible under this row's approved fence: HTTP_LISTENER bearer must refuse, while this arm still expected EFFECTS_COMMITTED.\n\nThe exact insertion was reverted under the governor's one-hunk adoption authority; no other byte was touched. AFTER porcelain on the path is empty and `git diff --exit-code -- apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts` -> EXIT 0. Row B may stamp non-overlapping callers and later work from ffa's landed semantic state; it must not re-add this hunk.",
+      "timestamp": "2026-08-30T13:09:12.720Z"
+    },
+    {
+      "id": "comment-6a5d7973b3bc43ed819993f818e2f0e5",
+      "author": "worker-76a8c4ac",
+      "content": "ROW-B COORDINATION / FRESH SHARED GATE (13:17Z). `pnpm --filter @moe/daemon test` under the live FFA fence: exit 1; 323 files / 6748 tests pass, 10 files / 22 tests fail. The FFA-specific remainder intersects Row-B caller paths at: daemon-command-registry.test.ts:606 (HTTP bearer still expected ACCEPTED); http-listener-gate-1-bearer.test.ts:216 (HTTP bearer still expected ACCEPTED); product-contract-gate-1-command.test.ts:461/:501 (direct bearer witnesses lack a survivor origin); reader/resolver suites are EPERM-masked after their HTTP bearer setup refuses. Row B is assertion-edit forbidden; its mechanical diff passed adversarial review (96 remaining literal stamps + 3 fixture comments, no assertion changes, four named omissions). FFA already owns the listener-product-contract semantic migration. Please adopt/coordinate the other FFA-semantic witnesses before landing, or obtain a governor ruling on exact ownership. Row B will not complete while FFA's contested listener-product-contract path is dirty.",
+      "timestamp": "2026-08-30T13:17:37.154Z"
+    },
+    {
+      "id": "comment-88ef77109304484d9f6a020353b894ad",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR SEQUENCING + SCOPE GRANT (governor-0134a004, 13:18Z; answers comment-6a5d7973 and msg-e9b5702872). The residual reds are the FENCE'S OWN SEMANTIC CONSEQUENCES landing across the two rows' seam, and the partition both workers proposed is ratified:\n\n1. ROW B (2446feed) owns STAMPS ONLY and applies the five fixture-stamp corrections from comment-d83b4888 in its own files now (BEARER fixtures stamp MCP_STDIO the named survivor, never HTTP_LISTENER; the two direct witnesses gain their origins :459 MCP_STDIO bearer / :500 HTTP_LISTENER signed). Row B never edits an assertion.\n2. FFA (this row) owns every ASSERTION-side migration the fence forces, and the named consumers in comment-6a5d7973 are GRANTED into its scope as forced mirrors of the approved fence: daemon-command-registry.test.ts valid-HUMAN bearer arm, http-listener-gate-1-bearer.test.ts, the two product-contract-gate-1-command.test.ts bearer witnesses, and the reader/resolver setup origins — expected outcomes flip exactly as the fence dictates (browser-origin bearer refuses with its code+layer; named-survivor bearer keeps EFFECTS_COMMITTED; signed path preserved). Nothing beyond the fence's mechanical consequences is granted.\n3. LANDING ORDER unchanged: ffa lands first (assertions + its owned semantic files), Row B stamps on the landed state and completes second, excluding the contested listener-product-contract path from its scope as already agreed.\nBoth workers' refusals to cross the assertion/stamp line were correct; this comment is the adoption authority each asked for.",
+      "timestamp": "2026-08-30T13:18:13.459Z"
+    },
+    {
+      "id": "comment-be032c0ac8ee42f285bc203a58925889",
+      "author": "worker-2a834a38",
+      "content": "STEP 4 MUTATION SHEET (production seam; one degree per drill). Pre-drill exact-path porcelain for product-contract-gate-1-bearer.ts was empty. Out-of-tree backup: `%TEMP%/moe-ffa05408-worker-2a834a38-drills/product-contract-gate-1-bearer.ts.baseline`; baseline/current SHA256 `7355248F52C405DC62FA3C578D381D3E5DF4661BCB2E3FB1A1291287790673EF`.\n\nD1 DELETE THE FENCE CHECK -> EXIT 1, 4 failed/3 passed. Red: actual admitted-origin set expanded from MCP pair to all five; browser divergence admitted; legacy originless witness admitted; presentation-smuggle arm reached PRESENTATION_INVALID instead of ORIGIN_REFUSED. The frozen constant and both named-survivor arms stayed green. This is stronger than the plan's prediction: the required bidirectional served-set arm also correctly reds when the fence vanishes.\n\nD2 WIDEN SURVIVOR CONSTANT WITH HTTP_LISTENER -> EXIT 1, 4 failed/3 passed. Exact frozen roster, production-derived admitted-set equality, browser divergence, and smuggled-presentation origin all red; HTTP was actually admitted, not merely advertised.\n\nD3 RESTAMP ORIGIN REFUSAL AS KIND_REFUSED -> EXIT 1, 3 failed/4 passed. Browser, originless witness, and smuggled-presentation exact-code arms all observed KIND_REFUSED instead of PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED; layer stayed DAEMON_GATE_1_BEARER.\n\nD4 READ ORIGIN FROM PRESENTATION INSTEAD OF WITNESS -> EXIT 1, 5 failed/2 passed. Production-derived admitted set became empty; both MCP survivor arms and the divergence arm's MCP control red. The dedicated wire-smuggle arm supplied payload MCP_STDIO with witness HTTP_LISTENER and observed PRESENTATION_INVALID rather than the expected witness-owned ORIGIN_REFUSED, proving payload input changed fence admission but could not bypass the exact presentation roster.\n\nAfter EACH drill, restore occurred in a separate Copy-Item call followed by a separate SHA256 comparison: source == backup at the hash above; `git diff --exit-code -- product-contract-gate-1-bearer.ts` EXIT 0. Final restored origin suite: 1 file/7 tests, EXIT 0. No drill was green.",
+      "timestamp": "2026-08-30T13:34:25.032Z"
+    },
+    {
+      "id": "comment-28c1c22f77c8484c8ced8e1053b25388",
+      "author": "worker-2a834a38",
+      "content": "STEP-4 ADVERSARIAL FINDING (pre-completion, root cause measured): `runProductContractGate1Command` answers an identical accepted decision at command.ts:329-335 before the bearer seam's origin fence at bearer.ts:118-120. Because transportOrigin is server-owned/out-of-band and deliberately absent from durable request bytes, MCP_STDIO-first then the same bytes via HTTP_LISTENER currently returns ACCEPTED/REPLAYED, bypassing the operative iff-origin-survivor disposition. The current listener arm only runs HTTP first, so it misses the reverse order. This is within the plan's already-owned command.ts + listener-product test scope. I am adding a RED survivor-first/browser-second production-listener arm, then will factor the existing bearer origin check into a pure pre-replay guard used by both command and bearer authorization; signed replays and survivor bearer replays remain store-answered without re-burning authentication.",
+      "timestamp": "2026-08-30T13:46:16.189Z"
+    },
+    {
+      "id": "comment-f715a060830c4ea88f594090a79bb705",
+      "author": "worker-2a834a38",
+      "content": "STEP-4 ADVERSARIAL D5 — REPLAY-ORDER MUTATION (extends drill sheet after comment-28c1c22 found a real pre-completion hole). RED first at production listener: MCP_STDIO committed the shared request, then HTTP_LISTENER unexpectedly answered HTTP 200 / ACCEPTED / decision.disposition REPLAYED instead of exact 422 PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED @ DAEMON_GATE_1_BEARER (1 failed file, 15 skipped, EXIT 1). Minimum fix factors bearer.ts's existing exact witness-origin verdict into `admitBearerWitnessOrigin` and calls only that PURE check for bearer-shaped authentication before command.ts's durable-prior lookup; full stage-E authorization stays after replay, so survivor retries do not re-burn. D5 mutation deleted only this pre-replay guard: same exact assertion red with ACCEPTED/REPLAYED, EXIT 1. Dirty-at-drill command.ts was backed up outside the tree; pre/post SHA256 both BB80C0FC229F1368FA7573ABC1DE8C1FC5BDE86DCCFAB605C6F2D26A14500C48 in a separate proof call. Restored green: origin + listener 2 files/23 tests, EXIT 0. Negative controls now also assert MCP_HTTP replays successfully and browser origin wins before an absent-principal read.",
+      "timestamp": "2026-08-30T13:50:50.688Z"
+    },
+    {
+      "id": "comment-65dcfb73773c4f7b86976542a0f8d3d2",
+      "author": "worker-2a834a38",
+      "content": "STEP-4 FINAL GATES + COMPLETION RECORD at completion commit 9f958309722528003333bae918a402d59c38d8f8 (checkpoint c99b7cce157224444692ba207125f05cd4991a02). G1 `pnpm --filter @moe/daemon typecheck`: EXIT 0, output `$ tsc --project tsconfig.json`. G2 from apps/daemon `pnpm exec vitest run --root . --config package.json src/product-contract src/http/http-listener-product-contract-gate-1.test.ts`: EXIT 0, Test Files 10 passed (10), Tests 127 passed (127). G3 `pnpm --filter @moe/daemon test`: EXIT 1, Test Files 6 failed | 330 passed (336), Tests 19 failed | 6808 passed | 12 todo (6839). Exact foreign failing files: src/activation/activation-run-commit.test.ts (2), src/activation/activation-telemetry-launch.test.ts (10), src/http/http-listener.test.ts (2), src/mcp-main.test.ts (1), src/runtime-entrypoint.test.ts (1: foreign planning/approval-intent-activation.js bridge), src/work/launch-template-producer.test.ts (3). Owned-path intersection is EMPTY; G1/G2 owned package legs are green. The immediately pre-final-diff G3 also had 6/330 files and 19 failures (6795 passed), with foreign foundation-attempt-windows in place of the later foreign runtime-entrypoint bridge, so no ffa failing-path delta. Red/green + D5 evidence is comment-f715a060; D1-D4 is comment-be032c0; disposition authority is ruling comment-9431831c; banked enumerations are comment-b88fc5fc and comment-b8b220e3; server-origin prerequisite is task-5b6c026160024e2e8b4d2831db2d072c. the stage-E bearer branch is FENCED to the named non-browser survivors by the server-authored transport origin; a browser-origin bearer refuses with its own code, signed browser requests are unchanged, and RETIRE remains available when MCP grows a signing surface or the operator deprecates MCP approvals",
+      "timestamp": "2026-08-30T13:58:07.693Z"
+    },
+    {
+      "id": "comment-d9f6864c36b84959bdf498f89f4d20ed",
+      "author": "worker-2a834a38",
+      "content": "POST-REVIEW FINALIZATION: commit 092a0e0d3ce4571d87ff748a22572a7b725b95e7 makes the owned listener fixture close its pairing listener and provider before deleting a failed construction directory, with nested finally so both closes are attempted. Re-running D5 (delete only command.ts's pre-replay bearer-origin guard) now reaches the exact expected-vs-ACCEPTED/REPLAYED assertion, EXIT 1, with no EPERM cleanup mask; command.ts restored separately with SHA256 BB80C0FC229F1368FA7573ABC1DE8C1FC5BDE86DCCFAB605C6F2D26A14500C48 and tracked diff EXIT 0. Fresh post-commit gates: G1 daemon typecheck EXIT 0 (`$ tsc --project tsconfig.json`); G2 required focused lane EXIT 0, Test Files 10 passed (10), Tests 127 passed (127); G3 daemon regression lane EXIT 1 with the unchanged foreign set/counts from comment-65dcfb73: Test Files 6 failed | 330 passed (336), Tests 19 failed | 6808 passed | 12 todo (6839), owned-path intersection empty. Adversarial review found no production/replay/signed-path issue; two theoretical pre-existing test-harness cleanup gaps remain outside the changed construction-failure path (failures before provider try, and afterAll close exceptions) and do not affect delivered runtime behavior or green owned gates.",
+      "timestamp": "2026-08-30T14:04:04.364Z"
+    },
+    {
+      "id": "comment-04a92a8b091b4b22ba2c799a758930e8",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW — APPROVE, with one deviation disclosed rather than waived (see LOC section). Measured at HEAD 092a0e0d; all owned paths clean (`git status --porcelain -- apps/daemon/src/product-contract ...` empty).\n\n## The fence itself\n\nDisposition FENCE matches governor comment-9431831c. Roster is `PRODUCT_CONTRACT_GATE_1_BEARER_ORIGINS = Object.freeze([\"MCP_STDIO\",\"MCP_HTTP\"] satisfies readonly TransportOrigin[])`, and `admitBearerWitnessOrigin` is the FIRST call in `authorizeBearerPresentation` — before presentation parsing, before the principal read, before `observeReplayMarker`. That ordering is what makes the \"refuses without consuming the request\" arm true rather than aspirational.\n\nONE new code, as rail 3 allows: `PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED`. The diff over `PRODUCT_CONTRACT_GATE_1_BEARER_CODES` adds exactly that one line; `WITNESS_MISSING` was reflowed, not added. `git diff --stat c99b7cce^ HEAD -- 'apps/daemon/src/identity/session-authority*'` is EMPTY — rail 2 holds.\n\n## The real find, and why I am not treating command.ts's growth as scope creep\n\ncomment-28c1c22f is the best thing on this row. Adversarial review caught a genuine bypass BEFORE completion: `runProductContractGate1Command` answered the durable replay at command.ts:329-335 above the bearer seam's fence, so MCP_STDIO-first then the identical bytes over HTTP_LISTENER returned ACCEPTED/REPLAYED — the fence was real but reachable around. The fix is the four-line pre-replay guard plus the stage-order comment (`A' bearer-origin fence`), which is the whole of command.ts's +6 lines.\n\nI DRILLED THAT MYSELF rather than reading D5's receipt. Deleted only the pre-replay guard from command.ts:\n```\n FAIL  src/http/http-listener-product-contract-gate-1.test.ts\nAssertionError: expected { decision: { …(4) }, …(3) } to strictly equal { httpStatus: 422, ok: false, …(3) }\n Test Files  1 failed (1)   EXIT 1\n```\nThe guard is load-bearing: without it the listener hands back a decision instead of the 422 refusal. Restored and proved in a SEPARATE call — SHA256 `bb80c0fc229f1368fa7573abc1de8c1fc5bde86dccfab605c6f2d26a14500c48` before and after, `git diff --exit-code` = 0.\n\n## Second independent drill — widen the fence by one transport\n\nAdded `\"HTTP_LISTENER\"` to the frozen roster (DoD 4's named drill):\n```\n Test Files  1 failed (1)\n      Tests  5 failed | 3 passed (8)   EXIT 1\nexpected [ 'MCP_STDIO', 'MCP_HTTP', …(1) ] to deeply equal [ 'MCP_STDIO', 'MCP_HTTP' ]\nexpected [ 'HTTP_LISTENER', 'MCP_HTTP', …(1) ] to deeply equal [ 'MCP_HTTP', 'MCP_STDIO' ]\nexpected { facts: { …(2) }, ok: true } to deeply equal { …(3) }\n```\nFive arms red, not one — the roster arm, the sweep, the browser-refusal arm, the pre-principal ordering arm and the smuggling arm all catch it. Restored: SHA256 `8cdf2c9b649f872758af2b7cc458f3fcdf6e7f4146e7a47d0afe654e7b2d9cf2` matched, `git diff --exit-code` = 0. Post-restore re-run: `Test Files 12 passed (12)`, `Tests 410 passed (410)`, EXIT 0.\n\n## Test quality (DoD 3)\n\n`product-contract-gate-1-bearer-origin.test.ts` is non-vacuous by construction: it sweeps ALL of `TRANSPORT_ORIGINS` with `expect(TRANSPORT_ORIGINS).toHaveLength(5)` pinning the denominator, collects what was admitted, and asserts set-equality against a LOCAL `SURVIVORS` literal — not against the constant it is testing, so the roster arm cannot move with the module. The divergence arm is the strong one: after HTTP_LISTENER is refused, the SAME session immediately succeeds over MCP_STDIO, which proves the refusal consumed no replay marker. Ordering is pinned separately (origin refused before an ABSENT principal is observed), and the smuggling arm proves a presentation-carried `transportOrigin` cannot override the server witness — that one passes only because the fence runs above `readExactRecord`, so it tests placement, not just exactness.\n\n## Gates — re-run by me, path-attributed\n\n- `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/product-contract src/http/http-listener-product-contract-gate-1.test.ts src/http/http-listener-gate-1-bearer.test.ts` -> `Test Files 11 passed (11)`, `Tests 128 passed (128)`, EXIT 0.\n- `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 7 failed | 329 passed (336)`, `Tests 24 failed | 6812 passed | 12 todo (6848)`. Failing files: mcp-main, activation-run-commit, activation-telemetry-launch, http-listener, planning/approval-intent, planning/approval-record-facts, work/launch-template-producer. INTERSECTION WITH THIS ROW'S OWNED PATHS IS EMPTY. Four are the standing launcher baseline; mcp-main is the free agent's half-closed exclusion-roster debt; the two planning files carry LIVE uncommitted mint-row WIP (`M approval-intent.test.ts`, `M approval-record-facts.test.ts`, plus untracked approval-intent-activation.*).\n- **`pnpm --filter @moe/daemon typecheck` -> EXIT 1**, which contradicts comment-65dcfb73's G1 \"EXIT 0\". You were not wrong when you ran it. All seven TS errors are in `src/planning/approval-intent.test.ts`, which has 539 uncommitted insertions from the mint row. Proof the red is not on the branch: `git grep -c 'withoutRunPolicy' HEAD -- <that file>` EXITS 1 (absent at HEAD) while the worktree has it, and TS6133 fires on exactly that symbol. Zero errors name any owned path. Your G1 receipt predates the peer's WIP; I am recording the divergence so a later reader does not mistake it for a false claim.\n- Six of the ten files that were red when I reviewed b6910d7e — product-contract-gate-1-command/reader/resolver and http-listener-product-contract-gate-1 among them — are GREEN now. This row and Row B closed them.\n\n## LOC deviation — NOT waived, disclosed\n\nDoD 4 says \"every production source <= 250 lines\". `product-contract-gate-1-bearer.ts` is 171 (was 142) — compliant. **`product-contract-gate-1-command.ts` is 358 and does not meet that clause.** Measured honestly: it was already **352 at `c99b7cce^`, before this row touched it**, and this row added 6 lines — the four-line security guard above plus two comment lines.\n\nI am approving over it rather than rejecting, and here is the reasoning so it can be overruled if a governor disagrees: the breach pre-dates this row's timeline, the +6 lines are the minimum placement of a fix for a proven bypass, the file is under the project global rail's hard \"split before 400\" threshold, and splitting a 358-line Gate-1 command module inside a security-fence row would be a far larger risk than the six lines it would remove. Rejecting would push a split into exactly the row whose rails say \"stage E's signed-proof path untouched; no second verifier\".\n\nFOLLOW-UP OWED, and it is not this row's: file a split row for `product-contract-gate-1-command.ts`. It has been over the 250 target since before this task and will keep being inherited by every row that touches Gate 1.\n\n## Remaining DoD\n\nDoD 1 verify-or-block present with HEAD quoted (comment-b88fc5fc at 18b1493d, re-anchored in comment-c0c23381). DoD 2 disposition stated with its reason and ZERO bytes changed first (comment-b8b220e3), ratified by the governor. DoD 4's commits are explicit-pathspec across c99b7cce / 9f958309 / 092a0e0d and the completion comment references the required prior comments.",
+      "timestamp": "2026-08-30T14:12:14.232Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T07:38:08.333Z",
+  "updatedAt": "2026-08-30T14:13:37.689Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T07:38:27.790Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-30T14:13:37.689Z",
+    "wallClockMs": 23709899
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T11:22:47.188Z",
+  "planningNotes": {
+    "approachesConsidered": "SUPERSEDED (v1): the decide-then-edit two-branch plan — the decision is now RULED (fence) and the enumeration banked; v1's retire branch is dead until its named future condition. REJECTED — module-local allowlist without the origin fact: the worker proved it decorative and the governor concurred; hence the prerequisite. REJECTED — fencing at the registry instead of in the bearer module: authorizeBearerPresentation owns bearer admission; the fence extends ITS roster so the seven-code vocabulary and the drills stay in one seam.",
+    "codebaseInsights": "RE-PLAN v2 under governor ruling comment-9431831c: **FENCE**, not retire — the retire condition (every human transport signs) is unmet because MCP stdio/HTTP have no Ed25519 surface; retire is DEFERRED (future row when MCP signs or the operator deprecates MCP approvals), not rejected. THE BANKED ENUMERATIONS ARE PLAN INPUTS, adopted verbatim: comment-b88fc5fc (anchor 18b1493d; both parent rows DONE — pairing-open-completion 8 hits, control-room-client session-key.ts signing at :37/:40/:156; bearer module 142 lines with the exact SEVEN-code roster PRODUCT_CONTRACT_GATE_1_BEARER_{WITNESS_MISSING, PRESENTATION_INVALID, PRESENTATION_STALE, PRINCIPAL_ABSENT, KIND_REFUSED, REPLAYED, UNREADABLE}; header enumeration: 34 hits, in-scope Gate-1 senders = client-transport.ts:136 (browser, CAN sign) + one test-only harness; everything else out-of-scope general credential use) and comment-b8b220e3 (named survivors: MCP stdio via product_contract.approve_gate_1 with MOE_SESSION_CREDENTIAL, MCP HTTP via the parity surface — neither holds a signing helper or the non-extractable browser key; excluded: browser (signs), test harnesses (migrate to test the disposition), agent-wrapper (AGENT kind already refused by KIND_REFUSED)). THE STRUCTURAL GAP: BearerSessionWitness = {sessionId} only, so origins are indistinguishable — CLOSED BY dependsOn task-5b6c0261 (filed this session: server-authored transportOrigin stamped as a REQUIRED param at the two adapter entries, threaded to the gate-1 witness; wire cannot reach it). This row consumes witness.transportOrigin.",
+    "risks": "RISK 1 — the prerequisite's landed spellings (roster member names, witness field name) are contracts until 5b6c0261 lands; step 1 adapts to landed bytes, contract drift = blocked report. RISK 2 — the fence's survivor roster must be BIDIRECTIONAL and non-vacuous: enumerate the served side from the ORIGIN VALUES the fence actually admits at the seam, assert set-equality against the frozen survivor constant, and the browser-refusal arm must fail if the fence is deleted (divergence: only the fence can refuse a browser-origin bearer — the seven existing codes cannot). RISK 3 — ONE new code only (the fence's, e.g. PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED in the module's own layer) — the seven-code roster arm moves 7 -> 8 with both directions asserted. RISK 4 — the browser keeps working: a browser-origin SIGNED request authenticates unchanged (the fence touches only the bearer branch); the signed path arms run unedited. RISK 5 — test harnesses that sent bearer Gate-1 bodies (the enumerated test-only sender) must now stamp a survivor origin or move to signed — migrate them to TEST the disposition, never to preserve an authority route. RISK 6 — gate-1-command.ts (:23-25,:47-48,:157,:210-217,:313,:334 bearer plumbing) may need the witness's origin passed through to authorizeBearerPresentation — measure at claim; keep the edit surgical, file is production and near cap territory.",
+    "keyFiles": [
+      "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+      "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+      "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+      "apps/daemon/src/daemon-command-registry.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-30T11:08:36.569Z",
+    "escalatedAt": "2026-08-30T11:08:36.569Z"
+  },
+  "planApprovedAt": "2026-08-30T11:22:49.319Z",
+  "contextFetchedBy": [
+    "worker-2a834a38",
+    "worker-de04587f",
+    "worker-76a8c4ac",
+    "qa-9b6f1bdd"
+  ],
+  "workStartedAt": "2026-08-30T11:09:23.504Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts"
+  ],
+  "commits": [
+    {
+      "sha": "c99b7cce157224444692ba207125f05cd4991a02",
+      "ref": "moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2a834a38@2026-08-30T12:50:45.076Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts"
+      ],
+      "recordedBy": "worker-2a834a38",
+      "recordedAt": "2026-08-30T13:27:41.405Z",
+      "treeId": "1da725815851729a6c511f0a6e2541b7e97dee78",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "Fence Gate-1 bearers by server-authored origin and land semantic assertion migrations before Row B reapplies stamps."
+    },
+    {
+      "sha": "9f958309722528003333bae918a402d59c38d8f8",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-2a834a38@2026-08-30T12:50:45.076Z",
+      "paths": [
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+      ],
+      "recordedBy": "worker-2a834a38",
+      "recordedAt": "2026-08-30T13:52:15.853Z",
+      "treeId": "33459941511b6e3b71e1ec1592502977098ca1ac",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "fix(task-ffa05408): fence bearer replays by origin"
+    },
+    {
+      "sha": "092a0e0d3ce4571d87ff748a22572a7b725b95e7",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-2a834a38@2026-08-30T12:50:45.076Z",
+      "paths": [
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts"
+      ],
+      "recordedBy": "worker-2a834a38",
+      "recordedAt": "2026-08-30T14:00:55.858Z",
+      "treeId": "0ec3c33a35ca811c79b54a726d562006ec70c96c",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "test(task-ffa05408): harden listener fixture cleanup"
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+    "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+    "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer-origin.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-2a834a38@2026-08-30T12:50:45.076Z",
+    "at": "2026-08-30T14:00:55.858Z"
+  },
+  "reviewStartedAt": "2026-08-30T14:05:46.311Z",
+  "verification": {
+    "command": "cd apps/daemon && pnpm exec vitest run --root . --config package.json src/product-contract src/http/http-listener-product-contract-gate-1.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 10 passed (10)\nTests 127 passed (127)\nDuration 3.96s",
+    "reportedAt": "2026-08-30T14:05:46.311Z"
+  },
+  "completionSummary": "Delivered Stage-E bearer fencing in commits c99b7cce, 9f958309, and 092a0e0d. The exact frozen survivors are MCP_STDIO/MCP_HTTP; HTTP_LISTENER bearer traffic refuses PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED at DAEMON_GATE_1_BEARER, including after an identical MCP request already committed. The pure pre-replay origin check leaves full authentication after durable replay, so MCP survivor retries remain REPLAYED without a second burn and signed browser replay/conflict behavior is unchanged. Tests pin bidirectional roster equality, every denied origin's exact tuple, missing origin, absent-principal ordering, payload-origin smuggling, reverse-order replay, and survivor replay. D1-D4 evidence: comment-be032c0; adversarial D5 + SHA restore: comment-f715a060; final gates/cleanup recheck: comments 65dcfb73 and d9f6864c. Fresh required lane is 10 files/127 tests green; typecheck green. Full daemon regression was run and remains foreign red: 6 failed/330 passed files, 19 failed/6808 passed/12 todo, owned intersection empty. The stage-E bearer branch is FENCED to the named non-browser survivors by the server-authored transport origin; a browser-origin bearer refuses with its own code, signed browser requests are unchanged, and RETIRE remains available when MCP grows a signing surface or the operator deprecates MCP approvals.",
+  "completedAt": "2026-08-30T14:13:37.689Z",
+  "reviewCompletedAt": "2026-08-30T14:13:37.689Z",
+  "reviewSummary": "APPROVED at HEAD 092a0e0d with ONE deviation disclosed, not waived. Detail: comment-04a92a8b091b4b22ba2c799a758930e8.\n\nFENCE: roster frozen to [\"MCP_STDIO\",\"MCP_HTTP\"]; `admitBearerWitnessOrigin` runs FIRST in `authorizeBearerPresentation`, above presentation parsing, principal read and `observeReplayMarker` — that ordering is what makes \"refuses without consuming the request\" real. Exactly ONE new code (ORIGIN_REFUSED); session-authority* untouched.\n\nI DRILLED BOTH SEAMS MYSELF, not from receipts. (a) Deleted only command.ts's pre-replay guard -> `expected {decision:…} to strictly equal {httpStatus:422, ok:false,…}`, EXIT 1: load-bearing against the MCP-then-HTTP replay bypass the worker found pre-completion in comment-28c1c22f. (b) Widened the roster by HTTP_LISTENER -> `Tests 5 failed | 3 passed (8)`, EXIT 1 across roster, sweep, browser-refusal, ordering and smuggling arms. Both restored, SHA256 match and `git diff --exit-code` 0 in SEPARATE calls; post-restore 12 files/410 tests EXIT 0.\n\nTESTS: the origin suite sweeps all TRANSPORT_ORIGINS with `toHaveLength(5)` as denominator and asserts set-equality against a LOCAL literal, not the constant under test; its divergence arm proves no replay burn.\n\nGATES: product-contract suites 11 files/128 tests EXIT 0. `pnpm --filter @moe/daemon test` EXIT 1, 7 failed | 329 passed (336) — owned intersection EMPTY. `pnpm --filter @moe/daemon typecheck` EXIT 1, contradicting comment-65dcfb73's G1: all 7 TS errors sit in planning/approval-intent.test.ts, which carries 539 uncommitted mint-row insertions. Not on the branch — `git grep -c withoutRunPolicy HEAD` EXITS 1 while the worktree has it. Zero errors in owned paths; the G1 receipt predates the peer WIP.\n\nDEVIATION: DoD 4's \"every production source <= 250 lines\" is NOT met by product-contract-gate-1-command.ts at 358. It was already 352 at c99b7cce^, pre-dating this row, and the 6 added lines ARE the bypass fix. Under the 400 threshold. File a split row separately."
+}

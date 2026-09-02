@@ -137,7 +137,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:31:58.761Z",
-  "updatedAt": "2026-08-28T17:57:14.813Z",
+  "updatedAt": "2026-08-30T17:40:55.167Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T17:32:28.563Z",
     "plannedStepCount": 6,
@@ -175,7 +175,8 @@
   "planApprovedAt": "2026-08-28T17:34:50.138Z",
   "contextFetchedBy": [
     "worker-f16b412c",
-    "qa-98bb373e"
+    "qa-98bb373e",
+    "worker-2a834a38"
   ],
   "workStartedAt": "2026-08-28T17:35:20.566Z",
   "reviewStartedAt": "2026-08-28T17:53:02.776Z",

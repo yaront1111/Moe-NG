@@ -1,4 +1,4 @@
-# Vision: from PRD to production, with proof
+/com# Vision: from PRD to production, with proof
 
 **Status.** Stated by the human on 2026-08-22. Items marked *proposed* are
 governor sharpenings from the same day, each anchored to a measurement on the

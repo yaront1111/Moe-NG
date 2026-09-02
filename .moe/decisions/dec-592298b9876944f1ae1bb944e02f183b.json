@@ -1,0 +1,11 @@
+{
+  "id": "dec-592298b9876944f1ae1bb944e02f183b",
+  "proposedBy": "worker-2a834a38",
+  "content": "Human/governor disposition requested for task-46b9d7acedf449b0979ae31270acd27d. Approve quarantine, for this release audit only, of exactly the 34 literal path+SHA-256 pairs incorporated by reference from immutable row comments comment-f020cc30782f435a88c3d9f354b139de, comment-b6b9078caf7248eab7cbf4cc8ed2f145, comment-6a9b5aadcb874239981d848c8263db0d, and comment-55889c3d69f244bc92332aac6b4058af. Approval grants no ownership/adoption and is void if any hash/path changes. If not approved, assign an exact action/actor per path; this worker cannot edit without an active plan amendment and <=10 declared paths. All 34 are OWNER=NONE; release remains blocked pending ruling.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-86a0cdd79cc245d39d26e12934dc13e0",
+  "createdAt": "2026-08-30T20:03:47.825Z",
+  "resolvedAt": null
+}

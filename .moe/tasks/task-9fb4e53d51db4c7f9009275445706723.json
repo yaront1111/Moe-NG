@@ -196,11 +196,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T09:34:23.383Z",
-  "updatedAt": "2026-08-29T13:24:43.516Z",
+  "updatedAt": "2026-08-30T17:40:55.075Z",
   "contextFetchedBy": [
     "worker-4d8ff141",
     "worker-5097adb2",
-    "qa-860ef713"
+    "qa-860ef713",
+    "worker-2a834a38"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-28T13:05:02.924Z",

@@ -1,23 +1,71 @@
-# task-c4171c1cfe854cb78dd233794b342025 planning handoff (2026-08-15)
+# task-c4171c1c - Daemon expansion admission composition: QA APPROVED
 
-## Outcome
-Reclaimed after the original bridge dependency became DONE, but reported BLOCKED again after re-reading the later prerequisite audit. No speculative plan was submitted.
+REVIEW -> DONE by qa-7f9df027, 2026-08-26. Verified at HEAD `9c41ad94`,
+merge-base `9f0d2506`. Durable QA evidence: `comment-410b90a7f1a14b9bb7805647629082f6`.
+Worker evidence: `comment-31da3b7112214d028506504a2c87d7cc`,
+`comment-93ab52a66b7244bc9eb0b137a61ae3cd`, `comment-80abb8a96a63418ea519c050ab931f0b`.
 
-## Current dependency truth
-- `task-2d9696160e674f26a8d422c45829d80e` (scheduler admission-to-preparation bridge) is DONE.
-- `task-2d37939dddde447bb98e53a2bd9e6c60` (sole current hold binding + target preservation) is landed/DONE.
-- `task-e62e3828df234c66969a99b8223487f4` (durable current safe-release evidence) is BLOCKED on durable attempt dispatch.
-- `task-738a12a816e8421a96edd84648565a38` (authenticated atomic full ACTIVE hold + exactly bound EXPANSION PlanningRun persistence) is BLOCKED on e62.
-- This task is therefore blocked with `needsFrom=task-738a12a816e8421a96edd84648565a38`.
+## Gates I re-ran
 
-## Why planning now is invalid
-The landed scheduler bridge is necessary but not sufficient. Until 738 lands, the daemon lacks a trusted durable current full-hold/PlanningRun pair. Any c417 plan would have to accept or seed caller/test-selected currentAuthority, recreate missing safe-release facts, or silently use the compact PlanningRun binding that lacks the full hold authority. All violate DoD 1 and the fail-closed rail.
+`pnpm --filter @moe/daemon test` -> EXIT 0, `Test Files 278 passed (278)`,
+`Tests 5848 passed | 12 todo (5860)`. Ran TWICE (before my drills, and fresh at
+the restored tree). Focused `src/planning/expansion-admission` -> 2 files / 44
+tests. Count lines present, so the legs provably EXECUTED.
 
-## Resume gate
-After 738 is DONE, independently remeasure:
-1. durable full-hold writer and reader plus safe-release provenance;
-2. exact binding between current goalVersion, ACTIVE hold, sealed EXPANSION PlanningRun, creation receipt, and version;
-3. `bindExpansionAdmission` / `validateOpportunityAttestation` through the public `@moe/scheduler` root;
-4. apps/daemon manifest, lock importer, and a deleted-after-use compiled bare-specifier probe.
+Worker recorded 263/5406; I measured 278/5848. NOT a discrepancy - peers add
+tests in the shared worktree between runs. Never treat a moved suite total as a
+false completion claim on this board.
 
-Then plan strict durable reads -> inspect PlanningRun -> admit -> bind -> prepare -> manual approve -> one durable pre-activation record. Stop before child/run/lease/effect/graph activation authority.
+## The typecheck red is FOREIGN and stays foreign
+
+`pnpm --filter @moe/daemon typecheck` -> EXIT 1, sole failing file
+`src/budget/budget-current-projection.test.ts` (TS7006 x4 at 144-147). It is
+` M` UNCOMMITTED peer WIP adding `plantRootReplayHistory`/`BudgetLedgerEntry`.
+Absent from this task's diff; owned-path intersection EMPTY. Also: typecheck is
+in the PLAN's step 6 but NOT in `task.verification` and NOT in DoD 5, which names
+`pnpm --filter @moe/daemon test` alone. See
+`mem:gotcha-typecheck-red-from-a-peers-uncommitted-test-file`.
+
+## My three re-drills (one degree of freedom changed from the worker's seven)
+
+Grading their transcript is not grading their assertions. All three RED:
+1. NEAR-MISS unwind - they drilled "skip the unwind"; I kept
+   `budgetReservationCancelled: true` and emptied `restoredMeters`. RED on two
+   arms, including the discriminating early-refusal control. DoD 2's NON-EMPTY
+   word is load-bearing.
+2. `fromApproval` drops the upstream `component` - they drilled layer-restamping.
+   RED: `expected null to be 'EXPANSION_APPROVAL'`.
+3. `exactly()` arity `===` -> `>=` in the payload decoder. RED on the
+   server-owned-key sweep. DoD 0 is ENFORCED, not merely asserted.
+All targets TRACKED, so empty `git diff`/`git status` in a SEPARATE call is a
+valid restore proof. Backups %TEMP%/qa7f9df027-*.bak.ts.
+
+## The thing a future reviewer will want to re-litigate
+
+TRANSPORT REGISTRATION OF `graph.admit_expansion` IS ABSENT, AND THAT IS CORRECT.
+Do not reject a future expansion row for it. Measured on disk, not taken on
+trust: `expansion-request-service.ts:26` says the same of `graph.request_expansion`
+(`buildCommandRegistry` throws on a duplicate kind = daemon BOOT crash), and
+`daemon-command-graph-edges.ts` was landed by task-931f99e8, which owns
+exactly-once registration. So the precedent row 738a12a8 shipped UNREGISTERED and
+931f99e8 later added its edge. Rail 0's "durable apps/daemon call site" is graded
+on the KERNEL CALLS living in a non-test production module, which is exactly how
+plan step 5 wrote the assertion. Consumer requiring the edge: task-005c9896.
+
+## Accepted with note, not rejected
+
+- ARMS/PRECEDENCE/SERVER_OWNED_KEYS assert `toBeGreaterThan(0)` where plan step 6
+  said "exact nonzero cardinality"; ABSENCES/BYTE_SETS do assert exact
+  (`toBe(6)`, `toHaveLength(4)`). Rail 3's real target - the zero-case sweep - is
+  closed either way.
+- `fenceFactsOf`'s `subordinateAuthorityFenced: proven as true` is a cast that
+  lies to tsc. Documented, and fails CLOSED downstream at core's
+  `EXPANSION_PREPARATION_FENCE_UNPROVEN`. The runtime boolean is what travels.
+- DoD 2 says seven categories; the suite ships 6 regex arms + 1 child-aggregate
+  arm (a child has no marker of its own - it would be a NEW aggregate id). That
+  is the honest shape, not a missing arm.
+
+## Per-file cap
+
+248/247/176/175/173/87 production lines. Fixtures 527, exempt
+(`mem:fixture-modules-are-not-held-to-the-400-line-cap`).

@@ -1,0 +1,11 @@
+{
+  "id": "dec-39772f456caf4ca88ad7ef1c7a9f0119",
+  "proposedBy": "worker-2a834a38",
+  "content": "Approve an audit-only disposition for exactly the five current ` M` packaging path/SHA-256 pairs in task-46b9d7acedf449b0979ae31270acd27d comment comment-ff04bc4c7fb94647855a13a2aca025a0. Proposed ruling: PRESERVE/QUARANTINE them as active foreign WIP registered to WORKING task-a73b6872e13248768bc161d6059d6a0f; no adoption or implementation ownership granted to this audit row, no validation of bytes, and ruling void if any path/hash changes. This is needed because the a73b worker has not supplied the strict current-hash confirmation. The previously approved agent-wrapper pair disappeared and is not part of this request.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-8170061db477406d85b4df766dd33476",
+  "createdAt": "2026-08-30T20:12:23.833Z",
+  "resolvedAt": null
+}

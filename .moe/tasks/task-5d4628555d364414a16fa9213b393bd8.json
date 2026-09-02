@@ -93,7 +93,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-17897c78",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -178,10 +178,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-02T21:55:11.854Z",
+  "updatedAt": "2026-09-02T21:59:09.817Z",
   "contextFetchedBy": [
     "worker-1ff24286",
-    "worker-17aab223"
+    "worker-17aab223",
+    "worker-17897c78"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-27T16:41:36.985Z",

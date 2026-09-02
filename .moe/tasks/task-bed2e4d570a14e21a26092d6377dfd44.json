@@ -175,7 +175,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:23:44.148Z",
-  "updatedAt": "2026-09-02T19:39:42.148Z",
+  "updatedAt": "2026-09-02T19:39:50.063Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:35.153Z",
     "plannedStepCount": 6,
@@ -248,7 +248,10 @@
     "tools/packaging/pack-windows-main.test.ts",
     ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
     ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
-    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json"
+    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+    ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json"
   ],
   "completionSummary": "Cargo now rides the Windows pack toolchain boundary end to end. Measured at HEAD 8c305e8f (not the planning HEAD).\n\nDoD1 VERIFY-OR-BLOCK settled: the gap was real. Zero cargo refs in the five carrier files; WindowsPackToolchain was node/pnpm/powershell only; the exact key set was the single literal at pack-command.ts:369; trustedDirectories built PATH from git/tar/node/pnpm/powershell only. The ADMISSION half from task-455f4139 was ADOPTED verbatim, never duplicated: resolveCargoPackTool stays the sole Cargo authority and PackCargoToolError/PACK_STEP_FAILED the only vocabulary.\n\nDELIVERED (7 paths). NEW pack-toolchain-codec.ts (123L): verbatim extraction of pack-command.ts:282-385, proven line by line with grep -Fxq at 104/104. PACK_TOOLCHAIN_SCHEMA, MAX_MANIFEST_BYTES and the interface moved too — required, not cosmetic: parse reads the schema as a runtime value, so leaving it behind creates an ESM cycle with a TDZ hazard. pack-command.ts re-exports all four, so its public surface is byte-equivalent and pack-windows.ts needed no edit (verified, not assumed). NEW pack-toolchain-codec.js: the one-line bridge every tools/packaging module needs — omitting it killed the spawn-based arms with ERR_MODULE_NOT_FOUND. Not in the plan roster; forced, disclosed, declared.\n\npack-command.ts 395->306: CARGO_PINS read ONCE at module load, resolveCargoPackTool keeps arity 2 (a landed test pins that), new cargoExecutable seam, new pinnedCargoExecutable(environment). Codec roster -> [\"cargo\",\"node\",\"pnpm\",\"powershell\",\"schemaVersion\"], decoded through the same decodeTool path. pack-windows-main.ts 398->399: cargo dirname in trustedDirectories, cargo leased at the child launch.\n\nSECURITY. RUSTUP_HOME/USERPROFILE are a LOCATION HINT only — the same trust model pnpm already uses here. Authority is the landed admission: not-in-repo, canonical (no symlink/junction), basename cargo.exe, parent bin, grandparent == pinned toolchain, great-grandparent toolchains, exact sha256, --version equal",
   "commits": [
@@ -275,6 +278,24 @@
       "treeId": "5c31fcfda91f7c9ea6e8221c12f408e4a3975c39",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "cdc123ab478fd5146122c8eeab274fb1cde07e66",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-ee158f8f@2026-09-02T19:30:31Z",
+      "paths": [
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
+        ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+        ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json"
+      ],
+      "recordedBy": "qa-ee158f8f",
+      "recordedAt": "2026-09-02T19:39:50.063Z",
+      "treeId": "58ee760655f171555acd5e51b5562affbc24fd70",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -293,9 +314,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6fab73fa@2026-09-02T19:00:25Z",
-    "at": "2026-09-02T19:29:46.054Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-ee158f8f@2026-09-02T19:30:31Z",
+    "at": "2026-09-02T19:39:50.063Z"
   },
   "completedAt": "2026-09-02T19:39:42.148Z",
   "reviewCompletedAt": "2026-09-02T19:39:42.148Z",

@@ -38,6 +38,60 @@ anything. With it, the empty result is a fact.
 Also true of counts: `grep -c` on a pattern that never matches returns 0 and looks like a passing
 threshold.
 
+## The control must share the pathspec, and `| wc -l` removes the last signal (2026-08-22)
+
+Measured at HEAD `1d9d84c` while hardening a DoD clause of the form "this grep returns zero".
+
+`git grep` makes both failure modes worse than the generic case:
+
+**It exits 1 on no match.** So a clause whose SUCCESS is an empty result runs a command that
+reports FAILURE — it aborts an `&&` chain and reads as a red. The obvious fix is to assert the
+number instead of the exit code:
+
+```sh
+git grep -n "<dead-id>" -- apps packages scripts | wc -l    # must print 0
+```
+
+**But that fix opens the false-negative hole, because the pipe discards git's exit code.** A wrong
+pathspec is SILENT — no fatal, no stderr, no clue:
+
+```sh
+git grep -n "a91e9fe2" -- nonexistent-dir     | wc -l   # -> 0
+git grep -n "a91e9fe2" -- apps packages scripts | wc -l # -> 4
+```
+
+**Worst case is a typo in ONE element of a multi-element pathspec**, masked by the valid ones:
+
+```sh
+git grep -n "a91e9fe2" -- app packages scripts | wc -l  # -> 0   <- `app` missing the s
+```
+
+`packages` and `scripts` are real and simply hold no hits; all real hits lived under `apps`. One
+missing character reads as a clean, entirely wrong zero. Widening a pathspec for coverage
+ENLARGES this surface — it is still usually right, just no longer self-checking.
+
+### The control must use the IDENTICAL pathspec, or it does not interlock
+
+```sh
+git grep -n "<dead-id>" -- apps packages scripts | wc -l   # (a) must print 0
+git grep -n "<live-id>" -- apps packages scripts | wc -l   # (b) must print >= 1
+```
+
+On any broken pathspec (b) also reads 0 and fails, so the pair cannot both go green on a broken
+path — while either alone can. Point (b) at something that reads **0 today** and only becomes
+nonzero through the work being graded; if it is already nonzero the clause grades green on work
+nobody did.
+
+### When this is written as a DoD clause, (b) will look deletable
+
+To a quick reader (b) is redundant — "we already assert the dead id is gone, why also assert the
+live one is present?" Deleting it silently converts (a) back into a zero that cannot fail. Say so
+IN the clause: same pathspec text character for character, graded as one clause.
+
+Generalisation: **an assertion of absence needs a companion assertion of presence through the
+identical instrument, or the instrument's own breakage is indistinguishable from the absence it
+is meant to prove.**
+
 Related: `mem:gotcha-package-boundary-test-matches-comments`,
 `mem:gotcha-boundary-test-greps-prose-not-imports`,
 `mem:gotcha-naive-grep-counts-comments-and-ban-fixtures-as-imports`,

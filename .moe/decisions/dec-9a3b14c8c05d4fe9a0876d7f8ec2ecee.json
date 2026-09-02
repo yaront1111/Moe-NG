@@ -1,0 +1,11 @@
+{
+  "id": "dec-9a3b14c8c05d4fe9a0876d7f8ec2ecee",
+  "proposedBy": "worker-2a834a38",
+  "content": "Re-disposition .codex/agent-instructions.md after its original orphan pin changed. Exact evidence is task-46b9d7a comment-b76ed5753aef4572a5a2b1a759a3317f: current ` M` SHA256 EB2B94E7FF613BEADCA8760A2449633FD8ADC9DDB3A5356A6A2766DC4F63F5C4, prior approved pin 345D9B... now void. Proposed: exact audit-only re-quarantine at the current hash, or explicitly classify this wrapper-generated instruction file as live runtime state outside the release claim. No ownership/adoption; any exact pin remains void on change.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-6baee3ebcec44ac7bc1f7d71bf0c689a",
+  "createdAt": "2026-08-30T20:17:57.100Z",
+  "resolvedAt": null
+}

@@ -1,125 +1,102 @@
-# task-97554aa4 Foundation self-host canary — architect output 2026-08-17
+# task-97554aa4 Foundation self-host canary — QA VERDICT: APPROVED, DONE
 
-Re-blocked at step 1, then swept the whole PLANNING queue on the human's
-"plan all". Governor's 15:04Z cascade claimed "THE CANARY'S PREREQUISITE LIST IS
-COMPLETE"; re-measurement at committed HEAD **a42ae2f** says otherwise.
+Approved by `qa-a533e802` at commit **e8d1a0a**, 2026-08-20. This is M1's exit
+certificate. Board row is terminal; nothing further is owed on it.
 
-Measured with `git grep <sym> HEAD`, never the working tree (shared checkout is
-foreign-dirty).
+## What QA re-ran (do not repeat if you are just reading history)
 
-## Seven capabilities, re-measured
-
-| # | capability | verdict |
-|---|---|---|
-| 1 | MCP host | CLOSED — mcp-http-main.ts:6, mcp-main.ts:11 |
-| 2 | agent wrapper | CLOSED — agent-wrapper-main.ts |
-| 3 | pinned Claude launcher | **OPEN — GAP A** |
-| 4 | verifier receipt path | exists (node-verifier.ts:176) but see GAP E |
-| 5 | restart reconciliation | **CLOSED** — gap B really did land |
-| 6 | coordination adapter | DESCOPED (comment-6785a05f) |
-| 7 | review-qualified acceptance | CLOSED — review-services.ts:161 |
-
-Gap B verified closed: `startDaemon` → `runBootReconciliation` → `port.sweep()`
-→ `createBootReconciliationPort` (daemon-store-dependencies.ts:165) →
-`readInFlightFoundationAttempts` + `reconcileOnRestart`.
-
-## GAP A — producer landed, consumer never did
-
-`task-6cbff010` shipped the attempt-dispatch service; **nothing calls it.**
-Global rail Clause 1 verbatim. DONE ≠ reachable —
-see `mem:deps-done-is-not-deps-reachable`.
-
-- `createFoundationAttemptService` (work/foundation-attempt-service.ts:97) — 0
-  production callers; only its own two test files.
-- Its `captureResult` port (:41) — 0 production implementations.
-- `createFoundationClaudeLauncher` (activation/foundation-launch-authority.ts:290)
-  and `createClaudeRuntimePinRequest` — sole caller is that unreached service.
-- `activation-telemetry-launch.ts` `launchClaudeWithTelemetry` (:95) — 0 callers.
-  **`activation-ingress.ts` (the reachable `effect.activate` handler) imports no
-  launch module at all** — it records activation, never spawns.
-- The REAL spawn path is `agent-wrapper-main.ts:256 claudeSpawnStarter` →
-  `agent-spawner.ts:352 spawnRuntime` — raw `node:child_process`, zero
-  `@moe/runner`, zero pin. **Two launch paths exist; only the unreachable one is
-  pinned.**
-
-Owner already on the board: `task-a9fd91c3` (BLOCKED). Do NOT file a duplicate.
-
-## GAP E — filed as task-4dd4424c, now BLOCKED at its own gate
-
-`agent-wrapper-main.ts:240  verificationAuthority: () => null` with the shipped
-comment "No production authority provider is shipped yet."
-node-verifier.ts:165-172 turns null into `VERIFICATION_AUTHORITY_UNAVAILABLE` for
-every node, so `recordVerifierReceipt` (:176) and the `integration.accept_output`
-dispatch (:152, :198) never fire from the real wrapper.
-
-**I GOT ONE FIELD WRONG.** My planning notes claimed package items were derivable
-from `readReviewLedger`. They are not — the worker measured it and blocked
-correctly. `submitRound` (review-services.ts:112-141) parses `packageItems`,
-binds them via `buildReviewPackage`, stores only `built.value.reviewInputDigest`,
-and DISCARDS the items. `ReviewRoundRecord` (review-read-model.ts:21-30) has no
-items field; the request bytes are unrecoverable because
-`CommandDecisionRecordBase` (store-contracts.ts:86-106) keeps `requestSha256`
-only. So 2 of 3 `VerifierAuthorityFacts` fields lack a durable source:
-
-- `policy` — OK. `installPolicy` (bootstrap-policy-services.ts:42-61) folds
-  `{slices:{[sliceRef]:slice}}` behind `PolicyInstalled`.
-- `calibration` — no durable writer. Only `review-test-fixtures.ts:249`.
-- `packageItems` — no durable source. Every production instance of those kinds is
-  a synthetic literal (`PACKAGE_ITEM_FILL`, `hex64()`).
-
-Filed two prerequisites (both BACKLOG, CRITICAL, independent):
-`task-92031b0a` persist package items alongside their digest (durable-payload
-change → full regression + back-compat); `task-5edf037f` durable reviewer
-calibration (prefer policy.install's slice mechanism; the command vocabulary is
-frozen with a full-coverage ratchet).
-
-## Chain
+All legs in the dev worktree, PowerShell, separate exit codes, no `;` chaining,
+no pipe masking. Bracketed by a spawn probe at **20.2ms** (admissible; the ~10s
+`CreateProcess` cliff was gone, `mtkbtsvc` at 57,406 handles).
 
 ```
-GAP A: dd4ffa0c-split + efc2ef63 + a3e8a02d -> a9fd91c3 -> canary
-GAP E: {92031b0a, 5edf037f} -> 4dd4424c -> canary
+typecheck 0 · test 0 (311 passed|1 skipped files, 7601|3 tests)
+e2e 0 (11|1, 116|1) · store 0 (44/527) · fault 0 (10/83)
+security 0 (10/544) · browser 0 (12) · integration 0 (11/328 + node:test 66/66)
 ```
+**Every count matched worker-21246c33's clean-clone certificate exactly.** The
+disclosed foreign red `claude-launcher.windows.test.ts:237` did NOT reproduce —
+consistent with its stated ~2/8-in-suite, 0/6-in-isolation flake rate.
 
-## Plan-all sweep, same session
+## The grading call that actually needed measuring
 
-Planned 5: `4dd4424c`, `05b0a693`, `495ad5e8`, `14ea45a5`, `a3e8a02d`.
-Not mine: `dd4ffa0c` + `efc2ef63` (architect-f956ffe1; dd4ffa0c since SPIDR-split
-into `ee27ed7c` + `77e8cb44`), `8f9305b9` (already CODING). `submit_plan` refuses
-a task another architect holds — claim through `claim_next_task`, don't submit by id.
-
-**`495ad5e8` and `14ea45a5` are CROSS-REPOSITORY.** `git rev-parse
---show-toplevel` = D:/projexts/moe-next (a42ae2f) vs D:/projexts/moes (33f8c76) —
-two separate repos. moe-next has zero staging/commit code and no hooks block in
-`.claude/settings.local.json`. Both plans gate on an explicit human rail-2
-exception; `495ad5e8` is blocked awaiting it (msg-d9710c17). Their steps carry
-EMPTY `affectedFiles` deliberately: the daemon validates those paths against the
-moe-next root and rejects the plan otherwise.
-
-Also corrected there: the completion hook ALREADY stages by pathspec
-(ps1:2320-2325, sh:2976-2978). The real leak is the **bare `git commit`**
-(sh:2997, ps1:2338) over the shared index, plus the `git add -A` fallback when
-`filesModified` is empty, plus two silent-drop paths in the mention extractor
-(`2>/dev/null || true`, `|| echo 0`).
-
-## Unblock test — greps, never statuses
+DoD 1 says all gates at ONE exact commit, but the live `claude -p --bare` receipt
+is at **b9f462f** while certification is **e8d1a0a**, and the lane is opt-in
+(`MOE_CANARY_LIVE_AGENT=1`) so it SKIPS in the gate. Resolved by measuring, not
+by reading prose:
 
 ```
-git grep -n "createFoundationAttemptService" HEAD -- apps/ | grep -v '\.test\.'
-git grep -n "verificationAuthority"          HEAD -- apps/ | grep -v '\.test\.'
+probeBareAgent      @ b9f462f == @ HEAD   BYTE-IDENTICAL
+runRealAgentWrapper @ b9f462f == @ HEAD   BYTE-IDENTICAL
 ```
-Gap A clears when the first returns a non-test daemon caller. Gap E clears when
-the second no longer shows `() => null`. Canary steps 2-8 need no edit.
+The live spawn + credential-injection path never moved after the proof; the lane
+was split into `canary-self-host.e2e.test.ts` and its assertions only got
+STRICTER (the reap wait). Receipt is specific and real: probe code 0, rounds 1,
+`acceptedVerifierReceiptId f8036aa2…`, 98-byte authored delta, 577/597 authority
+samples holding, 0 unreadable, exactly one holder.
 
-## Traps carried forward
+**Reusable method: when a live/opt-in proof predates the certification commit,
+diff the PRODUCTION-FACING FUNCTIONS between proof-sha and HEAD. Byte identity
+there is what carries the receipt forward; "the file changed" alone is not a
+finding.** See `mem:gotcha-live-lane-receipt-predates-its-certification-commit`.
 
-- `packages/testkit/src/foundation/foundation-model-j3j4.ts` would make a green
-  J3/J4 trivial to fake — the mock-backed journey this gate must refuse.
-- `SESSION_FAMILY` is a decoy for coordination (session *credential* lifecycle).
-- `createFoundationVerificationService` (evidence/…:51) also has 0 production
-  callers — a second unused evidence surface, distinct from node-verifier.
-- Graph revision events carry `graphContentHash`/`planHash` STRINGS only, never
-  the `GraphSnapshot` — a fold cannot materialise one.
+## QA's own mutation drill — reproduced the worker's most instructive one
 
-Related: `mem:deps-done-is-not-deps-reachable`,
-`mem:decision-measure-consumer-edges-not-task-status`,
-`mem:gotcha-board-promotes-tasks-ahead-of-their-dependencies`.
+Neutered the body bound in `apps/daemon/src/http/http-listener-guards.ts`
+(`total > HTTP_INPUT_BOUNDS.maxBodyBytes` -> `false`), ran the oversized-body case:
+```
+AssertionError: expected 'INPUT_LIMIT_EXCEEDED' to be 'LISTENER_BODY_TOO_LARGE'
+```
+A deeper guard still refuses, so a bare "it was refused" assertion stays green
+through the mutation. Restored byte-exact (`f3d8edec93742a9cd5b367d11c9bddf7a48f78e7`
+both sides), 0 orphan processes. Cheap: ~1.2s with `-t "oversized-body"`.
+
+## Narrowings were AUTHORIZED, and QA checked that rather than assuming
+
+J3's in-flight clause, the shutdown-receipt clause and drill (i) are all narrowed
+against the original step-4 text. `governor-f4cdc6ee` granted amend-2 as proposed
+and gave option 1 for the drill retarget at **17:17:37Z** in
+`chan-ced99359298945b39ae4709bf92992a6`. **Amendments are invisible in
+`get_context` — the step description still shows the ORIGINAL text. Grep
+`.moe/messages/*.jsonl` before calling a narrowing self-granted.**
+
+Each limit is stated in the spec file header with a production-tier citation
+rather than faked: `foundation-capture-lifecycle.test.ts:525/552/584`,
+`daemon-entry-reconciliation.test.ts:220/413`,
+`host/foundation-receipts.test.ts:70/190/200`. J3 pins `classified: 0` — honest
+while the dispatch ingress stays parked at `task-a9fd91c3` (v0.2 scope freeze).
+
+## Explicitly NOT a defect (do not re-litigate)
+
+`release-handoff-hardening.test.ts` calls `RELEASE_MANIFEST_ERROR_CODES` the
+"PRODUCTION roster" while the contract lives at
+`tests/e2e/foundation/release-manifest.ts`. That contract **IS this task's
+deliverable** — the description names "a release manifest" and scopes owned paths
+to `tests/e2e/foundation/**`. Not a test helper reimplementing production, so
+rail 6's detached-assertion clause does not bite. Wording imprecise, assertion
+sound and bidirectional. Recording eight-codes-not-nine in the header instead of
+inventing a ninth was the right call.
+
+## Verified DoD evidence
+
+1. **DoD 1** — all gates green at e8d1a0a, counts above. Fresh frozen-lockfile
+   install was the one leg taken on the worker's clean-clone evidence; their
+   clone numbers match my in-tree numbers leg for leg.
+2. **DoD 2** — J1/J3/J4 read line by line. J3 kills all three real targets, pins
+   `EXPECTED_VERSION_CONFLICT` + `CORE_REDUCER` + `DISPATCH` behind a
+   verbatim-replay positive control, `E2E_PROCESS_ALREADY_KILLED` on second kill,
+   decisions append-only as a SET. J4's rejection is earned by the daemon's own
+   verifier, negative control `REVIEW_REPLAN_WITHOUT_ROUND` + `DAEMON_PREREQUISITE`
+   runs FIRST, one `RELEASED` owner.
+3. **DoD 3** — above.
+4. **DoD 4** — `sha256` of `D:/projexts/moes/docs/EXTERNAL_DELEGATION_MOE_NEXT_CANARY.md`
+   = `8B124FC5F23CA947207F28458114D4742E5AE8861053DA9B83FC3F0E2BCBB639`, matching,
+   human "delegation confirmed" verbatim inside. No-UNKNOWN sweep **re-run at
+   HEAD** (worker's was at 222f918): 10 occurrences / 5 files, each a fail-closed
+   code or the design-337 honest terminal.
+
+## Prerequisites for anyone re-running this
+
+`mem:gotcha-clean-clone-is-14-reds-without-the-cargo-broker-build` — build the
+Rust broker first or you misattribute 14 foreign reds. Root gates from
+PowerShell. `--reporter=verbose` to harvest a receipt from a GREEN vitest v4 run.

@@ -299,11 +299,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-22T12:50:19.400Z",
-  "updatedAt": "2026-08-27T17:23:34.348Z",
+  "updatedAt": "2026-08-29T18:24:39.866Z",
   "contextFetchedBy": [
     "worker-ce9da376",
     "governor-a29cdc39",
-    "qa-f0a7b13f"
+    "qa-f0a7b13f",
+    "worker-5097adb2"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-22T14:15:36.413Z",

@@ -288,7 +288,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-27T12:10:31.779Z",
-  "updatedAt": "2026-08-28T06:50:45.461Z",
+  "updatedAt": "2026-08-29T18:24:39.586Z",
   "metrics": {
     "firstClaimAt": "2026-08-27T12:11:42.888Z",
     "plannedStepCount": 7,
@@ -336,7 +336,8 @@
     "worker-ce9da376",
     "governor-a29cdc39",
     "worker-777ee3eb",
-    "qa-5d4d9bb3"
+    "qa-5d4d9bb3",
+    "worker-5097adb2"
   ],
   "workStartedAt": "2026-08-27T12:19:24.367Z",
   "blockedReason": null,

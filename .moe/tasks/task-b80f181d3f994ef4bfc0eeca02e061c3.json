@@ -176,7 +176,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T17:54:45.307Z",
-  "updatedAt": "2026-08-28T21:46:51.652Z",
+  "updatedAt": "2026-08-30T17:41:17.842Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T17:56:12.093Z",
     "plannedStepCount": 7,
@@ -230,7 +230,8 @@
     "worker-7474490a",
     "worker-ee96dea4",
     "qa-f6085d2d",
-    "governor-8c340ce3"
+    "governor-8c340ce3",
+    "worker-2a834a38"
   ],
   "workStartedAt": "2026-08-28T19:03:07.248Z",
   "reviewStartedAt": "2026-08-28T20:33:51.377Z",

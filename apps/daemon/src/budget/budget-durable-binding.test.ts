@@ -30,6 +30,31 @@ import { readGoalBudgetIdentity } from "./budget-durable-binding.js";
 
 const ENCODER = new TextEncoder();
 
+/**
+ * The named tamper roster this row exists to make mechanically visible.
+ *
+ * Every entry is one DURABLE-RECORD tamper of a `GoalCreated`-TYPED row — the
+ * record EXISTS and cannot be trusted — and every entry must answer the SAME
+ * `BUDGET_PROJECTION_CORRUPT` at `BUDGET_CURRENT_PROJECTION`. Naming and
+ * counting the roster is the point: the three arms used to be three unrelated
+ * `it` blocks, so nothing asserted that the corrupt-byte axis was covered at
+ * all, and only one of the three pinned the refusing LAYER.
+ */
+const GOAL_CREATED_TAMPER_ROSTER: readonly (readonly [string, string, Uint8Array])[] = [
+  // Bytes that are not JSON at all.
+  ["malformed JSON", "goal-corrupt-json", ENCODER.encode('{"kind":"GoalCreated"')],
+  // Bytes that are not decodable UTF-8, so the decode fails before the parse.
+  ["invalid UTF-8", "goal-corrupt-bytes", new Uint8Array([0xff, 0xfe, 0x01])],
+  // Readable JSON under the GoalCreated event TYPE whose content does not carry
+  // the fact the type claims — the content-vs-type breach budget-genesis-leg.ts
+  // refuses as CORRUPT on the ledger root.
+  [
+    "GoalCreated type carrying a GoalRenamed fact",
+    "goal-kind-mismatch",
+    ENCODER.encode(JSON.stringify([{ kind: "GoalRenamed" }])),
+  ],
+];
+
 describe("readGoalBudgetIdentity", () => {
   it("answers the account and owner off the durable GoalCreated a production writer committed", () => {
     withBudgetStore("identity-ok", (store) => {
@@ -44,61 +69,37 @@ describe("readGoalBudgetIdentity", () => {
     });
   });
 
-  it("refuses CORRUPT, not GOAL_ABSENT, when the GoalCreated payload is not JSON", () => {
-    withBudgetStore("identity-bad-json", (store) => {
-      // A GoalCreated-TYPED row whose bytes cannot be parsed: a record that
-      // EXISTS and cannot be read, which is a different world from no record.
-      plantRawTransition(
-        store, "goal-corrupt-json", "goal-corrupt-json-0", "GoalCreated",
-        ENCODER.encode('{"kind":"GoalCreated"'),
-      );
+  it("TASK-F8 refuses every named GoalCreated tamper as CORRUPT at the projection layer", () => {
+    // Non-vacuity, asserted BEFORE the walk: a roster that silently generated
+    // nothing would satisfy every assertion below without executing one.
+    expect(GOAL_CREATED_TAMPER_ROSTER.length).toBe(3);
+    const graded: string[] = [];
 
-      const result = readGoalBudgetIdentity(store, PROJECT_ID, "goal-corrupt-json");
+    for (const [label, goalRef, payload] of GOAL_CREATED_TAMPER_ROSTER) {
+      withBudgetStore(`identity-tamper-${goalRef}`, (store) => {
+        plantRawTransition(store, goalRef, `${goalRef}-0`, "GoalCreated", payload);
 
-      expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("an unreadable GoalCreated yielded an identity");
-      expect(result.code).toBe("BUDGET_PROJECTION_CORRUPT");
-      // The laundering this file forbids: corruption answering the same code
-      // a goal that never existed answers.
-      expect(result.code).not.toBe("BUDGET_PROJECTION_GOAL_ABSENT");
-      expect(result.layer).toBe("BUDGET_CURRENT_PROJECTION");
-      expect(result.outcome).toBe("UNKNOWN");
-      expect(result.sourceCode).toBeNull();
-      expect(result.sourceLayer).toBeNull();
-    });
-  });
+        const result = readGoalBudgetIdentity(store, PROJECT_ID, goalRef);
 
-  it("refuses CORRUPT when the GoalCreated payload is not decodable UTF-8", () => {
-    withBudgetStore("identity-bad-bytes", (store) => {
-      plantRawTransition(
-        store, "goal-corrupt-bytes", "goal-corrupt-bytes-0", "GoalCreated",
-        new Uint8Array([0xff, 0xfe, 0x01]),
-      );
+        expect([label, result.ok]).toEqual([label, false]);
+        if (result.ok) throw new Error(`${label} yielded an identity`);
+        // The exact code AND the refusing layer, per arm — not merely "refused".
+        expect([label, result.code, result.layer]).toEqual([
+          label, "BUDGET_PROJECTION_CORRUPT", "BUDGET_CURRENT_PROJECTION",
+        ]);
+        // The laundering this file forbids: corruption answering the same code
+        // a goal that never existed answers.
+        expect([label, result.code]).not.toEqual([label, "BUDGET_PROJECTION_GOAL_ABSENT"]);
+        expect([label, result.outcome, result.sourceCode, result.sourceLayer]).toEqual([
+          label, "UNKNOWN", null, null,
+        ]);
+        graded.push(label);
+      });
+    }
 
-      const result = readGoalBudgetIdentity(store, PROJECT_ID, "goal-corrupt-bytes");
-
-      expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("undecodable GoalCreated bytes yielded an identity");
-      expect(result.code).toBe("BUDGET_PROJECTION_CORRUPT");
-    });
-  });
-
-  it("refuses CORRUPT when a GoalCreated-typed row carries no GoalCreated fact", () => {
-    withBudgetStore("identity-kind-mismatch", (store) => {
-      // Readable JSON under the GoalCreated event TYPE, but the content does
-      // not carry the fact the type claims — the same content-vs-type breach
-      // budget-genesis-leg.ts refuses as CORRUPT on the ledger root.
-      plantRawTransition(
-        store, "goal-kind-mismatch", "goal-kind-mismatch-0", "GoalCreated",
-        ENCODER.encode(JSON.stringify([{ kind: "GoalRenamed" }])),
-      );
-
-      const result = readGoalBudgetIdentity(store, PROJECT_ID, "goal-kind-mismatch");
-
-      expect(result.ok).toBe(false);
-      if (result.ok) throw new Error("a kind-mismatched GoalCreated yielded an identity");
-      expect(result.code).toBe("BUDGET_PROJECTION_CORRUPT");
-    });
+    // The bodies RAN: a `withBudgetStore` that never invoked its callback would
+    // leave this empty while every assertion above stayed unexecuted.
+    expect(graded).toEqual(GOAL_CREATED_TAMPER_ROSTER.map(([label]) => label));
   });
 
   it("still answers GOAL_ABSENT for a goal with no durable record at all", () => {

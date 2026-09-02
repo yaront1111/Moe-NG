@@ -556,9 +556,18 @@ describe.skipIf(!gitAvailable())(
       expect(worktreeCount(input.sourceRepositoryRoot)).toBe(2);
     });
 
-    it("refuses a same-commit worktree owned by another repository", () => {
-      const { input } = scenario();
-      const original = materialize(input);
+    /**
+     * Stages ANOTHER repository's tree at the derived path the source
+     * repository still has REGISTERED, holding every other inspected fact
+     * clean: a `--no-local` clone carries the same commit, `add --detach`
+     * leaves HEAD detached at that exact commit, and the fresh checkout is
+     * byte-clean. Ownership is therefore the only fence that can refuse —
+     * HEAD_MISMATCH, NOT_DETACHED, DIRTY and PARTIAL all have nothing to say.
+     */
+    function stageForeignOwnerAtRegisteredPath(
+      input: WorktreeMaterializationRequest,
+      original: WorktreeAssignment,
+    ): { readonly foreign: string; readonly expectedPath: string } {
       const expectedPath = original.realWorktreePath;
       const parked = join(temporaryDirectory("moe-worktree-parked-"), original.leaf);
       renameSync(expectedPath, parked);
@@ -568,6 +577,13 @@ describe.skipIf(!gitAvailable())(
         input.sourceRepositoryRoot, foreign);
       git(foreign, "config", "core.autocrlf", "false");
       git(foreign, "worktree", "add", "--detach", "--quiet", expectedPath, input.baseIdentity);
+      return { expectedPath, foreign };
+    }
+
+    it("refuses a same-commit worktree owned by another repository", () => {
+      const { input } = scenario();
+      const original = materialize(input);
+      const { expectedPath, foreign } = stageForeignOwnerAtRegisteredPath(input, original);
 
       expect(worktreeCount(input.sourceRepositoryRoot)).toBe(2);
       expect(worktreeCount(foreign)).toBe(2);
@@ -622,10 +638,19 @@ describe.skipIf(!gitAvailable())(
       expect(existsSync(original.realWorktreePath)).toBe(true);
     });
 
-    it("refuses each single adoption deviation with its own code and layer", { timeout: 180_000 }, () => {
-      // Exactly one fact is disturbed per arm; co-varying two would let one
-      // guard answer for both and hide the other entirely.
-      const roster: readonly (readonly [string, (a: WorktreeAssignment) => void, string])[] = [
+    it("TASK-F8 refuses each named materializer tamper with its own code and layer", { timeout: 240_000 }, () => {
+      /**
+       * The named tamper roster for the PRODUCTION materializer. Every arm
+       * builds a real repository, materializes once so the derived path is
+       * REGISTERED, disturbs exactly ONE inspected fact, and drives
+       * `materializer.materialize` again — co-varying two facts would let one
+       * guard answer for both and hide the other entirely.
+       */
+      const MATERIALIZER_TAMPER_ARMS: readonly (readonly [
+        string,
+        (assignment: WorktreeAssignment, input: WorktreeMaterializationRequest) => void,
+        string,
+      ])[] = [
         [
           "wrong HEAD",
           (a) => git(a.realWorktreePath, "checkout", "--detach", "--quiet", "HEAD~1"),
@@ -651,16 +676,36 @@ describe.skipIf(!gitAvailable())(
           (a) => redirectOutsideParent(a),
           "RUNNER_WORKSPACE_WORKTREE_ESCAPED",
         ],
+        [
+          // Same commit, detached, clean bytes: ownership is the ONLY fence
+          // left that can answer, which is what makes this arm a divergence
+          // rather than a proof that "the system refuses something".
+          "foreign repository at the registered derived path",
+          (a, i) => void stageForeignOwnerAtRegisteredPath(i, a),
+          "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
+        ],
       ];
-      expect(roster.length).toBe(5);
-      for (const [label, disturb, code] of roster) {
+      // Non-vacuity, asserted BEFORE the walk: a roster that silently generated
+      // nothing would satisfy every assertion below without executing one.
+      expect(MATERIALIZER_TAMPER_ARMS.length).toBe(6);
+      const graded: string[] = [];
+
+      for (const [label, disturb, code] of MATERIALIZER_TAMPER_ARMS) {
         const { input } = scenario();
-        disturb(materialize(input));
+        const assignment = materialize(input);
+        disturb(assignment, input);
         const result = materializer.materialize(input);
-        expect(result.ok).toBe(false);
-        if (result.ok) throw new Error("unreachable");
+        expect([label, result.ok]).toEqual([label, false]);
+        if (result.ok) throw new Error(`${label} became an assignment`);
         expect([label, result.code, result.layer]).toEqual([label, code, "WORKTREE_NODE"]);
+        // Never removes bytes on a failed verification: an unproven tree is
+        // retained for a human on every arm that still has one.
+        expect([label, "assignment" in result]).toEqual([label, false]);
+        graded.push(label);
       }
+
+      // The arms RAN: an empty or short-circuited walk would leave this behind.
+      expect(graded).toEqual(MATERIALIZER_TAMPER_ARMS.map(([label]) => label));
     });
 
     /**

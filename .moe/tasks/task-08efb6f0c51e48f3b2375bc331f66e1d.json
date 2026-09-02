@@ -173,10 +173,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T09:48:50.180Z",
-  "updatedAt": "2026-08-28T13:47:20.747Z",
+  "updatedAt": "2026-08-30T17:40:55.458Z",
   "contextFetchedBy": [
     "worker-013a8776",
-    "qa-fc82710f"
+    "qa-fc82710f",
+    "worker-2a834a38"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-28T12:33:28.013Z",

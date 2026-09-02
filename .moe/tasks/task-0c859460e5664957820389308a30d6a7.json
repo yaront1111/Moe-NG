@@ -1,0 +1,205 @@
+{
+  "id": "task-0c859460e5664957820389308a30d6a7",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.10a-hardening-c-pre-C] Flip the command-entry transport-origin parameter to required",
+  "description": "ROW C of the staged slicing (governor comment-1beddd5f on task-5b6c0261). Type hygiene on top of an already-closed gate: Row A's Gate-1 refusal makes an unstamped caller unable to pass Gate 1, and Row B stamped every remaining caller — so this row's flip of the third parameter from optional to REQUIRED on `handleCommandRequest` / `handleAsyncCommandRequest` is a compile-time completeness pin, not a security change. The 32-file arity fact from Row A's measurement (comment-e2694060) is resolved by Row B's stamps; this flip should compile clean if B was complete — a typecheck red IS the finding (an unstamped caller B missed).\n\nDELIVER: (1) the third parameter loses its `?` on both entries (and the dispatch threading's type if it was optional there); (2) Row B's Parameters<> surface pin is updated to assert the member is now REQUIRED (that pin was designed to red on exactly this flip — update it in the same change, both directions); (3) `pnpm --filter @moe/daemon typecheck` green proves total-caller completeness at compile time — quote the `$ tsc` echo; a red names the missed caller verbatim and is fixed by stamping it (with its transport's literal), never by re-optionalizing.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, row comment, `git rev-parse HEAD` quoted: Rows A and B DONE on disk (roster + four production stamps + gate-1 refusal + zero unstamped callers per B's final count); the parameter still optional (`git grep -n 'origin?' HEAD -- apps/daemon/src/http/http-adapter.ts` or the landed spelling, EXIT 0 — EXIT 1 = someone flipped it: adopt/verify).",
+    "The parameter is required on both entries; the Parameters<> pin asserts required-ness; `pnpm --filter @moe/daemon typecheck` exits 0 with the `$ tsc` echo quoted — any arity red is fixed by stamping the missed caller with its correct transport literal, never by widening the type or restoring the `?`.",
+    "One drill: restore the `?` on one entry -> the updated Parameters<> pin reds; restore proven by `git diff --exit-code`. Gates: `pnpm --filter @moe/daemon test` path-attributed, foreign red disclosed verbatim; explicit-pathspec commit; completion comment names Rows A (task-5b6c0261) and B (task-2446feed) and states: 'the transport origin is now compile-required at every command entry; the authority fence from Row A remains the security boundary'."
+  ],
+  "taskRails": [
+    "A typecheck red is a MISSED CALLER, fixed by stamping it — never by re-optionalizing, defaulting, or widening the type.",
+    "No security semantics change here: the Gate-1 refusal from Row A is untouched; this is type hygiene.",
+    "Explicit-pathspec commits; foreign WIP preserved; sequenced after Row B (dependsOn declared)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted. (a) Rows A (task-5b6c0261) and B (task-2446feed) DONE on disk: roster + four production stamps + gate-1 refusal present; B's completion counts quoted from epicSiblings (stamped/omitted/total). (b) The parameter still optional on both entries (grep the landed spelling in http-adapter.ts, EXIT 0; EXIT 1 = someone flipped it: adopt/verify). (c) List Row B's named refusal-arm omissions — they become explicit-`undefined` call sites in step 2. (d) porcelain on owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts"
+      ],
+      "note": "Read-only verification is durable in comment-56afa024. HEAD 092a0e0d; Rows A/B landed; five-origin roster, four production stamps, Gate-1 refusal, Row-B 108+4=112 census, exact four omissions, overload ordering, sync 2-tuple pin, async-pin absence, and empty owned porcelain all measured. Governor comment-099dd4dd supersedes steps 2/3: required-third flip is forbidden; an architect amendment is required before editing.",
+      "startedAt": "2026-08-30T14:07:20.029Z",
+      "completedAt": "2026-08-30T14:10:16.324Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE FLIP. Remove the optional marker from the third parameter on BOTH entries (and the dispatch threading's internal type if optional there). Convert Row B's named refusal-arm omissions to explicit `undefined` arguments (one-line comment each: 'absent-origin semantics under test; explicit undefined post-Row-C') — the runtime absent-origin refusal arms keep their meaning. Update the Parameters<> pin: the third member is now REQUIRED (the pin was designed to red on this flip — update both directions in the same change). `pnpm --filter @moe/daemon typecheck` — GREEN proves total-caller completeness (quote `$ tsc`); a red NAMES a caller Row B missed: stamp it with its correct transport literal (declare the extra path via moe.declare_files), re-run; NEVER restore the `?`, widen the type, or add a default.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "note": "Completed under governor replacement comment-983558bf, not stale base FLIP text. Added an exact compile-time characterization of both sanctioned overload pairs and the missing async legacy Parameters<[deps, request]> pin. No production signature or deliberate omission changed. Repo-wide tracked JS/TS AST invariant probe (full source comment-25263a91, result comment-f6532889) passed: 3,220 files; 113 calls; 109 stamped; exact four 2-arg omissions; zero spreads, aliases/value escapes, other arities, illegal third shapes, or violations. Typecheck and focused 1-file/20-test run passed.",
+      "startedAt": "2026-08-30T14:12:26.183Z",
+      "completedAt": "2026-08-30T14:24:47.554Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "DRILL + GATES + COMMIT + COMPLETION. Drill: restore the `?` on one entry -> the updated Parameters<> pin reds; restore proven by `git diff --exit-code -- apps/daemon/src/http/http-adapter.ts`. GATES: (G1) typecheck (quote `$ tsc`); (G2) `pnpm --filter @moe/daemon test` path-attributed, foreign red disclosed verbatim; (G3) focused adapter/registry suites from apps/daemon via `pnpm exec vitest run --root . --config package.json <files>` with counts. COMMIT by explicit pathspec (http-adapter.ts, http-adapter.test.ts, plus any Row-B-missed stamps taken in step 2, each declared). COMPLETION COMMENT names Rows A and B and states: 'the transport origin is now compile-required at every command entry; the authority fence from Row A remains the security boundary'.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "note": "Final step completed under governor replacement comment-983558bf. Mutation drill reversed the async overload order and made both new type assertions red (TS2344/TS2741); separate restore proved identical SHA256 and clean production diff. Clean delivery overlay G1 typecheck exit 0; G3 3 files/511 tests exit 0. Full daemon G2 was run before/after: baseline 6 failed/330 passed files, after 7 failed/329 passed; AFTER-minus-BASELINE intersect owned path is empty, with foreign failures disclosed in comment-ce4dbb5c. Adversarial diff review and diff --check found no runtime/concurrency/input/side-effect risk: this is type-only characterization. Only http-adapter.test.ts changed.",
+      "startedAt": "2026-08-30T14:24:59.269Z",
+      "completedAt": "2026-08-30T14:33:20.165Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Row C re-scoped by comment-983558bf (async Parameters pin + repo-wide carrier-invariant verify + retirement condition recorded as non-goal; the flip-to-required plan text was already superseded by comment-099dd4dd). One-pin close is legitimate if nothing else remains. Resume.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-2446feed210d46899e35d632e049a4c3"
+  ],
+  "priority": "LOW",
+  "order": 184,
+  "comments": [
+    {
+      "id": "comment-56afa024cdad4a29a79ff9314a3f0773",
+      "author": "worker-2a834a38",
+      "content": "STEP-1 VERIFY-OR-BLOCK @ HEAD 092a0e0d3ce4571d87ff748a22572a7b725b95e7. Rows A/B are DONE and landed. Row A's on-disk facts: frozen roster [HTTP_LISTENER, MCP_STDIO, MCP_HTTP, AGENT_WRAPPER, NODE_VERIFIER] at http-contract.ts:166-169; production stamps at http-listener.ts:277, mcp-dispatch-port.ts:213 (context selects MCP_STDIO/MCP_HTTP), orchestrator/agent-wrapper.ts:193, orchestrator/node-verifier.ts:131; Gate-1 owns PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_PRODUCT_CONTRACT_GATE_1 before durable replay, while FFA adds the browser bearer fence. Row B's persisted review/completion records report the live census as 108 stamped + exactly 4 omissions = 112 calls (the anchored pre-FFA denominator was 107+4=111), focused QA 25 files/802 tests and typecheck green.\n\nCurrent entry shape: required 3-arg overloads already exist at http-adapter.ts:149-153 and :187-191, followed by legacy 2-arg overloads at :154-157/:192-195; the implementation rest tuples remain optional at :161/:199 and internal carrier threading at :112/:135. Raw Parameters resolves to the LAST 2-arg overload and is pinned at index-surface.test.ts:576-577. There is NO async Parameters pin repo-wide (git grep EXIT 1). Row B's four intentional 2-arg omissions remain registry.test.ts:542 sync, :543 async, :558 wire-payload cannot mint the private carrier, and :620 absent-origin refusal; :623-626 is the explicit non-roster arm.\n\nPLAN CONTRADICTION: governor amendment comment-099dd4dd4bd14bc0ad179418ee54f5a0 explicitly supersedes this row's base 'flip required' premise: preserve the canonical 2-tuple carrier invariant, do not add/remove a third public parameter, do not convert the four refusal/identity omissions to explicit undefined; Row C must assert the carrier invariant repo-wide or close satisfied-by-A. Task244 QA then records the concrete remaining gap: async has no Parameters<> pin and Row C should add it. The approved Row-C steps still command the forbidden required-third flip and do not own index-surface.test.ts. Safe implementation therefore requires an architect amendment (likely no production edit; add the async exact 2-tuple pin in an approved test path plus a production-surface mutation drill). Owned porcelain for http-adapter.ts/http-adapter.test.ts/index-surface.test.ts is EMPTY.",
+      "timestamp": "2026-08-30T14:10:06.052Z"
+    },
+    {
+      "id": "comment-983558bf9e7d43279ac90fb38229df27",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT — Row C final scope (governor-0134a004, 14:11Z; answers the block and comment-56afa024; comment-099dd4dd already superseded the plan's flip-to-required text and the worker's stop was correct). Steps 2/3 are REPLACED by:\n\n1. PIN THE ASYNC ENTRY: add the missing Parameters<> pin for handleAsyncCommandRequest mirroring the sync pin's form — the legacy public tuple stays [deps, request]; the required stamping overloads that already coexist are pinned as the ONLY sanctioned wider form (assert the overload pair's shapes exactly as measured, never a third public positional on the legacy tuple).\n2. REPO-WIDE INVARIANT VERIFY, composed-negative form: positive control proving the pathspec is live, then the literal-shape read proving no caller anywhere passes a third positional to the legacy entries and no wildcard spread can smuggle one; disclose the four named Row-B omissions as the measured remaining 2-arg callers — they stay 2-arg BY DESIGN (converting them to explicit undefined stays forbidden).\n3. RECORD THE RETIREMENT CONDITION as a non-goal: the legacy two-arg overload retires only if a future row stamps the four omissions; nothing in this row removes or widens any overload.\n4. If after 1-2 nothing remains to edit beyond the async pin, complete with that single delivery — a one-pin row is a legitimate close for a row whose premise was satisfied by A/B.\nRow restored WORKING; resume under this reading.",
+      "timestamp": "2026-08-30T14:10:55.931Z"
+    },
+    {
+      "id": "comment-25263a91e60549eea55cdcd4d1a8d046",
+      "author": "worker-2a834a38",
+      "content": "ROW-C CARRIER-INVARIANT PROBE — FULL SOURCE. Anchor: current tracked tree; run from repo root as `node $env:TEMP/moe-row-c-invariant-compact-worker-2a834a38.cjs`. SHA256 4A06D0072713EEB4AE570178E2EE4BC29677A23554112A229F038B50CE96ABC3. It scans every tracked JS/TS-family source, rejects indirect value escapes/aliases, spreads, arity outside 2/3, any non-sanctioned third shape, drift in the exact four omissions, or dead positive controls.\n```js\nconst cp=require(\"node:child_process\"),fs=require(\"node:fs\"),P=require(\"node:path\"),R=process.cwd();\nconst t=require(P.join(R,\"node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/lib/typescript.js\"));\nconst N=new Set([\"handleCommandRequest\",\"handleAsyncCommandRequest\"]),base=\"apps/daemon/src/daemon-command-registry.test.ts:\";\nconst E=new Set([[542,\"handleCommandRequest\"],[543,\"handleAsyncCommandRequest\"],[558,\"handleCommandRequest\"],[620,\"handleCommandRequest\"]].map(([l,n])=>`${base}${l}:${n}`));\nconst A=new Set([\"literal:AGENT_WRAPPER\",\"literal:HTTP_LISTENER\",\"literal:MCP_HTTP\",\"literal:MCP_STDIO\",\"literal:NODE_VERIFIER\",\"assertion:\\\"WIRE_FIELD\\\" as TransportOrigin\",\"conditional:context === undefined ? \\\"MCP_STDIO\\\" : \\\"MCP_HTTP\\\"\"]);\nconst F=cp.execFileSync(\"git\",[\"ls-files\",\"-z\"],{encoding:\"utf8\"}).split(\"\\0\").filter(f=>/\\.(?:[cm]?[jt]sx?)$/u.test(f)&&!f.endsWith(\".d.ts\")),C=[],X=[];\nconst flat=s=>s.replace(/\\s+/gu,\" \").trim();\nfunction name(e){if(t.isIdentifier(e))return e.text;if(t.isPropertyAccessExpression(e))return e.name.text;if(t.isElementAccessExpression(e)&&t.isStringLiteral(e.argumentExpression))return e.argumentExpression.text;}\nfunction shape(n,s){if(t.isStringLiteral(n)||t.isNoSubstitutionTemplateLiteral(n))return`literal:${n.text}`;if(t.isConditionalExpression(n))return`conditional:${flat(n.getText(s))}`;if(t.isAsExpression(n)||t.isTypeAssertionExpression(n))return`assertion:${flat(n.getText(s))}`;return`${t.SyntaxKind[n.kind]}:${flat(n.getText(s))}`;}\nfunction allowed(n){const p=n.parent;if(t.isImportSpecifier(p))return(p.propertyName??p.name).text===p.name.text;if(t.isBindingElement(p))return!p.propertyName||(t.isIdentifier(p.propertyName)&&t.isIdentifier(p.name)&&p.propertyName.text===p.name.text);if((t.isFunctionDeclaration(p)&&p.name===n)||t.isExportSpecifier(p)||t.isTypeQueryNode(p))return true;if(t.isCallExpression(p)&&p.expression===n)return true;if(t.isQualifiedName(p)&&p.right===n&&t.isTypeQueryNode(p.parent))return true;if(t.isPropertyAccessExpression(p)&&p.name===n){const q=p.parent;return(t.isCallExpression(q)&&q.expression===p)||t.isTypeQueryNode(q);}return false;}\nfor(const f of F){const s=t.createSourceFile(f,fs.readFileSync(f,\"utf8\"),t.ScriptTarget.Latest,true,/\\.tsx$/u.test(f)?t.ScriptKind.TSX:/\\.[cm]?jsx?$/u.test(f)?t.ScriptKind.JS:t.ScriptKind.TS);function visit(n){if(t.isIdentifier(n)&&N.has(n.text)&&!allowed(n)){const l=s.getLineAndCharacterOfPosition(n.getStart(s)).line+1;X.push(`escape:${f}:${l}:${n.text}`);}if(t.isElementAccessExpression(n)&&t.isStringLiteral(n.argumentExpression)&&N.has(n.argumentExpression.text)){const p=n.parent;if(!((t.isCallExpression(p)&&p.expression===n)||t.isTypeQueryNode(p)))X.push(`escape:${f}:${n.argumentExpression.text}`);}if(t.isCallExpression(n)){const z=name(n.expression);if(z&&N.has(z)){const l=s.getLineAndCharacterOfPosition(n.getStart(s)).line+1;C.push({file:f.replaceAll(\"\\\\\",\"/\"),line:l,name:z,arity:n.arguments.length,spread:n.arguments.some(t.isSpreadElement),third:n.arguments[2]?shape(n.arguments[2],s):null});}}t.forEachChild(n,visit);}visit(s);}\nconst V=[...X];for(const c of C){if(c.spread)V.push(`spread:${c.file}:${c.line}:${c.name}`);if(c.arity!==2&&c.arity!==3)V.push(`arity-${c.arity}:${c.file}:${c.line}:${c.name}`);if(c.arity===3&&!A.has(c.third))V.push(`third:${c.file}:${c.line}:${c.third}`);}\nconst O=new Set(C.filter(c=>c.arity===2).map(c=>`${c.file}:${c.line}:${c.name}`));for(const x of O)if(!E.has(x))V.push(`extra2:${x}`);for(const x of E)if(!O.has(x))V.push(`missing2:${x}`);\nfor(const [f,n,a]of[[\"apps/daemon/src/orchestrator/agent-wrapper.ts\",\"handleCommandRequest\",\"literal:AGENT_WRAPPER\"],[\"apps/daemon/src/http/http-listener.ts\",\"handleAsyncCommandRequest\",\"literal:HTTP_LISTENER\"]])if(!C.some(c=>c.file===f&&c.name===n&&c.arity===3&&c.third===a))V.push(`control:${f}:${n}`);\nconst counts={},shapes={};for(const c of C){counts[`${c.name}/${c.arity}`]=(counts[`${c.name}/${c.arity}`]??0)+1;if(c.arity===3)shapes[c.third]=(shapes[c.third]??0)+1;}\nconsole.log(JSON.stringify({scannedFiles:F.length,positiveControls:!V.some(v=>v.startsWith(\"control:\")),counts,total:C.length,omissions:[...O].sort(),thirdShapes:shapes,spreads:C.filter(c=>c.spread),valueEscapes:X,violations:V},null,2));process.exitCode=V.length?1:0;\n```",
+      "timestamp": "2026-08-30T14:23:52.450Z"
+    },
+    {
+      "id": "comment-f653288923894a8f9eff47f2516fdc7c",
+      "author": "worker-2a834a38",
+      "content": "ROW-C INVARIANT RESULT @ HEAD 092a0e0d3ce4571d87ff748a22572a7b725b95e7 + owned async-pin diff. Command: `node $env:TEMP/moe-row-c-invariant-compact-worker-2a834a38.cjs` from repository root; EXIT 0. Full source is durable in comment-25263a91 and SHA256 4A06D0072713EEB4AE570178E2EE4BC29677A23554112A229F038B50CE96ABC3.\n\nPositive controls LIVE: apps/daemon/src/orchestrator/agent-wrapper.ts has sync/3/AGENT_WRAPPER and apps/daemon/src/http/http-listener.ts has async/3/HTTP_LISTENER. The probe scanned 3,220 tracked JS/TS-family files. It found 113 direct command-entry calls: sync 82x arity-3 + 3x arity-2; async 27x arity-3 + 1x arity-2 = 109 stamped + 4 deliberate omissions. Zero spread calls, zero other arities, zero indirect value escapes/aliases, zero non-sanctioned third shapes, violations=[]. Third-shape exact census: HTTP_LISTENER=72, MCP_STDIO=30, AGENT_WRAPPER=2, NODE_VERIFIER=2, MCP_HTTP=1, MCP_STDIO/MCP_HTTP production conditional=1, deliberate hostile \"WIRE_FIELD\" as TransportOrigin=1.\n\nThe only two-argument calls remain BY DESIGN at daemon-command-registry.test.ts:542 sync legacy byte identity, :543 async legacy byte identity, :558 wire payload cannot mint the private carrier, :620 absent-origin refusal. No omission was converted to explicit undefined. No production overload was removed, widened, reordered, or changed. Retirement is explicitly a NON-GOAL: the legacy two-argument overload can retire only in a future row that stamps these four deliberate omissions.\n\nOwned compile-time characterization in http-adapter.test.ts now pins both exact overload pairs and raw Parameters<> for both entries to [deps, request]. Fresh `pnpm --filter @moe/daemon typecheck`: EXIT 0 with `$ tsc --project tsconfig.json`. Fresh focused test: EXIT 0, Test Files 1 passed (1), Tests 20 passed (20).",
+      "timestamp": "2026-08-30T14:24:40.350Z"
+    },
+    {
+      "id": "comment-55933200bbca4daf92e65d7cb110d9e5",
+      "author": "worker-2a834a38",
+      "content": "ROW-C MUTATION-RED DRILL — tracked production path apps/daemon/src/http/http-adapter.ts was CLEAN before the drill; only owned http-adapter.test.ts was M. Backup and source SHA256 both 70D3DB346E2DC55295B0D80FD6066FA58A3D9AFF522A5D9F4ABA245896FE0298. One-degree mutant reversed only the two async public overload declarations, making the required 3-tuple last while preserving both callable shapes. `pnpm --filter @moe/daemon typecheck` then EXIT 1 at the NEW pins: http-adapter.test.ts:50 TS2344 rejected the reversed overload pair; :52 TS2741 reported tuple property 2 missing from expected [deps, request]. This reaches both the exact overload assertion and the async Parameters<> fence.\n\nRestore was a separate Copy-Item call. A later, separate proof found source and backup SHA256 equal at 70D3D...0298; `git diff --exit-code -- apps/daemon/src/http/http-adapter.ts` EXIT 0; exact porcelain returned only ` M apps/daemon/src/http/http-adapter.test.ts`. Post-restore `pnpm --filter @moe/daemon typecheck` EXIT 0 with `$ tsc --project tsconfig.json`.",
+      "timestamp": "2026-08-30T14:30:18.127Z"
+    },
+    {
+      "id": "comment-ce4dbb5cb6054e57b8a054782eeb6521",
+      "author": "worker-2a834a38",
+      "content": "G2 DAEMON GATE — PATH-ATTRIBUTED, NOT CLAIMED GREEN.\n\nBASELINE anchor: clean `git archive` of 092a0e0d3ce4571d87ff748a22572a7b725b95e7 at %TEMP%/moe-baseline-092a0e0d-787a6d51c7d14c2091790020328dbd77; offline frozen install EXIT 0 (329 reused, 0 downloaded); standalone/unpiped `pnpm --filter @moe/daemon test` EXIT 1: `Test Files 6 failed | 330 passed (336)`; `Tests 23 failed | 6792 passed | 12 todo (6827)`. Baseline failing paths/locations: activation/activation-run-commit.test.ts (2; :320 and helper :228 via :539); activation/activation-telemetry-launch.test.ts (10; :347,:377,:548,:637 x3,:682,:698,:753,:801); http/http-listener.test.ts (2; :603 and helper :137 via :619); mcp-main.test.ts (1; :220 expected 3 got 4); work/foundation-attempt-windows.test.ts (5; helper :519 via :737 and helper :798 via :818,:950,:1012,:1109); work/launch-template-producer.test.ts (3; :372,:382,:665).\n\nAFTER owned diff, same standalone/unpiped command in shared tree EXIT 1: `Test Files 7 failed | 329 passed (336)`; `Tests 21 failed | 6822 passed | 12 todo (6855)`. Exact current failures: activation-run-commit.test.ts (2: :320 expected UNKNOWN got REFUSED; helper :228 via :539 expected refusal but accepted); activation-telemetry-launch.test.ts (10: :347 EXIT_BEFORE_LAUNCH got REFUSED; :377/:682 expected MODEL_MISMATCH got REQUEST_MALFORMED; :548 and :637 x3 expected UNKNOWN got REFUSED; :698/:753/:801 expected NOT_ATTEMPTED facts got REFUSED facts); http-listener.test.ts (2: :603 expected SURFACE got REFUSED; helper :137 via :619 expected LISTENER_AFFORDANCE_REQUEST_INVALID/CONTROL_ROOM_LISTENER got AFFORDANCE_PROJECT_MISMATCH/AFFORDANCE_SURFACE); mcp-main.test.ts (1: :220 expected 3 got 4); launch-template-producer.test.ts (3: :372/:382/:665 expected RUNTIME_THROWN/MODEL_MISMATCH/SELECTION_MALFORMED, each got REQUEST_MALFORMED); planning/approval-intent.test.ts (1: :586 expected length 1 got 0); planning/approval-record-facts.test.ts (2: :392 source missing readApprovalRecordFacts; :433 expected derive index > -1, got -1).\n\nPath equation: AFTER minus BASELINE adds only {planning/approval-intent.test.ts, planning/approval-record-facts.test.ts}; baseline-only foundation-attempt-windows.test.ts became green. Owned set is {http/http-adapter.test.ts}; therefore (AFTER−BASELINE) ∩ OWNED = EMPTY. The owned file passed focused and is absent from both failure sets. All broad red is disclosed as foreign shared-tree drift; none is excused as green.",
+      "timestamp": "2026-08-30T14:30:48.365Z"
+    },
+    {
+      "id": "comment-912291add63d43c1a7d631fc2d4eacd4",
+      "author": "worker-2a834a38",
+      "content": "FINAL ROW-C VERIFICATION / COMPLETION RECORD. Prerequisites named: Row A task-5b6c026160024e2e8b4d2831db2d072c is DONE/landed and owns the Gate-1 transport-origin authority refusal; Row B task-2446feed210d46899e35d632e049a4c3 is DONE/landed and owns the stamped caller census.\n\nDelivered-tree candidate was constructed from the clean 092a0e0d3ce4571d87ff748a22572a7b725b95e7 archive, after proving its pre-overlay http-adapter.test.ts blob exactly 7887faf37f0cecc040b894fcf5db01146bf2ec45, then overlaying ONLY this row's owned test file; source/destination SHA256 both A0DB8EBF83BE11AAA100DAEF17CC570806F963AE0E6854BBD2D7A0B9CB5BB7B7. In that exact clean overlay: G1 `pnpm --filter @moe/daemon typecheck` EXIT 0 and echoed `$ tsc --project tsconfig.json`; G3 from apps/daemon `pnpm exec vitest run --root . --config package.json src/http/http-adapter.test.ts src/daemon-command-registry.test.ts src/index-surface.test.ts` EXIT 0, Test Files 3 passed (3), Tests 511 passed (511). G2 baseline/after foreign red and the empty owned-path delta are disclosed in comment-ce4dbb5c.\n\nA later shared-tree G1 rerun was NOT green: EXIT 1 only at peer-declared planning/approval-intent.test.ts:595 TS18047 (`hostile` possibly null), owned by task-6093483c85d34e4aa3b850abd8f00732 per moe.get_commit_scope. That foreign live-WIP red is preserved and disclosed, not called green; the exact delivery overlay above remains type-clean.\n\nTruthful Row-C sentence under governor comment-983558bf: the server-authored carrier's legacy two-argument entry invariant is now pinned for BOTH sync and async, while the required stamping overload is exactly pinned as the only sanctioned wider form; the authority fence from Row A remains the security boundary. Legacy overload retirement waits on a future row that stamps the four deliberate Row-B omissions. This row removes, reorders, defaults, or widens no production overload.",
+      "timestamp": "2026-08-30T14:33:11.972Z"
+    },
+    {
+      "id": "comment-1e1249809a2e446d85c18e3849bf147e",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW — APPROVE. Graded against governor amendment comment-983558bf, which replaced steps 2/3; the row's original \"flip to required\" DoD text and comment-099dd4dd are superseded and I did not grade against them.\n\n## Delivery had to be landed by QA\n\n`task.commits` was `[]`, `lastCommitOutcome` null, `git log --all --grep=0c859460` empty, and the single verified file sat ` M` (unstaged) in the shared checkout ~3 minutes after REVIEW opened. That is the fourth wrapper exit-commit miss I have seen on this board today. Rather than reject a fully-verified one-pin row for a wrapper defect the worker cannot fix, I landed it myself by explicit pathspec, following the precedent qa-85c12129 set on Row B at `9055d9e2` — whose own commit message documents the identical failure.\n\n```\n316625fc test(task-0c859460): pin the sanctioned command-entry overload pair\n apps/daemon/src/http/http-adapter.test.ts | 31 ++++++++++++++++++++++++++++---\n 1 file changed, 28 insertions(+), 3 deletions(-)\n```\nOne file, nothing swept, `git status --porcelain` on the path now empty, recorded via `moe.record_commit` as `kind: completion` with tree `6651967e`. Authorship is stated in the commit body — I am not claiming the worker landed it.\n\n## Amendment §1 — the pin\n\n```ts\ntype CommandEntry<Result> = {\n  (deps: CommandAdapterDeps, request: HttpCommandRequest, transportOrigin: TransportOrigin): Result;\n  (deps: CommandAdapterDeps, request: HttpCommandRequest): Result;\n};\n```\nasserted with `toEqualTypeOf` against BOTH `handleCommandRequest` and `handleAsyncCommandRequest`, plus raw `Parameters<>` pinned to the legacy 2-tuple for each. That matches production exactly: http-adapter.ts declares two public overloads per entry (:149/:154 sync, :187/:192 async) over a rest-tuple implementation signature that is not public. No third public positional on the legacy tuple, as §1 requires.\n\nThe amendment asked for the async pin \"mirroring the sync pin's form\". There was no sync pin — `grep -rn 'Parameters<typeof handle' apps/daemon/src` finds none outside this file, and Row B's `9055d9e2` diff of this file is stamps only. So the row delivered both, which is more than asked, not less. No prior assertion was removed: the 3 deleted lines are import reflows.\n\nWHAT ACTUALLY GATES THIS PIN: `expectTypeOf` is erased at runtime, so the 511-test vitest run does NOT execute it. Its only real gate is `pnpm --filter @moe/daemon typecheck`. A reader should not take the green suite as evidence for the pin.\n\n## The drill — mine, not the receipt's\n\nReversed the two async overload declarations in production http-adapter.ts:\n```\nsrc/http/http-adapter.test.ts(50,20): error TS2344: Type 'CommandEntry<Promise<HttpCommandResult>>' does not satisfy the constraint '\"Expected: function, Actual: never\"'.\nsrc/http/http-adapter.test.ts(52,20): error TS2741: Property '2' is missing in type '[deps: CommandAdapterDeps, request: HttpCommandRequest]' ...\n```\nExactly the TS2344/TS2741 pair the worker reported, on exactly the async arms. Restored and proved in a SEPARATE call: SHA256 `70d3db346e2dc55295b0d80fd6066fa58a3d9aff522a5d9f4aba245896fe0298` before and after, `git diff --exit-code` = 0.\n\n## Amendment §2 — repo-wide invariant, verified independently\n\nI wrote my own paren-balancing arity probe over `apps/ packages/ adapters/ tools/ tests/` (3,225 files):\n```\ncall sites   : 115   (114 real; one is a JSDoc mention in daemon-command-registry.test.ts:60)\narity counts : {3: 110, 2: 4}\nspreads      : 0\n2-arg legacy call sites:\n  apps/daemon/src/daemon-command-registry.test.ts:542 handleCommandRequest\n  apps/daemon/src/daemon-command-registry.test.ts:543 handleAsyncCommandRequest\n  apps/daemon/src/daemon-command-registry.test.ts:558 handleCommandRequest\n  apps/daemon/src/daemon-command-registry.test.ts:620 handleCommandRequest\n```\nExactly the FOUR deliberate Row-B omissions, all in the arm named \"keeps unstamped non-gate commands byte-identical on both legacy entries\" — the absent origin IS their subject, so they stay 2-arg by design and converting them to explicit `undefined` stays forbidden. Zero spreads, so nothing can smuggle a third positional.\n\nTwo honesty notes on my own instrument. My first pass reported thirteen \"4-arg\" calls; that was a trailing-comma miscount, not a defect — `handleCommandRequest(a, b, \"HTTP_LISTENER\",)` is three arguments. I fixed the probe rather than reporting the artefact. And my corrected count (114) differs by one from your AST probe's 113/109+4; that gap is instrument granularity, not a disagreement — we agree on every load-bearing fact.\n\nTHE STRONGER PROOF, which neither probe is: any wrong-arity call or third positional on a legacy entry is a COMPILE ERROR. `pnpm --filter @moe/daemon typecheck` is now EXIT 0 repo-wide for the package. The compiler is the total-caller check the row wanted, and it passes.\n\n## Amendment §3 and §4\n\nRetirement of the legacy 2-arg overload is recorded as a non-goal until a future row stamps the four omissions; nothing here removes or widens an overload, and no production byte changed — `git status` showed only the test file dirty throughout. §4's one-pin close is legitimate on this reading.\n\n## Gates re-run by me\n\n- `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/http/http-adapter.test.ts src/daemon-command-registry.test.ts src/index-surface.test.ts` -> `Test Files 3 passed (3)`, `Tests 511 passed (511)`, EXIT 0 — matching your recorded verification.\n- `pnpm --filter @moe/daemon typecheck` -> **EXIT 0**. Worth noting for the record: it was EXIT 1 forty minutes ago during the ffa05408 review, with all seven errors in `planning/approval-intent.test.ts` from the mint row's uncommitted WIP. That WIP has since resolved and the lane is clean, which retroactively confirms that attribution.\n- Rails: no re-optionalizing, no defaulting, no type widening; Gate-1 refusal from Row A untouched; explicit-pathspec commit; foreign WIP preserved.",
+      "timestamp": "2026-08-30T14:38:51.179Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T11:31:20.949Z",
+  "updatedAt": "2026-08-30T14:39:44.208Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T11:32:04.521Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3,
+    "doneAt": "2026-08-30T14:39:44.208Z",
+    "wallClockMs": 11259687
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T11:32:26.595Z",
+  "planningNotes": {
+    "approachesConsidered": "Nothing to fork: the design was fixed by the governor's staging. The only judgement is red-handling discipline (stamp the missed caller, never re-optionalize), which the rails pin.",
+    "codebaseInsights": "Row C of the staged slicing (governor comment-1beddd5f). Pure type hygiene on a gate Row A already closed (the authority refusal) and Row B made compile-complete (every caller stamped or a named refusal-arm omission). The flip should compile CLEAN; a typecheck red is the deliverable's own detector — it names a caller Row B missed, and the fix is stamping that caller with its transport literal.",
+    "risks": "RISK 1 — a deliberate refusal-arm omission from Row B now FAILS TO COMPILE (it passed no third argument). Those arms must keep testing the ABSENT-ORIGIN semantics: pass `undefined` explicitly (the type must allow `| undefined` explicitly if the house style demands, or cast at the test seam with a one-line comment) — the runtime property (absent origin refuses) is unchanged; record each such edit. RISK 2 — the dispatch threading's internal type may also carry the optional marker; flip it consistently. RISK 3 — keep it small: two production type lines + the pin update + any Row-B-missed stamps; nothing else.",
+    "keyFiles": [
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/http/http-adapter.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-30T14:06:15.442Z",
+    "escalatedAt": "2026-08-30T14:06:15.442Z"
+  },
+  "planApprovedAt": "2026-08-30T11:32:28.699Z",
+  "contextFetchedBy": [
+    "worker-2a834a38",
+    "qa-9b6f1bdd"
+  ],
+  "workStartedAt": "2026-08-30T14:07:20.029Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-08-30T14:34:31.246Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root . --config package.json src/http/http-adapter.test.ts src/daemon-command-registry.test.ts src/index-surface.test.ts (cwd clean 092a0e0d + owned-overlay apps/daemon)",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 .../moe-baseline-092a0e0d-787a6d51c7d14c2091790020328dbd77/apps/daemon\nTest Files  3 passed (3)\nTests  511 passed (511)\nDuration 5.05s\nSeparate clean-overlay daemon typecheck: exit 0; $ tsc --project tsconfig.json",
+    "reportedAt": "2026-08-30T14:34:31.246Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/http-adapter.ts",
+    "apps/daemon/src/http/http-adapter.test.ts"
+  ],
+  "completionSummary": "Delivered the governor-revised Row C as a one-pin type-characterization change in apps/daemon/src/http/http-adapter.test.ts. Both command entries are now pinned to exactly two sanctioned overloads: required server-stamping [deps, request, transportOrigin] and legacy [deps, request]; raw Parameters<> for sync and async is pinned to the legacy 2-tuple. No production signature, dispatch path, or caller changed. A full-source AST probe scanned 3,220 tracked JS/TS files and found 113 calls: 109 stamped plus exactly the four deliberate Row-B omissions, with zero spreads, aliases/value escapes, other arities, illegal third shapes, or violations. Reversing async overload order made the new assertions red (TS2344/TS2741), followed by independent SHA/diff restore proof. Clean delivery overlay typecheck passed; focused adapter/registry/index suites passed 3 files/511 tests. Full daemon baseline/after remained foreign-red only with empty owned-path delta, disclosed in comment-ce4dbb5c. Legacy overload retirement remains a future-row non-goal until the four omissions are stamped; Row A remains the security boundary.",
+  "commits": [
+    {
+      "sha": "316625fc9928f3af8cbdee516022c5e217af1cd1",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T14:38:00Z",
+      "paths": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T14:38:17.311Z",
+      "treeId": "6651967e6da1ededccf6508f9d6b30a1362b9ac4",
+      "status": "REVIEW",
+      "pushed": false,
+      "recoveredBy": "qa-9b6f1bdd",
+      "message": "Row C one-pin delivery landed by QA by explicit pathspec after the worker session's wrapper exit-commit did not fire (task.commits was empty, the verified path left unstaged in the shared checkout). Same handling as Row B at 9055d9e2. Carries only apps/daemon/src/http/http-adapter.test.ts; no production signature, dispatch path or caller changed."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-9b6f1bdd@2026-08-30T14:38:00Z",
+    "at": "2026-08-30T14:38:17.311Z"
+  },
+  "completedAt": "2026-08-30T14:39:44.208Z",
+  "reviewCompletedAt": "2026-08-30T14:39:44.208Z",
+  "reviewSummary": "APPROVED, graded against governor amendment comment-983558bf (the \"flip to required\" DoD text is superseded). Detail: comment-1e1249809a2e446d85c18e3849bf147e.\n\nDELIVERY LANDED BY ME. task.commits was [], lastCommitOutcome null, `git log --all --grep=0c859460` empty, and the one verified file sat ` M` unstaged ~3 min after REVIEW — the fourth wrapper exit-commit miss today. Rather than reject a fully-verified one-pin row for a wrapper defect the worker cannot fix, I landed it by explicit pathspec following qa-85c12129's Row B precedent at 9055d9e2: `316625fc`, ONE file, 28+/3-, path now clean, recorded as kind=completion. Authorship is stated in the commit body; I am not claiming the worker landed it.\n\n§1 PIN: both entries asserted with `toEqualTypeOf` against the two-overload shape (required [deps, request, transportOrigin] + legacy [deps, request]), raw `Parameters<>` pinned to the legacy 2-tuple each. Matches production exactly (:149/:154 sync, :187/:192 async over a non-public rest-tuple impl). No sync pin previously existed anywhere, so the row delivered both. The 3 deleted lines are import reflows; no assertion removed. NOTE: `expectTypeOf` is erased at runtime, so the 511-test run does NOT execute this pin; its only gate is the typecheck.\n\nDRILL (mine): reversed the async overload order in production -> `TS2344` at test:50 and `TS2741` at test:52, exactly the async arms. Restored in a SEPARATE call, SHA256 70d3db34… matched, `git diff --exit-code` 0.\n\n§2: my own probe over 3,225 files found 114 call sites, arity {3:110, 2:4}, ZERO spreads — the four 2-arg sites are exactly the deliberate Row-B omissions (registry.test.ts 542/543/558/620), whose arm's subject IS the absent origin. Stronger than any probe: a wrong arity or third legacy positional is a COMPILE error, and `pnpm --filter @moe/daemon typecheck` is EXIT 0.\n\n§3/§4: retirement is a non-goal; no overload removed or widened; zero production bytes changed. Focused suites 3 files/511 tests EXIT 0."
+}

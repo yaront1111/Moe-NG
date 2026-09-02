@@ -1,17 +1,14 @@
-import { StrictMode } from "react";
+import { StrictMode, Suspense, lazy } from "react";
 import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { resolveProjectManagerMode } from "./entry-project-manager.js";
 import { gateDevelopmentQuery } from "./entry-route.js";
-import { resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
 import type { LiveHandshakeResult } from "./live/live-handshake.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
-import { resolveShellMode } from "./shell-mode.js";
-import { ShellModeRoot } from "./shell-mode-view.js";
 import { CordumApp } from "./v2/cordum-app.js";
 import type { LiveAttempts } from "./v2/cordum-app.js";
 import { ProjectManagerApp } from "./v2/projects/project-manager-app.js";
@@ -20,6 +17,40 @@ import type { ProjectManagerConnection } from "./v2/projects/project-manager-cli
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
+
+/**
+ * THE ONE BUILD FACT THIS MODULE READS, and it is deliberately a single constant rather
+ * than a repeated `import.meta.env.DEV`. The bundler substitutes a literal `false` here for
+ * a production build, which is what makes both uses below statically decidable: the query
+ * gate and the legacy mount are then the SAME fact, so no build can strip the selectors at
+ * runtime while still shipping the shell they select, or the reverse.
+ */
+const DEVELOPMENT_BUILD: boolean = import.meta.env.DEV;
+
+/**
+ * The retired v1 shell, reachable ONLY from a development build.
+ *
+ * DELIBERATELY A CONDITIONAL LAZY IMPORT, NOT A STATIC ONE. A static import keeps
+ * `shell/frame.tsx` — and with it the `cr.shell.root` selector, the fixture banner and the
+ * frozen demo corpus — inside the production bundle even when no route can reach them, so
+ * the artifact is a lie about what the build can render. With `DEVELOPMENT_BUILD` folded to
+ * `false`, this whole branch is dead and the module is dropped from the graph. If a future
+ * bundler emits it as a separate chunk instead of eliminating it, the smoke lane's artifact
+ * fence still catches it: that fence enumerates EVERY `dist/assets/*.js`, not just the entry.
+ *
+ * AWAITED AT MODULE EVALUATION, not at first render, and the await lives inside the dead
+ * branch so a production build never emits it. A development entry therefore has the module
+ * in hand before `mountControlRoom` runs, and the Suspense boundary resolves on the first
+ * attempt rather than painting its fallback for a turn — which is what keeps the entry-point
+ * mount observable to a caller that awaits the import and then reads the DOM.
+ */
+const developmentLegacyModule = DEVELOPMENT_BUILD
+  ? await import("./development-legacy-root.js")
+  : null;
+
+const DevelopmentLegacyRoot = developmentLegacyModule === null
+  ? null
+  : lazy(async () => developmentLegacyModule);
 
 /**
  * The application's one real time source. This is the composition root, and it is the
@@ -64,10 +95,17 @@ function chooseRoot(
   if (managerMode && managerSetup !== undefined) {
     return <ProjectManagerApp prepared={managerSetup} />;
   }
-  if (new URLSearchParams(search).get("v1") === "1") {
-    const setup = resolveLiveSetupFromBuild();
-    const mode = resolveShellMode(search, setup);
-    return <ShellModeRoot mode={mode} setup={setup} />;
+  // BOTH conditions, in this order. The component being absent is the compile-time fact and
+  // the only one a production build can rely on; the exact `v1=1` is the route request, which
+  // a production build has already had stripped from `search` by the same constant.
+  if (DevelopmentLegacyRoot !== null && new URLSearchParams(search).get("v1") === "1") {
+    // A null fallback, and it is development-only by construction: production never reaches
+    // this branch, so no operator ever sees a blank frame while a chunk loads.
+    return (
+      <Suspense fallback={null}>
+        <DevelopmentLegacyRoot search={search} />
+      </Suspense>
+    );
   }
   return <CordumApp liveSetup={liveSetup} search={search} />;
 }
@@ -121,7 +159,7 @@ export function mountControlRoom(
 ): Root {
   const search = gateDevelopmentQuery(
     globalThis.location?.search ?? "",
-    import.meta.env.DEV,
+    DEVELOPMENT_BUILD,
   );
   // Fragments carry no authority. Remove any stale fragment before preparing
   // the request or constructing renderable state, without parsing or retaining it.

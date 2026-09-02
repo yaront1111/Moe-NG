@@ -210,7 +210,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T11:54:04.736Z",
-  "updatedAt": "2026-08-29T17:20:33.852Z",
+  "updatedAt": "2026-08-30T17:40:55.828Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T12:15:58.833Z",
     "plannedStepCount": 7,
@@ -256,7 +256,8 @@
   "contextFetchedBy": [
     "worker-4bba4fa4",
     "worker-8d70fe57",
-    "qa-a1b5393b"
+    "qa-a1b5393b",
+    "worker-2a834a38"
   ],
   "workStartedAt": "2026-08-29T12:46:55.761Z",
   "priorHandoffs": [

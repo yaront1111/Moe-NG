@@ -20,6 +20,20 @@ a green board says otherwise. This is the same family as
 `mem:gotcha-or-ed-layer-assertion-pins-neither-layer`: an assertion that has quietly detached
 from the thing it was written to check.
 
+## Re-verified 2026-08-19 at HEAD `19f7d9b` — still true, and it now guards a live clause
+```
+git ls-files -- 'tests/**/package.json'   ->  EMPTY   (no workspace member under tests/)
+pnpm-workspace.yaml                       ->  apps/*  adapters/*  packages/*
+tests/integration/portability/tsconfig.json  EXISTS, include ["./**/*.ts"], invoked by nothing
+```
+`tests/integration/portability/shadow-matrix-arms.ts` carries a `captureResult` consumer arm —
+the same symbol as the canary's sole live clause (`daemon-foundation-command.ts:64`, fed to
+production at `:93`). If that contract changes, this arm stays GREEN while being wrong, because
+no gate runs its project. Grade it with an explicit
+`npx tsc -p tests/integration/portability/tsconfig.json --noEmit`, or the integration vitest for
+that path. Eight tsconfigs now sit under `tests/` in this shape — treat every one as orphaned
+until you find the script that names it.
+
 ## What to do in a new `tests/` lane
 
 Put the `tsc -p` in your OWN script, not in the shared `typecheck`:
@@ -56,3 +70,7 @@ Expect foreign files to appear in that diff too — other agents land tests whil
 `task-97554aa4` the delta was +4: my 2, plus `packages/runner/src/supervisor/supervisor-restart.test.ts`
 and `packages/scheduler/src/index-surface.test.ts` from other in-flight tasks. Say which are
 yours rather than reporting a bare count.
+
+## Related
+`mem:gotcha-tests-dir-outside-every-gate`, `mem:gotcha-tests-dir-untypechecked-vitest`,
+`mem:gotcha-basename-path-resolution-picks-the-js-bridge` (how the orphaned arm was found).

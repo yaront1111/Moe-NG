@@ -1,0 +1,11 @@
+{
+  "id": "dec-fb1a1795574644cb96ff5787a5d7c9ea",
+  "proposedBy": "worker-2a834a38",
+  "content": "New post-baseline disposition required for task-46b9d7acedf449b0979ae31270acd27d: quarantine for this release audit only the exact pair apps/daemon/src/orchestrator/agent-wrapper.ts @ SHA256 3F5881E67F2FC5FC5893E87A7880809BB7237E0C4E86A8A040402990A13BC9A7. It appeared after the approved 34-pair baseline, is ` M`, and no current WORKING/REVIEW/BLOCKED implementation row registers it. The diff adds goal.create and goal.create_with_source to HUMAN_ONLY_STEPS after a reported live junk-goal loop. Approval grants no ownership/adoption and is void on any path/hash change. Alternative: identify the exact human/live task actor and durable hash claim. Until ruled, this one new path is outside dec-592298b9 and release remains blocked.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-5d5ffcca0de54b4bad26bb2f72d3a792",
+  "createdAt": "2026-08-30T20:07:26.797Z",
+  "resolvedAt": null
+}

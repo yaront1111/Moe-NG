@@ -1,68 +1,66 @@
-# Foundation MCP dispatch host — worker handoff (2nd block, different cause)
+# Foundation MCP dispatch host — QA APPROVED (2026-08-18)
 
-Task `task-49ed1e6d73544fc6ae09b3951a573848`. Reopened by governor after
-`task-5e43a9e2` (Foundation daemon ingress surface) landed. Re-measured at HEAD
-**8222b9e**, step-1 completed, blocked inside **step-2**.
+Task `task-49ed1e6d73544fc6ae09b3951a573848`, reviewed by qa-bbdecc14 at HEAD
+**26aa254**. APPROVED. Supersedes the worker completion handoff.
 
-Supersedes the earlier planning handoff: the `@moe/mcp` HTTP-root gap it named is
-CLOSED. The new block is a different, deeper one.
+## What I verified myself (not read from the worker's notes)
 
-## Step 1 landed (no code)
+- **Commit shape**: `git show --stat 26aa254` = 9 files, every one an owned path
+  under `apps/daemon/src`. No `package.json` / `pnpm-lock.yaml` in the commit —
+  correct, `@moe/mcp` is already declared at `HEAD:apps/daemon/package.json:22`.
+  The worktree's `moe-up` bin edit is task-bc9b4bed's and was correctly left alone.
+- **Owned suites, run by me**: foundation-receipts + mcp-main + daemon-main +
+  mcp-dispatch-port -> `Test Files 4 passed / Tests 45 passed`, EXIT 0.
+- **Plain-Node stdio smoke, run by me from PowerShell** against
+  `node apps/daemon/src/mcp-main.ts`: READY receipt on stderr carrying
+  pid/projectId/storePath, official MCP `initialize` round-trip on stdout
+  (uncontaminated by the receipts), stdin close -> SHUTDOWN(TRANSPORT_CLOSED),
+  exit 0. Run TWICE over one store (172032 bytes, different pids, same
+  project/store) = the DoD-3 restart clause, reproduced independently.
+- **Two mutation drills on `host/foundation-receipts.ts`**, both restored by
+  content (sha b736beb8... re-verified, `git status` clean, HEAD unmoved):
+  (i) delete the `SHUTDOWN_BEFORE_READY` arm -> exactly 3 tests red naming that
+  code; (ii) inject `new Date()` into `identityOf` -> the byte-identity test AND
+  the no-clock source-scan test both red. Both properties are load-bearing.
 
-Re-scope comment posted: `comment-303782aba93540b7ae787a8264b49c40`. Every plan
-measurement reconfirmed identical from a42ae2f to 8222b9e:
+## The foreign red, dated
 
-- `grep -rn "StdioDispatchPort|HttpDispatchPort" tests/` -> **ZERO**. The task
-  description's premise (a fake dispatch port injected in the E2E harness) is FALSE.
-  `tests/e2e/foundation/e2e-process.ts:96` spawns real children via
-  `spawn(process.execPath, …)`.
-- The host already exists TWICE: `apps/daemon/src/mcp-main.ts` (58 lines, stdio,
-  `createStdioMcpServer` + `connectStdioTransport` + `readBootstrapCredential`) and
-  `apps/daemon/src/mcp-http/mcp-http-main.ts` + `mcp-http/mcp-http-host.ts`
-  (Streamable HTTP via `createHttpMcpAdapter`). `apps/daemon/src/host/` does not exist.
-- `apps/daemon/package.json` already declares `@moe/mcp` — DoD 5's manifest addition
-  is a NO-OP. Do not run `pnpm install`; do not commit package.json or pnpm-lock.yaml.
-- File sizes: vocabulary 123, registry 226, daemon-entry 244, daemon-main 99,
-  mcp-main 58, mcp-dispatch-port 108, registry.test 549.
+All five legs were run SEPARATELY (no `;`-chain, no pipe). @moe/mcp both EXIT 0
+(167 tests). The three @moe/daemon + repo legs were EXIT 1, entirely foreign:
 
-## Why step 2/3/7 are impossible in owned paths
+- `src/orchestrator/demo-seed-main.ts` — UNTRACKED (`git ls-files --error-unmatch`
+  fails). Its error CHANGED between two runs minutes apart (TS1005 syntax ->
+  TS6196 unused) — a live peer mid-write, task-bc9b4bed.
+- `daemon-store-dependencies.test.ts` — registry roster gained
+  `foundation.verification`. Dated: count at `HEAD:daemon-command-vocabulary.ts`
+  = **0**, worktree = **1**; registry HEAD = **0**, worktree = **4**. Sibling
+  task-c52d25a4's uncommitted production edit; its own roster test lags.
+- `work/foundation-input-hydrator-stale.test.ts` — CLEARED on re-run (peer settled).
+- Earlier in the same window the whole package was 516-red from
+  `ReferenceError: admitProviderProfile is not defined` in the peer-modified
+  `bootstrap/bootstrap-services.ts` importing the untracked `provider-profile/`.
+  That cleared too. **Attribution proof that cost nothing**: the PARENT commit's
+  `mcp-dispatch-port.test.ts` already called `seamHarness` (line 102), so the one
+  owned test file in that blast radius failed identically at the merge-base —
+  delta empty by construction, no stash and no worktree needed.
 
-Full detail in `mem:gotcha-foundation-kinds-are-not-runtime-command-kinds`. Summary:
-`"foundation.dispatch"` and `"foundation.verification"` are not members of the frozen
-92-entry `RUNTIME_COMMAND_KINDS` in `packages/contracts/src/runtime/runtime-vocabulary.ts`
-(NOT an owned path). Four independent blockers, two of which survive closing the enum:
-closed enum (TS2322, compiled probe); envelope refusal at `runtime-envelope.ts:141`
-before the registry is consulted; sync `CommandHandler` vs async `dispatch`/`verify`;
-`Uint8Array activationRequestBytes` vs `JsonObject` payload. Plus
-`FoundationAttemptDeps.captureResult` has zero production producers.
+Failing-path set ∩ owned paths = EMPTY at every measurement.
 
-## What IS still buildable
+## Scope note recorded at approval, not a defect
 
-Steps 4-6 — the pure receipts module at `apps/daemon/src/host/foundation-receipts.ts`
-(+ mandatory `.js` bridge, see `mem:new-ts-module-needs-a-js-bridge-invisible-to-tsc-and-vitest`)
-emitted from `daemon-main.ts` (99 lines, owns `onStarted` at :82 and SIGINT/SIGTERM at
-:89-96) and `mcp-main.ts` (58 lines, has NO signal handling at all). That closes DoD 3
-alone. It was NOT landed: steps 2 and 3 precede it and the plan's step-6 justification
-depends on the host composition that cannot happen. Deliberately did not half-build
-under an approved plan whose shape is invalid.
+The stdio entry does **not** run the boot-reconciliation sweep itself. DoD 3's
+"drives production reconciliation before accepting commands" is met by the
+control-room HTTP entry, proved with a witness wrapper over the PRODUCTION
+provider asserting `["SWEPT","READY_RECEIPT"]` ordering. That is the right owner:
+the sweep is daemon-wide crash recovery, and N per-agent stdio sessions each
+sweeping would race. Graded against the written DoD, not against a redesign.
 
-`grep -rn "readinessReceipt|ReadinessRecord|shutdownReceipt|ReadyReceipt" apps/daemon/src`
-still returns ZERO; readiness is a log line at `daemon-entry.ts:227`. Do not edit
-`daemon-entry.ts` — 244 of a 250 target.
+## Reusable QA moves from this review
 
-## Already satisfied — do NOT rebuild
-
-Restart reconciliation (`boot-reconciliation.ts`, ordered before the listener per
-`daemon-entry.ts:202`); graceful shutdown with `DAEMON_ENTRY_ALREADY_STOPPED`
-(`daemon-entry.ts:189-190`); transport parity — both transports already reach
-`createMcpDispatchPort` -> `handleCommandRequest` (`mcp-dispatch-port.ts:62-71`).
-
-## Named prerequisite for the architect
-
-A `packages/contracts`-owned task adding both kinds to `RUNTIME_COMMAND_KINDS` with
-`satisfies RuntimeCommandKind` at each definition, AND an `apps/daemon`-owned task
-resolving the async-handler and binary-payload seams (either an async `CommandHandler`
-variant or a JSON-expressible dispatch request), AND a producer for `captureResult`.
-Until all three land, DoD 1/2/4's Foundation reach is unreachable from any transport.
-
-Final certifier remains Foundation canary `task-97554aa4293e40eab56c0b642e18513a`.
+1. When an owned-package gate is red at QA time, **date the offending symbol**
+   `HEAD` vs worktree before treating it as a block — here two `grep -c` pairs
+   settled it in one command. See `mem:qa-owned-package-red-can-postdate-the-task`.
+2. **Re-run the failing leg.** Peer worktree churn in this repo clears within
+   minutes; 516 failures became 2 became 1 across three runs of the same command.
+3. To prove an owned test file's red is not yours, show the PARENT commit's
+   version already used the broken fixture path. Cheaper than any baseline run.

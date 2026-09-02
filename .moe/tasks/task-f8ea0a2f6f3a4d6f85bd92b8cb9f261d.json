@@ -76,11 +76,12 @@
     {
       "stepId": "step-4",
       "description": "Make the already-implemented budget and worktree commit fences mechanically visible without changing their contracts. In the budget test, define a named nonempty tamper roster that drives `readGoalBudgetIdentity` over malformed JSON, invalid UTF-8, and a `GoalCreated` type/content mismatch; pin every result to `BUDGET_PROJECTION_CORRUPT` at `BUDGET_CURRENT_PROJECTION`, keep the real-writer acceptance and clean absence control, and assert the generated case count before iterating. In the worktree test, name and count the production materializer tamper arms: a foreign repository occupying the registered derived path at the same commit must refuse `RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH` at `WORKTREE_NODE`, and the single-deviation adoption roster must continue to pin each exact code/layer. Keep real git repositories, detached HEAD, clean bytes, and same commit in the foreign-owner fixture so ownership is the only refusing fence; retain the pre-staged same-owner adoption control so fail-closed-everything cannot pass.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/budget/budget-durable-binding.test.ts",
         "packages/runner/src/workspace/worktree-materializer-node.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-02T21:58:56.427Z"
     },
     {
       "stepId": "step-5",
@@ -194,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:57.545Z",
-  "updatedAt": "2026-09-02T21:58:33.284Z",
+  "updatedAt": "2026-09-02T21:58:56.427Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:43.597Z",
     "plannedStepCount": 7,
@@ -423,6 +424,24 @@
       "treeId": "6c1a03ddca1b027fd539e6595b0916cc50ec9216",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "388f776e934493c4a524621ca3f412e3a8e6134b",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-40d3f2ed@2026-09-02T21:58:33Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+      ],
+      "recordedBy": "worker-40d3f2ed",
+      "recordedAt": "2026-09-02T21:58:37.772Z",
+      "treeId": "730656e0d85a8a273dafdea1ef9813e5d91313ab",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -441,7 +460,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-61e68abb@2026-09-02T21:53:50Z",
-    "at": "2026-09-02T21:53:59.197Z"
+    "sessionId": "worker-40d3f2ed@2026-09-02T21:58:33Z",
+    "at": "2026-09-02T21:58:37.772Z"
   }
 }

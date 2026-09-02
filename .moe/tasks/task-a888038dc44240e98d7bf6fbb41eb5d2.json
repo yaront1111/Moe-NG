@@ -159,8 +159,8 @@
       "completedAt": "2026-08-30T00:46:11.452Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-063c9dff",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -193,11 +193,17 @@
       "author": "worker-e98a7edb",
       "content": "COMPLETION RECORD — [T1-b producer].\n\n**every finalized run now carries a policy-declared, daemon-computed risk tier or is refused as unclassifiable**\n\nCONSUMER: [T1-c reader] task-f42d5165b747436a9f9b354dbfa37e3d, which reads the run tier off `readPolicyEvaluationAuthority`'s new `runId` / `riskTier` pair and feeds approval.decide_intent's RISK_TIER slot.\nLANDED PREREQUISITES: task-cb0d65ffcbc74776af06e2be5aa21f2e ([T1-a] policy vocabulary) and task-4e013e45d6434641a99483519fbd0da0 ([T1-a2] daemon rosters), both DONE on disk and both re-measured at step 1 rather than assumed.\n\nWHAT SHIPPED. At `commitFinalizedSubmission`, the daemon reads the SEALED graph body named by `folded.state.sealedHashes.graphContentHash`, derives node-property fact ids through @moe/scheduler's `deriveNodePropertyFactIds` (which re-admits each definition through the production codec), stamps them `DAEMON_VERIFIED` with `tier: null`, evaluates them through core's existing `evaluatePolicy` against the newest installed evaluation slice's `riskClassifications`, and appends the resulting `PolicyEvaluated` row as a LEG of the same decision that seals. `computedTier: null` refuses `RUN_POLICY_UNCLASSIFIABLE @ DAEMON_RUN_POLICY` and the seal is refused with it. No default tier exists anywhere on the path.\n\nTWO STRUCTURAL DECISIONS, both forced by measurement, both recorded at step 1 (comment-7bcc3be8):\n1. The run row lives on `policy-run-evaluation:<runId>`, not `${projectId}-policy`. All 22 `\"PolicyEvaluated\"` sites address the project aggregate, and three PRODUCTION readers (policy-admission-reader.ts:62, approval-policy-ref.ts:89, supersession-policy-decision.ts:81) scan it newest-first and FAIL CLOSED on any row the strict reader refuses. Same event type, same strict reader, different address — so all four exact-8-key pins stay green UNEDITED.\n2. The chain is the newest installed slice `derivePolicySliceDigest` accepts, re-digested against its install address. Coverage-free on purpose, so CORE owns the unclassifiable verdict instead of a shadow fence in this module.\n\nFAN-OUT, MEASURED NOT GUESSED. The mandated refusal reaches every finalize driver. Route A (classify the shared `POLICY_SLICE`, moving `POLICY_REF`) measured `94 failed | 222 passed` / `1486 failed` against a `5 failed | 311 passed` / `18 failed` baseline — rejected and restored with `git diff --exit-code` EXIT 0. The adopted route appends a SECOND classifying install, leaving `POLICY_REF` and every digest derived from it byte-identical, and cost 3 extra files. Seven worlds were seeded; `legacyProposedStore()` additionally now carries the graph-body row it always implicitly had. PRODUCTION surfaces both updated with the identical four-entry table at the same digest `fff1cc91…`: the demo seed's `validatablePolicySlice()` and the control room's live dispatch payload. Control-room suite re-measured AT HEAD before and after: `67 failed | 41 passed (108)` both times, so my change adds zero there; restore proven by SHA256 equality in a call separate from the restore.\n\nGATES (comment-c0f88cc6): G1 daemon typecheck EXIT 0 `$ tsc` echoed; G1b control-room typecheck EXIT 0; G2 `Test Files 5 passed (5)` / `Tests 140 passed (140)` EXIT 0; G2b owned scope `1 failed | 95 passed (96)`, the one failure being byte-untouched baseline-red `http-listener.test.ts`; G3 DoD-4 seven policy.validate paths with EMPTY `git diff --stat` and EMPTY porcelain, `Test Files 4 passed (4)` / `Tests 115 passed (115)` unedited; G4 whole package EXIT 1, `Test Files 7 failed | 312 passed (319)` / `Tests 21 failed | 6624 passed`, owned-path intersection against the HEAD-547c6c55 baseline EMPTY. Foreign red disclosed verbatim: mcp-http-host + mcp-main `expected 3 to be 2` from a peer's ` M mcp-tool-allowlist.{ts,test.ts}`; foundation-attempt-windows red only under contention and `8 passed (8)` standalone; four files carried forward from baseline.\n\nDRILLS (comment-ee612b18), SHA256 restore proofs for the three UNTRACKED targets in calls separate from the restore: D1 (leg reads the caller-stated ref) RED 14/36; D1b (the plan's literal payload-read mutant) DOES NOT COMPILE, TS2339 — reported as a FINDING with the structural fix, since at this seam the two sources are provably equal and no fixture could distinguish them; D2 (default tier R0) RED 4/50 at both layers including the divergence arm; D3 (drop runId) RED 8 on the reader linkage arms; D4 (seal without evaluation) RED 2/36 on the both-ledgers-unchanged assertions. All four RESTORED-IDENTICAL. No green drill was banked.\n\nFOR THE ARCHITECT, one item this row could not resolve inside its scope: `apps/daemon/src/orchestrator/demo-seed-payloads.ts` was 411 lines at HEAD, already past the 400 split threshold before this row. I fixed it by SUBTRACTION (the three policy bodies moved to a new `demo-seed-policy.ts`, re-exported so no consumer's import moved), leaving it at 302 — 109 lines smaller than it arrived, but still above the 250 target. A further split is available and is not this row's concern.",
       "timestamp": "2026-08-30T00:46:51.373Z"
+    },
+    {
+      "id": "comment-39dcb6a71135420b8a3d94bc2d88c857",
+      "author": "qa-063c9dff",
+      "content": "QA VERIFICATION RECORD — APPROVE. Graded the delivered commit `37f95c18` (30 paths, `Moe-Kind: completion`, on moe/work-2026-08-08). `commits` was `[]` in get_context; I found and graded the commit myself.\n\nGATES I RAN.\n- DoD verification command verbatim from apps/daemon: EXIT 0, `Test Files 5 passed (5)`, `Tests 140 passed (140)` — byte-exact to the recorded evidence.\n- `pnpm --filter @moe/daemon typecheck`: EXIT 0 with the `$ tsc --project tsconfig.json` echo.\n- `pnpm --filter @moe/daemon test`: EXIT 1, `Test Files 4 failed | 315 passed (319)`, `Tests 17 failed | 6628 passed`. Attribution below; owned intersection empty.\n\nTHE PART THAT NEEDED THE MOST CARE — CONTESTED PATHS. This commit carries FOUR `Moe-Contested` trailers naming three other live rows (live-dispatch-payloads.ts and demo-seed-payloads.ts to task-be80cb74, bootstrap-policy-authority-reader.ts to task-f42d5165, bootstrap-durability.test.ts to task-b8272ee0), plus three foreign `.moe/tasks/*.json`. On this board that shape is one hunk away from the recurring sweep failure that has reverted approved work, so I did not take the declare_files note on faith.\nNOTHING WAS DESTROYED, and here is the measurement rather than the assurance: `git grep -n 'hex64(\"bb\")' 37f95c18^` and `37f95c18` over both control-room and daemon seed files BOTH return hits. The peer's budgetRef fix had not landed at either revision, so there was nothing to revert — the literal is present before and after. The demo-seed edit is a genuine split (demo-seed-payloads.ts -125 lines, new demo-seed-policy.ts +156) consistent with the row's declared scope of seeding a classifying policy table, not a blind sweep of a peer's bytes.\nBUT THE LINE ANCHORS MOVED, and two other rows are anchored on the old ones. `live-dispatch-payloads.ts` budgetRef went :204 -> :218 and `demo-seed-payloads.ts` went :395 -> :286. task-be80cb74's DoD-4 names \":395\" and @governor-0134a004's routing ruling to @worker-d9877466 names \":204\". Both citations are now stale by this commit. That is not a defect in this row — it is a live hazard for the two rows that have to make that edit next, and they should re-grep the literal rather than trusting the number.\n\nDoD, CLAUSE BY CLAUSE.\nDoD-2 RUN-SCOPED ROW: arms at run-policy-evaluation.test.ts:112 (tier equals what the production evaluator derives), :145 (refs and scope from the SEALED body, never from a caller), :204 (MAX of the classified tiers rather than the first or the last — the mutant a naive fixture would miss), :242 (deterministic: same sealed content twice yields identical record bytes).\nDoD-3 UNCLASSIFIABLE REFUSES: :166 asserts its own code AND layer; :181 is the divergence the clause demands, stated in its own title — \"DIVERGES on the classification alone: the same run, one table apart\" — so only the classification presence flips it. :232 refuses when the sealed body is not durable and names the GRAPH rather than the policy, which keeps the two refusal layers distinguishable.\nDoD-4 NO CALLER INFLUENCE: the tamper matrix at :314 is one tamper per arm and each asserts WHICH check answered, not merely that something refused — `toStrictEqual([code, \"DAEMON_POLICY_AUTHORITY\"])`, with a dropped runId answering POLICY_AUTHORITY_ROW_UNREADABLE (neither roster matches at ten keys) while value tampering answers POLICY_AUTHORITY_RUN_LINKAGE_MISMATCH. Different causes, different codes. `policy.validate` is untouched: `git show --stat 37f95c18` names zero validate files, and no validate suite appears in the daemon run's failures.\nThe reader change is the right shape too: `exactObject(payload, ROW_KEYS) ?? exactObject(payload, RUN_ROW_KEYS)` is an 8-or-11 try-both, and `RUN_ROW_KEYS` is composed from `RUN_POLICY_ROW_EXTRA_KEYS` IMPORTED from the writer's own module rather than re-spelled, so writer and reader cannot drift into disagreeing about what a run row carries.\nDoD-5 DRILLS: D1/D2/D3 all red with SHA256 restores proven in separate calls, and correctly NOT proven by `git diff` since three of the four targets were untracked at drill time. I corroborated at the bytes rather than trusting the sheet: `grep -c 'computedTier ?? \"R0\"'` is 0 at the commit, and `RUN_POLICY_ROW_EXTRA_KEYS` is back to the frozen three.\n\nD1b IS THE BEST THING IN THIS DELIVERY AND I WANT IT ON THE RECORD. The plan's literal mutant — read the graph hash off `request.payload.revision` — DOES NOT COMPILE. The worker did not declare the drill satisfied or quietly substitute a weaker one. They measured WHY it will not compile and found the real problem: at this seam the caller-stated revision and the sealed hash are PROVABLY EQUAL, because the finalize reducer derives `sealedHashes` from the command's own revision, so no fixture can make them differ and a value-level arm could never catch a payload read. Instead of asserting an unprovable property they changed what the seam PRODUCES — `buildRunPolicyLeg` narrowed from `HandlerContext` (which carries `request.payload`) to an explicit `RunPolicyLegInput` — and kept D1 as the value-level control. I verified the narrowing: `RunPolicyLegInput` has exactly seven members (decidedAt, ledger, principalId, projectId, runId, state, store) and neither `request` nor `payload` is among them. So taskRail 1's \"never from the finalize payload\" is enforced by the type system rather than by a test that could rot. That is the correct answer to epic rail 7(A) when no divergence input is constructible, and it is rarer than it should be.\n\nFOREIGN RED, attributed by cause. The four failing suites are activation-telemetry-launch (10), activation-run-commit (2), http-listener (2) and launch-template-producer (3), plus one arm in product-contract-gate-1-reader. None is an owned path and none is semantically reachable from run-scoped policy evaluation at finalize. The http-listener pair is the decisive one because it is nearest this row's surface, and I have my own earlier measurement of it: I ran that exact failure — \"answers the affordance surface for an absent or matching projectId\", `outcome: \"SURFACE\"` expected and `\"REFUSED\"` received — at roughly 02:52 tonight while reviewing a different row, and this commit was authored 03:48:24. It pre-dates the delivery by ~55 minutes. launch-template-producer belongs to @worker-d9877466's foundation.dispatch row and the activation pair to the provider-launch telemetry work; both were red before this row landed. Worth noting the daemon failing set has SHRUNK during my review window (the goal-catalog `binding:null` red and the daemon-command-vocabulary red both cleared under me), which is the usual behaviour of this tree and the reason I attribute by cause instead of by count.\n\nFINDINGS — none blocking.\n(A) SIZE, and it cuts the other way from how it reads. `demo-seed-payloads.ts` is 302 lines at the commit, over DoD-5's \"<= 250\". It was 411 BEFORE this row — already past the 400 hard cap — and the row cut it by 109 by splitting `demo-seed-policy.ts` (156) out. So the row substantially repaired a pre-existing violation without reaching the target, and the target was not reachable for that file without a second split nobody asked for. Every other production file is inside 250: run-policy-evaluation 216, run-policy-record 160, run-policy-leg 96, demo-seed-policy 156, planning-authority-finalize 244 (from 227), bootstrap-policy-authority-reader 247 (from 225).\n(B) A CAP ABOUT TO BITE. `bootstrap-policy-authority-reader.ts` is at 247 — three lines under the cap — and TWO rows edit it: this one and task-f42d5165, which the daemon flagged as a file collision when I claimed this review. The next edit there needs a split, not another few lines. Worth telling whoever picks up T1-c before they start.\n(C) The commit swept three foreign `.moe/tasks/*.json` alongside its own. Board metadata only, no source, and harmless — noting it so a later reader does not mistake the 30-path count for 30 paths of code.",
+      "timestamp": "2026-08-30T00:55:31.061Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:59:11.906Z",
-  "updatedAt": "2026-08-30T00:48:16.953Z",
+  "updatedAt": "2026-08-30T00:57:17.663Z",
   "contextFetchedBy": [
     "architect-dba58d99",
     "worker-e98a7edb",
@@ -211,7 +217,9 @@
     "firstClaimAt": "2026-08-29T22:09:28.671Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-30T00:57:17.663Z",
+    "wallClockMs": 10068992
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -306,7 +314,113 @@
     "apps/control-room/src/live/live-dispatch-payloads.ts",
     "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
     "apps/daemon/src/orchestrator/demo-seed-policy.ts",
-    "apps/daemon/src/orchestrator/demo-seed-policy.js"
+    "apps/daemon/src/orchestrator/demo-seed-policy.js",
+    ".moe/tasks/task-a888038dc44240e98d7bf6fbb41eb5d2.json",
+    ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+    ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+    ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json"
   ],
-  "completionSummary": "every finalized run now carries a policy-declared, daemon-computed risk tier or is refused as unclassifiable.\n\nAt `commitFinalizedSubmission` the daemon reads the SEALED graph body named by `folded.state.sealedHashes.graphContentHash`, derives node-property fact ids through @moe/scheduler's `deriveNodePropertyFactIds`, stamps them DAEMON_VERIFIED with `tier: null`, evaluates through core's existing `evaluatePolicy` against the newest installed slice's `riskClassifications`, and appends the `PolicyEvaluated` row as a LEG of the same decision that seals. `computedTier: null` refuses RUN_POLICY_UNCLASSIFIABLE @ DAEMON_RUN_POLICY and the seal refuses with it. No default tier exists on the path.\n\nCONSUMER [T1-c reader] task-f42d5165b747436a9f9b354dbfa37e3d reads the new `runId`/`riskTier` pair off `readPolicyEvaluationAuthority`. PREREQUISITES task-cb0d65ff and task-4e013e45, both DONE and both re-measured at step 1.\n\nADAPTED, not assumed: T1-a landed as `deriveNodePropertyFactIds` in @moe/scheduler, not `deriveNodePropertyFacts` in core (that grep EXIT 1). It returns IDs only by design, so this row stamps the truth class and core supplies the tier.\n\nTWO FORCED DECISIONS. (1) The run row lives on `policy-run-evaluation:<runId>`, same event type and same strict reader: all 22 PolicyEvaluated sites address `${projectId}-policy` and three PRODUCTION readers scan it newest-first and FAIL CLOSED, so a widened row there would break admission, plan-approval policyRef and supersession. All four exact-8-key pins are green UNEDITED. (2) The chain selector is coverage-free so CORE owns the unclassifiable verdict rather than a shadow fence.\n\nFAN-OUT MEASURED: classifying the shared POLICY_SLICE reds 94 files / 1486 tests (baseline 5/18); appending a second classifying install leaves POLICY_REF byte-identical and cost 3. Seven test worlds seeded; PRODUCTION demo seed and control-room live payload both carry the identical table at digest fff1cc91. Control-room baseline re-measured at "
+  "completionSummary": "every finalized run now carries a policy-declared, daemon-computed risk tier or is refused as unclassifiable.\n\nAt `commitFinalizedSubmission` the daemon reads the SEALED graph body named by `folded.state.sealedHashes.graphContentHash`, derives node-property fact ids through @moe/scheduler's `deriveNodePropertyFactIds`, stamps them DAEMON_VERIFIED with `tier: null`, evaluates through core's existing `evaluatePolicy` against the newest installed slice's `riskClassifications`, and appends the `PolicyEvaluated` row as a LEG of the same decision that seals. `computedTier: null` refuses RUN_POLICY_UNCLASSIFIABLE @ DAEMON_RUN_POLICY and the seal refuses with it. No default tier exists on the path.\n\nCONSUMER [T1-c reader] task-f42d5165b747436a9f9b354dbfa37e3d reads the new `runId`/`riskTier` pair off `readPolicyEvaluationAuthority`. PREREQUISITES task-cb0d65ff and task-4e013e45, both DONE and both re-measured at step 1.\n\nADAPTED, not assumed: T1-a landed as `deriveNodePropertyFactIds` in @moe/scheduler, not `deriveNodePropertyFacts` in core (that grep EXIT 1). It returns IDs only by design, so this row stamps the truth class and core supplies the tier.\n\nTWO FORCED DECISIONS. (1) The run row lives on `policy-run-evaluation:<runId>`, same event type and same strict reader: all 22 PolicyEvaluated sites address `${projectId}-policy` and three PRODUCTION readers scan it newest-first and FAIL CLOSED, so a widened row there would break admission, plan-approval policyRef and supersession. All four exact-8-key pins are green UNEDITED. (2) The chain selector is coverage-free so CORE owns the unclassifiable verdict rather than a shadow fence.\n\nFAN-OUT MEASURED: classifying the shared POLICY_SLICE reds 94 files / 1486 tests (baseline 5/18); appending a second classifying install leaves POLICY_REF byte-identical and cost 3. Seven test worlds seeded; PRODUCTION demo seed and control-room live payload both carry the identical table at digest fff1cc91. Control-room baseline re-measured at ",
+  "commits": [
+    {
+      "sha": "37f95c184356638ee8c6550a80ca259d746e45a1",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-e98a7edb@2026-08-29T23:44:07Z",
+      "paths": [
+        ".moe/tasks/task-a888038dc44240e98d7bf6fbb41eb5d2.json",
+        ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+        ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+        ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-journey-fixtures.ts",
+        "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-replay-bytes.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/http/http-listener-planning-run.test.ts",
+        "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+        "apps/daemon/src/orchestrator/demo-seed-policy.js",
+        "apps/daemon/src/orchestrator/demo-seed-policy.ts",
+        "apps/daemon/src/planning/approval-activation.test.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+        "apps/daemon/src/planning/planning-authority-finalize.test.ts",
+        "apps/daemon/src/planning/planning-authority-finalize.ts",
+        "apps/daemon/src/planning/run-policy-evaluation.js",
+        "apps/daemon/src/planning/run-policy-evaluation.test.ts",
+        "apps/daemon/src/planning/run-policy-evaluation.ts",
+        "apps/daemon/src/planning/run-policy-leg.js",
+        "apps/daemon/src/planning/run-policy-leg.ts",
+        "apps/daemon/src/planning/run-policy-record.js",
+        "apps/daemon/src/planning/run-policy-record.ts",
+        "apps/daemon/src/work/foundation-context-selection.test.ts"
+      ],
+      "recordedBy": "worker-e98a7edb",
+      "recordedAt": "2026-08-30T00:48:27.578Z",
+      "treeId": "73dc0c5a67fda63c0c4bcbcd610aa1b2011e765b",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/live-dispatch-payloads.ts",
+          "taskId": "task-be80cb7441d6483facd9c8f5b6c28096"
+        },
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+          "taskId": "task-b8272ee020a940009a11c6eb6355d578"
+        },
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+          "taskId": "task-f42d5165b747436a9f9b354dbfa37e3d"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+          "taskId": "task-be80cb7441d6483facd9c8f5b6c28096"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/http-listener-planning-run.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+    "apps/daemon/src/planning/run-policy-record.ts",
+    "apps/daemon/src/work/foundation-context-selection.test.ts",
+    "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+    "apps/daemon/src/planning/run-policy-evaluation.js",
+    "apps/daemon/src/planning/planning-authority-finalize.test.ts",
+    "apps/daemon/src/planning/planning-authority-finalize.ts",
+    "apps/daemon/src/planning/run-policy-evaluation.test.ts",
+    "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/daemon/src/planning/approval-activation.test.ts",
+    "apps/daemon/src/orchestrator/demo-seed-policy.ts",
+    "apps/daemon/src/planning/run-policy-leg.js",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/planning/run-policy-evaluation.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-replay-bytes.test.ts",
+    "apps/daemon/src/planning/run-policy-leg.ts",
+    "apps/daemon/src/bootstrap/bootstrap-journey-fixtures.ts",
+    "apps/daemon/src/planning/run-policy-record.js",
+    "apps/daemon/src/orchestrator/demo-seed-policy.js",
+    "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+    "apps/daemon/src/http/affordance-read.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-e98a7edb@2026-08-29T23:44:07Z",
+    "at": "2026-08-30T00:48:27.578Z"
+  },
+  "completedAt": "2026-08-30T00:57:17.663Z",
+  "reviewCompletedAt": "2026-08-30T00:57:17.663Z",
+  "reviewSummary": "APPROVE. Record: comment-39dcb6a7. Graded commit 37f95c18 (30 paths); get_context showed commits:[] so I found it myself.\n\nRE-RAN BY ME. DoD command verbatim: EXIT 0, `Test Files 5 passed (5)`/`Tests 140 passed (140)`, byte-exact. Daemon typecheck EXIT 0 with the `$ tsc` echo. Daemon test EXIT 1, 4 files/17 tests, owned intersection empty.\n\nCONTESTED PATHS, the part needing care. Four Moe-Contested trailers naming three other live rows. NOTHING DESTROYED, measured not assumed: the hex64 budgetRef literal is present at BOTH 37f95c18^ and 37f95c18, so the peer fix had not landed and nothing was reverted; the demo-seed change is a real split (-125 there, +156 in a new demo-seed-policy.ts). BUT THE ANCHORS MOVED: :204->:218 and :395->:286. task-be80cb74's DoD-4 cites :395 and the governor's ruling to worker-d9877466 cites :204 - both stale. Re-grep the literal.\n\nDoD. (2) arms pin tier-from-production-evaluator, refs/scope from the SEALED body, MAX-not-first/last, byte-determinism. (3) UNCLASSIFIABLE asserts code AND layer with the divergence arm. (4) the tamper matrix asserts WHICH check answered (ROW_UNREADABLE for a dropped key vs RUN_LINKAGE_MISMATCH for tampered values); policy.validate untouched. The reader is an 8-or-11 try-both whose extra roster is IMPORTED from the writer.\n\nD1b IS THE STANDOUT. The plan's literal mutant does not compile, and rather than declaring it done the worker found why: caller revision and sealed hash are provably equal at that seam, so no value-level arm could catch a payload read. They narrowed buildRunPolicyLeg to a RunPolicyLegInput with no payload member, making the mutation unrepresentable - verified, seven members, neither request nor payload among them.\n\nFINDINGS: (a) demo-seed-payloads.ts is 302 vs the 250 target, but was 411 - past the 400 cap - before this row cut it by 109; every other production file is inside 250. (b) bootstrap-policy-authority-reader.ts sits at 247 with TWO rows editing it."
 }

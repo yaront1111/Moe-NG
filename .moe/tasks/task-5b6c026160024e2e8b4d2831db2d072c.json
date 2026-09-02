@@ -183,7 +183,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T11:21:35.795Z",
-  "updatedAt": "2026-08-30T12:50:39.498Z",
+  "updatedAt": "2026-08-30T12:55:14.387Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T11:22:01.400Z",
     "plannedStepCount": 5,
@@ -195,7 +195,8 @@
   "contextFetchedBy": [
     "architect-1825759f",
     "worker-de04587f",
-    "qa-85c12129"
+    "qa-85c12129",
+    "worker-76a8c4ac"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -277,6 +278,21 @@
       ],
       "pushed": false,
       "message": "feat(daemon): stamp server transport origins"
+    },
+    {
+      "sha": "a4ff8db2373f998c36356c7b4b8f1621d0063c05",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T12:38:06Z",
+      "paths": [
+        ".moe/tasks/task-5b6c026160024e2e8b4d2831db2d072c.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T12:51:32.482Z",
+      "treeId": "d301a2e57e2380963f8247b6f6396f5e7c24d133",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -289,7 +305,8 @@
     "apps/daemon/src/http/http-listener.ts",
     "apps/daemon/src/mcp-dispatch-port.ts",
     "apps/daemon/src/orchestrator/agent-wrapper.ts",
-    "apps/daemon/src/orchestrator/node-verifier.ts"
+    "apps/daemon/src/orchestrator/node-verifier.ts",
+    ".moe/tasks/task-5b6c026160024e2e8b4d2831db2d072c.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/daemon-command-registry.test.ts",
@@ -306,9 +323,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-de04587f@2026-08-30T11:31:16.688Z",
-    "at": "2026-08-30T12:33:34.901Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-85c12129@2026-08-30T12:38:06Z",
+    "at": "2026-08-30T12:51:32.482Z"
   },
   "reviewStartedAt": "2026-08-30T12:37:51.864Z",
   "verification": {

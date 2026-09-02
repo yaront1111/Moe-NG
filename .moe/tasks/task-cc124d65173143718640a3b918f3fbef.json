@@ -232,7 +232,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:05:36.873Z",
-  "updatedAt": "2026-08-29T12:13:49.297Z",
+  "updatedAt": "2026-08-30T17:41:02.556Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T09:59:35.921Z",
     "plannedStepCount": 6,
@@ -248,7 +248,8 @@
     "architect-1270c677",
     "governor-8c340ce3",
     "worker-013a8776",
-    "qa-860ef713"
+    "qa-860ef713",
+    "worker-2a834a38"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
