@@ -1,0 +1,179 @@
+{
+  "id": "task-ed89967f396d4cb78ec65ba8188bfb19",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-016 leaf] Author canonical planning authority material on daemon surfaces",
+  "description": "SPIDR dependency leaf of task-0169055cad324b7f84a2e90f0b46f8e0, created under the human reopen ruling recorded in comment-9ab9b346375b46f9a17dde85e46bcb9c. Adopt and preserve the parent's completed daemon WIP in affordance-read.ts, affordance-read.test.ts, and affordance-read-planning.test.ts; do not restore or normalize it. Add the smallest server-owned carrier that lets the parent consume canonical per-run planning authority without importing Node-only codecs or reimplementing hashes in the browser. Exact owned paths (7): apps/daemon/src/http/affordance-planning-authorities.ts (new); apps/daemon/src/http/affordance-planning-authorities.js (new one-line bridge); apps/daemon/src/http/affordance-contract.ts; apps/daemon/src/http/affordance-read.ts; apps/daemon/src/http/affordance-read.test.ts; apps/daemon/src/http/affordance-read-planning.test.ts; apps/daemon/src/daemon-store-foundation-composition.ts. The real declared consumer is parent task-0169055cad324b7f84a2e90f0b46f8e0.",
+  "definitionOfDone": [
+    "Verify both declared prerequisites are DONE/merged from epicSiblings and preserve the three adopted daemon WIP paths byte-for-byte before red-first additions; record exact-path porcelain/blob hashes and never recover from the pre-WIP ref.",
+    "A focused <=250-line affordance-planning-authorities.ts calls the existing daemon journeyAuthority producer (no copied codec/digest) and returns an immutable planningAuthorityByRun map only for exact eligible plan.propose/approval.decide offer runs. Each entry has exactly authority, goalRef, graphContentBytesBase64, graphContentHash, graphRevisionRef, runId, and submissionHash; two nondefault goal/run pairs produce distinct correctly bound material.",
+    "AffordanceSurface exposes planningAuthorityByRun alongside planningGoalRefs, and createAffordancePort derives both from the same durable offers/bindings. With a configured principal and exactly one merged node, the authority-map key set equals the nonzero eligible offered-run set in both directions; each map key, embedded runId, goalRef, offer target, criterion/revision identity, and configured author agree exactly.",
+    "Production daemon-store-foundation-composition.ts forwards the real StoreDependencyConfig.principalId and existing mergedNodes into createAffordancePort. Missing principal, zero or multiple nodes, missing run-to-goal binding, or mismatched/withheld offer yields no authority entry; no DEFAULT_*, project owner, first-node selection, caller-provided identity, static digest, or operator-local fallback is admitted.",
+    "Existing compiler/bootstrap/claim/offer behavior and public step shapes remain compatible; only the new top-level authority map and optional port principal input are added. Both new production files remain <=250 lines, every edited production file remains <400 physical lines, and the .js bridge is exactly one re-export line.",
+    "Red-first focused tests assert the exact seven-key roster, nonzero bidirectional run coverage, configured-principal versus deliberately different project-owner provenance, two-sibling isolation, and every fail-closed omission. Restored mutations substituting a default run/goal, swapping one sibling goal, and dropping one map member make the named production-surface assertions red; reason/outcome assertions identify the exact refusing layer where a real command is driven.",
+    "Run the exact standalone focused daemon gate with nonzero Test Files/Tests counts, @moe/daemon typecheck and package tests, then the repository root lanes and path-attributed merge-base-versus-HEAD comparison; no new failure may intersect the seven owned paths and all foreign red is disclosed verbatim."
+  ],
+  "taskRails": [
+    "Own exactly the seven paths named in the description. Do not edit Control Room, demo-seed-payloads, journey-authority-bodies, manifests/lockfile, HTTP/MCP serializers, or the already-correct affordance-planning-offers.ts.",
+    "Use only configured principalId, an exactly-one-node roster, durable planningGoalRefs, and exact current planning offers. Missing or ambiguous server facts fail closed by omission; never choose first, use project owner, or fall back to DEFAULT_* constants.",
+    "journeyAuthority remains the sole canonical graph/plan/acceptance producer. This row may assemble its declared input and carry its returned bytes/digests, but may not copy, recompute, rotate, or browser-port authority/hash logic.",
+    "Preserve all foreign WIP and the parent's adopted daemon bytes; use explicit path attribution. The parent task is the required real consumer and must dependOn this leaf before implementation resumes."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0 — ADOPT THE HUMAN-AUTHORIZED DAEMON WIP AND RE-MEASURE BEFORE EDITING. Read parent comment-9ab9b346375b46f9a17dde85e46bcb9c and the parent handoff, verify task-4451675e309e4db5b7388ecabc05b44f and task-4942111bdaac427985e4636b2bbd0cad are DONE/merged from epicSiblings, and confirm parent task-0169055cad324b7f84a2e90f0b46f8e0 is the named consumer whose dependency-field update is pending with the governor. Record HEAD and exact-path porcelain/blob/SHA-256 for the three adopted dirty WIP paths; compare their semantic bytes with the parent step notes, never with the pre-WIP recovery ref, and stop rather than restore/normalize if they differ. Call moe.declare_files for exactly the seven task paths and record that the two new files do not yet exist, the other four non-WIP paths are clean, and all foreign dirt is untouched. Re-run shape/reachability scans for createAffordancePort, AffordanceSurface object literals, planningGoalRefs, exact surface key rosters/counts, journeyAuthority importers, node/principal sources, and .js bridge conventions; stop for re-plan if a new asserting consumer needs an eighth path. Capture fresh pre-leaf standalone baselines for the focused daemon tests, @moe/daemon typecheck/package test and the required root lanes, including nonzero Test Files/Tests lines and every foreign failure path.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js",
+        "apps/daemon/src/http/affordance-contract.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js"
+      ],
+      "startedAt": "2026-09-01T07:55:35.501Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED-FIRST PRODUCTION-SURFACE TESTS. In affordance-read-planning.test.ts build a real surface with configured principalId `configured-operator`, a deliberately different registered project owner, exactly one nondefault node, and two nondefault durable goal/run siblings. From the production readSurface result require a nonzero eligible-run denominator; bidirectional set equality between exact plan.propose/approval.decide offer targets and planningAuthorityByRun keys; distinct per-run entries with exactly the seven keys authority, goalRef, graphContentBytesBase64, graphContentHash, graphRevisionRef, runId, submissionHash; exact key/run/goal/criterion/revision/node/configured-author agreement; and no default/sibling literals in B. Add divergent zero-node, two-node, omitted-principal, missing-binding and mismatched/withheld-offer arms that keep the relevant offers/bindings otherwise valid and assert exact map omission, never merely failure. In affordance-read.test.ts pin the new top-level map without weakening the existing bidirectional served/carded roster or completed WIP assertions. Use the existing real planning handler only for one positive material-consumption arm and one swapped-sibling arm: keep both offers/bindings valid, substitute only B's production-surface material onto A's proposal terminal, and assert the exact ILLEGAL_TRANSITION / CORE_REDUCER refusal so no later persistence fence can answer first. Run only these two test files, prove nonzero collection, and record the expected red assertions before production edits.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE FOCUSED CANONICAL MATERIAL PRODUCER AND CONTRACT. Create affordance-planning-authorities.ts (<=250 physical lines) with immutable PlanningAuthorityMaterial/PlanningAuthorityByRun behavior over explicit server inputs: current offers, planningGoalRefs, optional configured principal, and one already-snapshotted node roster. Consider only plan.propose/approval.decide run targets; require a nonempty own run→goal binding, a nonempty configured principal, and exactly one valid node; de-duplicate exact runs without choosing a first conflicting fact. Call the existing journeyAuthority exactly once per eligible run with configured author, `${goalRef}-criterion`, `${runId}-graph-revision`, run idPrefix, the sole nodeRef and the established planning step description; carry its returned authority/bytes/hash/submission digest verbatim and add only explicit runId/goalRef/graphRevisionRef. Do not copy a codec, digest, canonicalizer, graph literal, DEFAULT_* value or project owner. Freeze each exact seven-key entry and the map. Add the repository-standard one-line .js re-export bridge. In affordance-contract.ts add the exact material types and the top-level planningAuthorityByRun field without changing ChainStep, NextAllowedCommand, refusal, or existing planningGoalRefs shapes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js",
+        "apps/daemon/src/http/affordance-contract.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "COMPOSE THE REAL DAEMON SURFACE WITHOUT FALLBACKS. In affordance-read.ts add only an optional principalId input (absence must yield an empty material map), snapshot config.nodes() once per read, derive planningAuthorityByRun from the same resolvePlanningOffers result/planningGoalRefs that produced the cards, return it on every SURFACE, and reuse that exact node snapshot for later node cards so the read cannot mix two rosters. Preserve the already-completed removal of default planning cards, exact offer-derived step identities, compiler/claim/session/review behavior, mint/clock semantics, refusal shapes and public exports; do not edit affordance-planning-offers.ts. In daemon-store-foundation-composition.ts forward config.principalId and the existing mergedNodes provider—never ledger project owner or a literal—into createAffordancePort. Make the red tests green, including `{}` for missing/ambiguous facts and the real sibling material drive, then run daemon typecheck. Review physical lines: both new files <=250 and every edited production file <400 without minification; split/report before crossing 400. No docs change is needed because this is an internal authenticated surface field with the parent consumer already named.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "PENULTIMATE ADVERSARIAL REVIEW AND RESTORED MUTATION DRILLS. Run the adversarial-self-review checklist over own-property bindings, duplicate/empty offer targets, zero/multiple/mutating node rosters, absent/empty principal, producer exceptions, sibling isolation, nested mutability, exact key rosters, and accidental DEFAULT_/owner/first-node fallbacks; verify HTTP/MCP generic serializers need no edit and the parent is still the declared consumer. Before every mutation capture `git status --porcelain` for the exact mutated paths. Because both new files are untracked, back them up to a worker-suffixed out-of-tree `$env:TEMP` directory and record SHA-256. Drill independently: (A) substitute DEFAULT_RUN_SUBJECT or a literal author in the canonical input and require the exact per-run/configured-author surface assertion to red while offers/bindings stay valid; (B) replace B's goal lookup with A/first-entry and require the exact B criterion/contract assertion to red; (C) drop one material map member and require the nonzero bidirectional set-equality assertion to red; (D) swap only sibling material on the real proposal and require ILLEGAL_TRANSITION @ CORE_REDUCER. A green mutant is a finding, not evidence. Restore in separate commands, then separately prove SHA-256 equality for untracked files and `git diff --exit-code` for tracked files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL CONCENTRATED VERIFICATION AND COMPLETION EVIDENCE. From repo root run this exact foreground/unpiped completion command and persist it verbatim in moe.complete_task.verification.command: `& {$p='pnpm.exe';&$p --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts;if($LASTEXITCODE){exit $LASTEXITCODE};&$p --filter @moe/daemon typecheck;if($LASTEXITCODE){exit $LASTEXITCODE};&$p --filter @moe/daemon test;exit $LASTEXITCODE}`. Read output, not only exit 0: require focused Test Files 2 passed with nonzero Tests, successful daemon typecheck, and full daemon nonzero Test Files/Tests. Then run `pnpm typecheck`, `pnpm test` (root lane only; apps/** not covered), `pnpm verify:foundation`, and `pnpm verify:store` separately/standalone; compare their failing-path sets and the daemon package set with the phase-0 pre-leaf baseline, require no new failure intersecting the seven owned paths, and disclose foreign red verbatim. Re-run exact shape/reachability grep and line counts, prove the diff/pathspec is a subset of the seven declared paths, both new-file hash restores and tracked-file restores hold, and the parent consumer dependency field names this DONE leaf before completion (if the pending governor update is still absent, report blocked rather than completing a producer without its edge). CompletionSummary records nonzero map/offer counts, exact seven-key roster, configured-principal/unique-node evidence, sibling real-handler outcome/code/layer, drill results, line counts, WIP adoption provenance, and exact test counts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-planning-authorities.ts",
+        "apps/daemon/src/http/affordance-planning-authorities.js",
+        "apps/daemon/src/http/affordance-contract.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0169055cad324b7f84a2e90f0b46f8e0",
+  "dependsOn": [
+    "task-4451675e309e4db5b7388ecabc05b44f",
+    "task-4942111bdaac427985e4636b2bbd0cad",
+    "task-3aa6acdb9d294fb2b116e0e25c4504b5"
+  ],
+  "priority": "CRITICAL",
+  "order": 191.9,
+  "comments": [
+    {
+      "id": "comment-53200a710f1946b6b1aa200feb777b31",
+      "author": "architect-1f97776b",
+      "content": "POST-SUBMISSION SAFETY FINDING — STOP before apps/daemon/src/daemon-store-foundation-composition.ts. Fresh ownership scan from dispatch_authority_recon found that path is currently untracked WIP owned by task-3aa6acdb9d294fb2b116e0e25c4504b5 (REVIEW, no recorded completion/landing yet). Do not edit, restore, or absorb it. This leaf must dependOn 3aa and may resume the composition-forward step only after 3aa is DONE/landed; the remaining six paths are not a license to bypass the missing clean-checkout producer. I am escalating the dependency-field repair because runtime rejects this architect's set_task_dependencies calls.",
+      "timestamp": "2026-09-01T07:56:11.156Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T00:56:38.970Z",
+  "updatedAt": "2026-09-01T07:57:14.143Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-01T00:57:11.299Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 7
+  },
+  "contextFetchedBy": [
+    "architect-1f97776b",
+    "worker-837771aa"
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/http/affordance-planning-authorities.ts",
+    "apps/daemon/src/http/affordance-planning-authorities.js",
+    "apps/daemon/src/http/affordance-contract.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-01T00:59:36.560Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected one daemon producer leaf plus the existing parent consumer because the measured end-to-end repair spans fourteen returned-shape/direct-consumer paths and live-dispatch-payloads.ts is already at the split-before-400 boundary. Rejected widening parent 016 beyond ten paths. Rejected rotating the browser's static digest or copying createPlanRevision/createAcceptanceContract/WebCrypto logic: the fixed graph bytes happen to match, but outer authority/submission fields do not, and the canonical codecs import node:crypto. Rejected a new HTTP payload-read route/two extra rows as unnecessary fan-out: the existing authenticated affordance surface is already serialized generically over HTTP/MCP and can carry non-secret canonical material with no serializer edit. Rejected hard-coded operator-local/node-code-1, project owner, first-node selection, DEFAULT_* and caller-supplied goal/run authority. Chosen design adds one exact per-run material map produced only by journeyAuthority from configured principal + an unambiguous node; the parent will parse and consume it, remove its local fallback, and retain full browser/E2E proof.",
+    "codebaseInsights": "Measured at HEAD ca1f05c8 after the human reopen. The parent's five WIP paths are the sole semantic copy; this leaf explicitly adopts only the three daemon WIP files, while live-board.test.tsx and board-chain.spec.ts remain with parent 016. Fresh focused gates: daemon 3 files/32 tests and Control Room 2 files/76 tests pass; daemon/CR/E2E typechecks pass. Fresh real Playwright executes 1 case, accepts six clicks, reaches the nondefault offered plan.propose, then returns ILLEGAL_TRANSITION @ CORE_REDUCER. Browser submission d0266c… differs from canonical daemon output; authority is unequal even though current graph bytes/hash are invariant. createAffordancePort currently receives nodes but not principalId; daemon-store-foundation-composition owns the real config.principalId and mergedNodes. Project owner is caller payload and cannot substitute for author. journeyAuthority is the sole canonical producer and requires exactly one node. HTTP listener/MCP serialize AffordanceSurface generically; exact shape/reachability scans found no serializer edit. Existing .js daemon modules use one-line re-export bridges. Current physical production lines are roughly affordance-read 301 WIP, contract 128, composition 352, journey-authority-bodies 251; new focused module/bridge keep all owned production files below 400.",
+    "risks": "The parent dependency-field update is requested from governor-425e4c88 because moe.set_task_dependencies misclassifies this architect worker; the leaf must not complete until parent 016 actually lists it in dependsOn. Preserve/declare the adopted WIP before any edit; the recovery ref contains only pre-WIP bytes. Snapshot nodes once—calling a dynamic provider twice could bind authority to a different roster than node cards. Treat zero/multiple nodes, absent/empty principal, missing own binding, and conflicting eligible runs as no material; never choose first or throw open a default. Keep nested authority bytes verbatim and do not claim the client has cryptographically verified them. Exact stable refusal code/layer belongs to the real handler swapped-material arm; map omissions are asserted as exact absence, not fabricated daemon refusal codes. Root pnpm test excludes apps/**, so the exact gate includes both focused and full @moe/daemon runs with count lines. No eighth path may be taken without re-plan.",
+    "keyFiles": [
+      "apps/daemon/src/http/affordance-planning-authorities.ts",
+      "apps/daemon/src/http/affordance-contract.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/http/affordance-read-planning.test.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/daemon/src/planning/journey-authority-bodies.ts",
+      "apps/daemon/src/http/affordance-planning-offers.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-09-01T07:54:51.976Z",
+    "escalatedAt": "2026-09-01T07:54:51.976Z"
+  },
+  "planApprovedAt": "2026-09-01T00:59:38.806Z",
+  "workStartedAt": "2026-09-01T07:55:35.502Z",
+  "blockedReason": "Architect safety finding comment-53200a710f1946b6b1aa200feb777b31 is confirmed on disk: apps/daemon/src/daemon-store-foundation-composition.ts is untracked WIP owned by task-3aa6acdb9d294fb2b116e0e25c4504b5, which is currently PLANNING with commits=[] and landing={}. This leaf's dependency field omits task-3aa, so runtime offered it before the prerequisite landed. Editing the required composition path would overwrite/absorb foreign WIP and make clean-checkout delivery false. No source edit was made; parent-adopted affordance WIP remains byte-preserved. Resume step-1 only after task-3aa6acdb9d294fb2b116e0e25c4504b5 is DONE/landed and the dependency auto-unblocks.",
+  "blockedOnTaskIds": [
+    "task-3aa6acdb9d294fb2b116e0e25c4504b5"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-01T07:57:14.143Z"
+}

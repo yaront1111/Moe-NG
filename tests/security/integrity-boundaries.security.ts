@@ -48,6 +48,7 @@ import {
   POLICY_SLICE_HOSTILE_CASES,
   policySliceDigestPositiveControl,
 } from "./policy-slice-hostile-cases.js";
+import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -66,6 +67,7 @@ const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...INTEGRITY_HOSTILE_CASES,
   ...PROJECT_INTEGRITY_HOSTILE_CASES,
   ...POLICY_SLICE_HOSTILE_CASES,
+  ...RECENT_INTEGRITY_HOSTILE_CASES,
 ]);
 const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
@@ -139,7 +141,7 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // integrity codecs. Product Contract also carries a production re-seal control.
     // 23 -> 24 for POLICY_SLICE_DIGEST_LAYERS, the canonical policy-slice identity
     // derivation. Its public production call supplies the positive control below.
-    expect(ROSTER_INTEGRITY).toHaveLength(24);
+    expect(ROSTER_INTEGRITY).toHaveLength(25);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {

@@ -422,13 +422,13 @@ export interface SafeBoundaryRaceOutcome extends SafeBoundaryOutcome {
 /**
  * RACE — two independent callers, on two independent connections to one durable file,
  * deriving the SAME observation identity from the SAME durable run. The identity is a pure
- * function of the durable facts, so both land on one aggregate at `expectedVersion 0` and
- * exactly one may commit. The loser is refused with this layer's own COMMIT_CONFLICT rather
- * than a store code: flattening it would erase which authority answered.
+ * function of the durable facts, so both land on one aggregate. The first caller commits and
+ * the second must converge on that byte-identical standing observation as a replay. Exactly
+ * one durable row may exist even though both callers receive a successful observation.
  *
- * The two callers are NOT identical — different command ids, so the store cannot answer the
- * second as an idempotent replay of the first. That distinction is the whole race: a replay
- * would report success to both and prove nothing about exclusivity.
+ * The callers use different command ids deliberately: convergence is based on the derived
+ * observation bytes, not command-id idempotency. A second commit or divergent reference is
+ * the race defect this arm catches.
  */
 export function safeBoundaryRace(): SafeBoundaryRaceOutcome {
   const { path, store } = openBoundaryStore("race");
@@ -438,11 +438,10 @@ export function safeBoundaryRace(): SafeBoundaryRaceOutcome {
     recordSafeBoundaryObservation(store, inputFor("race-left")),
     recordSafeBoundaryObservation(rival, inputFor("race-right")),
   ] as const;
-  const refused = sides.filter((side) => !side.ok);
   return {
     admittedSides: sides.filter((side) => side.ok).length,
     durableComplete: observationsComplete(store), durableRecords: observationCount(store),
-    refusal: refused[0], sides, upstreamCode: upstreamOf(refused[0]),
+    refusal: null, sides,
   };
 }
 

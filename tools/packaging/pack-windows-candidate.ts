@@ -26,6 +26,20 @@ const CANDIDATE_PREFIX = "moe-windows-candidate-owner-";
 const CANDIDATE_MARKER = ".moe-windows-candidate-owner";
 const WINDOWS_ARCHIVE = "moe-windows.zip";
 const MAX_CANDIDATE_BYTES = 512 * 1024 * 1024;
+const WINDOWS_PUBLICATION_FAILURE = /MOE_WINDOWS_PUBLICATION_FAILURE\|([a-z]+(?:-[a-z]+)*)\|(-?\d+)/;
+const WINDOWS_PUBLICATION_STAGES = new Set([
+  "decode", "ancestor-open", "output-open", "temporary-create", "candidate-open", "copy",
+  "archive-delete", "marker-delete", "dist-delete", "root-delete", "rename", "verify",
+]);
+
+function windowsPublicationCause(stderr: string): Error | undefined {
+  const match = WINDOWS_PUBLICATION_FAILURE.exec(stderr);
+  const stage = match?.[1];
+  const nativeError = Number(match?.[2]);
+  if (stage === undefined || !WINDOWS_PUBLICATION_STAGES.has(stage)
+    || !Number.isSafeInteger(nativeError)) return undefined;
+  return new Error(`PACK_WINDOWS_PUBLICATION_FAILED:${stage}:WIN32_${nativeError}`);
+}
 
 export interface PrivateWindowsCandidate {
   readonly root: string;
@@ -273,7 +287,10 @@ export function publishPrivateWindowsCandidate(
     if (packOutputPathPresent(output.zip)) {
       throw new PackOutputError("PACK_OUTPUT_PUBLICATION_CONFLICT");
     }
-    throw new PackOutputError("PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE");
+    const cause = windowsPublicationCause(result.stderr);
+    throw cause === undefined
+      ? new PackOutputError("PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE")
+      : new PackOutputError("PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE", { cause });
   }
   assertSameObservation(expected, fileObservation(output.zip, output.dist));
   return output.zip;

@@ -142,7 +142,7 @@ function request(overrides: Readonly<Record<string, unknown>> = {}): Record<stri
     environment: { SYSTEMROOT: "C:\\Windows" },
     reconciliation: null,
     limits: { stdoutBytes: 4_096, stderrBytes: 4_096, tailBytes: 256, timeoutMs: 1_000 },
-    renderedContext: "sealed activation context",
+    renderedContext: "sealed launch context",
     contextManifestDigest: "cd".repeat(32),
     launchSelection: SELECTION,
     ...overrides,

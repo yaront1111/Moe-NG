@@ -390,6 +390,10 @@ function expectUnknown(
 
 const DUPLICATE_ATTEMPT = "attempt-shared";
 const UNRELATED_ACTIVATIONS = 99;
+// These cases each commit 102 complete activation histories while the daemon
+// suite runs four worker files. Keep the test bounded without making hosted
+// Windows filesystem contention a 120-second coin flip.
+const PAGE_BOUNDARY_TIMEOUT_MS = 180_000;
 
 interface Ledger {
   readonly duplicates: readonly Activated[];
@@ -464,7 +468,7 @@ describe("readFoundationActivationByAttempt scans past its first hit", () => {
     expectUnknown(answer, "FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS");
     expect(counted.pages()).toBeGreaterThanOrEqual(2);
     expect(snapshot(ledger.store)).toEqual(before);
-  }, 120_000);
+  }, PAGE_BOUNDARY_TIMEOUT_MS);
 
   it("binds a unique activation that only appears on the second page", () => {
     const ledger = seedLedger("page-two");
@@ -486,7 +490,7 @@ describe("readFoundationActivationByAttempt scans past its first hit", () => {
     });
     expect(counted.pages()).toBeGreaterThanOrEqual(2);
     expect(snapshot(ledger.store)).toEqual(before);
-  }, 120_000);
+  }, PAGE_BOUNDARY_TIMEOUT_MS);
 });
 
 /* -------------------------------------------------------------------------

@@ -48,6 +48,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Record host facts
@@ -196,6 +197,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       # windows-latest hands a job an 8.3-MANGLED temp directory,
@@ -272,6 +274,11 @@ jobs:
       # cmdlet like Tee-Object does not touch it — which is the pwsh equivalent
       # of the PIPESTATUS read the host-evidence job performs.
       - name: Test
+        env:
+          # Windows publication tests take no-delete-sharing handles over their exact temp
+          # ancestry. Parallel files deleting sibling temp trees create a false host race;
+          # serialize this lane while each test's own process races remain intact.
+          VITEST_MAX_WORKERS: 1
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false

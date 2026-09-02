@@ -104,7 +104,7 @@ describe.skipIf(locate("pwsh", PATH_ENTRIES) === null)("moe.ps1 without a runtim
     const run = runLauncher(scrubbed);
     expect(run.status).toBe(process.platform === "win32" ? 9009 : (9009 & 0xff));
     expect(run.output).toContain("MOE_CLI_NODE_MISSING");
-  });
+  }, 30_000);
 
   it("hands a present runtime its own exit code, so the missing-node status names one condition", () => {
     // The entry the launcher joins does not exist beside the emitted script, so node

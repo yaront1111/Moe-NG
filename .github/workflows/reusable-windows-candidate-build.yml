@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+    env:
+      MOE_REQUIRE_ACTION_PNPM: "1"
     outputs:
       artifact_digest: ${{ steps.transfer.outputs['artifact-digest'] }}
       artifact_id: ${{ steps.transfer.outputs['artifact-id'] }}
@@ -90,6 +92,8 @@ jobs:
             exit 1
           }
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        env:
+          NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy
         with:
           version: 11.0.8
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

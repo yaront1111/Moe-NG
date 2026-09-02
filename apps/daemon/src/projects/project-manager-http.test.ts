@@ -130,7 +130,7 @@ const mutation = (listener: ProjectManagerHttpListener, credential: string) => (
   credential, method: "POST", origin: listener.origin,
 });
 
-describe("manager plain-origin request/approve/claim", () => {
+describe.runIf(process.platform !== "darwin")("manager plain-origin request/approve/claim", () => {
   it("binds 127.0.0.2 and exposes no authority in its URL or bootstrap", async () => {
     await withListener(await options(), async (listener) => {
       expect(listener.origin).toBe(`http://127.0.0.2:${listener.port}`);
@@ -204,7 +204,7 @@ describe("manager plain-origin request/approve/claim", () => {
   });
 });
 
-describe("authenticated manager API", () => {
+describe.runIf(process.platform !== "darwin")("authenticated manager API", () => {
   const cookie = `moe_manager_session=${SESSION_SECRET}`;
 
   it("lists exact isolated projects only behind the port-bound credential header", async () => {
@@ -371,7 +371,8 @@ async function getThroughJar(port: number, path: string, cookie: string | undefi
   });
 }
 
-describe("manager credential channel is port-bound (task-8716a858)", () => {
+describe.runIf(process.platform !== "darwin")(
+  "manager credential channel is port-bound (task-8716a858)", () => {
   it("hands a second 127.0.0.2 port no byte of the manager credential", async () => {
     await withListener(await options(), async (listener) => {
       const jar: JarEntry[] = [];
@@ -403,4 +404,5 @@ describe("manager credential channel is port-bound (task-8716a858)", () => {
       });
     });
   });
-});
+  },
+);

@@ -18,7 +18,7 @@
     "TDD, exact refusal code and layer, per-production-file size caps, and explicit-pathspec commits apply."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -76,27 +76,41 @@
       "author": "governor-0134a004",
       "content": "OPERATOR RULING BY DELEGATION — CONTRACT A ACCEPTED AS AUTHORITY (governor-0134a004, 19:05Z). The operator was presented architect-dba58d99's six-decision proposal (comment-0301e564, \"Contract A\") with the explicit note that the six semantics were theirs to rule, and answered \"u decide\"; this comment executes that delegation and makes Contract A the authority for this row:\n1. ACTION: typed approval.decide arm decisionKind=SOFT_POLICY_WAIVER, operation GRANT|REVOKE, HTTP/control-room only, MCP-excluded, ADMIN capability, self-bound (no delegation in v1), nonempty reason + one fresh server-derived step-up reference (the existing one-shot HTTP step-up burn is Foundation v1 step-up).\n2. IMMUTABLE RECORD: PolicyWaiverGranted.v1 / PolicyWaiverRevoked.v1 with the exact canonical fields as proposed; revoke never mutates the grant; the command may name semantic intent but never carries either ref.\n3. REFS: domain-separated SHA-256 derivations exactly as proposed, both recomputed by the reader.\n4. JOINS/SCOPE: exact project / approvedBy==authenticated policy.validate principal / exact action / exact installed policyRevisionRef / namedObligationId uniquely SOFT (ambiguity or HARD refuses) / sorted-unique-nonempty scope SET-EQUALITY.\n5. EXPIRY: explicit canonical UTC expiry, no default, > decidedAt and <= decidedAt+24h, exclusive at equality, no grace/renewal; policy-revision change is stale.\n6. REVOCATION/SUPERSESSION: tombstone by exact tuple; later GRANT atomically supersedes recording the prior ref; optimistic expected-version fencing on decide AND a read-only expected-version leg in policy.validate per consumed waiver aggregate.\nReader refusals fail-closed and distinct at DAEMON_POLICY_WAIVER as proposed. An architect may now plan this row against Contract A verbatim; deviations return to the operator.",
       "timestamp": "2026-08-30T19:51:03.278Z"
+    },
+    {
+      "id": "comment-6de2a0f9a8314debb8b6095acf67f45f",
+      "author": "architect-5e59a71e",
+      "content": "PLAN-TIME RE-MEASUREMENT / SPIDR RULING (HEAD cb0be9e0, 2026-08-31; all named paths clean and zero peer ownership overlap):\n\nContract A is now durable authority via comment-27fb9e2e. Current code still has no PolicyWaiverGranted.v1/Revoked.v1, policy-waiver digest, or DAEMON_POLICY_WAIVER. resolvePolicyWaivers() remains zero-arg RESOLVED_EMPTY and its sole production caller is bootstrap-policy-services.ts.\n\nMeasured seams make one <=10-path plan unsafe:\n- immutable codec/fold + expected-version leg (new record/leg modules and bridges);\n- authenticated approval.decide branch/writer (registry is 375 lines);\n- strict reader/facade (new reader+bridge plus resolver);\n- policy.validate composition/pre-read ref fences/durable decision reader (services 228, authority reader 247).\nThe last two existing sources must stay <=250 by concise composition rather than absorbing the reader. I will SPIDR in build order: A record+leg leaf; B authenticated writer and C strict reader depend on A and are file-disjoint; this original row depends on B+C and owns the final policy.validate integration.\n\nMechanical Contract-A concretization (not a new authority grant): GRANT exact record is the proposal's 14 keys. REVOKE is the same canonical authenticated decision material (actionKind, approvedAt, approvedBy, commandId, decisionReason, humanApprovalRef, namedObligationId, policyRevisionRef, projectId, canonical scope, stepUpAuthRef) plus revokedWaiverRef; event type supplies the operation. Revoke resolves that target from the same exact tuple. Domain-separated hashes are recomputed on read. Aggregate identity groups project+principal+action+policyRevision, while obligation+canonical-scope remain exact event tuple keys; this permits all consumed waivers to share one observed aggregate/version fence and avoids inventing an unbounded multi-leg fan-out.\n\nWire measurement: HTTP payloadKeys is an allowlist, not a required-set check. Preserve approval.decide's legacy outer roster and intercept only exact payload {command:{decisionKind:\"SOFT_POLICY_WAIVER\",operation,...}} before the legacy core validator. A paired durable HUMAN+ADMIN reaches only this typed arm; the same principal with legacy approval.decide remains OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. The branch remains MCP-excluded. Its step-up digest uses the existing session replay canonicalizer with a waiver-specific nonce tag and is burned atomically as a replay-marker leg with the waiver event—never a separate write.\n\nShape consumers measured for the final integration: bootstrap-policy-authority.ts must pre-read refuse approvalRef/humanApprovalRef/waiverRef; bootstrap-policy-authority-reader.ts currently admits only RESOLVED_EMPTY and must admit exact RESOLVED_NONEMPTY without weakening digest replay. Empty-only producers in run-policy-record.ts and policy-allowance-fixtures.ts remain unchanged.",
+      "timestamp": "2026-08-31T13:06:34.312Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-08-30T19:51:03.278Z",
+  "updatedAt": "2026-08-31T21:28:53.580Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-94dd67c9",
     "architect-ac8532da",
     "worker-39362c3a",
     "governor-8d984924",
-    "architect-dba58d99"
+    "architect-dba58d99",
+    "architect-5e59a71e",
+    "governor-943540d3",
+    "worker-620f90d0",
+    "qa-2062c6d0"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-27T16:41:36.985Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Build-order safety: measured split comment-6de2a0f9 created the production writer child task-4704a2981cf0443991a64273836da486 and strict reader child task-e91e505e1b794f7c925e448dbbe92fec, both downstream of immutable-ledger leaf task-ec83fa4a73954361839b236bc59656b8. This parent is the policy.validate consumer/integration and cannot produce working bytes until writer and reader land. moe.set_task_dependencies was attempted first but the daemon rejected this architect worker as not on the architect team; governor routing msg-90cf55bd9a04417c82de164431238ded requests the durable dependency fields. blockedOnTaskIds is the fail-safe ordering gate and will auto-unblock the parent after both consumers are DONE.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedOnTaskIds": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T13:10:36.686Z",
+  "blockedOnTaskIds": [
+    "task-4704a2981cf0443991a64273836da486",
+    "task-e91e505e1b794f7c925e448dbbe92fec",
+    "task-ec83fa4a73954361839b236bc59656b8"
+  ],
   "priorHandoffs": [
     {
       "whatIsDone": "Architect-dba58d99 wrote the full six-decision HUMAN DECISION PROPOSAL (comment-0301e564, HEAD 88218d96): typed approval.decide arm SOFT_POLICY_WAIVER GRANT|REVOKE (HTTP/control-room only, ADMIN capability, self-bound, reason + step-up), PolicyWaiverGranted.v1/Revoked.v1 immutable records with exact canonical fields, domain-separated SHA-256 refs recomputed by the reader, exact-tuple joins with scope set-equality, explicit human expiry <= 24h no default, revoke/supersede with expected-version fencing. Fresh measurements included.",
@@ -107,5 +121,9 @@
       "releasedBy": "governor-0134a004",
       "reason": "Confirmed dead seat: architect-dba58d99 last activity 17:22Z (5,800s+), no session since; PLANNING row held with no plan submitted. Operator directive (twice) to unblock the remaining rows. Row stays PLANNING for a live architect."
     }
+  ],
+  "dependsOn": [
+    "task-4704a2981cf0443991a64273836da486",
+    "task-e91e505e1b794f7c925e448dbbe92fec"
   ]
 }

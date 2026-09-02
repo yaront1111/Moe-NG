@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -25,7 +25,7 @@ function archiveRoster(snapshot: ReturnType<typeof snapshotPackTree>) {
 }
 
 function temporaryRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "moe-pack-broker-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-pack-broker-")));
   roots.push(root);
   return root;
 }

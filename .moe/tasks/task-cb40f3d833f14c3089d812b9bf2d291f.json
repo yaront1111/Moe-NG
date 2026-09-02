@@ -1,0 +1,129 @@
+{
+  "id": "task-cb40f3d833f14c3089d812b9bf2d291f",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Compose keyed live pairing and close Control Room runtime-provider arms",
+  "description": "SPIDR runtime-provider producer+consumer+arms row authorized by governor comment-7b46f67b32864ba09619355782a69e2a on parent task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d. Fresh grep at HEAD 438caef30a96f080b5addc4bcd394bb903d70839 found PRD_LOCAL_LAYER and SESSION_KEY_LAYER absent from the master boundary roster, and found generateSessionKey/openSessionRequestDigest/signSessionChallenge referenced only by the producer barrel/tests/E2E—not by a production Control Room call site. This row closes the real consumer edge: the live pairing flow uses the landed browser key module, presents the public key on the approved claim, signs the daemon-issued challenge, and completes /session/pair/open; failures remain fail-closed. It also extracts the daemon's proof framing into the existing browser-safe contracts canonical module rather than reimplementing it. Exact owned path set (10): packages/contracts/src/session-authority-canonical.ts; packages/contracts/src/session-authority-canonical.js; packages/contracts/src/index.ts; apps/daemon/src/identity/session-authority-contracts.ts; apps/daemon/src/identity/session-authority-protocol.ts; apps/control-room/src/live/live-keyed-session.ts (new); apps/control-room/src/live/live-keyed-session.test.ts (new); apps/control-room/src/live/live-handshake.ts; apps/control-room/src/v2/goals/use-goal-prd.ts; tests/security/runtime-provider-control-room.security.ts (new). Master roster and runtime partition edits are deferred to the serialized final integrity/roster row.",
+  "definitionOfDone": [
+    "Verify at current HEAD that task-1199836b's browser key functions and task-2f554e29's challenge/open route are landed; record `git grep -l` showing no production Control Room caller yet. Verify the existing @moe/control-room -> @moe/control-room-client and @moe/contracts manifest edges, pnpm-lock importer entries, and a temporary compiled bare-specifier probe deleted in the same command.",
+    "Red-first extract canonicalSessionProofBytes plus its proof algorithm/protocol constants into the existing dependency-free contracts canonical module; daemon contracts/protocol re-export or compose the shared surface without changing their public signatures. Existing daemon verifier tests and a browser-side equality arm must prove byte identity; no second canonicalizer or node: import reaches the browser.",
+    "A new <=250-line live-keyed-session module owns key generation, approved-claim material, challenge signing, and bounded /session/pair/open completion; live-handshake only orchestrates it and stays below 400. The real production flow consumes the existing @moe/control-room-client functions, keeps the private key browser-only/non-extractable, and returns no live setup until the signed open succeeds.",
+    "Add nonzero BEFORE/AFTER/RACE production arms for SESSION_KEY_LAYER and PRD_LOCAL_LAYER with exact code/layer: generateKey throw and non-keypair/wrong-SPKI all refuse SESSION_KEY_ALGORITHM_UNSUPPORTED@CONTROL_ROOM_SESSION_KEY; an oversized PRD never calls text(), an otherwise-valid read throw refuses PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL, and last-selection race cannot publish stale bytes. The PRD seam is an extracted pure reader called by useGoalPrd, not a helper that reimplements it.",
+    "Focused contracts, daemon protocol, control-room live-keyed-session, and runtime-provider security gates run standalone/unpiped with nonzero Test Files/Tests lines. Mutate the shared proof framing, keypair guard, PRD size/read guard, and one generated arm denominator; each named assertion must red, then prove exact restore. Broad app/package red is merge-base-versus-HEAD path-attributed."
+  ],
+  "taskRails": [
+    "Own exactly the ten listed paths; new files are live-keyed-session.ts, live-keyed-session.test.ts, and runtime-provider-control-room.security.ts. Do not edit BOUNDARY_ROSTER or runtime-provider-invariants in this row.",
+    "This is the missing real consumer edge for DONE task-1199836b, not a mock-backed re-proof. A key generated only in a test or a signed request assembled only by the E2E spec does not satisfy the row.",
+    "Private key material never leaves the browser, enters logs, request bodies, headers, or storage. Public SPKI and signatures follow the landed exact protocol; no alternate verifier or canonicalizer.",
+    "Keep contracts dependency-free, daemon verifier authoritative, and live-handshake below 400 by placing the keyed flow in the new focused module. Preserve all foreign WIP and explicit path ownership."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Adopt the dependency records only after the runtime releases this row. From get_context.epicSiblings, require A, B, and C all DONE with landing.merged=true; record each lastCompletion SHA, verification command/count lines, completionSummary, reviewSummary, and mutation-red/restore evidence. Name the certified capability per child: A = singular browser-safe session-proof bytes plus exact CONTROL_ROOM_SESSION_KEY producer arms; B = production Control Room keyed claim/challenge/signed-open consumer with legacy bearer fail-closed; C = pure PRD reader/current-generation publication plus CONTROL_ROOM_NEWGOAL arms. Confirm task-45839f34c88d4db291146bd6f2216b99 remains the downstream sole master-roster publisher and depends on this parent, so its not-yet-green completeness rows are not silently pulled forward. Record the claim HEAD and the exact pre-gate failure sets for standalone `pnpm typecheck`, root `pnpm test` (root lane only), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, and the full tests/security lane. Make no filesystem edits and report modifiedFiles as `[]`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "At the delivered-tree anchor, verify composition rather than producer existence. Use reachability and literal-shape greps to prove: live-keyed-session.ts imports and calls the four landed bare-specifier producers; live-handshake.ts is its real production caller; main.tsx and cordum-handshake.tsx still call the unchanged resolver; the committed pairing parity test drives the real daemon claim and createPairingOpenCompletion authority, asserts exact keyed/open shapes, and pins a bearer response to LIVE_PAIRING_REFUSED with zero open/setup; no production body/header/storage/log result contains privateKey. Prove contracts holds the sole browser-safe canonicalSessionProofBytes implementation and daemon protocol delegates to it while retaining the sole verifier. Prove readGoalPrdFile is called by the production hook, not only tests, and the committed form/security arms cover oversize-before-text, unreadable exact code/layer, and stale-selection race. Inspect runtime-provider-control-room.security.ts for exact nonempty subject set `{SESSION_KEY_LAYER, PRD_LOCAL_LAYER}`, exact BEFORE/AFTER/RACE tuples, and positive denominators. Also record that the two identifiers remain absent from the master roster as an expected downstream premise, not a green claim or a reason to edit it. No temporary helper may substitute for these committed consumer edges.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "Adversarial closure review with zero mutations and zero edits: mutation drills belong to the three DONE implementation owners and are adopted from their durable completion/review records, not repeated against unowned bytes. Attack the cross-child seams instead: could a second canonicalizer still produce the signature; could the private key escape by object spread/serialization; could missing challenge, failed/mismatched open, abort, timeout, or legacy bearer still construct LiveSetup; could approval-required retries rotate the key; could PRD text/digest run after oversize or stale bytes publish after a newer unreadable selection; could the security sheet pass with zero cases or one missing arm; could a test-only assembler satisfy the consumer claim. For every question, cite the delivered production call site and committed exact assertion (including stable code and refusing layer where exposed). Confirm the parent has no owned source path, no generated fan-out, no docs change, and no reason to amend any child or final-roster file; any missing committed edge is a child-delivery defect to report, never something this closure patches.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run one SHA-stable composed closure command and use its fresh output for complete_task. Exact Windows PowerShell command: `& { $anchor = (& git rev-parse HEAD).Trim(); $legs = @(@('--filter','@moe/contracts','exec','vitest','run','src/session-authority-canonical.test.ts','--reporter=dot'), @('--filter','@moe/control-room-client','exec','vitest','run','src/session-key.test.ts','--reporter=dot'), @('--filter','@moe/daemon','exec','vitest','run','--root','.','--config','package.json','src/identity/session-authority-protocol.test.ts','src/identity/session-authority.test.ts','--reporter=dot'), @('--filter','@moe/control-room','exec','vitest','run','src/live/live-keyed-session.test.ts','--reporter=dot'), @('--filter','@moe/control-room','exec','vitest','run','src/live/live-handshake.test.ts','--reporter=dot'), @('--filter','@moe/control-room','exec','vitest','run','src/scaffold.test.tsx','--reporter=dot'), @('--filter','@moe/control-room','exec','vitest','run','src/v2/cordum-app.test.tsx','--reporter=dot'), @('exec','vitest','run','tests/integration/control-room/pairing-claim-parity.test.ts','--reporter=dot'), @('--filter','@moe/control-room','exec','vitest','run','src/v2/goals/new-goal-form.test.tsx','--reporter=dot'), @('exec','vitest','run','--config','tests/security/vitest.config.ts','tests/security/runtime-provider-control-room.security.ts','--reporter=dot'), @('--filter','@moe/contracts','typecheck'), @('--filter','@moe/control-room-client','typecheck'), @('--filter','@moe/daemon','typecheck'), @('--filter','@moe/control-room','typecheck'), @('exec','tsc','-p','tests/security/tsconfig.json'), @('--filter','@moe/contracts','test'), @('--filter','@moe/control-room-client','test'), @('--filter','@moe/control-room','test')); foreach ($argv in $legs) { & pnpm @argv; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }; $after = (& git rev-parse HEAD).Trim(); if ($after -ne $anchor) { Write-Error \"HEAD advanced during closure gate: $anchor -> $after\"; exit 86 }; Write-Output \"CLOSURE_SHA=$anchor\"; exit 0 }`. Every Vitest leg must print nonzero Test Files/Tests counts; no count is UNVERIFIED. On POSIX run the identical argv legs serially with executable `pnpm`, unpiped, and enforce the same before/after SHA equality. Then rerun each broad leg from step 1 standalone at the same SHA, compare pre/post failing-path sets, and disclose all foreign/staging red verbatim; specifically do not call the full security completeness/roster lane green before downstream task-45839f34. Complete only when the composed command exits 0, the three child SHAs are ancestors of CLOSURE_SHA, the parent modified-file list is empty, and broad added-failure intersection with the parent's empty owned-path set is empty. Put SHA, every count denominator, child SHAs, consumer-edge grep, and expected downstream roster diagnostics in completionSummary or one <4500-char comment.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor ruling comment-bfb2ead8: three-way SPIDR split authorized (proof framing / keyed flow+callers / PRD-runtime hostile), no-fail-open binding on children, skill absence not a blocker. Next architect files children then re-scopes this parent.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+  "dependsOn": [
+    "task-d152f559bc2e4c9785f343ede125dcd8",
+    "task-28cd95db8bb6444b861eac4384c7fdc2",
+    "task-87f13cbaa8ee43208810abead90d5744"
+  ],
+  "priority": "CRITICAL",
+  "order": 188.4,
+  "comments": [
+    {
+      "id": "comment-62aa06055c374bc9888c06b6d8af9a6c",
+      "author": "architect-21d05545",
+      "content": "PLAN-TIME REACHABILITY / SCOPE BLOCK (delivered-tree anchor HEAD b3a7551dfaaf9473a2bbabfb9cef93dda9b451ad). All seven existing owned paths were clean; the three declared new files are absent. Physical lines: contracts canonical 68, contracts index 228, daemon contracts 221, daemon protocol 305, live-handshake 307, use-goal-prd 108; no existing production source crosses 400. Both prerequisite rows are DONE/merged. `git grep` confirms generateSessionKey/openSessionRequestDigest/signSessionChallenge have no production Control Room caller; only producer barrel/tests/E2E use them. `apps/control-room/package.json` declares both @moe/control-room-client and @moe/contracts, pnpm-lock importer lines 74-79 link both workspaces, and a temporary `apps/control-room/src` compiled probe imported both bare specifiers under `pnpm --filter @moe/control-room typecheck` exit 0, then was deleted by the same Node command.\n\nThe exact ten-path roster is insufficient for the required behavior and cannot be planned without violating rails 1/8. Changing resolveLiveSetupFromHandshake from bearer claim -> setup into key-bearing claim -> challenge -> signed `/session/pair/open` necessarily changes exact fetch/response expectations in at least THREE asserting consumers omitted from ownership: `apps/control-room/src/live/live-handshake.test.ts` (healthy path explicitly expects exactly bootstrap/request/claim and a claim body with no challenge), `apps/control-room/src/v2/cordum-app.test.tsx` (real handshake fixtures return the old seven-key claim and no open route), and `tests/integration/control-room/pairing-claim-parity.test.ts` (drives daemon bearer/keyed claim bodies through the current client but serves no open route). Accepting those old keyed responses as a bearer fallback would contradict DoD 3's “no live setup until signed open succeeds” and fail open.\n\nA second omitted production path is `packages/control-room-client/src/session-key.ts`: it owns `isKeyPair`, the 44-byte SPKI guard, and `SESSION_KEY_ALGORITHM_UNSUPPORTED@CONTROL_ROOM_SESSION_KEY`. DoD 4 and 5 require non-keypair/wrong-SPKI arms and a production mutation of that keypair guard; mutating or changing this unowned path is forbidden. `git grep` verified those guards are not present in any owned module.\n\nAdding the four mandatory reachable paths to the ten listed paths yields 14 distinct files, beyond the daemon's <=10 plan cap, so this is a SPIDR split signal rather than an amendment. Suggested production slices: (A) shared browser-safe proof framing/constants with contracts+daemon compatibility; (B) real keyed live pairing with session-key.ts, live-keyed-session, live-handshake, and all three existing caller tests; (C) PRD pure-reader plus runtime-provider hostile table after A/B, retaining exact code/layer and denominator drills. The `moe-epic-breakdown` skill required before filing split rows is not installed/exposed in this session (only moe-planning/moe-qa-loop exist), so I did not invent child rows without it.",
+      "timestamp": "2026-08-30T22:19:25.023Z"
+    },
+    {
+      "id": "comment-bfb2ead85631448db049a5ea7a5fbe9f",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RULING — SPIDR split AUTHORIZED per comment-62aa0605's own decomposition. Three children (architect files them; governor will set deps on the posted ids):\n1) PROOF FRAMING row — the keypair-guard arms/drill seam, owning packages/control-room-client/src/session-key.ts and its direct proof files;\n2) KEYED LIVE FLOW + CALLERS row — the handshake change plus the three asserting consumers it reaches (live-handshake.test.ts, cordum-app.test.tsx, pairing-claim-parity.test.ts);\n3) PRD/RUNTIME HOSTILE COVERAGE row — the remaining runtime-provider arms.\nThis parent re-scopes to whatever remains within its ten paths after the children exist, or becomes the thin serialized closure if nothing remains — your measurement decides, state it when filing.\n\nBINDING ON EVERY CHILD: no bearer fallback that fails open — the old path is removed or refuses closed (FENCE lineage, ffa05408 ruling); producer behavior and its hostile arms stay together (same rail-compliance basis as the f8ea0a2f reslice, comment-7b46f67b).\n\nSKILL ABSENCE IS NOT A BLOCKER: the moe-epic-breakdown skill is guidance; your comment already contains the measured decomposition. File the children with create_task directly, carrying the same exact-path rosters and one-seam-per-row discipline you would have gotten from the skill. Row returns to PLANNING. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T22:20:00.795Z"
+    },
+    {
+      "id": "comment-1b0aac3fe68d492192a73641cd9882d3",
+      "author": "architect-21d05545",
+      "content": "SPIDR CHILDREN FILED under governor ruling comment-bfb2ead85631448db049a5ea7a5fbe9f (delivered-tree measurement HEAD d0882c7a433156f9f644b172c989e48eefe42c75).\n\nA — task-d152f559bc2e4c9785f343ede125dcd8, order 188.31, PLANNING, depends on DONE 2f554e29 + 1199836b. Exact 10 paths: contracts canonical ts/js/index + canonical test; daemon session-authority contracts/protocol + protocol test; control-room-client session-key + test; NEW runtime-provider-control-room.security.ts. It owns shared browser-safe proof framing/constants AND the production SESSION_KEY keypair/SPKI guards with BEFORE/AFTER/RACE arms, keeping producer and hostile proof together.\n\nB — task-28cd95db8bb6444b861eac4384c7fdc2, order 188.32, PLANNING, depends on A + DONE 2f554e29 + 1199836b. Exact 7 paths: NEW live-keyed-session.ts/test; live-handshake.ts/test; scaffold.test.tsx; cordum-app.test.tsx; pairing-claim-parity.test.ts. This closes the real Control Room consumer edge through keyed claim -> exact challenge -> signed /session/pair/open -> setup, with no missing-challenge/bearer fallback. Correction to my earlier three-consumer list: shape grep found scaffold.test.tsx also hard-pins the bearer claim body/count and must be owned; it is included.\n\nC — task-87f13cbaa8ee43208810abead90d5744, order 188.33, PLANNING, depends on A. Exact 3 paths: use-goal-prd.ts; new-goal-form.test.tsx; the A-landed runtime-provider-control-room.security.ts. It serially extends A's receipt/denominator with PRD_LOCAL_LAYER BEFORE/AFTER/RACE arms and the production reader/generation seam; A and C cannot collide because C depends on A.\n\nRESIDUAL PARENT MEASUREMENT: every one of the original ten paths is now owned by A, B, or C; no implementation byte remains honestly assignable to this parent. Per the ruling, re-scope this row to the thin serialized closure (or archive it if preferred), set its dependsOn to A+B+C, and do not retain the stale exact-ten implementation rail. The closure can confirm the three durable completions and combined focused counts/consumer grep without inventing a fourth implementation seam. Full runtime-provider roster/partition serialization remains in the already-designated epic-final integrity row; children run focused receipts and disclose that intentional full-lane staging red.",
+      "timestamp": "2026-08-30T22:27:47.281Z"
+    },
+    {
+      "id": "comment-70a36aa0b2fc43648cb6e4b0c2cb8efc",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RE-SCOPE AMENDMENT (completes ruling comment-bfb2ead8; where this contradicts the row description/rails, THIS COMMENT WINS). Children filed per comment-1b0aac3f: A task-d152f559 (proof + SESSION_KEY), B task-28cd95db (keyed live flow + all 4 asserting consumers, dep A), C task-87f13cba (PRD reader + serialized runtime sheet, dep A). dependsOn set to [A, B, C] (the two ids it replaced are both DONE — no gate lost).\n\nTHIS PARENT IS NOW THE THIN SERIALIZED CLOSURE: after A+B+C land, it runs the composed runtime-provider closure gate (the axis's completeness/roster arms as mapped in comment-1b0aac3f) and records the sha-anchored green. The stale exact-ten implementation rail is STRUCK — this row implements nothing (zero residual implementation, measured); a plan for it names verification legs only. Judged in intersection form against its remaining owned proof paths. The no-fail-open bearer rule stays binding here and on every child. Not archived — the closure keeps the axis's single green anchor.",
+      "timestamp": "2026-08-30T22:28:49.543Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:56:45.473Z",
+  "updatedAt": "2026-09-01T00:57:10.394Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T22:15:05.297Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 0
+  },
+  "contextFetchedBy": [
+    "architect-21d05545",
+    "worker-76a8c4ac",
+    "architect-b2b16103",
+    "architect-5e59a71e",
+    "architect-8b0f89f2",
+    "architect-1f97776b"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-31T08:13:12.662Z",
+  "planningNotes": {
+    "approachesConsidered": "Followed governor re-scope comment-70a36aa0b2fc43648cb6e4b0c2cb8efc: this parent is a zero-edit serialized acceptance closure after children A/B/C, not a fourth implementation seam. Rejected reimplementing any stale original DoD byte, adopting the children's paths, duplicating their mutation drills, or editing the master boundary roster. The dedicated final roster row task-45839f34c88d4db291146bd6f2216b99 is deliberately downstream of this parent; making it a prerequisite would create a dependency cycle. Therefore this row's green anchor is the composed focused runtime-provider/keyed-flow/PRD surface, while the full security completeness lane is run and truthfully disclosed as staging red until task-45839f34 lands. TDD and documentation phases are consciously skipped because this row changes no behavior and owns zero source files.",
+    "codebaseInsights": "Current claim context: A task-d152f559bc2e4c9785f343ede125dcd8 is DONE/merged at 79315504; B task-28cd95db8bb6444b861eac4384c7fdc2 and C task-87f13cbaa8ee43208810abead90d5744 are WORKING and remain dependsOnUnmet, so the runtime will not offer this row for implementation until both are DONE. At HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55, B's two new live-keyed-session files are still absent; C has three foreign WIP paths, which are not landed evidence and must not be adopted. A's production proof/session-key bytes are present. The original ten-path implementation roster is fully allocated to A/B/C and explicitly struck by the governor. The downstream final roster row exists, depends on this parent, and solely owns BOUNDARY_ROSTER/completeness/runtime-provider-invariants publication; its DoD names the two runtime-provider identifiers. Current focused C sheet names SESSION_KEY_LAYER and PRD_LOCAL_LAYER with exact BEFORE/AFTER/RACE tables; the master roster intentionally does not yet advertise CONTROL_ROOM_SESSION_KEY or CONTROL_ROOM_NEWGOAL. The closure must certify: A's singular browser-safe proof authority and SESSION_KEY arms; B's real production browser-key -> keyed claim -> daemon challenge -> signed open -> LiveSetup consumer with bearer fail-closed; C's pure PRD reader, last-selection fence, and PRD arms. It does so from child completion/review records plus delivered-tree grep and committed tests, never from a helper or mock-only journey.",
+    "risks": "Do not mistake current C WIP or a task completionSummary without DONE/merged review for delivered authority; adopt each child only after dependency release. Do not require the downstream master roster to be green here: that would deadlock task-45839f34, which depends on this row. Conversely, do not call the full security lane green while its two runtime-provider completeness diagnostics remain expected. A focused sheet can be vacuous unless its exact two-subject roster, BEFORE/AFTER/RACE denominators, and committed production imports are inspected; require nonzero counts. B must be a real Control Room consumer and real daemon open integration, not merely new exported functions. Anchor the combined gate to one stable HEAD; if HEAD advances during the run, rerun. This row writes no source, probe, docs, or evidence files and must report modifiedFiles as an empty list.",
+    "keyFiles": [
+      "packages/contracts/src/session-authority-canonical.test.ts",
+      "packages/control-room-client/src/session-key.test.ts",
+      "apps/daemon/src/identity/session-authority-protocol.test.ts",
+      "apps/control-room/src/live/live-keyed-session.test.ts",
+      "apps/control-room/src/live/live-handshake.test.ts",
+      "tests/integration/control-room/pairing-claim-parity.test.ts",
+      "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+      "tests/security/runtime-provider-control-room.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-31T08:13:14.784Z"
+}

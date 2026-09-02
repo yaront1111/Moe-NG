@@ -14,6 +14,7 @@ import {
   type PackFileIdentity, type PackToolLaunch, type PackTreeEntry, type PackTreeIdentity,
 } from "./pack-tool-identity.js";
 import { resolvePnpmHandoff } from "./pack-pnpm-handoff.js";
+import { normalizedPnpmPackageTreeSha256 } from "./pack-pnpm-package-identity.js";
 import { readToolchainPins } from "./toolchain-pins.js";
 
 export {
@@ -153,6 +154,19 @@ function findPnpmPackageRoot(entry: string): string {
   }
   throw new Error(`${PACK_STEP_FAILED}: pnpm identity unavailable`);
 }
+function pnpmActionDestination(
+  handoff: ReturnType<typeof resolvePnpmHandoff>, environment: NodeJS.ProcessEnv,
+): string {
+  if (handoff.kind === "package" && handoff.witnesses.length !== 1) return "";
+  const home = handoff.kind === "package" ? dirname(handoff.witnesses[0]!.path)
+    : environment["PNPM_HOME"];
+  if (typeof home !== "string" || !isAbsolute(home)) return "";
+  try {
+    const binDirectory = realpathSync(home);
+    const installRoot = dirname(binDirectory);
+    return basename(binDirectory) === ".bin" && basename(installRoot) === "node_modules" ? dirname(installRoot) : "";
+  } catch { return ""; }
+}
 
 function execute(
   tool: PackToolLaunch, args: readonly string[], cwd: string, environment: NodeJS.ProcessEnv,
@@ -206,7 +220,10 @@ export function resolvePnpmPackTool(
     const entry = realpathSync(pnpmEntry(packageRoot));
     const node = capturePackFileIdentity(dependencies.nodeExecutable ?? process.execPath);
     const tree = capturePackTreeIdentity(packageRoot);
-    if (normalizedTreeSha256(tree)
+    if (normalizedPnpmPackageTreeSha256(tree, {
+      actionDestination: pnpmActionDestination(handoff, environment),
+      pnpmVersion: pin,
+    })
       !== (dependencies.expectedPnpmPackageTreeSha256 ?? PINS.pnpmPackageTreeSha256)) {
       throw new Error(`${PACK_STEP_FAILED}: pnpm provenance invalid`);
     }

@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 20, integrity 24, durable-store 18, runtime-provider
- * 31, scheduler-activation 38 — sums to 131, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 25, integrity 25, durable-store 20, runtime-provider
+ * 33, scheduler-activation 43 — sums to 146, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -143,10 +143,15 @@ interface ScannedBoundary {
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "IDE_ADAPTER_LAYERS", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
+  { constant: "LIVE_BUDGET_COMMITMENT_LAYER", file: "apps/control-room/src/live/live-budget-commitment.ts", axis: "transport" },
   { constant: "EFFORT_ADMISSION_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  { constant: "PRD_LOCAL_LAYER", file: "apps/control-room/src/v2/goals/new-goal-form-model.ts", axis: "runtime-provider" },
+  { constant: "PLAN_APPROVAL_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
+  { constant: "PLAN_APPROVAL_BUILD_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
+  { constant: "PLAN_APPROVAL_TRANSPORT_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
   // Browser-side manager bootstrap, fragment capture and response decoding. `transport` by
   // SUBJECT: it grants no project authority and owns no runtime; it validates the loopback
   // request/response seam before handing a client to the UI.
@@ -159,7 +164,11 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // The durable policy-risk admission record binds one active graph subject to an approved
   // action. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418 (2026-08-29).
   { constant: "POLICY_RISK_LAYER", file: "apps/daemon/src/bootstrap/policy-risk-record.ts", axis: "scheduler-activation" },
+  { constant: "BUDGET_COMMITMENT_LAYER", file: "apps/daemon/src/budget/budget-commitment.ts", axis: "scheduler-activation" },
   { constant: "PROJECT_CONFIGURATION_SELECTION_LAYER", file: "apps/daemon/src/configuration/project-configuration-selection.ts", axis: "integrity" },
+  { constant: "CUTOVER_ACTIVATE_LAYER", file: "apps/daemon/src/cutover/cutover-activate-contracts.ts", axis: "scheduler-activation" },
+  { constant: "CUTOVER_ATTEMPT_LAYER", file: "apps/daemon/src/cutover/cutover-attempt-contracts.ts", axis: "scheduler-activation" },
+  { constant: "CUTOVER_GENERATION_SNAPSHOT_LAYER", file: "apps/daemon/src/cutover/cutover-generation-snapshot.ts", axis: "durable-store" },
   { constant: "DAEMON_ENTRY_LAYER", file: "apps/daemon/src/daemon-entry.ts", axis: "transport" },
   { constant: "DOCUMENT_WORK_SERVICE_LAYERS", file: "apps/daemon/src/documents/document-work-service-contract.ts", axis: "scheduler-activation" },
   // Verification activation authority: FOUNDATION_* dispatch/verification family per the
@@ -177,6 +186,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // proceed. `scheduler-activation` by SUBJECT despite living under http: it schedules an
   // admission and owns no wire codec or authenticated session record.
   { constant: "PAIRING_APPROVAL_LAYER", file: "apps/daemon/src/http/pairing-approval-contract.ts", axis: "scheduler-activation" },
+  { constant: "PAIRING_OPEN_LAYER", file: "apps/daemon/src/http/pairing-open-completion.ts", axis: "transport" },
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
@@ -217,6 +227,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // store horizon, refuses if that horizon moved, and owns no codec and no admission
   // decision (producer task-80fce1d1, roster entry task-c5be7926).
   { constant: "IMPORT_SHADOW_READ_LAYER", file: "apps/daemon/src/projections/import-shadow-contracts.ts", axis: "durable-store" },
+  { constant: "IMPORT_GENERATION_READ_LAYER", file: "apps/daemon/src/projections/import-generation-reader.ts", axis: "durable-store" },
   { constant: "DOCTOR_VERSION_LAYERS", file: "apps/daemon/src/recovery/doctor-version-contract.ts", axis: "durable-store" },
   { constant: "DURABLE_INVENTORY_ADAPTER_LAYER", file: "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts", axis: "durable-store" },
   { constant: "RECOVERY_COMPLETION_LAYER", file: "apps/daemon/src/recovery/recovery-completion-digest.ts", axis: "integrity" },
@@ -267,6 +278,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
   { constant: "BENCHMARK_PROJECTION_LAYERS", file: "packages/benchmark/src/benchmark-projection-vocabulary.ts", axis: "runtime-provider" },
+  { constant: "GA_ACTIVATION_BINDING_LAYER", file: "packages/benchmark/src/activation-binding.ts", axis: "scheduler-activation" },
+  { constant: "GA_ACTIVATION_RECORD_LAYER", file: "packages/benchmark/src/activation-record.ts", axis: "scheduler-activation" },
   // The confirmatory-freeze custody/signing authority, still withheld: its zero-arity reader
   // returns the no-record refusal on committed bytes, while a strict contract defines how a
   // future human-installed record would be validated. `integrity` by SUBJECT, and the
@@ -287,8 +300,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_PROPOSAL_LAYERS", file: "packages/contracts/src/document-work/document-work-proposal-contract.ts", axis: "integrity" },
   { constant: "CONTROL_ROOM_TRANSPORT_LAYER", file: "packages/control-room-client/src/client-transport.ts", axis: "transport" },
+  { constant: "SESSION_KEY_LAYER", file: "packages/control-room-client/src/session-key.ts", axis: "runtime-provider" },
   { constant: "COORDINATION_LAYERS", file: "packages/coordination/src/coordination-contracts.ts", axis: "transport" },
   { constant: "PROJECT_CONFIGURATION_CODEC_LAYERS", file: "packages/core/src/configuration/project-configuration-manifest.ts", axis: "integrity" },
+  { constant: "LIVE_QUIESCE_EVIDENCE_LAYER", file: "packages/core/src/cutover/cutover-quiesce-evidence.ts", axis: "integrity" },
   { constant: "EXPANSION_APPROVAL_LAYERS", file: "packages/core/src/expansion/expansion-approval.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_HOLD_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_PREPARATION_LAYERS", file: "packages/core/src/expansion/expansion-preparation.ts", axis: "scheduler-activation" },
@@ -449,7 +464,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * record that binds an approved action to the active graph subject. `scheduler-activation`
  * by SUBJECT. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418.
  */
-const EXPECTED_ROSTER_SIZE = 131;
+const EXPECTED_ROSTER_SIZE = 146;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -457,20 +472,20 @@ const EXPECTED_ROSTER_SIZE = 131;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 62,
-  "packages/benchmark": 3,
+  "apps/daemon": 68,
+  "packages/benchmark": 5,
   "packages/runner": 22,
-  "packages/core": 14,
+  "packages/core": 15,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 5,
+  "apps/control-room": 10,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
   "packages/mcp": 1,
   "packages/import": 1,
   "packages/coordination": 1,
-  "packages/control-room-client": 1,
+  "packages/control-room-client": 2,
 });
 
 /** Scan roots. Every workspace area that can declare a production boundary. */

@@ -1,0 +1,56 @@
+{
+  "id": "task-75bb88d241894a43b6c6981f355bc220",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-UI leaf] Disable goal creation after live bootstrap refusal",
+  "description": "SPIDR prerequisite leaf for parent task-2c952438c41546b3a736623f3956c778. Objective: prevent a production Control Room mutation affordance from appearing enabled when live bootstrap has already refused. Deliverable: LiveGoalsHome threads the exact existing LiveRefused code/detail into GoalsHome’s established createDisabledReason admission seam only for setup.ok === false, so no create form or dispatch becomes reachable while attached setup remains unchanged. Exact owned paths (2): apps/control-room/src/v2/goals/live-goals.tsx; apps/control-room/src/v2/goals/goal-create-disabled.test.tsx. NOT in scope: live-handshake/refusal production, GoalsHome, CordumApp, parent journeys, transport code, manifests, or any new retry/authority/layer. The parent’s unchanged disconnected-banner journey is the served-build consumer and parent dependsOn this row. Exact verification command: pnpm --filter @moe/control-room exec vitest run src/v2/goals/goal-create-disabled.test.tsx",
+  "definitionOfDone": [
+    "Red-first extend the focused disabled-create test to render the real LiveGoalsHome with exact {ok:false, code:LIVE_BOOTSTRAP_UNAVAILABLE, detail:daemon bootstrap unavailable}; assert cr.goals.new is disabled, its title/explanation carries that exact stable code and detail, clicking opens no form, and neither transport nor onOpenBoard/dispatch is called. The pre-fix production surface is red because the button remains enabled.",
+    "LiveGoalsHome supplies GoalsHome.createDisabledReason only when setup.ok === false, deriving it solely from the existing LiveRefused code/detail; attached setup leaves the reason undefined and existing enabled create behavior intact. Do not invent a refusal layer because LiveRefused has none, do not change exported signatures, and keep live-goals.tsx below 250 physical lines.",
+    "The divergence fixture reaches LiveGoalsHome directly with the exact bootstrap refusal, so the downstream fallback dispatcher is unreachable and cannot satisfy the disabled-state assertion. A tracked-path mutation removing or polarity-swapping only createDisabledReason propagation makes the exact enabled/disabled assertion red while the fallback dispatcher remains present; restore separately and prove tracked path bytes/diff match the pre-drill state.",
+    "Run standalone/unpiped control-room typecheck, the exact focused verification command with nonzero Test Files/Tests counts, the full @moe/control-room test lane with nonzero counts, and root pnpm typecheck/pnpm test as merge-base-versus-HEAD path-attributed baselines; no new failure may intersect the two owned paths and foreign red is disclosed verbatim."
+  ],
+  "taskRails": [
+    "Own exactly live-goals.tsx and goal-create-disabled.test.tsx. Do not edit live-handshake, GoalsHome, CordumApp, parent journeys, transport, manifests, or locks.",
+    "Preserve exact LIVE_BOOTSTRAP_UNAVAILABLE refusal truth from the existing setup result. LiveRefused has no layer field; do not fabricate one, broaden retries, or convert refusal into setup authority.",
+    "The test must exercise the production LiveGoalsHome surface, not reimplement the propagation helper or stop at GoalsHome’s already-proven local guard.",
+    "Use red-first TDD, exact refusal-code assertions, nonzero test counts, and a restored tracked-path divergence drill; preserve all foreign WIP."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-2c952438c41546b3a736623f3956c778",
+  "priority": "HIGH",
+  "order": 192,
+  "comments": [
+    {
+      "id": "comment-8dbd98399ac1453db2172c1c7e1c267e",
+      "author": "architect-5e59a71e",
+      "content": "Planning block for task-75bb88d241894a43b6c6981f355bc220 after mandatory shape grep. Straight exact propagation of `LIVE_BOOTSTRAP_UNAVAILABLE: daemon bootstrap unavailable` into GoalsHome.createDisabledReason adds a third rendered text occurrence: existing CordumApp already renders LiveRefusalNotice + LiveGoalsHome.notAttached().comingOnlineNote, and GoalsHome adds `New goal unavailable — <reason>`. `apps/control-room/src/v2/cordum-app.test.tsx` lines 249 and 362 pin exactly 2 occurrences, so the required full @moe/control-room lane would red. That asserting consumer is outside this row's exact two paths, is dirty foreign WIP, and is owned by blocked task-28cd95db8bb6444b861eac4384c7fdc2. Silently neutralizing/removing comingOnlineNote only to keep count=2 would violate the shape-consumer rail and broaden behavior. Required ruling: either (A) after task-28cd lands, amend this row to depend on it and own cordum-app.test.tsx so the exact-count assertion can become semantic (recommended), or (B) explicitly authorize de-duplication of the refusal presentation and amend DoD/rail to say which occurrence is canonical. Do not submit the current two-file plan or overwrite foreign WIP.",
+      "timestamp": "2026-08-31T16:21:37.804Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-31T16:07:25.791Z",
+  "updatedAt": "2026-08-31T16:22:01.966Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T16:14:36.040Z"
+  },
+  "contextFetchedBy": [
+    "architect-5e59a71e"
+  ],
+  "dependsOn": [
+    "task-28cd95db8bb6444b861eac4384c7fdc2"
+  ],
+  "blockedReason": "Mandatory rendered-shape grep found an out-of-roster exact consumer: cordum-app.test.tsx pins two LIVE_BOOTSTRAP_UNAVAILABLE text occurrences, while exact createDisabledReason propagation necessarily renders a third. The file is dirty foreign WIP and explicitly owned by blocked task-28cd95db8bb6444b861eac4384c7fdc2, so this row cannot safely edit it; neutralizing notAttached().comingOnlineNote merely to evade the count would violate the shape-consumer rail and broaden presentation semantics. Root cause and options are recorded in comment-8dbd98399ac1453db2172c1c7e1c267e and governor msg-3cd16f5d26ec43a3b9afae3e07923d95. Recommended unblock: task-28cd lands, governor adds dependency/amends this row to include cordum-app.test.tsx, then replan exact semantic count; alternatively a human explicitly authorizes which refusal occurrence is canonical.",
+  "blockedOnTaskIds": [
+    "task-28cd95db8bb6444b861eac4384c7fdc2"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T16:22:01.966Z"
+}

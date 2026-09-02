@@ -11,14 +11,27 @@ const STORE_ROOT = join(REPOSITORY_ROOT, "packages/store");
 const FIXTURE_PATH = join(STORE_ROOT, "test-fixtures/recovery-slot-manifest-v1.json");
 const FIXTURE_SHA256 = "56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892";
 
-function executableFromPath(name: string): string {
+interface TestCommand {
+  readonly args: readonly string[];
+  readonly executable: string;
+}
+
+function commandFromPath(name: string): TestCommand {
   for (const directory of (process.env["PATH"] ?? "").split(delimiter)) {
     const candidateRoot = directory.replace(/^"|"$/gu, "");
     if (!isAbsolute(candidateRoot)) continue;
-    for (const candidate of process.platform === "win32" ? [`${name}.exe`, name] : [name]) {
+    // Extensionless setup-pnpm shims are shell scripts and cannot be passed directly to
+    // CreateProcess with shell:false. Windows therefore accepts only a native executable here.
+    for (const candidate of process.platform === "win32" ? [`${name}.exe`] : [name]) {
       try {
         const resolved = realpathSync(join(candidateRoot, candidate));
-        if (statSync(resolved).isFile()) return resolved;
+        if (statSync(resolved).isFile()) return { args: [], executable: resolved };
+      } catch { /* keep searching */ }
+    }
+    if (process.platform === "win32" && name === "pnpm") {
+      try {
+        const entry = realpathSync(join(candidateRoot, "..", "pnpm", "bin", "pnpm.cjs"));
+        if (statSync(entry).isFile()) return { args: [entry], executable: process.execPath };
       } catch { /* keep searching */ }
     }
   }
@@ -30,7 +43,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 function packPaths(): readonly string[] {
-  const result = spawnSync(executableFromPath("pnpm"), ["pack", "--dry-run", "--json"], {
+  const command = commandFromPath("pnpm");
+  const result = spawnSync(command.executable, [...command.args, "pack", "--dry-run", "--json"], {
     cwd: STORE_ROOT,
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,

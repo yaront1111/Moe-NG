@@ -1,0 +1,127 @@
+{
+  "id": "task-503e927b2b134f12af238bdfc474c0a1",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Retire daemon-scratch through the PRD browser boundary",
+  "description": "Acceptance follow-up for the one genuinely scratch-named tracked E2E module and the failing prd-to-approval Playwright file. Fold durable helpers into existing daemon-ports.ts rather than creating an eleventh path. Owned path set (10): tests/e2e/control-room/daemon-scratch.ts (delete after migration); tests/e2e/control-room/daemon-board.spec.ts; tests/e2e/control-room/daemon-ports.ts; tests/e2e/control-room/dev-graph-ports.ts; tests/e2e/control-room/pairing-operator-channel.spec.ts; tests/e2e/control-room/prd-boundary-readers.ts; tests/e2e/control-room/prd-persistence-boundary.spec.ts; tests/e2e/control-room/prd-persistence-ledger.ts; tests/e2e/control-room/prd-to-approval.spec.ts; tests/e2e/control-room/session-key-signing.spec.ts. The other 20 lexical probe hits are durable Serena notes or real provider/native/test probe capabilities and are not to be deleted merely to satisfy a basename grep.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: enumerate every daemon-scratch import and prove its helpers can be folded into daemon-ports.ts without shared mutable state or a path outside this exact ten-file set; otherwise report blocked/request a split rather than add an eleventh path.",
+    "daemon-scratch.ts is deleted, every import resolves through the durable existing harness module, and no debug/transcript/scratch artifact replaces it.",
+    "The real PRD-to-approval browser journey reaches the production boundary and asserts honest approval absence/refusal with the exact code/layer, never stale prose or fixture authority.",
+    "All affected E2E unit/typecheck files plus prd-to-approval Playwright are green with nonzero counts.",
+    "A mutation that restores a scratch-only path or bypasses the approval fence makes a named assertion red and is restored."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the ten listed; request amendment/split before expansion.",
+    "Do not rename or delete legitimate provider probes or Serena memories to appease a lexical grep.",
+    "Preserve foreign WIP and use red-first browser tests with exact refusal provenance."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "DEPENDENCY/RED-FIRST CONSUMER CHECK. This row certifies the real keyed browser pairing capability shipped by dependsOn task-28cd95db8bb6444b861eac4384c7fdc2; the runtime must not offer work until that row is DONE. At work start, read that sibling's durable verification/completion/review records and confirm the delivered tree still has live-handshake.ts consuming createLiveKeyedSession and publishing LiveSetup only after signed open; if the record/edge is absent, report blocked rather than use current foreign WIP. Then run `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts tests/e2e/control-room/prd-to-approval.spec.ts` before edits and bank the measured single red at the stale `cr.approve.note` lookup only after the real pairing, goal, and plan assertions have passed. In prd-to-approval.spec.ts replace that stale prose selector with `cr.approve.reason` and assert the exact rendered withheld reason, including `APPROVAL_AFFORDANCE_ABSENT` and refusing layer `CONTROL_ROOM_PLAN_APPROVAL`, while retaining disabled approval, `data-reviewable=false`, PLAN_REVIEW, real daemon origin, keyed handshake, and zero fixture/URL authority assertions. Rerun the focused browser test green with `1 passed`; a different earlier refusal is not this task's baseline.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/prd-to-approval.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED-FIRST SCRATCH CANARY. In prd-to-approval.spec.ts, immediately after the anchored repository-root check and before build/spawn, add a named fail-closed assertion that `tests/e2e/control-room/daemon-scratch.ts` does not exist. Run the same focused Playwright command and require it to fail at that named assertion while the tracked scratch module still exists; do not delete or weaken the assertion to get green. This is the production-surface-independent structural red for the retirement, and it must not scan or rename unrelated provider/native/Serena probe capabilities.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/prd-to-approval.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM MIGRATION/GREEN. Move the durable harness implementation from daemon-scratch.ts into daemon-ports.ts without semantic edits: private SCRATCH_PREFIX/HERE/HOP_COUNTED_ROOT; exported LANE_CREDENTIAL, LANE_CSRF_TOKEN; LaneScratch, LaneApprovalMode, LiveCredentialMode; repoRoot, createLaneScratch, daemonEnv, seedEnv, serverEnv, readWireProtocolVersion; and their node:fs/os/path/url imports. Preserve fresh mkdtemp identities, root anchoring, frozen results, HUMAN env key removal, Windows path normalization, and dynamic generated-client bridge loading; introduce no module-level mutable state. Update daemon-ports.ts's ownership comments. Migrate all nine measured consumers to the unchanged names/types from `./daemon-ports.js`, merging imports where daemon-board.spec.ts already imports it: daemon-board.spec.ts, dev-graph-ports.ts, pairing-operator-channel.spec.ts, prd-boundary-readers.ts, prd-persistence-boundary.spec.ts, prd-persistence-ledger.ts, prd-to-approval.spec.ts, session-key-signing.spec.ts, plus daemon-ports.ts itself no longer self-importing scratch. Delete daemon-scratch.ts. Require `git grep -n 'daemon-scratch' -- tests/e2e/control-room` to return no matches, then rerun the E2E tsconfig and focused Playwright to green; stop rather than touch an eleventh path if a new importer appears.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/daemon-scratch.ts",
+        "tests/e2e/control-room/daemon-board.spec.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/dev-graph-ports.ts",
+        "tests/e2e/control-room/pairing-operator-channel.spec.ts",
+        "tests/e2e/control-room/prd-boundary-readers.ts",
+        "tests/e2e/control-room/prd-persistence-boundary.spec.ts",
+        "tests/e2e/control-room/prd-persistence-ledger.ts",
+        "tests/e2e/control-room/prd-to-approval.spec.ts",
+        "tests/e2e/control-room/session-key-signing.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL REVIEW AND RESTORED MUTATION DRILL. Load adversarial-self-review and inspect the exact-ten diff for duplicate helper authority, shared state, import cycles, host-env leakage, Windows path/file-URL drift, lost freeze/return shapes, stale comments, fixture authority, or approval assertions that omit either code or layer. Prove the singular source with delivered-tree greps for every moved export and zero `daemon-scratch` references. Before drilling, record `git status --porcelain` for the exact ten paths. Recreate the deleted tracked daemon-scratch.ts path with a harmless sentinel comment (no imports or logic) and run the focused Playwright test; it must exit nonzero naming the scratch-absence assertion before child startup. Remove the sentinel, then in a separate call prove `Test-Path` is false, the exact pre/post porcelain for that path matches the intended tracked deletion, and `git diff --name-status -- tests/e2e/control-room/daemon-scratch.ts` still reports D. A green mutant or failed restore is a finding, not evidence; rerun the focused test green after restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/daemon-scratch.ts",
+        "tests/e2e/control-room/prd-to-approval.spec.ts",
+        "tests/e2e/control-room/daemon-ports.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "FINAL FOREGROUND/UNPIPED GATE AND EVIDENCE. Run separately: (1) `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json` exit 0; (2) `pnpm exec vitest run tests/e2e/control-room` exit 0 with nonzero `Test Files N passed` and `Tests N passed` lines (baseline 4/49, record fresh counts); (3) the exact complete_task verification command `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts tests/e2e/control-room/prd-to-approval.spec.ts`, exit 0 with a nonzero `1 passed` line. Also run `pnpm typecheck` and root-lane `pnpm test` at the task merge-base and delivered HEAD, record failing-path set subtraction intersected with the exact ten owned paths, and disclose foreign red verbatim; call the latter root lane only, not app-package coverage. Finish with zero `daemon-scratch` grep matches, `git diff --check --` over the exact ten paths, no debug/test-results/transcript artifacts, and report all ten modified/deleted paths through complete_step.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/daemon-scratch.ts",
+        "tests/e2e/control-room/daemon-board.spec.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/dev-graph-ports.ts",
+        "tests/e2e/control-room/pairing-operator-channel.spec.ts",
+        "tests/e2e/control-room/prd-boundary-readers.ts",
+        "tests/e2e/control-room/prd-persistence-boundary.spec.ts",
+        "tests/e2e/control-room/prd-persistence-ledger.ts",
+        "tests/e2e/control-room/prd-to-approval.spec.ts",
+        "tests/e2e/control-room/session-key-signing.spec.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "HIGH",
+  "order": 197,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:19:21.025Z",
+  "updatedAt": "2026-08-31T12:57:59.910Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T12:35:52.030Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 10
+  },
+  "contextFetchedBy": [
+    "architect-8b0f89f2"
+  ],
+  "dependsOn": [
+    "task-28cd95db8bb6444b861eac4384c7fdc2"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-31T12:57:57.792Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: keep the existing daemon-backed harness authority singular by moving daemon-scratch.ts's definitions verbatim into daemon-ports.ts, migrate every measured importer, then delete the scratch-named module. Rejected copying helpers (would create two mutable/drifting authorities), adding an eleventh durable module (forbidden exact-ten rail), weakening the live browser journey to fixtures, and editing Control Room production to recover stale prose (the production already renders an exact withheld code/layer; only the E2E selector is stale). The user confirmed this dependency-gated approach. Task dependsOn task-28cd95db8bb6444b861eac4384c7fdc2 so the acceptance journey cannot be worked/landed before the real keyed browser claim→signed-open consumer is DONE.",
+    "codebaseInsights": "Measured on the current tree: all ten owned paths are clean; daemon-scratch.ts exists at 173 lines and daemon-ports.ts at 315. `git grep -l 'from \"./daemon-scratch.js\"' -- tests/e2e/control-room/*.ts` returns exactly the other nine owned files and no outside consumer. The source exports LANE_CREDENTIAL, LANE_CSRF_TOKEN, LaneScratch, LaneApprovalMode, LiveCredentialMode, repoRoot, createLaneScratch, daemonEnv, seedEnv, serverEnv, and readWireProtocolVersion. Its only `let` is a call-local dynamic-import result; module state is immutable, createLaneScratch mints a fresh mkdtemp tree, and moving within the same directory preserves the import.meta.url hop count. Existing focused baselines: E2E tsconfig exit 0; Vitest control-room E2E unit lane `Test Files 4 passed (4)`, `Tests 49 passed (49)`; focused Playwright reaches the real handshake/goal/plan boundary and then fails exactly because `cr.approve.note` no longer exists (1 failed). Production now exposes `cr.approve.reason` with exact text/code/layer from authorizeApproval: APPROVAL_AFFORDANCE_ABSENT @ CONTROL_ROOM_PLAN_APPROVAL. The prerequisite B row is declared but currently unmet; its completion record says the keyed flow gates are green, while its delivered landing is still absent, so current dirty/untracked live-keyed bytes are foreign WIP, not evidence.",
+    "risks": "Do not start from or claim current foreign live-handshake/live-keyed-session WIP; runtime dependency release is the authority that B landed. Preserve exact helper return shapes, Object.freeze behavior, environment scrubbing, Windows slash normalization, file-URL loading, and per-run identity; do not introduce shared caches/state while co-locating. daemon-ports.ts will exceed 400 lines, but it is an E2E test harness rather than a production source and the task explicitly mandates folding into it; do not minify to fake compliance. The approval assertion must pin both exact stable code and layer on the real browser surface, not a negated phrase or fixture. Treat a green scratch-restoration mutant as a finding.",
+    "keyFiles": [
+      "tests/e2e/control-room/daemon-scratch.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
+      "tests/e2e/control-room/prd-to-approval.spec.ts",
+      "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+      "apps/control-room/src/v2/goals/plan-approval.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-31T12:57:59.910Z"
+}

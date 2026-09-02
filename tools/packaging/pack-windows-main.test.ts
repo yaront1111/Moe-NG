@@ -31,23 +31,36 @@ import { verifyWindowsRelease } from "../../scripts/release/verify-windows-relea
 
 const roots: string[] = [];
 
-function executableFromPath(name: string): string {
+interface TestCommand {
+  readonly args: readonly string[];
+  readonly executable: string;
+}
+
+function commandFromPath(name: string): TestCommand {
   for (const directory of (process.env["PATH"] ?? "").split(delimiter)) {
     const candidateRoot = directory.replace(/^"|"$/gu, "");
     if (!isAbsolute(candidateRoot)) continue;
-    for (const candidate of process.platform === "win32" ? [`${name}.exe`, name] : [name]) {
+    // Extensionless setup-pnpm shims are shell scripts and cannot be passed directly to
+    // CreateProcess with shell:false. Windows therefore accepts only a native executable here.
+    for (const candidate of process.platform === "win32" ? [`${name}.exe`] : [name]) {
       try {
         const resolved = realpathSync(join(candidateRoot, candidate));
-        if (statSync(resolved).isFile()) return resolved;
+        if (statSync(resolved).isFile()) return { args: [], executable: resolved };
+      } catch { /* keep searching */ }
+    }
+    if (process.platform === "win32" && name === "pnpm") {
+      try {
+        const entry = realpathSync(join(candidateRoot, "..", "pnpm", "bin", "pnpm.cjs"));
+        if (statSync(entry).isFile()) return { args: [entry], executable: process.execPath };
       } catch { /* keep searching */ }
     }
   }
   throw new Error(`missing test executable: ${name}`);
 }
 
-const gitExecutable = executableFromPath("git");
-const pnpmExecutable = executableFromPath("pnpm");
-const tarExecutable = executableFromPath("tar");
+const gitExecutable = commandFromPath("git").executable;
+const pnpmCommand = commandFromPath("pnpm");
+const tarExecutable = commandFromPath("tar").executable;
 const tarVersion = spawnSync(tarExecutable, ["--version"], {
   cwd: dirname(tarExecutable), encoding: "utf8", shell: false, windowsHide: true,
 });
@@ -177,7 +190,9 @@ describe("the production Windows pack source composition", () => {
       "node tools/packaging/pack-windows-main.ts",
     );
 
-    const run = spawnSync(pnpmExecutable, ["run", "pack:windows", "--", "--allow-dirty"], {
+    const run = spawnSync(pnpmCommand.executable, [
+      ...pnpmCommand.args, "run", "pack:windows", "--", "--allow-dirty",
+    ], {
       cwd: repositoryRoot, encoding: "utf8", shell: false, windowsHide: true,
     });
     expect(run.status).toBe(1);
@@ -269,8 +284,8 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("rebuilds PATH only from explicit directories outside the checkout", () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-pack-path-root-"));
-    const trustedRoot = mkdtempSync(join(tmpdir(), "moe-pack-path-tool-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-pack-path-root-")));
+    const trustedRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-pack-path-tool-")));
     roots.push(repositoryRoot, trustedRoot);
     const ignoredBin = join(repositoryRoot, "node_modules", ".bin");
     mkdirSync(ignoredBin, { recursive: true });
@@ -284,7 +299,7 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("refuses tracked or untracked live packer drift from the labeled commit", () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-runtime-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-runtime-")));
     roots.push(repositoryRoot);
     git(["init", "--quiet"], repositoryRoot);
     git(["config", "user.email", "pack-runtime@example.invalid"], repositoryRoot);
@@ -345,8 +360,8 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("builds only from the selected Git object tree and publishes outside its temporary owner", () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-entry-"));
-    const outputRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-output-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-entry-")));
+    const outputRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-output-")));
     roots.push(repositoryRoot, outputRoot);
     git(["init", "--quiet"], repositoryRoot);
     git(["config", "user.email", "pack-entry@example.invalid"], repositoryRoot);
@@ -386,8 +401,8 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("admits the same commit-anchored private candidate through Windows release authority", async () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-"));
-    const outputRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-output-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-")));
+    const outputRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-output-")));
     roots.push(repositoryRoot, outputRoot);
     git(["init", "--quiet"], repositoryRoot);
     git(["config", "user.email", "pack-authority@example.invalid"], repositoryRoot);
@@ -508,8 +523,8 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("publishes the private candidate only after tracked source re-verification", () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-publish-"));
-    const outputRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-public-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-publish-")));
+    const outputRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-public-")));
     roots.push(repositoryRoot, outputRoot);
     git(["init", "--quiet"], repositoryRoot);
     git(["config", "user.email", "pack-publish@example.invalid"], repositoryRoot);
@@ -550,8 +565,8 @@ describe("the production Windows pack source composition", () => {
   });
 
   it("publishes no public archive when the consumer mutates tracked source", () => {
-    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-mutation-"));
-    const outputRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-refusal-"));
+    const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-mutation-")));
+    const outputRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-windows-pack-refusal-")));
     roots.push(repositoryRoot, outputRoot);
     git(["init", "--quiet"], repositoryRoot);
     git(["config", "user.email", "pack-mutation@example.invalid"], repositoryRoot);

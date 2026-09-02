@@ -1,7 +1,17 @@
-/** Hostile coverage for the browser-owned session-key generation boundary. */
+/// <reference lib="dom" />
+/** Hostile coverage for the browser-owned control-room runtime boundaries. */
+
+import { createRequire } from "node:module";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { builtinEnvironments } from "vitest/runtime";
 
+import { PRD_LOCAL_LAYER } from "../../apps/control-room/src/v2/goals/new-goal-form-model.js";
+import {
+  PRD_FILE_PREFLIGHT_MAX_BYTES,
+  readGoalPrdFile,
+  useGoalPrd,
+} from "../../apps/control-room/src/v2/goals/use-goal-prd.js";
 import {
   SESSION_KEY_LAYER,
   generateSessionKey,
@@ -9,13 +19,19 @@ import {
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import {
   RUNTIME_BOUND as BOUND,
+  RUNTIME_PROVIDER_PARTITION,
   createLedger,
   describeSliceInvariants,
 } from "./runtime-provider-ledger.js";
 import type { Arm } from "./runtime-provider-ledger.js";
 
-const OWNED = [SESSION_KEY_LAYER] as const;
+const SESSION_KEY_BOUNDARY = "SESSION_KEY_LAYER";
+const PRD_LOCAL_BOUNDARY = "PRD_LOCAL_LAYER";
+const OWNED = RUNTIME_PROVIDER_PARTITION.CONTROL_ROOM;
 const ledger = createLedger();
+const requireFromControlRoom = createRequire(
+  new URL("../../apps/control-room/package.json", import.meta.url),
+);
 const REFUSAL = Object.freeze({
   code: "SESSION_KEY_ALGORITHM_UNSUPPORTED",
   layer: SESSION_KEY_LAYER,
@@ -26,6 +42,39 @@ interface HostileCase {
   readonly arm: Arm;
   readonly title: string;
   readonly run: () => Promise<void>;
+}
+
+interface PrdHostileCase {
+  readonly arm: Arm;
+  readonly title: string;
+  readonly run: () => Promise<void>;
+}
+
+interface HookRender<T> {
+  readonly result: { readonly current: T };
+}
+
+interface HookUtilities {
+  act(action: () => void): void;
+  act(action: () => Promise<void>): Promise<void>;
+  cleanup(): void;
+  renderHook<T>(render: () => T): HookRender<T>;
+  waitFor(assertion: () => void): Promise<void>;
+}
+
+const PRD_TOO_LARGE = Object.freeze({
+  code: "PRD_FILE_TOO_LARGE",
+  layer: PRD_LOCAL_LAYER,
+});
+const PRD_UNREADABLE = Object.freeze({
+  code: "PRD_FILE_UNREADABLE",
+  layer: PRD_LOCAL_LAYER,
+});
+
+function stubFetchCanary(): ReturnType<typeof vi.fn> {
+  const fetch = vi.fn(() => { throw new Error("PRD selection reached fetch"); });
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
 }
 
 function assertExactRefusal(actual: unknown): void {
@@ -63,8 +112,8 @@ const CASES = [
         () => generateSessionKey(),
       );
 
-      ledger.refused(SESSION_KEY_LAYER, "BEFORE", outcome.probe, REFUSAL);
-      ledger.refused(SESSION_KEY_LAYER, "BEFORE", outcome.effect, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "BEFORE", outcome.probe, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "BEFORE", outcome.effect, REFUSAL);
       assertExactRefusal(outcome.probe);
       assertExactRefusal(outcome.effect);
       expect(generateKey).toHaveBeenCalledTimes(2);
@@ -92,8 +141,8 @@ const CASES = [
         () => generateSessionKey(),
       );
 
-      ledger.refused(SESSION_KEY_LAYER, "AFTER", outcome.effect, REFUSAL);
-      ledger.refused(SESSION_KEY_LAYER, "AFTER", outcome.probe, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "AFTER", outcome.effect, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "AFTER", outcome.probe, REFUSAL);
       assertExactRefusal(outcome.effect);
       assertExactRefusal(outcome.probe);
       expect(privateOnly.map((pair) => Object.keys(pair))).toStrictEqual([
@@ -145,7 +194,7 @@ const CASES = [
       const assertionErrors: unknown[] = [];
       for (const side of [outcome.left, outcome.right]) {
         try {
-          ledger.refusedSide(SESSION_KEY_LAYER, side, REFUSAL);
+          ledger.refusedSide(SESSION_KEY_BOUNDARY, side, REFUSAL);
         } catch (error) {
           assertionErrors.push(error);
         }
@@ -163,6 +212,114 @@ const CASES = [
   },
 ] as const satisfies readonly HostileCase[];
 
+const PRD_CASES = [
+  {
+    arm: "BEFORE",
+    title: "oversize preflight refuses before text or digest",
+    run: async () => {
+      const fetch = stubFetchCanary();
+      const digest = vi.fn(async () => new Uint8Array(32).buffer);
+      vi.stubGlobal("crypto", { subtle: { digest } });
+      const file = new File(
+        ["a".repeat(PRD_FILE_PREFLIGHT_MAX_BYTES + 1)],
+        "too-large.md",
+        { type: "text/markdown" },
+      );
+      const text = vi.fn(async () => "must not be read");
+      Object.defineProperty(file, "text", { value: text });
+
+      const actual = await readGoalPrdFile(file);
+
+      ledger.refused(PRD_LOCAL_BOUNDARY, "BEFORE", actual, PRD_TOO_LARGE);
+      expect(actual).toStrictEqual({
+        code: "PRD_FILE_TOO_LARGE",
+        layer: "CONTROL_ROOM_NEWGOAL",
+        status: "ERROR",
+      });
+      expect(text).not.toHaveBeenCalled();
+      expect(digest).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  },
+  {
+    arm: "AFTER",
+    title: "valid-size text rejection maps to the local unreadable refusal",
+    run: async () => {
+      const fetch = stubFetchCanary();
+      const digest = vi.fn(async () => new Uint8Array(32).buffer);
+      vi.stubGlobal("crypto", { subtle: { digest } });
+      const file = new File(["read me"], "unreadable.md", { type: "text/markdown" });
+      const text = vi.fn(async () => { throw new Error("hostile text rejection"); });
+      Object.defineProperty(file, "text", { value: text });
+
+      const actual = await readGoalPrdFile(file);
+
+      ledger.refused(PRD_LOCAL_BOUNDARY, "AFTER", actual, PRD_UNREADABLE);
+      expect(actual).toStrictEqual({
+        code: "PRD_FILE_UNREADABLE",
+        layer: "CONTROL_ROOM_NEWGOAL",
+        status: "ERROR",
+      });
+      expect(text).toHaveBeenCalledTimes(1);
+      expect(digest).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  },
+  {
+    arm: "RACE",
+    title: "superseded success cannot publish over the current unreadable refusal",
+    run: async () => {
+      const environment = await builtinEnvironments.jsdom.setup(globalThis, {});
+      let cleanup: (() => void) | undefined;
+      try {
+        const utilities = requireFromControlRoom("@testing-library/react/pure") as HookUtilities;
+        ({ cleanup } = utilities);
+        const { act, renderHook, waitFor } = utilities;
+        const fetch = stubFetchCanary();
+        let resolveDigest!: (value: ArrayBuffer) => void;
+        const digest = vi.fn(() => new Promise<ArrayBuffer>((resolve) => {
+          resolveDigest = resolve;
+        }));
+        vi.stubGlobal("crypto", { subtle: { digest } });
+        const stale = new File(["stale bytes"], "stale.md", { type: "text/markdown" });
+        const current = new File(["current bytes"], "current.md", { type: "text/markdown" });
+        Object.defineProperty(current, "text", {
+          value: vi.fn(async () => { throw new Error("current file is unreadable"); }),
+        });
+        const { result } = renderHook(() => useGoalPrd());
+
+        act(() => result.current.acceptFile(stale));
+        await waitFor(() => expect(digest).toHaveBeenCalledTimes(1));
+        act(() => result.current.acceptFile(current));
+        await waitFor(() => expect(result.current.read).toStrictEqual({
+          code: "PRD_FILE_UNREADABLE",
+          layer: "CONTROL_ROOM_NEWGOAL",
+          status: "ERROR",
+        }));
+        await act(async () => {
+          resolveDigest(new Uint8Array(32).buffer);
+          await Promise.resolve();
+        });
+
+        ledger.refused(PRD_LOCAL_BOUNDARY, "RACE", result.current.read, PRD_UNREADABLE);
+        expect(result.current.read).toStrictEqual({
+          code: "PRD_FILE_UNREADABLE",
+          layer: "CONTROL_ROOM_NEWGOAL",
+          status: "ERROR",
+        });
+        expect(result.current.prd).toBeNull();
+        expect(result.current.submittedPrd).toBeUndefined();
+        expect(digest).toHaveBeenCalledTimes(1);
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        cleanup?.();
+        vi.unstubAllGlobals();
+        await environment.teardown(globalThis);
+      }
+    },
+  },
+] as const satisfies readonly PrdHostileCase[];
+
 describe(SESSION_KEY_LAYER, () => {
   it("declares exactly one literal case for each hostile arm", () => {
     expect(CASES).toHaveLength(3);
@@ -176,7 +333,8 @@ describe(SESSION_KEY_LAYER, () => {
   it("records exactly two refusing outcomes per hostile arm", () => {
     expect(CASES.map(({ arm }) => [
       arm,
-      ledger.entries.filter((entry) => entry.arm === arm).length,
+      ledger.entries.filter((entry) => entry.boundary === SESSION_KEY_BOUNDARY && entry.arm === arm)
+        .length,
     ])).toStrictEqual([
       ["BEFORE", 2],
       ["AFTER", 2],
@@ -185,4 +343,16 @@ describe(SESSION_KEY_LAYER, () => {
   });
 });
 
-describeSliceInvariants("control-room session key", ledger, OWNED, [], 0);
+describe(PRD_LOCAL_LAYER, () => {
+  it("declares a nonzero exact BEFORE, AFTER, RACE tuple", () => {
+    expect(PRD_CASES.length).toBeGreaterThan(0);
+    expect(PRD_CASES).toHaveLength(3);
+    expect(PRD_CASES.map(({ arm }) => arm)).toStrictEqual(["BEFORE", "AFTER", "RACE"]);
+  });
+
+  for (const hostileCase of PRD_CASES) {
+    it(`${hostileCase.arm} - ${hostileCase.title}`, hostileCase.run);
+  }
+});
+
+describeSliceInvariants("control-room browser boundaries", ledger, OWNED, [], 0);

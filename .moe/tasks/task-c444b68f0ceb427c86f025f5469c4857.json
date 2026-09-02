@@ -1,0 +1,141 @@
+{
+  "id": "task-c444b68f0ceb427c86f025f5469c4857",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-016 browser leaf] Consume daemon planning authority in live dispatch",
+  "description": "SPIDR interface child of task-0169055cad324b7f84a2e90f0b46f8e0, following daemon producer task-ed89967f396d4cb78ec65ba8188bfb19. Objective: replace the production Control Room's locally minted planning authority/hash/graph literals with the daemon-authored per-run material carried on the live affordance surface. Deliverable: an exact hostile-safe live-planning-authorities TS/JS module is composed through live feed, render eligibility and dispatch; the preserved parent WIP in live-board.test.tsx is adopted here, while parent 016 retains board-chain.spec.ts as the real browser acceptance consumer. Exact owned paths (10): apps/control-room/src/live/live-planning-authorities.ts (new); apps/control-room/src/live/live-planning-authorities.js (new one-line bridge); apps/control-room/src/live/live-board-feed.ts; apps/control-room/src/live/live-board.tsx; apps/control-room/src/live/live-board.test.tsx; apps/control-room/src/live/live-dispatch.ts; apps/control-room/src/live/live-dispatch-payloads.ts; apps/control-room/src/live/live-board-dispatch.test.tsx; tests/integration/control-room/dev-payload-parity.test.ts; tests/integration/control-room/live-approval-activation.test.ts. NOT in scope: daemon producers/contracts, board-chain E2E, agent-wrapper code, manifests/lockfile, browser canonicalization, or any default/static authority fallback. Exact verification command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx;x exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts;x --filter @moe/control-room typecheck}`.",
+  "definitionOfDone": [
+    "Verify both declared dependencies are DONE/merged and inspect their delivered bytes/records: the daemon surface must expose the exact per-run planningAuthorityByRun material with the seven-key entry contract, and the landed Control Room identity selector must still join exact kind+target+version. If either is absent, block rather than reimplement it.",
+    "Create <=250-line live-planning-authorities.ts plus an exact one-line .js bridge. It admits only own enumerable data with exact map/entry keys, bounded scalar/hash/base64 values, key===runId and durable planningGoalRefs[runId]===goalRef; it carries nested daemon authority verbatim and builds initial proposal, finalize and approval bodies without recomputing or copying any security canonicalizer.",
+    "live-board-feed parses the optional authority map and refuses a present malformed/hostile map as LIVE_SURFACE_UNREADABLE without invoking accessors. live-board/live-dispatch require the exact offered run's goal binding and authority material before rendering/sending plan.propose or approval.decide; absent goal binding remains PLANNING_OFFER_BINDING_ABSENT and absent/misaligned authority is PLANNING_AUTHORITY_BINDING_ABSENT, both at CONTROL_ROOM_LIVE_DISPATCH with zero builder/transport calls.",
+    "Remove GRAPH_CONTENT_BYTES, SUBMISSION_HASH, sealedAuthorityFor, planningChainFor, fixed finalize hashes and fixed approval revision/hash fields from live-dispatch-payloads.ts. Its exported payloadFor signature/type and DEV_PAYLOADS served roster remain source-compatible, but authority-less planning returns null; live-dispatch-payloads.js and plain Node imports remain loadable. payloads and the new module target <=250 lines and every edited production file stays <400.",
+    "Focused/component tests pin a nonzero two-sibling authority map, exact B-only payload selection, malformed/accessor refusal, missing-authority code/layer, zero downstream calls and bidirectional planning-kind roster coverage. Integration tests obtain material from the real daemon producer, prove a nondefault dynamic propose/finalize/approval journey succeeds, and replace the obsolete static-default parity/failure premise. Restored mutations selecting the first map entry, using the old fixed hash, or re-enabling a missing-material fallback make the named production-surface assertions red with exact observed code/layer.",
+    "Run the exact foreground/unpiped verification command `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx;x exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts;x --filter @moe/control-room typecheck}`, require Control Room Test Files 2 passed/nonzero Tests, integration Test Files 2 passed/nonzero Tests and typecheck success; then run the full @moe/control-room package and root lanes as path-attributed baselines, with no new failure intersecting the ten owned paths and all foreign red disclosed verbatim."
+  ],
+  "taskRails": [
+    "Own exactly the ten paths named in the description. Only live-planning-authorities.ts/.js are new. Do not edit daemon, board-chain E2E, agent-wrapper, manifests, lockfile, or foreign WIP.",
+    "The daemon material is authority; the browser may validate transport shape/bindings and assemble allowed command bodies but must not mint, hash, canonicalize, rotate, repair or default authority. Missing/malformed/misaligned material fails closed before builder or transport.",
+    "Preserve the old payloadFor TypeScript signature and export roster for the measured agent-wrapper hint caller, which already handles null. Keep the new physical .js bridge because plain Node imports live-dispatch.ts and follows .js-suffixed edges; a Vite-only TS module would create a clean-runtime hole.",
+    "Adopt live-board.test.tsx exactly from parent 016 without restoring/normalizing its WIP. Parent 016 is the real board-chain acceptance consumer and must dependOn this leaf before resuming."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0/1 — APPLY THE MEASURED TWO-FILE SCOPE OVERLAY, VERIFY LANDED PREREQUISITES, AND CAPTURE RED/BASELINE EVIDENCE. Treat authoritative comment-9d74eecb25cf4762b4f48038c78fcfd1 plus the declared task-d3bfc33e364d4dbab1ef02723d672263 dependency as the effective scope: this row owns only the two integration files below; d3 owns the ten production/component paths from the stale description, so never declare, edit, restore, or normalize them here. At worker claim, read epicSiblings completion/review/landing records for DONE/merged task-ed89967f396d4cb78ec65ba8188bfb19, task-d3bfc33e364d4dbab1ef02723d672263, and task-4942111bdaac427985e4636b2bbd0cad. Inspect the delivered SHAs, not shared-tree WIP: require the daemon surface's own-enumerable planningAuthorityByRun entries have exactly authority, goalRef, graphContentBytesBase64, graphContentHash, graphRevisionRef, runId, submissionHash; require the Control Room frame/sidecar/dispatch call site consumes that map while preserving the exact kind+target+version selector; and confirm parent task-0169055cad324b7f84a2e90f0b46f8e0 still dependsOn this row. If any edge/shape is absent, report blocked rather than importing journeyAuthority, rebuilding a digest, or minting a fallback. Re-run per-file import and SHAPE greps in both owned tests for literal command bodies, exact key/count assertions, DEFAULT_* subjects, journeyAuthority, payloadFor, and hard-coded hashes; record exact-path porcelain/SHA-256 and leave all foreign dirt untouched. Capture pre-diff standalone outputs for the exact focused command, full @moe/control-room tests, and root typecheck/test/foundation/store lanes with nonzero count lines/failing paths. With the dependencies landed, run the current two integration files before editing and require the obsolete authority-less static payload premise to red; a green current test means the forbidden fallback still exists and is a block, not a baseline to preserve.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/dev-payload-parity.test.ts",
+        "tests/integration/control-room/live-approval-activation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED-FIRST REAL-PRODUCER / EXACT-SIBLING PARITY ACCEPTANCE. Rewrite dev-payload-parity.test.ts so it no longer imports journeyAuthority, DEFAULT_GOAL_SUBJECT/DEFAULT_RUN_SUBJECT, or calls authority-less payloadFor. Seed a real ephemeral SqliteEventStore through runBootstrapCommand and the existing bootstrap/goal/planning handler table, activate the project, and create two nondefault goal/run siblings A then B. Build the real daemon surface with createAffordancePort using the configured nondefault principal and exactly one nondefault node, assert a nonzero two-run eligible-offer denominator, then require bidirectional set equality between eligible plan.propose/approval.decide offer targets and the planningAuthorityByRun keys and the exact seven-key roster for each entry. Pass the raw surface through production frameOfSurface, select B only by exact commandKind+targetAggregateId+expectedVersion, and hand that exact parsed offer to production dispatchAffordance. Obtain the actual generated client through the existing Control Room resolveLiveSetup seam and the apps/control-room manifest edge (remeasure the shipped matching compatibility report; do not add a root @moe/control-room-client import or edit manifests/lockfile); wrap its real builder only to count/delegate calls and use a recording accepting transport. Assert the built initial proposal, finalize, and approval bodies take every producer-owned graph/plan/author/node/criterion operand from B's carried material verbatim, contain no A/default/retired fixed hash, and are distinct where the two daemon entries are distinct; do not assert replacement of the producer-unowned dependencyHash/qualityHash/policyHash fields. Add the divergent absence arm by deleting only planningAuthorityByRun from an otherwise real valid B surface before frameOfSurface: keep B's offer, durable goal binding, budget reader, generated builder, and transport all accepting, then require BUILD_REFUSED with exact `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` and exact zero budget-reader/builder/transport calls. This makes the named guard the only possible refuser; never weaken it to a generic null/refused assertion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/dev-payload-parity.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM REAL-HANDLER DYNAMIC JOURNEY. Rewrite live-approval-activation.test.ts around a nondefault project/principal/goal/run/node and remove direct planning payloadFor calls. Keep setup commands on the existing DEV_PAYLOADS nonplanning roster, but after goal.create and after each planning transition read a fresh createAffordancePort surface configured with the same principal and exactly one node, parse it through frameOfSurface, and select the exact offered object plus its surfaced version—never a raw caller-built offer, first map entry, DEFAULT_* subject, or copied authority. Use resolveLiveSetup's admitted generated client and dispatchAffordance for initial plan.propose, finalize plan.propose, and approval.decide. Provide a transparent test transport adapter whose sendCommand passes the generated envelope's command id/kind/target/version/payload unchanged into the real runBootstrapCommand handler with only the already-required project/principal/time/schema ingress facts; preserve any handler refusal's stable code and refusing layer in the dispatch diagnostic rather than collapsing it to false. At approval, inject readBudgetCommitment that calls real deriveApprovalBudgetRef against the same store and assert it is called exactly once for the offered run only. Require every dispatch report to be ANSWERED/ok with diagnostics that expose exact code@layer on failure, assert the carried submission/hash values are nondefault and the three surface reads advance to the expected offered kinds, then use real resolveAdmissionGate to prove the exact nondefault node is activated by the exact human approval. Close every ephemeral store in afterEach/finally. Add no helper/source/doc file: the durable proof is these two committed integration consumers; the epic-final row owns the docs sweep.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/live-approval-activation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PENULTIMATE ADVERSARIAL REVIEW AND DEPENDENCY-OWNED MUTATION AUDIT. Apply adversarial-self-review to repeated/fresh surface reads, exact offer-object identity, A-first/B-selected ordering, regenerated command ids, empty/huge/missing maps, stale offers, missing goal versus missing authority precedence, asynchronous budget reads, handler refusal preservation, resource cleanup, and nonzero denominators. Inspect d3's durable completion/review record and delivered commit for the required restored first-entry, retired fixed-hash, and missing-material-fallback production mutations; those production files belong to d3, so do not touch or re-run mutations against foreign paths in this row. Require its record to name which production-surface assertion reddened, the exact old-hash observed code/layer where the real handler answered, pre-mutation exact-path status, and successful restore proof; missing evidence or any green mutant reopens/blocks on d3 rather than being fabricated here. In this row, prove the acceptance arms are independently load-bearing by running the two committed tests with nonzero counts and checking that (a) A and B are both actually generated, (b) the B-only body assertions compare against the real daemon surface rather than a helper copy, and (c) the missing-map arm's accepting downstream counters are nonzero in its positive control but exactly zero at the named guard. Re-run shape/reachability grep to ensure no static authority/default import or third owned path was introduced, and run git diff --check on exactly the two integration files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/dev-payload-parity.test.ts",
+        "tests/integration/control-room/live-approval-activation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "FINAL CONCENTRATED VERIFICATION AND COMPLETION EVIDENCE. Run exactly this foreground/unpiped stop-on-first-failure command from repo root and persist it verbatim as complete_task verification evidence: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx;x exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts;x --filter @moe/control-room typecheck}`. Read output, not only exit 0: require Control Room `Test Files 2 passed` with nonzero Tests, integration `Test Files 2 passed` with nonzero Tests, and successful @moe/control-room typecheck. Then run `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane only; apps/** not covered), `pnpm verify:foundation`, and `pnpm verify:store` as separate foreground/unpiped legs. Compare each HEAD failing-path set with the phase-0 merge-base/pre-diff set, require the owned-package/focused legs exit 0 and no new failure intersecting the two owned files, and disclose all foreign red verbatim with exact paths/count lines. Prove the final diff/pathspec is a subset of the two integration files, no production/default/canonicalizer bytes changed, and parent 016's consumer dependency still names this DONE row. CompletionSummary records the two-run denominator, exact seven-key roster, B-only dynamic operands, missing-authority code/layer plus zero-call counts and accepting positive-control counts, real-handler propose/finalize/approval outcomes, exact activated node, the three d3 mutation-record outcomes/restores, and all nonzero Test Files/Tests lines; put any overflow as one under-4500-character task comment before complete_task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/dev-payload-parity.test.ts",
+        "tests/integration/control-room/live-approval-activation.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0169055cad324b7f84a2e90f0b46f8e0",
+  "dependsOn": [
+    "task-ed89967f396d4cb78ec65ba8188bfb19",
+    "task-4942111bdaac427985e4636b2bbd0cad",
+    "task-d3bfc33e364d4dbab1ef02723d672263"
+  ],
+  "priority": "CRITICAL",
+  "order": 191.95,
+  "comments": [
+    {
+      "id": "comment-985a01be98ef42068e152fda5dd9a7d8",
+      "author": "architect-1f97776b",
+      "content": "PLAN-TIME SCOPE CORRECTION / SPIDR OVERLAY. Fresh HEAD ca1f05c8 reachability (git grep on approval.decide across LiveBoard consumers) found two behavior-asserting files omitted from this row: apps/control-room/src/live/live-board.a11y.test.tsx and apps/control-room/src/live/live-effort-path.test.tsx. Both currently render/click approval.decide with no goal/authority material; the required no-authority render fence necessarily makes their assertions fail, so they cannot be dismissed as source-compatible. Adding them to this row would make 12 paths and violate the hard 10-file cap. I therefore created dependency leaf task-bbf36377411d466397ae3519eee57fac with the six production paths plus all four direct component consumers (exact 10). It preserves SurfaceFrame and DispatchInput exported shapes via a validated offer-identity WeakMap, avoiding a much larger exported-type caller fan-out. This row should be amended to the two-file real-daemon acceptance slice (tests/integration/control-room/dev-payload-parity.test.ts and live-approval-activation.test.ts) and dependOn task-bbf36377411d466397ae3519eee57fac plus its existing producer prerequisites. Parent 016 remains the browser E2E consumer. Do not implement this stale ten-path roster before the dependency/description overlay is applied.",
+      "timestamp": "2026-09-01T08:19:09.957Z"
+    },
+    {
+      "id": "comment-48bdf9d93d454a9796def8c60dd37bcc",
+      "author": "architect-1f97776b",
+      "content": "CORRECTION to comment-985a01be98ef42068e152fda5dd9a7d8: the untouched draft child bbf363 was deleted before plan submission because its DoD falsely said journeyAuthority.planRevision could serve verbatim as the different finalize revision shape. The measured replacement is task-e38d54ed55b94ca5b40c3080f1568bf1, same exact ten-path split and producer dependencies, but it retires only the producer-owned graph/plan tuple and explicitly does not invent dependencyHash/qualityHash/policyHash. Add e38d54 (not deleted bbf363) to this row's dependsOn.",
+      "timestamp": "2026-09-01T08:28:09.076Z"
+    },
+    {
+      "id": "comment-9d74eecb25cf4762b4f48038c78fcfd1",
+      "author": "architect-1f97776b",
+      "content": "FINAL child-id correction: task-d3bfc33e364d4dbab1ef02723d672263 supersedes the deleted untouched drafts bbf363 and e38d54. d3bfc33 has the same exact ten-path production split, corrected measured graph/plan scope, and a nonvacuous 436-character completion gate that prints NODE_BRIDGE_OK. Add d3bfc33 (only) to c444 dependsOn; c444 remains the two-file real-daemon integration successor.",
+      "timestamp": "2026-09-01T08:31:15.927Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T08:06:12.978Z",
+  "updatedAt": "2026-09-01T13:14:08.426Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-01T08:06:55.109Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-1f97776b",
+    "architect-db6a0906"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured all direct shape and behavior consumers; identified two omitted approval-control tests; created exact-ten-path production child task-bbf36377411d466397ae3519eee57fac; recorded scope overlay in comment-985a01be98ef42068e152fda5dd9a7d8 and requested governor dependency update.",
+      "whatRemains": "After bbf363 is planned and lands, replan c444 as the two-file real-daemon integration acceptance slice over dev-payload-parity.test.ts and live-approval-activation.test.ts; retain ed899/494 prerequisites and add bbf363 dependsOn.",
+      "pitfalls": "Do not implement the stale original ten-path roster. Missing authority must remove approval controls, so live-board.a11y.test.tsx and live-effort-path.test.tsx are real consumers. Preserve SurfaceFrame/DispatchInput exported shapes or the caller fan-out exceeds the cap.",
+      "releasedAt": "2026-09-01T08:19:32.350Z",
+      "releasedBy": "architect-1f97776b",
+      "reason": "Fresh reachability requires a prerequisite production split before this acceptance row can be planned."
+    }
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-01T13:14:06.231Z",
+  "planningNotes": {
+    "approachesConsidered": "The original ten-path browser implementation was rejected after live approval.decide reachability found two additional asserting consumers; task-d3bfc33e364d4dbab1ef02723d672263 now owns the exact ten production/component paths, so duplicating those bytes here would collide with live ownership and breach the measured split. This plan makes c444 the two-file real-daemon acceptance successor named by final comment-9d74eecb25cf4762b4f48038c78fcfd1. Rejected retaining direct journeyAuthority/default payload parity because it proves a copied fixture rather than the served authority. Rejected importing/copying canonicalizers or adding fallbacks. Rejected a new root bare @moe/control-room-client import or manifest/lock edit: the root package has no declared edge, while apps/control-room already has the correct manifest+lock edge; resolveLiveSetup yields the real generated client through that production module. Rejected broad HTTP/pairing/browser expansion because this row certifies the real daemon handler plus production frame/dispatch seam; parent 016 owns board-chain browser E2E and epic-final hardening owns whole-epic regression/docs.",
+    "codebaseInsights": "Measured at HEAD ca1f05c8. Exact-path status showed only adopted foreign `apps/control-room/src/live/live-board.test.tsx` dirty; live-planning-authorities.ts/.js and daemon affordance-planning-authorities.ts/.js were absent because producer/core rows had not landed. Current production lines: live-board-feed 361, live-board 239, live-dispatch 178, live-dispatch-payloads 397; owned integration tests are 154/141 lines. Current dev-payload-parity imports journeyAuthority + DEFAULT_* + payloadFor and hard-pins five static-authority arms; live-approval-activation calls payloadFor directly for propose/finalize/approval. `git grep -l payloadFor` found both owned tests plus live board/dispatch and agent-wrapper callers, so d3 preserves the public signature while this row retires only the two obsolete callers. Verified existing symbols/signatures on disk: createAffordancePort/readSurface, frameOfSurface(response), dispatchAffordance(DispatchInput), resolveLiveSetup(env, compatReport), runBootstrapCommand, deriveApprovalBudgetRef, resolveAdmissionGate. Moe context measured dependencies: 494 is DONE/merged; ed899 is BLOCKED/unmerged; d3 is WORKING/unmerged; c444 dependsOn all three, and parent 016 already dependsOn c444. Thus the worker must grade delivered dependency records/SHAs at claim, never current WIP. The final two-file scope is an explicit plan overlay over stale description/rails, not an invitation to absorb d3 paths.",
+    "risks": "The two production dependencies are unfinished at plan time; runtime ordering must hold, and a delivered shape/signature mismatch is a block rather than an excuse to reimplement. The authority producer emits material only with a configured principal, an exact durable run→goal binding, eligible offers, and exactly one node; fixtures must preserve all those facts and assert nonzero sibling coverage. d3 intentionally does not replace dependencyHash/qualityHash/policyHash because the producer does not carry them; do not broaden claims. resolveLiveSetup's matching compatibility report must be remeasured from the shipped client at worker claim and accessed through apps/control-room's existing dependency edge—never paste an old digest into production or add a root dependency. The real-handler transport adapter may map envelope vocabulary to bootstrap ingress facts but must not mutate payload/authority or collapse refusal provenance. Stores must close on every exit. Shared dirty paths, especially parent live-board.test.tsx, are foreign and never a stop condition; only a new semantic edit on one of the two owned tests requires attribution.",
+    "keyFiles": [
+      "tests/integration/control-room/dev-payload-parity.test.ts",
+      "tests/integration/control-room/live-approval-activation.test.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/control-room/src/live/live-board-feed.ts",
+      "apps/control-room/src/live/live-dispatch.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-09-01T13:14:08.426Z"
+}

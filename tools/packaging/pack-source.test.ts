@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -130,7 +130,7 @@ function write(root: string, path: string, contents: string): void {
 }
 
 function createGitFixture(objectFormat: "sha1" | "sha256" = "sha1"): GitFixture {
-  const repositoryRoot = mkdtempSync(join(tmpdir(), `moe-pack-source-${objectFormat}-`));
+  const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), `moe-pack-source-${objectFormat}-`)));
   roots.push(repositoryRoot);
   run("git", ["init", "--quiet", `--object-format=${objectFormat}`], repositoryRoot);
   run("git", ["config", "user.email", "pack-source@example.invalid"], repositoryRoot);
@@ -181,8 +181,7 @@ function isGitCommand(args: readonly string[], command: string): boolean {
 }
 
 function isExecutable(command: string, name: "git" | "tar"): boolean {
-  const file = basename(command).toLowerCase();
-  return file === name || file === `${name}.exe`;
+  return command === (name === "git" ? TOOLCHAIN.gitExecutable : TOOLCHAIN.tarExecutable);
 }
 
 function isTarExtraction(args: readonly string[]): boolean {
@@ -221,7 +220,7 @@ function temporaryOwner(dependencies: Partial<PackSourceDependencies> = {}): {
     dependencies: {
       ...dependencies,
       makeTemporaryRoot: () => {
-        const owner = mkdtempSync(join(tmpdir(), "moe-pack-source-owner-test-"));
+        const owner = realpathSync(mkdtempSync(join(tmpdir(), "moe-pack-source-owner-test-")));
         owners.push(owner);
         roots.push(owner);
         return owner;
@@ -496,7 +495,7 @@ describe("exact-commit packaging source", () => {
   });
 
   it("refuses a lease snapshot whose bytes no longer match the Git-verified digest", () => {
-    const root = mkdtempSync(join(tmpdir(), "moe-pack-source-lease-binding-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-pack-source-lease-binding-")));
     roots.push(root);
     write(root, "src/version.txt", "trusted-source\n");
     const trusted = readFileSync(join(root, "src", "version.txt"));

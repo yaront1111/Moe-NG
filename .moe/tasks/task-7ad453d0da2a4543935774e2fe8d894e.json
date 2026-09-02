@@ -1,0 +1,50 @@
+{
+  "id": "task-7ad453d0da2a4543935774e2fe8d894e",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Require replayable recipes at the durable task-verification writer",
+  "description": "Acceptance follow-up for the fresh exact replay census: 161 DONE rows, one missing verification.command (task-7eddd612750847ad801f811a4f65be42), and a 49-row union of prose/placeholders, repo-root-invalid cwd annotations, vanished temp/materialization paths, or outer-shell/chained records. Owned boundary set: the production writer, codec, and reader that persist task.verification; NO project path is asserted yet because git grep found no such writer in this checkout. The architect must locate the real Moe platform owner in DoD 1 and block if it is external. Existing historical records are immutable provenance and must never be silently reconstructed or rewritten.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: locate the production task.verification writer/codec/reader and prove a real consumer edge; if that authority is outside D:/projexts/moe-next or cannot be assigned an exact <=10-path set, call moe.report_blocked with needsFrom=platform/governor rather than reimplementing it in the daemon or editing .moe data.",
+    "Future completion writes admit only a bounded replayable recipe with explicit cwd/executable/argv (or an equivalently machine-executable contract), rejecting prose, placeholders, vanished temp paths, and ambiguous shell chains with a stable code/layer.",
+    "Readers distinguish missing, legacy-unreplayable, and replayable records without inventing historical success; the 161-row census remains an immutable audit fixture/reference, not migrated authority.",
+    "Focused writer/codec tests assert exact reason provenance and nonzero generated cases for every rejected recipe class.",
+    "A mutation that admits one prose or cwd-annotation exemplar makes the named test red; the platform's normal task completion path remains green."
+  ],
+  "taskRails": [
+    "Do not edit .moe records or rewrite historical completion evidence.",
+    "Do not claim a repo-owned implementation until DoD 1 finds the actual production writer and an exact path set.",
+    "This is a writer-contract repair, not a separate evidence-only test row."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "HIGH",
+  "order": 198,
+  "comments": [
+    {
+      "id": "comment-f860eaaf5c0e4258ab919cb4a0e719c6",
+      "author": "architect-5e59a71e",
+      "content": "VERIFY-OR-BLOCK measurement (2026-08-31, production-at-claim; no .moe records read or edited):\n\n1. Repo-owned search:\n`$terms=@('complete_task','task.verification','completionSummary','reviewSummary'); foreach($term in $terms){ git grep -n -I -F $term -- 'apps/**' 'packages/**' 'adapters/**' 'tests/**' 'tools/**' 'scripts/**'; if($LASTEXITCODE -eq 1){'NO_MATCHES'} }`\nreturned NO_MATCHES for all four terms in D:/projexts/moe-next. A Task type/schema scan over the same tracked scopes also returned NO_MATCHES. The workspace manifests/lock have no Moe workforce daemon dependency.\n\n2. Actual served authority is external. The running JetBrains Moe proxy launches the installed `moe-daemon` for `--project D:/projexts/moe-next`; its repository identifies Moe-s-Tavern. Source checkout `D:/projexts/moes` is a separate git root (HEAD 5b5784e4be6709b0401a877f1038ea4760a93fe6), and its built modules match the installed plugin bytes for the measured boundary.\n\nExternal production path/call chain:\n- `packages/moe-daemon/src/tools/completeTask.ts`: complete_task input schema, calls validator, stamps reportedAt, writes task.verification.\n- `packages/moe-daemon/src/util/enforcement.ts::assertVerificationEvidence`: current admission/normalization codec.\n- `packages/moe-daemon/src/types/schema.ts::TaskVerification`: durable record type.\n- `packages/moe-daemon/src/state/taskStore.ts::updateTask` -> `state/persistence.ts::writeEntity` -> `util/atomicWrite.ts::atomicWriteJsonAsync`: durable persistence.\n- `packages/moe-daemon/src/tools/getContext.ts`: real reader; returns full current-task verification and reduced declared-dependency verification.\n- Served consumer edge: `src/index.ts` -> `server/McpAdapter.ts` -> `tools/index.ts`, which registers/dispatches completeTaskTool and getContextTool.\n\nCurrent contract admits any nonblank trimmed command <=500 plus integer exitCode=0 and optional string outputTail (suffix-truncated at 2000). It has no explicit cwd/executable/argv and no prose, placeholder, shell-chain, or vanished-temp screening. Current provenance is only MISSING_REQUIRED or INVALID_INPUT; no recipe-specific stable code/layer exists.\n\nA platform repair can be bounded in that external repo (writer/validator/type/reader/persistence and focused tests), but this moe-next row has zero legal implementation paths. Per DoD 1 and the task rail, submitting a local plan would fabricate the authority. needsFrom=platform/governor: authorize/rehome the writer-contract repair in the Moe-s-Tavern project and assign its exact external path roster; keep historical records immutable and do not migrate .moe data.",
+      "timestamp": "2026-08-31T12:45:33.036Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:19:37.500Z",
+  "updatedAt": "2026-08-31T12:46:02.178Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T12:37:22.487Z"
+  },
+  "contextFetchedBy": [
+    "architect-5e59a71e"
+  ],
+  "blockedReason": "VERIFY-OR-BLOCK fired: tracked-source searches found no production task-verification writer, codec, reader, Task record, or Moe workforce dependency inside D:/projexts/moe-next. The live complete_task authority is served from the separate Moe-s-Tavern platform/JetBrains plugin and is implemented under D:/projexts/moes/packages/moe-daemon (writer, validator/type, persistence path, get_context reader, and MCP dispatch consumer edge measured in row comment comment-f860eaaf5c0e4258ab919cb4a0e719c6). This row therefore has zero legal moe-next affected paths; a local implementation would fabricate authority and violate the explicit no-reimplementation rail. Platform/governor must rehome or authorize the writer-contract repair in that platform project with an exact external path roster. Historical records remain immutable; no .moe data was edited.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T12:46:02.178Z"
+}

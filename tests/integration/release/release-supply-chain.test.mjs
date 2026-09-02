@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -65,6 +66,10 @@ function materializeRepository(workspace) {
     "-c", "commit.gpgsign=false", "-c", "user.name=Moe Test",
     "-c", "user.email=moe-test.invalid", "commit", "-m", "fixture",
   ], { cwd: repository }), "git commit fixture");
+  // The real release job installs the workspace before launching this entrypoint. Preserve
+  // that module-resolution fact in the archived fixture without copying or committing the
+  // dependency tree; otherwise Node 24 refuses imports before the pnpm provenance fence runs.
+  symlinkSync(join(ROOT, "node_modules"), join(repository, "node_modules"), "junction");
   return repository;
 }
 
@@ -139,7 +144,9 @@ test("R3-12-F refuses forged pnpm before ZIP production or attacker execution", 
     assert.equal(existsSync(join(repository, "dist", "moe-windows.zip")), false,
       `forged ZIP produced: ${output}`);
     assert.equal(result.status, 1, output);
-    assert.equal(output.trim(), "PACK_STEP_FAILED: pnpm provenance invalid");
+    // With no trusted action handoff the package identity fence answers before a tree digest
+    // can be compared. This is the exact fail-closed refusal; the forged shim still never ran.
+    assert.equal(output.trim(), "PACK_STEP_FAILED: pnpm package identity unavailable");
   } finally {
     rmSync(workspace, { force: true, recursive: true });
   }

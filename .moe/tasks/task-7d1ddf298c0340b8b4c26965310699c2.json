@@ -1,0 +1,75 @@
+{
+  "id": "task-7d1ddf298c0340b8b4c26965310699c2",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Decompose HTTP ingress and static hosting while restoring R3-1 provenance",
+  "description": "Acceptance follow-up for two http-listener failures, the unsafe historical R3-1 whole-file drill, and over-cap http-listener.ts (970) plus static-asset-host.ts (556). Owned path set (8): apps/daemon/src/http/http-listener.ts; apps/daemon/src/http/static-asset-host.ts; apps/daemon/src/http/http-listener.test.ts; apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts; apps/daemon/src/http/http-listener-pairing-routes.ts; apps/daemon/src/http/http-listener-pairing-routes.test.ts; apps/daemon/src/http/pairing-open-completion.ts; apps/daemon/src/http/http-listener-pairing-approval.test.ts. Anchor: c289 comment-213ec4f3.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: trace current pairing approval and affordance-project mismatch from raw HTTP to the owning port; if retired self-approval cannot be isolated without reverting later open/challenge/origin behavior, report blocked/amend rather than restore historical files.",
+    "http-listener.ts and static-asset-host.ts are each below 400 physical lines (target <=250) through focused extractions without changing public/binary behavior.",
+    "Absent/matching/mismatched affordance requests and pairing refusals assert the exact current code and refusing layer; signed Gate-1 paths remain unchanged.",
+    "No browser-facing route can self-approve; in-process operator approval is still required, and a narrow mutation that re-enables self-approval makes the named R3-1 arm red.",
+    "Focused HTTP tests, daemon typecheck, and the full daemon package are green apart from separately attributed prerequisite rows."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the set listed in the description; request an amendment or split before expanding.",
+    "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
+    "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor authorization comment-49719405: comment-4ab52962 approved verbatim — file leaf S (4-path static-policy), amend this row to the 10-path listener/R3 roster, deps wired on S's id when posted. Re-claim and execute.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "CRITICAL",
+  "order": 191,
+  "comments": [
+    {
+      "id": "comment-87a778f35b8840a9a18df98619e565eb",
+      "author": "architect-b2b16103",
+      "content": "PLAN-TIME BLOCKER MEASUREMENT (delivered-tree anchor HEAD d0882c7a433156f9f644b172c989e48eefe42c75). Exact-literal porcelain for all 8 owned paths is empty. Physical lines: http-listener.ts 1002; static-asset-host.ts 556; listener.test 668; Gate-1 test 669; pairing-routes.ts 132; pairing-routes.test 244; pairing-open-completion.ts 164; pairing-approval.test 251. Focused current behavior is already green: 5 HTTP/static suites -> Test Files 5 passed, Tests 110 passed; daemon typecheck exit 0 with the tsc invocation. Full daemon baseline is foreign-red only: 3 files / 15 failures under activation/work, 336 files and 6904 tests passed; none intersects these paths.\n\nThe description's behavioral gaps are stale in the closed direction: /session/pair/approve is already an explicit pre-fallback tombstone returning LISTENER_ROUTE_UNKNOWN@CONTROL_ROOM_LISTENER; only ControlRoomListener.approvePairing reaches pairingApprovalWindow.operator.approve in-process. Absent/matching affordance project bodies already reach the surface, mismatched body already refuses LISTENER_AFFORDANCE_REQUEST_INVALID@CONTROL_ROOM_LISTENER. Remaining test hardening is exact foreign-principal AFFORDANCE_PROJECT_MISMATCH@AFFORDANCE_SURFACE plus a same-request signed open positive control and a narrow current-tree R3 drill; do not reimplement the retired fixes.\n\nThe exact-8 roster cannot satisfy DoD 2 through focused extraction. Listener must shed >=603 physical lines and static host >=157. Of the two other owned production modules, only pairing-specific bootstrap/request/open/tombstone material belongs in pairing-routes; pairing-open-completion is an authority/body codec and cannot accept generic listener/static logic. Their total hard-cap receiver room is 502 lines, less than the 760-line minimum removal, and static host has no coherent block belonging in either. Minifying/deleting commentary or hiding logic in tests is not a focused extraction. Every real daemon runtime TS module also has a tracked one-line .js bridge, so a legitimate new extraction costs two paths. A safe listener needs two new TS/JS module pairs plus pairing-routes absorption; static host needs at least one TS/JS pair. Keeping all original 8 would be 14 paths, above the hard 10-path plan cap. No plan can honestly be submitted under the present rail.",
+      "timestamp": "2026-08-30T22:25:25.561Z"
+    },
+    {
+      "id": "comment-4ab5296262f7494eb063f20da9f384c3",
+      "author": "architect-b2b16103",
+      "content": "PROPOSED MINIMAL SPIDR / GOVERNOR AMENDMENT. Create a dependency leaf S, then amend this row L.\n\nS (4 paths): static-asset-host.ts; NEW static-asset-path-policy.ts; NEW one-line static-asset-path-policy.js bridge; http-listener-static-assets.test.ts. Move the exact public contracts/frozen content-type, max-byte and header shapes plus decode/judge/segment/content-type/containment/etag policy into the new module; static-asset-host retains root leak proof plus locate/read and re-exports the old public surface from the old specifier. Both production files <400; all current exact-shape/security arms and project-manager consumers stay compatible. Exact gate: focused static suite (currently 1 file/53 tests) then @moe/daemon typecheck, foreground/unpiped.\n\nL (amend current to exactly 10 paths, dependsOn S): keep http-listener.ts, http-listener.test.ts, http-listener-product-contract-gate-1.test.ts, http-listener-pairing-routes.ts, http-listener-pairing-routes.test.ts, http-listener-pairing-approval.test.ts; ADD http-listener-command-stream-routes.ts/.js and http-listener-read-dispatch.ts/.js. DROP static-asset-host.ts (S owns it) and unchanged pairing-open-completion.ts (run its suite only). Command-stream owns wire helpers plus command/event/affordance/graph handlers; read-dispatch owns exact JSON path/method/body dispatch and thin read/static adapters; pairing-routes absorbs only bootstrap/request/claim/open/retired-approve ingress. Listener remains the stable public facade, logging, composition, bind/lifecycle, and in-process approval capability. No public signature/export/refusal roster changes; all production files <400.\n\nR3 arm edits the real-agent pairing-routes fixture: exact raw tombstone and pending-claim refusals, then private approval positive control, key-bearing claim, production digest/signature, raw /session/pair/open, and durable authority FOUND on the SAME request. Temporary drill grafts only the current retired branch to the historical valid-success lane using the already-created operator window; it must red the first exact tombstone assertion. Deleting the tombstone is invalid because unhosted fallback yields the same code/layer. Affordance mismatch uses a throw/counter port so changing only affordanceProjectMismatch to false reds. Preserve serveCommand(...,\"HTTP_LISTENER\") and signed Gate-1 bytes.\n\nMeasured L gate: six production-surface suites including pairing open and signed Gate-1 -> 6 files/88 tests, then daemon typecheck; full daemon remains baseline-attributed. Governor must authorize S and replace this row's exact roster/dependency before planning; the current rail forbids both necessary new modules and dropping the static responsibility.",
+      "timestamp": "2026-08-30T22:25:25.737Z"
+    },
+    {
+      "id": "comment-497194056a664a93bef2761cf7700ec5",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AUTHORIZATION — comment-4ab52962 is APPROVED VERBATIM as the binding decomposition. Where it contradicts this row's description/rails, comment-4ab52962 WINS.\n\n1) FILE LEAF S (architect verb): the exact 4-path static-policy row as specified (static-asset-host.ts, NEW static-asset-path-policy.ts + one-line .js bridge, http-listener-static-assets.test.ts; both production files <400; old public surface re-exported from the old specifier; gate = focused static suite then @moe/daemon typecheck, foreground/unpiped).\n2) THIS ROW L amends to the exact 10-path listener/R3 roster as specified (drop static-asset-host.ts and unchanged pairing-open-completion.ts — run its suite only; add command-stream and read-dispatch modules with their .js bridges; no public signature/export/refusal roster changes; all production files <400).\n3) Post S's id in #architects; governor sets L dependsOn [S].\n4) BINDING GUARDRAILS carried from your own text: no minification, no logic moved into fixtures, no reintroduction of historical whole-file bytes; the R3 drill must red the first exact tombstone assertion; preserve serveCommand(...,\"HTTP_LISTENER\") and signed Gate-1 bytes.\n5) Sequencing note: 272b09a7 (transport arms) is parked BLOCKED on this row and auto-unblocks when L lands — the split does not change that edge.\n\nRow returns to PLANNING for you to file S and plan L against the amended roster. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T22:25:56.834Z"
+    },
+    {
+      "id": "comment-ebd87b607fac46d589959651bff5b164",
+      "author": "architect-5e59a71e",
+      "content": "PLAN-TIME EXACT-SHAPE CONSUMER FOUND (HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55). apps/daemon/src/daemon-command-registry.test.ts:719-754 reads literal ./http/http-listener.ts and regex-matches the handleAsyncCommandRequest(..., \"HTTP_LISTENER\") call, then asserts the five-member served transport-origin set bidirectionally. The authorized extraction moves that call into NEW http-listener-command-stream-routes.ts, so leaving this unowned makes the registry suite fail; satisfying the regex with a comment or leaving the command handler in the facade would violate the binding extraction.\n\nRequested minimal roster correction, still exactly 10 paths: ADD apps/daemon/src/daemon-command-registry.test.ts; DROP apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts from ownership (continue to RUN it, plus product-contract-gate-1-command.test.ts, as signed Gate-1 regression; no edit is needed because public listener signatures and signed bytes remain unchanged). Retarget the scanner to enumerate the real production ingress modules and keep its nonempty bidirectional exact-set assertion. This is the sole functional source-path scanner found. Please authorize this one-for-one swap; all other comment-497194056a guardrails remain unchanged.",
+      "timestamp": "2026-08-31T11:00:40.397Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:18:58.469Z",
+  "updatedAt": "2026-09-01T00:57:15.140Z",
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "governor-943540d3",
+    "architect-5e59a71e",
+    "architect-1f97776b"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-30T22:11:29.249Z"
+  },
+  "blockedReason": "PLAN-TIME EXACT-SHAPE OWNERSHIP BLOCK at delivered HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. The authorized extraction moves handleAsyncCommandRequest(..., \"HTTP_LISTENER\") from http-listener.ts into the new command-stream module, but apps/daemon/src/daemon-command-registry.test.ts:719-754 hardcodes the old source path, regex-scans that exact call, and asserts the served transport-origin set bidirectionally. The binding exact-ten roster omits this asserting consumer, so the planned move would fail its 302-test production-source composition gate; leaving the call in the facade contradicts the governor-mandated extraction, and satisfying the scanner with a comment is forbidden. Comment comment-ebd87b607fac46d589959651bff5b164 requests the minimal still-ten-path correction: add daemon-command-registry.test.ts, drop ownership (but retain run-only verification) of http-listener-product-contract-gate-1.test.ts. No files were edited. Do not submit a speculative plan until that one-for-one roster amendment is authorized; the already-filed static leaf dependency still also needs governance wiring.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T11:07:13.214Z",
+  "blockedOnTaskIds": null,
+  "dependsOn": [
+    "task-aa205445cc564bec8044136348c5bc26"
+  ]
+}

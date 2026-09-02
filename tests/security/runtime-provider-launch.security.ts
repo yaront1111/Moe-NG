@@ -147,8 +147,8 @@ describe("CLAUDE_LAUNCH_LAYERS", () => {
   it("BEFORE — an unresolvable request is refused before any process exists", async () => {
     const outcome = await probeBefore(
       BOUND,
-      async () => await launchClaude(null),
-      async () => await launchClaude({ executable: POISON_PATH }),
+      async () => await launchClaude(null, { platform: "win32" }),
+      async () => await launchClaude({ executable: POISON_PATH }, { platform: "win32" }),
     );
     ledger.refused(boundary, "BEFORE", outcome.probe, malformed);
     ledger.refused(boundary, "BEFORE", outcome.effect, malformed);
@@ -164,8 +164,8 @@ describe("CLAUDE_LAUNCH_LAYERS", () => {
     };
     const outcome = await probeAfter(
       BOUND,
-      async () => await launchClaude(hostile(trap)),
-      async () => await launchClaude(hostile(new Proxy({}, {}))),
+      async () => await launchClaude(hostile(trap), { platform: "win32" }),
+      async () => await launchClaude(hostile(new Proxy({}, {})), { platform: "win32" }),
     );
     // A trap that HAS run has already had its effect whatever the guard decides afterwards, so
     // containment is asserted by the accessor never firing, not by the refusal alone.
@@ -181,8 +181,8 @@ describe("CLAUDE_LAUNCH_LAYERS", () => {
   it("RACE — two hostile launches contend and neither reports a launched process", async () => {
     const outcome = await probeRacing(
       BOUND,
-      async () => await launchClaude(hostile<unknown>([])),
-      async () => await launchClaude(hostile<unknown>("launch")),
+      async () => await launchClaude(hostile<unknown>([]), { platform: "win32" }),
+      async () => await launchClaude(hostile<unknown>("launch"), { platform: "win32" }),
     );
     for (const side of [outcome.left, outcome.right]) {
       expect(side.status).toBe("fulfilled");
