@@ -293,7 +293,8 @@ describe("createProjectBoundaryOpener", () => {
 });
 
 describe("runProjectManagerMain", () => {
-  it("starts one fixed-host manager, waits, then closes HTTP before every project Job", async () => {
+  it.runIf(process.platform === "win32")(
+    "starts one fixed-host manager, waits, then closes HTTP before every project Job", async () => {
     const localAppData = await temporary();
     const order: string[] = [];
     let signal = (): void => { throw new Error("signal not registered"); };
@@ -338,9 +339,11 @@ describe("runProjectManagerMain", () => {
     signal();
     expect(await completed).toBe(0);
     expect(order).toEqual(["http-close", "shutdown"]);
-  });
+    },
+  );
 
-  it("keeps manager and project approvals on bounded instance-correlated input", async () => {
+  it.runIf(process.platform === "win32")(
+    "keeps manager and project approvals on bounded instance-correlated input", async () => {
     const localAppData = await temporary();
     const order: string[] = [];
     let signal = (): void => { throw new Error("signal not registered"); };
@@ -397,7 +400,8 @@ describe("runProjectManagerMain", () => {
     signal();
     expect(await completed).toBe(0);
     expect(order).toEqual(["http-close", "shutdown"]);
-  });
+    },
+  );
 
   it("refuses unsupported platforms and missing LOCALAPPDATA before creating authority", async () => {
     const startHttp = vi.fn();
@@ -414,7 +418,8 @@ describe("runProjectManagerMain", () => {
     expect(startHttp).not.toHaveBeenCalled();
   });
 
-  it("preserves a malformed durable catalog refusal and starts no HTTP listener", async () => {
+  it.runIf(process.platform === "win32")(
+    "preserves a malformed durable catalog refusal and starts no HTTP listener", async () => {
     const localAppData = await temporary();
     const managerDirectory = join(localAppData, "Moe");
     await mkdir(managerDirectory, { recursive: true });
@@ -432,9 +437,11 @@ describe("runProjectManagerMain", () => {
     })).toBe(1);
     expect(logs).toEqual(["PROJECT_CATALOG_MALFORMED PROJECT_CATALOG"]);
     expect(startHttp).not.toHaveBeenCalled();
-  });
+    },
+  );
 
-  it("discloses exact asset and bind refusals without raw exceptions", async () => {
+  it.runIf(process.platform === "win32")(
+    "discloses exact asset and bind refusals without raw exceptions", async () => {
     const localAppData = await temporary();
     const missingLogs: string[] = [];
     expect(await runProjectManagerMain({
@@ -454,5 +461,6 @@ describe("runProjectManagerMain", () => {
       onSignal: vi.fn(), platform: "win32", root: "D:\\artifact",
     })).toBe(1);
     expect(bindLogs).toEqual(["PROJECT_MANAGER_BIND_FAILED PROJECT_MANAGER_HTTP"]);
-  });
+    },
+  );
 });

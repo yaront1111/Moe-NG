@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,7 +16,9 @@ import {
 
 let scratch = "";
 
-beforeEach(async () => { scratch = await mkdtemp(join(tmpdir(), "moe-manager-files-")); });
+beforeEach(async () => {
+  scratch = await realpath(await mkdtemp(join(tmpdir(), "moe-manager-files-")));
+});
 afterEach(async () => { await rm(scratch, { force: true, recursive: true }); });
 
 describe("createNodeProjectManagerFiles", () => {

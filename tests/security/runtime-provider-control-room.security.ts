@@ -19,12 +19,15 @@ import {
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import {
   RUNTIME_BOUND as BOUND,
+  RUNTIME_PROVIDER_PARTITION,
   createLedger,
   describeSliceInvariants,
 } from "./runtime-provider-ledger.js";
 import type { Arm } from "./runtime-provider-ledger.js";
 
-const OWNED = [SESSION_KEY_LAYER, PRD_LOCAL_LAYER] as const;
+const SESSION_KEY_BOUNDARY = "SESSION_KEY_LAYER";
+const PRD_LOCAL_BOUNDARY = "PRD_LOCAL_LAYER";
+const OWNED = RUNTIME_PROVIDER_PARTITION.CONTROL_ROOM;
 const ledger = createLedger();
 const requireFromControlRoom = createRequire(
   new URL("../../apps/control-room/package.json", import.meta.url),
@@ -109,8 +112,8 @@ const CASES = [
         () => generateSessionKey(),
       );
 
-      ledger.refused(SESSION_KEY_LAYER, "BEFORE", outcome.probe, REFUSAL);
-      ledger.refused(SESSION_KEY_LAYER, "BEFORE", outcome.effect, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "BEFORE", outcome.probe, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "BEFORE", outcome.effect, REFUSAL);
       assertExactRefusal(outcome.probe);
       assertExactRefusal(outcome.effect);
       expect(generateKey).toHaveBeenCalledTimes(2);
@@ -138,8 +141,8 @@ const CASES = [
         () => generateSessionKey(),
       );
 
-      ledger.refused(SESSION_KEY_LAYER, "AFTER", outcome.effect, REFUSAL);
-      ledger.refused(SESSION_KEY_LAYER, "AFTER", outcome.probe, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "AFTER", outcome.effect, REFUSAL);
+      ledger.refused(SESSION_KEY_BOUNDARY, "AFTER", outcome.probe, REFUSAL);
       assertExactRefusal(outcome.effect);
       assertExactRefusal(outcome.probe);
       expect(privateOnly.map((pair) => Object.keys(pair))).toStrictEqual([
@@ -191,7 +194,7 @@ const CASES = [
       const assertionErrors: unknown[] = [];
       for (const side of [outcome.left, outcome.right]) {
         try {
-          ledger.refusedSide(SESSION_KEY_LAYER, side, REFUSAL);
+          ledger.refusedSide(SESSION_KEY_BOUNDARY, side, REFUSAL);
         } catch (error) {
           assertionErrors.push(error);
         }
@@ -227,7 +230,7 @@ const PRD_CASES = [
 
       const actual = await readGoalPrdFile(file);
 
-      ledger.refused(PRD_LOCAL_LAYER, "BEFORE", actual, PRD_TOO_LARGE);
+      ledger.refused(PRD_LOCAL_BOUNDARY, "BEFORE", actual, PRD_TOO_LARGE);
       expect(actual).toStrictEqual({
         code: "PRD_FILE_TOO_LARGE",
         layer: "CONTROL_ROOM_NEWGOAL",
@@ -251,7 +254,7 @@ const PRD_CASES = [
 
       const actual = await readGoalPrdFile(file);
 
-      ledger.refused(PRD_LOCAL_LAYER, "AFTER", actual, PRD_UNREADABLE);
+      ledger.refused(PRD_LOCAL_BOUNDARY, "AFTER", actual, PRD_UNREADABLE);
       expect(actual).toStrictEqual({
         code: "PRD_FILE_UNREADABLE",
         layer: "CONTROL_ROOM_NEWGOAL",
@@ -298,7 +301,7 @@ const PRD_CASES = [
           await Promise.resolve();
         });
 
-        ledger.refused(PRD_LOCAL_LAYER, "RACE", result.current.read, PRD_UNREADABLE);
+        ledger.refused(PRD_LOCAL_BOUNDARY, "RACE", result.current.read, PRD_UNREADABLE);
         expect(result.current.read).toStrictEqual({
           code: "PRD_FILE_UNREADABLE",
           layer: "CONTROL_ROOM_NEWGOAL",
@@ -330,7 +333,7 @@ describe(SESSION_KEY_LAYER, () => {
   it("records exactly two refusing outcomes per hostile arm", () => {
     expect(CASES.map(({ arm }) => [
       arm,
-      ledger.entries.filter((entry) => entry.boundary === SESSION_KEY_LAYER && entry.arm === arm)
+      ledger.entries.filter((entry) => entry.boundary === SESSION_KEY_BOUNDARY && entry.arm === arm)
         .length,
     ])).toStrictEqual([
       ["BEFORE", 2],

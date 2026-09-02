@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -65,7 +65,7 @@ function configurationSettings(): Record<string, unknown> {
 function createConfigurationStore(): Readonly<{
   directory: string; settingsDigest: string; storePath: string;
 }> {
-  const directory = mkdtempSync(join(tmpdir(), "moe-store-deps-config-"));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-config-")));
   const storePath = join(directory, "store.db");
   const config = {
     credential: CREDENTIAL, principalId: "operator-local",
@@ -87,7 +87,7 @@ function createConfigurationStore(): Readonly<{
   return { directory, settingsDigest: created.manifest.settingsDigest, storePath };
 }
 
-const directory = mkdtempSync(join(tmpdir(), "moe-store-deps-"));
+const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-")));
 const storePath = join(directory, "store.db");
 
 const provider = createStoreDependencies({
@@ -171,7 +171,7 @@ describe("the Foundation workspace catalog never gates daemon boot", () => {
   /** A provider is opened per case here rather than reusing the module-level one:
    *  the subject IS the boot, so it has to happen inside the case. */
   function bootWith(label: string, catalogPath: string | undefined) {
-    const directory = mkdtempSync(join(tmpdir(), `moe-store-deps-catalog-${label}-`));
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), `moe-store-deps-catalog-${label}-`)));
     const path = join(directory, "store.db");
     const built = createStoreDependencies({
       clock: CLOCK, credential: CREDENTIAL, principalId: "operator-local",
@@ -386,7 +386,7 @@ describe("createStoreDependencies", () => {
 
 describe("subscription port quarantine on OUTCOME_UNKNOWN", () => {
   const READER = "control-room-1";
-  const quarantineDirectory = mkdtempSync(join(tmpdir(), "moe-store-deps-quarantine-"));
+  const quarantineDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-quarantine-")));
   const quarantineProvider = createStoreDependencies({
     clock: CLOCK,
     credential: CREDENTIAL,
@@ -613,7 +613,7 @@ try {
 `;
 
 it("serves the default provider and its registry bridge under plain Node", { timeout: 180_000 }, async () => {
-  const childDirectory = mkdtempSync(join(tmpdir(), "moe-store-deps-child-"));
+  const childDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-child-")));
   try {
     const { stdout } = await execFileAsync(
       process.execPath,
@@ -700,7 +700,7 @@ describe("first boot", () => {
   it("authenticates the operator on a fresh store with no manual binding install", () => {
     // The genesis seam: no restore has run, no fixture installed a binding.
     // Before genesis wiring this deadlocked — the operator could never get in.
-    const freshDirectory = mkdtempSync(join(tmpdir(), "moe-first-boot-"));
+    const freshDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-first-boot-")));
     const freshProvider = createStoreDependencies({
       clock: CLOCK,
       credential: CREDENTIAL,

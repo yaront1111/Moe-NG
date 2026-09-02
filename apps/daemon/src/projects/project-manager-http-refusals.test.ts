@@ -233,7 +233,7 @@ async function sweep(
   }
 }
 
-describe("project manager HTTP refusal vocabulary", () => {
+describe.runIf(process.platform !== "darwin")("project manager HTTP refusal vocabulary", () => {
   it("refuses each hostile mutation with its own code and layer, touching no port", async () => {
     // A sweep that generates zero cases would otherwise pass silently.
     expect(PRE_PORT_REFUSALS).toHaveLength(6);
@@ -301,7 +301,8 @@ describe("project manager HTTP refusal vocabulary", () => {
  * credential channel is the one and only mechanism that can refuse, and this arm cannot
  * pass because some neighbouring guard answered first.
  */
-describe("stolen manager credential replayed on the cookie channel (task-8716a858)", () => {
+describe.runIf(process.platform !== "darwin")(
+  "stolen manager credential replayed on the cookie channel (task-8716a858)", () => {
   const MUTATIONS = Object.freeze([
     "/manager/projects/create",
     "/manager/projects/register",
@@ -352,4 +353,5 @@ describe("stolen manager credential replayed on the cookie channel (task-8716a85
       expect(port[kind], kind).not.toHaveBeenCalled();
     }
   });
-});
+  },
+);

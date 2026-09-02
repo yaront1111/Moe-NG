@@ -43,7 +43,7 @@ afterEach(() => {
 
 /** @returns {Fixture} */
 function fixture() {
-  const cwd = mkdtempSync(join(tmpdir(), "moe-pack-observation-"));
+  const cwd = realpathSync.native(mkdtempSync(join(tmpdir(), "moe-pack-observation-")));
   roots.push(cwd);
   const dist = join(cwd, "dist");
   mkdirSync(dist);

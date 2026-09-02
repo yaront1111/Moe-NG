@@ -51,7 +51,7 @@ const CATALOG_PARITY_CASES = Object.freeze([
 let scratch = "";
 
 beforeEach(async () => {
-  scratch = await mkdtemp(join(tmpdir(), "moe-project-catalog-"));
+  scratch = await realpath(await mkdtemp(join(tmpdir(), "moe-project-catalog-")));
 });
 
 afterEach(async () => {

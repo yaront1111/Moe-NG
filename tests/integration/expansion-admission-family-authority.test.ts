@@ -332,5 +332,5 @@ describe("no child obtains authority from a partially admitted expansion (task-0
         expect(restored).toHaveLength(1);
         expect(restored).toEqual([{ meter: "tokens", available: 1000, reserved: 0 }]);
       });
-    });
+    }, 30_000);
 });

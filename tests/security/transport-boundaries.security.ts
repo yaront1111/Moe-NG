@@ -32,6 +32,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import type { LegOutcome } from "./hostile-harness.js";
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
+import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import type { HostileArm } from "./transport-hostile-cases.js";
 
@@ -51,6 +52,7 @@ const ARMS: readonly HostileArm[] = Object.freeze(["AFTER", "BEFORE", "RACE"]);
 const HOSTILE_CASES = Object.freeze([
   ...TRANSPORT_HOSTILE_CASES,
   ...PROJECT_TRANSPORT_HOSTILE_CASES,
+  ...RECENT_TRANSPORT_HOSTILE_CASES,
 ]);
 
 interface Recorded {
@@ -139,7 +141,7 @@ describe("transport axis — completeness against the roster and the no-admissio
 
   it("reads a POSITIVE number of transport entries off the roster's committed bytes", () => {
     expect(ROSTER_TRANSPORT.length).toBeGreaterThan(0);
-    expect(ROSTER_TRANSPORT).toHaveLength(20);
+    expect(ROSTER_TRANSPORT).toHaveLength(25);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

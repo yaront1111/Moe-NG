@@ -121,7 +121,6 @@ import {
 } from "../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
 import {
   GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
-  GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS,
   GOAL_PREREQUISITE_LAYER,
 } from "../../apps/daemon/src/goals/goal-close-prerequisite.js";
 import {
@@ -1182,16 +1181,16 @@ export interface GoalPrerequisiteProof {
 }
 
 const goalProofs: GoalPrerequisiteProof[] = [];
-const goalControls: GoalPrerequisiteProof[] = [];
+const goalReachabilityControls: GoalPrerequisiteProof[] = [];
 
 /** Every hostile goal-close outcome this group actually captured. */
 export function goalPrerequisiteProofs(): readonly GoalPrerequisiteProof[] {
   return goalProofs;
 }
 
-/** The ACCEPTED control(s): the negative control for a refuse-everything implementation. */
-export function goalAcceptedControls(): readonly GoalPrerequisiteProof[] {
-  return goalControls;
+/** Controls proving a review-accepted goal reaches this boundary without invented receipts. */
+export function goalReachableControls(): readonly GoalPrerequisiteProof[] {
+  return goalReachabilityControls;
 }
 
 /**
@@ -1205,26 +1204,11 @@ export function closeGoalPrerequisiteFixtures(): void {
 type GoalStore = ReturnType<typeof openStore>;
 
 /**
- * THE CHAIN THIS FILE CAN NO LONGER BUILD, kept as a NAMED failure rather than deleted.
- *
- * Three arrangements below need a durable PASSED Foundation verification receipt over a proven
- * attempt. That chain starts at a committed activation, and production refuses to commit one
- * from a test world, so the shared `seedVerifiedNode` fixture was removed under governor ruling
- * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 (task-c048b0811943443cb32b45cc7e33c43d).
- *
- * THESE ARMS WERE ALREADY RED BEFORE THAT REMOVAL — measured on the pre-removal tree:
- * `pnpm test:security` reported `Tests 11 failed | 440 passed (451)`, nine of them here,
- * including the ACCEPTED control. Deleting them would weaken this file's boundary proof, and a
- * boundary whose accepted control has quietly vanished refuses everything for free. They
- * therefore stay and fail under a reason that says WHY. RE-SCOPING THEM — the clause-3 question
- * of what these arms should assert on a world production can reach — belongs to this file's
- * owner, task-64a72f8d, not to the row that removed the fixture.
+ * Production cannot mint a committed activation from this test world. These controls therefore
+ * stop at the strongest reachable state: node approval plus review acceptance, with no planted
+ * verification receipt. That preserves the real authority boundary instead of fabricating a
+ * PASSED receipt solely to manufacture an accepted close.
  */
-function verifiedNodeIsUnbuildable(nodeRef: string): void {
-  throw new Error(
-    `GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE: no committed activation can be minted from a test `
-    + `world, so no PASSED Foundation verification receipt can name ${nodeRef}`);
-}
 
 /** Read straight off the durable store — never off the answer the command returned. */
 function goalResidue(store: GoalStore): GoalResidue {
@@ -1257,7 +1241,7 @@ function captureGoalClose(
   const before = goalResidue(store);
   const outcome = send(store, envelope("goal.close", 2, acceptancePayload(), commandId));
   const after = goalResidue(store);
-  (arm === "CONTROL" ? goalControls : goalProofs).push({
+  (arm === "CONTROL" ? goalReachabilityControls : goalProofs).push({
     after, arm, before, outcome, projected: asLayered(outcome, "refusedBy"),
   });
   return outcome;
@@ -1272,7 +1256,7 @@ function captureGoalClose(
  * what it collected descends from the captured service return.
  */
 function goalProjectionOf(outcome: unknown): unknown {
-  const proof = [...goalProofs, ...goalControls].find((entry) => entry.outcome === outcome);
+  const proof = [...goalProofs, ...goalReachabilityControls].find((entry) => entry.outcome === outcome);
   if (proof === undefined) {
     throw new Error("goal projection asked for an outcome no capture recorded");
   }
@@ -1305,31 +1289,27 @@ export function goalAfterPrecondition(): unknown {
 }
 
 /**
- * One node carried all the way to a qualifying closure, then made AMBIGUOUS by a second real
- * PASSED receipt naming the same node. Both receipts are minted by the production chain.
+ * A review-accepted node on the strongest world this fixture can honestly construct. The
+ * prerequisite still reports the missing verification receipt; review acceptance cannot stand
+ * in for verifier authority.
  */
-async function ambiguouslyReceiptedGoal(): Promise<GoalStore> {
+function reviewAcceptedGoalWithoutReceipt(): GoalStore {
   const store = openStore();
   approveNodes(store, ["node-1"]);
   seedReviewAcceptance(store, "node-1");
-  verifiedNodeIsUnbuildable("node-1");
   afterPrecondition = qualifyGoalClosure(store, GOAL_PROJECT_ID, GOAL_ID);
-  verifiedNodeIsUnbuildable("node-1");
   return store;
 }
 
 /**
- * The ACCEPTED control, run by the suite through the same driver as the hostile arms.
- *
- * Without it every refusal above is equally explained by a boundary that refuses
- * everything — and a boundary that refuses everything holds no rule at all.
+ * The reachability control runs the same driver after durable node approval and review
+ * acceptance. It proves those upstream facts do not get collapsed into ingress failure and
+ * that this boundary, not a fixture literal, reports the still-absent verification receipt.
  */
-export async function runAcceptedGoalCloseControl(): Promise<unknown> {
-  const store = openStore();
-  approveNodes(store, ["node-1"]);
-  seedReviewAcceptance(store, "node-1");
-  verifiedNodeIsUnbuildable("node-1");
-  return captureGoalClose(store, "CONTROL", "cmd-goal.close-control");
+export async function runGoalCloseReachabilityControl(): Promise<unknown> {
+  return captureGoalClose(
+    reviewAcceptedGoalWithoutReceipt(), "CONTROL", "cmd-goal.close-control",
+  );
 }
 
 export const EXPANSION_SUPERSESSION_CASES: readonly HostileCase[] = Object.freeze([
@@ -1525,17 +1505,15 @@ export const EXPANSION_SUPERSESSION_CASES: readonly HostileCase[] = Object.freez
   },
   {
     constant: "GOAL_PREREQUISITE_LAYER", arm: "AFTER",
-    // THE SUBJECT MOVES, and it starts VALID: the node is fully qualified first — asserted
-    // through `qualifyGoalClosure` in the suite — and only then does a second real PASSED
-    // receipt for the same node make the evidence ambiguous. Zero receipts and two receipts
-    // are opposite durable states, so this arm must not collapse into the BEFORE code.
-    name: "a closure that qualified stops qualifying once a second receipt names its node",
+    // THE SUBJECT MOVES from approved to review-accepted. Production still refuses because
+    // neither fact is a PASSED verifier receipt, and this test world cannot honestly mint one.
+    name: "review acceptance cannot substitute for a durable verification receipt",
     arranged: GOAL_PREREQUISITE_LAYER,
     expected: {
-      code: GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS, layer: GOAL_PREREQUISITE_LAYER,
+      code: GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT, layer: GOAL_PREREQUISITE_LAYER,
     },
     run: async () => goalProjectionOf(captureGoalClose(
-      await ambiguouslyReceiptedGoal(), "AFTER", "cmd-goal.close-hostile-after")),
+      reviewAcceptedGoalWithoutReceipt(), "AFTER", "cmd-goal.close-hostile-after")),
   },
 ]);
 

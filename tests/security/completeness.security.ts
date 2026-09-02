@@ -71,6 +71,13 @@ import {
 } from "./project-admission-hostile-cases.js";
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
+import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
+import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
+import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
+import {
+  RECENT_SCHEDULER_CASES,
+  RECENT_SCHEDULER_RACES,
+} from "./recent-scheduler-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -108,11 +115,11 @@ const AXES: readonly string[] = Object.freeze([...new Set(ROSTER.map((row) => ro
 // ── The four table-backed axes ────────────────────────────────────────────────────────────
 
 const transportPairs = (): readonly CoveredPair[] =>
-  [...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES]
+  [...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES, ...RECENT_TRANSPORT_HOSTILE_CASES]
     .map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
-  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES]
+  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES, ...RECENT_INTEGRITY_HOSTILE_CASES]
     .map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the
@@ -122,6 +129,7 @@ const durableStorePairs = (): readonly CoveredPair[] => [
     (entry) => [entry.boundary, entry.phase] as const,
   ),
   ...hostileRaceCases.map((entry) => [entry.boundary, "RACE"] as const),
+  ...RECENT_DURABLE_HOSTILE_CASES.map((entry) => [entry.boundary, entry.arm] as const),
 ];
 
 /** Subject modules pair tables carrying `arm` with race tables carrying none. The planning-graph,
@@ -140,6 +148,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...FOUNDATION_DISPATCH_CASES,
     ...PROJECT_ADMISSION_CASES,
     ...POLICY_RISK_CASES,
+    ...RECENT_SCHEDULER_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
@@ -149,6 +158,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...FOUNDATION_DISPATCH_RACES,
     ...PROJECT_ADMISSION_RACES,
     ...POLICY_RISK_RACES,
+    ...RECENT_SCHEDULER_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 
