@@ -62,7 +62,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-17a62b7e",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -93,7 +93,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.316Z",
-  "updatedAt": "2026-09-02T18:21:43.989Z",
+  "updatedAt": "2026-09-02T19:01:13.439Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:15:59.807Z",
     "plannedStepCount": 4,
@@ -105,7 +105,8 @@
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",
-    "architect-dbf9e869"
+    "architect-dbf9e869",
+    "worker-17a62b7e"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
