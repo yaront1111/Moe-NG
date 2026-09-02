@@ -166,8 +166,22 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
  * computed locally: verified/criteria are the daemon counts, and "needs you" is exactly "a
  * contract citing this goal PRD still awaits Gate 1".
  */
+/** "Last activity 3 min ago" from an ISO instant; undefined when it does not parse. */
+export function relativeActivityLabel(iso: string | null, nowMs: number): string | undefined {
+  if (iso === null) return undefined;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return undefined;
+  const seconds = Math.max(0, Math.round((nowMs - at) / 1000));
+  if (seconds < 60) return "Last activity just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `Last activity ${String(minutes)} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Last activity ${String(hours)} h ago`;
+  return `Last activity ${String(Math.round(hours / 24))} d ago`;
+}
+
 function withCoverage(
-  card: GoalCardModel, outcome: DocumentCoverageOutcome | undefined,
+  card: GoalCardModel, outcome: DocumentCoverageOutcome | undefined, nowMs: number,
 ): GoalCardModel {
   if (outcome === undefined) return card;
   if (outcome.status !== "COVERAGE") {
@@ -179,9 +193,12 @@ function withCoverage(
       : card;
   }
   const { contracts, criteria, verified } = outcome.totals;
+  const lastEventLabel = relativeActivityLabel(
+    outcome.goals.find((goal) => goal.goalId === card.goalId)?.lastActivityAt ?? null, nowMs,
+  );
   if (contracts === 0) {
     return Object.freeze({
-      ...card, progressComingOnline: "No Product Contract cites this goal PRD yet.",
+      ...card, lastEventLabel, progressComingOnline: "No Product Contract cites this goal PRD yet.",
       progressNote: "No contract cites the PRD yet",
     });
   }
@@ -198,6 +215,7 @@ function withCoverage(
       ? `All ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`
       : `${String(verified)} of ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`,
     headlineTone: complete ? "verified" : "accent",
+    lastEventLabel,
     needsYou: pending,
     progress: criteria === 0 ? undefined : Object.freeze({
       done: verified, noun: "acceptance criteria verified", total: criteria,
@@ -211,6 +229,7 @@ function withCoverage(
 export function deriveGoalCatalog(
   frame: GoalCatalogFrame | null,
   coverage?: ReadonlyMap<string, DocumentCoverageOutcome>,
+  nowMs: number = Date.now(),
 ): GoalsData {
   if (frame === null) {
     return empty(
@@ -232,7 +251,7 @@ export function deriveGoalCatalog(
   }
 
   const goals = Object.freeze(frame.goals.map(
-    (entry) => withCoverage(goalCard(entry), coverage?.get(entry.goalId)),
+    (entry) => withCoverage(goalCard(entry), coverage?.get(entry.goalId), nowMs),
   ));
   return Object.freeze({
     comingOnlineNote: goals.length === 0 ? "This project has no durable goals yet." : undefined,

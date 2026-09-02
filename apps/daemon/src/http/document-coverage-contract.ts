@@ -47,7 +47,10 @@ export interface ContractCoverage {
 }
 export interface GoalCoverage {
   readonly goalId: string;
+  /** The latest committed decision on the goal, its run or one of its sealed nodes. */
+  readonly lastActivityAt: string | null;
   readonly lifecycle: string | null;
+  readonly planningRunRef: string | null;
   readonly title: string | null;
 }
 export interface DocumentCoverageView {

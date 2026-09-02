@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
-import { deriveGoalCatalog } from "./goal-catalog-model.js";
+import { deriveGoalCatalog, relativeActivityLabel } from "./goal-catalog-model.js";
 
 function catalog(
   goals: GoalCatalogFrame["goals"],
@@ -252,7 +252,7 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
       revisionId: "rev-1",
     }],
     document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
-    goals: [{ goalId: "goal-cov", lifecycle: "EXECUTION_ENABLED", title: "Build it" }],
+    goals: [{ goalId: "goal-cov", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-cov", title: "Build it" }],
     sections: null,
     status: "COVERAGE",
     totals: { contracts: 1, criteria, goals: 1, planned: 0, requirements: 1, verified },
@@ -317,7 +317,7 @@ describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the sta
       revisionId: "rev-1",
     }],
     document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
-    goals: [{ goalId: "goal-cov", lifecycle, title: "Build it" }],
+    goals: [{ goalId: "goal-cov", lastActivityAt: null, lifecycle, planningRunRef: "run-cov", title: "Build it" }],
     sections: null,
     status: "COVERAGE",
     totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 2 },
@@ -328,5 +328,34 @@ describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the sta
   ])("lifecycle %s renders as %s", (lifecycle, state) => {
     const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", withLifecycle(lifecycle)]])).goals[0];
     expect(card?.state).toBe(state);
+  });
+});
+
+
+describe("relativeActivityLabel", () => {
+  const NOW = Date.parse("2026-09-02T20:00:00.000Z");
+  it("speaks the age of the last decision in the unit a person would use", () => {
+    expect(relativeActivityLabel("2026-09-02T19:59:40.000Z", NOW)).toBe("Last activity just now");
+    expect(relativeActivityLabel("2026-09-02T19:35:00.000Z", NOW)).toBe("Last activity 25 min ago");
+    expect(relativeActivityLabel("2026-09-02T14:00:00.000Z", NOW)).toBe("Last activity 6 h ago");
+    expect(relativeActivityLabel("2026-08-30T20:00:00.000Z", NOW)).toBe("Last activity 3 d ago");
+    expect(relativeActivityLabel(null, NOW)).toBeUndefined();
+    expect(relativeActivityLabel("not a time", NOW)).toBeUndefined();
+  });
+
+  it("reaches the card as lastEventLabel from the coverage read's goal row", () => {
+    const entry = {
+      binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-1",
+      planningRunRef: "run-1", truthClass: "DAEMON_VERIFIED",
+    } as const;
+    const outcome: DocumentCoverageOutcome = {
+      contracts: [], document: { byteLength: null, contentSha256: "b".repeat(64), displayPath: null },
+      goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:35:00.000Z", lifecycle: "PLANNING",
+        planningRunRef: "run-1", title: "Build it" }],
+      sections: null, status: "COVERAGE",
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+    };
+    const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-1", outcome]]), NOW).goals[0];
+    expect(card?.lastEventLabel).toBe("Last activity 25 min ago");
   });
 });

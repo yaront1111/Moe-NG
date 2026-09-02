@@ -28,7 +28,7 @@ const CONTRACT = Object.freeze({
 const COVERAGE = Object.freeze({
   contracts: [CONTRACT],
   document: { byteLength: 120, contentSha256: SHA, displayPath: "PRD.md" },
-  goals: [{ goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", title: "Build it" }],
+  goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1", title: "Build it" }],
   outcome: "COVERAGE",
   sections: { advisoryOnly: true, entries: [
     { cited: 1, heading: "11. Evidence", number: "11", verified: 1 },
@@ -56,7 +56,7 @@ describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
         revisionDigest: "d".repeat(64), revisionId: "rev-1",
       }],
       document: { byteLength: 120, contentSha256: SHA, displayPath: "PRD.md" },
-      goals: [{ goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", title: "Build it" }],
+      goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1", title: "Build it" }],
       sections: [
         { cited: 1, heading: "11. Evidence", number: "11", verified: 1 },
         { cited: 0, heading: "Appendix", number: null, verified: 0 },

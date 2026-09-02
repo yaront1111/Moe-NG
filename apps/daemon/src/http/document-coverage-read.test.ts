@@ -211,7 +211,11 @@ describe("createDocumentCoverageReadPort", () => {
   it("lists the bound goal, its document and its sections before any contract exists", () => {
     const { sha, store } = boundWorld();
     const view = coverage(portFor(store).readCoverage({ contentSha256: sha }));
-    expect(view.goals).toEqual([{ goalId: GOAL_ID, lifecycle: "DRAFT", title: "Coverage goal" }]);
+    expect(view.goals).toEqual([{
+      goalId: GOAL_ID, lastActivityAt: expect.any(String), lifecycle: "DRAFT",
+      planningRunRef: expect.any(String), title: "Coverage goal",
+    }]);
+    expect(view.goals[0]?.lastActivityAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
     expect(view.document).toEqual({
       byteLength: encoder.encode(PRD).byteLength, contentSha256: sha, displayPath: "docs/prd.md",
     });

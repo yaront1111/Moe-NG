@@ -8,7 +8,9 @@
  *    widened to COMPLETED goals so closed work keeps counting), whose `criterionBindings`
  *    say which criteria a node delivers;
  *  - each node's review ledger: `accepted` is the ONLY thing that makes a criterion
- *    VERIFIED. Nothing here reads a workspace or a test log.
+ *    VERIFIED. Nothing here reads a workspace or a test log;
+ *  - each goal's last activity: the latest committed decision on the goal, its planning
+ *    run, or one of its sealed nodes.
  *
  * The section map is prose-derived and advisory; the document text comes through the goal
  * source read, which re-proves the stored bytes against their declared digest.
@@ -27,8 +29,9 @@ import type {
   ContractCoverage, CriterionCoverage, CriterionCoverageStatus, DocumentCoverageReadPort,
   DocumentCoverageReadResult, DocumentCoverageSelector, GoalCoverage, RequirementCoverage,
 } from "./document-coverage-contract.js";
+import { catalogBoundGoals, lastDecidedAt } from "./document-coverage-goals.js";
+import type { BoundGoalRow } from "./document-coverage-goals.js";
 import { sectionCoverage } from "./document-coverage-sections.js";
-import { GOAL_CREATED_EVENT_TYPE, decodeGoalCatalogEntry } from "./goal-catalog-entry.js";
 
 const REVISION_AGGREGATE_PREFIX = "product-contract-revision:";
 const GATE_1_AGGREGATE_PREFIX = "product-contract-gate-1-";
@@ -36,8 +39,6 @@ const GATE_1_AGGREGATE_PREFIX = "product-contract-gate-1-";
 const COVERAGE_LIFECYCLES: ReadonlySet<string> =
   new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 const LOWER_HEX_64 = /^[0-9a-f]{64}$/u;
-const MAX_GOAL_PAGES = 16;
-const GOAL_PAGE_SIZE = 256;
 
 export interface DocumentCoverageReadOptions {
   readonly projectId: string;
@@ -56,8 +57,11 @@ const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>> : null;
 
-interface BoundGoal extends GoalCoverage { readonly sha: string }
-interface SealedNode { readonly criterionIds: readonly string[]; readonly nodeKey: string }
+interface SealedNode {
+  readonly criterionIds: readonly string[];
+  readonly goalRef: string;
+  readonly nodeKey: string;
+}
 interface Carrier { readonly nodeKey: string; readonly status: CriterionCoverageStatus }
 
 function sealedNodes(
@@ -72,6 +76,7 @@ function sealedNodes(
       if (!bearing.has(definition.nodeKey)) continue;
       nodes.push({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
+        goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
       });
     }
@@ -110,6 +115,20 @@ function requirementsOf(
   }));
 }
 
+/** The latest committed decision on the goal, its run, or one of its sealed nodes. */
+function lastActivityOf(
+  goal: BoundGoalRow, nodes: readonly SealedNode[], latest: ReadonlyMap<string, string>,
+): string | null {
+  const own = [goal.goalId, goal.planningRunRef ?? "", ...nodes
+    .filter((node) => node.goalRef === goal.goalId).map((node) => node.nodeKey)];
+  let last: string | null = null;
+  for (const aggregateId of own) {
+    const at = latest.get(aggregateId);
+    if (at !== undefined && (last === null || at > last)) last = at;
+  }
+  return last;
+}
+
 export function createDocumentCoverageReadPort(
   options: DocumentCoverageReadOptions,
 ): DocumentCoverageReadPort {
@@ -117,32 +136,6 @@ export function createDocumentCoverageReadPort(
   const readActive = options.readActive
     ?? ((s: SqliteEventStore, p: string) => activeCompiledGraphs(s, p, COVERAGE_LIFECYCLES));
   const readReview = options.readReview ?? readReviewLedger;
-
-  /** Every source-bound goal the catalog carries, or null when a row does not decode. */
-  const catalogGoals = (): BoundGoal[] | null => {
-    const ledger = readDurableLedger(store, projectId);
-    const goals: BoundGoal[] = [];
-    let after = 0n;
-    for (let page = 0; page < MAX_GOAL_PAGES; page += 1) {
-      const events = store.readEventsByTypeAfter(GOAL_CREATED_EVENT_TYPE, after, GOAL_PAGE_SIZE);
-      for (const event of events.items) {
-        after = event.globalPosition;
-        const decoded = decodeGoalCatalogEntry(event, projectId);
-        if (!decoded.ok) return null;
-        const entry = decoded.entry;
-        if (entry.binding === null || entry.binding === undefined) continue;
-        const lifecycle = dataRecord(stateOf(ledger, entry.goalId))?.["lifecycle"];
-        goals.push(Object.freeze({
-          goalId: entry.goalId,
-          lifecycle: typeof lifecycle === "string" ? lifecycle : null,
-          sha: entry.binding.contentSha256,
-          title: entry.brief?.title ?? null,
-        }));
-      }
-      if (!events.hasMore) break;
-    }
-    return goals.sort((left, right) => left.goalId.localeCompare(right.goalId));
-  };
 
   const approvedRevisions = (): ReadonlySet<string> => {
     const ledger = readDurableLedger(store, projectId);
@@ -158,9 +151,9 @@ export function createDocumentCoverageReadPort(
   };
 
   /** Criterion -> the node that carries it, VERIFIED winning over PLANNED. */
-  const carriers = (goalIds: ReadonlySet<string>): ReadonlyMap<string, Carrier> => {
+  const carriers = (nodes: readonly SealedNode[]): ReadonlyMap<string, Carrier> => {
     const carried = new Map<string, Carrier>();
-    for (const node of sealedNodes(readActive(store, projectId), goalIds)) {
+    for (const node of nodes) {
       const status: CriterionCoverageStatus =
         readReview(store, projectId, node.nodeKey).accepted !== undefined ? "VERIFIED" : "PLANNED";
       for (const criterionId of node.criterionIds) {
@@ -173,10 +166,21 @@ export function createDocumentCoverageReadPort(
     return carried;
   };
 
-  const coverageOf = (sha: string, allGoals: readonly BoundGoal[]): DocumentCoverageReadResult => {
-    const goals: GoalCoverage[] = allGoals.filter((goal) => goal.sha === sha)
-      .map(({ goalId, lifecycle, title }) => Object.freeze({ goalId, lifecycle, title }));
-    const carried = carriers(new Set(goals.map((goal) => goal.goalId)));
+  const coverageOf = (sha: string, allGoals: readonly BoundGoalRow[]): DocumentCoverageReadResult => {
+    const bound = allGoals.filter((goal) => goal.sha === sha);
+    const nodes = sealedNodes(readActive(store, projectId), new Set(bound.map((goal) => goal.goalId)));
+    const latest = lastDecidedAt(store, projectId, new Set([
+      ...bound.flatMap((goal) => [goal.goalId, ...(goal.planningRunRef === null ? [] : [goal.planningRunRef])]),
+      ...nodes.map((node) => node.nodeKey),
+    ]));
+    const goals: GoalCoverage[] = bound.map((goal) => Object.freeze({
+      goalId: goal.goalId,
+      lastActivityAt: lastActivityOf(goal, nodes, latest),
+      lifecycle: goal.lifecycle,
+      planningRunRef: goal.planningRunRef,
+      title: goal.title,
+    }));
+    const carried = carriers(nodes);
     const approved = approvedRevisions();
     const ledger = readDurableLedger(store, projectId);
     const contracts: ContractCoverage[] = [];
@@ -232,7 +236,7 @@ export function createDocumentCoverageReadPort(
 
   const readCoverage = (selector: DocumentCoverageSelector): DocumentCoverageReadResult => {
     try {
-      const allGoals = catalogGoals();
+      const allGoals = catalogBoundGoals(store, projectId);
       if (allGoals === null) return refused("DOCUMENT_COVERAGE_READ_UNREADABLE");
       if ("goalRef" in selector) {
         const bound = allGoals.find((goal) => goal.goalId === selector.goalRef);

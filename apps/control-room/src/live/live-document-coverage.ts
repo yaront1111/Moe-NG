@@ -37,7 +37,10 @@ export interface CoverageContractView {
 }
 export interface CoverageGoalView {
   readonly goalId: string;
+  /** The latest committed decision on the goal, its run or one of its sealed nodes. */
+  readonly lastActivityAt: string | null;
   readonly lifecycle: string | null;
+  readonly planningRunRef: string | null;
   readonly title: string | null;
 }
 export interface CoverageSectionView {
@@ -195,10 +198,16 @@ function contractOf(value: unknown): CoverageContractView | null {
 }
 
 function goalOf(value: unknown): CoverageGoalView | null {
-  const record = exactDataRecord(value, ["goalId", "lifecycle", "title"]);
+  const record = exactDataRecord(value, [
+    "goalId", "lastActivityAt", "lifecycle", "planningRunRef", "title",
+  ]);
   if (record === null || !nonEmptyString(record.goalId) || !nullableString(record.lifecycle)
+    || !nullableString(record.lastActivityAt) || !nullableString(record.planningRunRef)
     || !nullableString(record.title)) return null;
-  return Object.freeze({ goalId: record.goalId, lifecycle: record.lifecycle, title: record.title });
+  return Object.freeze({
+    goalId: record.goalId, lastActivityAt: record.lastActivityAt, lifecycle: record.lifecycle,
+    planningRunRef: record.planningRunRef, title: record.title,
+  });
 }
 
 function sectionOf(value: unknown): CoverageSectionView | null {

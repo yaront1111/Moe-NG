@@ -612,7 +612,7 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
         revisionDigest: "d".repeat(64), revisionId: "rev-1",
       }],
       document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
-      goals: [{ goalId, lifecycle: "EXECUTION_ENABLED", title: "Durable title" }],
+      goals: [{ goalId, lastActivityAt: null, lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-cov", title: "Durable title" }],
       sections: null,
       status: "COVERAGE" as const,
       totals: { contracts: 1, criteria: 10, goals: 1, planned: 0, requirements: 7, verified: 10 },
