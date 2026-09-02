@@ -11,7 +11,9 @@
 import type { SectionCoverage } from "./document-coverage-sections.js";
 
 export const DOCUMENT_COVERAGE_READ_PATH = "/documents/coverage/read" as const;
-export const DOCUMENT_COVERAGE_READ_LAYER = "DOCUMENT_COVERAGE_READ" as const;
+/** Module-private like every sibling read route: the boundary roster keys on EXPORTED
+ *  `*_LAYER` declarations, and a route-local refusal layer is not a new boundary. */
+const LAYER = "DOCUMENT_COVERAGE_READ" as const;
 
 export const DOCUMENT_COVERAGE_READ_CODES = Object.freeze([
   "DOCUMENT_COVERAGE_READ_CAPABILITY_DENIED",
@@ -87,5 +89,5 @@ export interface DocumentCoverageReadPort {
 }
 
 export const coverageRefused = (
-  code: string, layer: string = DOCUMENT_COVERAGE_READ_LAYER,
+  code: string, layer: string = LAYER,
 ): DocumentCoverageRefused => Object.freeze({ code, layer, outcome: "REFUSED" as const });
