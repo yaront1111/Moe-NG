@@ -842,4 +842,77 @@ describe("launchActivationProviderRun", () => {
       expect(handoff.launch.startedAt).toBeNull();
       expect(JSON.stringify(handoff)).not.toContain(CALLER_SENTINEL);
     });
+
+  /**
+   * DoD 2(a) — THE FIXTURE IS THE EXACT LIVE REQUEST SCHEMA, IN BOTH DIRECTIONS.
+   *
+   * `request` crosses this seam typed `unknown` on purpose — the launcher
+   * snapshots and validates it inside its own containment — so nothing in the
+   * daemon type-checks the fixture below. What DOES pin it is the launcher's own
+   * exact-record gate: `snapshotExactRecord(value, REQUEST_KEYS)` length-checks
+   * `Object.keys`, so a fixture one key short of the live `ClaudeLaunchRequest`
+   * refuses CLAUDE_LAUNCH_REQUEST_MALFORMED and drags every other arm here with
+   * it. MEASURED: deleting `launchSelection` from `request()` reddens TEN arms in
+   * this file and not one of them names the roster — exactly the "wave of generic
+   * malformed refusals in unrelated suites" the runner warns about at
+   * claude-launcher-input.ts:10-14.
+   *
+   * The EXTRA-key direction is already covered by the smuggled-observation arm
+   * above. The two arms below close the MISSING-key direction — the one that
+   * fires when `ClaudeLaunchRequest` GAINS a field — and make the diagnosis
+   * legible, so that growth reds here, by name, instead of scattering.
+   */
+  const FIXTURE_KEYS = Object.freeze([
+    "argv", "attempt", "bootstrapCredentialDigest", "claim", "contextManifestDigest", "cwd",
+    "duplicateDelivery", "effect", "environment", "grant", "launchSelection", "limits",
+    "priorRegistration", "reconciliation", "renderedContext", "runtime", "wrapperIdentity",
+  ] as const);
+
+  it("keeps the fixture at the exact live request roster, admitted past the launcher's gate",
+    async () => {
+      // Pinned independently of the fixture: deleting a key from `request()`
+      // reds this line rather than quietly shrinking a roster it also supplies.
+      expect(Object.keys(request()).sort()).toEqual([...FIXTURE_KEYS]);
+      expect(FIXTURE_KEYS).toHaveLength(17);
+      // Both sealed launch fields travel; neither is synthesized nor omitted.
+      expect(FIXTURE_KEYS).toContain("renderedContext");
+      expect(FIXTURE_KEYS).toContain("contextManifestDigest");
+      // THE ROSTER CONTROL. The unmodified fixture must clear the exact-record
+      // gate and reach a REAL downstream refusal. A field added to
+      // `ClaudeLaunchRequest` turns this into CLAUDE_LAUNCH_REQUEST_MALFORMED,
+      // reddening one named arm instead of ten anonymous ones.
+      const handoff = handoffOf(await launchActivationProviderRun(
+        authorityWitness().authority,
+        { providerRun: PROVIDER_RUN, request: request(), options: OPTIONS }));
+      expect(handoff.launch.reasonCode).toBe("CLAUDE_LAUNCH_MODEL_MISMATCH");
+      expect(handoff.launch.reasonLayer).toBe("TELEMETRY_CONFIGURATION");
+    });
+
+  it.each(FIXTURE_KEYS)(
+    "refuses at the launcher's own exact-record gate when the request omits %s",
+    async (omitted) => {
+      const short: Record<string, unknown> = { ...request() };
+      delete short[omitted];
+      // The case was actually generated: a sweep that silently removed nothing
+      // would pass every assertion below against the untouched fixture.
+      expect(Object.keys(short)).toHaveLength(FIXTURE_KEYS.length - 1);
+      expect(Object.keys(short)).not.toContain(omitted);
+
+      const handoff = handoffOf(await launchActivationProviderRun(
+        authorityWitness().authority,
+        { providerRun: PROVIDER_RUN, request: short, options: OPTIONS }));
+
+      // WHICH LAYER REFUSED IS THE POINT. This seam forwards the request UNREAD,
+      // so a missing field can only be caught inside the launcher's containment:
+      // the code and layer are the LAUNCHER's own, unrestamped by the daemon,
+      // and the telemetry layer adds its blind-handoff refusal beside them
+      // rather than replacing them.
+      expect(handoff.launch.kind).toBe("REFUSED");
+      expect(handoff.launch.reasonCode).toBe("CLAUDE_LAUNCH_REQUEST_MALFORMED");
+      expect(handoff.launch.reasonLayer).toBe("LAUNCHER");
+      expect(handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_REFUSED");
+      expect(handoff.telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      expect(handoff.terminal).toBe("REFUSED");
+      expect(handoff.launch.exit).toBeNull();
+    });
 });

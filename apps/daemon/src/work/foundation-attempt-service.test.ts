@@ -1255,6 +1255,65 @@ describe("foundation attempt dispatch — pre-launch context seal (task-203a5ca7
     expect(order.indexOf("prepare")).toBeLessThan(order.indexOf("seal"));
     expect(outcome).toBeDefined();
   });
+
+  /**
+   * DoD 1/3 — THE ROUND-TRIP FENCE, ISOLATED FROM THE FATAL DECODER BESIDE IT.
+   *
+   * `launchRequestBody` guards the delivered bytes TWICE and both answer with the SAME code and
+   * the SAME layer: the fatal UTF-8 decode at foundation-attempt-contracts.ts:233 and the
+   * re-encode byte comparison at :238. Invalid UTF-8 trips the decoder and never reaches :238,
+   * so a fixture of invalid bytes proves the SYSTEM refuses, not WHICH guard did. MEASURED:
+   * flipping `fatal: true` to `fatal: false` leaves all 111 arms across this file and
+   * foundation-context-launch-control.test.ts GREEN, because :238 catches the U+FFFD expansion
+   * ([c3,28] decodes to "�(" and re-encodes to [ef,bf,bd,28]) under the identical code.
+   *
+   * This arm supplies the one input that DIVERGES them. A UTF-8 BOM decodes CLEANLY under
+   * `fatal: true` - `TextDecoder` strips it because `ignoreBOM` defaults to false - so
+   * [ef,bb,bf] + text becomes that text again and re-encodes three bytes short. Only :238 can
+   * refuse it. The prefixed bytes are placed on BOTH the seal and its template so the :227
+   * template-binding guard, which answers under a DIFFERENT code, cannot answer first.
+   *
+   * The hazard is not merely a drill: foundation-context-prelaunch.ts admits durable bytes a
+   * replay "may have had sealed by another caller" as any 0-255 integer array, which is exactly
+   * why :238 guards those rather than trusting the renderer.
+   */
+  it("refuses sealed bytes that decode cleanly but do not round-trip, before any launch",
+    async () => {
+      const store = readyStore("context-seal-bom-round-trip");
+      const original = SEALED_TEMPLATE.renderedContext.bytes;
+      const bytes = Object.freeze([0xef, 0xbb, 0xbf, ...original]);
+      const decode = (input: readonly number[]): string =>
+        new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(input));
+
+      // THE DIVERGENCE, asserted rather than assumed: the fatal decoder ACCEPTS these bytes and
+      // yields the very same text as the unprefixed original, so it cannot be what refuses.
+      expect(bytes.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf]);
+      expect(decode(bytes)).toBe(decode(original));
+      expect(Buffer.from(decode(bytes), "utf8").byteLength).toBe(bytes.length - 3);
+
+      const template = Object.freeze({
+        ...SEALED_TEMPLATE,
+        renderedContext: Object.freeze({ ...SEALED_TEMPLATE.renderedContext, bytes }),
+      }) as unknown as typeof SEALED_TEMPLATE;
+      const contextSeal: FoundationContextSealPort = {
+        sealFoundationContext: () => Object.freeze({
+          bytes, contextManifestDigest: SEALED_TEMPLATE.renderedContext.manifest.digest,
+          ok: true as const, template,
+        }),
+      };
+      const { service } = harness(store, { contextSeal });
+
+      const outcome = await service.dispatch(dispatchRequest());
+
+      // The DAEMON attempt layer's own code - not the template-binding code, and not the
+      // launcher's: these bytes are refused before any request is built, so no launcher
+      // vocabulary can answer for them.
+      expectRefusal(
+        outcome, "FOUNDATION_ATTEMPT_CONTEXT_BYTES_UNDELIVERABLE", DAEMON_FOUNDATION_ATTEMPT);
+      // BEFORE EFFECTS, both counters. "It refused" is not "it left nothing behind".
+      expect(providerBoundaryProbe.launches).toHaveLength(0);
+      expect(providerBoundaryProbe.commits).toHaveLength(0);
+    });
 });
 
 const COMPLETION_PHASE_ORDER = Object.freeze([
