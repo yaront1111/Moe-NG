@@ -149,7 +149,7 @@
       "completedAt": "2026-09-02T15:14:01.466Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -174,24 +174,33 @@
       "author": "worker-f06d587f",
       "content": "STEP 7 DRILL MATRIX — 13 mutants, 13 RED, all restored and proven.\n\nMethod: pre-drill `git status --porcelain` over the five owned paths recorded 2 tracked M + 3 untracked ??. Every untracked path was copied OUT OF TREE to %TEMP%\\drill-worker-f06d587f and SHA256'd. Each drill: restore-from-backup, assert pre-mutation SHA256 equality, mutate ONE thing, run ONLY the named arm with `-t`, restore. Nonzero execution is proven by the `Tests 1 failed | N skipped (M)` line — a skipped-everything run never prints a failure.\n\nROSTER DENOMINATORS (production rosters in policy-waiver-command.ts; the received value in each message is the MUTATED PRODUCTION roster, so the production-side assertion is what fired, not the independent test constant):\nD1 outer roster -> [] : \"expected [] to have a length of 1 but got +0\", `Tests 1 failed | 45 skipped (46)`. Re-run with full context (D1b) names the exact line: `301| expect(POLICY_WAIVER_OUTER_KEYS).toHaveLength(1);` with the caret under it. The test-side `EXPECTED_OUTER_KEYS` on line 300 is only printed context.\nD2 GRANT roster minus expiresAt: \"expected [ 'actionKind', 'decisionKind', …(5) ] to have a length of 8 but got 7\".\nD3 REVOKE roster minus scope: \"…to have a length of 7 but got 6\".\nD4 operations minus REVOKE: \"expected [ 'GRANT' ] to have a length of 2 but got 1\".\nD5 branch codes minus POLICY_WAIVER_ADMIN_REQUIRED: \"…to have a length of 3 but got 2\".\nD6 hostile matrix minus \"outer legacy runId\" (test roster, per epic rail 7): \"…to have a length of 12 but got 11\", `Tests 1 failed | 44 skipped (45)`.\n\nBEHAVIOURAL MUTANTS:\nD7 HUMAN predicate loosened (`&& !isDurableHumanPrincipal(...)` -> `&& false`), graded by the ingress divergence fixture (non-HUMAN scoped session holding planning.write + project.admin): `Error: expected a refusal; the command was ACCEPTED`, `Tests 1 failed | 11 skipped (12)`. The non-HUMAN is ADMITTED — so NO downstream fence shares the answer and the guard is genuinely load-bearing, not the redundant-guard vacuity pattern.\nD10 ADMIN fence loosened (`if (false && !capabilities.includes(...))`), graded by the durable-HUMAN-without-ADMIN fixture: `Error: expected a refusal; the command was ACCEPTED`. Same conclusion for the other fence.\nD8 marker leg dropped from the atomic commit (`[waiverLeg, marker.leg]` -> `[waiverLeg]`), graded by the preseeded-marker arm: `Error: expected a DomainRefusal; the call returned normally` — i.e. a spent step-up would be reusable. D8b re-grades the SAME mutant against the atomicity arm: `expected [ { …(3) } ] to have a length of 2 but got 1` at `452| expect(legs).toHaveLength(2);`.\nD9 tuple operand swapped out of the step-up digest nonce (`/${policyWaiverTupleKeyFor(identity)}` -> `/`): the exact-ledger-bytes arm reds on `Object.is` string equality, differing only in `stepUpAuthRef` (expected 59f3f929…7299). The hard-coded digest exemplar is therefore load-bearing.\nD11 payload decode moved BELOW the two authority fences: the new \"answers the payload BEFORE the fences\" arm reds at `393| ))).toEqual({ code: \"POLICY_WAIVER_PAYLOAD_INVALID\", layer: \"DAEMON_…`.\n\nGAP FOUND AND CLOSED DURING THE PASS. The original zero-store-read arms all run as the CONFIGURED OPERATOR, which short-circuits the durable-human read — so \"decode before any store read\" was NOT falsifiable by them: moving the decode below the fences left them green. Added one arm using `principal-that-never-was` (not the operator, not a durable HUMAN, holding ADMIN); a decode below the fences then answers POLICY_WAIVER_HUMAN_REQUIRED instead. D11 is its drill. Focused suite 46 -> 47 tests.\n\nRESTORE PROOF (in a call SEPARATE from every restore). Untracked paths, live vs %TEMP% backup, byte-identical:\npolicy-waiver-command.ts 08cd74863d01b04e3caa91f13acdce5561cd9f3247449a91c3a377b6d227e843\npolicy-waiver-command.js 3e2db7c845488609a027be5963f45f531275980663a9b318123f4fa15a344b93\npolicy-waiver-command.test.ts d7459a840f4fae4ee0d52fcd273da469e19d9e9724e2f5aebfe3c18999aa041c\nTracked paths: `git diff` over daemon-command-registry.ts + daemon-command-registry-human-approver.test.ts is byte-identical to the pre-drill capture (`diff -q` clean). Exact-path status unchanged: 2 M, 3 ??, no sixth path.\n\nPOST-DRILL: `Test Files 3 passed (3)`, `Tests 64 passed (64)`; `pnpm --filter @moe/daemon typecheck` exit 0. Line counts: policy-waiver-command.ts 249 (cap 250), .js bridge 1, daemon-command-registry.ts 389 (hard cap 400).",
       "timestamp": "2026-09-02T15:07:11.321Z"
+    },
+    {
+      "id": "comment-89275f73010640309ef0c6059c6966b1",
+      "author": "qa-30d27a8d",
+      "content": "QA EVIDENCE (qa-30d27a8d) — full record backing the approval.\n\nANCHOR: delivered bytes at completion commit 8e60d991 (Moe-Kind: completion, ref moe/work-2026-09-02). `git status --porcelain` AND `git diff 8e60d991` over the five owned paths are BOTH EMPTY, so worktree == commit and every run below grades the commit, not peer dirt.\n\nGATES I RAN MYSELF (foreground, unpiped, standalone):\n1. The exact DoD command, TWICE (pre-drill and post-restore): exit 0, `Test Files 3 passed (3)`, `Tests 64 passed (64)`, `$ tsc --project tsconfig.json` echoed. Per-suite denominators seen directly during the drills: policy-waiver-command 47, human-approver 12, runtime-entrypoint 5.\n2. `pnpm --filter @moe/daemon test` exit 0: `Test Files 343 passed (343)`, `Tests 7037 passed | 12 todo (7049)`. Run because daemon-command-registry.ts is a composition root, so the package — not the 3-file gate — is the real regression surface. Zero reds; matches the completion record exactly.\n\nMY OWN MUTATION DRILLS — 3 mutants, 3 RED with nonzero execution. All five owned paths are TRACKED at HEAD, so `git diff --quiet -- <path>` is a valid restore proof; proven empty after every restore, and the final gate re-ran green on the restored tree.\n- D1 HUMAN fence loosened (`&& !isDurableHumanPrincipal(input.store, input.principalId)` -> `&& false`): reds EXACTLY ONE arm, \"refuses a non-HUMAN session holding ADMIN at POLICY_WAIVER_HUMAN_REQUIRED only\" (`Tests 1 failed | 11 passed (12)`, \"expected a refusal; the command was ACCEPTED\"). Nothing else answers for that fence.\n- D2 atomic marker leg dropped (`[waiverLeg, marker.leg]` -> `[waiverLeg]`): `Tests 3 failed | 44 passed (47)` — the two-leg atomicity arm, the exact-ledger-bytes arm, and \"refuses a preseeded step-up marker as SESSION_REPLAYED @ REPLAY, writing no waiver\". The one-use property is really pinned, not merely described.\n- D3 roster member deleted (\"scope\" out of POLICY_WAIVER_GRANT_KEYS, line-targeted — the REVOKE roster's line is byte-identical, so a naive sed hits both): \"freezes a GRANT roster of exactly 8 keys\" reds, `Tests 14 failed | 33 passed (47)`. Epic rail 7 denominators hold.\n\nWHY THE SUITE IS NOT VACUOUS: EXPECTED_* rosters (1/8/7/2/3) and the 64-hex digest, aggregate and record exemplars are literals written independently of the module under test, so no single edit moves an assertion and its subject at once. The 12-case hostile matrix asserts unique titles AND `isPolicyWaiverDecideCandidate(payload) === true` per case, so a case the classifier declined cannot pass by testing the legacy fence instead. Zero-store-read is counted by a delegating Proxy over the REAL frozen SqliteEventStore. The decode-before-fences claim is falsifiable only through the `principal-that-never-was` arm (non-operator, non-HUMAN, holds ADMIN) — the configured-operator arms short-circuit the durable-human read and prove nothing about order. That arm is present.\n\nRAILS: registry diff is 14 added / 0 removed, placed before the OPERATOR_PRINCIPAL_KINDS fence; PAYLOAD_KEYS, capability vocabulary, planning-services, MCP rosters, store, manifests and lockfile untouched. Per-file caps: policy-waiver-command.ts 249/250, daemon-command-registry.ts 389/400. Bidirectional MCP arm asserts set-equality against MCP_EXCLUDED_COMMAND_KINDS (5) and reads the served side from `wiredMcpToolKinds()` plus `deps.registry.has(\"approval.decide\")`.\n\nDISCLOSED, NOT GROUNDS FOR REJECTION:\n1. 8e60d991 also carries `.moe/tasks/task-aa205445cc564bec8044136348c5bc26.json`, a foreign board row swept in by the wrapper harvest (it appears in declaredPaths). Board bookkeeping, zero production bytes.\n2. Root-lane `pnpm test` is red at `packages/benchmark/campaigns/task-09008b4cb39c4a15aa661540d20e9b9b/activation-record.test.ts:102` (branch-ancestry probe). The root vitest include carries no `apps/**`, so that lane executes zero lines of this diff — correctly disclosed by the worker, not attributable here.\n3. The leaf's QA disclosed a red at daemon-command-registry-human-approver.test.ts:135. It is GREEN now, and this row owns that file, so I audited the diff's REMOVED lines: only the inline pairing mint (refactored to `mintPairing`) and the hard-coded `expectedVersion: 0` in `send`. No assertion was weakened — the new `openScopedSession` helper asserts the session open was ACCEPTED, which is what repaired the 401.\n\nNOTE FOR CONSUMER ROWS (not a defect of this row): `policyWaiverAggregateIdFor` keys on project+approvedBy+actionKind+policyRevisionRef, so a REVOKE folds the REVOKING principal's aggregate and a cross-principal revoke answers the leaf's POLICY_WAIVER_RECORD_MISSING. That identity belongs to task-ec83fa4a and is consumed unchanged here per task rail 3.",
+      "timestamp": "2026-09-02T15:24:40.448Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:08:06.720Z",
-  "updatedAt": "2026-09-02T15:15:45.028Z",
+  "updatedAt": "2026-09-02T15:25:14.610Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",
     "qa-2062c6d0",
     "architect-db6a0906",
     "worker-6a94d2a2",
-    "worker-f06d587f"
+    "worker-f06d587f",
+    "qa-30d27a8d"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T13:46:55.934Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-02T15:25:14.609Z",
+    "wallClockMs": 178698675
   },
   "stepsCompleted": [
     "step-1",
@@ -319,6 +328,27 @@
       "treeId": "2247fc9cc215dc545c907a8427be4616a2d7cadf",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "8e60d991f69b759b92bf491c1dd0a3ed21dce932",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-f06d587f@2026-09-02T14:26:54Z",
+      "paths": [
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/planning/policy-waiver-command.js",
+        "apps/daemon/src/planning/policy-waiver-command.test.ts",
+        "apps/daemon/src/planning/policy-waiver-command.ts"
+      ],
+      "recordedBy": "worker-f06d587f",
+      "recordedAt": "2026-09-02T15:15:54.218Z",
+      "treeId": "c20c9e5e92ea8c8d6a4f64591f6f0873e90a9d12",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -326,14 +356,16 @@
     "apps/daemon/src/planning/policy-waiver-command.ts",
     "apps/daemon/src/planning/policy-waiver-command.js",
     "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/daemon-command-registry.ts"
+    "apps/daemon/src/daemon-command-registry.ts",
+    ".moe/tasks/task-4704a2981cf0443991a64273836da486.json",
+    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-6a94d2a2@2026-09-02T09:33:00Z",
-    "at": "2026-09-02T09:33:07.641Z"
+    "kind": "completion",
+    "sessionId": "worker-f06d587f@2026-09-02T14:26:54Z",
+    "at": "2026-09-02T15:15:54.218Z"
   },
   "reviewStartedAt": "2026-09-02T15:15:45.028Z",
   "verification": {
@@ -342,5 +374,15 @@
     "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  3 passed (3)\n      Tests  64 passed (64)\n   Start at  18:14:15\n   Duration  4.40s (transform 4.42s, setup 0ms, import 5.50s, tests 2.50s, environment 0ms)\n\n$ tsc --project tsconfig.json\nEXIT=0",
     "reportedAt": "2026-09-02T15:15:45.028Z"
   },
-  "completionSummary": "The typed SOFT_POLICY_WAIVER GRANT|REVOKE arm of approval.decide is a real HTTP/Control Room human action that atomically appends the immutable ledger event plus a one-use step-up marker.\n\nFIVE OWNED PATHS, nothing else: NEW apps/daemon/src/planning/policy-waiver-command.ts (249 lines, rail cap 250), NEW .js bridge (1 line, `export * from \"./policy-waiver-command.ts\";`), NEW .test.ts (638 lines, 47 tests); MOD apps/daemon/src/daemon-command-registry.ts (375->389, hard cap 400) and daemon-command-registry-human-approver.test.ts (150->331, 12 tests). The whole registry diff is 14 ADDED lines, 0 removed: 2 import lines + a 12-line branch (4 comment, 8 code) at the top of `handler`, before the OPERATOR_PRINCIPAL_KINDS fence. PAYLOAD_KEYS, the capability vocabulary, planning-services, core contracts, MCP rosters, the store, manifests, the lockfile and .moe are untouched.\n\nORDER (load-bearing): exact outer(1)/GRANT(8)/REVOKE(7) decode via the landed snapshotPolicyWaiverFields -> ADMIN (`project.admin`) -> HUMAN (configured operator OR production isDurableHumanPrincipal) -> humanReviewWitness + one-use digest -> identifyReplayRequest -> buildPolicyWaiverLeg -> buildReplayMarkerDecisionLeg -> ONE commitExpectedVersionDecisionLegs with exactly [waiverLeg, markerLeg]. Decode precedes every store read. The step-up is sessionReplayDigest(generation 0, nonce `approval.decide/SOFT_POLICY_WAIVER/<landed aggregate>/<landed tuple>`, sessionId=principalId, clientKeyId=commandId); deriveStepUpAuthRef is never called (its tag is run-scoped to approval.decide_intent) and no caller step-up is accepted. All record/fold/leg construction delegates to task-ec83fa4a's landed exports unchanged — no second canonicaliser, hash, fold or shadow persistence, and no separate burn, so refusal / version conflict / replay each write NEITHER leg and a success cannot be reused.\n\nBEHAVIOUR PINNED, each with its exact code AND refusing layer: paired durable HUMAN+ADMIN succeeds over real HTTP with byte-exa"
+  "completionSummary": "The typed SOFT_POLICY_WAIVER GRANT|REVOKE arm of approval.decide is a real HTTP/Control Room human action that atomically appends the immutable ledger event plus a one-use step-up marker.\n\nFIVE OWNED PATHS, nothing else: NEW apps/daemon/src/planning/policy-waiver-command.ts (249 lines, rail cap 250), NEW .js bridge (1 line, `export * from \"./policy-waiver-command.ts\";`), NEW .test.ts (638 lines, 47 tests); MOD apps/daemon/src/daemon-command-registry.ts (375->389, hard cap 400) and daemon-command-registry-human-approver.test.ts (150->331, 12 tests). The whole registry diff is 14 ADDED lines, 0 removed: 2 import lines + a 12-line branch (4 comment, 8 code) at the top of `handler`, before the OPERATOR_PRINCIPAL_KINDS fence. PAYLOAD_KEYS, the capability vocabulary, planning-services, core contracts, MCP rosters, the store, manifests, the lockfile and .moe are untouched.\n\nORDER (load-bearing): exact outer(1)/GRANT(8)/REVOKE(7) decode via the landed snapshotPolicyWaiverFields -> ADMIN (`project.admin`) -> HUMAN (configured operator OR production isDurableHumanPrincipal) -> humanReviewWitness + one-use digest -> identifyReplayRequest -> buildPolicyWaiverLeg -> buildReplayMarkerDecisionLeg -> ONE commitExpectedVersionDecisionLegs with exactly [waiverLeg, markerLeg]. Decode precedes every store read. The step-up is sessionReplayDigest(generation 0, nonce `approval.decide/SOFT_POLICY_WAIVER/<landed aggregate>/<landed tuple>`, sessionId=principalId, clientKeyId=commandId); deriveStepUpAuthRef is never called (its tag is run-scoped to approval.decide_intent) and no caller step-up is accepted. All record/fold/leg construction delegates to task-ec83fa4a's landed exports unchanged — no second canonicaliser, hash, fold or shadow persistence, and no separate burn, so refusal / version conflict / replay each write NEITHER leg and a success cannot be reused.\n\nBEHAVIOUR PINNED, each with its exact code AND refusing layer: paired durable HUMAN+ADMIN succeeds over real HTTP with byte-exa",
+  "touchedFiles": [
+    "apps/daemon/src/planning/policy-waiver-command.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/planning/policy-waiver-command.js",
+    "apps/daemon/src/planning/policy-waiver-command.ts",
+    "apps/daemon/src/daemon-command-registry.ts"
+  ],
+  "completedAt": "2026-09-02T15:25:14.609Z",
+  "reviewCompletedAt": "2026-09-02T15:25:14.609Z",
+  "reviewSummary": "APPROVED at delivered bytes. Full evidence: comment-89275f73010640309ef0c6059c6966b1.\n\nANCHOR: completion commit 8e60d991 (kind=completion). porcelain AND `git diff 8e60d991` over the five owned paths both EMPTY, so every run grades the commit, not peer dirt.\n\nGATES: exact DoD command foreground/unpiped TWICE (pre-drill, post-restore), exit 0, `Test Files 3 passed (3)`, `Tests 64 passed (64)`, `$ tsc --project tsconfig.json` echoed; per-suite 47/12/5 seen directly. Registry is a composition root, so also `pnpm --filter @moe/daemon test`: exit 0, `Test Files 343 passed (343)`, `Tests 7037 passed | 12 todo (7049)`, zero reds.\n\nMY OWN DRILLS - 3 mutants, 3 RED, nonzero execution, each restored with `git diff --quiet` proven (paths tracked): D1 human fence -> `&& false` reds EXACTLY the named arm (1 failed | 11 passed), no second layer answers; D2 `[waiverLeg, marker.leg]` -> `[waiverLeg]` reds 3/44 incl. SESSION_REPLAYED@REPLAY; D3 delete \"scope\" from POLICY_WAIVER_GRANT_KEYS reds \"freezes a GRANT roster of exactly 8 keys\" (14/33).\n\nDoD 1-6 met. Rosters 1/8/7/2/3 and digest/record exemplars are literals independent of the module; each of the 12 hostile cases first asserts isPolicyWaiverDecideCandidate===true; zero-read counted by a Proxy over the real frozen SqliteEventStore; decode-before-fences falsifiable only via the `principal-that-never-was` arm, present. Registry diff 14 added/0 removed before the operator fence; PAYLOAD_KEYS, vocabulary, MCP rosters, store, manifests untouched. Caps 249/250 and 389/400.\n\nDISCLOSED not rejected: 8e60d991 also carries foreign board row task-aa205445 json (wrapper harvest, zero production bytes); root-lane `pnpm test` red at packages/benchmark activation-record.test.ts:102 - root vitest include has no apps/**; the leaf's red at human-approver.test.ts:135 is green now, removed-line audit shows a fixture refactor only, no assertion weakened."
 }
