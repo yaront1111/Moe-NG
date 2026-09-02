@@ -32,7 +32,7 @@ import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
-import { LiveHealth, LivePolicy } from "./ops/live-ops.js";
+import { LiveActivity, LiveHealth, LivePolicy } from "./ops/live-ops.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -251,6 +251,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             onFrame={reportFrame}
             runId={open.planningRunRef}
           />
+          <LiveActivity goalRef={open.goalId} headers={attached.headers} scopeLabel={open.title} />
         </>
       );
   } else if (fixtures) {

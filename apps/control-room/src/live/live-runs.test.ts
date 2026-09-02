@@ -13,7 +13,9 @@ const NODE = Object.freeze({
   claim: { active: false, claimedBy: "sess-wrap-1", expiresAt: "2026-09-02T21:00:00.000Z", status: "RELEASED" },
   criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: "2026-09-02T19:00:00.000Z",
   nodeKey: "node-a", objective: "Keep fields.",
-  review: { escalated: false, latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
+  receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
+  review: { escalated: false, findings: [{ detail: "Fine.", round: 1, ruleId: "rule-1", severity: "MINOR", subject: "NODE node-a" }], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
+  sharedKey: false,
   status: "ACCEPTED",
 });
 const GOAL = Object.freeze({
@@ -22,7 +24,7 @@ const GOAL = Object.freeze({
 });
 const TOTALS = Object.freeze({
   ACCEPTED: 1, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 0,
-  goals: 1, nodes: 1,
+  UNATTRIBUTABLE: 0, goals: 1, nodes: 1,
 });
 const RUNS = Object.freeze({ goals: [GOAL], outcome: "RUNS", totals: TOTALS });
 
@@ -54,6 +56,8 @@ describe("mapRunsAnswer", () => {
     expect(mapRunsAnswer(200, { ...RUNS, outcome: "RUN" })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, status: "DONE" }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, claim: { active: true } }] }] })).toStrictEqual(invalid);
+    expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, receipt: { exitCode: 0 } }] }] })).toStrictEqual(invalid);
+    expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, review: { ...NODE.review, findings: [{ detail: 1 }] } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, run: { ...GOAL.run, approval: "MAYBE" } }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, totals: { ...TOTALS, extra: 1 } })).toStrictEqual(invalid);
   });

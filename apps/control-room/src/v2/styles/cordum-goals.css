@@ -1108,6 +1108,30 @@
   font-size: var(--cr-fs-mono);
 }
 
+.cr2-run-node-findings {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--cr-danger);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cr2-run-node-finding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink);
+}
+
+.cr2-run-node[data-status="UNATTRIBUTABLE"] .cr2-run-status {
+  color: var(--cr-danger);
+  font-weight: 600;
+}
+
 @media (max-width: 720px) {
   .cr2-run-node {
     grid-template-columns: minmax(0, 1fr);
@@ -1212,4 +1236,69 @@
 .cr2-ops-ref {
   word-break: normal;
   overflow-wrap: anywhere;
+}
+
+
+/* Activity and seats: the ledger in a person's words, one row per decision or seat. */
+.cr2-ops-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 4px 8px;
+  max-width: 880px;
+}
+
+.cr2-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr2-activity-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-activity-when {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  padding-top: 2px;
+}
+
+.cr2-activity-what {
+  color: var(--cr-ink);
+}
+
+.cr2-activity-target {
+  grid-column: 2;
+  color: var(--cr-ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.cr2-activity-row[data-disposition="VERSION_CONFLICT"] .cr2-activity-what,
+.cr2-activity-row[data-liveness="EXPIRED"] .cr2-activity-when,
+.cr2-activity-row[data-liveness="CLOSED"] .cr2-activity-when {
+  color: var(--cr-ink-soft);
+}
+
+.cr2-activity-row[data-liveness="LIVE"] .cr2-activity-when {
+  color: var(--cr-accent);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .cr2-activity-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cr2-activity-target {
+    grid-column: 1;
+  }
 }

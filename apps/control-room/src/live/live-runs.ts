@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 export const RUN_NODE_STATUSES = [
   "ACCEPTED", "BLOCKED", "DELIVERED", "ESCALATED", "ESCALATION_REQUIRED", "IN_PROGRESS", "READY",
+  "UNATTRIBUTABLE",
 ] as const;
 export type RunNodeStatus = (typeof RUN_NODE_STATUSES)[number];
 const APPROVAL_STATES = ["ABSENT", "BOUND", "UNREADABLE"] as const;
@@ -23,8 +24,23 @@ export interface RunNodeClaimView {
   readonly expiresAt: string;
   readonly status: "OPEN" | "RELEASED";
 }
+export interface RunNodeFindingView {
+  readonly detail: string;
+  readonly round: number;
+  readonly ruleId: string;
+  readonly severity: string;
+  readonly subject: string;
+}
+export interface RunNodeReceiptView {
+  readonly byteCount: number;
+  readonly exitCode: number;
+  readonly outputSha256: string;
+  readonly test: string;
+  readonly workspace: string;
+}
 export interface RunNodeReviewView {
   readonly escalated: boolean;
+  readonly findings: readonly RunNodeFindingView[];
   readonly latestRoute: string | null;
   readonly rounds: number;
   readonly unreadable: boolean;
@@ -39,7 +55,9 @@ export interface RunNodeView {
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
   readonly objective: string;
+  readonly receipt: RunNodeReceiptView | null;
   readonly review: RunNodeReviewView;
+  readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }
 export interface RunGoalView {
@@ -142,23 +160,41 @@ function claimOf(value: unknown): RunNodeClaimView | null {
   return Object.freeze({ active: record.active, claimedBy: record.claimedBy, expiresAt: record.expiresAt, status: record.status });
 }
 
+function findingOf(value: unknown): RunNodeFindingView | null {
+  const record = exactDataRecord(value, ["detail", "round", "ruleId", "severity", "subject"]);
+  if (record === null || typeof record.detail !== "string" || !count(record.round) || !nonEmptyString(record.ruleId)
+    || !nonEmptyString(record.severity) || typeof record.subject !== "string") return null;
+  return Object.freeze({ detail: record.detail, round: record.round, ruleId: record.ruleId, severity: record.severity, subject: record.subject });
+}
+
+function receiptOf(value: unknown): RunNodeReceiptView | null {
+  const record = exactDataRecord(value, ["byteCount", "exitCode", "outputSha256", "test", "workspace"]);
+  if (record === null || !count(record.byteCount) || !count(record.exitCode) || !nonEmptyString(record.outputSha256)
+    || typeof record.test !== "string" || typeof record.workspace !== "string") return null;
+  return Object.freeze({ byteCount: record.byteCount, exitCode: record.exitCode, outputSha256: record.outputSha256, test: record.test, workspace: record.workspace });
+}
+
 function reviewOf(value: unknown): RunNodeReviewView | null {
-  const record = exactDataRecord(value, ["escalated", "latestRoute", "rounds", "unreadable", "unsuccessfulRounds", "version"]);
+  const record = exactDataRecord(value, ["escalated", "findings", "latestRoute", "rounds", "unreadable", "unsuccessfulRounds", "version"]);
   if (record === null || typeof record.escalated !== "boolean" || !nullableString(record.latestRoute)
     || !count(record.rounds) || typeof record.unreadable !== "boolean" || !count(record.unsuccessfulRounds)
     || !count(record.version)) return null;
+  const findings = listOf(record.findings, findingOf);
+  if (findings === null) return null;
   return Object.freeze({
-    escalated: record.escalated, latestRoute: record.latestRoute, rounds: record.rounds,
+    escalated: record.escalated, findings, latestRoute: record.latestRoute, rounds: record.rounds,
     unreadable: record.unreadable, unsuccessfulRounds: record.unsuccessfulRounds, version: record.version,
   });
 }
 
 function nodeOf(value: unknown): RunNodeView | null {
   const record = exactDataRecord(value, [
-    "accepted", "claim", "criterionIds", "dependsOn", "lastActivityAt", "nodeKey", "objective", "review", "status",
+    "accepted", "claim", "criterionIds", "dependsOn", "lastActivityAt", "nodeKey", "objective", "receipt", "review",
+    "sharedKey", "status",
   ]);
   if (record === null || !nonEmptyString(record.nodeKey) || typeof record.objective !== "string"
     || !nullableString(record.lastActivityAt) || typeof record.status !== "string"
+    || typeof record.sharedKey !== "boolean"
     || !(RUN_NODE_STATUSES as readonly string[]).includes(record.status)) return null;
   const criterionIds = stringList(record.criterionIds);
   const dependsOn = stringList(record.dependsOn);
@@ -175,9 +211,15 @@ function nodeOf(value: unknown): RunNodeView | null {
     claim = claimOf(record.claim);
     if (claim === null) return null;
   }
+  let receipt: RunNodeReceiptView | null = null;
+  if (record.receipt !== null) {
+    receipt = receiptOf(record.receipt);
+    if (receipt === null) return null;
+  }
   return Object.freeze({
     accepted, claim, criterionIds, dependsOn, lastActivityAt: record.lastActivityAt,
-    nodeKey: record.nodeKey, objective: record.objective, review, status: record.status as RunNodeStatus,
+    nodeKey: record.nodeKey, objective: record.objective, receipt, review, sharedKey: record.sharedKey,
+    status: record.status as RunNodeStatus,
   });
 }
 

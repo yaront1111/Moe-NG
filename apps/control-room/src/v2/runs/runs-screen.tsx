@@ -24,6 +24,7 @@ export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.free
   ESCALATION_REQUIRED: "Needs escalation",
   IN_PROGRESS: "In progress",
   READY: "Ready for an agent",
+  UNATTRIBUTABLE: "Shared key, not attributable",
 });
 
 /** Lifecycle tokens the daemon folds, in a person's words; an unknown token stays as it is. */
@@ -59,7 +60,14 @@ function ago(iso: string | null, nowMs: number): string | null {
 /** The evidence line under a node: only facts the daemon stated, in a person's words. */
 export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[] {
   const lines: string[] = [];
+  if (node.sharedKey) {
+    lines.push("another activated plan carries this node key, so its review ledger cannot be attributed to this goal");
+  }
   if (node.accepted !== null) lines.push(`accepted by the daemon ${MIDDOT} receipt ${node.accepted.verifierReceiptId}`);
+  if (node.receipt !== null) {
+    lines.push(`verifier ran ${node.receipt.test} in ${node.receipt.workspace}, exit ${String(node.receipt.exitCode)},`
+      + ` output ${node.receipt.outputSha256.slice(0, 12)} (${String(node.receipt.byteCount)} bytes)`);
+  }
   if (node.review.rounds > 0) {
     const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;
     lines.push(`${String(node.review.rounds)} review round${node.review.rounds === 1 ? "" : "s"}${route}`);
@@ -96,6 +104,16 @@ function NodeRow({ node, nowMs }: { readonly node: RunNodeView; readonly nowMs: 
         <p className="cr2-run-node-evidence" data-testid={`cr.runs.node.${node.nodeKey}.evidence`}>
           {nodeEvidence(node, nowMs).join(` ${MIDDOT} `)}
         </p>
+        {node.review.findings.length === 0 ? null : (
+          <ul className="cr2-run-node-findings" data-testid={`cr.runs.node.${node.nodeKey}.findings`}>
+            {node.review.findings.map((finding, index) => (
+              <li className="cr2-run-node-finding" data-severity={finding.severity} key={`${finding.ruleId}:${String(index)}`}>
+                <span className="cr2-approve-mono">{`${finding.severity} ${MIDDOT} ${finding.ruleId}`}</span>
+                <span className="cr2-approve-step-body">{finding.detail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {node.criterionIds.length === 0 ? null : (
           <p className="cr2-run-node-criteria">{`criteria ${node.criterionIds.join(", ")}`}</p>
         )}
@@ -153,7 +171,7 @@ function GoalSection({ goal, nowMs, onOpenBoard }: {
 function totalsLine(outcome: Extract<RunsOutcome, { status: "RUNS" }>): string {
   const { totals } = outcome;
   const parts = [`${String(totals.nodes)} node${totals.nodes === 1 ? "" : "s"}`];
-  for (const status of ["ACCEPTED", "DELIVERED", "IN_PROGRESS", "READY", "ESCALATION_REQUIRED", "ESCALATED", "BLOCKED"] as const) {
+  for (const status of ["ACCEPTED", "DELIVERED", "IN_PROGRESS", "READY", "ESCALATION_REQUIRED", "ESCALATED", "BLOCKED", "UNATTRIBUTABLE"] as const) {
     if (totals[status] > 0) parts.push(`${String(totals[status])} ${STATUS_WORDS[status].toLowerCase()}`);
   }
   return `${String(totals.goals)} goal${totals.goals === 1 ? "" : "s"} ${MIDDOT} ${parts.join(` ${MIDDOT} `)}`;

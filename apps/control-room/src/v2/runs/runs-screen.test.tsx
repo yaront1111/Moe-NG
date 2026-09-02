@@ -14,7 +14,7 @@ const NOW = Date.parse("2026-09-02T20:00:00.000Z");
 const node = (overrides: Partial<RunNodeView> = {}): RunNodeView => ({
   accepted: null, claim: null, criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: null,
   nodeKey: "node-a", objective: "Keep fields.",
-  review: { escalated: false, latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
+  receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
   status: "READY", ...overrides,
 });
 
@@ -23,7 +23,7 @@ describe("nodeEvidence", () => {
     expect(nodeEvidence(node(), NOW)).toEqual([]);
     expect(nodeEvidence(node({
       accepted: { verifierReceiptId: "receipt-9" }, status: "ACCEPTED",
-      review: { escalated: false, latestRoute: "ACCEPT", rounds: 2, unreadable: false, unsuccessfulRounds: 1, version: 4 },
+      receipt: null, review: { escalated: false, findings: [], latestRoute: "ACCEPT", rounds: 2, unreadable: false, unsuccessfulRounds: 1, version: 4 }, sharedKey: false,
       claim: { active: false, claimedBy: "sess-wrap-1", expiresAt: "2026-09-02T19:00:00.000Z", status: "RELEASED" },
       dependsOn: ["node-0"], lastActivityAt: "2026-09-02T19:35:00.000Z",
     }), NOW)).toEqual([
@@ -36,11 +36,15 @@ describe("nodeEvidence", () => {
     ]);
     expect(nodeEvidence(node({
       status: "ESCALATION_REQUIRED",
-      review: { escalated: false, latestRoute: "ESCALATE", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 3 },
+      receipt: null, review: { escalated: false, findings: [], latestRoute: "ESCALATE", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 3 }, sharedKey: false,
     }), NOW)[1]).toBe("3 unsuccessful: the daemon refuses more rounds until a human escalates");
     expect(nodeEvidence(node({
       claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T21:00:00.000Z", status: "OPEN" }, status: "IN_PROGRESS",
     }), NOW)).toEqual(["held by sess-wrap-2 until 2026-09-02T21:00:00.000Z"]);
+    expect(nodeEvidence(node({
+      receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
+    }), NOW)).toEqual(["verifier ran pnpm test in D:/unai, exit 0, output oooooooooooo (120 bytes)"]);
+    expect(nodeEvidence(node({ sharedKey: true, status: "UNATTRIBUTABLE" }), NOW)[0]).toContain("cannot be attributed");
   });
 });
 
@@ -56,7 +60,7 @@ describe("the runs screen", () => {
       { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], run: null, title: null },
     ],
     status: "RUNS",
-    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, goals: 2, nodes: 2 },
+    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
   };
 
   it("renders the totals, each goal's run line, and the node ladder with status words", async () => {
@@ -69,6 +73,7 @@ describe("the runs screen", () => {
     expect(screen.getByTestId("cr.runs.node.node-a.status").textContent).toBe(STATUS_WORDS.READY);
     expect(screen.getByTestId("cr.runs.node.node-b.status").textContent).toBe(STATUS_WORDS.IN_PROGRESS);
     expect(screen.getByTestId("cr.runs.node.node-b.evidence").textContent).toContain("held by sess-wrap-2");
+    expect(screen.queryByTestId("cr.runs.node.node-a.findings")).toBeNull();
     expect(screen.getByTestId("cr.runs.goal.goal-2.run").textContent).toBe("No plan has been run for this goal yet.");
     expect(screen.getByTestId("cr.runs.goal.goal-2.empty")).toBeTruthy();
     expect((screen.getByTestId("cr.runs.goal.goal-2.open") as HTMLButtonElement).disabled).toBe(true);

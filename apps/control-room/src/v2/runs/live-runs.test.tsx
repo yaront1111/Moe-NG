@@ -14,13 +14,13 @@ const RUNS: RunsOutcome = {
     goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
     nodes: [{
       accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-a",
-      objective: "Keep fields.", review: { escalated: false, latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
+      objective: "Keep fields.", receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
       status: "READY",
     }],
     run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
   }],
   status: "RUNS",
-  totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 1, goals: 1, nodes: 1 },
+  totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 1, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
 };
 
 describe("LiveRuns", () => {

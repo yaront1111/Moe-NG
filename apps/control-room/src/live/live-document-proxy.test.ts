@@ -4,6 +4,7 @@ import { buildDevProxy, DEV_PROXY_PATHS } from "./dev-proxy-paths.js";
 
 it("proxies the complete project-daemon v2 surface without manager authority", () => {
   expect(DEV_PROXY_PATHS).toStrictEqual([
+    "/activity/read",
     "/affordances/read",
     "/bootstrap",
     "/budget/commitment/read",
@@ -29,6 +30,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/session/pair/claim",
     "/session/pair/open",
     "/session/pair/request",
+    "/sessions/read",
   ]);
   expect(new Set(DEV_PROXY_PATHS).size).toBe(DEV_PROXY_PATHS.length);
   expect(DEV_PROXY_PATHS.some((path) => path.startsWith("/manager/"))).toBe(false);
