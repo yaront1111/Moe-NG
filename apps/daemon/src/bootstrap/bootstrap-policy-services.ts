@@ -11,7 +11,9 @@ import {
   POLICY_EVALUATOR_VERSION,
   POLICY_EVALUATOR_VERSION_SOURCE,
 } from "./bootstrap-policy-authority.js";
-import { resolvePolicyFact, resolvePolicyWaivers } from "./policy-fact-resolver.js";
+import {
+  evaluationChain, evaluationScope, resolvePolicyFact, resolvePolicyWaivers,
+} from "./policy-fact-resolver.js";
 export { readPolicyEvaluationAuthority } from "./bootstrap-policy-authority-reader.js";
 export type {
   PolicyEvaluationAuthority,
@@ -159,7 +161,15 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
     || canonicalDecidedAt !== request.decidedAt) {
     return refuse(request.kind, "BOOTSTRAP_POLICY_TIME_UNAVAILABLE", "DAEMON_PREREQUISITE");
   }
-  const waiverResolution = resolvePolicyWaivers();
+  const waiverResolution = resolvePolicyWaivers(store, {
+    authenticatedPrincipal: request.principalId,
+    evaluatedAction: callerRequestedAction,
+    evaluatedAtEpochMs,
+    installedPolicyRevisionRef: policyRef,
+    installedSliceChain: evaluationChain(slice),
+    projectId: request.projectId,
+    scope: evaluationScope(input["scope"]),
+  });
   const facts = [resolvePolicyFact(
     store,
     request.projectId,

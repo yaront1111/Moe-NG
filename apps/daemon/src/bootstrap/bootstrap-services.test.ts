@@ -3,6 +3,7 @@ import type { JsonValue } from "@moe/contracts";
 import {
   POLICY_SLICE_DIGEST_VERSION, derivePolicySliceDigest, evaluatePolicy,
 } from "@moe/core";
+import type { PolicyObligation } from "@moe/core";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -26,6 +27,10 @@ import {
   decisionDigestFor,
 } from "./bootstrap-policy-authority.js";
 import { readPolicyEvaluationAuthority } from "./bootstrap-policy-services.js";
+import {
+  buildPolicyWaiverGrant,
+  policyWaiverAggregateIdFor,
+} from "./policy-waiver-record.js";
 
 const encoder = new TextEncoder();
 
@@ -1135,5 +1140,241 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
     if (derived.ok) return;
     expect(derived.code).toBe("POLICY_SLICE_INVALID");
     expect(derived.layer).toBe("POLICY_SLICE_CODEC");
+  });
+});
+
+/**
+ * THE CONSUMER EDGE (task-5d462855, DoD 4). Contract A is authority per comment-27fb9e2e.
+ *
+ * Core reads `input.waivers` in exactly ONE place — `ruleRelaxation` (policy-composition.ts:106)
+ * — reached only when a ruleId is redeclared in the fold. A waiver can therefore relax a DROPPED
+ * SOFT OBLIGATION and nothing else, which is why the three invariants below are structural rather
+ * than defensive. `validSlice` does not require ruleIds to be unique WITHIN a slice, so one
+ * installed slice carrying an ancestor rule and its weaker redeclaration reaches that path on the
+ * real single-slice chain policy.validate evaluates.
+ */
+describe("policy.validate - consumes verified durable waivers (task-5d462855)", () => {
+  afterEach(closeStores);
+
+  const ACTION = "plan.approve";
+  const OBLIGATION = "obligation.soft.waivable";
+  const RULE_ID = "rule-redeclared";
+  const SCOPE = Object.freeze(["scope.alpha", "scope.beta"] as const);
+  const DECIDED_AT = "2026-08-08T00:00:00.000Z";
+  const DECIDED_MS = Date.parse(DECIDED_AT);
+  const EXPIRES_MS = DECIDED_MS + 3_600_000;
+  const AGGREGATE_PREFIX = "policy-waiver:aggregate:v1:sha256:";
+
+  /** An ancestor rule and its weaker redeclaration, in ONE slice, sharing a ruleId. */
+  function redeclaringSlice(
+    obligations: readonly PolicyObligation[], requiredFactIds: readonly string[] = [],
+  ): Readonly<Record<string, unknown> & { readonly sliceRef: string }> {
+    return addressedPolicySlice({
+      autoApprovalOptIns: [],
+      rules: [
+        Object.freeze({ effect: "ALLOW", obligations, requiredFactIds, ruleId: RULE_ID }),
+        Object.freeze({
+          effect: "ALLOW", obligations: [], requiredFactIds: [], ruleId: RULE_ID,
+        }),
+      ],
+    });
+  }
+
+  const SOFT = Object.freeze({ kind: "SOFT", obligationId: OBLIGATION } as const);
+  const softSlice = redeclaringSlice([SOFT]);
+  /** The obligation the grant names is HARD here, so the READER refuses to verify it at all. */
+  const notSoftSlice = redeclaringSlice([{ kind: "HARD", obligationId: OBLIGATION }]);
+  /**
+   * A VERIFIABLE soft obligation beside an unwaivable one. The grant joins and is verified, so
+   * these two arms cannot pass by the resolver simply never producing a waiver.
+   */
+  const hardSlice = redeclaringSlice([
+    SOFT, { kind: "HARD", obligationId: "obligation.hard.blocking" },
+  ]);
+  const factSlice = redeclaringSlice([SOFT], ["fact.required"]);
+
+  function seeded(slice: Readonly<Record<string, unknown>>): SqliteEventStore {
+    const store = openStore();
+    const prefix = [
+      envelope("project.register", 0, { owner: "owner-1" }),
+      envelope("project.bind_repository", 1, { observation: OBSERVATION }),
+    ];
+    for (const step of prefix) {
+      const outcome = send(store, step);
+      if (!outcome.ok) throw new Error(`seed refused at ${step.kind}: ${outcome.code}`);
+    }
+    const installed = send(store, envelope("policy.install", 0, { slice }, "cmd-install-waiver"));
+    if (!installed.ok) throw new Error(`install refused: ${installed.code}`);
+    return store;
+  }
+
+  /**
+   * Seeds the grant through the PRODUCTION record codec and aggregate-id derivation. The reader
+   * still recomputes every ref and re-runs every join, so this is durable history, not a fixture
+   * that grants authority: only the `approval.decide` transport (task-4704a298, separately
+   * tested) is skipped.
+   */
+  function seedGrant(
+    store: SqliteEventStore, policyRevisionRef: string,
+    over: Readonly<Record<string, unknown>> = {},
+  ): void {
+    const built = buildPolicyWaiverGrant({
+      actionKind: ACTION,
+      approvedAt: DECIDED_AT,
+      approvedBy: "principal-1",
+      commandId: "cmd-waiver-grant",
+      decisionReason: "human approved this soft obligation for the consumer-edge arm",
+      expiresAtEpochMs: EXPIRES_MS,
+      namedObligationId: OBLIGATION,
+      policyRevisionRef,
+      projectId: PROJECT_ID,
+      scope: [...SCOPE],
+      stepUpAuthRef: "step-up:consumer-edge",
+      supersedesWaiverRef: null,
+      ...over,
+    });
+    if (!built.ok) throw new Error(`grant fixture refused: ${built.code}`);
+    const aggregateId = policyWaiverAggregateIdFor(built.record);
+    if (!aggregateId.startsWith(AGGREGATE_PREFIX)) {
+      throw new Error(`grant landed outside the reader prefix: ${aggregateId}`);
+    }
+    store.commit({
+      aggregateId,
+      commandBytes: bytes({ commandId: "cmd-waiver-grant" }),
+      commandId: "cmd-waiver-grant",
+      committedAt: DECIDED_AT,
+      events: [{
+        eventId: `${aggregateId}#1`, eventType: built.eventType, payload: built.bytes,
+      }],
+      expectedVersion: 0,
+    });
+  }
+
+  function validated(
+    store: SqliteEventStore, sliceRef: string,
+    extraInputKeys: Readonly<Record<string, unknown>> = {},
+  ): Record<string, unknown> {
+    const outcome = send(store, envelope("policy.validate", 1, {
+      input: {
+        action: ACTION,
+        actor: "principal-1",
+        callerRiskHint: null,
+        decisionDigest: hex64("d1"),
+        graphNodeRevisionRefs: [],
+        policyRevisionRef: sliceRef,
+        requiredFactIds: [],
+        scope: [...SCOPE],
+        ...extraInputKeys,
+      },
+    }, "cmd-validate-waiver")) as unknown as Record<string, unknown>;
+    if (!outcome.ok) throw new Error(`policy.validate refused: ${String(outcome["code"])}`);
+    const events = store.readEvents(`${PROJECT_ID}-policy`)
+      .filter((event) => event.eventType === "PolicyEvaluated");
+    const latest = events[events.length - 1];
+    if (latest === undefined) throw new Error("no PolicyEvaluated row was written");
+    const decoded = decodeBoundedJsonBytes(latest.payload);
+    if (!decoded.ok) throw new Error(`payload undecodable: ${decoded.code}`);
+    return decoded.value as unknown as Record<string, unknown>;
+  }
+
+  function serverSources(row: Record<string, unknown>): Record<string, unknown> {
+    const material = row["decisionMaterial"] as Record<string, unknown>;
+    return material["serverSources"] as Record<string, unknown>;
+  }
+
+  it("keeps the fail-closed default: no grant is RESOLVED_EMPTY and the relaxation stands", () => {
+    const store = seeded(softSlice);
+    const row = validated(store, softSlice.sliceRef);
+
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_EMPTY");
+    expect(row["decision"]).toBe("DENY");
+  });
+
+  it("applies a fully joined verified grant to the dropped SOFT obligation", () => {
+    const store = seeded(softSlice);
+    seedGrant(store, softSlice.sliceRef);
+    const row = validated(store, softSlice.sliceRef);
+
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_VERIFIED");
+    // The relaxation is gone, so DENY is gone. HOLD_UNKNOWN remains — the next arm pins that.
+    expect(row["decision"]).not.toBe("DENY");
+  });
+
+  it("never lets a waiver reach ALLOW: HOLD_UNKNOWN still dominates", () => {
+    const store = seeded(softSlice);
+    seedGrant(store, softSlice.sliceRef);
+
+    expect(validated(store, softSlice.sliceRef)["decision"]).toBe("HOLD_UNKNOWN");
+  });
+
+  it("refuses to verify a grant whose named obligation is HARD in the installed chain", () => {
+    const store = seeded(notSoftSlice);
+    seedGrant(store, notSoftSlice.sliceRef);
+    const row = validated(store, notSoftSlice.sliceRef);
+
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_EMPTY");
+    expect(row["decision"]).toBe("DENY");
+  });
+
+  it("never suppresses a HARD obligation, even alongside a VERIFIED waiver", () => {
+    const store = seeded(hardSlice);
+    seedGrant(store, hardSlice.sliceRef);
+    const row = validated(store, hardSlice.sliceRef);
+
+    // RESOLVED_VERIFIED is what makes this arm non-vacuous: a real waiver was applied to the
+    // soft obligation in the same rule, and the dropped HARD one still denies.
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_VERIFIED");
+    expect(row["decision"]).toBe("DENY");
+  });
+
+  it("never shrinks a required fact, even alongside a VERIFIED waiver", () => {
+    const store = seeded(factSlice);
+    seedGrant(store, factSlice.sliceRef);
+    const row = validated(store, factSlice.sliceRef);
+
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_VERIFIED");
+    expect(row["decision"]).toBe("DENY");
+  });
+
+  it("refuses a grant bound to a different installed policy revision", () => {
+    const store = seeded(softSlice);
+    seedGrant(store, softSlice.sliceRef, { policyRevisionRef: hex64("aa") });
+    const row = validated(store, softSlice.sliceRef);
+
+    expect(serverSources(row)["waiverResolutionStatus"]).toBe("RESOLVED_EMPTY");
+    expect(row["decision"]).toBe("DENY");
+  });
+
+  /**
+   * `SERVER_SOURCED_KEYS` (bootstrap-policy-authority.ts:23-29) refuses `waivers` by presence,
+   * but `humanApprovalRef`/`waiverRef`/`approvalRef` are not members and are therefore IGNORED
+   * rather than refused. This row introduces the first authority read on this path, so the
+   * property that matters is that none of them can REACH it. Proven by identity: the durable
+   * decision is byte-for-byte the same as the request without them.
+   */
+  it("cannot reach the authority read with a caller-carried approval reference", () => {
+    const carried = { approvalRef: hex64("ab"), humanApprovalRef: hex64("ac"), waiverRef: hex64("ad") };
+    const clean = seeded(softSlice);
+    seedGrant(clean, softSlice.sliceRef);
+    const baseline = validated(clean, softSlice.sliceRef);
+    closeStores();
+
+    const spoofed = seeded(softSlice);
+    seedGrant(spoofed, softSlice.sliceRef);
+    const row = validated(spoofed, softSlice.sliceRef, carried);
+
+    expect(Object.keys(carried)).toHaveLength(3);
+    expect(row["decisionDigest"]).toBe(baseline["decisionDigest"]);
+    expect(row["decision"]).toBe(baseline["decision"]);
+  });
+
+  it("keeps serverSources at exactly the four keys the admission reader accepts", () => {
+    const store = seeded(softSlice);
+    seedGrant(store, softSlice.sliceRef);
+
+    expect(Object.keys(serverSources(validated(store, softSlice.sliceRef))).sort()).toEqual([
+      "evaluationTimeSource", "evaluatorVersionSource", "policySliceDigestVersion",
+      "waiverResolutionStatus",
+    ]);
   });
 });
