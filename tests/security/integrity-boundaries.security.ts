@@ -50,6 +50,11 @@ import {
 } from "./policy-slice-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
 import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
+import { RECENT_DELIVERY_V2_INTEGRITY_CASES } from "./recent-delivery-v2-hostile-cases.js";
+import {
+  RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
+} from "./recent-product-contract-v2-hostile-cases.js";
+import { RECENT_V2_CUTOVER_INTEGRITY_CASES } from "./recent-v2-cutover-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -70,6 +75,9 @@ const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...POLICY_SLICE_HOSTILE_CASES,
   ...RECENT_INTEGRITY_HOSTILE_CASES,
   ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
+  ...RECENT_DELIVERY_V2_INTEGRITY_CASES,
+  ...RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
+  ...RECENT_V2_CUTOVER_INTEGRITY_CASES,
 ]);
 const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
@@ -149,7 +157,11 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // and the runner's RUNNER_SOURCE_SNAPSHOT_GIT_LAYER): codecs and a revision-binding
     // check, `integrity` by SUBJECT, whose eighteen arms land with this bump in
     // recent-core-contract-hostile-cases.ts.
-    expect(ROSTER_INTEGRITY).toHaveLength(31);
+    // 31 -> 41 on 2026-09-02 when the roster scanner became digit-aware: the `/2` cutover
+    // authority and both `/2` manifests, the delivery-v2 authority and resolution-selection
+    // codec, and five product-contract `/2` codecs/bindings/validators. Arms in
+    // recent-v2-cutover-, recent-delivery-v2- and recent-product-contract-v2-hostile-cases.ts.
+    expect(ROSTER_INTEGRITY).toHaveLength(41);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {

@@ -50,6 +50,14 @@ import {
   SAFE_BOUNDARY_REASON_CODES,
 } from "../../apps/daemon/src/work/safe-boundary-observation.js";
 import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
+import { RECENT_DELIVERY_V2_DURABLE_CASES } from "./recent-delivery-v2-hostile-cases.js";
+
+/** Every table-backed recent durable case, in one roster so a table registered here
+ *  is also the table `recentNames` is derived from below. */
+const RECENT_DURABLE_CASES = Object.freeze([
+  ...RECENT_DURABLE_HOSTILE_CASES,
+  ...RECENT_DELIVERY_V2_DURABLE_CASES,
+]);
 
 afterAll(() => {
   // Handles first, roots after: a held SQLite handle IS the EPERM a retry cannot fix, and in
@@ -278,7 +286,7 @@ describe("durable-store roster coverage", () => {
     // 17 -> 18 on 2026-08-27: attempt-keyed safe-boundary lookup, including its bounded
     // mid-scan reader race and delegated observation-reader provenance.
     expect(DURABLE_BOUNDARY_NAMES).toHaveLength(18);
-    const recentNames = [...new Set(RECENT_DURABLE_HOSTILE_CASES.map((entry) => entry.boundary))];
+    const recentNames = [...new Set(RECENT_DURABLE_CASES.map((entry) => entry.boundary))];
     expect([...DURABLE_BOUNDARY_NAMES, ...recentNames].sort()).toStrictEqual(rosterNames);
   });
 
@@ -290,7 +298,7 @@ describe("durable-store roster coverage", () => {
 });
 
 describe("recent durable readers refuse hostile input on all three arms", () => {
-  for (const hostileCase of RECENT_DURABLE_HOSTILE_CASES) {
+  for (const hostileCase of RECENT_DURABLE_CASES) {
     it(`${hostileCase.arm} ${hostileCase.boundary}`, async () => {
       const outcome = await hostileCase.run();
       if (hostileCase.arm === "RACE") {

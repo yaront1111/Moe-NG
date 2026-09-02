@@ -91,6 +91,14 @@ import {
   RECENT_SCHEDULER_CASES,
   RECENT_SCHEDULER_RACES,
 } from "./recent-scheduler-hostile-cases.js";
+import {
+  RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES,
+  RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES,
+} from "./recent-product-contract-v2-hostile-cases.js";
+import {
+  RECENT_V2_COMPILER_SCHEDULER_CASES,
+  RECENT_V2_COMPILER_SCHEDULER_RACES,
+} from "./recent-v2-cutover-hostile-cases.js";
 import type {
   GoalPrerequisiteProof,
   HostileArm,
@@ -112,8 +120,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES, ...RECENT_SCHEDULER_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES, ...RECENT_SCHEDULER_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES, ...RECENT_SCHEDULER_CASES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES, ...RECENT_V2_COMPILER_SCHEDULER_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES, ...RECENT_SCHEDULER_RACES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES, ...RECENT_V2_COMPILER_SCHEDULER_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -175,7 +183,10 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // 31 -> 37 on 2026-08-27: four expansion contract/map boundaries plus attempt finalization
     // and release-handoff cross-check, rostered and armed by task-d1145412. 37 -> 38 on
     // 2026-08-29: POLICY_RISK_LAYER, rostered and armed by task-12465418.
-    expect(ROSTER_AXIS).toHaveLength(43);
+    // 43 -> 46 on 2026-09-02 once the roster scanner became digit-aware: the `/2` planning
+    // compiler and the two product-contract `/2` command services (clarification, propose).
+    // Arms in recent-v2-cutover- and recent-product-contract-v2-hostile-cases.ts.
+    expect(ROSTER_AXIS).toHaveLength(46);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
