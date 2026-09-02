@@ -98,7 +98,7 @@
       "completedAt": "2026-09-02T16:49:51.524Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -144,24 +144,33 @@
       "author": "worker-f06d587f",
       "content": "THE +12 vs +6 SECURITY COUNT DELTA — declared up front so it is not read as scope creep.\n\nStep 4(b) predicted \"the security count must have risen by exactly 6\". Measured: 180 -> 192 = +12. I am reporting reality rather than deleting DoD-3-mandated assertions to hit a predicted number. Exactly SIX of the twelve are the CASE ARMS, one per case — which is the delta the +6 clause was reaching for, and it is satisfied exactly. The other six are the structural assertions DoD 3 itself enumerates.\n\nFull `--reporter=verbose` roster of the twelve new lines, all passing:\n\nSIX CASE ARMS (one per pre-roster case):\n  pre-roster hostile before and after arms > GA_ACTIVATION_RECORD_LAYER BEFORE: a 39-hex top-level source commit cannot name the admitted record\n  pre-roster hostile before and after arms > GA_ACTIVATION_RECORD_LAYER AFTER: a one-nibble spec drift cannot inherit the pinned record authority\n  pre-roster hostile before and after arms > LIVE_QUIESCE_EVIDENCE_LAYER BEFORE: a resolved-count drift cannot mint the quiesce generation\n  pre-roster hostile before and after arms > LIVE_QUIESCE_EVIDENCE_LAYER AFTER: a successful stop without its stop moment cannot mint the generation\n  pre-roster hostile race arms > GA_ACTIVATION_RECORD_LAYER RACE: independent source and spec drift refuse regardless of settlement order\n  pre-roster hostile race arms > LIVE_QUIESCE_EVIDENCE_LAYER RACE: count and host divergence refuse regardless of settlement order\n\nSIX STRUCTURAL ASSERTIONS, each traceable to a DoD-3 clause:\n  pre-roster integrity boundaries > generates exactly six pre-roster cases                      -> \"Assert denominator=6\"\n  pre-roster integrity boundaries > covers exactly the two pre-roster constants, three arms each -> \"exact two-constant and three-arm set equality\"\n  pre-roster integrity boundaries > keeps the activation boundary out of the covered union of this axis -> \"outside the current roster-derived COVERED union\"\n  the pre-roster slice > admits no activation record and accepts no cutover generation snapshot  -> \"zero activation admissions/accepted snapshots\"\n  the pre-roster slice > collected an outcome from every pre-roster leg                          -> nothing escaped by not running (8 legs: 4 refusal + 2 races x 2)\n  the pre-roster slice > forwarded all three distinct core diagnoses through the daemon wrapper  -> \"preserved upstream COUNT_MISMATCH, STOP_MOMENT_MISSING, or INCOMPLETE at live-quiesce-evidence\"\n\nEvery one of the six structural assertions is drill-proven load-bearing, not decoration: D1/D2 redden the zero-admission sweep, and D3/D4/D5/D6 each redden the three-diagnoses set-equality. The denominator and set-equality trio are the anti-vacuity guards — vitest reports no failure for an empty `it.each` table, so without the literal 6 a sweep that silently yielded nothing would have passed.\n\nWHY THE SET STAYS OUT OF COVERED (mechanical, re-derived at the delivered tree). integrity-boundaries.security.ts builds COVERED from eight ROSTERED case tables and asserts BIDIRECTIONAL set equality against the 41-entry ROSTER_INTEGRITY. GA_ACTIVATION_RECORD_LAYER is rostered on axis \"scheduler-activation\", so folding the six into HOSTILE_CASES reddens \"covered minus roster is empty\" on the spot. The six also keep their OWN `preRosterCollected` array: the rostered slice's denominator `toHaveLength(refusalCases.length + raceCases.length * 2)` counts only the rostered tables and a foreign push would break it. Both constraints are now pinned by assertions, not comments.\n\nFOREIGN IN-FLIGHT EDIT ON ONE OF MY OWNED PATHS, disclosed. 30 seconds into this session a sibling session STAGED (`M `, index-modified) tests/security/integrity-boundaries.security.ts: 318 -> 338 lines, adding four case-set imports (RECENT_CORE_CONTRACT / DELIVERY_V2 / PRODUCT_CONTRACT_V2 / V2_CUTOVER), their four spreads into HOSTILE_CASES, and the ROSTER_INTEGRITY pin 25 -> 41. I did NOT revert, stash or reset it — my 197 lines are purely additive on top, and the file now stands at 533 lines. That foreign edit is why the security baseline was 180 rather than the 112 DoD 5 predicted. My block is independent of ROSTER_INTEGRITY, so it survives either state of that sibling edit.\n\nALL DoD-5 BASELINE NUMBERS WERE STALE (taken at 5fe0fdde; HEAD at claim was dd1c227d, and the plan's own re-anchor to 3c054aed was also stale). Measured fresh: security 180 (DoD said 112), units 22 (DoD said 16), daemon 20 (DoD said 14, stale-low exactly as the plan predicted because task-642df965 added arms).",
       "timestamp": "2026-09-02T16:49:30.403Z"
+    },
+    {
+      "id": "comment-a7f315d45b2c434bb6de269f1806bc84",
+      "author": "qa-30d27a8d",
+      "content": "QA EVIDENCE SHEET (qa-30d27a8d, review round 2, approved). Everything below was re-run by me, not read off the worker's record.\n\n## Commit\n86fd4998ee3a684c7c61c642fd89b592b9a5dee8 kind=completion, Moe-Task trailer present, Moe-Inferred: 0, pushed. `git show --name-only` = 4 paths: the two owned test files + .moe/tasks/task-38ec450a.json + .moe/tasks/task-3aa6acdb.json (board metadata swept by the wrapper; noted, not a defect). ZERO production paths in the commit — consistent with the byte-identical claim.\n\n## Gate re-run (verbatim DoD-5 command, foreground, unpiped)\n  tsc -p tests/security/tsconfig.json --noEmit    exit 0, no diagnostics\n  security  integrity-boundaries.security.ts       Test Files 1 passed (1) / Tests 192 passed (192)\n  units     activation-record + cutover-quiesce    Test Files 2 passed (2) / Tests  22 passed (22)\n  daemon    cutover-generation-snapshot.test.ts    Test Files 1 passed (1) / Tests  20 passed (20)\n  GATE-EXITCODE=0\nEvery leg printed a nonzero count line — no vacuous exit-0 leg. Byte-for-byte the same numbers as task.verification.outputTail.\nFULL security lane: Test Files 12 passed (12) / Tests 865 passed (865), exit 0.\n\n## Byte identity of the three production sources\nblob at claim anchor dd1c227d vs blob at HEAD:\n  packages/benchmark/src/activation-record.ts              e91992889b85… == e91992889b85…  IDENTICAL\n  packages/core/src/cutover/cutover-quiesce-evidence.ts    22e567b2b334… == 22e567b2b334…  IDENTICAL\n  apps/daemon/src/cutover/cutover-generation-snapshot.ts   c006dbaf8a62… == c006dbaf8a62…  IDENTICAL\n`git status --porcelain` on all five owned paths: EMPTY. Physical lines 160 / 268 / 372 — all under 400, per-file cap satisfied.\n\n## Independent mutation drills (2 of 6 re-run by me, the two that carry the argument)\nD6 — apps/daemon/src/cutover/cutover-generation-snapshot.ts :271, dropped `Object.freeze({ code: derived.code, layer: derived.layer })` from the SEMANTIC branch only.\n  RED 4: the three LIVE_QUIESCE upstream assertions (\"the daemon must forward the core refusal, not drop it to null\") + \"forwarded all three distinct core diagnoses through the daemon wrapper\" (expected [] to deeply equal [ …(3) ]). The outer CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT tuple assertions and the zero-admission sweep stayed GREEN — which is exactly the point: the upstream tuple is the only thing that separates a semantic @moe/core rejection from a missing evidence file. Confirms the runner is not testing the outer code alone.\nD1 — packages/benchmark/src/activation-record.ts :96, COMMIT_HEX /^[0-9a-f]{40}$/ -> /^[0-9a-f]{39,40}$/.\n  RED 3: the 39-hex BEFORE leg, the activation RACE arm, and the pre-roster zero-admission sweep.\nRestore proof for both (tracked paths, so `git diff` is valid): `git diff --exit-code` clean, HEAD blob match, and sha256 equality against an out-of-tree backup — activation-record c30a9bab7143…, snapshot 35d5d960f71f… Both match the worker's reported values. Tree left byte-identical.\n\n## Two DoD premises that were stale, and why I accepted the deviation\n1. DoD 3 orders \"do not soften the expected-red 146-versus-131 master-roster premise\". That premise NO LONGER EXISTS. boundary-roster.security.ts:525 pins EXPECTED_ROSTER_SIZE = 168 (documented at :108 as the axis sum), the file is clean and absent from the commit, and it is green inside the 865-test lane. Nothing was softened because there was nothing red to soften.\n2. Plan step 4(b) demanded the security count rise by EXACTLY 6. It rose by 12 (180 -> 192). The extra six are structural assertions DoD 3 itself mandates: literal denominator, two-constant set equality, three-arm set equality, COVERED separation, zero-admission sweep + leg denominator, upstream three-code set equality. Hitting +6 would have required deleting DoD clauses. Measured reality reported; accepted.\n\n## Foreign red, disclosed and attributed\nFull `@moe/daemon` lane: TIMED OUT at 10m under me — \"[vitest-pool]: Timeout terminating forks worker for test files apps/daemon/src/goals/goal-services.test.ts\". Foreign: 13 dirty paths under apps/daemon/src from a live http-listener split, and this row changed ZERO daemon bytes (blob-identical above), so causation is impossible. The owned daemon arm passes 20/20 standalone.\nRoot lane: its include is [\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\", \"tools/**/*.test.ts\"] — it cannot match a `.security.ts` file and has no apps/**, so neither owned test file is even loadable there. Root red is structurally non-attributable.\nAlso present and untouched: untracked tests/security/goal-closure-verification-fixture.ts (foreign).\nDelta (HEAD failing set minus merge-base failing set) intersected with the five owned paths: EMPTY.\n\n## Note for the parent row task-45839f34\nWhen it advertises GA_ACTIVATION_RECORD_LAYER and LIVE_QUIESCE_EVIDENCE_LAYER into the roster and folds these six into HOSTILE_CASES/COVERED, the separation assertion \"keeps the activation boundary out of the covered union of this axis\" must be DELETED in the same edit — it asserts `COVERED` does not contain the activation constant and will redden the moment the fold happens. That is by design, not a bug.",
+      "timestamp": "2026-09-02T17:08:46.454Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T17:38:05.987Z",
-  "updatedAt": "2026-09-02T16:51:09.609Z",
+  "updatedAt": "2026-09-02T17:08:46.455Z",
   "metrics": {
     "firstClaimAt": "2026-09-01T17:38:46.256Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 5,
     "executedStepCount": 10,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-02T17:08:14.972Z",
+    "wallClockMs": 84568716
   },
   "contextFetchedBy": [
     "architect-db6a0906",
     "governor-c11c29e2",
     "architect-dbf9e869",
-    "worker-f06d587f"
+    "worker-f06d587f",
+    "qa-30d27a8d"
   ],
   "stepsCompleted": [
     "step-1",
@@ -203,10 +212,12 @@
     "tests/security/integrity-boundaries.security.ts",
     "packages/benchmark/src/activation-record.ts",
     "packages/core/src/cutover/cutover-quiesce-evidence.ts",
-    "apps/daemon/src/cutover/cutover-generation-snapshot.ts"
+    "apps/daemon/src/cutover/cutover-generation-snapshot.ts",
+    ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json",
+    ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json"
   ],
   "completionSummary": "CONSUMER EDGE CLOSED + DELIVERED. Gate exit 0, every leg printing a nonzero count line: tsc 0 diagnostics; security 1 file/192 tests; units 2/22; daemon 1/20.\n\nTHE GAP WAS REAL AND IS NOW SHUT. PRE_ROSTER_INTEGRITY_HOSTILE_CASES was exported at integrity-hostile-cases.ts:3017 and imported by NOTHING (`grep -c PRE_ROSTER` on the runner = 0). The six cases satisfied every existence grep and never executed. +197 lines in integrity-boundaries.security.ts now run all six.\n\nSECURITY DELTA IS +12, NOT the predicted +6 — reported as measured rather than deleting DoD-3 clauses to hit a number. 180 -> 192. Exactly SIX are the case arms, one per case (all six named in a row comment from --reporter=verbose); the other six are the structural assertions DoD 3 itself mandates: literal denominator 6, two-constant set equality, three-arm set equality, COVERED-union separation, zero-admission sweep + 8-leg denominator, and upstream three-code set equality. The +6 case-arm delta the clause was reaching for is satisfied exactly.\n\nDoD-4 RE-SPLIT: SATISFIED BY ALREADY-LANDED ROWS, NO NEW ROW FILED. task-1edf8277 (core total/bounded validator) and task-642df965 (daemon bounded fixed-path reader) are DONE and already in dependsOn; filing another would duplicate a landed capability. Verified on disk: deriveLiveQuiesceEvidenceDigest :257; readCutoverQuiesceRecordBytes :9 + decodeBoundedJsonBytes(read.bytes) :260; ports.readFileText :113 never invoked.\n\nALL THREE PRODUCTION SOURCES FINISHED BYTE-IDENTICAL after six drills — sha256 c30a9bab / b0bc31fc / 35d5d960, `git status --porcelain` empty, 160/268/372 lines, all <400. Only two test paths carry bytes, both declared.\n\nSIX DRILLS, ALL RED ON THEIR OWN NAMED ASSERTION, NONE GREEN, no defect found. D3/D4/D5 redden three DISJOINT legs (real one-degree separation). D6 is decisive: dropping the daemon's forwarded upstream on the SEMANTIC branch left every outer-tuple assertion AND the zero-admission sweep GREEN while only the new upstream check r",
-  "reviewCompletedAt": "2026-09-01T20:10:33.694Z",
+  "reviewCompletedAt": "2026-09-02T17:08:14.972Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Delivery/commit rail: the two-file pre-roster acceptance implementation is not backed by a recorded completion commit or landing.",
@@ -260,5 +271,39 @@
   "declaredFiles": [
     "tests/security/integrity-hostile-cases.ts",
     "tests/security/integrity-boundaries.security.ts"
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "86fd4998ee3a684c7c61c642fd89b592b9a5dee8",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-f06d587f@2026-09-02T16:13:15Z",
+      "paths": [
+        ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+        "tests/security/integrity-boundaries.security.ts",
+        "tests/security/integrity-hostile-cases.ts"
+      ],
+      "recordedBy": "worker-f06d587f",
+      "recordedAt": "2026-09-02T16:51:36.620Z",
+      "treeId": "4cd16dce087510e727403e0289bd0fdf38e0dd71",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "tests/security/.pre-roster-fragment.tmp",
+    "tests/security/integrity-boundaries.security.ts",
+    "tests/security/integrity-hostile-cases.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-f06d587f@2026-09-02T16:13:15Z",
+    "at": "2026-09-02T16:51:36.620Z"
+  },
+  "completedAt": "2026-09-02T17:08:14.972Z",
+  "reviewSummary": "APPROVED. Both prior rejection items closed. Full evidence sheet in my row comment.\n\nDELIVERY (item 1, the blocker): commit 86fd4998 kind=completion, Moe-Task trailer, paths = exactly the two owned test files + two board JSONs. No production path in the commit.\n\nGATE RE-RUN BY ME, verbatim DoD-5 command, foreground/unpiped: tsc 0; security 1 file/192 tests; units 2/22; daemon 1/20; exit 0 — identical to task.verification. Full security lane 12 files/865 tests, exit 0.\n\nDoD1: the 3 production sources are blob-identical between claim anchor dd1c227d and HEAD (e9199288/22e567b2/c006dbaf); sha256 c30a9bab/35d5d960 match the worker sheet. 160/268/372 lines, all <400. Rejection item 2 (bounded-read re-split) verified ON DISK as landed sibling work, correctly not re-filed: readCutoverQuiesceRecordBytes :9/:242 + decodeBoundedJsonBytes(read.bytes) :260.\n\nDoD2/3: consumer edge closed — PRE_ROSTER_INTEGRITY_HOSTILE_CASES imported and executed at integrity-boundaries.security.ts:40. Literal denominator 6 (4/2 split), two-constant + three-arm set equality, per-leg non-admission, COVERED separation pinned as an assertion. Quiesce legs assert the forwarded upstream {code,layer}, not just the outer code — correct, since missing-file and semantic-core rejection share CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT.\n\nDoD4: two drills reproduced INDEPENDENTLY by me. D6 (drop forwarded upstream, snapshot :271) -> 4 red, exactly the named upstream assertions, outer tuple green. D1 (COMMIT_HEX {40}->{39,40}) -> 3 red incl. the 39-hex leg. Both restored; git diff --exit-code clean + sha256 equal.\n\nDEVIATIONS ACCEPTED: security delta is +12 not the plan's +6 (6 arms + 6 structural assertions DoD3 itself mandates); DoD3's \"expected-red 146-vs-131\" premise is STALE — EXPECTED_ROSTER_SIZE is 168 and boundary-roster.security.ts is green and untouched."
 }
