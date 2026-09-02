@@ -12,6 +12,8 @@ import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { isPolicyWaiverDecideCandidate, runPolicyWaiverDecideCommand }
+  from "./planning/policy-waiver-command.js";
 import { PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND }
   from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
@@ -207,6 +209,18 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
+      // The typed SOFT_POLICY_WAIVER arm, composed BEFORE the operator fence below: a
+      // paired browser HUMAN holding ADMIN may decide one, while the legacy bytes stay
+      // operator-only for that same principal. Decode, fences, witness, one-use step-up
+      // and ledger all live in the focused module; this is only the delegation.
+      if (kind === "approval.decide" && isPolicyWaiverDecideCandidate(envelope.payload)) {
+        return runPolicyWaiverDecideCommand({
+          capabilities: principal.capabilities, commandId: envelope.commandId,
+          correlationId: envelope.correlationId, decidedAt: clock(),
+          expectedVersion: envelope.expectedVersion, operatorPrincipalId,
+          payload: envelope.payload, principalId: principal.principalId, projectId, store,
+        });
+      }
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         // TWO kinds are widened, not the seat: a session the operator approved

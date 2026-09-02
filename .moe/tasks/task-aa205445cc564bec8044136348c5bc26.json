@@ -128,7 +128,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-09-02T14:39:50.541Z",
+  "updatedAt": "2026-09-02T14:40:37.461Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 3,
@@ -183,7 +183,9 @@
     "apps/daemon/src/http/http-listener-static-assets.test.ts",
     ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
     ".moe/tasks/task-4704a2981cf0443991a64273836da486.json",
-    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+    ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+    ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json"
   ],
   "completionSummary": "NO-CHURN VERIFY AT LANDED BYTES. Zero bytes changed this session. The three QA rejections were delivery-only and are now FALSIFIED at the delivered tree.\n\nDELIVERED: the four anchored blobs are AT HEAD a1138d52 (main, in sync with origin/main), tracked and CLEAN (`git status --porcelain` over the four paths is EMPTY). `git ls-tree HEAD` returns exactly e8f0e362 (host, 206 lines), 762180b5 (static-asset-path-policy.ts, 174 lines), ddca3afa (one-line .js bridge), e7c98799 (test, 991 lines) — byte-identical to the planning anchors (sha256 0b4afb54.../798f673d.../6396e474.../58e630be...). They reached main through d2629d0d \"Moe/work 2026 08 08 (#5)\", an ancestor of origin/main whose message carries 6 `Moe-Task: task-aa205445cc564bec8044136348c5bc26` trailer lines (PR #5 squashed the six pushed wrapper checkpoints on refs/heads/moe/work-2026-08-08, incl. 5c7e49a2 which carried all four owned paths). So DoD 2 and DoD 3 hold at HEAD: policy module + bridge present, delivered host is 206 lines, not 556.\n\nGATES (foreground, unpiped, shell:false), both nonzero so neither is vacuous:\n- exact persisted command -> exit 0, `Test Files 1 passed (1)`, `Tests 56 passed (56)`, `$ tsc --project tsconfig.json`.\n- `pnpm --filter @moe/daemon test` standalone -> exit 0, `Test Files 342 passed (342)`, `Tests 6983 passed | 12 todo (6995)`. ZERO foreign red to disclose. Merge-base-vs-HEAD failing-path delta is empty by construction (owned bytes already in the merge-base tree).\n\nADVERSARIAL REVIEW (read-only): policy imports only `node:path`; host holds every node:fs effect; precedence method->decode->path->type->realpath->containment->stat/file->size intact; old specifier exposes exactly the seven runtime keys with IDENTITY re-exports (test :315 set-equality + `toBe`); callers unchanged; hostile roster asserts length 9 AND >0; refusals assert code + CONTROL_ROOM_LISTENER_LAYER; `/escape/secret.js` divergence fixture leaves containment as the only refusing fence, with `/CONSOLE.js` -> NOT_FOU",
   "rejectionDetails": {
@@ -407,14 +409,31 @@
       "treeId": "0d2f30af11fccf67c347b55ba4d4699504164f16",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "71d552039eb8b491e2fa282efa040a4e0a0b7f27",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-30d27a8d@2026-09-02T14:32:54Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+        ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+      ],
+      "recordedBy": "qa-30d27a8d",
+      "recordedAt": "2026-09-02T14:40:37.461Z",
+      "treeId": "6a231ab65235eea3473b0ce88006adb02b448c04",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-f06d587f@2026-09-02T14:16:26Z",
-    "at": "2026-09-02T14:26:23.351Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-30d27a8d@2026-09-02T14:32:54Z",
+    "at": "2026-09-02T14:40:37.461Z"
   },
   "reviewStartedAt": "2026-09-02T14:25:37.565Z",
   "touchedFiles": [
