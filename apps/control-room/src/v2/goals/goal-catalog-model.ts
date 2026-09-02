@@ -172,13 +172,17 @@ function withCoverage(
   if (outcome === undefined) return card;
   if (outcome.status !== "COVERAGE") {
     return outcome.status === "REFUSED" && outcome.code === "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND"
-      ? Object.freeze({ ...card, progressComingOnline: "No PRD is bound to this goal." })
+      ? Object.freeze({
+        ...card, progressComingOnline: "No PRD is bound to this goal.",
+        progressNote: "No PRD bound to this goal",
+      })
       : card;
   }
   const { contracts, criteria, verified } = outcome.totals;
   if (contracts === 0) {
     return Object.freeze({
       ...card, progressComingOnline: "No Product Contract cites this goal PRD yet.",
+      progressNote: "No contract cites the PRD yet",
     });
   }
   const pending = outcome.contracts.some((contract) => contract.gate1 === "PENDING");

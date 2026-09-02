@@ -55,6 +55,8 @@ export interface GoalCardModel {
   /** undefined means acceptance progress is coming online (see progressComingOnline). */
   readonly progress?: GoalProgress | undefined;
   readonly progressComingOnline?: string | undefined;
+  /** A short line shown in the progress label when there is no bar and the reason is known. */
+  readonly progressNote?: string | undefined;
   /** undefined means the last-event time is coming online. */
   readonly lastEventLabel?: string | undefined;
   /** undefined means budget/spend is coming online (see budgetComingOnline). */

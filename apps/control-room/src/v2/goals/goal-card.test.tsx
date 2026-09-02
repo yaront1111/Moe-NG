@@ -372,3 +372,18 @@ describe("goalshome-08: a lone triage strip does not stretch the whole content w
     expect(TRIAGE_TSX).toContain('import "./goal-card.css"');
   });
 });
+
+describe("the progress label names the reason when the model carries one", () => {
+  it("shows progressNote in place of the generic coming-online line", () => {
+    const base = FIXTURE_GOALS_DATA.goals[0] as GoalCardModel;
+    const goal: GoalCardModel = {
+      ...base, goalId: "goal-note", progress: undefined, progressNote: "No PRD bound to this goal",
+    };
+    render(<GoalCard expanded={false} goal={goal} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
+    expect(screen.getByTestId("cr.goals.card.goal-note.progress").textContent).toBe("No PRD bound to this goal");
+    cleanup();
+    const plain: GoalCardModel = { ...base, goalId: "goal-plain", progress: undefined };
+    render(<GoalCard expanded={false} goal={plain} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
+    expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress coming online");
+  });
+});
