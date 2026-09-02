@@ -120,7 +120,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.931Z",
-  "updatedAt": "2026-09-02T22:29:47.359Z",
+  "updatedAt": "2026-09-02T22:29:51.905Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:08:14.451Z",
     "plannedStepCount": 4,
@@ -304,10 +304,28 @@
       "treeId": "ff4165e96db11c726b4bcbfb773a6716bd7f7641",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "0f678d9d3c3b1d93769be8254bc85ceb7a722c97",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d109461f@2026-09-02T22:29:47Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+      ],
+      "recordedBy": "qa-d109461f",
+      "recordedAt": "2026-09-02T22:29:51.905Z",
+      "treeId": "edec5219ebe1b68d01418c9fe6304cfba7933f5a",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
-    "tests/e2e/control-room/board-chain.spec.ts"
+    "tests/e2e/control-room/board-chain.spec.ts",
+    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+    ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
   ],
   "touchedFiles": [
     "tests/e2e/control-room/board-chain.spec.ts"
@@ -316,8 +334,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-7d91321b@2026-09-02T21:51:02Z",
-    "at": "2026-09-02T21:51:10.738Z"
+    "sessionId": "qa-d109461f@2026-09-02T22:29:47Z",
+    "at": "2026-09-02T22:29:51.905Z"
   },
   "reviewStartedAt": "2026-09-02T22:29:35.754Z",
   "verification": {
