@@ -5,6 +5,7 @@ import { ActionButton } from "../components/primitives.js";
 import { ARROW_LEFT, MIDDOT } from "../glyphs.js";
 import type {
   PlanningRunAcceptanceView,
+  PlanningRunApprovalState,
   PlanningRunOutcome,
   PlanningRunPlanView,
 } from "../../live/live-planning-run.js";
@@ -107,14 +108,34 @@ function AcceptanceSection(
   );
 }
 
+function bannerText(
+  reviewable: boolean, approval: PlanningRunApprovalState, lifecycle: string,
+): string {
+  if (reviewable) return "Ready for your approval";
+  // A decided run really does stay in PLAN_REVIEW; "still planning" would be the wrong truth.
+  if (approval === "BOUND") {
+    return `Approved - the decision is bound to this run; execution proceeds (run lifecycle ${lifecycle})`;
+  }
+  if (approval === "UNREADABLE") {
+    return `Approval state unreadable - not offered for approval, lifecycle ${lifecycle}`;
+  }
+  return `Still planning - not ready to approve yet, lifecycle ${lifecycle}`;
+}
+
 function ReviewableBanner(
-  { reviewable, lifecycle }: { readonly reviewable: boolean; readonly lifecycle: string },
+  { reviewable, lifecycle, approval }: {
+    readonly reviewable: boolean; readonly lifecycle: string;
+    readonly approval: PlanningRunApprovalState;
+  },
 ): JSX.Element {
   return (
-    <p className="cr2-approve-banner" data-reviewable={reviewable ? "true" : "false"} data-testid="cr.approve.banner">
-      {reviewable
-        ? "Ready for your approval"
-        : `Still planning - not ready to approve yet, lifecycle ${lifecycle}`}
+    <p
+      className="cr2-approve-banner"
+      data-approval={approval}
+      data-reviewable={reviewable ? "true" : "false"}
+      data-testid="cr.approve.banner"
+    >
+      {bannerText(reviewable, approval, lifecycle)}
     </p>
   );
 }
@@ -128,14 +149,14 @@ function RunView(
   if (!outcome.sealed || outcome.plan === null) {
     return (
       <div className="cr2-approve-empty" data-testid="cr.approve.empty">
-        <ReviewableBanner lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
+        <ReviewableBanner approval={outcome.approval} lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
         <p className="cr2-slot-body">The plan is not sealed yet; nothing to review.</p>
       </div>
     );
   }
   return (
     <div className="cr2-approve-body">
-      <ReviewableBanner lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
+      <ReviewableBanner approval={outcome.approval} lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
       <PlanSection plan={outcome.plan} />
       {outcome.acceptance === null ? null : <AcceptanceSection acceptance={outcome.acceptance} />}
       <details className="cr2-approve-inspect" data-testid="cr.approve.inspect">
@@ -166,7 +187,7 @@ function AppliedLine({ state }: { readonly state: LoadState }): JSX.Element | nu
   if (state.phase !== "LOADED" || state.outcome.status !== "RUN") return null;
   return (
     <p className="cr2-approve-banner" data-testid="cr.approve.applied">
-      {`Approved ${MIDDOT} the daemon now reports lifecycle ${state.outcome.lifecycle}`}
+      {`Approved ${MIDDOT} the daemon now reports approval ${state.outcome.approval}, lifecycle ${state.outcome.lifecycle}`}
     </p>
   );
 }

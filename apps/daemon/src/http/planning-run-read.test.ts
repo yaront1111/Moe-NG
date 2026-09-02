@@ -105,6 +105,7 @@ describe("POST /planning/run/read reviewability against a durable approval (task
     const frame = runFrame(store, RUN_ID);
     expect(frame.lifecycle).toBe("PLAN_REVIEW");
     expect(frame.reviewable).toBe(true);
+    expect(frame.approval).toBe("ABSENT");
     expect(frame.runId).toBe(RUN_ID);
     // The run is genuinely sealed, or the arm would be asserting reviewability over an empty plan.
     expect(frame.plan).not.toBeNull();
@@ -119,6 +120,8 @@ describe("POST /planning/run/read reviewability against a durable approval (task
     // truth the read must keep telling — and it is NOT offered for approval any more.
     expect(frame.lifecycle).toBe("PLAN_REVIEW");
     expect(frame.reviewable).toBe(false);
+    // ...and the read SAYS WHY: the decision is bound, so a screen can render "approved".
+    expect(frame.approval).toBe("BOUND");
     expect(frame.plan).not.toBeNull();
   });
 
@@ -131,6 +134,7 @@ describe("POST /planning/run/read reviewability against a durable approval (task
     const sibling = runFrame(store, SECOND_RUN_ID);
     expect(sibling.lifecycle).toBe("PLAN_REVIEW");
     expect(sibling.reviewable).toBe(true);
+    expect(sibling.approval).toBe("ABSENT");
   });
 
   it("answers reviewable FALSE when the goal's approval event will not decode", () => {
@@ -141,6 +145,7 @@ describe("POST /planning/run/read reviewability against a durable approval (task
     // direction that re-invites a human to approve a run that may already be approved.
     expect(frame.lifecycle).toBe("PLAN_REVIEW");
     expect(frame.reviewable).toBe(false);
+    expect(frame.approval).toBe("UNREADABLE");
   });
 
   it("answers reviewable FALSE when the goal carries TWO approval events", () => {

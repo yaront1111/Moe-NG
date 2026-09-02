@@ -69,12 +69,24 @@ const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
  * FAIL CLOSED on `UNREADABLE`: a decision this daemon cannot read is not a decision it may
  * present as absent, because "not approved" is the answer that re-invites a second approval.
  */
-function reviewableNow(
-  store: SqliteEventStore, lifecycle: string, goalRef: string | null, runId: string,
-): boolean {
-  if (lifecycle !== REVIEWABLE_LIFECYCLE) return false;
-  if (goalRef === null) return false;
-  return readPlanningRunApprovalBinding({ goalRef, runId, store }) === "ABSENT";
+export const PLANNING_RUN_APPROVAL_STATES = Object.freeze(["ABSENT", "BOUND", "UNREADABLE"] as const);
+export type PlanningRunApprovalState = (typeof PLANNING_RUN_APPROVAL_STATES)[number];
+
+/**
+ * The approval bound to THIS run, REPORTED alongside `reviewable` so a screen can say
+ * "approved" instead of "still planning" for a decided run (which really does stay in
+ * `PLAN_REVIEW`). A run with no goal has no approval this daemon can read: UNREADABLE, never
+ * ABSENT, for the same fail-closed reason as an undecodable decision.
+ */
+function approvalStateOf(
+  store: SqliteEventStore, goalRef: string | null, runId: string,
+): PlanningRunApprovalState {
+  if (goalRef === null) return "UNREADABLE";
+  return readPlanningRunApprovalBinding({ goalRef, runId, store });
+}
+
+function reviewableNow(lifecycle: string, approval: PlanningRunApprovalState): boolean {
+  return lifecycle === REVIEWABLE_LIFECYCLE && approval === "ABSENT";
 }
 
 /**
@@ -131,6 +143,8 @@ export interface PlanningRunAuthorityView {
 
 export interface PlanningRunView {
   readonly acceptance: PlanningRunAcceptanceView | null;
+  /** The decision bound to this run: ABSENT (still the approver's), BOUND (decided), UNREADABLE. */
+  readonly approval: PlanningRunApprovalState;
   readonly authority: PlanningRunAuthorityView | null;
   readonly lifecycle: string;
   readonly outcome: "RUN";
@@ -272,15 +286,17 @@ export function readPlanningRun(
   const authorityRef = planningAuthorityAggregateId(runId);
   const bodies = verifyBodies(store, authorityRef, submissionHash);
   const envelopeDigest = stringOf(record["envelopeDigest"]);
+  const approval = approvalStateOf(store, goalRef, runId);
   return Object.freeze({
     acceptance: bodies === null ? null : acceptanceView(bodies.acceptance),
+    approval,
     authority: bodies === null ? null : Object.freeze({
       authorityRef, bodiesDigest: bodies.bodiesDigest, envelopeDigest,
     }),
     lifecycle,
     outcome: "RUN" as const,
     plan: bodies === null ? null : planView(bodies.plan),
-    reviewable: reviewableNow(store, lifecycle, goalRef, runId),
+    reviewable: reviewableNow(lifecycle, approval),
     runId,
     submissionHash,
   });
