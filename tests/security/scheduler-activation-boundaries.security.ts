@@ -65,6 +65,9 @@ import {
   ACTIVATION_ADMISSION_CASES,
   ACTIVATION_ADMISSION_RACES,
   DEV_READY,
+  DIVERGENCE_CASES,
+  DIVERGENCE_CONSTANTS,
+  DIVERGENCE_RACES,
   EXPANSION_SUPERSESSION_CASES,
   EXPANSION_SUPERSESSION_RACES,
   GOAL_PREREQUISITE_LAYER,
@@ -100,6 +103,7 @@ import {
   RECENT_V2_COMPILER_SCHEDULER_RACES,
 } from "./recent-v2-cutover-hostile-cases.js";
 import type {
+  DivergenceRaceCase,
   GoalPrerequisiteProof,
   HostileArm,
   HostileCase,
@@ -745,5 +749,146 @@ describe("the whole slice", () => {
     // code and layer, which a boundary that spawned the process first and refused afterwards
     // would satisfy in full. Only the launcher's own count separates the two.
     expect(verifierLaunchCount()).toBe(0);
+  });
+});
+
+// ============================================================================================
+// THE FOUR DIVERGENCE BOUNDARIES (task-59eaddfb).
+//
+// SELF-CONTAINED ON PURPOSE. Nothing below feeds `CASES`, `RACES`, `COVERED`, `ROSTER_AXIS` or
+// `collected`. Those are bidirectionally equated with the roster above (:193-199) and are
+// re-enumerated by completeness.security.ts's axis partition; PLAN_APPROVAL_LAYER is rostered on
+// the TRANSPORT axis, so a contribution from this set would claim one boundary on two axes.
+// Every assertion above -- the 46 literal, both set-equality directions, and the per-constant
+// three-arm sweep -- runs unchanged.
+//
+// WHAT THIS SET ADDS THAT THE ROSTERED ARMS CANNOT. All four constants already carry
+// BEFORE/AFTER/RACE arms (recent-scheduler-hostile-cases.ts, recent-transport-hostile-cases.ts),
+// and every one of those arms trips the OUTERMOST fence of its module. Loosening any of the four
+// NAMED guards leaves all of them green, because the shape check in front answers first. These
+// twelve are arranged so the named guard is the only mechanism that can refuse.
+// ============================================================================================
+
+/** Every outcome this set produced. SEPARATE from `collected` by design, per the note above. */
+const divergenceCollected: unknown[] = [];
+
+const divergenceKeys = (): readonly string[] => [
+  ...DIVERGENCE_CASES.map((entry) => `${entry.constant}#${entry.arm}`),
+  ...DIVERGENCE_RACES.map((entry) => `${entry.constant}#RACE`),
+];
+
+describe("the four divergence boundaries generate a complete, nonzero case set", () => {
+  it("generates exactly twelve cases", () => {
+    // The LITERAL denominator. vitest reports no failure for an empty `it.each` table, so a set
+    // that silently yielded nothing would make every arm below vacuous.
+    expect(DIVERGENCE_CASES.length + DIVERGENCE_RACES.length).toBe(12);
+    expect(DIVERGENCE_CASES).toHaveLength(8);
+    expect(DIVERGENCE_RACES).toHaveLength(4);
+  });
+
+  it("covers exactly the four constants, three arms each", () => {
+    expect([...new Set(divergenceKeys().map((key) => key.split("#")[0]))].sort())
+      .toEqual([...DIVERGENCE_CONSTANTS].sort());
+    // The full CONSTANT#ARM key set, mirroring the :202 discipline: a deleted case names the
+    // key it removed rather than only moving a count, and a constant that lost one arm cannot
+    // hide behind another constant that gained one.
+    expect([...divergenceKeys()].sort()).toEqual([
+      "BUDGET_COMMITMENT_LAYER#AFTER",
+      "BUDGET_COMMITMENT_LAYER#BEFORE",
+      "BUDGET_COMMITMENT_LAYER#RACE",
+      "CUTOVER_ACTIVATE_LAYER#AFTER",
+      "CUTOVER_ACTIVATE_LAYER#BEFORE",
+      "CUTOVER_ACTIVATE_LAYER#RACE",
+      "GA_ACTIVATION_BINDING_LAYER#AFTER",
+      "GA_ACTIVATION_BINDING_LAYER#BEFORE",
+      "GA_ACTIVATION_BINDING_LAYER#RACE",
+      "PLAN_APPROVAL_LAYER#AFTER",
+      "PLAN_APPROVAL_LAYER#BEFORE",
+      "PLAN_APPROVAL_LAYER#RACE",
+    ]);
+  });
+
+  it("keeps the four out of this axis' covered union", () => {
+    // Load-bearing rather than decorative: it pins the separation the comment above describes,
+    // so folding this set into `CASES` reddens HERE with a named reason instead of reddening
+    // the roster set-equality assertions with an opaque one.
+    const covered = new Set(COVERED);
+    expect([...DIVERGENCE_CONSTANTS.filter((constant) => covered.has(constant))].sort())
+      .toEqual(["BUDGET_COMMITMENT_LAYER", "CUTOVER_ACTIVATE_LAYER", "GA_ACTIVATION_BINDING_LAYER"]);
+    // PLAN_APPROVAL_LAYER is rostered on `transport`; this axis must never claim it.
+    expect(covered.has("PLAN_APPROVAL_LAYER")).toBe(false);
+  });
+});
+
+describe("divergence before and after arms", () => {
+  it.each(DIVERGENCE_CASES.map((entry) => [`${entry.constant} ${entry.arm}: ${entry.name}`, entry]))(
+    "%s",
+    async (_name: string, entry: HostileCase) => {
+      const outcome = await entry.run();
+      divergenceCollected.push(outcome);
+      // Code AND layer through the shared helper, which rejects a code-only call at compile
+      // time and again at runtime.
+      assertRefusedWith(outcome, entry.expected);
+      // THE SERIES CHECK, same as the rostered runner: proof the fixture reached the layer it
+      // was arranged for rather than being answered by a fence in front of it.
+      expect(entry.expected.layer, `${entry.constant}: arranged layer must answer`)
+        .toBe(entry.arranged);
+      expect(isAdmitted(outcome), `${entry.constant}: nothing may be admitted`).toBe(false);
+    },
+    CASE_BOUND_MS,
+  );
+});
+
+describe("divergence race arms", () => {
+  it.each(DIVERGENCE_RACES.map((entry) => [`${entry.constant} RACE: ${entry.name}`, entry]))(
+    "%s",
+    async (_name: string, entry: DivergenceRaceCase) => {
+      const [left, right] = await entry.run();
+      divergenceCollected.push(left, right);
+      // PER LEG, never on an aggregate: an aggregate can hide a double-admit, and on the two
+      // races that exist to show a guard telling two causes apart it would also erase the very
+      // discrimination under test. Positional by construction, so no settle order is pinned.
+      assertRefusedWith(left, entry.expectedLeft);
+      assertRefusedWith(right, entry.expectedRight);
+      expect(isAdmitted(left), `${entry.constant}: left leg admitted`).toBe(false);
+      expect(isAdmitted(right), `${entry.constant}: right leg admitted`).toBe(false);
+      expect(entry.expectedLeft.layer).toBe(entry.arranged);
+      expect(entry.expectedRight.layer).toBe(entry.arranged);
+    },
+    CASE_BOUND_MS,
+  );
+});
+
+describe("the divergence slice", () => {
+  it("admits nothing across all twelve arms", () => {
+    expect(divergenceCollected.filter((outcome) => isAdmitted(outcome))).toEqual([]);
+  });
+
+  it("recorded sixteen outcomes, one per leg", () => {
+    // Both denominators. The derived one moves with the tables, so the LITERAL is what makes a
+    // table that shrank redden here; and because each race records TWO legs, a dropped leg
+    // reddens here rather than passing on its surviving half.
+    expect(divergenceCollected).toHaveLength(
+      DIVERGENCE_CASES.length + DIVERGENCE_RACES.length * 2,
+    );
+    expect(divergenceCollected).toHaveLength(16);
+  });
+
+  it("proves each guard by a DISTINCT code, not by a shared refusal", () => {
+    // The property the rostered arms cannot carry. Four boundaries answering with six distinct
+    // codes is what says these fixtures reached four different guards; four arms all landing on
+    // one module's outermost fence would collapse this set.
+    const codes = divergenceCollected
+      .map((outcome) => (outcome as { readonly code?: unknown }).code)
+      .filter((code): code is string => typeof code === "string");
+    expect(codes).toHaveLength(16);
+    expect([...new Set(codes)].sort()).toEqual([
+      "ACTIVATION_BINDING_GENERATION_UNBOUND",
+      "ACTIVATION_BINDING_WORK_MISMATCH",
+      "APPROVAL_AFFORDANCE_SUBJECT_MISMATCH",
+      "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH",
+      "CUTOVER_ACTIVATE_EXPECTED_VERSION_CONFLICT",
+      "CUTOVER_ACTIVATE_FIELD_INVALID",
+    ]);
   });
 });

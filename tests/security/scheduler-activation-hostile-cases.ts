@@ -19,7 +19,36 @@
  * `hostile-harness.ts` is not modified.
  */
 
-import { SqliteEventStore } from "../../packages/store/src/index.js";
+import { DurableStoreError, SqliteEventStore } from "../../packages/store/src/index.js";
+
+// task-59eaddfb's four divergence boundaries. Each is imported from the module that OWNS the
+// guard, so every case below can be keyed on the identifier rather than on the layer string.
+import { frameOfSurface } from "../../apps/control-room/src/live/live-board-feed.js";
+import type { SurfaceFrame } from "../../apps/control-room/src/live/live-board-feed.js";
+import {
+  APPROVAL_COMMAND_KIND,
+  PLAN_APPROVAL_LAYER,
+  authorizeApproval,
+} from "../../apps/control-room/src/v2/goals/plan-approval.js";
+import {
+  BUDGET_COMMITMENT_LAYER,
+  budgetCommitmentDigest,
+  budgetCommitmentMaterial,
+  verifyBudgetCommitment,
+} from "../../apps/daemon/src/budget/budget-commitment.js";
+import type { GenesisApprovedRun } from "../../apps/daemon/src/budget/budget-genesis-binding.js";
+import {
+  CUTOVER_ACTIVATE_LAYER,
+  storeRefusal as cutoverActivateStoreRefusal,
+} from "../../apps/daemon/src/cutover/cutover-activate-contracts.js";
+import {
+  GA_ACTIVATION_BINDING_LAYER,
+  GA_ACTIVATION_WORK_REF,
+  GO_ACTIVATE_GATE_ID,
+  admitActivationBinding,
+} from "../../packages/benchmark/src/activation-binding.js";
+import { grantHumanAuthority } from "../../packages/core/src/planning/approval-authority.js";
+import type { HumanAuthorityGate } from "../../packages/core/src/planning/approval-authority.js";
 
 import {
   ACTIVATION_BUDGET_LAYER,
@@ -111,6 +140,7 @@ import {
 import { readDurableLedger } from "../../apps/daemon/src/bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
+  GRAPH_REVISION_REF,
   PROJECT_ID as GOAL_PROJECT_ID,
   acceptancePayload,
   closeStores,
@@ -199,7 +229,12 @@ export function isAdmitted(value: unknown): boolean {
     return false;
   }
   const status = answer["status"];
-  if (status === "ABSENT" || status === "UNKNOWN") {
+  // WITHHELD is `plan-approval.ts:88`'s own refusal marker, in the same family as the two
+  // beside it: production minted it, this file did not infer it. It is READ rather than
+  // defaulted, and it can only move a value from ADMITTED to refused -- never the reverse --
+  // so the slice invariant stays exactly as strict for every other case on this axis. No
+  // production surface on this axis returns `status: "WITHHELD"` on a success path.
+  if (status === "ABSENT" || status === "UNKNOWN" || status === "WITHHELD") {
     return false;
   }
   const disposition = answer["disposition"];
@@ -303,6 +338,8 @@ export function openHostileStore(label: string): SqliteEventStore {
 
 export function closeHostileStores(): number {
   let closed = 0;
+  // Dropped with the handles it memoized, so a later call cannot hand out a closed store.
+  budgetWorld = null;
   for (const store of openStores.splice(0)) {
     try {
       store.close();
@@ -2145,6 +2182,358 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
   },
 ]);
 
+
+// ============================================================================================
+// THE FOUR DIVERGENCE BOUNDARIES (task-59eaddfb).
+//
+// WHY THESE EXIST BESIDE ARMS THAT ALREADY PASS. All four constants are rostered and all four
+// already carry BEFORE/AFTER/RACE arms -- three in `recent-scheduler-hostile-cases.ts`, one in
+// `recent-transport-hostile-cases.ts`. Every one of those arms trips the OUTERMOST fence of its
+// module: a null frame, a non-hex ref, a plain `Error`, a null record. An outermost-fence arm
+// proves the module refuses SOMETHING; it cannot distinguish the guard it is named for from the
+// shape check standing in front of it, so loosening the named guard leaves it green.
+//
+// Each case below is arranged so the NAMED guard is the ONLY mechanism that can refuse: every
+// earlier fence is genuinely satisfied, and two of the four carry a POSITIVE CONTROL that
+// proves the fixture reaches past those fences rather than merely claiming to.
+//
+// THEY ARE A SEPARATE SET, NOT AN APPEND. `CASES`/`RACES` in the suite module are
+// bidirectionally equated with the roster axis (boundaries :193-199) and are re-enumerated by
+// `completeness.security.ts`'s axis partition. PLAN_APPROVAL_LAYER is rostered on the TRANSPORT
+// axis, so folding it into this axis' tables would claim one boundary on two axes and redden
+// that partition. A separate set contributes to neither union and needs no roster edit.
+// ============================================================================================
+
+/** The four case keys, spelled as IDENTIFIERS. See `DIVERGENCE_BUDGET` for why that matters. */
+const DIVERGENCE_PLAN = "PLAN_APPROVAL_LAYER";
+/**
+ * KEYED ON THE IDENTIFIER, NEVER THE LAYER LITERAL, and this constant is why.
+ * `BUDGET_COMMITMENT_LAYER` IS the string `"DAEMON_PREREQUISITE"` -- and so is
+ * `GOAL_PREREQUISITE_LAYER` (`goal-close-prerequisite.ts:46`), which this very file already
+ * imports and asserts elsewhere. A case keyed on the literal is satisfied by a goal-prerequisite
+ * refusal and says nothing about budget-commitment's own guard.
+ */
+const DIVERGENCE_BUDGET = "BUDGET_COMMITMENT_LAYER";
+const DIVERGENCE_CUTOVER = "CUTOVER_ACTIVATE_LAYER";
+const DIVERGENCE_BINDING = "GA_ACTIVATION_BINDING_LAYER";
+
+export const DIVERGENCE_CONSTANTS: readonly string[] = Object.freeze([
+  DIVERGENCE_BINDING, DIVERGENCE_BUDGET, DIVERGENCE_CUTOVER, DIVERGENCE_PLAN,
+]);
+
+// -- PLAN_APPROVAL_LAYER: a CONNECTED, genuine offer bound only to a FOREIGN run -------------
+
+const FOREIGN_RUN_ID = "run-foreign-9d2b";
+const APPROVED_RUN_ID = "run-local-4a71";
+
+/**
+ * A surface body carrying ONE genuine `approval.decide_intent` offer for `runId`.
+ *
+ * Decoded by the PRODUCTION reader rather than hand-built as a `SurfaceFrame` literal: a literal
+ * would be this file's own idea of a valid frame and would keep passing after the reader
+ * tightened. Going through `frameOfSurface` is what proves the two fences ahead of the subject
+ * guard are genuinely satisfied -- the frame is CONNECTED and the offer survives `offerOf`.
+ */
+function decideIntentSurface(runId: string): SurfaceFrame {
+  const decoded = frameOfSurface({
+    nextAllowedCommands: [{
+      commandId: `cmd-approve-${runId}`,
+      commandKind: APPROVAL_COMMAND_KIND,
+      expectedVersion: 3,
+      targetAggregateId: runId,
+    }],
+    outcome: "SURFACE",
+    steps: [],
+  });
+  if (decoded.connection !== "CONNECTED" || decoded.offers.length !== 1) {
+    throw new Error(
+      `plan-approval fixture did not decode to one CONNECTED offer: `
+      + `${decoded.connection}/${decoded.offers.length}`,
+    );
+  }
+  return decoded;
+}
+
+/**
+ * THE POSITIVE CONTROL, run inside the arm rather than beside it. The SAME frame authorizes the
+ * run it was offered for; only the subject differs between that call and the refusing one. A
+ * fixture that had failed earlier -- on connectivity, or on affordance validity -- would fail
+ * this first, so the refusal returned below cannot be the wrong mechanism answering.
+ */
+function foreignBoundApproval(): unknown {
+  const frame = decideIntentSurface(FOREIGN_RUN_ID);
+  const authorized = authorizeApproval(frame, FOREIGN_RUN_ID);
+  if (authorized.status !== "AUTHORIZED") {
+    throw new Error(
+      `plan-approval control did not authorize its own run: ${authorized.code}@${authorized.layer}`,
+    );
+  }
+  return authorizeApproval(frame, APPROVED_RUN_ID);
+}
+
+// -- BUDGET_COMMITMENT_LAYER: valid seeded material with a ONE-HEX digest near miss ----------
+
+/**
+ * `runBinding` is `null` and `verifiedGraphRevisionRef` is never consulted on this world:
+ * `readGenesisBudgetBinding` asks the STRICT reader first and forwards its answer untouched, and
+ * the seeded world below has an ACTIVE graph, so the genesis fallback is unreachable here. The
+ * cast keeps that fact visible rather than inventing a binding the fixture would have to keep
+ * true. `openHostileStore` reads the world back through `assertActivationWorldSeeded`, so an
+ * unseeded store cannot reach the guard under test wearing a passing verdict.
+ */
+const BUDGET_QUERY = Object.freeze({
+  approvedRun: Object.freeze({
+    runBinding: null as unknown as GenesisApprovedRun["runBinding"],
+    verifiedGraphRevisionRef: GRAPH_REVISION_REF,
+  }),
+  goalRef: GOAL_ID,
+  projectId: GOAL_PROJECT_ID,
+});
+
+let budgetWorld: SqliteEventStore | null = null;
+
+/** ONE seeded world, so the race below genuinely races two callers against one commitment. */
+function budgetStore(): SqliteEventStore {
+  budgetWorld ??= openHostileStore("budget-divergence");
+  return budgetWorld;
+}
+
+/**
+ * Flips ONE hex digit and nothing else. Length, case and alphabet are preserved, so the
+ * malformed-ref fence (`HEX64`) cannot answer and only the digest comparison is left.
+ */
+function oneHexOff(digest: string, at: number): string {
+  const original = digest[at] ?? "0";
+  const replacement = original === "0" ? "1" : "0";
+  return `${digest.slice(0, at)}${replacement}${digest.slice(at + 1)}`;
+}
+
+/**
+ * A REAL store, REAL material and the REAL digest -- then one hex digit moved.
+ *
+ * The exact digest is verified first and must be ADMITTED. That control is what separates this
+ * from the rostered `"not-a-digest"` arm: it proves the material was available and that the
+ * recompute reached the comparison, so `BUDGET_COMMITMENT_REF_MALFORMED` and
+ * `BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE` are both out of reach and the mismatch is the only
+ * verdict this guard can still produce.
+ */
+function nearMissBudgetVerdict(at: number): unknown {
+  const store = budgetStore();
+  const built = budgetCommitmentMaterial(store, BUDGET_QUERY);
+  if (!built.ok) {
+    throw new Error(`budget fixture material unavailable: ${built.code}@${built.layer}`);
+  }
+  const exact = budgetCommitmentDigest(built.material);
+  const control = verifyBudgetCommitment(store, BUDGET_QUERY, exact);
+  if (!control.ok) {
+    throw new Error(`budget control refused its own exact commitment: ${control.code}`);
+  }
+  return verifyBudgetCommitment(store, BUDGET_QUERY, oneHexOff(exact, at));
+}
+
+// -- CUTOVER_ACTIVATE_LAYER: the REAL mapper, two DISTINCT store causes ----------------------
+
+/**
+ * The mapper's two DISCRIMINATING branches, driven with real `DurableStoreError`s.
+ *
+ * The rostered arm hands `storeRefusal` a plain `Error`, which fails the `instanceof` test on
+ * line one and lands on `CUTOVER_ACTIVATE_STORE_UNAVAILABLE` -- the default, reachable without
+ * the mapper discriminating anything. These two carry store codes the mapper must tell apart
+ * and they produce DIFFERENT outer codes: one cause and one code would leave the discrimination
+ * untested however many arms pointed at it.
+ */
+const cutoverVersionRefusal = (): unknown =>
+  cutoverActivateStoreRefusal(
+    new DurableStoreError("EXPECTED_VERSION_CONFLICT", "activation aggregate moved under us"),
+  );
+
+const cutoverFieldRefusal = (): unknown =>
+  cutoverActivateStoreRefusal(
+    new DurableStoreError("STORE_INPUT_INVALID", "activation marker field rejected"),
+  );
+
+// -- GA_ACTIVATION_BINDING_LAYER: core-minted grants, one identity off -----------------------
+
+const BINDING_GRANTED_AT = 1_756_000_000_000;
+const BINDING_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const FOREIGN_WORK_REF = "task-ffffffffffffffffffffffffffffffff";
+
+/**
+ * Minted through core's PUBLISHED minter, never hand-written: a literal grant would be this
+ * file's idea of what core accepts and would survive core tightening its own rules.
+ */
+function mintedGate(workRef: string): HumanAuthorityGate {
+  const minted = grantHumanAuthority(
+    { gateId: GO_ACTIVATE_GATE_ID, grant: null, workRef },
+    { kind: "HUMAN", principalId: "operator-yaron" },
+    BINDING_GRANTED_AT,
+  );
+  if (!minted.ok) throw new Error(`binding fixture gate did not mint: ${minted.code}`);
+  return minted.gate;
+}
+
+const BOUND_GENERATIONS: Readonly<Record<string, string>> = Object.freeze({
+  backupGenerationDigest: "a".repeat(64), distributionManifestSha256: "b".repeat(64),
+  importGenerationSha256: "c".repeat(64), quiesceRecordSha256: "d".repeat(64),
+});
+
+function bindingRecord(
+  gate: HumanAuthorityGate, generations: Readonly<Record<string, string>>,
+): Record<string, unknown> {
+  return {
+    authority: gate, decision: GO_ACTIVATE_GATE_ID, generations, sourceCommit: BINDING_COMMIT,
+  };
+}
+
+/**
+ * WORK IDENTITY ALONE. The grant is real, internally consistent and would satisfy core's human
+ * gate; family, campaign and claims are untouched. Only the work this authorization was given
+ * for differs, so `ACTIVATION_BINDING_WORK_MISMATCH` is the sole reachable verdict.
+ */
+const bindingWorkRefusal = (): unknown =>
+  admitActivationBinding(bindingRecord(mintedGate(FOREIGN_WORK_REF), BOUND_GENERATIONS));
+
+/**
+ * GENERATION IDENTITY ALONE, and it is the arm that proves the human gate was PASSED rather than
+ * dodged: `ACTIVATION_BINDING_GENERATION_UNBOUND` is minted AFTER `decideApprovalAuthority`
+ * returns ok, so this code is unreachable unless the core-minted grant genuinely satisfied core.
+ * One digest is 63 hex digits -- a near miss that clears the shape fence, which never reads the
+ * generation VALUES, and is stopped only by the generation-binding check.
+ */
+const bindingGenerationRefusal = (): unknown =>
+  admitActivationBinding(bindingRecord(mintedGate(GA_ACTIVATION_WORK_REF), {
+    ...BOUND_GENERATIONS, quiesceRecordSha256: "d".repeat(63),
+  }));
+
+// -- THE TWELVE ARMS ------------------------------------------------------------------------
+
+const PLAN_SUBJECT_MISMATCH: RefusalExpectation = Object.freeze({
+  code: "APPROVAL_AFFORDANCE_SUBJECT_MISMATCH", layer: PLAN_APPROVAL_LAYER,
+});
+const BUDGET_MISMATCH: RefusalExpectation = Object.freeze({
+  code: "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH", layer: BUDGET_COMMITMENT_LAYER,
+});
+const CUTOVER_VERSION_CONFLICT: RefusalExpectation = Object.freeze({
+  code: "CUTOVER_ACTIVATE_EXPECTED_VERSION_CONFLICT", layer: CUTOVER_ACTIVATE_LAYER,
+});
+const CUTOVER_FIELD_INVALID: RefusalExpectation = Object.freeze({
+  code: "CUTOVER_ACTIVATE_FIELD_INVALID", layer: CUTOVER_ACTIVATE_LAYER,
+});
+const BINDING_WORK_MISMATCH: RefusalExpectation = Object.freeze({
+  code: "ACTIVATION_BINDING_WORK_MISMATCH", layer: GA_ACTIVATION_BINDING_LAYER,
+});
+const BINDING_GENERATION_UNBOUND: RefusalExpectation = Object.freeze({
+  code: "ACTIVATION_BINDING_GENERATION_UNBOUND", layer: GA_ACTIVATION_BINDING_LAYER,
+});
+
+/**
+ * A race on this set. Per-leg expectations, because two of the four races exist precisely to
+ * show a guard DISCRIMINATING between two causes; `HostileRaceCase`'s single `expected` cannot
+ * express that, and asserting the pair against one code would erase the property under test.
+ */
+export interface DivergenceRaceCase {
+  readonly constant: string;
+  readonly name: string;
+  readonly arranged: string;
+  /** POSITIONAL, matching the order the legs are constructed in -- never a settle order. */
+  readonly expectedLeft: RefusalExpectation;
+  readonly expectedRight: RefusalExpectation;
+  readonly run: () => Promise<readonly [unknown, unknown]>;
+}
+
+export const DIVERGENCE_CASES: readonly HostileCase[] = Object.freeze([
+  {
+    constant: DIVERGENCE_PLAN, arm: "BEFORE",
+    name: "a connected, genuine decide_intent offer bound to a foreign run cannot approve this one",
+    arranged: PLAN_APPROVAL_LAYER, expected: PLAN_SUBJECT_MISMATCH,
+    run: async () => foreignBoundApproval(),
+  },
+  {
+    constant: DIVERGENCE_PLAN, arm: "AFTER",
+    name: "the foreign-bound offer still cannot approve this run after authorizing its own",
+    arranged: PLAN_APPROVAL_LAYER, expected: PLAN_SUBJECT_MISMATCH,
+    run: async () => { foreignBoundApproval(); return foreignBoundApproval(); },
+  },
+  {
+    constant: DIVERGENCE_BUDGET, arm: "BEFORE",
+    name: "a commitment one hex digit off the recomputed digest is refused as a mismatch",
+    arranged: BUDGET_COMMITMENT_LAYER, expected: BUDGET_MISMATCH,
+    run: async () => nearMissBudgetVerdict(0),
+  },
+  {
+    constant: DIVERGENCE_BUDGET, arm: "AFTER",
+    name: "a near miss at the last digit is refused after the exact digest was admitted",
+    arranged: BUDGET_COMMITMENT_LAYER, expected: BUDGET_MISMATCH,
+    run: async () => nearMissBudgetVerdict(63),
+  },
+  {
+    constant: DIVERGENCE_CUTOVER, arm: "BEFORE",
+    name: "an expected-version store failure maps to the version-conflict code, not the default",
+    arranged: CUTOVER_ACTIVATE_LAYER, expected: CUTOVER_VERSION_CONFLICT,
+    run: async () => cutoverVersionRefusal(),
+  },
+  {
+    constant: DIVERGENCE_CUTOVER, arm: "AFTER",
+    name: "a field-invalid store failure maps to a DIFFERENT code than the version conflict",
+    arranged: CUTOVER_ACTIVATE_LAYER, expected: CUTOVER_FIELD_INVALID,
+    run: async () => cutoverFieldRefusal(),
+  },
+  {
+    constant: DIVERGENCE_BINDING, arm: "BEFORE",
+    name: "a core-minted grant for foreign work is refused on work identity alone",
+    arranged: GA_ACTIVATION_BINDING_LAYER, expected: BINDING_WORK_MISMATCH,
+    run: async () => bindingWorkRefusal(),
+  },
+  {
+    constant: DIVERGENCE_BINDING, arm: "AFTER",
+    name: "a grant core admitted is still refused when one generation digest is one digit short",
+    arranged: GA_ACTIVATION_BINDING_LAYER, expected: BINDING_GENERATION_UNBOUND,
+    run: async () => bindingGenerationRefusal(),
+  },
+]);
+
+export const DIVERGENCE_RACES: readonly DivergenceRaceCase[] = Object.freeze([
+  {
+    constant: DIVERGENCE_PLAN,
+    name: "two foreign-bound approvals racing are both withheld on subject, and neither authorizes",
+    arranged: PLAN_APPROVAL_LAYER,
+    expectedLeft: PLAN_SUBJECT_MISMATCH, expectedRight: PLAN_SUBJECT_MISMATCH,
+    run: async () => await Promise.all([
+      Promise.resolve().then(foreignBoundApproval),
+      Promise.resolve().then(foreignBoundApproval),
+    ]) as readonly [unknown, unknown],
+  },
+  {
+    constant: DIVERGENCE_BUDGET,
+    name: "two near misses racing one commitment admit neither",
+    arranged: BUDGET_COMMITMENT_LAYER,
+    expectedLeft: BUDGET_MISMATCH, expectedRight: BUDGET_MISMATCH,
+    run: async () => await Promise.all([
+      Promise.resolve().then(() => nearMissBudgetVerdict(0)),
+      Promise.resolve().then(() => nearMissBudgetVerdict(63)),
+    ]) as readonly [unknown, unknown],
+  },
+  {
+    constant: DIVERGENCE_CUTOVER,
+    name: "two store failures racing keep their DISTINCT causes apart",
+    arranged: CUTOVER_ACTIVATE_LAYER,
+    expectedLeft: CUTOVER_VERSION_CONFLICT, expectedRight: CUTOVER_FIELD_INVALID,
+    run: async () => await Promise.all([
+      Promise.resolve().then(cutoverVersionRefusal),
+      Promise.resolve().then(cutoverFieldRefusal),
+    ]) as readonly [unknown, unknown],
+  },
+  {
+    constant: DIVERGENCE_BINDING,
+    name: "a foreign-work grant and an unbound generation racing keep their DISTINCT codes apart",
+    arranged: GA_ACTIVATION_BINDING_LAYER,
+    expectedLeft: BINDING_WORK_MISMATCH, expectedRight: BINDING_GENERATION_UNBOUND,
+    run: async () => await Promise.all([
+      Promise.resolve().then(bindingWorkRefusal),
+      Promise.resolve().then(bindingGenerationRefusal),
+    ]) as readonly [unknown, unknown],
+  },
+]);
 export {
   AGENT_STAFFING_LAYER,
   ACTIVATION_BUDGET_LAYER,
