@@ -98,7 +98,7 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
 
   it("lists exactly the prerequisite tokens the daemon emits", () => {
     expect(new Set(Object.keys(MISSING_TOKENS)))
-      .toEqual(new Set(["verification", "verifier-calibration", "verifier-policy"]));
+      .toEqual(new Set(["escalation", "verification", "verifier-calibration", "verifier-policy"]));
   });
 });
 

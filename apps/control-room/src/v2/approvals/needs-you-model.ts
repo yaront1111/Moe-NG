@@ -1,6 +1,7 @@
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
+import type { RunsOutcome } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
 
 /**
@@ -14,17 +15,30 @@ import { MIDDOT } from "../glyphs.js";
  *    PENDING at Gate 1 (the same fact the goal card's "Needs you" flag rests on).
  *  - READY_TO_CLOSE: every criterion the contract states is VERIFIED, every citing contract
  *    is past Gate 1, and the goal is still open. Closing stays the operator's call.
+ *  - ESCALATION: the affordance surface OFFERS `escalation.decide` for a node, which the
+ *    daemon does only when three review rounds failed and the kernel refuses more until a
+ *    human decides. The runs read names the goal the node belongs to.
  *
  * Every item routes to the goal, where the plan, the contract and the close control already
  * live with their evidence. This screen is the queue, not a second place to decide blind.
  */
 
-export const NEEDS_YOU_KINDS = ["PLAN_APPROVAL", "GATE_1", "READY_TO_CLOSE"] as const;
+export const NEEDS_YOU_KINDS = ["PLAN_APPROVAL", "ESCALATION", "GATE_1", "READY_TO_CLOSE"] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
+
+export interface EscalationFacts {
+  /** The daemon's offer, spent verbatim by the escalation port. */
+  readonly affordance: Readonly<Record<string, unknown>>;
+  readonly latestRoute: string | null;
+  readonly nodeKey: string;
+  readonly unsuccessfulRounds: number | null;
+}
 
 export interface NeedsYouItem {
   readonly actionLabel: string;
   readonly detail: string;
+  /** Present only for an ESCALATION item: the inline decision it carries. */
+  readonly escalation?: EscalationFacts | undefined;
   readonly goalId: string;
   readonly headline: string;
   readonly kind: NeedsYouKind;
@@ -42,11 +56,12 @@ export interface NeedsYouData {
 export interface NeedsYouInput {
   readonly catalog: GoalCatalogFrame | null;
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
+  readonly runs?: RunsOutcome | null | undefined;
   readonly surface: SurfaceFrame | null;
 }
 
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, GATE_1: 1, READY_TO_CLOSE: 2,
+  PLAN_APPROVAL: 0, ESCALATION: 1, GATE_1: 2, READY_TO_CLOSE: 3,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -105,8 +120,39 @@ function itemsFor(
   return items;
 }
 
+/** One item per escalation.decide the daemon offers, joined to its goal through the runs read. */
+function escalationItems(
+  surface: SurfaceFrame | null, runs: RunsOutcome | null | undefined, catalog: GoalCatalogFrame,
+): NeedsYouItem[] {
+  if (surface === null || surface.outcome !== "SURFACE") return [];
+  const items: NeedsYouItem[] = [];
+  for (const offer of surface.offers) {
+    if (offer["commandKind"] !== "escalation.decide" || typeof offer["targetAggregateId"] !== "string") continue;
+    const nodeKey = offer["targetAggregateId"];
+    const goal = runs?.status === "RUNS"
+      ? runs.goals.find((row) => row.nodes.some((node) => node.nodeKey === nodeKey)) : undefined;
+    const node = goal?.nodes.find((row) => row.nodeKey === nodeKey);
+    const entry = goal === undefined ? undefined : catalog.goals.find((row) => row.goalId === goal.goalId);
+    const rounds = node?.review.unsuccessfulRounds ?? null;
+    const route = node?.review.latestRoute ?? null;
+    items.push(Object.freeze({
+      actionLabel: "Open the goal",
+      detail: `${nodeKey} failed review ${rounds === null ? "three or more" : String(rounds)} times`
+        + (route === null ? "" : ` (last: ${route})`)
+        + ". The daemon refuses further rounds until you allow more attempts.",
+      escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
+      goalId: goal?.goalId ?? "",
+      headline: "A node's review is exhausted",
+      kind: "ESCALATION",
+      planningRunRef: entry?.planningRunRef ?? goal?.run?.runId ?? "",
+      title: goal?.title ?? entry?.brief?.title ?? `node ${nodeKey}`,
+    }));
+  }
+  return items;
+}
+
 export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
-  const { catalog, coverage, surface } = input;
+  const { catalog, coverage, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
       countLabel: "WAITING FOR THE GOAL CATALOG", items: Object.freeze([]),
@@ -119,9 +165,10 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       note: `The goal catalog answered ${catalog.outcome}: ${catalog.detail}.`,
     });
   }
-  const items = catalog.goals
-    .flatMap((entry) => itemsFor(entry, coverage.get(entry.goalId), surface))
-    .sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
+  const items = [
+    ...catalog.goals.flatMap((entry) => itemsFor(entry, coverage.get(entry.goalId), surface)),
+    ...escalationItems(surface, runs, catalog),
+  ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));
   const count = items.length;
   return Object.freeze({

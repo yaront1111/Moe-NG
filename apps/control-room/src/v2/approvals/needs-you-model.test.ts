@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
+import type { RunsOutcome } from "../../live/live-runs.js";
 import { deriveNeedsYou } from "./needs-you-model.js";
 
 /**
@@ -115,6 +116,37 @@ describe("deriveNeedsYou", () => {
     expect(data.items.map((item) => `${item.kind}:${item.title}`)).toEqual([
       "PLAN_APPROVAL:Mike", "GATE_1:Alpha", "GATE_1:Zulu",
     ]);
+  });
+
+  it("lists an escalation per escalation.decide offer, named through the runs read", () => {
+    const offer = {
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-esc-1", commandKind: "escalation.decide",
+      expectedVersion: 4, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x",
+    };
+    const runs: RunsOutcome = {
+      goals: [{
+        goalId: "goal-a", lifecycle: "EXECUTION_ENABLED",
+        nodes: [{
+          accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x",
+          objective: "o", review: { escalated: false, latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 },
+          status: "ESCALATION_REQUIRED",
+        }],
+        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-goal-a" }, title: "Alpha",
+      }],
+      status: "RUNS",
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, goals: 1, nodes: 1 },
+    };
+    const data = deriveNeedsYou({ catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(), runs, surface: surface([offer]) });
+    expect(data.items).toHaveLength(1);
+    expect(data.items[0]).toMatchObject({
+      escalation: { affordance: offer, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
+      goalId: "goal-a", kind: "ESCALATION", planningRunRef: "run-goal-a", title: "Alpha",
+    });
+    expect(data.items[0]?.detail).toBe("node-x failed review 3 times (last: REJECT_PLAN). The daemon refuses further rounds until you allow more attempts.");
+    // Without the runs read the node is still listed, named by itself, with no goal to open.
+    const bare = deriveNeedsYou({ catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(), surface: surface([offer]) });
+    expect(bare.items[0]).toMatchObject({ goalId: "", planningRunRef: "", title: "node node-x" });
+    expect(bare.items[0]?.detail).toContain("three or more times");
   });
 
   it("does not invent a decision from partial verification or a refused coverage read", () => {

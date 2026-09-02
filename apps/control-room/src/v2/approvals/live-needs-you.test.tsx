@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LiveSetup } from "../../live/live-config.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import type { RunsOutcome } from "../../live/live-runs.js";
 import { LiveNeedsYou } from "./live-needs-you.js";
 
 /**
@@ -70,6 +71,34 @@ describe("LiveNeedsYou", () => {
     expect(onCount).toHaveBeenLastCalledWith(2);
     expect(readCoverage).toHaveBeenCalledWith("goal-plan");
     expect(readCoverage).toHaveBeenCalledWith("goal-gate");
+  });
+
+  it("spends the daemon's escalation offer through the port and shows the answer", async () => {
+    stubWire();
+    const offer = {
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-esc", commandKind: "escalation.decide",
+      expectedVersion: 4, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: [offer] }), status: 200 } as unknown as Response;
+      if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as unknown as Response;
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const runs: RunsOutcome = {
+      goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
+        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
+        review: { escalated: false, latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 },
+        status: "ESCALATION_REQUIRED" }], run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+      status: "RUNS",
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, goals: 1, nodes: 1 },
+    };
+    const submit = vi.fn(async () => ({ commandId: "cmd-esc", ok: true as const }));
+    render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={async () => runs} setup={SETUP} />);
+    const button = await screen.findByTestId("cr.needsyou.escalate.node-x");
+    expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("Plan me");
+    button.click();
+    await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed."); });
+    expect(submit).toHaveBeenCalledWith(offer, "node-x");
   });
 
   it("shows an honest empty queue without a coverage reader", async () => {

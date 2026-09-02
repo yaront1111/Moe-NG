@@ -43,6 +43,25 @@ describe("the Needs-you queue", () => {
     expect(onOpenBoard).toHaveBeenCalledWith("goal-2", "run-2", "Beta");
   });
 
+  it("offers the inline escalation decision and shows the daemon's answer beside it", async () => {
+    const onEscalate = vi.fn();
+    const item = {
+      actionLabel: "Open the goal", detail: "node-x failed review 3 times.",
+      escalation: { affordance: { commandKind: "escalation.decide" }, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
+      goalId: "goal-1", headline: "A node's review is exhausted", kind: "ESCALATION" as const, planningRunRef: "run-1", title: "Alpha",
+    };
+    const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
+    const { rerender } = render(<NeedsYou data={data} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("REVIEW EXHAUSTED · Alpha");
+    await userEvent.click(screen.getByTestId("cr.needsyou.escalate.node-x"));
+    expect(onEscalate).toHaveBeenCalledWith(item);
+    rerender(<NeedsYou data={data} escalationResults={new Map([["node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
+    expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
+    rerender(<NeedsYou data={data} escalationResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onEscalate={onEscalate} onOpenBoard={vi.fn()} />);
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toBe("REFUSED · REVIEW_ESCALATION_NOT_REACHED · DAEMON_PREREQUISITE");
+  });
+
   it("states the empty queue as an invitation and carries the daemon's note", () => {
     render(<NeedsYou
       data={{ countLabel: "0 DECISIONS · NEEDS YOU", items: [], note: "The daemon's offers have not arrived yet." }}
