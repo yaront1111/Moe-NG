@@ -9,7 +9,7 @@ import { WIRE_PROTOCOL_VERSION } from "../../../apps/daemon/src/http/http-contra
 import { killTree, spawnNode, survivingPids } from "./daemon-children.js";
 import {
   LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv,
-} from "./daemon-scratch.js";
+} from "./daemon-ports.js";
 import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
 
 /**

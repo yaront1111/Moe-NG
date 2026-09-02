@@ -32,6 +32,9 @@ import {
 import type { LaneApprovalMode, LaneScratch, LiveCredentialMode } from "./daemon-scratch.js";
 
 export { survivingPids } from "./daemon-children.js";
+export {
+  LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv,
+} from "./daemon-scratch.js";
 
 export const DAEMON_LANE_ERROR_CODES = Object.freeze([
   "E2E_REPO_ROOT_UNRESOLVED",
