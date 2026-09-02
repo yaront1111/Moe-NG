@@ -188,6 +188,34 @@ checkout's HEAD. The tool prints one JSON receipt and exits 0 only when the
 production reader answers the written manifest back; a second run against the
 same project is refused and names the manifest that stands.
 
+### Producing the evidence files
+
+`v2-readiness-evidence-collector-main.ts` produces the files the writer reads,
+from the sources that exist at the release commit, and refuses BY KIND where
+none does. It never invents a record to make the writer accept:
+
+```
+node apps/daemon/src/cutover/v2-readiness-evidence-collector-main.ts   --evidence-root=<dir> --source-commit=<40-hex> --source-root=<clean checkout at that commit>   --project-id=<id> --store-path=<quiesced store.sqlite> --store-root=<dir holding live-quiesce-evidence.json>   --windows-release-evidence=<dist/release/<sha>/<digest>/evidence.json>   [--windows-observation=<moe-windows.zip.provenance.json>] --security-out=<dir>
+```
+
+| kind | source | what is checked |
+| --- | --- | --- |
+| `contract-schema.json` | the exact UTF-8 bytes of `canonicalContractSurface()` | its sha256 equals the generated client's `GENERATED_CONTRACT_DIGEST`, so the file digest is the same `contractSchemaHash` every distribution manifest carries |
+| `windows-packaging-evidence.json` | `pnpm release:evidence` output, optionally the pack observation receipt | canonical bytes, `source.sourceSha` is the commit, RECORDED / unpublished / UNKNOWN verdict with a win32 PASS; the receipt must bind the same commit and the evidence digest under its own `receiptDigest` |
+| `store-migration-evidence.json` | the quiesced store | `user_version` and the manifest row are captured read-only BEFORE any migrating open, a `VACUUM INTO` snapshot is opened through the production store (the migrating path), and the copy's schema facts, `quick_check` and `foreign_key_check` are read back |
+| `backup-evidence.json` | the store's own readers | the fenced generation snapshot, the INSTALLED restore binding and the anchored restore incarnation must name one generation and one restore command |
+| `security-evidence.json` | `pnpm test:security --reporter=default --reporter=json --outputFile=<dir>/vitest-security.json` run with `MOE_SECURITY_EVIDENCE_OUT=<dir>` (no `--` before the flags: pnpm forwards it literally and vitest then reads them as filters) | every slice receipt belongs to that run, every boundary is on the roster at the commit, the JSON report is green with a non-zero count; roster and report digests are embedded |
+| `acceptance-evidence.json` | `pnpm test:e2e` and `pnpm test:e2e:browser`, RUN by the tool in `--source-root` | HEAD is the commit, the tree is clean, both legs exit 0 with a count line, graded PASS by the benchmark's gate-family resolver |
+| `restore-drill.json` | none at this commit | refused `V2_EVIDENCE_PRODUCER_ABSENT`: no production path publishes a backup generation to rehearse against |
+| `delivery-profile-qualification-evidence.json` | none at this commit | refused `V2_EVIDENCE_PRODUCER_ABSENT`: no production path commits a qualification or its attestations |
+
+The receipt names each kind's sha256 or refusal and exits 0 only when all
+eight were produced; today it exits 1 naming the two absent producers, and
+the writer then refuses the two missing files by name. That is the honest
+state of the gate, not a bug in the tooling: closing it means wiring the
+backup/restore rehearsal and the delivery-profile qualification into
+production paths, after which the two rows above become producers.
+
 ## Local refusal is expected
 
 Packaging source code that differs from the selected commit must continue to
