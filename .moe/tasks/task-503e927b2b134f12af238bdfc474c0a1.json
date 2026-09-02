@@ -131,7 +131,7 @@
       "completedAt": "2026-09-02T22:36:22.361Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -159,16 +159,24 @@
       "author": "worker-40d3f2ed",
       "content": "FOREIGN RED, DISCLOSED VERBATIM — root-lane `pnpm test` at the delivered tree (worker-40d3f2ed, 2026-09-03, root D:/projexts/moe-next, branch moe/work-2026-09-02, base HEAD 7f653e01).\n\nRoot lane only. The root vitest include carries NO apps/**, so this is NOT app-package coverage and must not be read as one.\n\n  Test Files  3 failed | 422 passed | 1 skipped (426)\n       Tests  4 failed | 10258 passed | 44 skipped (10306)\n       Duration 54.75s\n\nTHE THREE FAILING FILES, none among this row's owned ten, none modified by this diff:\n\n(1) tests/e2e/control-room/journey-coverage.test.ts — 1 failed\n    \"the ledger's UNKNOWNs still describe real gaps > binds the served-root roster to every chooseRoot production arm\"\n    AssertionError: main.tsx imports ShellModeRoot: expected 'import { StrictMode, Suspense, lazy }…' to match /import\\s+\\{\\s*ShellModeRoot\\s*\\}\\s+f…/u\n    - Expected: /import\\s+\\{\\s*ShellModeRoot\\s*\\}\\s+from/u\n    + Received: \"import { StrictMode, Suspense, lazy } from \\\"react\\\"; …\"\n    at tests/e2e/control-room/journey-coverage.test.ts:261:53\n      259|     const main = readFileSync(join(repoRoot(), \"apps/control-room/src/…\n      260|     for (const component of [\"ProjectManagerApp\", \"ShellModeRoot\", \"Co…\n      261|       expect(main, `main.tsx imports ${component}`).toMatch(\n\n(2) packages/store/src/command-decision-replay-bytes.test.ts — 1 failed\n\n(3) tests/integration/release/release-version-surfaces.test.ts — 2 failed\n    at :838:26, `expect(unclassified).toMatchObject([{ literal: version.full, path … }])`\n    Unclassified occurrences it reports, added not removed:\n      + \".serena/memories/gotcha-board-deadlock-no-architect.md 11708 v0.1\"\n      + \".serena/memories/gotcha-board-deadlock-no-architect.md 19740 v0.1\"\n      + \".serena/memories/gotcha-board-deadlock-no-architect.md 20842 v0.1\"\n      + \"tests/security/integrity-hostile-cases.ts 130477 0.1.0\"\n        \"README.md 7698 0.1.0\"   (this one expected)\n\nATTRIBUTION — MEASURED, NOT ASSERTED. A literal merge-base checkout is unavailable here: `git stash` is banned in a shared checkout and epic rail 1 forbids sibling worktrees. The exact equivalent was used instead:\n  `git diff HEAD --stat -- . ':!tests/e2e/control-room' ':!.moe'` → EMPTY.\nEvery byte outside this row's one directory is therefore AT merge-base state, so any red rooted outside it runs against byte-identical code before and after this diff. `git diff HEAD --stat` over all three failing paths is likewise EMPTY.\n(2)-MINUS-(1) DELTA ∩ OWNED TEN = EMPTY. Owned-scope legs are exit 0 (e2e tsc; focused Playwright `1 passed`).\n\nFor (1) specifically the argument is stronger than path-disjointness — it is IMPORT-disjointness: `git grep -ln 'daemon-ports\\|daemon-scratch' -- 'tests/e2e/control-room/*.test.ts'` EXITS 1. No vitest file in that directory imports either module, so the whole vitest leg is unreachable from this diff. Its two inputs are unmodified, and at HEAD bytes apps/control-room/src/main.tsx has no static ShellModeRoot import at all — it became a conditional `await import(\"./development-legacy-root.js\")` at :48 — so the guard fails on merge-base bytes alone. main.tsx last moved in e3be82df (\"chore(board): sweep … and control-room edits\"); the guard last moved in c65d41b2, 2026-09-01.\n\nProvenance for (3): the memory file landed in e3be82df, integrity-hostile-cases.ts in 86fd4998 (task-38ec450a). Both predate this session.\n\nSTANDING HAZARD THIS UNCOVERED, relevant to every agent on this branch and to whoever owns the epic-final hardening row:\nrelease-version-surfaces.test.ts (:548-559) scans EVERY TRACKED UTF-8 file for two literals — `version.full` bounded by (?<![0-9.])…(?![0-9.]), and `v${version.series}` — and fails on any occurrence not in its declared/excluded set. `.serena/memories/` is TRACKED (968 files) and NOT gitignored. So an agent's routine Serena handoff note containing a version-shaped literal silently ADDS a failure to a release-integrity test. That is exactly how three of the four current unclassified entries got there. This diff adds none: `grep -cE '0\\.1\\.0|v0\\.1'` over this row's board JSON = 0, and over the owned paths EXIT 1; the memories written for this task were kept free of both literals deliberately.",
       "timestamp": "2026-09-02T22:36:48.974Z"
+    },
+    {
+      "id": "comment-752cb726ed9648f8a469918892b4ab34",
+      "author": "qa-d109461f",
+      "content": "QA EVIDENCE (qa-d109461f, 2026-09-03) — full detail; reviewSummary carries the compressed version.\n\nANCHOR: delivered tree at completion commit dfe9329c, on moe/work-2026-09-02, = HEAD at review. Not the dirty worktree.\nREADING TRAP WORTH RECORDING: step 2's canary landed in this SAME row's earlier wip a65d03f6 (`1 file changed, 11 insertions(+)`), so `git show dfe9329c -- prd-to-approval.spec.ts` shows ONLY the import swap and reads like the canary is missing. `git show <sha>:<path>` (blob at tree) is the correct probe. Filed as Serena `gotcha-completion-commit-diff-hides-a-wip-landed-deliverable`.\n\nGATES RE-RUN BY ME, standalone and unpiped (redirects, not pipes):\n1. `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json` -> EXIT 0 in 0.99s. Sub-second, so POSITIVE CONTROL: appended `const __qa_control: number = \"planted\";` to prd-boundary-readers.ts -> EXIT 1, `TS2322: Type 'string' is not assignable to type 'number'`. `git checkout --` restored; `git diff --stat` empty. The leg executes.\n2. `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts tests/e2e/control-room/prd-to-approval.spec.ts` -> EXIT 0, `1 passed (3.2s)`. Byte-matches the recorded task.verification.outputTail.\n3. `pnpm exec vitest run tests/e2e/control-room` -> EXIT 1. `Test Files 1 failed | 3 passed (4)` / `Tests 1 failed | 54 passed (55)`. Nonzero counts present.\n\nFOREIGN RED, verbatim and attributed:\n  FAIL tests/e2e/control-room/journey-coverage.test.ts > the ledger's UNKNOWNs still describe real gaps > binds the served-root roster to every chooseRoot production arm\n  AssertionError: main.tsx imports ShellModeRoot: expected 'import { StrictMode, Suspense, lazy }...' to match /import\\s+\\{\\s*ShellModeRoot\\s*\\}\\s+f.../u\nThree independent attributions, all clearing this row:\n  (a) IMPORT CLOSURE — journey-coverage.test.ts imports only ./journey-coverage.js and ./journey-invariants.js. Zero edge to daemon-ports.ts or daemon-scratch.ts.\n  (b) INPUT BYTE-IDENTITY — journey-coverage.test.ts, journey-coverage.ts, journey-invariants.ts all UNCHANGED (`git rev-parse c65d41b2:<f>` == `HEAD:<f>`). Only main.tsx CHANGED.\n  (c) BLAME — the sole main.tsx change in c65d41b2..HEAD is e3be82df `chore(board): sweep the uncommitted board state, memories, plans and control-room edits`, carrying NO Moe-Task trailer. It moved ShellModeRoot to development-legacy-root.tsx. main.tsx is not an owned path, so the rail-3 (HEAD-minus-merge-base ∩ owned) intersection is EMPTY.\nThe worker disclosed this red verbatim and explicitly refused to call the leg green. Correct conduct.\n\nDoD 1 — census: nine importers + the module = ten paths; gate1-v1-approval.spec.ts is out of the grep because leaf task-a26f5c69 landed and re-pointed it. No shared mutable state: grep for `^(let|var)`, `^export (let|var)`, and module-scope `new Map|new Set|= []` in daemon-ports.ts exits 1.\nDoD 2 — daemon-scratch.ts absent from disk, `git diff --name-status HEAD~1 HEAD` reports D. The only two remaining `daemon-scratch` hits anywhere under tests/ are the canary's own path literal (:50) and its failure message (:51) — intended. `git status --porcelain -- tests/e2e/control-room` BLANK: no debug/transcript/scratch artifact replaces it.\nDoD 3 — :181-182 asserts `cr.approve.reason` matches /APPROVAL_AFFORDANCE_ABSENT.*CONTROL_ROOM_PLAN_APPROVAL/iu, i.e. code AND refusing layer, not either alone. :172 pins data-reviewable=\"false\"; :176 PLAN_REVIEW; :117-118 assert the URL's hash AND search are both empty, which is what forecloses the `?fixtures=` production-bundle authority path. Step 1's \"ZERO BYTES CHANGED\" claim is TRUE: `git show c65d41b2:...prd-to-approval.spec.ts` already carried cr.approve.reason with both literals at :170-171. Gap-claimed-present-actually-closed, correctly reported instead of fabricating an edit.\nDoD 5 — MY OWN DRILL, not the worker's transcript. Pre-drill lane porcelain blank. Created daemon-scratch.ts as a comment-only sentinel (porcelain `?? `). Playwright EXIT 1: `Error: retired module: tests/e2e/control-room/daemon-scratch.ts must not exist (its helpers live in daemon-ports.ts)` at prd-to-approval.spec.ts:52:5. Removed in a SEPARATE call. PowerShell `Test-Path = False` (untracked path, so absence-proof not git diff). Post-drill porcelain line-for-line identical to pre. name-status still D. Re-green EXIT 0, `1 passed`.\n\nMOVE FIDELITY — 155/157 non-import, non-blank lines of `dfe9329c^:daemon-scratch.ts` are grep -Fxq byte-present in `dfe9329c:daemon-ports.ts`. The 2 absent lines are the old file's own header comment describing the now-obsolete split (\"Nothing here spawns, kills or waits — that is `daemon-ports.ts`. Split so the / per-file cap is met without either half doing two jobs.\"), correctly dropped as stale. Definition grep | sort | uniq -d is blank: no duplicate symbol authority.\n\n493-LINE QUESTION — RAISED AND DELIBERATELY NOT A REJECT. daemon-ports.ts is 493 lines, past 400. Project rail 2 and epic rail 6 both scope the cap to PRODUCTION source; this is a Playwright/vitest harness with zero non-test importers, and four siblings in the same directory already exceed 400 (prd-persistence-boundary.spec.ts 630, session-key-signing.spec.ts 562, board-chain.spec.ts 556, pairing-operator-channel.spec.ts 438). The governor's split authorization in reopenReason said not to fold into daemon-ports.ts; the architect subsequently re-measured the TIER question in planningNotes.codebaseInsights and that replan was SPEED auto-approved, so the approved plan directs exactly this fold. Grading against the superseded sentence would reject correct work. Flagged for the record. If the epic wants this split, it is a follow-up item for the hardening row, not a defect in this delivery.",
+      "timestamp": "2026-09-02T22:43:43.709Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:21.025Z",
-  "updatedAt": "2026-09-02T22:38:21.113Z",
+  "updatedAt": "2026-09-02T22:44:50.757Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:35:52.030Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-02T22:44:50.757Z",
+    "wallClockMs": 209338727
   },
   "contextFetchedBy": [
     "architect-8b0f89f2",
@@ -177,7 +185,8 @@
     "worker-6fab73fa",
     "worker-17a62b7e",
     "worker-7870e26b",
-    "worker-40d3f2ed"
+    "worker-40d3f2ed",
+    "qa-d109461f"
   ],
   "dependsOn": [
     "task-28cd95db8bb6444b861eac4384c7fdc2"
@@ -311,6 +320,32 @@
       "treeId": "a7765c807e1378f148cfee7d25245a6fcc119b09",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "dfe9329c592eaf7d480703f5f25d0eeb354e7c7b",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-40d3f2ed@2026-09-02T22:24:05Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        "tests/e2e/control-room/daemon-board.spec.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/daemon-scratch.ts",
+        "tests/e2e/control-room/dev-graph-ports.ts",
+        "tests/e2e/control-room/pairing-operator-channel.spec.ts",
+        "tests/e2e/control-room/prd-boundary-readers.ts",
+        "tests/e2e/control-room/prd-persistence-boundary.spec.ts",
+        "tests/e2e/control-room/prd-persistence-ledger.ts",
+        "tests/e2e/control-room/prd-to-approval.spec.ts",
+        "tests/e2e/control-room/session-key-signing.spec.ts"
+      ],
+      "recordedBy": "worker-40d3f2ed",
+      "recordedAt": "2026-09-02T22:38:36.184Z",
+      "treeId": "b4803f0bf469777f073c4e8774b3588adb2f7b47",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -323,14 +358,16 @@
     "tests/e2e/control-room/prd-boundary-readers.ts",
     "tests/e2e/control-room/prd-persistence-boundary.spec.ts",
     "tests/e2e/control-room/prd-persistence-ledger.ts",
-    "tests/e2e/control-room/session-key-signing.spec.ts"
+    "tests/e2e/control-room/session-key-signing.spec.ts",
+    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+    ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-7870e26b@2026-09-02T21:51:06Z",
-    "at": "2026-09-02T21:51:13.910Z"
+    "kind": "completion",
+    "sessionId": "worker-40d3f2ed@2026-09-02T22:24:05Z",
+    "at": "2026-09-02T22:38:36.184Z"
   },
   "reviewStartedAt": "2026-09-02T22:38:21.113Z",
   "verification": {
@@ -339,5 +376,20 @@
     "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\prd-to-approval.spec.ts:38:1 > v2: pairs by handshake, reads the sealed plan, and never fabricates approval (2.9s)\n\n  1 passed (3.2s)\nVERIFY_EXIT=0",
     "reportedAt": "2026-09-02T22:38:21.113Z"
   },
-  "completionSummary": "daemon-scratch.ts is RETIRED. Its 12 helpers now live in daemon-ports.ts, all nine importers re-pointed, module deleted via `git rm` (`D ` staged). Exactly the ten owned paths touched.\n\nDoD 1 (verify-or-block): both blocking grounds re-measured and gone. Census at work start = NINE importers + the module = TEN paths; gate1-v1-approval.spec.ts is out of the grep because task-a26f5c69 landed, so no eleventh path was needed or taken. No shared mutable state: the three moved privates are `const`, zero module-scope let/Map/Set/array.\nDoD 2: deleted; `git grep 'daemon-scratch\\.js' -- . ':!.moe'` EXIT 1 — ZERO import edges in source. No debug/transcript/scratch artifact replaces it (`git status --porcelain tests/e2e/control-room | grep '^??'` EXIT 1).\nDoD 3: the real browser journey reaches the production boundary — build, real daemon, real seed, keyed handshake — and prd-to-approval.spec.ts:181-182 asserts cr.approve.reason carries BOTH the code (APPROVAL_AFFORDANCE_ABSENT) and the refusing layer (CONTROL_ROOM_PLAN_APPROVAL). Structural, not prose: :172 pins data-reviewable=\"false\"; :116-118 keep zero fixture/URL authority.\nDoD 4: e2e tsc EXIT 0 (with a planted-error positive control, since it runs in 1.3s); focused Playwright EXIT 0 `1 passed`. `vitest run tests/e2e/control-room` EXITS 1 on ONE foreign failure and I am not calling it green — see below.\nDoD 5: drill done. Recreating the deleted tracked path as a comment-only sentinel reddens the named canary — EXIT 1 at prd-to-approval.spec.ts:52, body 68ms, dying before createLaneScratch() on :55, so no child ever spawned (green body is 2.8s; those two numbers are the proof it fires before child startup). Restored: PowerShell Test-Path False, post-drill porcelain LINE-FOR-LINE identical to pre-drill, name-status D in both worktree and index, re-green EXIT 0.\n\nHOW THE MOVE WAS DONE: the region was sliced programmatically out of `git show HEAD:...` lines 21-173, not retyped, with every replacement asserting count==1. It ap"
+  "completionSummary": "daemon-scratch.ts is RETIRED. Its 12 helpers now live in daemon-ports.ts, all nine importers re-pointed, module deleted via `git rm` (`D ` staged). Exactly the ten owned paths touched.\n\nDoD 1 (verify-or-block): both blocking grounds re-measured and gone. Census at work start = NINE importers + the module = TEN paths; gate1-v1-approval.spec.ts is out of the grep because task-a26f5c69 landed, so no eleventh path was needed or taken. No shared mutable state: the three moved privates are `const`, zero module-scope let/Map/Set/array.\nDoD 2: deleted; `git grep 'daemon-scratch\\.js' -- . ':!.moe'` EXIT 1 — ZERO import edges in source. No debug/transcript/scratch artifact replaces it (`git status --porcelain tests/e2e/control-room | grep '^??'` EXIT 1).\nDoD 3: the real browser journey reaches the production boundary — build, real daemon, real seed, keyed handshake — and prd-to-approval.spec.ts:181-182 asserts cr.approve.reason carries BOTH the code (APPROVAL_AFFORDANCE_ABSENT) and the refusing layer (CONTROL_ROOM_PLAN_APPROVAL). Structural, not prose: :172 pins data-reviewable=\"false\"; :116-118 keep zero fixture/URL authority.\nDoD 4: e2e tsc EXIT 0 (with a planted-error positive control, since it runs in 1.3s); focused Playwright EXIT 0 `1 passed`. `vitest run tests/e2e/control-room` EXITS 1 on ONE foreign failure and I am not calling it green — see below.\nDoD 5: drill done. Recreating the deleted tracked path as a comment-only sentinel reddens the named canary — EXIT 1 at prd-to-approval.spec.ts:52, body 68ms, dying before createLaneScratch() on :55, so no child ever spawned (green body is 2.8s; those two numbers are the proof it fires before child startup). Restored: PowerShell Test-Path False, post-drill porcelain LINE-FOR-LINE identical to pre-drill, name-status D in both worktree and index, re-green EXIT 0.\n\nHOW THE MOVE WAS DONE: the region was sliced programmatically out of `git show HEAD:...` lines 21-173, not retyped, with every replacement asserting count==1. It ap",
+  "touchedFiles": [
+    "tests/e2e/control-room/session-key-signing.spec.ts",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "tests/e2e/control-room/prd-persistence-boundary.spec.ts",
+    "tests/e2e/control-room/pairing-operator-channel.spec.ts",
+    "tests/e2e/control-room/prd-to-approval.spec.ts",
+    "tests/e2e/control-room/dev-graph-ports.ts",
+    "tests/e2e/control-room/prd-boundary-readers.ts",
+    "tests/e2e/control-room/daemon-board.spec.ts",
+    "tests/e2e/control-room/daemon-scratch.ts",
+    "tests/e2e/control-room/prd-persistence-ledger.ts"
+  ],
+  "completedAt": "2026-09-02T22:44:50.757Z",
+  "reviewCompletedAt": "2026-09-02T22:44:50.757Z",
+  "reviewSummary": "APPROVED at delivered tree dfe9329c (= HEAD). FULL EVIDENCE: comment-752cb726ed9648f8a469918892b4ab34.\n\nGATES I RE-RAN: (1) e2e tsc EXIT 0 in 0.99s; sub-second so POSITIVE CONTROL — planted TS2322 in prd-boundary-readers.ts -> EXIT 1, restored clean. Leg executes. (2) task.verification's exact playwright command EXIT 0 `1 passed (3.2s)`, byte-matching its recorded outputTail. (3) `vitest run tests/e2e/control-room` EXIT 1, `Test Files 1 failed | 3 passed (4)` / `Tests 1 failed | 54 passed (55)`.\n\nFOREIGN RED CLEARED 3 WAYS: journey-coverage.test.ts \"binds the served-root roster...\", expects main.tsx to match /ShellModeRoot/. (a) its import closure is journey-coverage.js + journey-invariants.js only, zero edge to daemon-ports/scratch; (b) all 3 inputs byte-identical c65d41b2 vs HEAD, only main.tsx changed; (c) that change is e3be82df `chore(board): sweep...`, NO Moe-Task trailer, moving ShellModeRoot to development-legacy-root.tsx. Not an owned path -> rail-3 intersection EMPTY. Worker disclosed it verbatim.\n\nDoD1 nine importers + module = ten paths; zero module-level let/var/Map/Set/[]. DoD2 name-status D, off disk; only surviving `daemon-scratch` hits are the canary's own path literal + message; lane porcelain BLANK. DoD3 :181-182 asserts cr.approve.reason matches /APPROVAL_AFFORDANCE_ABSENT.*CONTROL_ROOM_PLAN_APPROVAL/iu (code AND layer); :172 data-reviewable=false; :117-118 URL hash+search empty. Step 1's \"ZERO BYTES CHANGED\" verified TRUE at c65d41b2:170-171 — honest, not skipped. DoD5 MY OWN DRILL: recreated daemon-scratch.ts as comment-only sentinel -> playwright EXIT 1 `Error: retired module...` at prd-to-approval.spec.ts:52:5; removed separately; Test-Path False; porcelain identical; still D; re-green EXIT 0.\n\nMOVE FIDELITY 155/157 old lines byte-present via grep -Fxq; 2 absent are the stale header comment.\n\nNOT A DEFECT: daemon-ports.ts 493 lines. Cap is per PRODUCTION source; zero non-test importers, 4 same-dir siblings exceed 400."
 }
