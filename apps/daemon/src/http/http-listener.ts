@@ -51,8 +51,10 @@ import {
   EVENT_STREAM_RESUME_LAYER, EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
 } from "./event-resume-command.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
-import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
-import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import type {
+  CommandAdapterDeps, CommandAuthorityPlane, CommandAuthorityPlanePort, HttpCommandResult,
+} from "./http-contract.js";
+import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { answerGatedGraphQuery, gateGraphQuery } from "../planning/graph-query.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
@@ -162,6 +164,12 @@ export interface StartListenerOptions {
    * authority plane; it never falls back to the v1 registry in `deps`.
    */
   readonly v2Deps?: CommandAdapterDeps;
+  /**
+   * States on `/bootstrap` which plane a browser must write to. Absent means the
+   * listener answers V1, the plane `/command` serves when no cutover marker exists;
+   * a composed reader answers from the durable marker on every request.
+   */
+  readonly commandAuthorityPlane?: CommandAuthorityPlanePort;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
   /** Absent means the operator ingest route refuses rather than recording a document. */
@@ -805,11 +813,46 @@ function serveBootstrap(
     refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
     return;
   }
-  reply(response, 200, {
+  const body = composeBootstrapBody(options, pairing.boundProjectId);
+  // A plane this listener cannot serve is not stated. V2 with no `/2` registry
+  // would send every browser write to a 503; the same unavailable code is the
+  // honest answer here, before the browser commits to a route.
+  if (body.commandAuthorityPlane === "V2" && options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_V2_COMMAND_UNAVAILABLE", policy);
+    return;
+  }
+  reply(response, 200, body, policy);
+}
+
+/**
+ * The exact `/bootstrap` body. Exported for `tests/integration`, where the real
+ * browser-client admission is fed THIS composition rather than a hand-written
+ * fixture of it. The plane is read per request: a daemon that activates `/2`
+ * while a browser is open answers V2 to that browser's next bootstrap without a
+ * restart. A reader that answers outside the plane roster THROWS, which the
+ * request loop reports as LISTENER_REQUEST_FAILED; it is never coerced to V1.
+ */
+export function composeBootstrapBody(
+  options: Pick<StartListenerOptions, "commandAuthorityPlane" | "csrfToken">,
+  boundProjectId: string,
+): Readonly<{
+  readonly commandAuthorityPlane: CommandAuthorityPlane;
+  readonly csrfToken: string;
+  readonly projectId: string;
+  readonly protocolVersion: typeof WIRE_PROTOCOL_VERSION;
+}> {
+  const plane: unknown = options.commandAuthorityPlane === undefined
+    ? "V1" : options.commandAuthorityPlane.readPlane();
+  if (typeof plane !== "string"
+    || !(COMMAND_AUTHORITY_PLANES as readonly string[]).includes(plane)) {
+    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
+  }
+  return Object.freeze({
+    commandAuthorityPlane: plane as CommandAuthorityPlane,
     csrfToken: options.csrfToken,
-    projectId: pairing.boundProjectId,
+    projectId: boundProjectId,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  }, policy);
+  });
 }
 
 /**

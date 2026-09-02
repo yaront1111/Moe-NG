@@ -124,6 +124,11 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the v2 pending reader is always wired");
     return port();
   },
+  commandAuthorityPlane: () => {
+    const port = fromEnv().commandAuthorityPlane;
+    if (port === undefined) throw new Error("unreachable: the command plane reader is always wired");
+    return port();
+  },
   pairingOpenSessions: () => {
     const port = fromEnv().pairingOpenSessions;
     if (port === undefined) throw new Error("pairingOpenSessions is unavailable");

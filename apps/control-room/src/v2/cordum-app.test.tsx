@@ -92,6 +92,7 @@ function liveAttempts(
 }
 
 const BOOTSTRAP = Object.freeze({
+  commandAuthorityPlane: "V1",
   csrfToken: "csrf-live",
   projectId: "project-live",
   protocolVersion: WIRE,
@@ -276,7 +277,8 @@ describe("CordumApp live path uses the runtime handshake", () => {
     window.history.replaceState(null, "", "/?v2=1#pair=ONE-TIME-SECRET");
     const fetchMock = vi.fn((input: string, _init?: RequestInit) => {
       if (input === "/bootstrap") return Promise.resolve(jsonResponse({
-        csrfToken: "csrf-blue", projectId: "proj-blue", protocolVersion: WIRE,
+        commandAuthorityPlane: "V1", csrfToken: "csrf-blue", projectId: "proj-blue",
+        protocolVersion: WIRE,
       }));
       if (input === "/session/pair/request") return Promise.resolve(jsonResponse({
         confirmationLabel: "abcd-ef01-2345", ok: true, requestId: "a".repeat(64),
@@ -303,7 +305,8 @@ describe("CordumApp live path uses the runtime handshake", () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit): Promise<Response> => {
       if (input === "/bootstrap") {
         return Promise.resolve(jsonResponse({
-          csrfToken: "csrf-live", projectId: "project-live", protocolVersion: WIRE,
+          commandAuthorityPlane: "V1", csrfToken: "csrf-live", projectId: "project-live",
+          protocolVersion: WIRE,
         }));
       }
       if (input === "/session/pair/request") {

@@ -25,10 +25,21 @@ export type TransportRefusalCode = (typeof TRANSPORT_REFUSAL_CODES)[number];
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
-export type CommandAuthorityPlane = "V1" | "V2";
+export const COMMAND_AUTHORITY_PLANES = Object.freeze(["V1", "V2"] as const);
+export type CommandAuthorityPlane = (typeof COMMAND_AUTHORITY_PLANES)[number];
+
+/** Exact-string admission of the plane a daemon states on `/bootstrap`. */
+export function isCommandAuthorityPlane(value: unknown): value is CommandAuthorityPlane {
+  return typeof value === "string"
+    && (COMMAND_AUTHORITY_PLANES as readonly string[]).includes(value);
+}
 
 export interface TransportOptions {
-  /** Selects the daemon command authority plane; legacy callers remain on V1. */
+  /**
+   * The plane the DAEMON stated on `/bootstrap`. A caller that never read a
+   * bootstrap (test doubles, the dev-only build-time attachment) states V1
+   * explicitly or inherits it; nothing here infers a plane from the build.
+   */
   readonly commandAuthorityPlane?: CommandAuthorityPlane | undefined;
   readonly csrfToken: string;
   /**

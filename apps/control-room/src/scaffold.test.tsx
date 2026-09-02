@@ -99,6 +99,7 @@ describe("control-room scaffold mounts", () => {
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input === "/bootstrap") {
         return Promise.resolve(new Response(JSON.stringify({
+          commandAuthorityPlane: "V1",
           csrfToken: "csrf-strict",
           projectId: "project-strict",
           protocolVersion: wire,

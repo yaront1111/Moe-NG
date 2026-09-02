@@ -1,5 +1,7 @@
-import { admitByWireProtocol, createControlRoomTransport } from "@moe/control-room-client";
-import type { FetchLike } from "@moe/control-room-client";
+import {
+  admitByWireProtocol, createControlRoomTransport, isCommandAuthorityPlane,
+} from "@moe/control-room-client";
+import type { CommandAuthorityPlane, FetchLike } from "@moe/control-room-client";
 import { LIVE_PROJECTION, LIVE_SUBSCRIBER } from "./live-config.js";
 import type { LiveConfigRefusalCode, LiveRefused, LiveSetupResult } from "./live-config.js";
 import { createLiveKeyedSession } from "./live-keyed-session.js";
@@ -31,6 +33,12 @@ type LiveSetup = Extract<LiveSetupResult, { readonly ok: true }>;
 
 interface BootstrapContext {
   readonly client: CompatGate["client"];
+  /**
+   * Which plane the DAEMON says it serves. The browser never chooses: a bundle
+   * pinned to `/v2/command` refuses every write on a daemon whose cutover marker
+   * was never committed, and one pinned to `/command` is retired the moment it is.
+   */
+  readonly commandAuthorityPlane: CommandAuthorityPlane;
   readonly csrfToken: string;
   readonly projectId: string;
   readonly protocolVersion: string;
@@ -146,15 +154,23 @@ async function readBootstrap(
   if (!gate.ok) {
     return refused("LIVE_COMPAT_REFUSED", `compat gate refused for daemon protocol ${body["protocolVersion"]}`);
   }
+  // Compat first, so a daemon from before this key is named by its protocol drift,
+  // not by the key it never had. A same-protocol daemon must state the plane.
+  if (!isCommandAuthorityPlane(body["commandAuthorityPlane"])) {
+    return refused("LIVE_BOOTSTRAP_UNAVAILABLE",
+      statusDetail("daemon bootstrap states no admissible commandAuthorityPlane", result));
+  }
   return {
-    client: gate.client, csrfToken: body["csrfToken"], projectId: body["projectId"],
+    client: gate.client, commandAuthorityPlane: body["commandAuthorityPlane"],
+    csrfToken: body["csrfToken"], projectId: body["projectId"],
     protocolVersion: body["protocolVersion"],
   };
 }
 
 function makeSetup(context: BootstrapContext, input: HandshakeInput, credential: string): LiveSetup {
   const transport = createControlRoomTransport({
-    commandAuthorityPlane: "V2", csrfToken: context.csrfToken, fetch: input.fetchImpl, origin: "",
+    commandAuthorityPlane: context.commandAuthorityPlane, csrfToken: context.csrfToken,
+    fetch: input.fetchImpl, origin: "",
     sessionCredential: credential, wireProtocolVersion: context.protocolVersion,
   });
   return Object.freeze({

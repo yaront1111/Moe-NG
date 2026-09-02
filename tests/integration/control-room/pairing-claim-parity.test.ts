@@ -8,7 +8,12 @@ import {
   pairingOpenStatusFor,
 } from "../../../apps/daemon/src/http/pairing-open-completion.js";
 import { createSessionChallengeOperandsReadPort } from "../../../apps/daemon/src/http/session-challenge-operands-read.js";
-import { WIRE_PROTOCOL_VERSION } from "../../../apps/daemon/src/http/http-contract.js";
+import {
+  COMMAND_AUTHORITY_PLANES as DAEMON_COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION,
+} from "../../../apps/daemon/src/http/http-contract.js";
+import { composeBootstrapBody } from "../../../apps/daemon/src/http/http-listener.js";
+import { COMMAND_AUTHORITY_PLANES as CLIENT_COMMAND_AUTHORITY_PLANES }
+  from "../../../packages/control-room-client/src/client-transport.js";
 import { OPERATOR_CAPABILITIES } from "../../../apps/daemon/src/daemon-command-vocabulary.js";
 import { createOperatorSessionHandshakePort } from "../../../apps/daemon/src/identity/session-handshake.js";
 import { createSessionAuthority } from "../../../apps/daemon/src/identity/session-authority.js";
@@ -108,8 +113,9 @@ async function drive(mode: "KEYED" | "FORCE_BEARER"): Promise<Journey> {
   let openWire: unknown;
   const fetchImpl = async (path: string, init?: RequestInit): Promise<Response> => {
     if (path === "/bootstrap") {
-      return json({ csrfToken: "csrf-parity", projectId: PROJECT_ID,
-        protocolVersion: WIRE_PROTOCOL_VERSION });
+      // The daemon's OWN body composition, not a fixture of it: a key the listener
+      // adds or drops reaches the real client admission here.
+      return json(composeBootstrapBody({ csrfToken: "csrf-parity" }, PROJECT_ID));
     }
     if (path === "/session/pair/request") {
       request = seam.request();
@@ -182,4 +188,12 @@ it("refuses the real bearer claim divergence before signed open", async () => {
   });
   expect(journey.openBodies).toHaveLength(0);
   expect(journey.openWire).toBeUndefined();
+});
+
+it("spells the command authority plane roster identically on both sides of the wire", () => {
+  // Two literal rosters, one wire. The daemon states a plane from its roster and
+  // the client admits by exact string from its own; a member either side adds
+  // alone is a plane the other cannot name.
+  expect([...CLIENT_COMMAND_AUTHORITY_PLANES]).toEqual([...DAEMON_COMMAND_AUTHORITY_PLANES]);
+  expect(DAEMON_COMMAND_AUTHORITY_PLANES).toHaveLength(2);
 });

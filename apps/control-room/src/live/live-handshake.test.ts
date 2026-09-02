@@ -45,7 +45,9 @@ function makeFetch(respond: Responder): { readonly calls: Call[]; readonly fetch
     fetchImpl: async (path, init) => { calls.push({ init, path }); return respond(path, init); },
   };
 }
-const bootstrap = (): Response => json({ csrfToken: "csrf-local", projectId: "project-a", protocolVersion: WIRE });
+const bootstrap = (commandAuthorityPlane: unknown = "V1"): Response => json({
+  commandAuthorityPlane, csrfToken: "csrf-local", projectId: "project-a", protocolVersion: WIRE,
+});
 const OPERATOR_PRESENT: HeadersInit = { [OPERATOR_CHANNEL_HEADER]: "true" };
 const requestCreated = (headers: HeadersInit = OPERATOR_PRESENT): Response =>
   json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID }, 200, headers);
@@ -119,7 +121,7 @@ describe("plain-origin live pairing handshake", () => {
     await setup.transport.sendCommand({} as RuntimeCommandEnvelope);
     expect(fetch.calls.map(({ path }) => path)).toEqual([
       "/bootstrap", "/session/pair/request", "/session/pair/claim", "/session/pair/open",
-      "/v2/command",
+      "/command",
     ]);
     const signals = fetch.calls.map(({ init }) => init.signal);
     const handshakeSignals = signals.slice(0, 4);
@@ -339,7 +341,7 @@ describe("plain-origin live pairing handshake", () => {
   it("refuses protocol drift and malformed pairing without attaching", async () => {
     const cases = [
       [(path: string): Response => path === "/bootstrap"
-        ? json({ csrfToken: "csrf", projectId: "p", protocolVersion: "drift" })
+        ? json({ commandAuthorityPlane: "V1", csrfToken: "csrf", projectId: "p", protocolVersion: "drift" })
         : requestCreated(), "LIVE_COMPAT_REFUSED"],
       // Carries the exact true header on purpose, so this arm still reaches and
       // measures the BODY fence rather than the new header fence in front of it.
@@ -496,5 +498,42 @@ describe("daemon-stated operator channel availability", () => {
       graded += 1;
     }
     expect(graded).toBe(HOSTILE_OPERATOR_CHANNEL_HEADERS.length);
+  });
+});
+
+describe("daemon-stated command authority plane", () => {
+  it("routes every write to the plane the daemon states on bootstrap, never a built-in one", async () => {
+    const ROUTES = Object.freeze([["V1", "/command"], ["V2", "/v2/command"]] as const);
+    expect(ROUTES).toHaveLength(2);
+    for (const [plane, path] of ROUTES) {
+      const fetch = makeFetch((requested, init) =>
+        requested === "/bootstrap" ? bootstrap(plane) : healthy(requested, init));
+      const pairing = pending(await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl }));
+      const setup = await pairing.claim();
+      if (!("ok" in setup) || !setup.ok) throw new Error("expected attached setup");
+      await setup.transport.sendCommand({} as RuntimeCommandEnvelope);
+      expect(fetch.calls.map((call) => call.path).at(-1)).toBe(path);
+    }
+  });
+  it("refuses a bootstrap that states no admissible plane instead of defaulting one", async () => {
+    const HOSTILE_PLANES: readonly unknown[] = Object.freeze([
+      undefined, null, "", "v1", "V3", "V1 ", 1, ["V1"], { plane: "V1" },
+    ]);
+    expect(HOSTILE_PLANES).toHaveLength(9);
+    for (const plane of HOSTILE_PLANES) {
+      const fetch = makeFetch((requested, init) => {
+        if (requested !== "/bootstrap") return healthy(requested, init);
+        const body: Record<string, unknown> = {
+          csrfToken: "csrf-local", projectId: "project-a", protocolVersion: WIRE,
+        };
+        if (plane !== undefined) body["commandAuthorityPlane"] = plane;
+        return json(body);
+      });
+      const result = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
+      expect("ok" in result && result.ok).toBe(false);
+      if (!("ok" in result) || result.ok) throw new Error("expected refusal");
+      expect(result.code).toBe("LIVE_BOOTSTRAP_UNAVAILABLE");
+      expect(fetch.calls.map((call) => call.path)).toEqual(["/bootstrap"]);
+    }
   });
 });

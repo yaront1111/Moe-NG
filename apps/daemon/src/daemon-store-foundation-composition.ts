@@ -59,7 +59,8 @@ import { createSessionChallengeOperandsReadPort,
 import { createSessionAuthority } from "./identity/session-authority.js";
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
-import type { CommandAdapterDeps } from "./http/http-contract.js";
+import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "./http/http-contract.js";
+import { admitV2ActiveInstallation } from "./cutover/cutover-v2-authority.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
 
@@ -327,6 +328,19 @@ export function createStoreDependencies(
       store,
     });
   /**
+   * The plane `/bootstrap` tells a browser to write to, derived from the durable
+   * cutover marker on EVERY read and never cached, so the answer flips the moment
+   * `cutover.activate` commits. The same marker read the V1 gate uses: an
+   * unreadable or readiness-divergent marker answers V1 here, and `/command` then
+   * refuses that write itself with V1_AUTHORITY_STATUS_UNKNOWN, so the browser is
+   * routed to the plane that names the fault rather than to one that is silent.
+   */
+  const commandAuthorityPlane = (): CommandAuthorityPlanePort => Object.freeze({
+    boundProjectId: config.projectId,
+    readPlane: () =>
+      admitV2ActiveInstallation(store, { projectId: config.projectId }).ok ? "V2" : "V1",
+  });
+  /**
    * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
    * A caller names nothing: the principal is the authenticated one.
    */
@@ -384,6 +398,7 @@ export function createStoreDependencies(
     affordances,
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
+    commandAuthorityPlane,
     documentDossiers,
     documentIngest,
     graph,

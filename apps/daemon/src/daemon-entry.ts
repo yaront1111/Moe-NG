@@ -289,6 +289,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       ? {} : { productContractV2Current: resolved.productContractV2Current }),
     ...(resolved.productContractV2Pending === undefined
       ? {} : { productContractV2Pending: resolved.productContractV2Pending }),
+    ...(resolved.commandAuthorityPlane === undefined
+      ? {} : { commandAuthorityPlane: resolved.commandAuthorityPlane }),
     ...(resolved.sessionChallengeOperands === undefined
       ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
     ...(resolved.pairingOpenSessions === undefined

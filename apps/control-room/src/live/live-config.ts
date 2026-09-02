@@ -71,7 +71,11 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
   }
   // Origin is empty on purpose: requests stay same-origin and the dev server
   // proxies /command, /events/read, /events/ack and /affordances/read to the daemon.
+  // V1 is STATED, not inferred: this build-time attachment never reads `/bootstrap`,
+  // so it cannot learn a cutover plane and must not pretend to. The shipped path is
+  // the handshake in live-handshake.ts, which routes by what the daemon states.
   const transport = createControlRoomTransport({
+    commandAuthorityPlane: "V1",
     csrfToken: csrf,
     origin: "",
     sessionCredential: credential,

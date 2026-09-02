@@ -1,8 +1,10 @@
 export { admitByWireProtocol, createCompatGate } from "./client-compat.js";
 export {
+  COMMAND_AUTHORITY_PLANES,
   CONTROL_ROOM_TRANSPORT_LAYER,
   TRANSPORT_REFUSAL_CODES,
   createControlRoomTransport,
+  isCommandAuthorityPlane,
 } from "./client-transport.js";
 export type {
   CommandAuthorityPlane,
