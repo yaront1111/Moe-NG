@@ -52,7 +52,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-7973e36b",
   "branch": null,
   "prLink": null,
   "reopenCount": 5,
@@ -73,11 +73,17 @@
       "author": "worker-d16b4297",
       "content": "FINAL GATE (no-churn replay): exact persisted shell:false command exited 0.\nFocused output: Test Files 1 passed (1); Tests 56 passed (56); daemon `tsc --project tsconfig.json` completed.\n\nStandalone `pnpm --filter @moe/daemon test` executed non-vacuously and exited 1 with foreign red only: Test Files 2 failed | 340 passed (342); Tests 3 failed | 6980 passed | 12 todo (6995). Surviving failures, verbatim by path/line:\n- `apps/daemon/src/daemon-command-registry-human-approver.test.ts:135`: expected httpStatus 403 and refusal.code OPERATOR_PRINCIPAL_REQUIRED, received httpStatus 401.\n- `apps/daemon/src/work/foundation-attempt-windows.test.ts:864`: expected existsSync(DERIVED_WORKTREE) false, received true.\n- `apps/daemon/src/work/foundation-attempt-windows.test.ts:986`: expected observedBoundaryProbe.launches length 1, received 0.\nNone intersects this task's exact four owned paths; the focused owned-package leg and typecheck are green. This is disclosed raw red, not relabeled green.\n\nPost-gate anchors remain byte-identical: host 206 lines / SHA 0B4AF...61C8 / blob e8f0e3...5191; policy TS 174 / 798F67...B70D / 762180...658e; bridge 1 / 6396E4...FE17 / ddca3a...56c9; test 991 / 58E630...0220 / e7c987...772. Bridge is exact export line plus LF; `git diff --check` exit 0. get_commit_scope still asserts exactly the four paths, with planned/touched/inferred/unattributed all empty. No source byte was edited.",
       "timestamp": "2026-09-01T21:30:39.307Z"
+    },
+    {
+      "id": "comment-af900c86122646418815eac4756c48ec",
+      "author": "governor-517c10b5",
+      "content": "GOVERNOR REOPEN BRIEF — read before touching any source file.\n\nThis is reopen #5, human-directed. The four prior rejections all said the same thing: substantively green in the shared worktree, not delivered by any recorded commit. THAT PREMISE IS DEAD as of today, proven twice:\n- ec83 landed via a QA session checkpoint (f40efeb3) and went DONE.\n- 1edf landed a proper kind=completion from its WORKER seat (bfa0a616): 4 declared paths including 2 previously-untracked ones, pushed, ancestor of HEAD.\n\nSo the landing path works. Nothing here needs re-implementing.\n\nTHE WORK IS DONE AND ON DISK. Steps 1-3 were COMPLETED before this reopen; the reopen reset them to PENDING as a bookkeeping side effect, NOT because the work was undone. All four declared paths are present and uncommitted right now:\n  M  apps/daemon/src/http/http-listener-static-assets.test.ts\n  M  apps/daemon/src/http/static-asset-host.ts\n  ?? apps/daemon/src/http/static-asset-path-policy.ts\n  ?? apps/daemon/src/http/static-asset-path-policy.js\n\nDO NOT rewrite, regenerate, or \"clean up\" these files. Do not regenerate static-asset-host.ts from a HEAD copy — that destroys the extraction. The two untracked files are the entire deliverable of this task; they are the ones a careless sweep drops, so confirm both land.\n\nWHAT THIS ROW ACTUALLY NEEDS, in order:\n1. Re-walk the three steps against the EXISTING bytes (the plan is unchanged and correct). Verify, do not re-author.\n2. Land all four paths with an explicit pathspec commit. Do not rely on an exit sweep, and never use `git add -A` — the shared worktree carries 20+ dirty foreign files from other parked rows and a broad add would land them under this task id.\n3. Re-run the stored verification.command at the LANDED bytes and hold it to its own non-vacuity clause: nonzero `Test Files` AND nonzero `Tests`. Exit 0 with no counts is not a pass.\n4. Confirm the DoD line caps (both modules under 400 physical lines, target <=250) and that static-asset-path-policy.js is the repository-standard one-line bridge — measured at the landed bytes, not the worktree.\n\nKNOWN LEDGER ARTIFACT: if a completion is recorded at a sha already present as a checkpoint, the daemon merges it and does NOT upgrade task.commits[].kind. lastCommitOutcome is the authoritative locus in that case. A NO-COMPLETION-COMMIT warning at approval time under those conditions is the merge artifact, not a missing delivery.\n\nDOWNSTREAM: aa205 gates 7d1, which gates 272b09a7, which gates 59eaddfb, f8ea0a2f and 45839f34. Five rows are waiting on this one.",
+      "timestamp": "2026-09-02T09:32:44.599Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-09-02T09:32:19.424Z",
+  "updatedAt": "2026-09-02T09:32:45.596Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 3,
@@ -86,7 +92,9 @@
     "rejectCount": 4,
     "reopenCount": 4
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-7973e36b"
+  ],
   "stepsCompleted": [],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-01T20:14:53.206Z",
@@ -102,7 +110,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-09-02T09:32:45.478Z",
+    "escalatedAt": "2026-09-02T09:32:45.478Z"
   },
   "planApprovedAt": "2026-09-01T20:14:55.540Z",
   "workStartedAt": "2026-08-31T11:52:30.893Z",

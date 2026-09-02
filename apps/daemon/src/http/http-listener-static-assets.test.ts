@@ -309,6 +309,24 @@ const root = () => {
   return resolved;
 };
 
+it("extracts pure asset policy without widening the legacy runtime surface", async () => {
+  const policy = await import("./static-asset-path-policy.js");
+  const legacy = await import("./static-asset-host.js");
+  expect(Object.keys(legacy).toSorted()).toEqual([
+    "CONTROL_ROOM_ASSET_CONTENT_TYPES",
+    "CONTROL_ROOM_ASSET_MAX_BYTES",
+    "CONTROL_ROOM_ASSET_RESPONSE_HEADERS",
+    "assetIsUnchanged",
+    "locateControlRoomAsset",
+    "readControlRoomAssetBytes",
+    "resolveControlRoomAssetRoot",
+  ]);
+  expect(legacy.CONTROL_ROOM_ASSET_CONTENT_TYPES).toBe(policy.CONTROL_ROOM_ASSET_CONTENT_TYPES);
+  expect(legacy.CONTROL_ROOM_ASSET_MAX_BYTES).toBe(policy.CONTROL_ROOM_ASSET_MAX_BYTES);
+  expect(legacy.CONTROL_ROOM_ASSET_RESPONSE_HEADERS).toBe(policy.CONTROL_ROOM_ASSET_RESPONSE_HEADERS);
+  expect(legacy.assetIsUnchanged).toBe(policy.assetIsUnchanged);
+});
+
 it("answers from a CLOSED extension map, frozen and spelled one way", () => {
   expect(Object.isFrozen(CONTROL_ROOM_ASSET_CONTENT_TYPES)).toBe(true);
   // No `.json` and no `.map`: the built bundle emits neither, and `.json` is
@@ -316,6 +334,14 @@ it("answers from a CLOSED extension map, frozen and spelled one way", () => {
   expect(Object.keys(CONTROL_ROOM_ASSET_CONTENT_TYPES).sort()).toEqual([
     ".css", ".html", ".js", ".png", ".svg", ".woff2",
   ]);
+  expect(CONTROL_ROOM_ASSET_CONTENT_TYPES).toEqual({
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".woff2": "font/woff2",
+  });
   for (const [extension, type] of Object.entries(CONTROL_ROOM_ASSET_CONTENT_TYPES)) {
     expect(extension).toMatch(/^\.[a-z0-9]+$/u);
     expect(type).not.toContain("octet-stream");
@@ -328,6 +354,16 @@ it("publishes the policy header set as one frozen record and sends it on EVERY s
     "cache-control", "content-security-policy", "cross-origin-resource-policy",
     "referrer-policy", "x-content-type-options", "x-frame-options",
   ]);
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS).toEqual({
+    "cache-control": "no-cache",
+    "content-security-policy":
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "cross-origin-resource-policy": "same-origin",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+  });
   // React uses bounded style attributes for progress and status visuals. Script
   // remains same-origin only; the style exception must never widen script.
   expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
@@ -415,6 +451,22 @@ it("LOCATES without reading: a dispatch carries a length and a validator and no 
     const bytes = readControlRoomAssetBytes(located);
     expect(bytes instanceof Uint8Array).toBe(true);
     expect(Buffer.from(bytes as Uint8Array).toString("utf8")).toBe(BUNDLE_INDEX);
+  }
+});
+
+it("returns the exact filesystem refusal when a located asset disappears before read", () => {
+  const volatilePath = join(bundleRoot, "volatile.js");
+  writeFileSync(volatilePath, "export const volatile = true;\n", "utf8");
+  try {
+    const located = locateControlRoomAsset(root(), "GET", "/volatile.js");
+    if (located.kind !== "ASSET") throw new Error(`locate refused: ${located.code}`);
+    rmSync(volatilePath);
+    expect(readControlRoomAssetBytes(located)).toEqual({
+      code: "LISTENER_ASSET_READ_FAILED",
+      kind: "LISTENER_REFUSAL",
+    });
+  } finally {
+    rmSync(volatilePath, { force: true });
   }
 });
 
@@ -611,17 +663,24 @@ it("refuses an NTFS alternate data stream on a name that would otherwise serve",
   });
 });
 
-it.each([
-  ["/NUL.js", "a bare device with a servable extension"],
-  ["/COM1.js", "a numbered serial device"],
-  ["/LPT9.js", "a numbered printer device"],
-  ["/CONIN$.js", "a console device whose name carries a dollar"],
-  ["/CON%20.js", "a device whose stem ends in the space Windows drops"],
-  ["/assets/index.js.", "a trailing dot Windows strips before resolving"],
-  ["/assets/index%09.js", "a control character inside a segment"],
-  ["/assets/in<dex.js", "a character Win32 forbids in a file name"],
-  ["/assets/index.js%00.txt", "an embedded NUL, which truncates a validated name"],
-])("refuses %s (%s) with the segment code", async (path) => {
+const HOSTILE_SEGMENT_CASES = Object.freeze([
+  Object.freeze(["/NUL.js", "a bare device with a servable extension"]),
+  Object.freeze(["/COM1.js", "a numbered serial device"]),
+  Object.freeze(["/LPT9.js", "a numbered printer device"]),
+  Object.freeze(["/CONIN$.js", "a console device whose name carries a dollar"]),
+  Object.freeze(["/CON%20.js", "a device whose stem ends in the space Windows drops"]),
+  Object.freeze(["/assets/index.js.", "a trailing dot Windows strips before resolving"]),
+  Object.freeze(["/assets/index%09.js", "a control character inside a segment"]),
+  Object.freeze(["/assets/in<dex.js", "a character Win32 forbids in a file name"]),
+  Object.freeze(["/assets/index.js%00.txt", "an embedded NUL, which truncates a validated name"]),
+] as const);
+
+it("generates the exact nonempty hostile segment roster", () => {
+  expect(HOSTILE_SEGMENT_CASES).toHaveLength(9);
+  expect(HOSTILE_SEGMENT_CASES.length).toBeGreaterThan(0);
+});
+
+it.each(HOSTILE_SEGMENT_CASES)("refuses %s (%s) with the segment code", async (path) => {
   await withAssetHost(async (listener) => {
     expectAssetRefusal(await fetchAsset(listener, path), "LISTENER_ASSET_SEGMENT_INVALID", 403);
   });
