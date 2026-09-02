@@ -185,7 +185,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:25:58.933Z",
-  "updatedAt": "2026-09-02T19:07:31.729Z",
+  "updatedAt": "2026-09-02T19:08:36.052Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",
@@ -253,7 +253,8 @@
     ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json",
     ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
     ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
-    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json"
+    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
   ],
   "completionSummary": "Delivery-only replay completed with no source churn. The current correction admits retry only for HTTP 409 with an exact `{code,layer}` body, the fixed pairing-request layer, and `PAIRING_APPROVAL_REQUIRED` or `PAIRING_REQUEST_BUSY`; wrong-layer and surplus-key variants refuse locally without signed open, while same-key retry remains covered. The seven declared task paths compose the real Control Room live consumer through challenge, nonextractable closure-held key generation, proof signing, and exact signed session open; setup is unavailable until open succeeds and there is no bearer fallback. Production remains 222/263 lines. Fresh exact gate passed: keyed-session 6 tests, handshake 18, scaffold 37, Cordum 32, pairing parity 2, Control Room typecheck, and full Control Room 111 files/1505 tests. Fresh root typecheck, root test (401 passed files; 9783 passed tests), foundation (35/756), and store (52/673) also passed. Daemon test remains foreign red in two unowned daemon tests (`daemon-command-registry-human-approver`, `foundation-attempt-windows`); its owned seven-path intersection is empty. HEAD/checkpoint/recovery provenance was audited: `e384a6cd...` is only a mixed PLANNING checkpoint and `ef7ac9e1...` salvage, not delivery. Dependency completions are landed. Durable mutation-red evidence remains in `comment-52278af42dc547ac9e5d6c676fe2bca3`. This completion requests the Moe wrapper's authoritative `kind=completion` landing.",
   "rejectionDetails": {
@@ -517,6 +518,22 @@
       "treeId": "3c27267ef8b9c8ce3836b3c1b4b2e93c46987014",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "df1d29648d7051f438f4003732fe93db69922b62",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-9179846c@2026-09-02T19:00:27Z",
+      "paths": [
+        ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
+      ],
+      "recordedBy": "worker-9179846c",
+      "recordedAt": "2026-09-02T19:08:36.052Z",
+      "treeId": "528b435295e3260388d9649f993c3c79df539840",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -525,8 +542,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-50445f7a@2026-09-02T18:28:26Z",
-    "at": "2026-09-02T18:47:36.292Z"
+    "sessionId": "worker-9179846c@2026-09-02T19:00:27Z",
+    "at": "2026-09-02T19:08:36.052Z"
   },
   "priorHandoffs": [
     {
