@@ -129,7 +129,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:31:06.576Z",
-  "updatedAt": "2026-09-02T19:00:49.718Z",
+  "updatedAt": "2026-09-02T19:00:55.011Z",
   "contextFetchedBy": [
     "governor-425e4c88",
     "architect-1f97776b",
@@ -189,5 +189,52 @@
   "blockedReason": null,
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "workStartedAt": "2026-09-02T18:33:57.060Z"
+  "workStartedAt": "2026-09-02T18:33:57.060Z",
+  "commits": [
+    {
+      "sha": "56dae6d7c473c7188aeb57d3faeab1bf9d5c0605",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1ff24286@2026-09-02T19:00:50Z",
+      "paths": [
+        ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-effort-path.test.tsx",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-planning-authorities.ts"
+      ],
+      "recordedBy": "worker-1ff24286",
+      "recordedAt": "2026-09-02T19:00:55.011Z",
+      "treeId": "619af6fffb03e0b5654bba2560eeffc0f3329ecb",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+    "apps/control-room/src/live/live-board.a11y.test.tsx",
+    "apps/control-room/src/live/live-board.test.tsx",
+    "apps/control-room/src/live/live-board.tsx",
+    "apps/control-room/src/live/live-board-dispatch.test.tsx",
+    "apps/control-room/src/live/live-board-feed.ts",
+    "apps/control-room/src/live/live-dispatch.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/live/live-effort-path.test.tsx",
+    "apps/control-room/src/live/live-planning-authorities.js",
+    "apps/control-room/src/live/live-planning-authorities.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-1ff24286@2026-09-02T19:00:50Z",
+    "at": "2026-09-02T19:00:55.011Z"
+  }
 }
