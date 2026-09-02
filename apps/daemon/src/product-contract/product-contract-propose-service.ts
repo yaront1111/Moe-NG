@@ -70,6 +70,44 @@ function refused(code: ProductContractProposeCode): ProposeRevisionRefused {
   return Object.freeze({ code, layer: LAYER, ok: false });
 }
 
+const ID_KEYED_ARRAYS = Object.freeze({
+  criteria: "criterionId", requirements: "requirementId",
+} as const);
+const STRING_ARRAYS = Object.freeze([
+  "retiredCriterionIds", "retiredRequirementIds", "sourceDocumentDigests",
+] as const);
+
+function sortedById(value: unknown, key: string): unknown {
+  if (!Array.isArray(value)) return value;
+  const idOf = (item: unknown): string => {
+    const id = record(item)?.[key];
+    return typeof id === "string" ? id : "";
+  };
+  return [...value].sort((a, b) => (idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0));
+}
+
+/**
+ * Listing order is the agent's habit, not a contract fact: every id-keyed array is sorted
+ * ascending (the core admission's canonical form, and the only form the digest sees), so an
+ * agent that lists criteria in reading order commits the same revision as one that sorts.
+ * Only keys the draft carries are touched; absent keys stay absent for the shape admission.
+ */
+function canonicalDraftOrder(
+  draft: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const canonical: Record<string, unknown> = { ...draft };
+  for (const [field, key] of Object.entries(ID_KEYED_ARRAYS)) {
+    if (field in draft) canonical[field] = sortedById(draft[field], key);
+  }
+  for (const field of STRING_ARRAYS) {
+    const value = draft[field];
+    if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+      canonical[field] = [...value].sort();
+    }
+  }
+  return Object.freeze(canonical);
+}
+
 function record(value: unknown): Readonly<Record<string, unknown>> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>>
@@ -86,8 +124,9 @@ export function runProductContractProposeRevision(
     || typeof payload["goalRef"] !== "string") {
     return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
   }
-  const draft = record(payload["draft"]);
-  if (draft === null) return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
+  const listed = record(payload["draft"]);
+  if (listed === null) return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
+  const draft = canonicalDraftOrder(listed);
 
   // v0: first-admitted-wins, no parent chains — see module doc.
   if (draft["lineage"] !== null) {

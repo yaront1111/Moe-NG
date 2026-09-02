@@ -211,6 +211,47 @@ describe("runSubmitDecomposition", () => {
     expect(again.submissionHash).toBe(first.submissionHash);
   });
 
+  it("canonicalizes the agent's criterion set: listing order and repeats are not plan facts", () => {
+    const canonicalStore = boundWorld();
+    const canonicalRef = committedRevision(canonicalStore);
+    approveGate1(canonicalStore, canonicalRef);
+    const canonical = submit(canonicalStore, canonicalRef);
+    if (!canonical.ok) throw new Error(`canonical refused: ${canonical.code}`);
+
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const structure = structureOf();
+    const node = (structure["nodes"] as Record<string, unknown>[])[0]!;
+    const shuffled = submit(store, ref, {
+      structure: {
+        ...structure,
+        nodes: [{ ...node, criterionIds: ["crit-ui", "crit-api", "crit-ui"] }],
+      },
+    });
+    if (!shuffled.ok) throw new Error(`shuffled refused: ${shuffled.code}`);
+    expect(shuffled.disposition).toBe("DECIDED");
+    expect(shuffled.submissionHash).toBe(canonical.submissionHash);
+    expect(shuffled.graphContentHash).toBe(canonical.graphContentHash);
+  });
+
+  it("refuses node text the plan codec cannot admit as a SHAPE refusal, never a producer throw", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const structure = structureOf();
+    const node = (structure["nodes"] as Record<string, unknown>[])[0]!;
+    const refusalOf = (overrides: Record<string, unknown>): string => {
+      const result = submit(store, ref, { structure: { ...structure, nodes: [{ ...node, ...overrides }] } });
+      return result.ok ? "ACCEPTED" : result.code;
+    };
+    expect(refusalOf({ objective: "\0bad" })).toBe("SUBMIT_DECOMPOSITION_MALFORMED");
+    expect(refusalOf({ objective: "é" })).toBe("SUBMIT_DECOMPOSITION_MALFORMED");
+    expect(refusalOf({ criterionIds: ["crit-api", 7] })).toBe("SUBMIT_DECOMPOSITION_MALFORMED");
+    expect(refusalOf({ dependsOn: [null] })).toBe("SUBMIT_DECOMPOSITION_MALFORMED");
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
   it("refuses when no Gate 1 approval exists — the human gate is not optional", () => {
     const store = boundWorld();
     const ref = committedRevision(store);

@@ -94,6 +94,16 @@ function record(value: unknown): Readonly<Record<string, unknown>> | null {
     : null;
 }
 
+/**
+ * The plan codec's text rule (non-empty, no NUL, well-formed, NFC), applied at THIS boundary so
+ * an agent's malformed text answers as a coded shape refusal here instead of surfacing as the
+ * compiled-plan producer's throw (which the listener reports as a bare 500).
+ */
+function canonicalText(value: unknown): value is string {
+  return stringField(value) && !value.includes("\0") && value.isWellFormed()
+    && value.normalize("NFC") === value;
+}
+
 function stringField(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
@@ -192,13 +202,16 @@ export function runSubmitDecomposition(
     const node = record(raw);
     const criterionIds = node?.["criterionIds"];
     const dependsOn = node?.["dependsOn"] ?? [];
-    if (node === null || !stringField(node["nodeKey"]) || !stringField(node["objective"])
-      || !Array.isArray(criterionIds) || !Array.isArray(dependsOn)) {
+    if (node === null || !canonicalText(node["nodeKey"]) || !canonicalText(node["objective"])
+      || !Array.isArray(criterionIds) || !criterionIds.every(canonicalText)
+      || !Array.isArray(dependsOn) || !dependsOn.every(canonicalText)) {
       return refused("SUBMIT_DECOMPOSITION_MALFORMED");
     }
     sealedNodes.push(Object.freeze({
       capability: COMPILED_NODE_RISK_PROFILE.capability,
-      criterionIds: criterionIds as readonly string[],
+      // A SET, never the agent's listing: order and repeats are not plan facts, and the
+      // plan codec admits only an ascending, duplicate-free set.
+      criterionIds: Object.freeze([...new Set(criterionIds)].sort()),
       dependsOn: dependsOn as readonly string[],
       nodeKey: node["nodeKey"] as string,
       objective: node["objective"] as string,

@@ -1321,7 +1321,9 @@ describe("release package command", () => {
       expectReleaseRefusal(record, "TOOLCHAIN_OBSERVATION_FAILED");
       return;
     }
-    assert.equal(run.status, 0);
+    // Name the recorder's own refusal when the host was expected to record: a bare `1 !== 0`
+    // on the hosted Windows candidate run (2026-09-02) left the reason unrecoverable.
+    assert.equal(run.status, 0, `release evidence recorder refused: ${JSON.stringify(record)}`);
     assert.equal(record.componentCount, 6);
     assert.equal(record.reportCount, 3);
     assert.equal(record.sourceSha, SOURCE_SHA);
