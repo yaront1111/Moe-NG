@@ -296,13 +296,13 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
     expect(unbound?.progress).toBeUndefined();
     expect(unbound?.progressComingOnline).toBe("No PRD is bound to this goal.");
     expect(unbound?.progressNote).toBe("No PRD bound to this goal");
-    expect(uncontracted?.progressNote).toBe("No contract cites the PRD yet");
     const uncontracted = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
       ...coverage(0, 0, "APPROVED"), contracts: [],
       totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
     }]])).goals[0];
     expect(uncontracted?.progress).toBeUndefined();
     expect(uncontracted?.progressComingOnline).toBe("No Product Contract cites this goal PRD yet.");
+    expect(uncontracted?.progressNote).toBe("No contract cites the PRD yet");
   });
 });
 
