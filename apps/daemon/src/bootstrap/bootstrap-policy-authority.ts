@@ -19,6 +19,17 @@ import type { JsonObject, JsonValue } from "@moe/contracts";
  * The keys a caller may name but may not SUPPLY, because the server sources both.
  *
  * Named once so the refusal and the composition below cannot drift apart.
+ *
+ * ORDER IS LOAD-BEARING. `callerSuppliedKey` returns the FIRST member the payload carries, and
+ * `bootstrap-policy-services.ts:118-132` maps four of these to their own dedicated code before a
+ * catch-all leg. Append; never prepend. Moving the approval references above `sliceChain` would
+ * silently retarget a co-supplied chain from BOOTSTRAP_POLICY_CHAIN_CALLER_SUPPLIED to the
+ * vaguer waiver refusal, which is a real loss of diagnosis and nothing goes red for it.
+ *
+ * The three approval REFERENCES are members for the same reason `waivers` is: authority comes
+ * from a durable record the server reads, so a caller-carried reference to one is unverifiable
+ * by construction. Being ignored is not equivalent — an ignored key carries no code and no
+ * refusing layer, so a caller cannot tell it was disregarded rather than honoured.
  */
 const SERVER_SOURCED_KEYS: readonly string[] = Object.freeze([
   "sliceChain",
@@ -26,6 +37,9 @@ const SERVER_SOURCED_KEYS: readonly string[] = Object.freeze([
   "facts",
   "evaluatedAtEpochMs",
   "evaluatorVersion",
+  "approvalRef",
+  "humanApprovalRef",
+  "waiverRef",
 ]);
 
 /**

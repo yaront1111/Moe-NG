@@ -26,6 +26,7 @@ import {
   POLICY_DECISION_DIGEST_VERSION,
   decisionDigestFor,
 } from "./bootstrap-policy-authority.js";
+import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import { readPolicyEvaluationAuthority } from "./bootstrap-policy-services.js";
 import {
   buildPolicyWaiverGrant,
@@ -1250,11 +1251,16 @@ describe("policy.validate - consumes verified durable waivers (task-5d462855)", 
     });
   }
 
-  function validated(
+  /**
+   * The request `validated` sends, returned UNJUDGED. A refusal is an outcome this block now
+   * asserts on rather than a thrown fixture error, so the ingress arms can pin its exact code
+   * and layer without reaching past the production command path.
+   */
+  function attempt(
     store: SqliteEventStore, sliceRef: string,
     extraInputKeys: Readonly<Record<string, unknown>> = {},
-  ): Record<string, unknown> {
-    const outcome = send(store, envelope("policy.validate", 1, {
+  ): ServiceOutcome {
+    return send(store, envelope("policy.validate", 1, {
       input: {
         action: ACTION,
         actor: "principal-1",
@@ -1266,8 +1272,15 @@ describe("policy.validate - consumes verified durable waivers (task-5d462855)", 
         scope: [...SCOPE],
         ...extraInputKeys,
       },
-    }, "cmd-validate-waiver")) as unknown as Record<string, unknown>;
-    if (!outcome.ok) throw new Error(`policy.validate refused: ${String(outcome["code"])}`);
+    }, "cmd-validate-waiver"));
+  }
+
+  function validated(
+    store: SqliteEventStore, sliceRef: string,
+    extraInputKeys: Readonly<Record<string, unknown>> = {},
+  ): Record<string, unknown> {
+    const outcome = attempt(store, sliceRef, extraInputKeys);
+    if (!outcome.ok) throw new Error(`policy.validate refused: ${outcome.code}`);
     const events = store.readEvents(`${PROJECT_ID}-policy`)
       .filter((event) => event.eventType === "PolicyEvaluated");
     const latest = events[events.length - 1];
@@ -1346,26 +1359,54 @@ describe("policy.validate - consumes verified durable waivers (task-5d462855)", 
   });
 
   /**
-   * `SERVER_SOURCED_KEYS` (bootstrap-policy-authority.ts:23-29) refuses `waivers` by presence,
-   * but `humanApprovalRef`/`waiverRef`/`approvalRef` are not members and are therefore IGNORED
-   * rather than refused. This row introduces the first authority read on this path, so the
-   * property that matters is that none of them can REACH it. Proven by identity: the durable
-   * decision is byte-for-byte the same as the request without them.
+   * DoD 2's second clause. A caller-carried approval REFERENCE must be REFUSED before any
+   * authority read, with an exact stable code and an exact refusing layer. Ignored is not
+   * refused: it carries neither, and a silent drop is indistinguishable at the call site from
+   * having been honoured. `SERVER_SOURCED_KEYS` (bootstrap-policy-authority.ts:34-43) rosters
+   * the three ref spellings, so each falls to the catch-all leg at
+   * bootstrap-policy-services.ts:130-132 without needing new vocabulary.
+   *
+   * Asserted PER KEY rather than over a bag of three, so one key dropped from the roster later
+   * cannot hide behind the other two. The zero-durable-row assertion is what makes this "before
+   * any authority read" and not merely "refused"; it strictly replaces the decisionDigest
+   * identity proof this arm carried while the three keys were still ignored.
    */
-  it("cannot reach the authority read with a caller-carried approval reference", () => {
-    const carried = { approvalRef: hex64("ab"), humanApprovalRef: hex64("ac"), waiverRef: hex64("ad") };
-    const clean = seeded(softSlice);
-    seedGrant(clean, softSlice.sliceRef);
-    const baseline = validated(clean, softSlice.sliceRef);
-    closeStores();
+  it("refuses each caller-carried approval reference with the exact code and layer", () => {
+    const carriedKeys = Object.freeze(["approvalRef", "humanApprovalRef", "waiverRef"] as const);
+    expect(carriedKeys).toHaveLength(3);
+    expect(carriedKeys.length).toBeGreaterThan(0);
+    for (const key of carriedKeys) {
+      const store = seeded(softSlice);
+      seedGrant(store, softSlice.sliceRef);
+      const outcome = attempt(store, softSlice.sliceRef, { [key]: hex64("ab") });
 
-    const spoofed = seeded(softSlice);
-    seedGrant(spoofed, softSlice.sliceRef);
-    const row = validated(spoofed, softSlice.sliceRef, carried);
+      if (outcome.ok) throw new Error(`${key} was accepted instead of refused`);
+      expect(outcome.code).toBe("BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE");
+      expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+      expect(store.readEvents(`${PROJECT_ID}-policy`)
+        .filter((event) => event.eventType === "PolicyEvaluated")).toHaveLength(0);
+      closeStores();
+    }
+  });
 
-    expect(Object.keys(carried)).toHaveLength(3);
-    expect(row["decisionDigest"]).toBe(baseline["decisionDigest"]);
-    expect(row["decision"]).toBe(baseline["decision"]);
+  /**
+   * Roster ORDER is load-bearing and this arm is the fence on it. `callerSuppliedKey`
+   * (bootstrap-policy-authority.ts:107-110) is a `find`, so the FIRST rostered key the payload
+   * carries answers. The three refs are appended for exactly this reason: prepending them would
+   * silently retarget the four dedicated refusals to BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE for
+   * any payload that carried both, turning a precise refusal into a vaguer one with no test
+   * going red. Green before and after this row's change, deliberately — a fence, not a red-first
+   * arm.
+   */
+  it("keeps the dedicated chain refusal ahead of a co-supplied approval reference", () => {
+    const store = seeded(softSlice);
+    const outcome = attempt(store, softSlice.sliceRef, {
+      approvalRef: hex64("ab"), sliceChain: [softSlice],
+    });
+
+    if (outcome.ok) throw new Error("a caller-supplied slice chain was accepted");
+    expect(outcome.code).toBe("BOOTSTRAP_POLICY_CHAIN_CALLER_SUPPLIED");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
   });
 
   it("keeps serverSources at exactly the four keys the admission reader accepts", () => {

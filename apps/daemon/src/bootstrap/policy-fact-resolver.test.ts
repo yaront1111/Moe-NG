@@ -338,6 +338,30 @@ const REFUSAL_CASES: readonly RefusalCase[] = Object.freeze([
     name: "the named obligation is HARD in the installed chain",
     store: storeOf(grant()),
   },
+  {
+    // soft=1, hard=1. The guard is a CONJUNCTION (`soft === 1 && hard === 0`,
+    // policy-waiver-reader.ts:175) and the hard-only case above satisfies the first conjunct's
+    // refusal on its own, so without this case relaxing `hard === 0` leaves the suite green.
+    code: "POLICY_WAIVER_NOT_SOFT",
+    input: resolutionInput({
+      installedSliceChain: [obligationSlice("slice.root", [named("SOFT"), named("HARD")])],
+    }),
+    name: "the named obligation is declared both SOFT and HARD",
+    store: storeOf(grant()),
+  },
+  {
+    // soft=2, hard=0. Ambiguity: two SOFT declarations leave no single obligation to relax. This
+    // is the case that makes `soft === 1` load-bearing rather than `soft >= 1`.
+    code: "POLICY_WAIVER_NOT_SOFT",
+    input: resolutionInput({
+      installedSliceChain: [
+        obligationSlice("slice.root", [named("SOFT")]),
+        obligationSlice("slice.second", [named("SOFT")]),
+      ],
+    }),
+    name: "the named obligation is declared SOFT twice",
+    store: storeOf(grant()),
+  },
 ] as const);
 
 describe("resolvePolicyWaivers - the consumer edge of the strict reader", () => {
@@ -423,11 +447,18 @@ describe("resolvePolicyWaivers - the consumer edge of the strict reader", () => 
 
   describe("every hostile record the reader distinguishes yields no authority", () => {
     it("pins the exact roster size so a silently emptied sweep cannot pass", () => {
-      expect(REFUSAL_CASES).toHaveLength(13);
+      expect(REFUSAL_CASES).toHaveLength(15);
       expect(new Set(REFUSAL_CASES.map((entry) => entry.code)).size).toBe(11);
-      // Two codes are each reached two independent ways, which is why 13 cases carry 11 codes.
-      for (const doubled of ["POLICY_WAIVER_RECORD_UNREADABLE", "POLICY_WAIVER_SCOPE_FOREIGN"]) {
-        expect(REFUSAL_CASES.filter((entry) => entry.code === doubled)).toHaveLength(2);
+      // Three codes are reached more than one independent way, which is why 15 cases carry 11
+      // codes. NOT_SOFT carries three because its guard is a conjunction over two counters, and
+      // one case per way of failing it is what keeps each conjunct load-bearing.
+      const multiplyReached = Object.freeze({
+        POLICY_WAIVER_NOT_SOFT: 3,
+        POLICY_WAIVER_RECORD_UNREADABLE: 2,
+        POLICY_WAIVER_SCOPE_FOREIGN: 2,
+      });
+      for (const [code, reached] of Object.entries(multiplyReached)) {
+        expect(REFUSAL_CASES.filter((entry) => entry.code === code)).toHaveLength(reached);
       }
     });
 
