@@ -93,7 +93,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-1ff24286",
+  "assignedWorkerId": "worker-17aab223",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -178,9 +178,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-02T21:08:22.486Z",
+  "updatedAt": "2026-09-02T21:51:04.256Z",
   "contextFetchedBy": [
-    "worker-1ff24286"
+    "worker-1ff24286",
+    "worker-17aab223"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-27T16:41:36.985Z",
@@ -337,13 +338,28 @@
       "treeId": "d4d68d14c5a6cef9d8195d010735b943554cda99",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "2fc9c9e19200829ce5840213a4d6daa515b43123",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1ff24286@2026-09-02T21:08:53Z",
+      "paths": [
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json"
+      ],
+      "recordedBy": "worker-1ff24286",
+      "recordedAt": "2026-09-02T21:09:00.834Z",
+      "treeId": "379bd59bbe6d9a61db49cc84816a3e38a2ee23a4",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-1ff24286@2026-09-02T21:08:15Z",
-    "at": "2026-09-02T21:08:22.486Z"
+    "sessionId": "worker-1ff24286@2026-09-02T21:08:53Z",
+    "at": "2026-09-02T21:09:00.834Z"
   },
   "reviewCompletedAt": "2026-09-02T20:38:14.948Z",
   "rejectionDetails": {
