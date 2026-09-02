@@ -121,7 +121,7 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     // SOON chip. The chip must be what NAV_BADGE selects, and at 64px the item
     // still has to explain itself by some visible route - its title.
     render(<CordumShell title="Goals" />);
-    const approvals = screen.getByTestId("cr.nav.approvals");
+    const approvals = screen.getByTestId("cr.nav.health");
     expect(approvals.hasAttribute("disabled")).toBe(true);
     const badge = approvals.querySelector(".cr2-statuschip");
     expect(badge).not.toBeNull();
@@ -134,10 +134,10 @@ describe("the narrow rail keeps every name it stops drawing", () => {
 
   it("keeps a daemon-supplied count inside the button's own text, which is its name", () => {
     render(
-      <CordumShell navBadges={{ approvals: { count: "7", tone: "info" } }} onNavigate={() => undefined}
+      <CordumShell navBadges={{ health: { count: "7", tone: "info" } }} onNavigate={() => undefined}
         title="Goals" />,
     );
-    const approvals = screen.getByTestId("cr.nav.approvals");
+    const approvals = screen.getByTestId("cr.nav.health");
     const badge = approvals.querySelector(".cr2-statuschip");
     expect([...document.querySelectorAll(NAV_BADGE)]).toContain(badge);
     expect(badge?.textContent).toBe("7");
@@ -145,7 +145,7 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     expect(approvals.getAttribute("aria-label")).toBeNull();
     expect(approvals.textContent).toContain("not available yet");
     expect(approvals.textContent).toContain("7");
-    expect(screen.getByRole("button", { name: /Approvals.*not available yet.*7/iu }))
+    expect(screen.getByRole("button", { name: /Health.*not available yet.*7/iu }))
       .toBe(approvals);
   });
 });

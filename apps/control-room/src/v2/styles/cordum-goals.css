@@ -907,3 +907,77 @@
 .cr2-coverage-section[data-cited="false"] {
   opacity: 0.6;
 }
+
+
+/* Needs you: the queue of decisions the daemon is waiting on. */
+.cr2-needs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 24px;
+}
+
+.cr2-needs-bar {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.cr2-needs-note {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-needs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cr2-needs-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+  border-left: 4px solid var(--cr-accent);
+}
+
+.cr2-needs-card[data-kind="READY_TO_CLOSE"] {
+  border-left-color: var(--cr-ink-soft);
+}
+
+.cr2-needs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cr2-needs-headline {
+  margin: 0;
+  font-size: var(--cr-fs-title, 18px);
+  font-weight: 600;
+  color: var(--cr-ink);
+}
+
+.cr2-needs-detail {
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink-soft);
+}
+
+@media (max-width: 720px) {
+  .cr2-needs-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

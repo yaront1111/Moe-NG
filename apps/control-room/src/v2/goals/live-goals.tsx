@@ -6,11 +6,13 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { createGoalCatalogFeed } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
-import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { createGoalDispatcher } from "./live-goal-create.js";
 import { GoalsHome } from "./goals-home.js";
+import { deriveNeedsYou } from "../approvals/needs-you-model.js";
+import { useGoalCoverage } from "./use-goal-coverage.js";
+import type { CoverageReader } from "./use-goal-coverage.js";
 
 /**
  * The LIVE goals home.
@@ -29,7 +31,6 @@ import { GoalsHome } from "./goals-home.js";
  */
 
 const POLL_INTERVAL_MS = 2_000;
-const COVERAGE_POLL_MS = 10_000;
 
 function notAttached(setup: LiveRefused): GoalsData {
   return {
@@ -53,7 +54,9 @@ export interface LiveGoalsHomeProps {
    * count. Injected rather than derived from `setup` so the wire is the shell choice and a
    * test can drive it without a second fetch stub.
    */
-  readonly readCoverage?: ((goalId: string) => Promise<DocumentCoverageOutcome>) | undefined;
+  readonly readCoverage?: CoverageReader | undefined;
+  /** The number of decisions waiting on a human, for the shell's Needs-you badge. */
+  readonly onNeedsYouCount?: ((count: number) => void) | undefined;
 }
 
 export function LiveGoalsHome({
@@ -62,10 +65,11 @@ export function LiveGoalsHome({
   onConnection,
   onOpenBoard,
   readCoverage,
+  onNeedsYouCount,
 }: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
-  const [coverage, setCoverage] = useState<ReadonlyMap<string, DocumentCoverageOutcome>>(new Map());
+  const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => (setup.ok
@@ -74,6 +78,7 @@ export function LiveGoalsHome({
       intervalMs: POLL_INTERVAL_MS,
       onFrame: (next) => {
         frameRef.current = next;
+        setSurface(next);
         onConnection?.(next.connection);
       },
     })
@@ -93,26 +98,13 @@ export function LiveGoalsHome({
     return (): void => { feed?.stop(); catalogFeed?.stop(); };
   }, [catalogFeed, feed]);
 
-  // Coverage rides on the catalog goal set and re-reads on its own slower cadence: one read
-  // per goal, all in flight together; a failed read leaves that card "coming online".
-  const goalIds = catalog !== null && catalog.outcome === "GOALS"
-    ? catalog.goals.map((goal) => goal.goalId).join("\n") : "";
-  useEffect(() => {
-    if (readCoverage === undefined || goalIds === "") return undefined;
-    let live = true;
-    const ids = goalIds.split("\n");
-    const tick = (): void => {
-      void Promise.all(ids.map(async (goalId) => {
-        try { return [goalId, await readCoverage(goalId)] as const; } catch { return null; }
-      })).then((rows) => {
-        if (!live) return;
-        setCoverage(new Map(rows.flatMap((row) => (row === null ? [] : [row]))));
-      });
-    };
-    tick();
-    const timer = setInterval(tick, COVERAGE_POLL_MS);
-    return (): void => { live = false; clearInterval(timer); };
-  }, [goalIds, readCoverage]);
+  const coverage = useGoalCoverage(catalog, readCoverage);
+  // The same derivation the Needs-you screen renders, so the badge and the queue agree.
+  const needsYouCount = useMemo(
+    () => deriveNeedsYou({ catalog, coverage, surface }).items.length,
+    [catalog, coverage, surface],
+  );
+  useEffect(() => { onNeedsYouCount?.(needsYouCount); }, [needsYouCount, onNeedsYouCount]);
 
   const data = setup.ok ? deriveGoalCatalog(catalog, coverage) : notAttached(setup);
 

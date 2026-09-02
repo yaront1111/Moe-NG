@@ -372,6 +372,10 @@ describe("a truth chip on a goal fact opens the proof drawer", () => {
 const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const ONOPENBOARD_CONSUMERS: readonly string[] = Object.freeze([
+  "v2/approvals/live-needs-you.test.tsx",
+  "v2/approvals/live-needs-you.tsx",
+  "v2/approvals/needs-you.test.tsx",
+  "v2/approvals/needs-you.tsx",
   "v2/cordum-app.tsx",
   "v2/goals/goal-card.test.tsx",
   "v2/goals/goal-card.tsx",
@@ -404,7 +408,7 @@ describe("the onOpenBoard consumer roster is complete and its arity is pinned", 
     // A sweep that generated nothing would satisfy every assertion below vacuously.
     expect(found.length).toBeGreaterThan(0);
     // EXACT, not `> 0`: a one-member roster satisfies a lower bound.
-    expect(ONOPENBOARD_CONSUMERS).toHaveLength(8);
+    expect(ONOPENBOARD_CONSUMERS).toHaveLength(12);
     expect(Object.isFrozen(ONOPENBOARD_CONSUMERS)).toBe(true);
     // Both directions at once: nothing missing from the roster, nothing stale in it.
     expect(found).toEqual([...ONOPENBOARD_CONSUMERS]);
@@ -426,8 +430,10 @@ describe("the onOpenBoard consumer roster is complete and its arity is pinned", 
     // GoalCard's prop is a ZERO-ARG THUNK and is deliberately NOT widened: goals-home
     // adapts it, so the arity never reaches it. taskRail 3 owns that file elsewhere.
     expect(thunks.map((entry) => entry.rel)).toEqual(["v2/goals/goal-card.tsx"]);
-    expect(widened.map((entry) => entry.rel))
-      .toEqual(["v2/goals/goals-home.tsx", "v2/goals/live-goals.tsx"]);
+    expect(widened.map((entry) => entry.rel)).toEqual([
+      "v2/approvals/live-needs-you.tsx", "v2/approvals/needs-you.tsx",
+      "v2/goals/goals-home.tsx", "v2/goals/live-goals.tsx",
+    ]);
     // THREE, asserted as a property rather than as an incident: a fourth parameter added
     // later must move this assertion instead of arriving unannounced.
     for (const entry of widened) {

@@ -30,6 +30,7 @@ import { CordumShell } from "./shell/cordum-shell.js";
 import { boardRoute } from "./shell/shell-routes.js";
 import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
+import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -94,6 +95,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // DURABLE planning run rides on it: there is no build-time run constant any more,
   // and a second goal opens its own plan.
   const [open, setOpen] = useState<BoardRoute | null>(null);
+  // Which home the operator is on when no board is open: the goals list or the Needs-you
+  // queue. Both are routes from the shell's source of truth; a board opens over either.
+  const [view, setView] = useState<"approvals" | "goals">("goals");
+  const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   // The board's own affordance frame, held here because the approval gate and the
   // board read the SAME daemon answer. A second poll for the same bytes would be a
@@ -124,9 +129,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     setConnection(null);
     setBoardFrame(null);
     setOpen(route.kind === "board" ? route : null);
+    if (route.kind !== "board") setView(route.kind);
   }, []);
 
-  const title = open === null ? "Goals" : open.title;
+  const title = open === null ? (view === "approvals" ? "Needs you" : "Goals") : open.title;
 
   // Only an attached operator session carries the authenticated header set the
   // plan-review read requires; unattached (fixtures / pending / refused) the open
@@ -264,20 +270,31 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         return descriptor.actionsEnabled ? undefined : descriptor.banner;
       })()
       : "Actions require an attached daemon session.";
-    body = (
-      <>
-        {!live.setup.ok && <LiveRefusalNotice
-          busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
-        />}
-        <LiveGoalsHome
-          createDisabledReason={createDisabledReason}
+    body = view === "approvals" && live.setup.ok
+      ? (
+        <LiveNeedsYou
           onConnection={reportConnection}
+          onCount={setNeedsYouCount}
           onOpenBoard={openBoard}
           readCoverage={readCoverage ?? undefined}
           setup={live.setup}
         />
-      </>
-    );
+      )
+      : (
+        <>
+          {!live.setup.ok && <LiveRefusalNotice
+            busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
+          />}
+          <LiveGoalsHome
+            createDisabledReason={createDisabledReason}
+            onConnection={reportConnection}
+            onNeedsYouCount={setNeedsYouCount}
+            onOpenBoard={openBoard}
+            readCoverage={readCoverage ?? undefined}
+            setup={live.setup}
+          />
+        </>
+      );
   }
 
   // Every live body names its hard project boundary. Fixtures mode is exempt:
@@ -297,12 +314,16 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
 
   return (
     <CordumShell
-      activeNav="goals"
-      backLabel="GOALS"
+      activeNav={view}
+      backLabel={view === "approvals" ? "NEEDS YOU" : "GOALS"}
       connection={shellConnection}
       eyebrow={eyebrow}
       initialConnection={fixtures ? "CONNECTED" : null}
-      navBadges={fixtures ? FIXTURE_BADGES : undefined}
+      navBadges={fixtures
+        ? FIXTURE_BADGES
+        : needsYouCount === null || needsYouCount === 0
+          ? undefined
+          : { approvals: { count: String(needsYouCount), tone: "info" } }}
       onBack={open === null ? undefined : back}
       onNavigate={navigate}
       simulatable={fixtures}
