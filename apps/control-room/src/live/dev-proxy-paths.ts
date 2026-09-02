@@ -17,8 +17,10 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/events/read",
   "/events/resume",
   "/goals/read",
+  "/health/read",
   "/graph/get",
   "/planning/run/read",
+  "/policy/read",
   "/product-contract/pending/read",
   "/runs/read",
   // The browser reads the three OPEN_SESSION operands and completes the signed open on

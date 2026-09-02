@@ -1,0 +1,57 @@
+import { describe, expect, it } from "vitest";
+
+import { mapHealthAnswer, mapPolicyAnswer, readHealth, readPolicy } from "./live-ops.js";
+
+const POLICY = Object.freeze({
+  aggregateVersion: 3,
+  evaluations: [{ decidedAt: "2026-09-02T19:00:00.000Z", decision: "ALLOW", policyRef: "f".repeat(64), principalId: "operator-local" }],
+  outcome: "POLICY",
+  slices: [
+    { autoApprovalOptIns: 0, contentDigestMatches: true, installedAt: "2026-09-02T18:00:00.000Z", kind: "EVALUATION", riskClassifications: 7, rules: 0, sliceRef: "f".repeat(64) },
+    { autoApprovalOptIns: null, contentDigestMatches: null, installedAt: null, kind: "VERIFIER_POLICY", riskClassifications: null, rules: null, sliceRef: "moe-verifier-policy/1" },
+  ],
+  verifier: { calibration: true, policy: true },
+  waivers: { reason: "No command on this daemon records a policy waiver.", supported: false },
+});
+const HEALTH = Object.freeze({
+  daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
+  ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:30:00.000Z" },
+  outcome: "HEALTH", readAt: "2026-09-02T20:00:00.000Z", verifier: { calibration: true, policy: false },
+});
+const response = (status: number, body: unknown): Response => ({ json: async () => body, status } as unknown as Response);
+
+describe("mapPolicyAnswer / mapHealthAnswer", () => {
+  it("map exact frames verbatim", () => {
+    expect(mapPolicyAnswer(200, POLICY)).toStrictEqual({
+      aggregateVersion: 3, evaluations: POLICY.evaluations, slices: POLICY.slices, status: "POLICY",
+      verifier: { calibration: true, policy: true }, waivers: { reason: POLICY.waivers.reason, supported: false },
+    });
+    expect(mapHealthAnswer(200, HEALTH)).toStrictEqual({
+      daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt, status: "HEALTH", verifier: HEALTH.verifier,
+    });
+  });
+
+  it("carry refusals at their layer and redden drifted frames", () => {
+    expect(mapPolicyAnswer(503, { code: "LISTENER_POLICY_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER" }))
+      .toStrictEqual({ code: "LISTENER_POLICY_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" });
+    expect(mapHealthAnswer(200, { code: "HEALTH_READ_PROJECT_MISMATCH", layer: "HEALTH_READ", outcome: "REFUSED" }))
+      .toStrictEqual({ code: "HEALTH_READ_PROJECT_MISMATCH", layer: "HEALTH_READ", status: "REFUSED" });
+    const invalid = { code: "OPS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_OPS", status: "ERROR" };
+    expect(mapPolicyAnswer(200, { ...POLICY, slices: [{ ...POLICY.slices[0], kind: "OTHER" }] })).toStrictEqual(invalid);
+    expect(mapPolicyAnswer(200, { ...POLICY, waivers: { reason: "r", supported: true } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, daemon: { ...HEALTH.daemon, pid: "4242" } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, extra: 1 })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(500, {})).toStrictEqual(invalid);
+  });
+});
+
+describe("readPolicy / readHealth", () => {
+  it("post exactly {} and map the reply; transport failures are ERROR", async () => {
+    const bodies: string[] = [];
+    expect((await readPolicy({}, async (body) => { bodies.push(body); return response(200, POLICY); })).status).toBe("POLICY");
+    expect((await readHealth({}, async (body) => { bodies.push(body); return response(200, HEALTH); })).status).toBe("HEALTH");
+    expect(bodies).toEqual(["{}", "{}"]);
+    expect(await readHealth({}, async () => { throw new Error("down"); }))
+      .toStrictEqual({ code: "TRANSPORT_REQUEST_FAILED", layer: "CONTROL_ROOM_LIVE_OPS", status: "ERROR" });
+  });
+});

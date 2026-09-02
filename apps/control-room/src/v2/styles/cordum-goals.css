@@ -1113,3 +1113,61 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Policy and Health: the daemon's own facts, listed. */
+.cr2-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 24px;
+  max-width: 880px;
+}
+
+.cr2-ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--cr-surface, #fffaf2);
+  border: 1px solid var(--cr-line, rgba(0, 0, 0, 0.12));
+}
+
+.cr2-ops-ref {
+  margin: 0;
+  word-break: break-all;
+}
+
+.cr2-ops-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+}
+
+.cr2-ops-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cr2-ops-fact-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-ops-fact-value {
+  margin: 0;
+  color: var(--cr-ink);
+  word-break: break-all;
+}
+
+@media (max-width: 720px) {
+  .cr2-ops-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

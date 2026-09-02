@@ -32,6 +32,7 @@ import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
+import { LiveHealth, LivePolicy } from "./ops/live-ops.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -98,7 +99,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const [open, setOpen] = useState<BoardRoute | null>(null);
   // Which home the operator is on when no board is open: the goals list or the Needs-you
   // queue. Both are routes from the shell's source of truth; a board opens over either.
-  const [view, setView] = useState<"approvals" | "goals" | "runs">("goals");
+  const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "runs">("goals");
   const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   // The board's own affordance frame, held here because the approval gate and the
@@ -134,7 +135,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
 
   const title = open !== null ? open.title
-    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs & leases" : "Goals";
+    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs & leases"
+      : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals";
 
   // Only an attached operator session carries the authenticated header set the
   // plan-review read requires; unattached (fixtures / pending / refused) the open
@@ -274,6 +276,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       : "Actions require an attached daemon session.";
     body = view === "runs" && live.setup.ok
       ? <LiveRuns headers={live.setup.headers} onOpenBoard={openBoard} />
+      : view === "policy" && live.setup.ok
+      ? <LivePolicy headers={live.setup.headers} />
+      : view === "health" && live.setup.ok
+      ? <LiveHealth headers={live.setup.headers} />
       : view === "approvals" && live.setup.ok
       ? (
         <LiveNeedsYou
@@ -319,7 +325,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   return (
     <CordumShell
       activeNav={view}
-      backLabel={view === "approvals" ? "NEEDS YOU" : view === "runs" ? "RUNS" : "GOALS"}
+      backLabel={view === "approvals" ? "NEEDS YOU" : view === "runs" ? "RUNS"
+        : view === "policy" ? "POLICY" : view === "health" ? "HEALTH" : "GOALS"}
       connection={shellConnection}
       eyebrow={eyebrow}
       initialConnection={fixtures ? "CONNECTED" : null}
