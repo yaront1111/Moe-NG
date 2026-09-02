@@ -53,7 +53,7 @@
     {
       "stepId": "step-3",
       "description": "IMPLEMENT THE HOSTILE-SAFE SIDECAR AND FEED COMPOSITION (DoD 2 + 3).\n\n(a) Create apps/control-room/src/live/live-planning-authorities.ts, **<=250 lines**, plus the exact LF one-line bridge live-planning-authorities.js containing `export * from \"./live-planning-authorities.ts\";`.\n\nPARSING IS DESCRIPTOR-ONLY AND MUST NOT EVALUATE. Read with getOwnPropertyDescriptor and inspect `value` — never plain property access, or an accessor fires during validation and DoD 2's 'refuse without evaluation' clause becomes false. Admit only plain or null-prototype maps with <=256 entries whose records carry the EXACT seven keys recorded in step 1; 512-byte id bound; canonical bounded base64; lowercase 64-hex hashes. Nested authority is recursively SNAPSHOTTED and FROZEN under the shared max JSON bytes/depth from @moe/contracts and <=4096 nodes. Refuse on accessors, symbols, cycles, sparse or extra-key arrays, nonfinite numbers, or mapKey/runId/goalRef mismatch.\n\n(b) BIND VIA A MODULE-OWNED WeakMap KEYED BY EXACT PARSED OFFERS. Do not export a new broad type and do not accept caller-supplied authority — the sidecar exists so caller-minted material is unrepresentable. SurfaceFrame and DispatchInput exported shapes stay UNCHANGED (rail 1).\n\n(c) live-board-feed.ts: a WHOLLY ABSENT map stays optional; any PRESENT malformed or hostile value maps to exactly `LIVE_SURFACE_UNREADABLE` (already defined at :87 as UNREADABLE_DETAIL — reuse it) without invoking getters.\n\n(d) live-board.tsx: require an exact offered-run goal binding PLUS sidecar material before rendering plan.propose or approval.decide.\n\n(e) live-dispatch.ts: refuse BEFORE the budget reader, builder and transport — reuse the existing `PLANNING_OFFER_BINDING_ABSENT` constant (:42) for a missing goal binding, and add `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` for absent or misaligned material, following the sibling format at :52. goal.close stays target-only.\n\nRAIL 2 IS ABSOLUTE: the browser may validate bounded transport shape and bindings and assemble bodies, but must never mint, hash, canonicalize, rotate, repair, default, or pick a first entry.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-planning-authorities.ts",
         "apps/control-room/src/live/live-planning-authorities.js",
@@ -65,18 +65,29 @@
         "apps/control-room/src/live/live-planning-authorities.ts",
         "apps/control-room/src/live/live-planning-authorities.js"
       ],
-      "startedAt": "2026-09-02T18:47:46.120Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-board.test.tsx"
+      ],
+      "note": "SIDECAR + FEED/RENDER/DISPATCH FENCES LANDED (DoD 2 + 3).\n\n(a) NEW apps/control-room/src/live/live-planning-authorities.ts — 236 lines (cap 250). Bridge live-planning-authorities.js is exactly one LF line, `export * from \"./live-planning-authorities.ts\";`, byte-format-identical to the daemon sibling's bridge (od -c confirmed: single trailing \\n, no CRLF, no BOM).\n\nPARSING IS DESCRIPTOR-ONLY. `ownValue()` is the module's ONLY read: `Object.getOwnPropertyDescriptor` + `\"value\" in descriptor` + `enumerable`, wrapped in try/catch for revoked proxies, returning a private ABSENT symbol on a miss. There is no plain property access anywhere in the validation path, so \"refuses without evaluation\" is literally true and the three-depth zero-invocation arm passes.\nAdmitted: plain or null-prototype maps, <= 256 entries (inclusive), exact seven-key records checked as a SET (`keys.length !== ENTRY_KEYS.length` plus membership, so a swap of one key for another is refused), 512-BYTE ids via TextEncoder with a character pre-bound so a hostile megastring is never encoded, lowercase /^[0-9a-f]{64}$/u hashes, and CANONICAL base64 — length % 4, alphabet, and the discarded-bit tails (`[AEIMQUYcgkosw048]=` / `[AQgw]==`), because atob/Buffer decode whitespace, url-safe and short padding best-effort and the daemon's ingress then answers PLANNING_GRAPH_CONTENT_MALFORMED.\n`snapshot()` deep-COPIES and `Object.freeze`s the authority under the SHARED bounds imported from @moe/contracts (MAX_JSON_DEPTH 64, MAX_JSON_BODY_BYTES 1_048_576) plus <= 4096 nodes, using `undefined` as the refusal sentinel (never a legitimate JSON member). Refuses: accessors, symbol keys, functions/bigint/undefined, nonfinite numbers and NaN, non-Object/Array prototypes, and arrays whose own keys are not exactly the dense indices plus `length` — which catches BOTH a sparse hole and an injected own key with one check. A cycle terminates on the depth bound.\nBINDINGS ARE CHECKED, NEVER REPAIRED: `runId !== mapKey` refuses, and `goalRef !== ownValue(goalRefs, runId)` refuses — the latter also refusing when the run is unbound, since ABSENT never equals a string. A surface stating material with NO planningGoalRefs refuses whole (there is nothing to check the binding against).\n\n(b) SIDECAR: `const MATERIAL = new WeakMap<object, PlanningMaterial>()`, module-owned. `PlanningMaterial` is NOT exported — only `bindPlanningAuthorities`, `hasPlanningMaterial` and `PLANNING_AUTHORITY_KINDS` cross the boundary, so there is no broad type fan-out and caller-minted material is unrepresentable rather than merely discouraged. SurfaceFrame and DispatchInput are BYTE-UNCHANGED; the absent-map arm additionally pins `Object.keys(frame)` to the exact seven existing members, so a later widening reddens.\nDELIBERATE NON-IMPORT: `boundGoalOf` lives in live-board-feed.ts, which now imports this module. Reusing it would close an import cycle, so the two-line descriptor read is inlined here instead.\n\n(c) live-board-feed.ts 361 -> 370: after offers are parsed, `bindPlanningAuthorities(offers, planningGoalRefs, response[\"planningAuthorityByRun\"])`; false -> the existing `unreadable()` / UNREADABLE_DETAIL (`LIVE_SURFACE_UNREADABLE`), reused not re-minted. Absent/null stays optional, matching how planningGoalRefs already treats absence.\n\n(d) live-board.tsx 239 -> 251: `boardMayDispatch(step, planningGoalRefs, offer)` gains a third parameter defaulting to null; for the two authority-bearing kinds it demands BOTH an exact offered-run goal binding AND `hasPlanningMaterial(offer)`. The render site passes `offerFor(frame, step)` — the same kind+target+version join measured in step 1(c) — so material is read off the OFFER, never off the card.\n\n(e) live-dispatch.ts 178 -> 198: `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` REUSED verbatim from the existing constant (no parallel spelling), and the goal-binding requirement widened from `plan.propose` alone to `PLANNING_AUTHORITY_KINDS` so approval.decide is fenced too; goal.close stays target-only. NEW `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`, formatted after the sibling at :52, placed BEFORE `payloadFor`, before `withBudgetCommitment` and before `dispatchPreparedPayload` — so a refused offer costs no commitment read, no build and no send.\n\nlive-board.test.tsx: three pre-existing LiveBoard approval fixtures (READY_SURFACE, the repeated-kind surface, and the new no-control arm) given VALID goal + material wire facts via `approvalRefs`/`approvalMaterial`. One arm needed a real decision rather than a fixture patch: \"refuses a READY card whose offer does not bind its exact version\" used to prove the CLICK reports \"the daemon offers no command for this move\", but a planning card with no binding offer now has no material and so renders no control at all. Rather than weaken it, the message arm was moved to `project.register` (still a version-mismatched card, same assertion verbatim) and a STRICTER new arm added: a planning card ",
+      "startedAt": "2026-09-02T18:47:46.120Z",
+      "completedAt": "2026-09-02T18:53:27.473Z"
     },
     {
       "stepId": "step-4",
       "description": "RETIRE THE STALE TUPLE AND MOVE THE ASSEMBLY (DoD 4). Edit live-dispatch-payloads.ts and finish planningPayloadFor in the new module.\n\n(a) DELETE the four module-private symbols and every producer-owned static graph/plan operand: GRAPH_CONTENT_BYTES (:51), SUBMISSION_HASH (:72), sealedAuthorityFor (:74), planningChainFor (:122), and their use sites (:106/:143/:147/:153/:228/:361). Step 1(f) confirmed all four are module-private, so no other file is reached. Do NOT touch the daemon's unrelated SUBMISSION_HASH at bootstrap-test-fixtures.ts:123.\n\n(b) **DELETION ALONE WILL NOT MEET THE BUDGET.** The file is 397 lines and DoD 4 requires <=250; removing the four symbols recovers only ~85 lines, landing near ~312. MOVE the residual planning assembly into `planningPayloadFor` in live-planning-authorities.ts, which must itself stay <=250. Every edited production file stays under 400. Do not park logic in test fixtures to shrink a production file.\n\n(c) PRESERVE: payloadFor's exact signature and type (:352, with its fallbacks at :366/:371/:396) and the DEV_PAYLOADS bidirectional roster (:204). Authority-less plan.propose and approval.decide return null.\n\n(d) ASSEMBLY, all from the SAME safely snapshotted authority: initial propose carries authority, graph bytes and submissionHash; finalize replaces graphContentHash, graphRevisionRef and planHash; approval replaces actor, graphRevisionRef, activation.graphHash, exactRevisionHash, node scope and criteria identity.\n\n(e) **RAIL 3 — DO NOT TOUCH dependencyHash, qualityHash OR policyHash.** The producer does not carry them; a measured journeyAuthority probe recorded in the description proves it. live-dispatch-payloads.ts:186 has `qualityHash: hex64(\"dd\")` as a deliberate internally-consistent placeholder. Preserve their existing behavior and claim no remediation. If something appears to require replacing them, BLOCK on a real producer rather than deriving or relabelling an unrelated digest — inventing one is fabricated authority.\n\n(f) Update live-board.a11y.test.tsx and live-effort-path.test.tsx approval surfaces with VALID goal and material wire facts, because the new render fence changes their fixtures. Never weaken their expectations to keep them green.\n\nRe-run the four focused files and require green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/live/live-dispatch-payloads.ts",
         "apps/control-room/src/live/live-planning-authorities.ts",
         "apps/control-room/src/live/live-board.a11y.test.tsx",
         "apps/control-room/src/live/live-effort-path.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-09-02T18:53:30.658Z"
     },
     {
       "stepId": "step-5",
@@ -118,7 +129,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:31:06.576Z",
-  "updatedAt": "2026-09-02T18:47:46.120Z",
+  "updatedAt": "2026-09-02T18:53:30.658Z",
   "contextFetchedBy": [
     "governor-425e4c88",
     "architect-1f97776b",
@@ -130,7 +141,7 @@
     "firstClaimAt": "2026-09-01T08:31:29.385Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "declaredFiles": [
     "apps/control-room/src/live/live-planning-authorities.ts",
@@ -149,7 +160,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-02T18:17:14.633Z",

@@ -1,13 +1,53 @@
+import { existsSync, rmSync } from "node:fs";
+
 import { EVIDENCE_RECEIPT_VERSION } from "@moe/runner";
 import type { EvidenceReceipt, VerifierCapture } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const cleanupCloseProbe = vi.hoisted(() => ({
+  beforeClose: null as (() => void) | null,
+  calls: 0,
+  failure: null as Error | null,
+}));
+const cleanupRemoveProbe = vi.hoisted(() => ({
+  failPath: null as string | null,
+  failuresRemaining: 0,
+}));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    rmSync: (...args: Parameters<typeof actual.rmSync>): void => {
+      if (String(args[0]) === cleanupRemoveProbe.failPath
+        && cleanupRemoveProbe.failuresRemaining > 0) {
+        cleanupRemoveProbe.failuresRemaining -= 1;
+        throw new Error("injected fixture root removal failure");
+      }
+      actual.rmSync(...args);
+    },
+  };
+});
+
+vi.mock("../bootstrap/bootstrap-test-fixtures.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../bootstrap/bootstrap-test-fixtures.js")>();
+  return {
+    ...actual,
+    closeStores: (): void => {
+      cleanupCloseProbe.calls += 1;
+      cleanupCloseProbe.beforeClose?.();
+      if (cleanupCloseProbe.failure !== null) throw cleanupCloseProbe.failure;
+      actual.closeStores();
+    },
+  };
+});
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { ACTIVATION_WORLD_NODE_KEY } from "../activation/activation-world-fixtures.js";
 import {
   GOAL_ID,
   PROJECT_ID,
-  closeStores,
   decisionCount,
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -22,8 +62,11 @@ import { encodeFoundationPayload } from "../work/foundation-attempt-codec.js";
 import { readFoundationAttemptRecord } from "../work/foundation-attempt-store.js";
 import {
   approveNodes,
+  cleanupGoalClosureFixtures,
   scanGlobalEvents,
+  seedProvenAttempt,
   seedReviewAcceptance,
+  seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
 
@@ -31,20 +74,14 @@ import { qualifyGoalClosure } from "./goal-qualification.js";
  * The daemon prerequisite composer for `goal.close`, read straight out of durable bytes on a
  * store PRODUCTION CAN ACTUALLY REACH.
  *
- * WHAT CHANGED AND WHY. Every arm here used to start from `seedVerifiedNode`, which drove
- * `runEffectActivateCommand`, a real launcher grant and a real verifier child process. Production
- * cannot commit an activation from a test world any more — the ingress refuses — so those arms
- * were asserting against a state nothing can build, and the whole file died in setup. Governor
- * ruling comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 is applied: the world is not rebuilt
- * below the admission path, the SUBJECT is narrowed to what this store can honestly hold. What
- * survives is the RECEIPT READER — approval and review are seeded through production, and every
- * receipt row below is a hostile or negative READER INPUT.
+ * The accepted arm composes the shipped Foundation attempt service, injects only its physical
+ * provider effect, and then runs the shipped verification service against a real Git candidate.
+ * Approval, activation, attempt settlement, verification, and receipt readback therefore share
+ * the same production authorities. The remaining planted receipt rows are deliberately hostile
+ * READER INPUTS; none of them is writer-success evidence.
  *
- * A PLANTED ROW IS NEVER EVIDENCE THAT A WRITER SUCCEEDED. Nothing below claims a Foundation
- * attempt was proven, a verification ran, or an activation was committed; the arms assert what
- * `qualifyGoalClosure` returns when it is handed those bytes. The retired positive arms
- * (successful witness derivation, the review-package and zero-authority halves) needed a real
- * PASSED receipt over a real proven attempt and have no owner until production can mint one.
+ * A PLANTED ROW IS NEVER EVIDENCE THAT A WRITER SUCCEEDED. Those arms assert only what
+ * `qualifyGoalClosure` returns when it reads hostile or negative bytes.
  *
  * `qualifyGoalClosure` is a pure read: it commits nothing, ever. Each arm therefore snapshots the
  * store after seeding and re-reads it afterwards, because a composer that mutated and then
@@ -56,6 +93,7 @@ const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const DIGEST_A = "1".repeat(64);
 const DIGEST_B = "2".repeat(64);
 const DIGEST_C = "3".repeat(64);
+const GOAL_WORLD_BOUND_MS = 120_000;
 const encoder = new TextEncoder();
 
 interface StoreSnapshot {
@@ -91,8 +129,8 @@ const CAPTURE: VerifierCapture = Object.freeze({
 
 /**
  * The runner's receipt, restated as a literal. Built by hand rather than by `buildEvidenceReceipt`
- * because that builder demands the manifests and execution of a real run — the very thing this
- * store cannot hold. Typing it as `EvidenceReceipt` is what keeps it honest: a bound field added
+ * because these are hostile reader inputs rather than writer-success worlds. Typing it as
+ * `EvidenceReceipt` keeps it honest: a bound field added
  * to the production receipt reddens this literal at typecheck instead of drifting silently.
  */
 function evidenceReceipt(graphIdentity: string): EvidenceReceipt {
@@ -192,9 +230,127 @@ function approvedWorld(store: SqliteEventStore, nodeRefs: readonly string[]): vo
   for (const nodeRef of nodeRefs) seedReviewAcceptance(store, nodeRef);
 }
 
-afterEach(closeStores);
+afterEach(() => {
+  cleanupRemoveProbe.failPath = null;
+  cleanupRemoveProbe.failuresRemaining = 0;
+  cleanupCloseProbe.failure = null;
+  cleanupCloseProbe.beforeClose = null;
+  try {
+    cleanupGoalClosureFixtures();
+  } finally {
+    cleanupCloseProbe.calls = 0;
+  }
+});
 
 describe("goal closure qualification — the reachable receipt reader", () => {
+  it("closes real fixture stores before removing their candidate roots", async () => {
+    const store = openStore();
+    const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
+    let candidateRootExistedAtClose: boolean | undefined;
+    cleanupCloseProbe.calls = 0;
+    cleanupCloseProbe.beforeClose = () => {
+      candidateRootExistedAtClose = existsSync(seeded.candidateRoot);
+    };
+
+    cleanupGoalClosureFixtures();
+
+    expect(cleanupCloseProbe.calls).toBe(1);
+    expect(candidateRootExistedAtClose).toBe(true);
+    expect(() => store.readEventHorizon()).toThrow();
+    expect(existsSync(seeded.candidateRoot)).toBe(false);
+  }, GOAL_WORLD_BOUND_MS);
+
+  it("retains a root for a later cleanup attempt when bounded removal throws", async () => {
+    const store = openStore();
+    const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
+    cleanupRemoveProbe.failPath = seeded.candidateRoot;
+    cleanupRemoveProbe.failuresRemaining = 1;
+
+    try {
+      expect(() => cleanupGoalClosureFixtures())
+        .toThrowError("injected fixture root removal failure");
+      expect(existsSync(seeded.candidateRoot)).toBe(true);
+
+      cleanupGoalClosureFixtures();
+
+      expect(existsSync(seeded.candidateRoot)).toBe(false);
+      expect(cleanupRemoveProbe.failuresRemaining).toBe(0);
+    } finally {
+      rmSync(seeded.candidateRoot, { force: true, recursive: true });
+    }
+  }, GOAL_WORLD_BOUND_MS);
+
+  it("preserves both close and removal failures while retaining the root", async () => {
+    const store = openStore();
+    const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
+    const closeFailure = new Error("injected fixture store close failure");
+    cleanupCloseProbe.failure = closeFailure;
+    cleanupRemoveProbe.failPath = seeded.candidateRoot;
+    cleanupRemoveProbe.failuresRemaining = 1;
+
+    try {
+      let cleanupFailure: unknown;
+      try {
+        cleanupGoalClosureFixtures();
+      } catch (error) {
+        cleanupFailure = error;
+      }
+      expect(cleanupFailure).toBeInstanceOf(AggregateError);
+      expect(cleanupFailure).toMatchObject({
+        errors: [closeFailure, new Error("injected fixture root removal failure")],
+      });
+      expect(existsSync(seeded.candidateRoot)).toBe(true);
+
+      cleanupCloseProbe.failure = null;
+      cleanupGoalClosureFixtures();
+      expect(existsSync(seeded.candidateRoot)).toBe(false);
+    } finally {
+      cleanupCloseProbe.failure = null;
+      rmSync(seeded.candidateRoot, { force: true, recursive: true });
+    }
+  }, GOAL_WORLD_BOUND_MS);
+
+  it("derives both closure witnesses from one production-backed verified attempt", async () => {
+    const store = openStore();
+    expect(seedProvenAttempt).toBeTypeOf("function");
+
+    const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
+    seedReviewAcceptance(store, ACTIVATION_WORLD_NODE_KEY);
+
+    expect(seeded.providerRunCalls).toBe(1);
+    const attempt = readFoundationAttemptRecord(store, seeded.attemptAggregateId);
+    expect(attempt.ok).toBe(true);
+    if (!attempt.ok) return;
+    expect(attempt.record["truthClass"]).toBe("PROVEN");
+    expect(attempt.record["resultManifest"]).not.toBeNull();
+    const activationScan = scanGlobalEvents(store);
+    expect(activationScan.total).toBeGreaterThan(0);
+    expect(activationScan.activationRows).toBe(1);
+
+    const receipt = readStoredReceipt(store, seeded.verificationId);
+    expect(receipt.ok).toBe(true);
+    if (!receipt.ok) return;
+    expect(receipt.row["verdict"]).toBe("PASSED");
+    expect((receipt.row["receipt"] as Record<string, unknown>)["graphIdentity"])
+      .toBe(ACTIVATION_WORLD_NODE_KEY);
+    const receiptEvents = store.readEvents(deriveVerificationAggregateId(seeded.verificationId))
+      .filter((event) => event.eventType === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+    expect(receiptEvents.length).toBeGreaterThan(0);
+    expect(receiptEvents).toHaveLength(1);
+    const before = snapshot(store);
+
+    const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    expect(qualified.ok).toBe(true);
+    if (!qualified.ok) return;
+    expect(Object.keys(qualified).sort()).toStrictEqual([
+      "closureWitness", "ok", "zeroAuthorityWitness",
+    ]);
+    expect(qualified.closureWitness["truthClass"]).toBe("DAEMON_VERIFIED");
+    expect(qualified.zeroAuthorityWitness["truthClass"]).toBe("DAEMON_VERIFIED");
+    expectUnmoved(store, before);
+  }, GOAL_WORLD_BOUND_MS);
+
   it("holds no committed activation anywhere in the store, measured store-wide", () => {
     const store = openStore();
     approvedWorld(store, ["node-1"]);
