@@ -24,12 +24,21 @@ import {
   IDE_ADAPTER_LAYER, IDE_ADAPTER_LAYERS,
 } from "../../adapters/ide-contract/src/index.js";
 import {
+  BUDGET_COMMITMENT_INVALID_RESPONSE_CODE, BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE,
+  LIVE_BUDGET_COMMITMENT_LAYER, readBudgetCommitment,
+} from "../../apps/control-room/src/live/live-budget-commitment.js";
+import {
   EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER, EFFORT_LAYERS,
 } from "../../apps/control-room/src/performance/effort-records.js";
 import {
   TIMELINE_REFUSAL_LAYERS,
 } from "../../apps/control-room/src/timeline/timeline-contract.js";
 import type { TimelineSourcePage } from "../../apps/control-room/src/timeline/timeline-contract.js";
+import {
+  APPROVAL_COMMAND_KIND, PLAN_APPROVAL_BUILD_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER,
+  createPlanApprovalPort,
+} from "../../apps/control-room/src/v2/goals/plan-approval.js";
+import type { PlanApprovalWire } from "../../apps/control-room/src/v2/goals/plan-approval.js";
 import { CAPABILITIES } from "../../apps/daemon/src/daemon-command-vocabulary.js";
 import { DAEMON_ENTRY_LAYER } from "../../apps/daemon/src/daemon-entry.js";
 import { AFFORDANCE_SURFACE_LAYER } from "../../apps/daemon/src/http/affordance-contract.js";
@@ -49,12 +58,19 @@ import type { ListenerRefusalCode } from "../../apps/daemon/src/http/http-listen
 import { WIRE_PROTOCOL_VERSION } from "../../apps/daemon/src/http/http-contract.js";
 import type { AuthenticatedPrincipal } from "../../apps/daemon/src/http/http-contract.js";
 import {
+  PAIRING_OPEN_KEYS, PAIRING_OPEN_LAYER, PAIRING_OPEN_MAX_BODY_BYTES,
+  createPairingOpenCompletion,
+} from "../../apps/daemon/src/http/pairing-open-completion.js";
+import {
   DAEMON_INGRESS_LAYER, decodeRecoveryCompleteRequest,
 } from "../../apps/daemon/src/recovery/recovery-completion-evidence.js";
 import {
   CONTROL_ROOM_TRANSPORT_LAYER, createControlRoomTransport,
 } from "../../packages/control-room-client/src/client-transport.js";
 import type { FetchLike } from "../../packages/control-room-client/src/client-transport.js";
+import {
+  GENERATED_COMMAND_BUILDERS,
+} from "../../packages/control-room-client/src/generated/generated-client.js";
 import {
   COORDINATION_LAYERS, coordinationCapability,
 } from "../../packages/coordination/src/coordination-contracts.js";
@@ -443,3 +459,240 @@ export const sendVia = (
   presentation: { proofMaterial: "never-stored" },
   transportId: "transport-hostile",
 });
+
+// ── DIVERGENCE FIXTURES for four ROSTERED transport boundaries ─────────────────────────────
+//
+// WHY THESE EXIST BESIDE ARMS THAT ALREADY PASS. `LIVE_BUDGET_COMMITMENT_LAYER`,
+// `PLAN_APPROVAL_BUILD_LAYER`, `PLAN_APPROVAL_TRANSPORT_LAYER` and `PAIRING_OPEN_LAYER` are
+// rostered (`boundary-roster.security.ts:146,156,157,204`) and each already carries three arms
+// in `recent-transport-hostile-cases.ts`. Those arms are REACHING, not divergent, and measuring
+// them is what motivated this set:
+//   * `casesFor` (:51-75) builds BEFORE, AFTER and RACE from ONE thunk, so all three run the
+//     identical input and the arm name is a label rather than a schedule;
+//   * the build and transport arms inject a FAKE builder/transport that hands back
+//     `APPROVAL_COMMAND_BUILD_REFUSED` / `APPROVAL_TRANSPORT_REFUSED` — neither string occurs
+//     anywhere in `apps/`, `packages/` or `adapters/`, so those arms assert only that
+//     plan-approval echoes a code a fixture authored;
+//   * the pairing arm passes an EMPTY body, so `JSON.parse` throws and the PARSE fence answers:
+//     the byte cap and the exact roster are never reached;
+//   * the budget arm calls `mapBudgetCommitmentAnswer(200, null)`, so `readBudgetCommitment`
+//     and its transport catch are never entered.
+// Every fixture below therefore drives the REAL seam and is built so that exactly ONE named
+// guard can answer. Each expected code and layer was measured off production before it was
+// written down, never copied from a plan.
+//
+// THEY ARE DELIBERATELY NOT ADDED TO `TRANSPORT_HOSTILE_CASES`.
+// `transport-boundaries.security.ts:158` is `expect(races).toBe(ROSTER_TRANSPORT.length)` —
+// EXACT equality, so a second RACE arm for an already-covered boundary reddens it. The
+// separate export carries its own runner, its own recorded array and its own denominator.
+
+// ── live budget commitment ────────────────────────────────────────────────────────────────
+export const BUDGET_TRANSPORT_FAILED =
+  at(BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE, LIVE_BUDGET_COMMITMENT_LAYER);
+export const BUDGET_RESPONSE_INVALID =
+  at(BUDGET_COMMITMENT_INVALID_RESPONSE_CODE, LIVE_BUDGET_COMMITMENT_LAYER);
+
+const BUDGET_HEADERS: Readonly<Record<string, string>> =
+  Object.freeze({ "content-type": "application/json" });
+
+/** The POST never returns, so the client's OWN catch is the only mechanism that can answer:
+ *  no response exists for the status gate or the shape gate to read. */
+export const budgetTransportThrows = async (): Promise<unknown> =>
+  await readBudgetCommitment(BUDGET_HEADERS, "run-budget-1", () => {
+    throw new TypeError("fetch failed");
+  });
+
+/**
+ * EXACT-SHAPE-INVALID BY ONE SURPLUS KEY, and that is the whole divergence.
+ *
+ * The frame is HTTP 200 so the status gate cannot answer; its three keys are neither
+ * `{code, layer}` nor `{code, layer, outcome}` so `refusalFrom` cannot answer; and
+ * `outcome`/`ref` are both exactly what a COMMITMENT carries, so nothing downstream of the
+ * exact-key check has anything to object to. Loosening that one check admits the frame as a
+ * COMMITMENT rather than moving the refusal to a neighbouring fence.
+ */
+export const budgetShapeInvalid = async (): Promise<unknown> =>
+  await readBudgetCommitment(BUDGET_HEADERS, "run-budget-1", async () => new Response(
+    JSON.stringify({ extra: "surplus", outcome: "COMMITMENT", ref: "commitment-ref-1" }),
+    { status: 200 },
+  ));
+
+// ── plan approval: the BUILD layer ────────────────────────────────────────────────────────
+/** Measured, not assumed: the GENERATED builder refuses an affordance whose `commandKind` is
+ *  not the kind being built, and `createRuntimeError` resolves that to `INPUT_INVALID`. */
+export const APPROVAL_BUILD_REFUSED = at("INPUT_INVALID", PLAN_APPROVAL_BUILD_LAYER);
+export const APPROVAL_TRANSPORT_FAILED =
+  at("TRANSPORT_REQUEST_FAILED", PLAN_APPROVAL_TRANSPORT_LAYER);
+export const APPROVAL_TRANSPORT_UNREADABLE =
+  at("TRANSPORT_RESPONSE_UNREADABLE", PLAN_APPROVAL_TRANSPORT_LAYER);
+
+const APPROVAL_RUN_ID = "run-approval-1";
+
+/** A daemon-shaped `NextAllowedCommand`. Only `commandKind` and `targetAggregateId` vary, so a
+ *  case differs from a valid offer by exactly the fact it is testing. */
+const approvalOffer = (
+  commandKind: string, targetAggregateId: string,
+): Readonly<Record<string, unknown>> => Object.freeze({
+  commandId: "cmd-approval-1", commandKind, expectedVersion: 7, targetAggregateId,
+});
+
+/** A GENUINE affordance for the caller-authored `approval.decide`, bound to a FOREIGN run.
+ *  Well-formed in every respect the daemon mints; wrong on the fact the builder checks. */
+export const foreignRunOffer = (): Readonly<Record<string, unknown>> =>
+  approvalOffer("approval.decide", "run-someone-else");
+
+/** The same offer replayed with its kind dropped, so the builder cannot recognise a subject. */
+export const kindlessOffer = (): Readonly<Record<string, unknown>> => Object.freeze({
+  commandId: "cmd-approval-1", expectedVersion: 7, targetAggregateId: "run-someone-else",
+});
+
+/** A valid offer for the DAEMON-OWNED wire, bound to the run being approved: it passes the
+ *  build layer, so a refusal downstream of it can only be the transport's. */
+const boundApprovalOffer = (): Readonly<Record<string, unknown>> =>
+  approvalOffer(APPROVAL_COMMAND_KIND, APPROVAL_RUN_ID);
+
+/** UNREACHABLE ON PURPOSE. The build arms leave no second mechanism that could refuse: if the
+ *  build guard stops answering, this throws instead of producing a tidier refusal. */
+const unreachableTransport = Object.freeze({
+  sendCommand: async (): Promise<never> => {
+    throw new Error("transport contacted: the build layer did not refuse first");
+  },
+});
+
+const approvalWire = (
+  transport: PlanApprovalWire["transport"],
+): PlanApprovalWire => Object.freeze({
+  client: { commands: GENERATED_COMMAND_BUILDERS },
+  sessionCredential: "session-credential-1",
+  transport,
+});
+
+/** The REAL generated builder and the REAL port; only the offer is hostile. */
+export const approvalBuild = async (
+  offer: () => Readonly<Record<string, unknown>>,
+): Promise<unknown> => await createPlanApprovalPort(approvalWire(unreachableTransport))
+  .submit(Object.freeze({ affordance: offer(), runId: APPROVAL_RUN_ID }));
+
+// ── plan approval: the TRANSPORT layer ────────────────────────────────────────────────────
+/** The REAL `createControlRoomTransport`, so `delivered:false` is produced by the transport
+ *  rather than declared by a stub. `fetch` is the only injected seam. */
+const approvalTransport = (fetchLike: FetchLike): PlanApprovalWire["transport"] =>
+  createControlRoomTransport({
+    csrfToken: "csrf-1", fetch: fetchLike, origin: "http://127.0.0.1:0",
+    sessionCredential: "session-credential-1", wireProtocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+
+/**
+ * The request is BUILT VALIDLY FIRST — a bound offer through the genuine builder — so the build
+ * layer has already said yes and the undelivered round trip is the only refusal in play.
+ */
+export const approvalSend = async (fetchLike: FetchLike): Promise<unknown> =>
+  await createPlanApprovalPort(approvalWire(approvalTransport(fetchLike)))
+    .submit(Object.freeze({ affordance: boundApprovalOffer(), runId: APPROVAL_RUN_ID }));
+
+/** Nothing is delivered: the round trip never completes. */
+export const sendUnreachable: FetchLike = () => { throw new TypeError("fetch failed"); };
+/** Delivered bytes that are not JSON, so the round trip completes and the BODY is unreadable —
+ *  a different transport-owned code, which keeps the two transport arms distinguishable. */
+export const sendUnreadable: FetchLike = async () =>
+  new Response("<html>not json</html>", { status: 200 });
+
+// ── pairing open completion ───────────────────────────────────────────────────────────────
+export const PAIRING_BODY_TOO_LARGE = at("PAIRING_OPEN_BODY_TOO_LARGE", PAIRING_OPEN_LAYER);
+export const PAIRING_REQUEST_INVALID = at("PAIRING_OPEN_REQUEST_INVALID", PAIRING_OPEN_LAYER);
+
+/**
+ * A body that satisfies the exact roster AND every shape rule, so the route's own two remaining
+ * guards are the only things that can object to a variation of it. Checked AGAINST
+ * `PAIRING_OPEN_KEYS` rather than trusted, so a roster change reddens the fixture instead of
+ * silently leaving it testing a stale shape.
+ */
+const validPairingBody = (): Record<string, unknown> => {
+  const body: Record<string, unknown> = {
+    clientKeyId: "client-key-1", commandId: "cmd-pair-1", correlationId: "corr-pair-1",
+    credentialId: "cred-1", principalId: "principal-1", proof: { signatureHex: "ab" },
+    publicKeySpkiHex: "cd", requestDigest: "ef", sessionId: "session-1",
+    transportId: "transport-1", transportIds: ["transport-1"],
+  };
+  const declared = [...PAIRING_OPEN_KEYS].sort().join(",");
+  if (Object.keys(body).sort().join(",") !== declared) {
+    throw new Error(`pairing fixture no longer matches PAIRING_OPEN_KEYS: ${declared}`);
+  }
+  return body;
+};
+
+/** UNREACHABLE ON PURPOSE, exactly as `unreachableTransport` is: the authority is the only
+ *  thing downstream of these guards, so a guard that stops answering throws here. */
+const untouchableSessions = Object.freeze({
+  openSession: (): never => {
+    throw new Error("pairing authority contacted: the route guard did not refuse first");
+  },
+});
+
+export const pairingComplete = (body: Uint8Array): unknown =>
+  createPairingOpenCompletion(untouchableSessions).complete(body);
+
+/**
+ * OTHERWISE-VALID AND OVER-BOUND BY WHITESPACE ALONE. The padding is JSON-insignificant, so if
+ * the byte cap stops answering the body parses, passes the exact roster and passes every shape
+ * rule — the cap is the single mechanism separating this input from an accepted one.
+ */
+export const pairingOverBound = (): Uint8Array => {
+  const padded = encode(
+    `${JSON.stringify(validPairingBody())}${" ".repeat(PAIRING_OPEN_MAX_BODY_BYTES)}`,
+  );
+  if (padded.byteLength <= PAIRING_OPEN_MAX_BODY_BYTES) {
+    throw new Error(`pairing over-bound fixture is not over the bound: ${padded.byteLength}`);
+  }
+  return padded;
+};
+
+/**
+ * EXACT ROSTER DRIFT, UNDER THE BOUND, BY ONE SURPLUS KEY THAT SORTS LAST.
+ *
+ * `exactRoster` compares a sorted key list positionally after comparing its length. A key
+ * sorting AFTER every rostered key leaves the positional comparison true for all eleven, so the
+ * LENGTH clause alone refuses — and `shapeOk` has nothing to object to either. This is the
+ * narrowest input that isolates the exact-arity guard from its own neighbouring clause.
+ */
+export const pairingRosterDrift = (): Uint8Array => {
+  const drifted = encode(JSON.stringify({ ...validPairingBody(), zzSurplus: "unrostered" }));
+  if (drifted.byteLength > PAIRING_OPEN_MAX_BODY_BYTES) {
+    throw new Error(`pairing drift fixture must stay under the bound: ${drifted.byteLength}`);
+  }
+  return drifted;
+};
+
+// ── DIVERGENCE POSITIVE CONTROLS ──────────────────────────────────────────────────────────
+//
+// Each hostile fixture above claims to be "otherwise valid" — identical to an ACCEPTED input
+// except for the one fact its named guard judges. That claim is what makes the arm a test of
+// THAT guard rather than of the system's general willingness to refuse, and a claim only
+// asserted in a comment is not asserted at all. These controls are the same inputs with the
+// hostile fact REMOVED, so the runner can prove admission is otherwise reachable. If a control
+// stops being admitted, the matching hostile arm has silently become a reaching fixture and the
+// suite reddens here rather than passing on a refusal some neighbouring fence produced.
+//
+// They are deliberately NOT hostile cases: they are expected to SUCCEED, so they never enter
+// the recorded outcomes or the no-admission invariant.
+
+/** The surplus-key frame with the surplus key removed: an accepted COMMITMENT. */
+export const budgetShapeValid = async (): Promise<unknown> =>
+  await readBudgetCommitment(BUDGET_HEADERS, "run-budget-1", async () => new Response(
+    JSON.stringify({ outcome: "COMMITMENT", ref: "commitment-ref-1" }), { status: 200 },
+  ));
+
+/** The same validly built approval, answered by a daemon that actually replies `ok`. Proves the
+ *  build layer genuinely passes for `boundApprovalOffer`, so the transport arms are not
+ *  silently grading the builder. */
+export const approvalDelivered = async (): Promise<unknown> =>
+  await approvalSend(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+/** The pairing body with neither the padding nor the surplus key: the authority is REACHED.
+ *  A separate port is used because `untouchableSessions` throws by design. */
+export const pairingAccepted = (): unknown => createPairingOpenCompletion({
+  openSession: () => hostile({
+    authority: { session: { sessionId: "session-1" } }, disposition: "DECIDED",
+    ok: true, receipt: {},
+  }),
+}).complete(encode(JSON.stringify(validPairingBody())));

@@ -35,17 +35,25 @@
     {
       "stepId": "step-2",
       "description": "RED-FIRST PRODUCTION-SURFACE TESTS (DoD 5). Edit the four test files only; no production code yet.\n\nIn live-board.test.tsx extend the adopted two-sibling wire fixture:\n1. NONZERO TWO-SIBLING SELECTION: sibling A first in the map, sibling B the one dispatched. Assert the dispatched operands are B's EXACTLY — this is the arm that catches a first-entry pick. The two siblings must differ in every bound field, or the assertion cannot detect a swap.\n2. EXACT B-ONLY graph/plan operands: assert the specific graph bytes, graphContentHash, graphRevisionRef and submissionHash come from B's material, not from any static constant.\n3. HOSTILE/ACCESSOR UNREADABILITY: a map value carrying an accessor, a symbol key, a cycle, a sparse or extra-key array, a nonfinite number, or a mapKey/runId/goalRef mismatch maps to exactly `LIVE_SURFACE_UNREADABLE` — and the accessor MUST NOT FIRE. Install a getter that records invocation and assert the recorded count is ZERO.\n4. WHOLLY-ABSENT map stays optional (no refusal) — distinct from a present-but-malformed map, which refuses.\n\nIn live-board-dispatch.test.tsx add the two DISTINCT dispatch fixtures, each with every OTHER seam accepting so only the named guard can answer, and each asserting ZERO calls to the budget reader, builder and transport:\n  - missing goal binding -> `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`. **This code ALREADY EXISTS** (live-dispatch.ts:42) and is already asserted at :672/:695/:718 — reuse it, do not re-mint a parallel spelling.\n  - absent or misaligned material -> `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`, the one genuinely new code (zero hits repo-wide today).\n  - goal.close remains target-only.\n5. BIDIRECTIONAL planning-kind roster equality for DEV_PAYLOADS: assert every advertised kind is served AND every served kind is advertised. A test iterating the roster alone sees one direction and stays green when an entry vanishes.\n\nRun the four focused files and capture the named production-surface red.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-board.test.tsx",
         "apps/control-room/src/live/live-board-dispatch.test.tsx"
       ],
-      "startedAt": "2026-09-02T18:40:08.260Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "note": "RED-FIRST TESTS LANDED (DoD 5). Four test files only; zero production edits.\n\nlive-board.test.tsx 1024 -> 1367. Adopted parent-016 WIP extended, never reverted or normalized.\n - Seven-key `materialOf()` fixture builder + MATERIAL_A / MATERIAL_B / BOTH_MATERIAL (A FIRST in the map). A and B differ in EVERY bound member: goalRef, runId, graphRevisionRef, graphContentHash (a1.. vs b2..), submissionHash (a3.. vs b4..), criteriaDigest (a5.. vs b6..), graphContentBytesBase64 (c2libGluZy1hLWdyYXBo vs …iLWdyYXBo) and the whole authority body — so a first-entry pick is DETECTABLE rather than invisible.\n - `siblingPlanningFrame(refs, authorities = BOTH_MATERIAL, authoritiesPresent = true)`.\n - Two-sibling arm extended with EXACT B-ONLY operands: propose.graphContentBytesBase64/submissionHash, authority.planRevision.graphBinding (toEqual, both members), planHash, acceptanceContract.criteriaDigest and contractId; plus four `not.toContain` on A's distinct literals.\n - New describe \"the per-run planning authority material\": absent-map-stays-optional (also pins Object.keys(frame) exactly, so SurfaceFrame cannot silently widen); well-formed map carried without widening the frame; a 25-case malformed sweep with a `length > 20` cardinality pin (non-record, number, array, entry pairs, empty run key, non-record entry, six-key, eight-key, mapKey/runId mismatch, unbound goalRef, uppercase hash, short hash, non-canonical base64, out-of-alphabet base64, empty body, 513-byte id, non-string goalRef, non-record authority, Infinity, NaN, cycle, sparse array, extra-keyed array, function, 257 entries); null-prototype + EXACTLY-256 inclusive bound; a three-depth accessor sweep (map value / entry member / authority member) asserting `{authority:0, entry:0, map:0}` invocation counts; symbol keys at map and authority depth; a present map with NO planningGoalRefs to check goalRef against; and a render arm proving a goal-bound offered run with NO material renders NO control.\n\nlive-board-dispatch.test.tsx 750 -> 1085.\n - `materialFor` / `authoritiesFor`, and the two seam helpers that make the sidecar's key identity testable: `boundOffer()` returns the EXACT record `frameOfSurface` minted (throws if the fixture was refused, so a bad fixture is loud), `unboundOffer()` the same wire shape parsed against an EMPTY authority map.\n - everyKindReady / CLAIMED_SURFACE / APPROVAL_SURFACE given valid goal+material wire facts; the PAYLOAD_KINDS predicate sweep and the two-version plan.propose predicate arm now pass the parsed offer.\n - plan.propose describe rebuilt against `planningPayloadFor`: authority toEqual the material's, submissionHash, graph bytes, finalize graphContentHash/graphRevisionRef/planHash, `not.toHaveProperty(\"graphContentBytesBase64\")` on finalize, and the approval's actor / approvedNodeScope / criteriaRef / exactRevisionHash / activation.graphHash all traced to the SAME material. Also pins the authority-less half: `payloadFor(\"plan.propose\"…)` and `payloadFor(\"approval.decide\"…)` both null.\n - RAIL 3 ARM: dependencyHash `d1`+62 zeros, qualityHash `dd`+62 zeros, activation.policyHash `b1`+62 zeros preserved verbatim, and the producer material asserted NOT to carry dependencyHash/qualityHash/policyHash. No remediation is claimed or attempted.\n - BIDIRECTIONAL ROSTER describe, enumerated from the IMPLEMENTATION SEAMS not the constant: direction 1 every advertised PLANNING_AUTHORITY_KINDS entry is served; direction 2 set-EQUALITY of the served set against the roster; plus a disjointness arm (no kind served by both payloadFor and planningPayloadFor) and a union arm (the two seams cover the whole vocabulary minus node.deliver).\n - DIVERGENCE describe \"the two planning bindings refuse under their own names\", 5 arms. Missing-GOAL fixture keeps material BOUND so the authority guard would accept; missing-AUTHORITY fixture keeps the goal binding PRESENT so the goal guard accepts. Each pins detail exactly and ZERO budget reads, ZERO builder calls, ZERO transport sends. A caller-minted twin (`{...genuine}`, toEqual-identical, different object) refuses with the authority code while the genuine record ANSWERS in the same arm — so that arm is about the binding, not a shape refusal both would trip. goal.close stays target-only and dispatches with neither a goal binding nor material.\n\nlive-board.a11y.test.tsx 133 -> 190 and live-effort-path.test.tsx 308 -> 371: approval surfaces given VALID goal + material wire facts (a11y: approval-a/approval-b; effort-path: `planningFactsFor` derives them for every approval.decide/plan.propose card in surfaceBody). No expectation weakened in either file — arms, names and counts are byte-identical.\n\nRED CAPTURED, standalone and unpiped, naming the intended production surfaces:\n  Test Files  2 failed | 2 passed (4)\n       Tests  6 failed | 43 passed (49)\n  FAIL src/live/live-board-dispatch.test.tsx [ … ]\n    Error: Failed to resolve import \"./live-planning-authorities.js\" from \"src/live/live-board-dispatch.test.tsx\". D",
+      "startedAt": "2026-09-02T18:40:08.260Z",
+      "completedAt": "2026-09-02T18:47:42.998Z"
     },
     {
       "stepId": "step-3",
       "description": "IMPLEMENT THE HOSTILE-SAFE SIDECAR AND FEED COMPOSITION (DoD 2 + 3).\n\n(a) Create apps/control-room/src/live/live-planning-authorities.ts, **<=250 lines**, plus the exact LF one-line bridge live-planning-authorities.js containing `export * from \"./live-planning-authorities.ts\";`.\n\nPARSING IS DESCRIPTOR-ONLY AND MUST NOT EVALUATE. Read with getOwnPropertyDescriptor and inspect `value` — never plain property access, or an accessor fires during validation and DoD 2's 'refuse without evaluation' clause becomes false. Admit only plain or null-prototype maps with <=256 entries whose records carry the EXACT seven keys recorded in step 1; 512-byte id bound; canonical bounded base64; lowercase 64-hex hashes. Nested authority is recursively SNAPSHOTTED and FROZEN under the shared max JSON bytes/depth from @moe/contracts and <=4096 nodes. Refuse on accessors, symbols, cycles, sparse or extra-key arrays, nonfinite numbers, or mapKey/runId/goalRef mismatch.\n\n(b) BIND VIA A MODULE-OWNED WeakMap KEYED BY EXACT PARSED OFFERS. Do not export a new broad type and do not accept caller-supplied authority — the sidecar exists so caller-minted material is unrepresentable. SurfaceFrame and DispatchInput exported shapes stay UNCHANGED (rail 1).\n\n(c) live-board-feed.ts: a WHOLLY ABSENT map stays optional; any PRESENT malformed or hostile value maps to exactly `LIVE_SURFACE_UNREADABLE` (already defined at :87 as UNREADABLE_DETAIL — reuse it) without invoking getters.\n\n(d) live-board.tsx: require an exact offered-run goal binding PLUS sidecar material before rendering plan.propose or approval.decide.\n\n(e) live-dispatch.ts: refuse BEFORE the budget reader, builder and transport — reuse the existing `PLANNING_OFFER_BINDING_ABSENT` constant (:42) for a missing goal binding, and add `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` for absent or misaligned material, following the sibling format at :52. goal.close stays target-only.\n\nRAIL 2 IS ABSOLUTE: the browser may validate bounded transport shape and bindings and assemble bodies, but must never mint, hash, canonicalize, rotate, repair, default, or pick a first entry.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/live/live-planning-authorities.ts",
         "apps/control-room/src/live/live-planning-authorities.js",
@@ -56,7 +64,8 @@
       "newFiles": [
         "apps/control-room/src/live/live-planning-authorities.ts",
         "apps/control-room/src/live/live-planning-authorities.js"
-      ]
+      ],
+      "startedAt": "2026-09-02T18:47:46.120Z"
     },
     {
       "stepId": "step-4",
@@ -109,7 +118,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:31:06.576Z",
-  "updatedAt": "2026-09-02T18:40:08.260Z",
+  "updatedAt": "2026-09-02T18:47:46.120Z",
   "contextFetchedBy": [
     "governor-425e4c88",
     "architect-1f97776b",
@@ -121,7 +130,7 @@
     "firstClaimAt": "2026-09-01T08:31:29.385Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "declaredFiles": [
     "apps/control-room/src/live/live-planning-authorities.ts",
@@ -139,7 +148,8 @@
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-02T18:17:14.633Z",

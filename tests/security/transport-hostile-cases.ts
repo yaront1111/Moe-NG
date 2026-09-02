@@ -47,6 +47,12 @@ import {
   resumePayload,
   revokedProvider, sendVia, severed, stalling, sweepHeldSessions, verdictFor,
   withHostileDocumentIngest, withPoisonedSurface,
+  APPROVAL_BUILD_REFUSED, APPROVAL_TRANSPORT_FAILED, APPROVAL_TRANSPORT_UNREADABLE,
+  BUDGET_RESPONSE_INVALID, BUDGET_TRANSPORT_FAILED, PAIRING_BODY_TOO_LARGE,
+  PAIRING_REQUEST_INVALID, approvalBuild, approvalSend, budgetShapeInvalid,
+  budgetTransportThrows, foreignRunOffer, kindlessOffer, pairingComplete,
+  pairingOverBound, pairingRosterDrift, sendUnreachable, sendUnreadable,
+  approvalDelivered, budgetShapeValid, pairingAccepted,
 } from "./transport-hostile-fixtures.js";
 
 export type HostileArm = "AFTER" | "BEFORE" | "RACE";
@@ -441,4 +447,117 @@ export const TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
     run: async () => await probeRacing(BOUND,
       async () => sendVia(forgedBinding, true, { note: "left" }),
       async () => sendVia(grantedBinding, false, { note: "right" })) },
+]);
+
+/**
+ * DIVERGENCE ARMS for four ROSTERED transport boundaries, kept OUT of the table above.
+ *
+ * WHY A SECOND EXPORT RATHER THAN TWELVE MORE ENTRIES IN `TRANSPORT_HOSTILE_CASES`.
+ * `transport-boundaries.security.ts:158` asserts `races === ROSTER_TRANSPORT.length` — EXACT
+ * equality, one race per rostered boundary. All four constants below are ALREADY rostered
+ * (`boundary-roster.security.ts:146,156,157,204`) and already contribute one race each, so a
+ * second race arm for any of them makes that count 30 against a roster of 26 and reddens the
+ * runner. The roster is therefore NOT edited here, and neither is any assertion above it.
+ *
+ * WHY THE ARMS ARE NEEDED AT ALL, given those boundaries already pass. The landed arms in
+ * `recent-transport-hostile-cases.ts` are REACHING rather than divergent: `casesFor` derives
+ * BEFORE, AFTER and RACE from a single thunk, and the build and transport arms assert codes
+ * (`APPROVAL_COMMAND_BUILD_REFUSED`, `APPROVAL_TRANSPORT_REFUSED`) that a fixture authored and
+ * that exist nowhere in production. Two production paths had NO coverage at all before this
+ * set: `readBudgetCommitment`'s transport catch, and the pairing route's byte cap. The header
+ * of `transport-hostile-fixtures.ts` records the full measurement.
+ *
+ * EVERY CASE IS KEYED ON THE CONSTANT IDENTIFIER, NEVER THE LAYER LITERAL.
+ * `PLAN_APPROVAL_TRANSPORT_LAYER` IS the string "CONTROL_ROOM_TRANSPORT", which at least seven
+ * other suites already assert; an arm keyed on that literal is satisfied by a collision and
+ * proves nothing about plan-approval's own seam. The expectations import each constant from
+ * its production module so the identifier, not the spelling, is what is pinned.
+ *
+ * EVERY RACE IS HOSTILE ON BOTH LEGS and the two legs carry DIFFERENT expectations, so a case
+ * cannot pass by having one fixture answer for both. Neither expectation consults the settle
+ * order.
+ */
+export const DIVERGENCE_TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
+  // ── LIVE_BUDGET_COMMITMENT_LAYER ────────────────────────────────────────────────────────
+  { arm: "BEFORE", boundary: "LIVE_BUDGET_COMMITMENT_LAYER", expected: BUDGET_TRANSPORT_FAILED,
+    name: "a POST that never returns is the client's own transport failure, at its own layer",
+    run: async () => (await probeBefore(BOUND,
+      budgetTransportThrows, budgetTransportThrows)).probe },
+
+  { arm: "AFTER", boundary: "LIVE_BUDGET_COMMITMENT_LAYER", expected: BUDGET_RESPONSE_INVALID,
+    name: "a 200 frame carrying one surplus key is unreadable, not a commitment",
+    // The EFFECT is a genuine ADMITTED read, never a second hostile call. Two reasons, both
+    // measured: it makes AFTER mean "after a real success" rather than "the same input twice"
+    // (the defect in `casesFor`), and it stops a regression in a NEIGHBOURING guard from
+    // reddening this arm through its own effect leg — this arm must indict the exact-key
+    // check and nothing else.
+    run: async () => (await probeAfter(BOUND,
+      budgetShapeValid, budgetShapeInvalid)).probe },
+
+  { arm: "RACE", boundary: "LIVE_BUDGET_COMMITMENT_LAYER",
+    expected: both(BUDGET_TRANSPORT_FAILED, BUDGET_RESPONSE_INVALID),
+    name: "a dead round trip and a surplus-key frame contend and neither yields a ref",
+    run: async () => await probeRacing(BOUND, budgetTransportThrows, budgetShapeInvalid) },
+
+  // ── PLAN_APPROVAL_BUILD_LAYER ───────────────────────────────────────────────────────────
+  { arm: "BEFORE", boundary: "PLAN_APPROVAL_BUILD_LAYER", expected: APPROVAL_BUILD_REFUSED,
+    name: "a genuine foreign-run offer for the caller-authored kind is refused at build",
+    run: async () => (await probeBefore(BOUND,
+      async () => await approvalBuild(foreignRunOffer),
+      async () => await approvalBuild(foreignRunOffer))).probe },
+
+  { arm: "AFTER", boundary: "PLAN_APPROVAL_BUILD_LAYER", expected: APPROVAL_BUILD_REFUSED,
+    name: "the same offer replayed without its command kind is still refused at build",
+    run: async () => (await probeAfter(BOUND,
+      approvalDelivered,
+      async () => await approvalBuild(kindlessOffer))).probe },
+
+  { arm: "RACE", boundary: "PLAN_APPROVAL_BUILD_LAYER",
+    expected: both(APPROVAL_BUILD_REFUSED, APPROVAL_BUILD_REFUSED),
+    name: "a foreign-run offer and a kindless offer contend and neither reaches the wire",
+    run: async () => await probeRacing(BOUND,
+      async () => await approvalBuild(foreignRunOffer),
+      async () => await approvalBuild(kindlessOffer)) },
+
+  // ── PLAN_APPROVAL_TRANSPORT_LAYER ───────────────────────────────────────────────────────
+  { arm: "BEFORE", boundary: "PLAN_APPROVAL_TRANSPORT_LAYER",
+    expected: APPROVAL_TRANSPORT_FAILED,
+    name: "a validly built approval whose round trip never completes refuses at transport",
+    run: async () => (await probeBefore(BOUND,
+      async () => await approvalSend(sendUnreachable),
+      async () => await approvalSend(sendUnreachable))).probe },
+
+  { arm: "AFTER", boundary: "PLAN_APPROVAL_TRANSPORT_LAYER",
+    expected: APPROVAL_TRANSPORT_UNREADABLE,
+    name: "a validly built approval answered with non-JSON bytes refuses at transport",
+    run: async () => (await probeAfter(BOUND,
+      approvalDelivered,
+      async () => await approvalSend(sendUnreadable))).probe },
+
+  { arm: "RACE", boundary: "PLAN_APPROVAL_TRANSPORT_LAYER",
+    expected: both(APPROVAL_TRANSPORT_FAILED, APPROVAL_TRANSPORT_UNREADABLE),
+    name: "a dead round trip and an unreadable answer contend and neither is approved",
+    run: async () => await probeRacing(BOUND,
+      async () => await approvalSend(sendUnreachable),
+      async () => await approvalSend(sendUnreadable)) },
+
+  // ── PAIRING_OPEN_LAYER ──────────────────────────────────────────────────────────────────
+  { arm: "BEFORE", boundary: "PAIRING_OPEN_LAYER", expected: PAIRING_BODY_TOO_LARGE,
+    name: "an otherwise-valid body padded past the cap is refused on its size alone",
+    run: async () => (await probeBefore(BOUND,
+      async () => pairingComplete(pairingOverBound()),
+      async () => pairingComplete(pairingOverBound()))).probe },
+
+  { arm: "AFTER", boundary: "PAIRING_OPEN_LAYER", expected: PAIRING_REQUEST_INVALID,
+    name: "an under-bound body with one surplus key drifts from the exact roster",
+    run: async () => (await probeAfter(BOUND,
+      async () => pairingAccepted(),
+      async () => pairingComplete(pairingRosterDrift()))).probe },
+
+  { arm: "RACE", boundary: "PAIRING_OPEN_LAYER",
+    expected: both(PAIRING_BODY_TOO_LARGE, PAIRING_REQUEST_INVALID),
+    name: "an over-bound body and a roster drift contend and neither opens a session",
+    run: async () => await probeRacing(BOUND,
+      async () => pairingComplete(pairingOverBound()),
+      async () => pairingComplete(pairingRosterDrift())) },
 ]);
