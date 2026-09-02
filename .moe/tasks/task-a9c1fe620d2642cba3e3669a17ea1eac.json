@@ -137,7 +137,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.010Z",
-  "updatedAt": "2026-09-02T18:03:10.161Z",
+  "updatedAt": "2026-09-02T18:14:13.511Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",
@@ -174,11 +174,6 @@
       "apps/daemon/src/goals/goal-close-prerequisite.ts",
       "apps/daemon/src/goals/goal-qualification.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 5400000,
-    "warnedAt": "2026-09-01T21:14:10.091Z",
-    "escalatedAt": "2026-09-01T21:14:10.091Z"
   },
   "planApprovedAt": "2026-09-02T18:02:55.710Z",
   "workStartedAt": "2026-08-31T10:42:39.178Z",

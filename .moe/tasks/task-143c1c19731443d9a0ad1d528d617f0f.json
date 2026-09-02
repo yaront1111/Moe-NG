@@ -148,7 +148,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.855Z",
-  "updatedAt": "2026-09-02T18:26:28.844Z",
+  "updatedAt": "2026-09-02T18:27:55.015Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:52:35.790Z",
     "plannedStepCount": 5,
@@ -210,7 +210,11 @@
     "apps/daemon/src/activation/activation-run-commit.test.ts",
     "apps/daemon/src/work/launch-template-producer.test.ts",
     "apps/daemon/src/work/foundation-attempt-contracts.ts",
-    "apps/daemon/src/work/foundation-attempt-service.test.ts"
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+    ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+    ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+    ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json"
   ],
   "completionSummary": "WHAT THIS ROW ACTUALLY DID vs WHAT ITS DESCRIPTION CLAIMED. Two of the three premises were already closed on disk; I re-measured before touching anything and did NOT re-implement landed work.\n\n1. THE 15 COMMITTED FAILURES WERE ALREADY FIXED at claim time — measured, not adopted: the three focused files ran Test Files 3 passed (3) | Tests 131 passed (131). No fix was written for them.\n2. DoD 4 DISCHARGED BY ADOPTION of child task-3aa6acdb, exactly as the QA rejection instructed. daemon-store-dependencies.ts is 169 lines (<400, inside the <=250 target), composition.ts exists, export surface unchanged at the old specifier. `git diff --exit-code` on the store path is EMPTY — I never edited either delegated path.\n3. DoD 1 VERIFY-OR-BLOCK: OUTCOME A, not blocked. Full trace in comment-e8504665f1f747fca08f727e24f38b29. Exactly ONE production runner-request producer exists (launchRequestBody); `satisfies ClaudeLaunchRequest` makes omission a compile error and three guards make synthesis impossible. The replay digest DOES exclude both sealed fields, but soundly — I confirmed the ordering claim and REFUTED the defect conclusion on four grounds, the decisive one being that prelaunch renders once, commits, RE-READS and returns the re-read bytes, so delivered bytes are ledger-authoritative, not render-authoritative. The launcher parser was not weakened.\n\nWHAT I ADDED: +132 lines, ZERO deletions, two owned test files. 18 arms closing the MISSING-key direction of the telemetry request roster (the extra-key direction was already covered), and 1 arm closing a real coverage hole.\n\nDRILLS — 8 run, 6 red on their own named arm, 2 GREEN and therefore FINDINGS (comment-8b3096471a724529b21d4b73234c649f). PROVEN: a changed sealed byte refuses at PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER (drills C/D, one arm each), and the idempotent-replay arm detects an unstable identity (drill H). FINDING 1, FIXED: disabling the round-trip fence at contracts.ts:238 left 111/111 arms green — i",
   "commits": [
@@ -253,6 +257,26 @@
       "treeId": "f7764160dfd8b6c6872f2b0042077011a8613c31",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "68b9e5582ca9a408ce96557ebfe22b5e250604f4",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-50445f7a@2026-09-02T17:41:53Z",
+      "paths": [
+        ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+        ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+        ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+        ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "recordedBy": "worker-50445f7a",
+      "recordedAt": "2026-09-02T18:27:55.015Z",
+      "treeId": "d83c8c8c298f49aca84152bc3514cb1204c994fc",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -260,9 +284,9 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-50445f7a@2026-09-02T17:41:53Z",
-    "at": "2026-09-02T17:42:05.386Z"
+    "at": "2026-09-02T18:27:55.015Z"
   },
   "reviewCompletedAt": "2026-08-31T21:34:34.147Z",
   "rejectionDetails": {
@@ -297,6 +321,10 @@
     }
   ],
   "declaredFiles": [
+    "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+    "apps/daemon/src/work/foundation-attempt-service.test.ts"
+  ],
+  "touchedFiles": [
     "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
     "apps/daemon/src/work/foundation-attempt-service.test.ts"
   ]

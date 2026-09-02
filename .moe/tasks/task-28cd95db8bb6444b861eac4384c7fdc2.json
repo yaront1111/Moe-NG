@@ -82,7 +82,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-50445f7a",
   "branch": null,
   "prLink": null,
   "reopenCount": 9,
@@ -142,11 +142,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:25:58.933Z",
-  "updatedAt": "2026-09-02T18:16:14.125Z",
+  "updatedAt": "2026-09-02T18:28:26.016Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",
-    "architect-99fe366f"
+    "architect-99fe366f",
+    "worker-50445f7a"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T05:22:27.589Z",
@@ -177,7 +178,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 4500000
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-09-02T18:28:25.868Z",
+    "escalatedAt": "2026-09-02T18:28:25.868Z"
   },
   "planApprovedAt": "2026-09-02T18:16:14.125Z",
   "workStartedAt": "2026-08-31T08:11:23.997Z",
