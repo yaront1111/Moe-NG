@@ -94,8 +94,8 @@
       "completedAt": "2026-09-02T16:10:55.631Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-30d27a8d",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
@@ -128,18 +128,32 @@
       "author": "worker-f06d587f",
       "content": "SURFACE-PRESERVATION PROOF (DoD 1/3) + PATH-ATTRIBUTED RED (DoD 5). Adversarial self-review output.\n\nEVERY EXPORT OF THE 490-LINE ROOT SURVIVES. Compared the old root's export surface at the landing commit's parent against the delivered donor, symbol by symbol rather than by reading the design:\n  $ git show 95f4c018^:apps/daemon/src/daemon-store-dependencies.ts | grep -nE '^export'\n    63: export { agentCapabilitiesFor } from \"./daemon-command-registry.js\";\n    65: export interface StoreDependencyConfig\n    81: export const STORE_DEPENDENCIES_ENV_MISSING = \"STORE_DEPENDENCIES_ENV_MISSING\" as const;\n    85: export function readStoreDependencyEnv(\n   143: export function createStoreDependencies(\n   490: export default provider;\n  $ grep -nE '^export' apps/daemon/src/daemon-store-dependencies.ts   (delivered, 144 lines)\n    14: export { agentCapabilitiesFor } from \"./daemon-command-registry.js\";\n    15: export { createStoreDependencies };\n    16: export type { StoreDependencyConfig };\n    18: export const STORE_DEPENDENCIES_ENV_MISSING = \"STORE_DEPENDENCIES_ENV_MISSING\" as const;\n    22: export function readStoreDependencyEnv(\n   144: export default provider;\n6 old exports, 6 preserved, 0 lost, 0 added. `StoreDependencyConfig` moved from `export interface` to `export type { … }` re-export — equivalent at every consuming import site and clean under the package's typecheck. `StoreDependencyProvider` was NOT exported by the old root, so the donor importing it without re-exporting is correct, not a regression; it is exported from composition.ts where it now lives. Environment parsing (`readStoreDependencyEnv`, `STORE_DEPENDENCIES_ENV_MISSING`) and the default-provider wiring (`export default provider`) stayed in the donor exactly as DoD 1 requires.\n\nOLD PUBLIC SPECIFIER STILL SERVES, NO CALLER EDIT. apps/daemon/src/daemon-store-dependencies.js is tracked at HEAD and reads:\n  export { default } from \"./daemon-store-dependencies.ts\";\n  export * from \"./daemon-store-dependencies.ts\";\nso `createStoreDependencies`, `StoreDependencyConfig` and `agentCapabilitiesFor` remain reachable at the unchanged old specifier. Reachability grep (`git grep -l daemon-store-dependencies -- apps packages adapters tests`) returns 20 consumers including mcp-main.ts, mcp-http-main.ts, orchestrator/agent-wrapper.ts, agent-wrapper-main.ts, moe-up-spawn.ts, projects/project-stack-host-main.ts and tests/e2e/control-room/*; none required an edit and none was edited.\n\nBRIDGE IS REPO-STANDARD, NOT AN INVENTION. Identical shape to the tracked siblings:\n  apps/daemon/src/http/static-asset-path-policy.js :: export * from \"./static-asset-path-policy.ts\";\n  apps/daemon/src/daemon-command-registry.js       :: export * from \"./daemon-command-registry.ts\";\nand `git ls-files 'apps/daemon/src/**/*.js'` returns 456 tracked bridges. The never-commit-a-bridge rule covers packages/contracts/src/index.js only — which is still untracked in this checkout and was not touched.\n\nCAP (DoD 3): composition.ts 352 lines, donor 144 lines, bridge 1 line, against a 490-line pre-extraction root that was OVER the 400 cap. Both halves now under it. No command kind, provider key, refusal code/layer, environment shape, subscription-quarantine or close/restore behaviour changed — the exact-key-set arms in the plain-Node probe (providerKeys incl. `graph`, the full registryKinds set, bridgeExports) all pass unchanged, and the close/restore arms (\"closes exactly once before rethrowing a digest mismatch\", \"never lets a cleanup failure mask the digest mismatch\") pass.\n\nPATH-ATTRIBUTED RED (DoD 5). Baseline `pnpm --filter @moe/daemon test`: `Test Files 344 passed (344)` / `Tests 7053 passed | 12 todo (7065)`. Final: `Test Files 344 passed (344)` / `Tests 7054 passed | 12 todo (7066)`. BOTH failing sets EMPTY (grep for `FAIL `/`✕` = 0 lines). delta = {} ; delta INTERSECTED WITH owned paths = {} . No foreign red exists in this package to disclose verbatim — a measured absence over 344 files, not an omission. The +1 test count is a peer session's addition landing between runs, disclosed rather than smoothed; this row adds no tests (rail 3).\n\nFOREIGN DIRT: 139 -> 147 paths during the session, none mine, owned paths clean throughout, nothing staged. Includes four sibling split rows in this row's exact half-landed .ts+.js shape (http-listener-command-stream-routes, http-listener-read-dispatch, agent-wrapper-staffing, process-runner-lifecycle, compiled-approval/policy-authority-body). No revert, stash, `git add`, `git clean -fd` or `git checkout -- .` at any point.",
       "timestamp": "2026-09-02T16:10:33.508Z"
+    },
+    {
+      "id": "comment-e2c84641c00e431eaa3765d04b7940dd",
+      "author": "qa-30d27a8d",
+      "content": "QA VERIFICATION RECORD (qa-30d27a8d, 2026-09-02 19:12-19:28 local). APPROVED. Every claim below is my own measurement, not the worker's.\n\nCOMMIT RAIL — RESOLVED, the 4th \"no completion commit\" rejection would have been FALSE.\n`dd1c227d65f0c6958a0fab8ac901f9d52611fecd` = `fix(task-3aa6acdb9d294fb2b116e0e25c4504b5): ... (retry after qa_reject #3)`, trailers `Moe-Kind: completion`, `Moe-Task: task-3aa6acdb9d294fb2b116e0e25c4504b5`, `Moe-Session: worker-f06d587f@2026-09-02T15:55:24Z`. `git merge-base --is-ancestor dd1c227d HEAD` -> YES.\nIts --stat carries only 2 board JSONs, which is CORRECT: the source bytes had already landed at `95f4c018` (kind=checkpoint, same Moe-Task trailer, --stat = 3 files/357 insertions/350 deletions), also an ancestor of HEAD. Nothing source-wise was left to stage. get_context.commits[] lagged and showed only the two checkpoints at review time; the branch is the authority.\n\nDoD 1 — PASS. donor:8 `} from \"./daemon-store-foundation-composition.js\";`. All 6 pre-extraction exports preserved (measured against base `8a7e49d3` = `95f4c018^`): agentCapabilitiesFor, StoreDependencyConfig, STORE_DEPENDENCIES_ENV_MISSING, readStoreDependencyEnv, createStoreDependencies, `export default provider`. Zero caller edits — `git diff 8a7e49d3 dd1c227d -- apps packages adapters scripts tests` is EXACTLY the 3 owned paths. Old specifier still served by the tracked `daemon-store-dependencies.js`.\n\nDoD 2 — PASS. composition.ts owns StoreDependencyConfig / StoreDependencyProvider / createStoreDependencies. Bridge is 58 bytes, one line, `export * from \"./daemon-store-foundation-composition.ts\";` — identical in shape to the 548 tracked apps/daemon bridges I sampled.\n\nDoD 4 — MY OWN DRILL, one degree different from the worker's (they dropped the `.js` extension; I deleted the bridge FILE, which is the sharper test of \"the bridge is production-reachable\"). Backup sha256 taken out-of-tree first.\n  FAIL src/daemon-store-dependencies.test.ts > serves the default provider and its registry bridge under plain Node\n  \"code\": \"ERR_MODULE_NOT_FOUND\", \"message\": \"Cannot find module '...daemon-store-foundation-composition.js' imported from ...daemon-store-dependencies.ts\"\n  Test Files 1 failed (1) / Tests 1 failed | 24 passed (25)\nExactly the named arm reddened; the other 24 stayed green, so the mutation is narrow and the arm is genuinely load-bearing on the bridge file. RESTORE PROVEN IN A SEPARATE CALL: sha256 `7c3664508c7ca87d815949331a4f6c7d2e92f000a8c8cab93bfb81599781a752` (= anchor), empty `git diff` on all 3 owned paths, empty `git status --porcelain` on them.\n\nVERBATIM-MOVE AUDIT (the real risk in a 490->144 shrink). Extracted all 350 deleted donor lines and `grep -Fxq`'d each against composition.ts + the shrunk donor: 349/350 present verbatim. The single exception is `type StoreDependencyProvider = DaemonDependencyProvider & {` gaining the `export` keyword — required for the donor to import it, and a widening only. No behavior edit hides in this diff.\n\nDoD 5 — PASS. Exact shell:false gate re-run by me TWICE, standalone and unpiped:\n  at 95f4c018 tree, 19:12:54 -> exit 0, `Test Files 1 passed (1)` / `Tests 22 passed (22)` / `$ tsc --project tsconfig.json`\n  at current HEAD tree, 19:27:35 -> exit 0, `Test Files 1 passed (1)` / `Tests 25 passed (25)` / `$ tsc --project tsconfig.json`\nBoth reproduce the worker's recorded verification.",
+      "timestamp": "2026-09-02T16:28:55.445Z"
+    },
+    {
+      "id": "comment-fbed45fd0571439f858edfae8b590e16",
+      "author": "qa-30d27a8d",
+      "content": "QA RECORD 2/2 — FOREIGN RED DISCLOSURE + ONE FINDING THIS ROW DOES NOT OWN (qa-30d27a8d).\n\nFULL LANE ATTRIBUTION (`pnpm --filter @moe/daemon test`, standalone, PIPESTATUS captured).\nRun 1 @19:13:57 -> `Test Files 70 failed | 303 passed (373)` / `Tests 16 failed | 5941 passed (5957)`, mass `ERR_INVALID_TYPESCRIPT_SYNTAX: Expected '{', got 'interface'` in plain-Node children. NOT REAL: the exemplar file `src/planning/graph-query-production-route.test.ts` passes 2/2 standalone @19:16:52, and `grep -rln --include='*.js' -E '^\\s*(export\\s+)?(interface|type\\s+\\w+\\s*=|enum)\\b' apps/daemon/src` returns ZERO. That was a peer mid-write file in this shared checkout, and it cleared.\nRun 2 @19:19 -> `Test Files 2 failed | 371 passed (373)` / `Tests 3 failed | 7621 passed (7624)`. The 3 survivors, verbatim, ALL FOREIGN:\n1. `src/runtime-entrypoint.test.ts > has an exact .js bridge for every runtime module and none for test-tier ones` — `unexpected: [\"http\\\\http-listener-command-stream-routes.js\", \"http\\\\http-listener-read-dispatch.js\"]`. Those are the SIBLING rows sitting in this row's old half-landed shape. Load-bearing for THIS row in the opposite direction: `daemon-store-foundation-composition.js` is NOT in the unexpected list, i.e. the repo's own bridge-roster guard ACCEPTS this row's bridge.\n2. `src/http/http-listener-pairing-routes.test.ts > answers /bootstrap Host FIRST, then method, then availability` — received an extra `\"commandAuthorityPlane\": \"V1\"` key. Peer HTTP-ingress WIP (task-7d1ddf29, `6f4f5d15`).\n3. same file > `answers the retired approve path identically whether or not a bundle is hosted` — `Test timed out in 30000ms`.\nDelta intersected with the 3 owned paths: **EMPTY**. Nothing here touches daemon-store-*.\n\nFINDING — 400-LINE CAP IS BREACHED AT THE CURRENT BRANCH TIP, BY A FOREIGN MERGE, NOT BY THIS ROW. Needs an owner; it is not a defect in this row and I did not reject for it.\nLine counts I measured across the chain:\n  95f4c018 donor=144 comp=352   (this row's bytes)\n  dd1c227d donor=144 comp=352   (this row's completion commit)\n  61471143 donor=169 comp=422   (<- the change)\n  HEAD     donor=169 comp=422\n`61471143` is `Merge remote-tracking branch 'origin/main' into moe/work-2026-09-02`, NO Moe-Task trailer, conflict-resolved on exactly `daemon-command-registry.ts`, `daemon-store-dependencies.ts`, `daemon-store-foundation-composition.ts`. Crucially `git cat-file -e 62160aeb:apps/daemon/src/daemon-store-foundation-composition.ts` SUCCEEDS — **origin/main already carries its own, larger copy of this same extraction** (main's donor is also 169). The merge reconciled the branch's 352-line version with main's 422-line one; the +134 it added to composition.ts is main's V2 wiring (`createDaemonV2CommandPorts`, `createDeliveryV2SourceSnapshotPublisher`, `createSessionAuthenticator`, `createOperatorSessionHandshakePort`, `createCompiledNodeSource`, `createBoardProjectionService`, ...).\nWHY I APPROVED ANYWAY: DoD 3 is anchored at THIS ROW's delivered tree, where both files are 352 and 144 — comfortably under 400. Grading the row against a tree that a later foreign merge produced is the \"clause anchored at the wrong tree rejects correct work\" failure, and this row is at reopenCount 3 with all three prior rejections on provenance and zero behavior defects. The human also forbade any source rewrite here, so the worker could not fix 422 without re-extracting.\nACTION FOR WHOEVER OWNS THE MERGE / THE EPIC-FINAL HARDENING ROW: `apps/daemon/src/daemon-store-foundation-composition.ts` is 422 physical lines at HEAD and violates epic rail 6. Split it. Also note main and this branch now both contain this extraction — check for a silent duplicate before any further work on this module.\nStructure survives the merge and I re-verified it at HEAD: donor:8 still imports the bridge, all 6 exports intact, gate exit 0 with `Tests 25 passed (25)` + `$ tsc`.",
+      "timestamp": "2026-09-02T16:29:20.866Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T15:59:00.129Z",
-  "updatedAt": "2026-09-02T16:11:56.936Z",
+  "updatedAt": "2026-09-02T16:30:13.876Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:10:57.225Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 4,
     "executedStepCount": 23,
     "rejectCount": 3,
-    "reopenCount": 3
+    "reopenCount": 3,
+    "doneAt": "2026-09-02T16:30:13.876Z",
+    "wallClockMs": 173956651
   },
   "contextFetchedBy": [
     "worker-837771aa",
@@ -189,10 +203,11 @@
     "apps/daemon/src/daemon-store-foundation-composition.js",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
-    ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json"
+    ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+    ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json"
   ],
   "completionSummary": "NO SOURCE BYTES CHANGED BY THIS SESSION. Verified, drilled, re-gated. The row's bytes were ALREADY DELIVERED when I claimed it.\n\nDELIVERY (the only thing that ever failed here — 3 rejections, all provenance, zero behaviour defects). All three owned paths are TRACKED and CLEAN at HEAD 95f4c018 on moe/work-2026-09-02. `git status --porcelain` on them is EMPTY; `git cat-file -e HEAD:<path>` succeeds for all three. They landed at 95f4c018, a kind=checkpoint commit carrying `Moe-Task: task-3aa6acdb9d294fb2b116e0e25c4504b5` — a prior session of this same seat died mid-flight and its wrapper checkpoint correctly swept the untracked bytes. --stat is exactly the deliverable: 3 files, 357 insertions, 350 deletions. Only the kind=completion reclassification was missing.\n\nBLOBS BYTE-IDENTICAL TO THE QA-VERIFIED ANCHORS (measured twice: sha256sum on the worktree AND `git show HEAD:<path> | sha256sum`):\n  daemon-store-foundation-composition.ts 45c47f3790266fe38842511e5153b9832ed05c85670d07dc2212a4f281070ed6\n  daemon-store-foundation-composition.js 7c3664508c7ca87d815949331a4f6c7d2e92f000a8c8cab93bfb81599781a752\n  daemon-store-dependencies.ts           3bb1eaa88fe01523972f4ea6b7057295065a17506773a363bd5687ed811fdf45\n\nSPLIT: 490 -> 144 + 352 (+1-line bridge). Pre-extraction root at 95f4c018^ was 490 lines, over the 400 cap; both halves now under it.\n\nDRILL (DoD 4). First attempt — bridge body to `export {}` — gave `Tests no tests` (collection crash, arm never ran); rejected as vacuous, not banked. It falsified the file's own :543 premise: vitest resolves the REAL .js bridge, so no bridge-content mutation can diverge. Accepted drill was one degree on the donor's line-8 specifier extension (`...composition.js` -> `...composition`), which vitest resolves but plain Node does not:\n  Tests  1 failed | 21 passed (22)\n  FAIL src/daemon-store-dependencies.test.ts > serves the default provider and its registry bridge under plain Node\n  AssertionError: expected { outcome: 'FAILED', …(2) } to ",
-  "reviewCompletedAt": "2026-09-01T07:55:56.376Z",
+  "reviewCompletedAt": "2026-09-02T16:30:13.876Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Delivery/commit rail — no recorded completion commit contains the three-path extraction.",
@@ -307,6 +322,22 @@
       "treeId": "607a6f90f29a58fcb40c982ba8b3d12b7e9bd481",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "dd1c227d65f0c6958a0fab8ac901f9d52611fecd",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-f06d587f@2026-09-02T15:55:24Z",
+      "paths": [
+        ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json"
+      ],
+      "recordedBy": "worker-f06d587f",
+      "recordedAt": "2026-09-02T16:12:44.862Z",
+      "treeId": "f27a71c688658af450dd49518e13bc0bf20f9004",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -314,8 +345,15 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-30d27a8d@2026-09-02T16:11:52Z",
-    "at": "2026-09-02T16:11:56.936Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-f06d587f@2026-09-02T15:55:24Z",
+    "at": "2026-09-02T16:12:44.862Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/daemon-store-foundation-composition.js",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts"
+  ],
+  "completedAt": "2026-09-02T16:30:13.876Z",
+  "reviewSummary": "APPROVED; measurements mine. Full record: comment-e2c84641 + comment-fbed45fd.\n\nCOMMIT RAIL RESOLVED - a 4th \"no completion commit\" reject would have been FALSE. dd1c227d = kind=completion, Moe-Task: task-3aa6acdb, ancestor of HEAD; carries only board JSON because source bytes already landed at 95f4c018 (checkpoint, same trailer, 3 files/357+/350-), also an ancestor.\n\nDoD1 PASS: donor:8 imports \"./daemon-store-foundation-composition.js\"; all 6 pre-extraction exports preserved vs base 8a7e49d3; `git diff 8a7e49d3 dd1c227d -- apps packages adapters scripts tests` is EXACTLY the 3 owned paths, zero caller edits; test file byte-unchanged (rail 2).\nDoD2 PASS: bridge 58 bytes/1 line, same shape as 548 tracked siblings.\nDoD4: MY OWN drill, one degree off the worker's - deleted the bridge FILE; reddened exactly `serves the default provider and its registry bridge under plain Node` (ERR_MODULE_NOT_FOUND), other 24 arms green. Restore proven in a SEPARATE call (sha256 7c366450..., empty git diff, clean porcelain).\nVERBATIM MOVE: all 350 deleted donor lines grep -Fxq'd; 349/350 verbatim, sole exception `type StoreDependencyProvider` gaining `export`.\nDoD5 PASS: exact shell:false gate re-run twice standalone - exit 0 / Test Files 1 passed (1) / Tests 22 passed (22) / $ tsc; then at current HEAD exit 0 / Tests 25 passed (25) / $ tsc.\nLane run 2: 2 failed files, 3 tests, ALL FOREIGN - runtime-entrypoint's `unexpected` are sibling rows' http-listener-*.js and it ACCEPTS this bridge; pairing-routes is peer HTTP WIP + 30s timeout. Owned-path delta EMPTY. Run 1's 70-file ERR_INVALID_TYPESCRIPT_SYNTAX was peer mid-write, cleared on re-run.\n\nDISCLOSED, NOT THIS ROW'S DEFECT: foreign merge 61471143 (origin/main, no Moe-Task trailer) took composition.ts 352->422, donor 144->169; main already carries its own copy of this extraction. DoD3 holds at this row's delivered anchor (352/144, both <400). The 422-line rail-6 breach at HEAD needs a follow-up owner."
 }
