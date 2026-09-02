@@ -143,7 +143,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:09:27.335Z",
-  "updatedAt": "2026-09-02T19:30:37.464Z",
+  "updatedAt": "2026-09-02T19:30:43.788Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",
@@ -203,7 +203,37 @@
     "apps/daemon/src/bootstrap/policy-waiver-record.ts",
     "apps/daemon/src/bootstrap/policy-waiver-reader.test.ts",
     "apps/daemon/src/bootstrap/policy-waiver-reader.ts",
-    "apps/daemon/src/bootstrap/policy-waiver-reader.js"
+    "apps/daemon/src/bootstrap/policy-waiver-reader.js",
+    ".moe/tasks/task-3f75f0e6a37645a08b48f628a2514239.json",
+    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json"
   ],
-  "completionSummary": "Delivered the strict, side-effect-free durable policy-waiver reader. 3 owned paths, all new: policy-waiver-reader.ts (243 lines, cap 250), the exact one-line .js bridge, and policy-waiver-reader.test.ts (535 lines, 45 tests). Prerequisite task-ec83fa4a's codec/leg untouched and clean.\n\nSUPERSESSION IS VALIDITY-AWARE, NOT LINEAGE-BASED — the row's central design fact. policy-waiver-leg.ts:138 sets `prior.superseded = true` for ANY later grant (\"Revocation ends authority, not lineage\"), which contradicts the amended DoD 3. The reader therefore does not carry `superseded` into its own grant type at all: selectCurrent() returns the LAST survivor that is itself valid, so a predecessor is displaced only by a successor that itself passes every join and every validity condition; when nothing is valid the last survivor reports its own refusal. One fold, one pass, no second read, no replay selector, no diagnostic surface.\n\nDELIBERATE DEVIATION, recorded not hidden (full derivation in comment-057829dee7a542e68e286f0ec20cf0fb): POLICY_WAIVER_SUPERSEDED is NOT emitted. The join operands are exactly policyWaiverTupleKeyFor's tuple and the aggregate id is its first four components, so a later grant satisfying every join is always itself a survivor — any rule emitting SUPERSEDED for the grant it returns breaks every renewal. That is precisely the governor's chosen option (the prior architect's option C, \"remove/narrow the direct SUPERSEDED requirement\"). Real supersession is proven by consequence — the displaced predecessor's bytes are never returned — plus a 4-history sweep proving no path emits the code. The 12-code roster is still pinned exactly.\n\nFAIL-OPEN FOUND IN ADVERSARIAL REVIEW AND FIXED: `expiresAtEpochMs <= NaN` is false, so a non-finite/fractional evaluatedAtEpochMs granted authority. Now `!Number.isSafeInteger(evaluatedAtEpochMs) || expiresAtEpochMs <= evaluatedAtEpochMs`; pinned by a 4-case hostile-instant matrix.\n\nDRILLS (ledger in comment-d9117d57ddeb45b8bb1637af1b"
+  "completionSummary": "Delivered the strict, side-effect-free durable policy-waiver reader. 3 owned paths, all new: policy-waiver-reader.ts (243 lines, cap 250), the exact one-line .js bridge, and policy-waiver-reader.test.ts (535 lines, 45 tests). Prerequisite task-ec83fa4a's codec/leg untouched and clean.\n\nSUPERSESSION IS VALIDITY-AWARE, NOT LINEAGE-BASED — the row's central design fact. policy-waiver-leg.ts:138 sets `prior.superseded = true` for ANY later grant (\"Revocation ends authority, not lineage\"), which contradicts the amended DoD 3. The reader therefore does not carry `superseded` into its own grant type at all: selectCurrent() returns the LAST survivor that is itself valid, so a predecessor is displaced only by a successor that itself passes every join and every validity condition; when nothing is valid the last survivor reports its own refusal. One fold, one pass, no second read, no replay selector, no diagnostic surface.\n\nDELIBERATE DEVIATION, recorded not hidden (full derivation in comment-057829dee7a542e68e286f0ec20cf0fb): POLICY_WAIVER_SUPERSEDED is NOT emitted. The join operands are exactly policyWaiverTupleKeyFor's tuple and the aggregate id is its first four components, so a later grant satisfying every join is always itself a survivor — any rule emitting SUPERSEDED for the grant it returns breaks every renewal. That is precisely the governor's chosen option (the prior architect's option C, \"remove/narrow the direct SUPERSEDED requirement\"). Real supersession is proven by consequence — the displaced predecessor's bytes are never returned — plus a 4-history sweep proving no path emits the code. The 12-code roster is still pinned exactly.\n\nFAIL-OPEN FOUND IN ADVERSARIAL REVIEW AND FIXED: `expiresAtEpochMs <= NaN` is false, so a non-finite/fractional evaluatedAtEpochMs granted authority. Now `!Number.isSafeInteger(evaluatedAtEpochMs) || expiresAtEpochMs <= evaluatedAtEpochMs`; pinned by a 4-case hostile-instant matrix.\n\nDRILLS (ledger in comment-d9117d57ddeb45b8bb1637af1b",
+  "commits": [
+    {
+      "sha": "64fe2558dd2f1a6c6c26be0e1cf39c3d43b13528",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-368df350@2026-09-02T19:30:39Z",
+      "paths": [
+        ".moe/tasks/task-3f75f0e6a37645a08b48f628a2514239.json",
+        ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+        "apps/daemon/src/bootstrap/policy-waiver-reader.js",
+        "apps/daemon/src/bootstrap/policy-waiver-reader.test.ts",
+        "apps/daemon/src/bootstrap/policy-waiver-reader.ts"
+      ],
+      "recordedBy": "qa-368df350",
+      "recordedAt": "2026-09-02T19:30:43.788Z",
+      "treeId": "2746d6d713b5b9faf3e19b8b3a8fbf3d59bd3b1e",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-368df350@2026-09-02T19:30:39Z",
+    "at": "2026-09-02T19:30:43.788Z"
+  }
 }
