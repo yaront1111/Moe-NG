@@ -115,7 +115,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.931Z",
-  "updatedAt": "2026-09-02T20:54:49.419Z",
+  "updatedAt": "2026-09-02T21:04:19.832Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:08:14.451Z",
     "plannedStepCount": 4,
@@ -185,5 +185,43 @@
       "releasedBy": "architect-1f97776b",
       "reason": "Build-order SPIDR: release the consumer while the newly filed daemon authority producer leaf is planned first; human reopen explicitly authorized amend/split and WIP preservation."
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "5ec2f18615ec7c42d55f57668180c1b45e51cdae",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-9801b4a8@2026-09-02T20:39:24Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-a26f5c690ddb484885dbad9a4b21e5ff.json",
+        ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json",
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ],
+      "recordedBy": "worker-9801b4a8",
+      "recordedAt": "2026-09-02T21:04:19.832Z",
+      "treeId": "3104e061193a28ca12b7c5ffdc4a6374bae7624b",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+    ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+    ".moe/tasks/task-a26f5c690ddb484885dbad9a4b21e5ff.json",
+    ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json",
+    "tests/e2e/control-room/board-chain.spec.ts"
+  ],
+  "touchedFiles": [
+    "tests/e2e/control-room/board-chain.spec.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-9801b4a8@2026-09-02T20:39:24Z",
+    "at": "2026-09-02T21:04:19.832Z"
+  }
 }
