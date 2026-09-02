@@ -8,7 +8,7 @@ import type { ProofRow } from "../shell/proof-context.js";
  * gains authority by filling a missing fact itself.
  */
 
-export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DRAFT";
+export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DONE" | "DRAFT";
 
 /** The coloured status dot beside a goal's one-line headline. */
 export type HeadlineTone = "accent" | "agent" | "danger" | "verified";

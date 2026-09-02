@@ -266,6 +266,7 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
       needsYou: false,
       progress: { done: 3, noun: "acceptance criteria verified", total: 10 },
       progressComingOnline: undefined,
+      state: "ACTIVE",
     });
   });
 
@@ -286,14 +287,44 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
     const plain = deriveGoalCatalog(catalog([entry])).goals[0];
     expect(plain?.progress).toBeUndefined();
     const refused = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
-      code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
+      code: "DOCUMENT_COVERAGE_READ_CAPABILITY_DENIED", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
     }]])).goals[0];
     expect(refused).toStrictEqual(plain);
+    const unbound = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
+    }]])).goals[0];
+    expect(unbound?.progress).toBeUndefined();
+    expect(unbound?.progressComingOnline).toBe("No PRD is bound to this goal.");
     const uncontracted = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
       ...coverage(0, 0, "APPROVED"), contracts: [],
       totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
     }]])).goals[0];
     expect(uncontracted?.progress).toBeUndefined();
     expect(uncontracted?.progressComingOnline).toBe("No Product Contract cites this goal PRD yet.");
+  });
+});
+
+describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the state pill", () => {
+  const entry = {
+    binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-cov",
+    planningRunRef: "run-cov", truthClass: "DAEMON_VERIFIED",
+  } as const;
+  const withLifecycle = (lifecycle: string | null): DocumentCoverageOutcome => ({
+    contracts: [{
+      contractId: "contract-1", gate1: "APPROVED", requirements: [], revisionDigest: "d".repeat(64),
+      revisionId: "rev-1",
+    }],
+    document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
+    goals: [{ goalId: "goal-cov", lifecycle, title: "Build it" }],
+    sections: null,
+    status: "COVERAGE",
+    totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 2 },
+  });
+  it.each([
+    ["COMPLETED", "DONE"], ["EXECUTION_ENABLED", "ACTIVE"], ["CLOSING", "ACTIVE"],
+    ["PLAN_REVIEW", "DRAFT"], ["DRAFT", "DRAFT"], [null, "DRAFT"],
+  ])("lifecycle %s renders as %s", (lifecycle, state) => {
+    const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", withLifecycle(lifecycle)]])).goals[0];
+    expect(card?.state).toBe(state);
   });
 });

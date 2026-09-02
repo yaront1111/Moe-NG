@@ -169,7 +169,12 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
 function withCoverage(
   card: GoalCardModel, outcome: DocumentCoverageOutcome | undefined,
 ): GoalCardModel {
-  if (outcome === undefined || outcome.status !== "COVERAGE") return card;
+  if (outcome === undefined) return card;
+  if (outcome.status !== "COVERAGE") {
+    return outcome.status === "REFUSED" && outcome.code === "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND"
+      ? Object.freeze({ ...card, progressComingOnline: "No PRD is bound to this goal." })
+      : card;
+  }
   const { contracts, criteria, verified } = outcome.totals;
   if (contracts === 0) {
     return Object.freeze({
@@ -179,6 +184,10 @@ function withCoverage(
   const pending = outcome.contracts.some((contract) => contract.gate1 === "PENDING");
   const complete = criteria > 0 && verified === criteria && !pending;
   const gate = pending ? "Gate 1 pending" : "contract approved";
+  // The lifecycle is the daemon fold of the goal aggregate; DONE is exactly COMPLETED.
+  const lifecycle = outcome.goals.find((goal) => goal.goalId === card.goalId)?.lifecycle ?? null;
+  const state: GoalCardModel["state"] = lifecycle === "COMPLETED" ? "DONE"
+    : lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" ? "ACTIVE" : card.state;
   return Object.freeze({
     ...card,
     headline: complete
@@ -191,6 +200,7 @@ function withCoverage(
     }),
     progressComingOnline: criteria === 0
       ? "The contract carries no acceptance criteria yet." : undefined,
+    state,
   });
 }
 

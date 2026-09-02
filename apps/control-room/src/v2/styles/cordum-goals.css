@@ -343,6 +343,12 @@
   border: 1px solid color-mix(in srgb, var(--cr-accent) 28%, transparent);
 }
 
+.cr2-goal-state[data-state="DONE"] {
+  color: var(--cr-accent);
+  background: color-mix(in srgb, var(--cr-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cr-accent) 32%, transparent);
+}
+
 .cr2-goal-state[data-state="BLOCKED"] {
   color: var(--cr-danger);
   background: color-mix(in srgb, var(--cr-danger) 12%, transparent);
