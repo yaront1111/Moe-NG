@@ -270,6 +270,7 @@ export function createStoreDependencies(
   const affordances = () => createAffordancePort({
     mintId: config.affordanceMintId ?? (() => randomUUID()),
     nodes: mergedNodes,
+    principalId: config.principalId,
     projectId: config.projectId,
     store,
   });

@@ -17,6 +17,8 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
 import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
+import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
+import type { PlanningAuthorityEntry } from "./affordance-planning-authorities.js";
 import {
   DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, createAffordancePort,
 } from "./affordance-read.js";
@@ -570,5 +572,354 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
 
     expect(surface().planningGoalRefs).toEqual({ [runId]: DECOY_GOAL_SUBJECT });
     expect(offerTargets("approval.decide")).toEqual([]);
+  });
+});
+
+/**
+ * task-ed89967f / R3-016 — the canonical per-run planning authority the surface carries so the
+ * browser never ports a Node-only codec or rotates a static digest.
+ *
+ * THE MATERIAL IS journeyAuthority's, VERBATIM. This suite grades BINDING — which run, which
+ * goal, which revision, which author — and never re-derives a hash. A test that recomputed
+ * graphContentHash would be grading its own copy of the producer, which is the second-verifier
+ * defect the whole carrier exists to avoid.
+ */
+describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
+  const projectId = "proj-affordance-authority";
+  /** The daemon's CONFIGURED principal: rail 2's only admitted author. */
+  const PRINCIPAL = "principal-configured-1";
+  /**
+   * The REGISTERED project owner, deliberately different from PRINCIPAL and from the command
+   * issuer below. Every other world in this file spells all three "operator-local", where a
+   * producer reaching for the owner and one reading the configured principal are literally
+   * indistinguishable — so provenance could not be graded there at all.
+   */
+  const OWNER_DECOY = "project-owner-decoy";
+  /** A THIRD identity: whoever issued the durable commands. Not an author either. */
+  const COMMAND_ISSUER = "operator-local";
+  const NODE = { nodeRef: "node-authority-1", title: "The single merged node" };
+  const SECOND_NODE = { nodeRef: "node-authority-2", title: "A second merged node" };
+  const ALPHA_COMMAND = "authority-alpha";
+  const BETA_COMMAND = "authority-beta";
+  const ALPHA_GOAL = `goal-${ALPHA_COMMAND}`;
+  const ALPHA_RUN = `run-${ALPHA_COMMAND}`;
+  const BETA_GOAL = `goal-${BETA_COMMAND}`;
+  const BETA_RUN = `run-${BETA_COMMAND}`;
+  /**
+   * Spelled out here, NOT imported from the module under test. An imported roster moves with the
+   * very mutation it exists to catch: delete a key from the production constant and both sides of
+   * the set equality shrink together, leaving the arm green.
+   */
+  const AUTHORITY_KEYS: readonly string[] = [
+    "authority", "goalRef", "graphContentBytesBase64", "graphContentHash",
+    "graphRevisionRef", "runId", "submissionHash",
+  ];
+  /**
+   * DoD 2's exact eligible pair. `goal.close` and the two compiler kinds are NOT here and target
+   * the GOAL aggregate, which is what the withheld-lane arm below proves cannot become a key.
+   * `approval.decide_intent` is omitted deliberately: it is always co-offered with
+   * `approval.decide` against the SAME run, so including it could not change any key set.
+   */
+  const ELIGIBLE_KINDS: readonly string[] = ["approval.decide", "plan.propose"];
+
+  const authorityDirectory = mkdtempSync(join(tmpdir(), "moe-affordance-authority-"));
+  const authorityStore = SqliteEventStore.openForProject(
+    join(authorityDirectory, "store.db"), projectId);
+  installTestRecoveryBinding(authorityStore);
+
+  afterAll(() => {
+    authorityStore.close();
+    rmSync(authorityDirectory, { force: true, recursive: true });
+  });
+
+  let authorityMinted = 0;
+  const mintId = (): string => `authority-offer-${String(authorityMinted += 1)}`;
+
+  /** The COMPOSED shape: configured principal plus the merged-node roster the composition root
+   *  forwards. Every fail-closed port below differs from this one by exactly one input. */
+  const port = createAffordancePort({
+    mintId, nodes: () => [NODE], principalId: PRINCIPAL, projectId, store: authorityStore,
+  });
+
+  function commitAuthority(
+    kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
+  ): void {
+    const outcome = runBootstrapCommand(authorityStore, encoder.encode(JSON.stringify({
+      commandId: commandId ?? `authority-${kind}-${String(authorityMinted += 1)}`,
+      correlationId: "corr-r3-016",
+      decidedAt: "2026-09-02T12:00:00.000Z",
+      expectedVersion,
+      kind,
+      payload,
+      principalId: COMMAND_ISSUER,
+      projectId,
+      schemaVersion: "moe-bootstrap-command/1",
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+  }
+
+  function read() {
+    const result = port.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result;
+  }
+
+  /**
+   * Derived from the OFFERS, never from the map. A set built by iterating the map can only ever
+   * prove "every key is a key" — it sees ONE direction and stays green when a member is silently
+   * dropped, which is exactly the mutation drill 3 performs.
+   */
+  function eligibleOfferedRuns(surface: {
+    readonly nextAllowedCommands: readonly { readonly commandKind: string;
+      readonly targetAggregateId: string }[];
+  }): string[] {
+    return [...new Set(surface.nextAllowedCommands
+      .filter((entry) => ELIGIBLE_KINDS.includes(entry.commandKind))
+      .map((entry) => entry.targetAggregateId))].sort();
+  }
+
+  function planRevisionOf(entry: PlanningAuthorityEntry): Record<string, unknown> {
+    return entry.authority["planRevision"] as Record<string, unknown>;
+  }
+
+  function acceptanceContractOf(entry: PlanningAuthorityEntry): Record<string, unknown> {
+    return entry.authority["acceptanceContract"] as Record<string, unknown>;
+  }
+
+  function createTwoLegacyGoals(): void {
+    commitAuthority("project.register", { owner: OWNER_DECOY });
+    commitAuthority("project.bind_repository", {
+      observation: {
+        baseRevisionHash: "b".repeat(64), repositoryRef: "repo-r3-016",
+        scopeRef: "scope-r3-016", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 1);
+    commitAuthority("provider.probe", { observation: PROVIDER_OBSERVATION });
+    commitAuthority("policy.install", { slice: POLICY_SLICE });
+    commitAuthority("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
+    commitAuthority("project.activate", {
+      witness: {
+        artifactPathRef: "artifact-r3-016", backupPathRef: "backup-r3-016",
+        credentialRef: "credential-r3-016", distributionManifestHash: "cafe".padEnd(64, "0"),
+        policyRevisionHash: "face".padEnd(64, "0"),
+        providerMinimumProfileRef: "provider-profile-r3-016", signingKeyRef: "signing-r3-016",
+        storeDriverRef: "store-driver-r3-016", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 2);
+    // TWO goals on the legacy lane, so both runs carry an eligible plan.propose offer and the
+    // sibling-isolation arm has two entries that must differ in every bound field.
+    commitAuthority("goal.create", {
+      instructions: "Carry the first durable planning run.", title: "Alpha goal",
+    }, 0, ALPHA_COMMAND);
+    commitAuthority("goal.create", {
+      instructions: "Carry the second durable planning run.", title: "Beta goal",
+    }, 0, BETA_COMMAND);
+  }
+
+  it("carries exactly the seven-key authority roster on every entry", () => {
+    createTwoLegacyGoals();
+    const entries = Object.values(read().planningAuthorityByRun);
+
+    // Non-vacuity: a producer returning {} would satisfy a bare for-loop silently.
+    expect(entries).toHaveLength(2);
+    for (const entry of entries) {
+      // Object.keys is OWN enumerable keys only, so a prototype-borrowed member cannot be
+      // counted as carried material.
+      expect(Object.keys(entry).sort()).toEqual([...AUTHORITY_KEYS].sort());
+      expect(Object.keys(entry)).toHaveLength(7);
+    }
+  });
+
+  it("keys the map on exactly the eligible offered runs, in both directions and nonzero", () => {
+    const surface = read();
+    const offered = eligibleOfferedRuns(surface);
+    const keys = Object.keys(surface.planningAuthorityByRun).sort();
+
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered).toEqual([ALPHA_RUN, BETA_RUN].sort());
+    // Stated as two explicit directions so a drill's red names WHICH direction broke.
+    expect(offered.filter((runId) => !(runId in surface.planningAuthorityByRun))).toEqual([]);
+    expect(keys.filter((runId) => !offered.includes(runId))).toEqual([]);
+    expect(keys).toEqual(offered);
+  });
+
+  it("binds every entry to its own run, goal, revision and configured author", () => {
+    const surface = read();
+    const bound = Object.entries(surface.planningAuthorityByRun);
+    expect(bound).toHaveLength(2);
+
+    for (const [runId, entry] of bound) {
+      expect(entry.runId).toBe(runId);
+      expect(surface.nextAllowedCommands.some((offer) =>
+        offer.commandKind === "plan.propose" && offer.targetAggregateId === runId)).toBe(true);
+      expect(entry.goalRef).toBe(surface.planningGoalRefs[runId]);
+      expect(entry.graphRevisionRef).toBe(`${runId}-graph-revision`);
+
+      const plan = planRevisionOf(entry);
+      const contract = acceptanceContractOf(entry);
+      expect(plan["authorRef"]).toBe(PRINCIPAL);
+      expect(contract["authorRef"]).toBe(PRINCIPAL);
+      expect(plan["revisionId"]).toBe(`${runId}-revision`);
+      expect(contract["contractId"]).toBe(`${runId}-contract`);
+      expect(plan["affectedCriterionIds"]).toEqual([`${entry.goalRef}-criterion`]);
+      expect(plan["affectedNodeIds"]).toEqual([NODE.nodeRef]);
+      expect((contract["obligations"] as readonly { criterionId: string }[])
+        .map((obligation) => obligation.criterionId)).toEqual([`${entry.goalRef}-criterion`]);
+      // The digests are CARRIED, not recomputed here: what is graded is that the entry's own
+      // sibling fields name the same graph the sealed bodies bind to.
+      expect(plan["graphBinding"]).toEqual({
+        graphContentHash: entry.graphContentHash, graphRevisionRef: entry.graphRevisionRef,
+      });
+      expect(contract["applicability"]).toMatchObject({
+        graphContentHash: entry.graphContentHash, graphRevisionRef: entry.graphRevisionRef,
+        nodeIds: [NODE.nodeRef],
+      });
+      expect(plan["planHash"]).toBe(entry.submissionHash);
+    }
+  });
+
+  it("gives two sibling runs distinct, correctly bound material", () => {
+    const map = read().planningAuthorityByRun;
+    const alpha = map[ALPHA_RUN];
+    const beta = map[BETA_RUN];
+    if (alpha === undefined || beta === undefined) throw new Error("both siblings must be keyed");
+
+    expect([alpha.runId, alpha.goalRef]).toEqual([ALPHA_RUN, ALPHA_GOAL]);
+    expect([beta.runId, beta.goalRef]).toEqual([BETA_RUN, BETA_GOAL]);
+    // DISTINCT IN EVERY RUN-BOUND FIELD. A fixture where the siblings shared any of these could
+    // not detect drill 2's goal swap — the swapped value would collide with the correct one.
+    expect(alpha.runId).not.toBe(beta.runId);
+    expect(alpha.goalRef).not.toBe(beta.goalRef);
+    expect(alpha.graphRevisionRef).not.toBe(beta.graphRevisionRef);
+    expect(alpha.submissionHash).not.toBe(beta.submissionHash);
+    // AND SHARED IN THE CONTENT-ADDRESSED PAIR, pinned deliberately rather than left unstated.
+    // The journey graph is a single execution-bearing node with the same author, and
+    // `planExecutionContentDigest` folds only {affectedCriterionIds, affectedNodeIds, steps,
+    // verificationRecipeRefs, version} — all fixed constants inside `nodePlanning`. So two runs
+    // planning the same node seal byte-identical graph content, which is what content addressing
+    // MEANS. Recorded here so a consumer never mistakes the graph pair for a run discriminator:
+    // the run-discriminating members are runId, goalRef, graphRevisionRef and submissionHash.
+    expect(alpha.graphContentHash).toBe(beta.graphContentHash);
+    expect(alpha.graphContentBytesBase64).toBe(beta.graphContentBytesBase64);
+    expect(planRevisionOf(alpha)["affectedCriterionIds"]).toEqual([`${ALPHA_GOAL}-criterion`]);
+    expect(planRevisionOf(beta)["affectedCriterionIds"]).toEqual([`${BETA_GOAL}-criterion`]);
+  });
+
+  it("authors with the configured principal, not the project owner or the command issuer", () => {
+    const entries = Object.values(read().planningAuthorityByRun);
+    expect(entries).toHaveLength(2);
+    // The decoy is a REAL, distinct durable fact, so the negatives below are not vacuous.
+    expect(new Set([PRINCIPAL, OWNER_DECOY, COMMAND_ISSUER]).size).toBe(3);
+
+    for (const entry of entries) {
+      // POSITIVE FIRST: a negative-only check passes when the author field is absent entirely.
+      expect(planRevisionOf(entry)["authorRef"]).toBe(PRINCIPAL);
+      expect(acceptanceContractOf(entry)["authorRef"]).toBe(PRINCIPAL);
+      // Supplementary only: a serialized negative tests ONE spelling, never a property.
+      const serialized = JSON.stringify(entry);
+      expect(serialized).not.toContain(OWNER_DECOY);
+      expect(serialized).not.toContain(COMMAND_ISSUER);
+    }
+  });
+
+  it("freezes the map and every entry it carries", () => {
+    const map = read().planningAuthorityByRun;
+    expect(Object.isFrozen(map)).toBe(true);
+    expect(Object.values(map)).toHaveLength(2);
+    for (const entry of Object.values(map)) {
+      expect(Object.isFrozen(entry)).toBe(true);
+    }
+  });
+
+  it("omits every entry when no principal is configured", () => {
+    const unconfigured = createAffordancePort({
+      mintId, nodes: () => [NODE], projectId, store: authorityStore,
+    });
+    const surface = unconfigured.readSurface();
+    if (surface.outcome !== "SURFACE") throw new Error(`refused: ${surface.code}`);
+
+    expect(surface.planningAuthorityByRun).toEqual({});
+    // THE CONTROL that makes {} a refusal rather than an empty world: the same store still
+    // offers both eligible runs and still binds both goals. Omission, never DEFAULT_*, the
+    // project owner, the command issuer, or a caller-supplied identity.
+    expect(eligibleOfferedRuns(surface)).toEqual([ALPHA_RUN, BETA_RUN].sort());
+    expect(Object.keys(surface.planningGoalRefs).sort()).toEqual([ALPHA_RUN, BETA_RUN].sort());
+  });
+
+  it("omits every entry when the merged node roster is absent, empty or ambiguous", () => {
+    const absent = createAffordancePort({
+      mintId, principalId: PRINCIPAL, projectId, store: authorityStore,
+    });
+    const empty = createAffordancePort({
+      mintId, nodes: () => [], principalId: PRINCIPAL, projectId, store: authorityStore,
+    });
+    // TWO nodes is the FIRST-NODE ban: an ambiguous roster omits rather than picking one.
+    const ambiguous = createAffordancePort({
+      mintId, nodes: () => [NODE, SECOND_NODE], principalId: PRINCIPAL,
+      projectId, store: authorityStore,
+    });
+
+    for (const candidate of [absent, empty, ambiguous]) {
+      const surface = candidate.readSurface();
+      if (surface.outcome !== "SURFACE") throw new Error(`refused: ${surface.code}`);
+      expect(surface.planningAuthorityByRun).toEqual({});
+      expect(eligibleOfferedRuns(surface)).toEqual([ALPHA_RUN, BETA_RUN].sort());
+    }
+  });
+
+  it("omits a source-bound run whose plan.propose is withheld, and never keys on a goal", () => {
+    const sourceOffer = read().nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create_with_source");
+    if (sourceOffer === undefined) throw new Error("no goal.create_with_source offer to drive");
+    const compiledGoal = `goal-${sourceOffer.commandId}`;
+    const compiledRun = `run-${sourceOffer.commandId}`;
+
+    commitAuthority("goal.create_with_source", {
+      instructions: "Compile this brief; do not hand-plan it.",
+      source: {
+        displayPath: "docs/r3-016-brief.md",
+        mediaType: "text/markdown",
+        text: `# ${sourceOffer.commandId}\n\nThe compiler ladder owns this goal.\n`,
+      },
+      title: "Source-bound goal",
+    }, 0, sourceOffer.commandId);
+
+    const after = read();
+    // THE BINDING EXISTS — this is not a missing-goal world.
+    expect(after.planningGoalRefs[compiledRun]).toBe(compiledGoal);
+    // But the compiler ladder WITHHOLDS plan.propose and offers the writer against the GOAL.
+    expect(after.nextAllowedCommands.some((entry) =>
+      entry.commandKind === "product_contract.propose_revision"
+      && entry.targetAggregateId === compiledGoal)).toBe(true);
+    expect(after.nextAllowedCommands.some((entry) =>
+      ELIGIBLE_KINDS.includes(entry.commandKind)
+      && entry.targetAggregateId === compiledRun)).toBe(false);
+
+    // So: no entry for that run, and a goal-targeted offer never becomes a key.
+    expect(compiledRun in after.planningAuthorityByRun).toBe(false);
+    expect(compiledGoal in after.planningAuthorityByRun).toBe(false);
+    // TARGETED omission, not a whole-map collapse: the two legacy siblings are untouched.
+    expect(Object.keys(after.planningAuthorityByRun).sort())
+      .toEqual([ALPHA_RUN, BETA_RUN].sort());
+  });
+
+  it("omits a run that carries an eligible offer with no durable goal binding", () => {
+    // Structurally unreachable from the surface today: resolvePlanningOffers records
+    // planningGoalRefs[run] before it mints any offer for that goal, so an offer without a
+    // binding cannot be observed end-to-end. Driven against the REAL production producer (not a
+    // reimplementation) so the fail-closed branch is graded rather than assumed reachable.
+    const offer = read().nextAllowedCommands
+      .find((entry) => entry.commandKind === "plan.propose");
+    if (offer === undefined) throw new Error("no plan.propose offer to drive");
+
+    expect(resolvePlanningAuthorities({
+      nodes: [NODE], offers: [offer], planningGoalRefs: {}, principalId: PRINCIPAL,
+    })).toEqual({});
+    // CONTROL: the same offer WITH its binding does produce an entry, so the {} above is the
+    // missing binding and not a call shape the producer rejects wholesale.
+    expect(Object.keys(resolvePlanningAuthorities({
+      nodes: [NODE], offers: [offer], principalId: PRINCIPAL,
+      planningGoalRefs: { [offer.targetAggregateId]: ALPHA_GOAL },
+    }))).toEqual([offer.targetAggregateId]);
   });
 });

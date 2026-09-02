@@ -1,5 +1,7 @@
 import type { NextAllowedCommand } from "@moe/contracts";
 
+import type { PlanningAuthorityByRun } from "./affordance-planning-authorities.js";
+
 /**
  * The affordance surface: what the daemon offers next, derived from its own
  * durable ledger and from nothing else.
@@ -59,6 +61,12 @@ export interface ChainStep {
 export interface AffordanceSurface {
   readonly nextAllowedCommands: readonly NextAllowedCommand[];
   readonly outcome: "SURFACE";
+  /**
+   * Canonical planning authority material per eligible run, derived from the SAME durable offers
+   * and bindings as `planningGoalRefs` so the two can never disagree. Empty when the daemon holds
+   * no configured principal or no unambiguous node roster — an omission, never a fallback.
+   */
+  readonly planningAuthorityByRun: PlanningAuthorityByRun;
   /** Per-run durable binding under which every planning offer is answered. */
   readonly planningGoalRefs: Readonly<Record<string, string>>;
   /** Durable goal bound to the default planning run; null when absent or ambiguous. */

@@ -17,6 +17,7 @@ import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
 import { createCompilerLanePort } from "./affordance-compiler-lane.js";
+import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
   AffordancePort,
@@ -98,6 +99,12 @@ export interface AffordancePortConfig {
    * never an invented one.
    */
   readonly nodes?: () => readonly NodeSpec[];
+  /**
+   * The daemon's configured principal, the ONLY author admitted onto planning authority material.
+   * OPTIONAL because a bounded harness composition may hold none: absence yields an EMPTY
+   * authority map, never the project owner, the command issuer or a DEFAULT_* stand-in.
+   */
+  readonly principalId?: string | undefined;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
@@ -237,6 +244,10 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
   const readSurface = (): AffordanceSurfaceResult => {
     const offers: NextAllowedCommand[] = [];
     const now = (config.clock ?? ((): string => new Date().toISOString()))();
+    // ONE read of the roster per surface call. It used to be read only inside the node-step gate
+    // below; the authority map needs it too, and two reads of a live directory could disagree
+    // within a single answer — one roster is what makes the map and the node steps consistent.
+    const nodes = config.nodes?.() ?? [];
     const ledger = readDurableLedger(config.store, config.projectId);
     const planning = resolvePlanningOffers({
       compilerLane: createCompilerLanePort({
@@ -245,6 +256,14 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       ledger, mintId: config.mintId, projectId: config.projectId,
     });
     offers.push(...planning.offers);
+    // Derived from the SAME `planning` resolution that produced planningGoalRefs and the offers,
+    // so the carried material and the binding it claims cannot disagree.
+    const planningAuthorityByRun = resolvePlanningAuthorities({
+      nodes,
+      offers: planning.offers,
+      planningGoalRefs: planning.planningGoalRefs,
+      principalId: config.principalId,
+    });
     const boundGoalRef = planning.planningGoalRefs[DEFAULT_RUN_SUBJECT] ?? null;
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const planningSubject = soleLegacyPlanningSubject(planning.planningGoalRefs, planning.offers);
@@ -314,7 +333,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     // sat EXECUTION_ENABLED with zero node.deliver steps behind this gate.
     if (config.nodes !== undefined
       && (ledger.kinds.has("approval.decide") || ledger.kinds.has("approval.decide_intent"))) {
-      for (const spec of config.nodes()) {
+      for (const spec of nodes) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
         if (review.accepted !== undefined) {
@@ -343,6 +362,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     return Object.freeze({
       nextAllowedCommands: Object.freeze(offers),
       outcome: "SURFACE",
+      planningAuthorityByRun,
       planningGoalRefs: planning.planningGoalRefs,
       planningGoalRef: boundGoalRef,
       steps: Object.freeze(steps),

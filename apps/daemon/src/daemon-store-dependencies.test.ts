@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -17,6 +17,12 @@ import { afterAll, describe, expect, it } from "vitest";
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
 import { acquireFoundationStore } from "./daemon-store-acquisition.js";
+import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
+import {
+  CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
+} from "./bootstrap/bootstrap-test-fixtures.js";
+import { GOAL_HANDLERS } from "./goals/goal-services.js";
+import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
@@ -864,5 +870,126 @@ describe("Foundation wiring startup cleanup", () => {
       acquired.store.close();
       rmSync(fixture.directory, { force: true, recursive: true });
     }
+  });
+});
+
+/**
+ * task-ed89967f / R3-016 — THE CONSUMER EDGE for the composition's one-line principal forward.
+ *
+ * Epic rail 8B: a gate must assert a consumer edge, not a producer's own presence. Every other
+ * arm for this feature drives `createAffordancePort` directly, which stays green even if the
+ * composition root never forwards `config.principalId` — the feature would then exist in the
+ * module and not in the daemon. This arm is the only one that fails when that single property is
+ * dropped, because without it the composed surface's authority map is EMPTY.
+ */
+describe("the composed affordance port carries planning authority (task-ed89967f / R3-016)", () => {
+  const AUTHORITY_PROJECT = "proj-store-deps-authority";
+  /** Deliberately NOT the registered project owner below, so the arm distinguishes a forwarded
+   *  configured principal from a producer that reached for the owner. */
+  const AUTHORITY_PRINCIPAL = "principal-composed-1";
+  const AUTHORITY_OWNER = "operator-local";
+  const NODE_REF = "node-composed-1";
+  const GOAL_COMMAND = "composed-goal";
+  const GOAL_ID = `goal-${GOAL_COMMAND}`;
+  const RUN_ID = `run-${GOAL_COMMAND}`;
+
+  const authorityDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-authority-")));
+  const authorityStorePath = join(authorityDirectory, "store.db");
+  const nodeSpecsDir = join(authorityDirectory, "nodes");
+
+  function seedWorld(): void {
+    mkdirSync(nodeSpecsDir, { recursive: true });
+    // EXACTLY ONE merged node: `mergedNodes` unions spec files with compiled nodes, and this
+    // world has no approved plan, so the compiled side contributes none.
+    writeFileSync(
+      join(nodeSpecsDir, "node.json"),
+      JSON.stringify({ nodeRef: NODE_REF, title: "The composed node" }),
+      "utf8",
+    );
+    const store = SqliteEventStore.openForProject(authorityStorePath, AUTHORITY_PROJECT);
+    installTestRecoveryBinding(store);
+    let minted = 0;
+    const commit = (
+      kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
+    ): void => {
+      const outcome = runBootstrapCommand(store, new TextEncoder().encode(JSON.stringify({
+        commandId: commandId ?? `composed-${kind}-${String(minted += 1)}`,
+        correlationId: "corr-r3-016-composed",
+        decidedAt: CLOCK(),
+        expectedVersion,
+        kind,
+        payload,
+        principalId: AUTHORITY_OWNER,
+        projectId: AUTHORITY_PROJECT,
+        schemaVersion: "moe-bootstrap-command/1",
+      })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+      if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+    };
+    commit("project.register", { owner: AUTHORITY_OWNER });
+    commit("project.bind_repository", {
+      observation: {
+        baseRevisionHash: hex("b"), repositoryRef: "repo-composed",
+        scopeRef: "scope-composed", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 1);
+    commit("provider.probe", { observation: PROVIDER_OBSERVATION });
+    commit("policy.install", { slice: POLICY_SLICE });
+    commit("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
+    commit("project.activate", {
+      witness: {
+        artifactPathRef: "artifact-composed", backupPathRef: "backup-composed",
+        credentialRef: "credential-composed", distributionManifestHash: "cafe".padEnd(64, "0"),
+        policyRevisionHash: "face".padEnd(64, "0"),
+        providerMinimumProfileRef: "provider-profile-composed",
+        signingKeyRef: "signing-composed", storeDriverRef: "store-driver-composed",
+        truthClass: "DAEMON_VERIFIED",
+      },
+    }, 2);
+    commit("goal.create", {
+      instructions: "Carry the composed planning run.", title: "Composed goal",
+    }, 0, GOAL_COMMAND);
+    store.close();
+  }
+
+  seedWorld();
+  const authorityProvider = createStoreDependencies({
+    clock: CLOCK,
+    credential: CREDENTIAL,
+    nodeSpecsDir,
+    principalId: AUTHORITY_PRINCIPAL,
+    projectId: AUTHORITY_PROJECT,
+    storePath: authorityStorePath,
+  });
+
+  afterAll(() => {
+    authorityProvider.close();
+    rmSync(authorityDirectory, { force: true, recursive: true });
+  });
+
+  it("authors the composed authority map with the configured StoreDependencyConfig principal", () => {
+    const port = authorityProvider.affordances?.();
+    expect(port).toBeDefined();
+    if (port === undefined) throw new Error("affordances is always wired");
+    const read = port.readSurface();
+    if (read.outcome !== "SURFACE") throw new Error(`refused: ${read.code}`);
+
+    // THE CONTROL that makes the assertion below load-bearing: the world really does offer an
+    // eligible run and really does bind it, so an empty map could only mean a missing forward.
+    expect(read.planningGoalRefs).toEqual({ [RUN_ID]: GOAL_ID });
+    expect(read.nextAllowedCommands.some((offer) =>
+      offer.commandKind === "plan.propose" && offer.targetAggregateId === RUN_ID)).toBe(true);
+
+    expect(Object.keys(read.planningAuthorityByRun)).toEqual([RUN_ID]);
+    const entry = read.planningAuthorityByRun[RUN_ID];
+    if (entry === undefined) throw new Error("the composed run must carry material");
+    expect(entry.goalRef).toBe(GOAL_ID);
+    // The one line under test. `AUTHORITY_PRINCIPAL` reaches this material ONLY through
+    // `principalId: config.principalId` in daemon-store-foundation-composition.ts.
+    expect((entry.authority["planRevision"] as Record<string, unknown>)["authorRef"])
+      .toBe(AUTHORITY_PRINCIPAL);
+    expect(AUTHORITY_PRINCIPAL).not.toBe(AUTHORITY_OWNER);
+    // And the merged-node roster really came from the composed spec directory.
+    expect((entry.authority["planRevision"] as Record<string, unknown>)["affectedNodeIds"])
+      .toEqual([NODE_REF]);
   });
 });

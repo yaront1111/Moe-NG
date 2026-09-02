@@ -425,9 +425,9 @@ const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
   { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS },
 );
 
-/** Planning offers are emitted per durable goal further down the surface, not from the
- *  bootstrap chain (affordance-read.ts:186-188), so these three are carded but never offered. */
-const DEFERRED_OFFER_KINDS: readonly string[] = ["approval.decide", "goal.close", "plan.propose"];
+/** These lifecycle kinds are carded only from their durable per-goal offers. */
+const BOARD_PLANNING_KINDS: readonly string[] =
+  Object.freeze(["approval.decide", "goal.close", "plan.propose"]);
 
 describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () => {
   it("offers both creation kinds against fresh daemon-minted aggregates", () => {
@@ -454,30 +454,35 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
     expect(legacy?.expectedVersion).toBe(0);
   });
 
-  it("cards exactly the kinds the dispatch serves, and offers exactly its READY ones", () => {
+  it("cards the non-planning dispatch roster and offers exactly its READY tuples", () => {
     const read = surface();
     const carded = read.steps.map((entry) => entry.kind);
+    const nonPlanningServed = SERVED_BOOTSTRAP_KINDS
+      .filter((kind) => !BOARD_PLANNING_KINDS.includes(kind));
+    const nonPlanningCarded = [...new Set(carded
+      .filter((kind) => nonPlanningServed.includes(kind)))].sort();
 
     // BOTH DIRECTIONS, and the served side is read off the HANDLER SEAM rather than off
     // BOOTSTRAP_COMMAND_KINDS. An arm that iterated the roster could only ever prove
     // "advertised implies carded": delete a member and the iteration shrinks with it, staying
     // green while a served capability silently vanishes from the surface.
     expect([...SERVED_BOOTSTRAP_KINDS].sort()).toEqual([...BOOTSTRAP_COMMAND_KINDS].sort());
-    expect(SERVED_BOOTSTRAP_KINDS.filter((kind) => !carded.includes(kind))).toEqual([]);
-    expect(carded.filter((kind) => SERVED_BOOTSTRAP_KINDS.includes(kind)).sort())
-      .toEqual([...SERVED_BOOTSTRAP_KINDS].sort());
+    expect(nonPlanningServed.filter((kind) => !carded.includes(kind))).toEqual([]);
+    expect(nonPlanningCarded).toEqual([...nonPlanningServed].sort());
+    expect(BOARD_PLANNING_KINDS.length).toBeGreaterThan(0);
+    expect([...BOARD_PLANNING_KINDS].sort())
+      .toEqual(["approval.decide", "goal.close", "plan.propose"]);
 
     // And set-equality over the CHAIN OFFERS: every READY bootstrap step carries an offer, and
-    // no offer exists for a kind no step called READY. The three deferred kinds are excluded
-    // from BOTH sides — `resolvePlanningOffers` emits them per durable goal from a different
-    // path, so counting them here would compare the chain against the planning surface.
+    // no offer exists for a kind no step called READY. The three planning kinds are covered
+    // by exact target+version tuple assertions in affordance-read-planning.test.ts.
     const offered = read.nextAllowedCommands
       .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)
-        && !DEFERRED_OFFER_KINDS.includes(entry.commandKind))
+        && !BOARD_PLANNING_KINDS.includes(entry.commandKind))
       .map((entry) => entry.commandKind).sort();
     const expected = read.steps
       .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.kind)
-        && entry.status === "READY" && !DEFERRED_OFFER_KINDS.includes(entry.kind))
+        && entry.status === "READY" && !BOARD_PLANNING_KINDS.includes(entry.kind))
       .map((entry) => entry.kind).sort();
     expect(offered).toEqual(expected);
     expect(offered).toContain("goal.create_with_source");
@@ -549,5 +554,29 @@ describe("readAffordanceRequest", () => {
     expect(readAffordanceRequest(encoder.encode("[]"))).toBeNull();
     expect(readAffordanceRequest(encoder.encode("{"))).toBeNull();
     expect(readAffordanceRequest(encoder.encode('{"projectId":7}'))).toBeNull();
+  });
+});
+
+/**
+ * task-ed89967f / R3-016 — the compatibility face of the new top-level authority map.
+ *
+ * This port is the UNCONFIGURED one: no principalId, no node roster. DoD 4 forbids any fallback,
+ * so the only admissible answer here is an omission, and DoD 5 requires the addition to be purely
+ * additive to the existing surface shape.
+ */
+describe("planningAuthorityByRun on an unconfigured port (task-ed89967f / R3-016)", () => {
+  it("adds a frozen, empty map without disturbing the existing surface members", () => {
+    const read = surface();
+
+    expect(read.planningAuthorityByRun).toEqual({});
+    expect(Object.isFrozen(read.planningAuthorityByRun)).toBe(true);
+    // THE CONTROL: this world is not planning-free — it holds durable goals and their run
+    // bindings — so {} is the unconfigured port failing closed, not an artifact of a bare ledger.
+    expect(Object.keys(read.planningGoalRefs).length).toBeGreaterThan(0);
+    // ADDITIVE ONLY: every member the surface published before this row is still published.
+    expect(Object.keys(read).sort()).toEqual([
+      "nextAllowedCommands", "outcome", "planningAuthorityByRun", "planningGoalRef",
+      "planningGoalRefs", "steps",
+    ]);
   });
 });

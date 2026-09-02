@@ -244,6 +244,8 @@ describe("createAgentWrapper", () => {
         readSurface: () => ({
           nextAllowedCommands: [],
           outcome: "SURFACE",
+          // task-ed89967f: this stub carries no planning material, and the wrapper reads none.
+          planningAuthorityByRun: {},
           planningGoalRefs: {},
           planningGoalRef: null,
           steps: [
