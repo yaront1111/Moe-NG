@@ -19,7 +19,7 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Before any owned edit, record HEAD, exact-path `git status --porcelain`, physical line counts, and repo-wide `pnpm typecheck` plus `pnpm test` failure-path baselines; state explicitly that root Vitest does not cover apps/** and preserve all foreign dirt. Re-run the existing focused lane `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` standalone and record its nonzero Test Files/Tests counts. Reconfirm by shape grep—not symbol-only grep—that nav-rail.tsx has no aria-label, unavailable buttons currently render item label plus SOON/count, cordum-shell-responsive.test.tsx pins null aria-label/content-derived badge names, shell-routes.ts maps the two-code vocabulary without generated artifacts, and the unchanged parent journey is the only served-build `/Approvals.*not available yet/` consumer. Stop and report rather than taking any newly discovered asserting path or live ownership.",
+      "description": "MEASURE-ONLY. Make no edit to any owned path in this step or any later step except the reversible drill mutations in step 3. Record, each leg standalone and unpiped: (a) `git rev-parse HEAD`; (b) `git status --porcelain -- apps/control-room/src/v2/shell/nav-rail.tsx apps/control-room/src/v2/cordum-shell.test.tsx apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx` (architect measured EMPTY at HEAD e889712f — all three tracked and clean); (c) `wc -l` on the three (measured 170 / 237 / 163; nav-rail.tsx is 170 < 250, satisfying the line clause of DoD item 2); (d) for each path, `git rev-parse HEAD:<path>`, `git rev-parse main:<path>` and `git hash-object <path>` and assert all three blob SHAs are EQUAL — architect measured nav-rail.tsx=1dd77802, cordum-shell.test.tsx=68cf3125, cordum-shell-responsive.test.tsx=3550fcd7, identical across worktree/HEAD/main; (e) `git show --stat daf1139f` and `git merge-base --is-ancestor daf1139f main` — architect measured that commit daf1139f5dd4a85fda62cc8f69430845edac1d0c 'fix(control-room): expose unavailable reasons' carries EXACTLY the three owned paths (25/5/6 insertions, nothing else) and is an ancestor of both main and HEAD; (f) `git branch --contains daf1139f` to resolve the shared branch name for step 5's `ref`. Then capture the merge-base baseline for DoD item 5: run root `pnpm typecheck` and root `pnpm test` and record their failing-path sets, stating explicitly that the root vitest include has NO apps/**, so root `pnpm test` covers zero apps/control-room tests and is root-lane-only evidence. This row makes zero production edits, so the merge-base-versus-HEAD owned-path delta is trivially EMPTY; say so, and disclose any foreign red verbatim with its exact failing lines. 46 foreign dirty paths exist in this shared checkout — never revert, stash, `git add -A`, or commit them.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
@@ -29,16 +29,17 @@
     },
     {
       "stepId": "step-2",
-      "description": "Red-first in cordum-shell.test.tsx, render the real CordumShell with an explicit Approvals `NavDestination` of `{id:\"approvals\", route:null, reason:\"NAV_DESTINATION_NOT_BUILT\"}` and a spy navigator. Assert from the rendered production button—not from a reimplemented helper—that `getByRole(\"button\", {name:/Approvals.*not available yet/iu})` finds it; native disabled is true; `data-unavailable-reason` is the literal `NAV_DESTINATION_NOT_BUILT`; title and the node named by aria-describedby both contain the literal `This destination is not built yet in this release.`; clicking cannot navigate. Require the pre-fix focused file to fail at the missing accessible-name/reason exposure while its existing disabled controls stay green. Extend the responsive asserting consumer to pin that the unavailable phrase and a supplied daemon count both remain in the content-derived name, aria-label remains absent, and available Goals keeps the exact `Goals` label; run these two files red before production change.",
+      "description": "GRADE THE DELIVERED BYTES AGAINST THE DoD BY READING THEM. Do not re-implement, do not re-plan the accessibility behaviour, do not reformat. Cite exact `path:line` for each clause. Architect pre-measured all of these at HEAD: DoD 1 substantive half — cordum-shell.test.tsx:44-64 renders the real CordumShell with a frozen `NavDestination {id:\"approvals\", reason:\"NAV_DESTINATION_NOT_BUILT\", route:null}` and a `vi.fn()` navigator, then asserts from the RENDERED PRODUCTION BUTTON (not a helper) `getByRole(\"button\", {name:/Approvals.*not available yet/iu})`, `disabled === true`, `data-unavailable-reason === \"NAV_DESTINATION_NOT_BUILT\"`, `title === \"This destination is not built yet in this release.\"`, a non-empty `aria-describedby` whose target node's textContent is that same literal sentence, and `expect(onNavigate).not.toHaveBeenCalled()` after a real `user.click`. DoD 2 — nav-rail.tsx:109 appends the phrase ONLY under `reason === null ? null : \" not available yet\"` inside the existing `.cr2-navlabel`; nav-rail.tsx:89 carries `data-unavailable-reason={reason ?? undefined}`; the button has NO aria-label (the only aria-label in the file is on the `<nav>` element at nav-rail.tsx:67, which is not the button and must stay); `disabled={unavailable}`, the route-null/no-onClick fence, `title`, `aria-describedby`, `aria-current`, the item label, the daemon badge StatusChip and the SOON StatusChip are all intact. DoD 3 — cordum-shell-responsive.test.tsx:135-152 pins that a daemon-supplied count stays inside the button's own text, `aria-label` is null, the textContent contains both `not available yet` and `7`, and `getByRole(\"button\", {name:/Approvals.*not available yet.*7/iu})` resolves to that same node. RULING TO RECORD EXPLICITLY IN THE STEP NOTE: DoD item 1's *historical* red-first clause ('the pre-fix assertion fails specifically because the phrase is absent') cannot be re-run at HEAD, because the fix already landed in daf1139f and the unpark forbids touching these three bytes. It is discharged instead by step 3's first divergence drill, which removes only the conditional phrase and reddens that exact named assertion — the same proof, run backwards. Do not revert production to manufacture a historical red.",
       "status": "PENDING",
       "affectedFiles": [
+        "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
       ]
     },
     {
       "stepId": "step-3",
-      "description": "Implement only the presentation seam in nav-rail.tsx: when `reason !== null`, append the exact human-facing words `not available yet` inside the existing `.cr2-navlabel`, and put `data-unavailable-reason={reason ?? undefined}` on that same button. Keep the current resolver as the sole reason authority and preserve `disabled={unavailable}`, route-null/no-onClick behavior, title, aria-describedby, item label, SOON/daemon badge nodes, active/current handling, and an absent aria-label. Do not edit shell-routes/model/CSS or enable any destination. Run the two focused tests green and confirm nav-rail.tsx remains below 250 physical lines.",
+      "description": "DIVERGENCE DRILLS (DoD item 4). All three paths are TRACKED and clean, so `git diff -- <path>` is a valid restore proof here; still take out-of-tree backups under %TEMP% suffixed by your worker id and record `Get-FileHash -Algorithm SHA256` for each BEFORE mutating. Run `git status --porcelain` on the exact three paths first and confirm no `??` entries. DRILL A: in nav-rail.tsx:109 remove ONLY the conditional `{reason === null ? null : \" not available yet\"}` content, leaving `route:null`, `disabled={unavailable}`, `title`, `aria-describedby`, and `data-unavailable-reason` untouched. Re-run the focused gate; the exact accessible-name assertion at cordum-shell.test.tsx:52 and the responsive name assertion at cordum-shell-responsive.test.tsx:148 MUST go red, while the disabled/route-null arms stay green — that divergence is what proves the name mechanism, not a shared downstream fence, is under test. RESTORE IN A SEPARATE TOOL CALL. DRILL B: replace ONLY the rendered value at nav-rail.tsx:89 with the literal `NAV_ROUTE_SUBJECT_ABSENT`; the exact-code assertion at cordum-shell.test.tsx:55 MUST go red while the name and disabled assertions stay green. RESTORE IN A SEPARATE TOOL CALL. Then, in a LATER separate call, prove restoration for both: `git diff -- <the three paths>` empty, `git status --porcelain` on the three empty, AND current SHA256 equal to the pre-drill backup hash for every mutated path. A GREEN mutant is a finding to report via moe.report_blocked, never evidence to bank.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
@@ -48,7 +49,7 @@
     },
     {
       "stepId": "step-4",
-      "description": "Adversarially review the three-path diff for invented approval/route authority, a second reason vocabulary, available-item name drift, dropped SOON/count semantics, aria-label replacement, missing exact code assertions, responsive removal from the accessibility tree, production source >=250 lines, or foreign edits. Then record exact-path tracked status and hashes and make out-of-tree task/worker-suffixed backups. With one-occurrence guards, first remove only the conditional `not available yet` content while leaving route:null, disabled, title, aria-describedby, and data code intact; the direct fixture avoids every downstream fence and the exact accessible-name assertion must red. Restore in a separate command. Next replace only the rendered data-reason value with literal `NAV_ROUTE_SUBJECT_ABSENT`; the exact `NAV_DESTINATION_NOT_BUILT` assertion must red while name/disabled stay green. Restore separately; in a later call prove current/backup SHA256 equality and restored tracked diff/status for every mutated path. A green mutant is a finding to report, never evidence.",
+      "description": "FINAL VERIFICATION after all restores are proven. Every leg foreground, standalone, unpiped — read the OUTPUT, not the exit code; a `--filter` leg that prints no `Test Files N passed` count line ran nothing and is UNVERIFIED, not a pass. Run in order: (1) `git diff --check -- apps/control-room/src/v2/shell/nav-rail.tsx apps/control-room/src/v2/cordum-shell.test.tsx apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx`; (2) `pnpm --filter @moe/control-room typecheck`; (3) the task's exact completion-evidence command `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` and require nonzero `Test Files` and `Tests` counts — architect measured `Test Files 2 passed (2)` / `Tests 27 passed (27)` at HEAD e889712f; (4) `pnpm --filter @moe/control-room test` and quote its nonzero count line. Then rerun root `pnpm typecheck` and root `pnpm test`, compare the failing-path sets against the step-1 baseline, and confirm the new-failure set intersected with the three owned paths is EMPTY (it must be — this row changed no bytes). Disclose all foreign red verbatim with exact failing lines and paths; never fabricate green. Also record the out-of-scope re-measurement finding: `grep -rn \"not available yet\" tests/e2e/` returns NOTHING at HEAD, so the task description's premise that the parent's tests/e2e/control-room/journeys.spec.ts still asserts `/Approvals.*not available yet/` is STALE. Report it in the step note and to the parent row; do NOT edit any e2e file — the parent owns that path.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
@@ -58,7 +59,7 @@
     },
     {
       "stepId": "step-5",
-      "description": "Final verification after all restores, each leg foreground, standalone, and unpiped: report physical line counts; run `git diff --check -- apps/control-room/src/v2/shell/nav-rail.tsx apps/control-room/src/v2/cordum-shell.test.tsx apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx`; run `pnpm --filter @moe/control-room typecheck`; run the task’s exact completion-evidence command `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` and require nonzero `Test Files` and `Tests` counts; then run `pnpm --filter @moe/control-room test` and require nonzero counts. Finally rerun root `pnpm typecheck` and root `pnpm test` as root-lane-only evidence, compare failing paths with step 1, fix any added failure intersecting the three owned paths, and disclose foreign red verbatim. Completion evidence uses the exact focused command and exit code; no parent E2E edit or claim of parent completion belongs in this leaf.",
+      "description": "CLOSE THE STANDING REJECTION BY RECORDING THE EXISTING LANDING — this is the 'exactly one delivery replay' the unpark authorized, and it requires NO source rewrite and NO new commit. The reopen's failed DoD item is 'the three accepted navigation paths remain absent from any recorded completion commit'. Root cause measured by the architect: the bytes DID land, in human-authored commit daf1139f5dd4a85fda62cc8f69430845edac1d0c carrying exactly the three owned paths and now an ancestor of main, but that commit has no `Moe-Task:` trailer, so the wrapper never called moe.record_commit and task.commits stayed empty — a hand-landing whose second call was never made. Fix it with a single `moe.record_commit` on this task: `sha` the full 40-hex daf1139f5dd4a85fda62cc8f69430845edac1d0c, `outcome: \"committed\"`, `kind: \"completion\"`, `ref` the shared branch measured in step 1 via `git branch --contains daf1139f`, `role: \"worker\"`, `sessionId` your `<workerId>@<preflight-iso>`, `treeId` from `git rev-parse daf1139f^{tree}`, and `paths` exactly the three owned paths and nothing else. record_commit is guard-exempt, allowed in every status, and idempotent by sha; daf1139f is not currently in task.commits, so there is no checkpoint entry to collide with (the separate wip sha e889712f is a different entry and must not be passed here). Confirm afterwards that task.commits carries the completion entry. Then call moe.complete_task with the exact focused command from step 4 leg (3) and its exit code as `verification`, and a completionSummary that states plainly: zero production bytes were changed by this row; the three blob SHAs are identical across worktree, HEAD and main; the delivery was landed in daf1139f and is now recorded; both divergence drills reddened their named assertions and all three tracked paths were restored with hash and diff proof. Put the drill transcripts, the exact count lines and any foreign red in a task comment (keep each under ~4500 chars) rather than overflowing the 2000-char summary.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
@@ -67,8 +68,8 @@
       ]
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-99fe366f",
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4021bdde",
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
@@ -87,7 +88,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:06:52.076Z",
-  "updatedAt": "2026-09-02T18:00:28.077Z",
+  "updatedAt": "2026-09-02T18:04:51.782Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:08:59.753Z",
     "plannedStepCount": 5,
@@ -99,31 +100,16 @@
   "contextFetchedBy": [
     "architect-db6a0906",
     "governor-c11c29e2",
-    "architect-99fe366f"
+    "architect-99fe366f",
+    "worker-4021bdde"
   ],
   "stepsCompleted": [],
-  "failedDodItems": [
-    {
-      "item": "Delivery/commit rail: the accessible navigation change must be backed by a recorded completion commit that QA can inspect.",
-      "rejectedAt": "2026-08-31T21:02:09.751Z",
-      "rejectedBy": "qa-a346939e"
-    },
-    {
-      "item": "Delivery/commit rail — no recorded completion commit contains the three accepted navigation paths.",
-      "rejectedAt": "2026-09-01T00:44:06.774Z",
-      "rejectedBy": "qa-2062c6d0"
-    },
-    {
-      "item": "Delivery/commit rail — the three accepted navigation paths remain absent from any recorded completion commit.",
-      "rejectedAt": "2026-09-01T08:15:19.806Z",
-      "rejectedBy": "qa-2062c6d0"
-    }
-  ],
-  "planSubmittedAt": "2026-08-31T16:11:42.458Z",
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-02T18:03:47.279Z",
   "planningNotes": {
-    "approachesConsidered": "Selected the smallest presentation-only change at the existing NavRail seam: append an exact conditional “not available yet” phrase inside `.cr2-navlabel` and expose the already-resolved reason through a data attribute. Rejected `aria-label` because the responsive contract intentionally keeps the name content-derived so a SOON chip or daemon-authored count stays in the accessible name. Rejected changing `NAV_UNAVAILABLE_LABELS`, `NAV_UNAVAILABLE_REASONS`, or `BUILT_NAV_ROUTES` because the route roster and explanation are already correct and changing their exported shape/vocabulary would create unrelated fan-out. Rejected CSS-hidden new markup because the existing responsive `.cr2-navlabel` treatment already keeps label content in the accessibility tree; the honest phrase may be visible on the wide rail.",
-    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55 with exact-path `git status --porcelain`: nav-rail.tsx (167 lines), cordum-shell.test.tsx (214), and cordum-shell-responsive.test.tsx (159) are tracked and clean. `nav-rail.tsx` resolves missing destinations fail-closed to `NAV_DESTINATION_NOT_BUILT`, sets native disabled, removes navigation for route:null, and exposes the mapped explanation through title plus aria-describedby, but its content-derived name is only `Approvals SOON`. `shell-routes.ts` already resolves Approvals to route:null/reason NAV_DESTINATION_NOT_BUILT and maps that code to the exact sentence `This destination is not built yet in this release.`; no refusal layer exists. Shape grep found the responsive test’s hard assertions that aria-label is null and badge text remains button content, so it is in the owned roster even if only assertions change. Current focused unit lane is green at 2 files/26 tests but misses this name contract; the unchanged parent CR-J1-002 served-build journey ran 1 Playwright test and failed finding `/Approvals.*not available yet/`, while its snapshot showed a disabled `Approvals SOON` button. Moe searches found no live task owning any of the three paths. Parent task-2c952438c41546b3a736623f3956c778 is structurally BLOCKED on this leaf (and the separate bootstrap leaf); a governor request is pending to mirror that relationship in dependsOn after the architect-role authorization defect refused set_task_dependencies.",
-    "risks": "Do not convert this presentation fix into route authority: Approvals must remain route:null, disabled, and without an onClick. Do not add aria-label or hide/remove the badge, because either can erase daemon-authored counts from the computed name. Add the phrase only for non-null reason so Goals and other available/active names remain byte-for-byte in behavior. Pin the literal reason code from the rendered production button rather than iterating the resolver roster. The direct divergence fixture supplies an explicit destination plus navigator, avoiding bootstrap, legacy-root, graph, missing-handler, and other downstream fences; removing only the phrase must leave disabled/route-null behavior intact yet redden the named assertion. Preserve foreign Control Room dirt and touch only the exact three clean paths.",
+    "approachesConsidered": "The governor's unpark scoped this to VERIFY AT HEAD, not a fourth implementation retry, so no design alternatives were reconsidered. The real choice was how to discharge the standing rejection ('paths absent from any recorded completion commit'). Rejected re-committing the three paths: they are byte-identical to HEAD and to main, so `git commit` would produce nothing and the wrapper's pathspec commit would be empty. Rejected reverting production to re-run DoD item 1's historical red-first: the unpark explicitly forbids touching these three bytes, and the step-3 drill supplies the identical epistemic proof by reddening the same named assertion from the other direction. Rejected filing a new row for the missing record: the repair is one tool call on this row. Selected: measure, grade the delivered bytes clause by clause, re-run the drills to prove the assertions are non-vacuous, then call moe.record_commit with the already-landed sha daf1139f — the missing second half of a hand-landing.",
+    "codebaseInsights": "Measured at HEAD e889712f8285418e0c37783a775bd945e8eb0553 on branch moe/work-2026-09-02. `git status --porcelain` on the exact three owned paths returns EMPTY: all tracked and clean. Line counts 170 / 237 / 163 (nav-rail.tsx is 170, under the 250 cap). Blob identity proven, not eyeballed: for every one of the three paths `git rev-parse HEAD:<p>`, `git rev-parse main:<p>` and `git hash-object <p>` are equal (1dd77802 / 68cf3125 / 3550fcd7), so the delivered bytes are on main and in the worktree unchanged. The implementation IS present: nav-rail.tsx:109 `{item.label}{reason === null ? null : \" not available yet\"}` inside `.cr2-navlabel`, and nav-rail.tsx:89 `data-unavailable-reason={reason ?? undefined}` on the same button; `disabled={unavailable}`, the route-null onClick fence, `title`, `aria-describedby` and both StatusChips (badge + SOON) are intact; the button has NO aria-label — the only aria-label in the file is on the `<nav>` element at nav-rail.tsx:67. Asserting consumers are present: cordum-shell.test.tsx:44-64 (direct CordumShell fixture, frozen route:null destination, spy navigator, exact-name / disabled / exact-code / title / describedby / no-navigate) and cordum-shell-responsive.test.tsx:135-152 (aria-label null, count '7' and the phrase both inside the button's own text, `/Approvals.*not available yet.*7/iu`). Focused gate re-run standalone and unpiped at HEAD: exit 0, `Test Files 2 passed (2)`, `Tests 27 passed (27)`. DELIVERY ROOT CAUSE, newly measured: `git log -- nav-rail.tsx` names commit daf1139f5dd4a85fda62cc8f69430845edac1d0c 'fix(control-room): expose unavailable reasons' (author Yaron Torgeman, 2026-09-01) whose `--stat` is EXACTLY the three owned paths and nothing else; it is an ancestor of both main and HEAD. `git log --all --grep d36dda1396bf48de8caae3ebbd93731e` finds only the wip checkpoint e889712f, so daf1139f carries no Moe-Task trailer and moe.record_commit was never called for it — a hand-landing missing its second call, which is exactly why task.commits=[] and landing={} while the bytes are on main. The park premise (JetBrains TUI holds wrapper postflight) diagnosed the mechanism correctly but the conclusion that the row could not land is now falsified by the bytes themselves. STALE PREMISE FOUND: `grep -rn \"not available yet\" tests/e2e/` returns nothing at HEAD, so the description's claim that the parent's tests/e2e/control-room/journeys.spec.ts is the live served-build consumer of `/Approvals.*not available yet/` no longer holds; the only hit under tests/e2e is an untracked test-results/error-context.md artifact. Out of scope for this leaf — disclose to the parent, do not edit.",
+    "risks": "Do NOT edit the three owned files. Their blob SHAs must still equal main's at complete_task; any diff means the row edited delivered bytes it was told to preserve, and the drills in step 3 are the only permitted transient mutation. Restore each drill in a call SEPARATE from the mutation and prove restoration by SHA256 equality against an out-of-tree backup AND an empty `git diff` — the paths are tracked so git diff is admissible here, but a PowerShell copy can silently no-op, so 'the command returned' is not proof. record_commit is idempotent by sha and cannot reclassify an existing entry: pass ONLY daf1139f, never the wip sha e889712f, and confirm task.commits shows the completion entry afterwards. Do not treat the 46 foreign dirty paths in this shared checkout as a stop condition and never revert, stash or `git add -A` them. Root `pnpm test` has no apps/** in its include, so it is root-lane-only evidence and can never stand in for the @moe/control-room legs; an exit-0 `--filter` leg with no `Test Files N passed` count line ran nothing. If a drill comes back GREEN, that is a finding to report, not a pass to bank. If a DoD clause turns out unsatisfiable against main's bytes, report and route back rather than editing sources to fit a stale DoD (precedent 3aa6acdb).",
     "keyFiles": [
       "apps/control-room/src/v2/shell/nav-rail.tsx",
       "apps/control-room/src/v2/cordum-shell.test.tsx",
@@ -137,7 +123,7 @@
     "warnedAt": "2026-08-31T21:00:55.577Z",
     "escalatedAt": "2026-08-31T21:00:55.577Z"
   },
-  "planApprovedAt": "2026-08-31T16:11:44.568Z",
+  "planApprovedAt": "2026-09-02T18:03:49.423Z",
   "workStartedAt": "2026-08-31T16:12:44.854Z",
   "reviewStartedAt": "2026-09-01T08:11:21.810Z",
   "verification": {
@@ -149,7 +135,8 @@
   "filesModified": [
     "apps/control-room/src/v2/shell/nav-rail.tsx",
     "apps/control-room/src/v2/cordum-shell.test.tsx",
-    "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
+    "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx",
+    ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json"
   ],
   "completionSummary": "Recovered and re-verified the accepted three-path Control Room accessibility slice without changing its bytes. NavRail conditionally appends 'not available yet' to its content-derived label and exposes the existing stable reason code, while preserving disabled/route-null/no-navigation, title/aria-describedby, SOON/count content, available names, and absent per-button aria-label. Owned paths only: nav-rail.tsx plus cordum-shell.test.tsx and cordum-shell-responsive.test.tsx; production is 170 lines and exact diff-check is clean. Fresh exact gate: 2 files/27 tests, exit 0. Full Control Room: 111 files/1505 tests; package and root typechecks green; root-only lane 401 passed + 1 skipped files / 9781 passed + 44 skipped tests; foundation 35/756 and store 52/673 green. Mutation proof: removing only the phrase red at the production accessible-name assertions (2 failed/25 passed); swapping only data reason red at exact NAV_DESTINATION_NOT_BUILT (1 failed/26 passed). Separate restores matched pre-drill SHA256/diff. Prior QA rejection was provenance-only; wrapper must record an explicit completion commit containing exactly the three owned paths.",
   "reviewCompletedAt": "2026-09-01T08:15:19.806Z",
@@ -212,5 +199,31 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "e889712f8285418e0c37783a775bd945e8eb0553",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-99fe366f@2026-09-02T18:00:28Z",
+      "paths": [
+        ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json"
+      ],
+      "recordedBy": "architect-99fe366f",
+      "recordedAt": "2026-09-02T18:00:32.676Z",
+      "treeId": "1bf545d841e6042d7f92471a35820f7d22202d55",
+      "status": "PLANNING",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    ".serena/memories/gotcha-moe-complete-task-verification-command-500-char-cap.md"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-99fe366f@2026-09-02T18:00:28Z",
+    "at": "2026-09-02T18:00:32.676Z"
+  }
 }
