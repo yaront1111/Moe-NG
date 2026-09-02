@@ -29,13 +29,25 @@ import { GoalsHome } from "./goals-home.js";
 
 const POLL_INTERVAL_MS = 2_000;
 
+/**
+ * The refusal already in hand, said in one sentence.
+ *
+ * Both refused surfaces - the coming-online note and the disabled create
+ * control - read it from here, so this page speaks ONE refusal vocabulary and
+ * the two cannot drift apart. Nothing is added to the daemon's truth:
+ * `LiveRefused` is `{code, detail, ok}` and has no layer (live-config.ts:49-53).
+ */
+function refusalSentence(setup: LiveRefused): string {
+  return `${setup.code}: ${setup.detail}`;
+}
+
 function notAttached(setup: LiveRefused): GoalsData {
   return {
     source: "live",
     goals: [],
     triage: [],
     goalCountLabel: "NOT ATTACHED",
-    comingOnlineNote: `${setup.code}: ${setup.detail}`,
+    comingOnlineNote: refusalSentence(setup),
   };
 }
 
@@ -84,6 +96,13 @@ export function LiveGoalsHome({
 
   const data = setup.ok ? deriveGoalCatalog(catalog) : notAttached(setup);
 
+  // A refused bootstrap closes goal creation on THIS component's own authority,
+  // never on its caller's memory to pass a reason. On refusal the derived
+  // sentence SUPERSEDES the prop: the shell's string is generic prose and does
+  // not name the code the operator needs. On an attached session nothing is
+  // derived and the caller's connection banner flows through untouched.
+  const createDisabled = setup.ok ? createDisabledReason : refusalSentence(setup);
+
   const dispatch = useMemo<(draft: GoalDraft) => Promise<GoalCreateResult>>(
     () => (setup.ok
       ? createGoalDispatcher(setup as LiveSetup, () => frameRef.current)
@@ -121,7 +140,7 @@ export function LiveGoalsHome({
         </p>
       ) : null}
       <GoalsHome
-        createDisabledReason={createDisabledReason}
+        createDisabledReason={createDisabled}
         data={data}
         onCreateGoal={onCreateGoal}
         onOpenBoard={onOpenBoard}

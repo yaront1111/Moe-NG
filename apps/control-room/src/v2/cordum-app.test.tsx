@@ -264,7 +264,11 @@ describe("CordumApp live path uses the runtime handshake", () => {
     // The refused surface renders once the handshake fails closed: NOT ATTACHED
     // with the bootstrap refusal code, and no crash.
     expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
-    expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(2);
+    // Three paragraphs: the refusal notice, the NOT ATTACHED note, and the
+    // create control's own "New goal unavailable" explanation, which LiveGoalsHome
+    // now derives itself. The button carries the code in a `title` attribute too,
+    // which getAllByText does not see.
+    expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(3);
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
     expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
 
@@ -380,7 +384,10 @@ describe("CordumApp bounded live recovery", () => {
 
     render(<StrictMode><CordumApp liveSetup={attempts} search="" /></StrictMode>);
 
-    expect(await screen.findAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/u)).toHaveLength(2);
+    // Three, for the same reason as the refused-surface arm above: the create
+    // control's derived "New goal unavailable" explanation joins the notice and
+    // the NOT ATTACHED note.
+    expect(await screen.findAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/u)).toHaveLength(3);
     expect(fetchMock.mock.calls.filter(([input]) => input === "/bootstrap")).toHaveLength(1);
     expect(attempts.retry).toHaveBeenCalledTimes(0);
   });
