@@ -5,7 +5,7 @@ import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { packWindows } from "./pack-windows.js";
-import { parseWindowsPackToolchain } from "./pack-command.js";
+import { parseWindowsPackToolchain } from "./pack-toolchain-codec.js";
 
 const SOURCE_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const INPUT_ERROR = "PACK_SOURCE_INPUT_INVALID" as const;

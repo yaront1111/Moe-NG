@@ -135,12 +135,12 @@
       "startedAt": "2026-09-02T19:13:09.750Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "AWAITING_APPROVAL",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Still required; blocked rather than backlogged per human cleanup policy: browser-core consumer pending ed899/3aa completion provenance. Unblock after ed899 lands.",
+  "reopenReason": "Architect amendment decision FILED (comment-83cb3c22). Hopping via AWAITING_APPROVAL because PLANNING -> WORKING is refused by the state machine and the only other route to WORKING is submit_plan, which would REPLACE implementationPlan and destroy the COMPLETED status plus the evidence notes on steps 1-5 — exactly what the governor's handoff forbade (\"DO NOT RE-IMPLEMENT ... anything that rewrites the delivered work is wrong\"). The existing 6-step plan is intact and correct; steps 1-5 are COMPLETE and this row's own 436-char gate passes at the delivered tree (4 files / 106 tests, tsc clean, NODE_BRIDGE_OK, exit 0). ONLY STEP 6 REMAINS: run the gate, disclose the single @moe/control-room lane red verbatim naming task-3f75f0e6a37645a08b48f628a2514239 as its owner, and complete. The unnamed-consumer block is resolved: the 11-path amendment was measured unavailable (submit_plan rejects >10 affectedFiles, this row sits at exactly 10, and all ten carry delivered work across steps 2-5 so no swap exists), so successor task-3f75f0e6 now owns apps/control-room/src/shell-mode-view.test.tsx. task-28cd95db has been given that successor in dependsOn so the chain cannot livelock. Approve to return this row to WORKING; no plan change is needed or wanted.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c444b68f0ceb427c86f025f5469c4857",
   "dependsOn": [
@@ -161,11 +161,17 @@
       "author": "worker-1ff24286",
       "content": "BLOCK EVIDENCE — MEASURED REGRESSION ON AN UNNAMED CONSUMER (step 6c). For the architect amending this row.\n\n=== THE BREAK, WITH ITS MERGE-BASE BASELINE ===\nFailing arm: apps/control-room/src/shell-mode-view.test.tsx:198-200\n  expect(screen.getAllByRole(\"button\", { name: /^Dispatch /u })).toHaveLength(...)\n  expect(screen.getByTestId(\"cr.liveboard.dispatch.approval.decide\")).toBeTruthy();\nFailure: `Unable to find an element by: [data-testid=\"cr.liveboard.dispatch.approval.decide\"]` — the approval control no longer renders.\n\nPATH-ATTRIBUTED BASELINE, both legs run standalone/unpiped:\n (1) MERGE-BASE 8c305e8f (= 56dae6d7^, the commit before this row's only commit). I restored ONLY my four pre-existing owned production files with `git checkout 8c305e8f -- …` and moved the two new files out of tree, then ran the single file:\n     `Test Files 1 passed (1) / Tests 10 passed (10)`, EXIT=0.\n (2) HEAD 83ac17e3 + my diff: `Test Files 1 failed (1) / Tests 1 failed | 9 passed (10)`, EXIT=1.\nDELTA (2)-minus-(1) is NON-EMPTY and it is MINE. I am not attributing it to a peer: `git status --porcelain` on that path is clean, and no live row owns it (rows naming it are DONE, except task-28cd95db which is BLOCKED). This is precisely the case the global rail says a worker may NOT excuse under the path-attributed baseline.\n\n=== ROOT CAUSE — CORRECT PRODUCTION BEHAVIOUR, STALE CONSUMER FIXTURE ===\nDoD 3 requires live-board to \"require exact offered run goal binding PLUS sidecar material before rendering plan.propose or approval.decide\". Measured: `git grep -c planningAuthorityByRun -- apps/control-room/src/shell-mode-view.test.tsx` returns NO HITS. The fixture offers approval.decide while stating no planning material, so under the new fence the control correctly does NOT render. The fence is right; the fixture's expectation is stale.\n\n=== WHY I DID NOT FIX IT ===\nThree routes, two of them forbidden:\n (a) Weaken the render fence so the material-less fixture renders again — forbidden by DoD 3 and by the rail's \"never rename or reformat the producer to evade the consumer's check\". It would also silently retire the capability this whole row exists to add.\n (b) Edit shell-mode-view.test.tsx myself — an ELEVENTH path against task rail 1 (\"Own exactly the ten named paths\"), and the row already sits at the daemon's hard 10-file reject threshold.\n (c) STOP AND REPORT — what the rail prescribes verbatim: \"A worker who finds an unnamed consumer mid-step must stop and report rather than take the extra path, and the architect must amend or split.\" Taking (b) quietly is how an ownership roster becomes fiction.\n\n=== THE AMENDMENT, SCOPED SO IT IS ONE MOVE ===\nFull reachability re-grep for consumers of the render surface OUTSIDE my ten:\n  `git grep -l -E 'cr\\.liveboard\\.dispatch|Dispatch (plan\\.propose|approval\\.decide)|name: /\\^Dispatch ' -- apps packages`\n  -> apps/control-room/src/live/live-board-narrow.test.ts  (PASSES — no change needed; it was among the 112 green files)\n  -> apps/control-room/src/shell-mode-view.test.tsx        (THE ONLY RED)\n  `git grep -l -E 'from \"\\./live-board\\.js\"|frameOfSurface'` -> apps/control-room/src/live/live-app.tsx (no dispatch-control assertions; not affected)\nSo the amendment needs EXACTLY ONE extra owned path: `apps/control-room/src/shell-mode-view.test.tsx` (11 total), or a split if 11 is unacceptable.\n\nTHE FIX ITSELF IS THE WORK DoD 4(f) ALREADY DESCRIBES, applied to a third consumer of the same class: add valid `planningAuthorityByRun` wire facts to that fixture (exact seven-key entry, mapKey == runId, goalRef matching the surface's `planningGoalRefs`) so the approval control renders on real material — NEVER by weakening the expectation to `queryByTestId(...).toBeNull()`. The architect named two approval consumers (a11y, effort-path); the reachability grep behind that roster missed this third one because it lives at `src/`, not `src/live/`.\n\n=== EVERYTHING ELSE IS DONE AND GREEN ===\nThe exact 436-char completion gate passes at the delivered tree, foreground/unpiped, re-verified AFTER the attribution experiment restored all ten files (10/10 SHA-EQUAL, 0 mismatches):\n  `Test Files 4 passed (4)` / `Tests 106 passed (106)`; `$ tsc --project tsconfig.json`; literal `NODE_BRIDGE_OK`; GATE EXIT=0.\nSteps 1-5 are COMPLETED. Step 5 additionally found and fixed two real fail-open defects (revoked-Proxy TypeError escape; a plain-access read that let a hostile getter fire and throw) red-first — see the step-5 note. Full control-room lane at the delivered tree: `Test Files 1 failed | 112 passed (113)` / `Tests 1 failed | 1561 passed (1562)` — that ONE failure is the row above and nothing else.\nRoot typecheck/test/foundation/store lanes were deliberately NOT run: their result changes once the amendment lands, and I will not bank a baseline that the fix invalidates.",
       "timestamp": "2026-09-02T19:17:31.167Z"
+    },
+    {
+      "id": "comment-83cb3c22c69144dcacb589b2478d311b",
+      "author": "architect-99fe366f",
+      "content": "ARCHITECT RULING ON THE AMENDMENT HANDOFF — SUCCESSOR, NOT AN ELEVENTH PATH. Filed by architect-99fe366f. worker-1ff24286's report was correct in every particular and required no re-measurement to overturn; this only decides the routing question the governor left open.\n\nTHE MEASUREMENT THE GOVERNOR ASKED FOR. The 11-path option is NOT available. moe.submit_plan rejects a plan with more than 10 distinct affectedFiles — the daemon states it directly in its own warning (\"plans over 10 are rejected\"), and this row is already at exactly 10. I then checked whether a swap was possible instead of an addition: it is not. Every one of the ten paths carries delivered work across the completed steps — step 2 modified 4 of them, step 3 six, step 4 all ten, step 5 three. There is no unedited path to drop. So the roster cannot absorb shell-mode-view.test.tsx by amendment, and the successor is the only route.\n\nFILED: **task-3f75f0e6a37645a08b48f628a2514239** — \"[R3-016 consumer leaf] State valid planning authority in the shell-mode-view fixture\", CRITICAL, PLANNING, parentTaskId this row, dependsOn this row. It owns exactly one path, apps/control-room/src/shell-mode-view.test.tsx.\n\nI RE-MEASURED THE PREMISE RATHER THAN TRUSTING THE HANDOFF, and it holds: the file is 208 lines, tracked, clean in porcelain, and `git grep -c planningAuthorityByRun` on it returns 0. The failing assertions are at :198-200 — `getAllByRole(\"button\", {name:/^Dispatch /u})).toHaveLength(1)` and `getByTestId(\"cr.liveboard.dispatch.approval.decide\")).toBeTruthy()`. Correct production behaviour, stale fixture, exactly as reported.\n\nTHE FIX IS CARRIED INTO THE SUCCESSOR'S DoD AND RAILS VERBATIM AND UNWEAKENED. I located the exemplar so the next agent does not have to: live-board.test.tsx:535-541 `approvalMaterial(runIds)` maps each runId to `materialOf({bytes, criteriaDigest, goalRef: \\`goal-${runId}\\`, graphHash, runId, submissionHash})`. NOTE IT IS LOCAL TO THAT FILE AND NOT EXPORTED, so the successor must construct the equivalent facts rather than import it — that would otherwise be the first thing a worker tries and the first thing that fails. The binding rule is stated in that file's own comment: an approval control renders only for a run the daemon bound to a goal AND stated material for, so a surface must state BOTH. A weakened `queryByTestId(...).toBeNull()` is barred in both the successor's DoD item 3 and its rail 2.\n\nI ALSO ADDED A NON-VACUITY DRILL the handoff did not ask for: break the mapKey so it no longer equals its runId, and separately supply a goalRef absent from planningGoalRefs, and require the approval.decide assertion to red each time while the BLOCKED-card arms stay green. Without it the new fixture would pin only that the control renders, not that it renders for the RIGHT reason — which is the whole capability this row adds.\n\nDEPENDENCY WIRED SO THE CHAIN CANNOT LIVELOCK. task-28cd95db is BLOCKED with blockedOnTaskIds [this row], so it would have auto-unblocked the moment this row reached DONE — straight into a lane still red through the same fixture, and straight back to blocked. I have therefore added task-3f75f0e6 to 28cd95db's dependsOn. The chain is now: this row DONE -> 3f75f0e6 claimable -> 3f75f0e6 DONE -> 28cd95db claimable with a green lane. Self-clearing, no governor hop required at any step.\n\nNOTHING IS ASKED OF THIS ROW. Steps 1-5 stay COMPLETE, the delivered work stays untouched, and this row's own 436-char gate already passes (4 files / 106 tests, tsc clean, NODE_BRIDGE_OK, exit 0). Finish step 6 and complete; the one red in the wider @moe/control-room lane is now owned by a named successor that 28cd95db waits on, and should be disclosed verbatim in the completion record with that row id cited rather than treated as this row's failure.",
+      "timestamp": "2026-09-02T19:28:40.746Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T08:31:06.576Z",
-  "updatedAt": "2026-09-02T19:19:07.336Z",
+  "updatedAt": "2026-09-02T19:29:28.150Z",
   "contextFetchedBy": [
     "governor-425e4c88",
     "architect-1f97776b",
@@ -222,9 +228,9 @@
     "escalatedAt": "2026-09-02T18:33:42.194Z"
   },
   "planApprovedAt": "2026-09-02T18:17:16.739Z",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-02T19:19:07.336Z",
-  "blockedReason": "ARCHITECT AMENDMENT NEEDED — ONE UNNAMED CONSUMER, ONE EXTRA PATH. Full evidence in row comment comment-cce7c999 plus the step-4/step-5 notes.\n\nImplementation is COMPLETE; the exact 436-char gate PASSES at the delivered tree: `Test Files 4 passed (4)` / `Tests 106 passed (106)`, `$ tsc --project tsconfig.json`, literal `NODE_BRIDGE_OK`, EXIT=0. Steps 1-5 COMPLETED. I am not blocking on my own work.\n\nBLOCK: my DoD-3 render fence reds a consumer the plan never named — apps/control-room/src/shell-mode-view.test.tsx:198-200 (`cr.liveboard.dispatch.approval.decide` stops rendering). Path-attributed baseline, both legs standalone: merge-base 8c305e8f (=56dae6d7^) `Tests 10 passed` EXIT=0; HEAD+my diff `1 failed | 9 passed`. Delta is NON-EMPTY and MINE (path clean, no live owner), so I may not excuse it as foreign red.\n\nCAUSE: correct production behaviour, stale fixture. DoD 3 requires goal binding + sidecar material before rendering approval.decide, and `git grep -c planningAuthorityByRun` on that file returns NO HITS. Missed because it sits at src/, not src/live/.\n\nWHY NOT SELF-SERVED: it is an ELEVENTH owned path against task rail 1 (row already at the hard 10-file threshold); loosening the fence instead is forbidden by DoD 3 and would retire the capability this row adds. Rail: a worker who finds an unnamed consumer mid-step must stop and report, never take the extra path.\n\nASK: amend owned paths to add exactly apps/control-room/src/shell-mode-view.test.tsx (11 total), or split into a successor. Re-grep proves it is the ONLY red consumer (live-board-narrow.test.ts passes; live-app.tsx asserts no controls). Fix = DoD 4(f) applied to a third consumer: add valid seven-key planningAuthorityByRun wire facts (mapKey==runId, goalRef matching planningGoalRefs) — NEVER a weakened queryByTestId(...).toBeNull().\n\nStep 5 also found+fixed two real fail-open defects red-first. Full lane: 1 failed | 112 passed (113) — that one failure only.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "workStartedAt": "2026-09-02T18:33:57.060Z",
@@ -268,6 +274,28 @@
       "treeId": "11259a6a88496391e30c1e8a0fcb7b16568d1861",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "798e141924e52bbb4ec0483f6bccc57495a87ef6",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1ff24286@2026-09-02T19:00:50Z",
+      "paths": [
+        ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
+        ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-planning-authorities.ts"
+      ],
+      "recordedBy": "worker-1ff24286",
+      "recordedAt": "2026-09-02T19:19:25.274Z",
+      "treeId": "6480dec232209debd03f6c5b8264d84a340d9639",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -281,14 +309,15 @@
     "apps/control-room/src/live/live-dispatch-payloads.ts",
     "apps/control-room/src/live/live-effort-path.test.tsx",
     "apps/control-room/src/live/live-planning-authorities.js",
-    "apps/control-room/src/live/live-planning-authorities.ts"
+    "apps/control-room/src/live/live-planning-authorities.ts",
+    ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-f06d587f@2026-09-02T18:33:42Z",
-    "at": "2026-09-02T19:04:09.445Z"
+    "sessionId": "worker-1ff24286@2026-09-02T19:00:50Z",
+    "at": "2026-09-02T19:19:25.274Z"
   },
   "touchedFiles": [
     "apps/control-room/src/live/live-board.a11y.test.tsx",
@@ -303,5 +332,6 @@
     ".moe-trim-f06d587f.py",
     "apps/control-room/src/live/live-effort-path.test.tsx",
     "apps/control-room/src/live/live-planning-authorities.js"
-  ]
+  ],
+  "priorBlockedReason": "ARCHITECT AMENDMENT NEEDED — ONE UNNAMED CONSUMER, ONE EXTRA PATH. Full evidence in row comment comment-cce7c999 plus the step-4/step-5 notes.\n\nImplementation is COMPLETE; the exact 436-char gate PASSES at the delivered tree: `Test Files 4 passed (4)` / `Tests 106 passed (106)`, `$ tsc --project tsconfig.json`, literal `NODE_BRIDGE_OK`, EXIT=0. Steps 1-5 COMPLETED. I am not blocking on my own work.\n\nBLOCK: my DoD-3 render fence reds a consumer the plan never named — apps/control-room/src/shell-mode-view.test.tsx:198-200 (`cr.liveboard.dispatch.approval.decide` stops rendering). Path-attributed baseline, both legs standalone: merge-base 8c305e8f (=56dae6d7^) `Tests 10 passed` EXIT=0; HEAD+my diff `1 failed | 9 passed`. Delta is NON-EMPTY and MINE (path clean, no live owner), so I may not excuse it as foreign red.\n\nCAUSE: correct production behaviour, stale fixture. DoD 3 requires goal binding + sidecar material before rendering approval.decide, and `git grep -c planningAuthorityByRun` on that file returns NO HITS. Missed because it sits at src/, not src/live/.\n\nWHY NOT SELF-SERVED: it is an ELEVENTH owned path against task rail 1 (row already at the hard 10-file threshold); loosening the fence instead is forbidden by DoD 3 and would retire the capability this row adds. Rail: a worker who finds an unnamed consumer mid-step must stop and report, never take the extra path.\n\nASK: amend owned paths to add exactly apps/control-room/src/shell-mode-view.test.tsx (11 total), or split into a successor. Re-grep proves it is the ONLY red consumer (live-board-narrow.test.ts passes; live-app.tsx asserts no controls). Fix = DoD 4(f) applied to a third consumer: add valid seven-key planningAuthorityByRun wire facts (mapKey==runId, goalRef matching planningGoalRefs) — NEVER a weakened queryByTestId(...).toBeNull().\n\nStep 5 also found+fixed two real fail-open defects red-first. Full lane: 1 failed | 112 passed (113) — that one failure only."
 }

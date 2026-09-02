@@ -105,7 +105,8 @@
   "dependsOn": [
     "task-d152f559bc2e4c9785f343ede125dcd8",
     "task-2f554e29d31d48e8a18027110a8e4d5c",
-    "task-1199836b41f943f7bf69c2614c40412d"
+    "task-1199836b41f943f7bf69c2614c40412d",
+    "task-3f75f0e6a37645a08b48f628a2514239"
   ],
   "priority": "CRITICAL",
   "order": 188.32,
@@ -185,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:25:58.933Z",
-  "updatedAt": "2026-09-02T19:08:36.052Z",
+  "updatedAt": "2026-09-02T19:28:22.015Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",

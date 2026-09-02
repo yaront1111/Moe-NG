@@ -139,6 +139,7 @@ export function packWindowsFromCommit(
           locks: mergeWindowsLeaseEntries(
             leaseEntries,
             leaseEntriesForTool(dependencies.toolchain.node),
+            leaseEntriesForTool(dependencies.toolchain.cargo),
             candidateBoundary.leaseEntries,
           ),
           observation: candidateBoundary.observation,
@@ -257,8 +258,8 @@ function trustedDirectories(dependencies: WindowsPackCommitDependencies): readon
   return [
     dirname(dependencies.gitExecutable), dirname(dependencies.tarExecutable),
     ...(toolchain === undefined ? [] : [
-      dirname(toolchain.node.executable.path), dirname(toolchain.pnpm.executable.path),
-      dirname(toolchain.powershell.executable.path),
+      dirname(toolchain.cargo.executable.path), dirname(toolchain.node.executable.path),
+      dirname(toolchain.pnpm.executable.path), dirname(toolchain.powershell.executable.path),
     ]),
   ];
 }

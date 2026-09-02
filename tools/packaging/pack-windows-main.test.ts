@@ -134,6 +134,7 @@ describe("the production Windows pack source composition", () => {
       }, {
         gitExecutable, tarExecutable, tarFlavor,
         toolchain: Object.freeze({
+          cargo: captureNativePackTool("cargo", process.execPath),
           node, pnpm: captureNativePackTool("pnpm", process.execPath),
           powershell: captureNativePackTool(
             "powershell", resolveProtectedWindowsPackExecutable("powershell"),
@@ -150,6 +151,85 @@ describe("the production Windows pack source composition", () => {
       });
       expect(lines).not.toContain("x".repeat(5_000));
       expect(existsSync(join(outputRoot, "dist", "moe-windows.zip"))).toBe(false);
+    },
+    120_000,
+  );
+
+  it.runIf(process.platform === "win32")(
+    "carries only the pinned Cargo directory into the materialized child PATH",
+    () => {
+      const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-pack-child-cargo-"));
+      const outputRoot = mkdtempSync(join(tmpdir(), "moe-pack-child-cargo-output-"));
+      roots.push(repositoryRoot, outputRoot);
+      git(["init", "--quiet"], repositoryRoot);
+      git(["config", "user.email", "pack-cargo@example.invalid"], repositoryRoot);
+      git(["config", "user.name", "Pack Cargo Test"], repositoryRoot);
+      git(["config", "core.autocrlf", "false"], repositoryRoot);
+      const entry = join(repositoryRoot, "tools", "packaging", "pack-windows-materialized-main.ts");
+      mkdirSync(dirname(entry), { recursive: true });
+      writeFileSync(entry, [
+        "process.stdout.write(JSON.stringify({",
+        "  cargoHome: process.env.CARGO_HOME ?? null,",
+        "  comSpec: process.env.ComSpec ?? null,",
+        "  keys: Object.keys(process.env).sort(),",
+        "  path: process.env.PATH ?? null,",
+        "  userProfile: process.env.USERPROFILE ?? null,",
+        "}) + '\\n');",
+        "process.exitCode = 17;", "",
+      ].join("\n"));
+      git(["add", "--", "tools/packaging/pack-windows-materialized-main.ts"], repositoryRoot);
+      git(["commit", "--quiet", "-m", "cargo path probe"], repositoryRoot);
+      const sourceSha = git(["rev-parse", "HEAD"], repositoryRoot);
+      const cargoExecutable = realpathSync(join(
+        process.env["RUSTUP_HOME"] ?? join(process.env["USERPROFILE"] ?? "", ".rustup"),
+        "toolchains", "1.96.0-x86_64-pc-windows-msvc", "bin", "cargo.exe",
+      ));
+      const node = captureNativePackTool("node", process.execPath);
+      const pnpm = captureNativePackTool("pnpm", process.execPath);
+      const powershell = captureNativePackTool(
+        "powershell", resolveProtectedWindowsPackExecutable("powershell"),
+      );
+      const cargo = captureNativePackTool("cargo", cargoExecutable);
+      const lines: string[] = [];
+
+      const status = packWindowsFromCommit({
+        log: (line) => lines.push(line), outputRoot, repositoryRoot, sourceSha,
+      }, {
+        gitExecutable, tarExecutable, tarFlavor,
+        toolchain: Object.freeze({
+          cargo, node, pnpm, powershell, schemaVersion: PACK_TOOLCHAIN_SCHEMA,
+        }),
+      });
+
+      expect(status).toBe(17);
+      const probe = JSON.parse(lines[1] ?? "{}") as Readonly<{
+        cargoHome: string | null; comSpec: string | null; keys: readonly string[];
+        path: string | null; userProfile: string | null;
+      }>;
+      const observed = (probe.path ?? "").split(delimiter).filter((value) => value !== "");
+      const expected = [
+        dirname(realpathSync(gitExecutable)), dirname(realpathSync(tarExecutable)),
+        dirname(node.executable.path), dirname(pnpm.executable.path),
+        dirname(powershell.executable.path), dirname(cargo.executable.path),
+      ];
+
+      // The carrier: Cargo's canonical external directory reaches the child...
+      expect(observed).toContain(dirname(cargoExecutable));
+      // ...and nothing else does. Set equality, so an extra ambient directory reddens too.
+      expect([...new Set(observed)].sort()).toEqual([...new Set(expected)].sort());
+      expect(observed.some((value) => value.toLowerCase().includes(".cargo"))).toBe(false);
+      // No Cargo-redirect or shell authority survives the boundary.
+      expect(probe.cargoHome).toBeNull();
+      expect(probe.comSpec).toBeNull();
+      expect(probe.keys).not.toContain("CARGO_HOME");
+      expect(probe.keys).not.toContain("RUSTUP_HOME");
+      expect(probe.keys.length).toBeGreaterThan(0);
+      // Windows itself re-injects USERPROFILE into any child given an explicit environment
+      // block, so its absence is not assertable. What IS assertable, and is the actual
+      // security property, is that it grants no Cargo reach: the host Cargo under
+      // the user profile's own .cargo/bin directory never enters the rebuilt PATH.
+      expect(probe.userProfile).not.toBeNull();
+      expect(observed).not.toContain(join(String(probe.userProfile), ".cargo", "bin"));
     },
     120_000,
   );

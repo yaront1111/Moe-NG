@@ -17,6 +17,9 @@ import * as packCommand from "./pack-command.js";
 import {
   capturePackTreeIdentity, normalizedTreeSha256,
 } from "./pack-tool-identity.js";
+import {
+  PACKAGING_TOOLCHAIN_LAYER, PackCargoToolError, readCargoToolchainPins,
+} from "./pack-cargo-tool.js";
 import { normalizedPnpmPackageTreeSha256 } from "./pack-pnpm-package-identity.js";
 import { readToolchainPins, TOOLCHAIN_PINS_PATH } from "./toolchain-pins.js";
 
@@ -553,6 +556,7 @@ describe("packaging process launch", () => {
   it("round-trips the closed tool manifest and refuses extra authority", () => {
     const node = captureNativePackTool("node", process.execPath);
     const toolchain: WindowsPackToolchain = Object.freeze({
+      cargo: { ...node, kind: "cargo" as const },
       node, pnpm: { ...node, kind: "pnpm" as const },
       powershell: { ...node, kind: "powershell" as const },
       schemaVersion: "moe-windows-pack-toolchain/1",
@@ -564,4 +568,182 @@ describe("packaging process launch", () => {
     expect(() => parseWindowsPackToolchain(JSON.stringify(parsed)))
       .toThrow("PACK_STEP_FAILED: tool manifest invalid");
   });
+
+  const CARGO_PIN = readCargoToolchainPins();
+  const CARGO_KEYS = Object.freeze(["cargo", "node", "pnpm", "powershell", "schemaVersion"]);
+
+  function pinnedCargoExecutable(): string {
+    const rustup = process.env["RUSTUP_HOME"]
+      ?? join(process.env["USERPROFILE"] ?? "", ".rustup");
+    return join(rustup, "toolchains", CARGO_PIN.toolchain, "bin", "cargo.exe");
+  }
+
+  function cargoFixture(
+    toolchain = CARGO_PIN.toolchain, name = "cargo.exe", body = "counterfeit cargo bytes\n",
+    root = temporary("moe-pack-cargo-tool-"),
+  ): string {
+    return write(root, `toolchains/${toolchain}/bin/${name}`, body);
+  }
+
+  function cargoDependencies(cargoExecutable: string): Readonly<{
+    readonly dependencies: Record<string, unknown>;
+    readonly shim: string;
+  }> {
+    const action = actionPnpm();
+    return Object.freeze({
+      dependencies: {
+        architecture: "x64",
+        cargoExecutable,
+        expectedNodeSha256: createHash("sha256")
+          .update(readFileSync(process.execPath)).digest("hex"),
+        nodeExecutable: process.execPath,
+        nodeVersion: process.version,
+        platform: "win32",
+        ...actionPin(action),
+      },
+      shim: action.shim,
+    });
+  }
+
+  function resolveWithCargo(cargoExecutable: string): WindowsPackToolchain {
+    const repo = repository();
+    const seam = cargoDependencies(cargoExecutable);
+    return resolveWindowsPackToolchain(repo, {
+      ...process.env, npm_execpath: seam.shim,
+    }, seam.dependencies);
+  }
+
+  function cargoRefusal(action: () => unknown): PackCargoToolError {
+    let caught: unknown;
+    try { action(); } catch (error) { caught = error; }
+    // DIVERGENCE: every sibling fence inside resolveWindowsPackToolchain throws a plain Error
+    // whose message carries a ": <detail>" suffix ("node provenance invalid",
+    // "PowerShell unavailable", "pnpm provenance invalid", "pnpm version mismatch").
+    // Only the Cargo guard produces a PackCargoToolError whose message is the bare stable code,
+    // so this assertion names which layer refused rather than merely that something refused.
+    expect(caught).toBeInstanceOf(PackCargoToolError);
+    expect(caught).toMatchObject({
+      code: "PACK_STEP_FAILED", layer: PACKAGING_TOOLCHAIN_LAYER, message: "PACK_STEP_FAILED",
+    });
+    return caught as PackCargoToolError;
+  }
+
+  it.runIf(process.platform === "win32")(
+    "carries the pinned Cargo identity through the resolved Windows toolchain", () => {
+      const toolchain = resolveWithCargo(pinnedCargoExecutable());
+
+      expect(toolchain.cargo.kind).toBe("cargo");
+      expect(toolchain.cargo.executable.path).toBe(realpathSync(pinnedCargoExecutable()));
+      expect(toolchain.cargo.executable.sha256).toBe(CARGO_PIN.cargoSha256);
+      // Literal, not the pin constant: a one-character edit to cargo-toolchain-pins.json
+      // must not be able to move both sides of this comparison at once.
+      expect(toolchain.cargo.executable.sha256)
+        .toBe("122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5");
+      expect(toolchain.cargo.argsPrefix).toEqual([]);
+      expect(Object.isFrozen(toolchain.cargo)).toBe(true);
+      expect(Object.isFrozen(toolchain.cargo.argsPrefix)).toBe(true);
+      expect(Object.isFrozen(toolchain.cargo.executable)).toBe(true);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "advertises exactly the served toolchain roster in both directions", () => {
+      const served = resolveWithCargo(pinnedCargoExecutable());
+      const parsed = parseWindowsPackToolchain(serializeWindowsPackToolchain(served));
+
+      // Enumerated from the production seam, not from a roster constant: set equality both ways,
+      // so a member that silently vanishes from either side reddens this arm.
+      expect(Object.keys(served).sort()).toEqual([...CARGO_KEYS]);
+      expect(Object.keys(parsed).sort()).toEqual(Object.keys(served).sort());
+      expect(parsed).toEqual(served);
+      expect(JSON.parse(serializeWindowsPackToolchain(served))).toHaveProperty("cargo");
+    },
+  );
+
+  it("refuses a serialized toolchain that drops any advertised member", () => {
+    const node = captureNativePackTool("node", process.execPath);
+    const toolchain: WindowsPackToolchain = Object.freeze({
+      cargo: { ...node, kind: "cargo" as const },
+      node, pnpm: { ...node, kind: "pnpm" as const },
+      powershell: { ...node, kind: "powershell" as const },
+      schemaVersion: "moe-windows-pack-toolchain/1",
+    });
+    const encoded = serializeWindowsPackToolchain(toolchain);
+    expect(parseWindowsPackToolchain(encoded)).toEqual(toolchain);
+
+    for (const key of CARGO_KEYS) {
+      const parsed = JSON.parse(encoded) as Record<string, unknown>;
+      delete parsed[key];
+      expect(() => parseWindowsPackToolchain(JSON.stringify(parsed)))
+        .toThrow("PACK_STEP_FAILED: tool manifest invalid");
+    }
+    expect(CARGO_KEYS).toHaveLength(5);
+  });
+
+  it("refuses a Cargo member whose declared kind is not cargo", () => {
+    const node = captureNativePackTool("node", process.execPath);
+    const encoded = serializeWindowsPackToolchain(Object.freeze({
+      cargo: { ...node, kind: "cargo" as const },
+      node, pnpm: { ...node, kind: "pnpm" as const },
+      powershell: { ...node, kind: "powershell" as const },
+      schemaVersion: "moe-windows-pack-toolchain/1",
+    }));
+    const parsed = JSON.parse(encoded) as Record<string, Record<string, unknown>>;
+    parsed["cargo"]!["kind"] = "node";
+
+    expect(() => parseWindowsPackToolchain(JSON.stringify(parsed)))
+      .toThrow("PACK_STEP_FAILED: tool manifest invalid");
+  });
+
+  it.runIf(process.platform === "win32")(
+    "refuses every counterfeit Cargo at the packaging toolchain layer", () => {
+      const repositoryRoot = repository();
+      const linkRoot = join(temporary("moe-pack-cargo-link-"), "toolchains",
+        CARGO_PIN.toolchain);
+      mkdirSync(linkRoot, { recursive: true });
+      symlinkSync(dirname(realpathSync(pinnedCargoExecutable())), join(linkRoot, "bin"),
+        "junction");
+      const symlinked = join(linkRoot, "bin", "cargo.exe");
+      const cases = Object.freeze([
+        Object.freeze({
+          executable: join(temporary("moe-pack-cargo-missing-"), "toolchains",
+            CARGO_PIN.toolchain, "bin", "cargo.exe"),
+          name: "missing",
+        }),
+        Object.freeze({ executable: cargoFixture(), name: "wrong-digest" }),
+        Object.freeze({
+          executable: cargoFixture(CARGO_PIN.toolchain, "cargo.exe",
+            "counterfeit cargo bytes\n", repositoryRoot),
+          name: "in-repository",
+        }),
+        Object.freeze({
+          executable: cargoFixture(CARGO_PIN.toolchain, "cargo-copy.exe"), name: "wrong-name",
+        }),
+        Object.freeze({
+          executable: cargoFixture("stable-x86_64-pc-windows-msvc"), name: "wrong-toolchain",
+        }),
+        Object.freeze({ executable: symlinked, name: "symlinked" }),
+        Object.freeze({ executable: "cargo.exe", name: "relative" }),
+      ]);
+
+      expect(cases.length).toBeGreaterThan(0);
+      for (const scenario of cases) {
+        cargoRefusal(() => resolveWithCargo(scenario.executable));
+      }
+      expect(cases).toHaveLength(7);
+    },
+    120_000,
+  );
+
+  it.runIf(process.platform === "win32")(
+    "refuses when no pinned Cargo location is carried at all", () => {
+      const repo = repository();
+      const seam = cargoDependencies(pinnedCargoExecutable());
+      const { cargoExecutable: _dropped, ...withoutCargo } = seam.dependencies;
+
+      cargoRefusal(() => resolveWindowsPackToolchain(repo, {
+        ...process.env, npm_execpath: seam.shim, RUSTUP_HOME: "", USERPROFILE: "",
+      }, withoutCargo));
+    },
+  );
 });
