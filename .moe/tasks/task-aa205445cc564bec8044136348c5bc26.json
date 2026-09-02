@@ -83,7 +83,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-09-02T09:41:09.919Z",
+  "updatedAt": "2026-09-02T09:41:18.520Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 3,
@@ -128,7 +128,9 @@
     "apps/daemon/src/http/static-asset-path-policy.ts",
     "apps/daemon/src/http/static-asset-path-policy.js",
     "apps/daemon/src/http/http-listener-static-assets.test.ts",
-    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+    ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+    ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
   ],
   "completionSummary": "No-churn delivery replay of the already verified four-path static-asset policy extraction. Preserved exact anchored bytes: host 206 lines/blob e8f0e3…5191; pure policy 174/blob 762180…658e; one-line LF bridge/blob ddca3a…56c9; focused test 991/blob e7c987…772. Prior durable containment-only mutation proof was adopted because policy/test hashes remained identical; no destructive drill or source edit was repeated. Fresh exact completion gate: 1 focused file/56 tests passed and daemon typecheck passed. Standalone daemon suite executed 342 files/6995 tests and remained foreign-red only: daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, got 401) and foundation-attempt-windows.test.ts:864/:986 (worktree/launch observations); 2 files/3 tests failed, 340 files/6980 tests passed, 12 todo. No failure intersects the four owned paths. diff-check passed; commit scope asserts exactly four, no unattributed/fifth path. Wrapper must now create the kind=completion explicit-path commit; QA should verify task.commits SHA, landing.lastCompletion/merged, Moe-Task trailer, and all four anchored blobs.",
   "rejectionDetails": {
@@ -288,13 +290,30 @@
       "treeId": "ab1adb28ba191c91a2ba316062b8cbbf64e8c7ec",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "2b0cfe965fdde0f73a19b7fea83177a50632c03c",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-0cc57d30@2026-09-02T09:41:10Z",
+      "paths": [
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+        ".moe/tasks/task-4704a2981cf0443991a64273836da486.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+      ],
+      "recordedBy": "worker-0cc57d30",
+      "recordedAt": "2026-09-02T09:41:18.520Z",
+      "treeId": "f10716329ffcb3c18ad97355f453159a8f23f093",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-7973e36b@2026-09-02T09:33:28Z",
-    "at": "2026-09-02T09:33:35.238Z"
+    "sessionId": "worker-0cc57d30@2026-09-02T09:41:10Z",
+    "at": "2026-09-02T09:41:18.520Z"
   }
 }
