@@ -37,6 +37,7 @@ const ACCEPTANCE = Object.freeze({
 
 const SEALED_RUN = Object.freeze({
   acceptance: ACCEPTANCE,
+  approval: "ABSENT",
   authority: AUTHORITY,
   lifecycle: "PLAN_REVIEW",
   outcome: "RUN",
@@ -48,6 +49,7 @@ const SEALED_RUN = Object.freeze({
 
 const UNSEALED_RUN = Object.freeze({
   acceptance: null,
+  approval: "ABSENT",
   authority: null,
   lifecycle: "PLANNING",
   outcome: "RUN",
@@ -74,6 +76,7 @@ describe("mapPlanningRunAnswer shapes the plan-review route's answer", () => {
           verificationRecipeRefs: ["recipe-1"],
         }],
       },
+      approval: "ABSENT",
       lifecycle: "PLAN_REVIEW",
       plan: {
         affectedCriterionIds: ["crit-1"],
@@ -93,6 +96,7 @@ describe("mapPlanningRunAnswer shapes the plan-review route's answer", () => {
     const outcome = mapPlanningRunAnswer(200, UNSEALED_RUN);
     expect(outcome).toStrictEqual({
       acceptance: null,
+      approval: "ABSENT",
       lifecycle: "PLANNING",
       plan: null,
       reviewable: false,
