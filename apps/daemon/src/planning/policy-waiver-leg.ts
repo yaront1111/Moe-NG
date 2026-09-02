@@ -185,11 +185,12 @@ export function buildPolicyWaiverLeg(
   }
   const built = buildRecord(folded, stableInput);
   if (!built.ok) return built;
-  const event = Object.freeze({ eventId: `${stableInput.value.commandId}-${built.eventType}`,
-    eventType: built.eventType, payload: built.bytes });
-  const leg = Object.freeze({ aggregateId, events: Object.freeze([event]),
-    expectedVersion: folded.observedVersion });
-  return Object.freeze({ leg, ok: true as const });
+  const eventId = `${stableInput.value.commandId}-${built.eventType}`;
+  return Object.freeze({ get leg() {
+    const event = Object.freeze({ eventId, eventType: built.eventType, payload: built.bytes });
+    return Object.freeze({ aggregateId, events: Object.freeze([event]),
+      expectedVersion: folded.observedVersion });
+  }, ok: true as const });
 }
 
 export { DAEMON_POLICY_WAIVER };

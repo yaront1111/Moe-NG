@@ -15,9 +15,97 @@
     "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
     "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-590b698f",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND DoD-1 VERIFY-OR-BLOCK. Do not edit anything in this step.\n\n(a) Confirm the dependency landed: aa205 static-asset-host.ts is present with `wc -l apps/daemon/src/http/static-asset-host.ts apps/daemon/src/http/static-asset-path-policy.ts`. Record both counts. static-asset-host.ts must be <400 (expected 206). This satisfies DoD-2's static clause by VERIFICATION -- never edit that file, aa205 owns it.\n\n(b) Record `git status --porcelain --` for each of the 10 owned paths individually (exact literal pathspecs, not the directory). Note foreign dirt under src/http and continue; peer dirt is never a stop condition.\n\n(c) Record `wc -l` for http-listener.ts (expect 1002, NOT the description's stale 970), http-listener-pairing-routes.ts, and the three owned test files.\n\n(d) DoD-1 TRACE, recorded in the step note as command+result, from raw HTTP down to the owning port:\n  - `grep -n 'RETIRED_PAIRING_APPROVE_PATH' apps/daemon/src/http/http-listener.ts` -- confirm the tombstone branch (~:812) answers LISTENER_ROUTE_UNKNOWN and sits BEFORE the JSON_ROUTES/asset split.\n  - `grep -rn 'operator.approve' apps/daemon/src/http/` -- confirm the ONLY reach is inside ControlRoomListener.approvePairing (~:974-979), which no HTTP route calls.\n  - `grep -n 'affordanceProjectRefusal\\|affordanceProjectMismatch' apps/daemon/src/http/http-listener.ts apps/daemon/src/http/affordance-contract.ts` -- confirm the two divergent affordance mechanisms.\nEXPECTED OUTCOME: the trace resolves in the CLOSED direction, so the historical R3-1 whole-file restore is NOT performed and no later open/challenge/origin behavior is reverted. Only if the trace contradicts this (a browser-reachable route reaches operator.approve, or the tombstone sits after the asset fallback) do you stop and call moe.report_blocked instead of restoring historical files.\n\n(e) Capture the merge-base baseline for red attribution: run `pnpm --filter @moe/daemon test` standalone and unpiped, and record the `Test Files`/`Tests` count lines plus the names of every failing file. This is the (1) term of the path-attributed baseline; foreign red under activation/work is expected and is disclosed verbatim, never fixed here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.ts",
+        "apps/daemon/src/http/http-listener.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-approval.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "HARDEN THE THREE AFFORDANCE ARMS (DoD-3) in apps/daemon/src/http/http-listener.test.ts. Production is already correct here, so the red-first obligation is discharged by mutation, not by a production fix: strengthen the assertion, prove it reds under a narrow mutation of the named predicate, restore, confirm green. Do the mutations in step 7; write the assertions now.\n\nBuild the affordance fixture port so reachability is OBSERVABLE: wrap `readSurface` in a counter that also records call count, and give the two refusal arms a variant whose `readSurface` THROWS. A refusal arm that reaches the surface must fail loudly rather than pass quietly.\n\n:632 FOREIGN PRINCIPAL arm -- replace `toMatchObject({outcome:\"REFUSED\"})` with an exact assertion on status 200 AND `code: \"AFFORDANCE_PROJECT_MISMATCH\"` AND `layer: \"AFFORDANCE_SURFACE\"`, plus an assertion that the surface call count is 0. Import the two constants from ./affordance-contract.js rather than retyping the literals ONLY if that import does not make the assertion move with the production value; since these are frozen wire codes, assert the STRING LITERALS so a rename of the constant cannot move both sides of the assertion at once.\n\n:616 BODY-MISMATCH arm -- keep expectListenerRefusal for LISTENER_AFFORDANCE_REQUEST_INVALID but additionally assert the refusing layer is CONTROL_ROOM_LISTENER (the literal), and that the surface call count is 0. This is what separates it from the :632 mechanism: different code, different layer, both unreachable-surface.\n\n:598 ABSENT/MATCHING arm -- additionally assert the surface call count is exactly 2 (one per sub-case), so \"answers the surface\" means the surface was actually consulted rather than a refusal frame that happens to carry outcome SURFACE.\n\nRun the focused leg and record the `Test Files`/`Tests` count lines:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/http-listener.test.ts`",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "ADD THE R3-1 PROVENANCE ARM (DoD-1, DoD-4) in apps/daemon/src/http/http-listener-pairing-approval.test.ts. ONE named arm, ONE requestId, exercising the whole journey against the real listener so the retired self-approval is pinned by what the socket actually answers.\n\nOn a single request identity, in this exact order:\n 1. Raw POST /session/pair/approve -> assert EXACTLY status 404, code LISTENER_ROUTE_UNKNOWN, layer CONTROL_ROOM_LISTENER. This is the FIRST assertion in the arm and is the one the step-7 drill must redden.\n 2. Pre-approval claim carrying the pairing key -> assert the exact APPROVAL_REQUIRED refusal (code and layer), proving no HTTP route minted anything.\n 3. In-process `listener.approvePairing(label)` -> assert success. This is the positive control that makes step 1's refusal a statement about the ROUTE, not about a listener that refuses everything.\n 4. Re-issue the same keyed claim -> assert the challenge is now issued.\n 5. Produce the digest/canonical bytes through the PRODUCTION daemon surface and sign with Node Ed25519 (node:crypto). Do NOT import @moe/control-room-client -- apps/daemon declares no dependency on it and there is no escape hatch.\n 6. Raw POST /session/pair/open -> assert the exact response key roster (set-equality, not a subset).\n 7. Assert the durable authority is FOUND in the SAME store the listener was wired with.\n\nName the arm so the drill target is unambiguous, e.g. \"answers the retired approve route with a tombstone while only in-process approval can mint\". Reuse the existing real-agent pairing fixture; do not add a mock that reimplements listener authority.\n\nRun and record count lines:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/http-listener-pairing-approval.test.ts`",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-pairing-approval.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "EXTRACT THE COMMAND/STREAM SURFACE, AND RETARGET THE SCANNER IN THE SAME STEP so no intermediate red is created.\n\nCreate apps/daemon/src/http/http-listener-command-stream-routes.ts owning, MOVED VERBATIM from http-listener.ts (bodies and comments unchanged): the route constants COMMAND_PATH, EVENT_PAGE_PATH, EVENT_ACKNOWLEDGE_PATH, EVENT_RESUME_PATH, AFFORDANCE_PATH, GRAPH_GET_PATH (:201-206); the wire helpers `type ReplyHeaders`, `reply`, `refuseRequest`, `replyEventStreamAccessRefusal` (:235-266); and the handlers serveCommand, serveEventPage, serveEventAcknowledge, serveEventResume, serveAffordances, serveGraphQuery (:267-473). EXPORT the wire helpers and the route constants -- read-dispatch consumes them from here, which is the authorized ownership per comment-4ab52962.\n\nCall-site bytes are load-bearing: keep the parameter named `options` and leave `handleAsyncCommandRequest(options.deps, {...protocolVersion: protocolVersionOf(request)}, \"HTTP_LISTENER\")` byte-identical, or the registry regex stops matching without any type error.\n\nImport the shared guards directly from ./http-listener-guards.js (CONTROL_ROOM_LISTENER_LAYER, credentialOf, protocolVersionOf, statusFor, readEventRequest, readEventAcknowledgeRequest, and the ListenerRefusalCode type). Import StartListenerOptions as `import type ... from \"./http-listener.js\"` -- TYPE-ONLY, never a value import.\n\nCreate apps/daemon/src/http/http-listener-command-stream-routes.js containing exactly one line plus a trailing LF: `export * from \"./http-listener-command-stream-routes.ts\";`\n\nIn http-listener.ts delete the moved bodies and import the handlers and helpers from the new module. Public exports, signatures and the refusal vocabulary are unchanged.\n\nIn apps/daemon/src/daemon-command-registry.test.ts change ONLY the `file:` field at :724 from \"./http/http-listener.ts\" to \"./http/http-listener-command-stream-routes.ts\". Leave the regex, `expected: [\"HTTP_LISTENER\"]`, `expect(served).toHaveLength(5)` and the bidirectional TRANSPORT_ORIGINS set-equality byte-identical -- the arm must keep asserting both directions.\n\nVerify no runtime cycle: `grep -n 'from \"./http-listener.js\"' apps/daemon/src/http/http-listener-command-stream-routes.ts` and confirm every hit is on an `import type` line.\n\nRun and record count lines:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/http-listener.test.ts src/daemon-command-registry.test.ts src/runtime-entrypoint.test.ts`",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-listener-command-stream-routes.ts",
+        "apps/daemon/src/http/http-listener-command-stream-routes.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "EXTRACT THE READ/ASSET DISPATCH.\n\nCreate apps/daemon/src/http/http-listener-read-dispatch.ts owning, MOVED VERBATIM from http-listener.ts: the JSON_ROUTES frozen roster (:218-233); the eight read adapters serveDocumentDossier, servePlanningRun, serveGoalCatalog, serveBudgetCommitmentRead, serveProductContractGate1, serveProductContractPending, serveSessionChallengeOperands, serveDocumentIngest (:474-651); serveAsset (:652-704); and the JSON/asset tail of serve() (:818-889) -- the JSON_ROUTES membership test, the asset fallback with its `assets === null` LISTENER_ROUTE_UNKNOWN branch, checkHeaders, the eight per-path POST guards, readBoundedBody with its LISTENER_BODY_TOO_LARGE branch, and the dispatch chain.\n\nExport one entry point that the facade calls after the handshake surface has had its turn, plus the JSON_ROUTES roster. Preserve the guard order EXACTLY as listed above and keep the dispatch chain's final unconditional `else serveDocumentDossier(...)`; that fallthrough is the roster's own bidirectional consistency and must not become an explicit branch with no else.\n\nImport reply/refuseRequest/the route constants from ./http-listener-command-stream-routes.js and the command/stream handlers it dispatches to from the same module. Import StartListenerOptions and ControlRoomAssetRoot as TYPE-ONLY. Import the static-asset helpers (CONTROL_ROOM_ASSET_RESPONSE_HEADERS, assetIsUnchanged, locateControlRoomAsset, readControlRoomAssetBytes) from ./static-asset-host.js -- consume that module, never edit it, aa205 owns it.\n\nCreate apps/daemon/src/http/http-listener-read-dispatch.js containing exactly one line plus a trailing LF: `export * from \"./http-listener-read-dispatch.ts\";`\n\nIn http-listener.ts delete the moved bodies and their now-unused imports.\n\nVerify no runtime cycle: `grep -n 'from \"./http-listener.js\"' apps/daemon/src/http/http-listener-read-dispatch.ts` -- every hit must be on an `import type` line.\n\nRun and record count lines:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/http-listener.test.ts src/http/http-listener-static-assets.test.ts src/http/http-listener-document-ingest.test.ts src/http/http-listener-goal-catalog.test.ts src/http/http-listener-planning-run.test.ts src/http/runtime-entrypoint.test.ts`\n(if that last path does not resolve, use src/runtime-entrypoint.test.ts -- it lives at the daemon src root)",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ABSORB THE HANDSHAKE INGRESS INTO PAIRING ROUTES AND CONFIRM EVERY CAP (DoD-2).\n\nMove into apps/daemon/src/http/http-listener-pairing-routes.ts, verbatim with their doc comments: BOOTSTRAP_PATH and SESSION_PAIR_PATH (:214-215), serveBootstrap (:705-736), serveSessionPair (:737-760), and RETIRED_PAIRING_APPROVE_PATH with its tombstone branch (:95-99 and :806-815, including the task-82c28bf1 R3-1 comment that records WHY the route is answered before the asset fallback). Reuse the module's existing wireReply/wireRefusal rather than adding a second copy of the wire helpers.\n\nThe facade's serve() keeps only: onRequest, the query-stripping path derivation, the log line, delegation of the handshake surface (bootstrap, session-pair, request/claim/open, retired-approve) to pairing-routes, and then delegation to read-dispatch. ORDER IS THE BEHAVIOR: the handshake surface and the tombstone must still answer BEFORE the JSON_ROUTES/asset split, so a hosted and an unhosted listener answer /session/pair/approve identically.\n\nhttp-listener.ts retains: the public block (ControlRoomListener, PairingOperatorApprovalResult, StartListenerResult, StartListenerOptions, the guards re-exports), the serve() shell, startControlRoomListener with its unchanged approvePairing closure, and closeServer. No public signature, export or refusal-code change anywhere in this task.\n\nExtend apps/daemon/src/http/http-listener-pairing-routes.test.ts with arms that pin the newly-owned ingress at its new home: bootstrap's Host-then-method-then-availability order with its exact codes (LISTENER_HOST_INVALID, LISTENER_PAIRING_METHOD_INVALID, LISTENER_PAIRING_UNAVAILABLE), the session-pair tombstone's header-then-method-then-protocol order, and the retired-approve tombstone answering LISTENER_ROUTE_UNKNOWN on a listener that HAS an asset root wired -- that last arm is what proves the tombstone still precedes the asset fallback. Keep the existing hostile-roster arm's nonzero, exact, unique assertions intact.\n\nCAP CHECK (DoD-2), recorded verbatim in the step note:\n`wc -l apps/daemon/src/http/http-listener.ts apps/daemon/src/http/static-asset-host.ts apps/daemon/src/http/http-listener-command-stream-routes.ts apps/daemon/src/http/http-listener-read-dispatch.ts apps/daemon/src/http/http-listener-pairing-routes.ts`\nEvery one must be <400, target <=250. Use wc -l, not PowerShell Measure-Object, which undercounts a file lacking a trailing newline. If any file lands over 400, split further within the owned roster rather than minifying, deleting commentary, or relocating logic into a test or fixture -- all three are explicitly forbidden by comment-497194056a.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "MUTATION DRILLS WITH RESTORE PROOF (DoD-3, DoD-4). Four drills, each varying ONE degree of freedom. A drill that stays GREEN is a FINDING to report in the completion record, never a pass to bank -- and never repaired by deleting the redundant guard, which would make the mutant green and read as \"no guard needed\".\n\nBEFORE ANY MUTATION: run `git status --porcelain` on the exact paths you are about to mutate and copy each to an out-of-tree %TEMP% backup suffixed with your worker id. http-listener-command-stream-routes.ts and http-listener-read-dispatch.ts are NEW and therefore untracked, where `git diff` is blind -- empty before, during and after -- so for those two the restore proof is SHA256 equality against the backup, computed in a call SEPARATE from the restore. `git diff` remains a valid restore proof for the tracked files only.\n\nDRILL 1 (R3-1, DoD-4). In pairing-routes, temporarily thread the EXISTING operator approval window into the retired-approve branch ONLY, so that route can mint. EXPECTED: the step-3 arm's FIRST assertion -- the exact 404 / LISTENER_ROUTE_UNKNOWN / CONTROL_ROOM_LISTENER tombstone -- goes RED. Do NOT drill by deleting the tombstone: the unhosted asset fallback emits the same code and layer, so a deletion mutant stays green and proves nothing.\n\nDRILL 2 (foreign principal). Loosen ONLY the `access.principal.projectId !== options.affordances.boundProjectId` comparison in serveAffordances. EXPECTED: the :632 arm reds on the code/layer assertion or on the surface-call-count assertion.\n\nDRILL 3 (body mismatch). Negate ONLY the `affordanceProjectMismatch(...)` term -- not the `affordanceRequest === null` term it is OR'd with, or the decode term keeps the arm green and the drill proves nothing. EXPECTED: the :616 arm reds.\n\nDRILL 4 (scanner). Change the retargeted `file:` field in daemon-command-registry.test.ts to a path that no longer holds the call. EXPECTED: `expect(match, entry.file).not.toBeNull()` reds, proving the scanner still executes against real source rather than passing vacuously.\n\nAfter each drill: restore, then prove the restore in a separate call (SHA256 equality for the two untracked modules, `git diff` empty for tracked ones), then re-run the affected focused leg and confirm it is green again.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.ts",
+        "apps/daemon/src/http/http-listener-command-stream-routes.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "FINAL VERIFICATION AND ADVERSARIAL REVIEW (DoD-5). Run every leg standalone and unpiped, in the foreground, and read the OUTPUT -- a `--filter` leg that prints no `Test Files N passed` count line ran nothing, and exit 0 is not evidence.\n\nLEG 1 (focused, includes the run-only regression the roster dropped from ownership):\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/http-listener.test.ts src/http/http-listener-pairing-routes.test.ts src/http/http-listener-pairing-approval.test.ts src/http/http-listener-product-contract-gate-1.test.ts src/http/http-listener-static-assets.test.ts src/http/pairing-open-completion.test.ts src/http/http-listener-handshake.test.ts src/http/http-listener-forwarding.test.ts src/daemon-command-registry.test.ts src/runtime-entrypoint.test.ts`\nSigned Gate-1 and pairing-open-completion must be green with ZERO edits to their files -- that is what \"signed Gate-1 paths remain unchanged\" means (DoD-3).\n\nLEG 2: `pnpm --filter @moe/daemon typecheck`\n\nLEG 3, THE NAMED VERIFICATION COMMAND for complete_task: `pnpm --filter @moe/daemon test`\nQuote its `Test Files` and `Tests` count lines verbatim. Attribute any red as (HEAD failures) minus (the step-1 merge-base failures), intersected with the 10 owned paths; that intersection must be EMPTY. Disclose foreign red verbatim with its exact failing lines and paths -- never hide it and never fabricate green.\n\nCAP EVIDENCE: re-run the step-6 `wc -l` on all five production files and quote the numbers.\n\nADVERSARIAL SELF-REVIEW before complete_task:\n - Is EVERY import of StartListenerOptions in both new modules an `import type`? A value import is a real runtime cycle that typechecks clean and can leave a handler undefined at bind time.\n - Does a probe of /session/pair/approve answer identically on a listener WITH an asset root and one WITHOUT? If the tombstone slipped after the asset fallback, hosted and unhosted diverge.\n - Do the eight POST guards still fire in their original order, and does the dispatch chain still end in the unconditional serveDocumentDossier else?\n - Is `handleAsyncCommandRequest(options.deps, ...)` still byte-identical, and does the registry arm still assert served.length 5 and TRANSPORT_ORIGINS set-equality in BOTH directions?\n - Does each new .js bridge contain exactly `export * from \"./<name>.ts\";` plus a trailing LF? runtime-entrypoint.test.ts reports missing/unexpected/wrongContent by name.\n - Did any drill come back green? If so it is a reported finding, not a silent pass.\n - Did you touch static-asset-host.ts or any foreign dirty path? Neither is yours.\n\nReport every path you created or modified in complete_step.modifiedFiles, including the two .js bridges.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-command-stream-routes.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.ts",
+        "apps/daemon/src/http/http-listener.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -56,11 +144,17 @@
       "author": "governor-c11c29e2",
       "content": "HUMAN/GOVERNOR SCOPE RULING (2026-09-01): authorize the measured one-for-one exact-10 roster correction—add apps/daemon/src/daemon-command-registry.test.ts and drop ownership (retain run-only verification) of apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts. Re-plan against this overlay; dependency on aa205 remains a separate build-order gate.",
       "timestamp": "2026-09-01T16:35:23.402Z"
+    },
+    {
+      "id": "comment-90b5655229d141548d45e44278a2e85f",
+      "author": "architect-590b698f",
+      "content": "PLAN SUBMITTED (8 steps / exactly 10 distinct files). The daemon's \"target <=5 files\" warning is EXPECTED and authorized, not drift: the 10-path roster is the binding exact-10 set from comment-497194056a (approving comment-4ab52962 verbatim) as corrected by the human/governor one-for-one swap in comment-916532a1. Do not reject on the file-count warning; splitting further would breach the ruled roster.\n\nRE-MEASURED AT HEAD 540b9e52 (description is stale in BOTH directions, epic rail 2):\n- http-listener.ts is 1002 physical lines, NOT the description's 970. Plan is built on 1002.\n- static-asset-host.ts: HEAD 556, but aa205 (REVIEW, already this row's dependsOn) has it at 206 with static-asset-path-policy.ts at 174 in the shared worktree. DoD-2's static clause is discharged here by `wc -l` VERIFICATION only. This row never edits that file; aa205 owns it.\n\nDoD-1 VERIFY-OR-BLOCK RESOLVES CLOSED — NO HISTORICAL RESTORE. http-listener.ts:812 answers /session/pair/approve with LISTENER_ROUTE_UNKNOWN as an explicit pre-fallback tombstone, ahead of the JSON_ROUTES/asset split, so hosted and unhosted listeners answer a probe identically. The only reach to pairingApprovalWindow.operator.approve is :974-979 inside the in-process ControlRoomListener.approvePairing closure; no browser-facing route reaches it. Restoring historical R3-1 whole-file bytes would revert later open/challenge/origin behavior for no gain and is planned OUT.\n\nTHE TWO http-listener FAILURES ARE ASSERTION WEAKNESSES, NOT PRODUCTION BUGS. http-listener.test.ts:632 asserts only toMatchObject({outcome:\"REFUSED\"}) — no code, no layer, and nothing proves readSurface() stayed unreachable; :616 pins the code but not the layer or reachability; :598 asserts only {outcome:\"SURFACE\"}. Step 2 pins exact code+layer on all three and adds surface call-count observation. Red-first is discharged by mutation (step 7), since production is already correct.\n\nEPIC RAIL 7A DIVERGENCE IS SATISFIED BY MEASUREMENT, NOT INVENTION. serveAffordances carries two mechanisms that emit distinguishable results: principal gate -> 200 AFFORDANCE_PROJECT_MISMATCH@AFFORDANCE_SURFACE (affordance-contract.ts:16-17,78-80); body gate -> LISTENER_AFFORDANCE_REQUEST_INVALID@CONTROL_ROOM_LISTENER. Different code AND different layer, so neither fence can answer for the other. Drill 3 must negate ONLY the affordanceProjectMismatch term, never the `=== null` term it is OR'd with.\n\nREACHABILITY (epic rail 8A), measured not assumed. `git grep -n 'http-listener\\.ts\"'` across all TS returns exactly ONE consumer outside the file itself: daemon-command-registry.test.ts:724. Its arm readFileSync's that literal path, regex-matches the handleAsyncCommandRequest(options.deps, ..., \"HTTP_LISTENER\") call, then asserts served.length===5 and TRANSPORT_ORIGINS set-equality BIDIRECTIONALLY. Only the `file:` field changes; regex, expected, length pin and both directions stay byte-identical. No readdirSync scanner and no automated line-cap gate covers apps/daemon/src/http (`toBeLessThan(400)` exists only under apps/control-room/src/recovery; `toBeLessThan(250)` only under apps/daemon/src/planning), so DoD-2 is a hand `wc -l` measurement.\n\nBRIDGES ARE MACHINE-CHECKED, ROSTER NEEDS NO EDIT. runtime-entrypoint.test.ts:185 derives the runtime tier from the `from \"./x.js\"` import graph and reports {missing,unexpected,wrongContent} BY NAME with no frozen count. Both new TS modules therefore require a bridge containing exactly `export * from \"./<name>.ts\";` + trailing LF. That file is run-only verification, not owned.\n\nTOP WORKER TRAP, called out in risks: both new modules need StartListenerOptions, which stays exported from http-listener.ts. It MUST be `import type` — a value import builds a real runtime cycle through the .js bridges, typechecks clean, and can leave a handler undefined at bind time.\n\nProjected caps, all under 400: facade ~315, command-stream ~290, read-dispatch ~375, pairing-routes 132->~215, static host 206 (aa205).\n\nNamed verification command for complete_task: `pnpm --filter @moe/daemon test`, standalone and unpiped, read by its Test Files/Tests count lines. Step 1 captures the merge-base baseline so HEAD red is attributed by delta intersected with the 10 owned paths; foreign activation/work red is disclosed verbatim, never fixed here.",
+      "timestamp": "2026-09-02T09:02:14.301Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.469Z",
-  "updatedAt": "2026-09-02T08:54:26.028Z",
+  "updatedAt": "2026-09-02T09:02:14.301Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "governor-943540d3",
@@ -71,7 +165,9 @@
     "architect-590b698f"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-30T22:11:29.249Z"
+    "firstClaimAt": "2026-08-30T22:11:29.249Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 10
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -80,5 +176,122 @@
   "blockedOnTaskIds": null,
   "dependsOn": [
     "task-aa205445cc564bec8044136348c5bc26"
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "540b9e521655b968ad87543a899dfd7bfa15c3c5",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-590b698f@2026-09-02T08:54:26Z",
+      "paths": [
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+        ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+        ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+        ".moe/tasks/task-215522d11bf04b4eb4aa75f1e16dde96.json",
+        ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+        ".moe/tasks/task-2bf8fa1a485146aa860bd0f50cbf8287.json",
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+        ".moe/tasks/task-45839f34c88d4db291146bd6f2216b99.json",
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        ".moe/tasks/task-59eaddfbf1e049bbab00290233a54284.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+        ".moe/tasks/task-75bb88d241894a43b6c6981f355bc220.json",
+        ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+        ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+        ".moe/tasks/task-a73b6872e13248768bc161d6059d6a0f.json",
+        ".moe/tasks/task-a9c1fe620d2642cba3e3669a17ea1eac.json",
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+        ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+        ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
+        ".moe/tasks/task-c4321b6f0dbe439cb4948a3b27302d81.json",
+        ".moe/tasks/task-c444b68f0ceb427c86f025f5469c4857.json",
+        ".moe/tasks/task-cb40f3d833f14c3089d812b9bf2d291f.json",
+        ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json",
+        ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+        ".moe/tasks/task-dcf0ce921b5b4ca59db32851ea711924.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+        ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json",
+        ".moe/tasks/task-ed89967f396d4cb78ec65ba8188bfb19.json",
+        ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+      ],
+      "recordedBy": "architect-590b698f",
+      "recordedAt": "2026-09-02T08:54:37.584Z",
+      "treeId": "2e67917193d73c86ef09d5cf96d86cf2285bdac2",
+      "status": "PLANNING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+    ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+    ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+    ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
+    ".moe/tasks/task-215522d11bf04b4eb4aa75f1e16dde96.json",
+    ".moe/tasks/task-28cd95db8bb6444b861eac4384c7fdc2.json",
+    ".moe/tasks/task-2bf8fa1a485146aa860bd0f50cbf8287.json",
+    ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+    ".moe/tasks/task-38ec450ae92d486f860c5801c0f28870.json",
+    ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+    ".moe/tasks/task-45839f34c88d4db291146bd6f2216b99.json",
+    ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+    ".moe/tasks/task-59eaddfbf1e049bbab00290233a54284.json",
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+    ".moe/tasks/task-642df965071a4a239c1b5bce97bbafc5.json",
+    ".moe/tasks/task-75bb88d241894a43b6c6981f355bc220.json",
+    ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+    ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+    ".moe/tasks/task-a73b6872e13248768bc161d6059d6a0f.json",
+    ".moe/tasks/task-a9c1fe620d2642cba3e3669a17ea1eac.json",
+    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
+    ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+    ".moe/tasks/task-bed2e4d570a14e21a26092d6377dfd44.json",
+    ".moe/tasks/task-c4321b6f0dbe439cb4948a3b27302d81.json",
+    ".moe/tasks/task-c444b68f0ceb427c86f025f5469c4857.json",
+    ".moe/tasks/task-cb40f3d833f14c3089d812b9bf2d291f.json",
+    ".moe/tasks/task-d36dda1396bf48de8caae3ebbd93731e.json",
+    ".moe/tasks/task-d3bfc33e364d4dbab1ef02723d672263.json",
+    ".moe/tasks/task-dcf0ce921b5b4ca59db32851ea711924.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+    ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json",
+    ".moe/tasks/task-ed89967f396d4cb78ec65ba8188bfb19.json",
+    ".moe/tasks/task-f1f8ac7895e249b786817e9c2f611c0c.json",
+    ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-590b698f@2026-09-02T08:54:26Z",
+    "at": "2026-09-02T08:54:37.584Z"
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-02T09:01:47.052Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED restoring historical R3-1 whole-file bytes: DoD-1's VERIFY-OR-BLOCK resolves in the CLOSED direction at HEAD 540b9e52 (see codebaseInsights), so a restore would revert later open/challenge/origin behavior for no gain. REJECTED folding wire helpers into http-listener-guards.ts: not on the authorized 10-path roster and would push a 351-line unowned file toward the cap. REJECTED moving StartListenerOptions into a new shared contract module: costs an 11th+12th path (TS+bridge) and changes the export surface, which comment-497194056a forbids; a TYPE-ONLY back-import is erased at runtime and is the correct zero-cost answer. REJECTED satisfying the registry scanner's regex with a comment or leaving serveCommand in the facade: comment-ebd87b607f already ruled both invalid; the authorized fix is retargeting the scanner's file field. REJECTED deleting the tombstone as the R3 drill: the unhosted fallback emits the SAME code and layer, so the mutant would stay green (epic rail 7A).",
+    "codebaseInsights": "BINDING ROSTER. comment-497194056a authorized comment-4ab52962 VERBATIM; comment-916532a1 applied the human one-for-one swap. Owned = exactly 10: http-listener.ts, http-listener.test.ts, http-listener-pairing-routes.ts, http-listener-pairing-routes.test.ts, http-listener-pairing-approval.test.ts, NEW http-listener-command-stream-routes.ts/.js, NEW http-listener-read-dispatch.ts/.js, daemon-command-registry.test.ts. DROPPED from ownership: static-asset-host.ts (aa205 owns it), pairing-open-completion.ts, http-listener-product-contract-gate-1.test.ts -- last two are RUN-ONLY regression.\n\nMEASURED AT HEAD 540b9e52 (`wc -l`). http-listener.ts = 1002 physical lines, NOT the description's 970 -- the description is stale, plan against 1002. Section map: 1-100 imports; 101-200 public types/exports; 201-234 route constants + JSON_ROUTES roster; 235-266 ReplyHeaders/reply/refuseRequest/replyEventStreamAccessRefusal; 267-288 serveCommand; 289-473 serveEventPage/Acknowledge/Resume + serveAffordances + serveGraphQuery; 474-651 the eight read adapters; 652-704 serveAsset; 705-760 serveBootstrap + serveSessionPair; 761-890 serve() dispatch; 891-1002 startControlRoomListener + closeServer.\n\nSTATIC HOST IS ALREADY DONE BY aa205, NOT BY THIS ROW. HEAD static-asset-host.ts = 556, but aa205 (REVIEW, dependsOn already set) has it at 206 in the shared worktree with static-asset-path-policy.ts at 174. DoD-2's static clause is VERIFIED here with `wc -l`, never edited. If aa205's bytes are absent at claim time the dependency gate is the answer, not an edit.\n\nDoD-1 TRACE ALREADY RESOLVES CLOSED -- DO NOT RESTORE HISTORICAL FILES. http-listener.ts:812 answers RETIRED_PAIRING_APPROVE_PATH (\"/session/pair/approve\") with refuseRequest(response,\"LISTENER_ROUTE_UNKNOWN\") as an explicit pre-fallback tombstone, placed BEFORE the JSON_ROUTES/asset split so hosted and unhosted listeners answer a probe identically. The ONLY reach to pairingApprovalWindow.operator.approve is http-listener.ts:974-979, inside the frozen ControlRoomListener.approvePairing closure -- in-process, gated on `closed` and on options.pairing. No browser-facing route can self-approve at HEAD.\n\nAFFORDANCE MECHANISMS ARE ALREADY DIVERGENT (satisfies epic rail 7A without invention). serveAffordances (393-439) has TWO distinguishable refusals: (a) principal gate `access.principal.projectId !== options.affordances.boundProjectId` replies 200 with affordanceProjectRefusal() = code AFFORDANCE_PROJECT_MISMATCH / layer AFFORDANCE_SURFACE (constants at affordance-contract.ts:16-17, frame built at :78-80); (b) body gate `affordanceProjectMismatch(request, bound)` OR a null decode calls refuseRequest -> LISTENER_AFFORDANCE_REQUEST_INVALID / layer CONTROL_ROOM_LISTENER. Different code AND different layer, so neither fence can stand in for the other.\n\nTHE TWO http-listener FAILURES ARE ASSERTION WEAKNESSES, NOT PRODUCTION BUGS. http-listener.test.ts:632 asserts only `toMatchObject({outcome:\"REFUSED\"})` -- no code, no layer, and nothing proves readSurface() stayed unreachable. :616 asserts the code via expectListenerRefusal but likewise cannot see whether the surface was touched. :598 asserts only `{outcome:\"SURFACE\"}`. All three are one added fence away from vacuous.\n\nSOLE SOURCE-TEXT CONSUMER, MEASURED. `git grep -n 'http-listener\\.ts\"'` over all TS returns exactly ONE hit outside the file itself: daemon-command-registry.test.ts:724 `file: \"./http/http-listener.ts\"`. Its arm (720-755) readFileSync's that literal path, regex-matches /handleAsyncCommandRequest\\(options\\.deps,\\s*\\{[\\s\\S]*?protocolVersion:\\s*protocolVersionOf\\(request\\),?\\s*\\},\\s*\"([A-Z_]+)\"\\s*\\)/, then asserts served.length === 5 and set-equality against TRANSPORT_ORIGINS bidirectionally. Extraction moves that call, so ONLY the `file:` field changes; the regex, the expected [\"HTTP_LISTENER\"], the length pin and the bidirectional set assertion all stay byte-identical.\n\n.js BRIDGES ARE MANDATORY AND MACHINE-CHECKED. apps/daemon/src/runtime-entrypoint.test.ts:185 walks src, derives the runtime tier from the `from \"./x.js\"` import graph, and asserts {missing,unexpected,wrongContent} all empty by NAME. No hard-coded roster and no frozen count, so it needs NO edit -- but each new TS module MUST ship a bridge whose content is EXACTLY `export * from \"./<name>.ts\";` plus a trailing LF (verified against http-listener-pairing-routes.js and static-asset-path-policy.js). A missing, extra, or byte-wrong bridge reds this arm by name.\n\nNO AUTOMATED LINE-CAP GATE COVERS apps/daemon/src/http. `toBeLessThan(400)` exists only in apps/control-room/src/recovery/recovery-import-ban.test.ts and `toBeLessThan(250)` only in apps/daemon/src/planning/compiled-authority-bodies.test.ts. DoD-2 is therefore measured by hand with `wc -l`; do NOT use PowerShell Measure-Object, which undercounts a file with no trailing newline.\n\nPROJECTED LINE BUDGET (all under 400, none near it): facade ~315 (imports shrink hard once route modules leave; keeps 101-200 pu",
+    "risks": "CIRCULAR IMPORT IS THE #1 TRAP. Both new modules need the StartListenerOptions interface, which stays exported from http-listener.ts. Import it as `import type { StartListenerOptions } from \"./http-listener.js\";` and NEVER as a value import -- a value import creates a real runtime cycle through the .js bridges and can leave a handler undefined at bind time with no typecheck error. Guard it with `grep -n 'from \"./http-listener.js\"'` in both new modules and confirm every hit is on an `import type` line.\n\nGUARD ORDER IS THE BEHAVIOR. Preserve exactly: handshake surface (bootstrap, session-pair, request/claim/open) answers BEFORE the JSON/asset split; the retired-approve tombstone answers BEFORE any asset fallback; then JSON_ROUTES membership; then checkHeaders; then the eight per-path POST guards in their current order; then readBoundedBody; then the dispatch chain whose final `else` is serveDocumentDossier. Moving any of these across the extraction boundary changes which code a probe sees.\n\nSERVE-COMMAND BYTES ARE LOAD-BEARING. The registry regex matches `options.deps` and `protocolVersion: protocolVersionOf(request)` literally. Keep the parameter named `options` and the call byte-identical in the new module; renaming it to `deps` or destructuring the argument silently reds a 302-test suite through a regex mismatch, not a type error.\n\nSTATIC HOST IS NOT YOURS. aa205 delivers static-asset-host.ts. Verify its line count; if you find yourself editing it, stop -- that is a shared-worktree collision with its owner.\n\nDRILL RESTORE ON UNTRACKED FILES. Two of the drill targets are NEW and therefore untracked, where `git diff` is blind: empty before, during and after. Run `git status --porcelain` on the exact mutated paths FIRST; for every `??` path prove restore by SHA256 equality against an out-of-tree %TEMP% backup suffixed by worker id, in a call SEPARATE from the restore itself. `git diff` is a valid restore proof for TRACKED paths only.\n\nA GREEN DRILL IS A FINDING. If a mutation leaves the suite green, report it -- do not delete the redundant guard to make the mutant bite, and do not weaken the assertion to fit.\n\nBODY-GATE DRILL SUBTLETY. serveAffordances's body gate is a two-term OR (`affordanceRequest === null || affordanceProjectMismatch(...)`). Mutate ONLY the affordanceProjectMismatch term, or a malformed-body case will keep the arm green through the decode term and the drill will prove nothing.\n\nBASELINE IS FOREIGN-RED. The full daemon suite is red under activation/work at merge-base and daemon typecheck may show foreign red in a dirty goal-qualification.test.ts. Attribute by merge-base-vs-HEAD delta intersected with the 10 owned paths, and quote the foreign red verbatim rather than hiding or fixing it.",
+    "keyFiles": [
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/http/http-listener.test.ts",
+      "apps/daemon/src/http/http-listener-pairing-routes.ts",
+      "apps/daemon/src/http/http-listener-guards.ts",
+      "apps/daemon/src/http/affordance-contract.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-09-02T09:01:49.153Z"
 }

@@ -146,6 +146,24 @@ describe("immutable policy-waiver record", () => {
     expect(decodedGrant.record.scope).toEqual(["graph.read", "plan.preview"]);
   });
 
+  it("returns fresh canonical bytes after a caller corrupts one exposure", () => {
+    const granted = grantOf();
+    const first = granted.bytes;
+    const second = granted.bytes;
+    expect(Object.keys(granted)).toEqual(["bytes", "eventType", "ok", "record"]);
+    expect(first).not.toBe(second);
+    expect(first.buffer).not.toBe(second.buffer);
+    expect(first).toEqual(second);
+    first[0] = 0xff;
+    expectRefusal(
+      decodePolicyWaiverRecord(granted.eventType, first),
+      "POLICY_WAIVER_RECORD_UNREADABLE",
+    );
+    const decoded = decodePolicyWaiverRecord(granted.eventType, granted.bytes);
+    if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+    expect(decoded.record).toEqual(granted.record);
+  });
+
   it("accepts every exact upper boundary and rejects the next value", () => {
     const scope = Object.freeze(Array.from({ length: 64 }, (_, index) =>
       `scope-${String(index).padStart(2, "0")}`));
@@ -186,6 +204,7 @@ describe("immutable policy-waiver record", () => {
 
   it("refuses every named hostile object shape without invoking getters", () => {
     let getterReads = 0;
+    let nestedScopeTrapCalls = 0;
     const getter = { ...BASE };
     Object.defineProperty(getter, "actionKind", {
       enumerable: true, get: () => { getterReads += 1; return BASE.actionKind; },
@@ -200,17 +219,25 @@ describe("immutable policy-waiver record", () => {
     cycle.scope.push(cycle);
     const accessorScope = [...BASE.scope];
     Object.defineProperty(accessorScope, "0", { enumerable: true, get: () => "graph.read" });
+    const nestedScopeProxy = new Proxy([...BASE.scope], {
+      getOwnPropertyDescriptor: (target, key) => {
+        nestedScopeTrapCalls += 1; return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      getPrototypeOf: (target) => { nestedScopeTrapCalls += 1; return Reflect.getPrototypeOf(target); },
+      ownKeys: (target) => { nestedScopeTrapCalls += 1; return Reflect.ownKeys(target); },
+    });
     const missing = { ...BASE } as Partial<PolicyWaiverGrantInput>;
     delete missing.actionKind;
     const HOSTILE_SHAPES = Object.freeze([
       getter, proxy, transparentProxy, symbol, exotic, cycle, { ...BASE, scope: accessorScope },
-      missing, { ...BASE, extra: "smuggled" },
+      { ...BASE, scope: nestedScopeProxy }, missing, { ...BASE, extra: "smuggled" },
     ]);
-    expect(HOSTILE_SHAPES).toHaveLength(9);
+    expect(HOSTILE_SHAPES).toHaveLength(10);
     for (const candidate of HOSTILE_SHAPES) {
       expectRefusal(buildPolicyWaiverGrant(candidate as never), "POLICY_WAIVER_RECORD_INVALID");
     }
     expect(getterReads).toBe(0);
+    expect(nestedScopeTrapCalls).toBe(0);
   });
 
   it("fatal-decodes only canonical bytes and recomputes both stored refs", () => {

@@ -20,7 +20,7 @@
     {
       "stepId": "step-1",
       "description": "PHASE 0 — ADDRESS THE REOPEN AND RE-MEASURE BEFORE EDITING. Read reopenReason, rejectionDetails, governor comment-ae277d7400d848189c57405de4ba88a4, the active amendment fields, and the prior completion record; the no-edit replay is superseded. Record current HEAD, exact-six `git status --porcelain`, SHA-256 and physical-line counts. Require the six pre-edit blobs to equal the measured 5fe0fdde roster (record.ts 98C9A7DA...9665, record.js 600DF7E5...336, record.test C2599E5F...2990, leg.ts A8016AD5...C707, leg.js 29A54670...616D, leg.test CE584D8D...3983) or a later tree with a fully explained same-task delta; never normalize foreign WIP. Re-run reachability and shape greps across apps/packages/tests for every exported codec/fold/leg symbol, `{bytes,eventType,ok,record}`, `{leg,ok}`, hard-coded key/count expectations and .js-suffixed imports; if any caller/asserting consumer lies outside these six, stop and report for re-plan. Confirm apps/daemon's package.json and pnpm-lock importer still declare @moe/store and its existing bare import typechecks, both one-line LF bridges load, and writer task-4704a2981cf0443991a64273836da486 plus reader task-e91e505e1b794f7c925e448dbbe92fec still dependOn this leaf. Capture the pre-edit full-daemon/root-lane failing-path baseline for final path attribution; disclose rather than repair foreign red.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.ts",
         "apps/daemon/src/bootstrap/policy-waiver-record.js",
@@ -28,97 +28,59 @@
         "apps/daemon/src/planning/policy-waiver-leg.ts",
         "apps/daemon/src/planning/policy-waiver-leg.js",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "note": "Phase 0 completed read-only at HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d. Exact-six porcelain and staged diff were empty before/after; hashes/physical lines exactly match the approved anchor: record.ts 98C9A7DA...9665/250, record.js 600DF7E5...336/1 LF, record.test C2599E5F...2990/251, leg.ts A8016AD5...C707/195, leg.js 29A54670...616D/1 LF, leg.test CE584D8D...3983/243. Both bridges are exact one-line .ts re-exports; diff-check exit 0. Measured defects remain: nested forwarding Proxy scope is admitted and invokes traps; record .bytes reads alias one Uint8Array/buffer; accepted leg/events/event/payload reads alias one mutable payload. Outer/envelope Proxy rejection and the pre-read stable input snapshot are already present. Reachability/shape grep across apps/packages/tests found snapshotPolicyWaiverFields only in record.ts/leg.ts and all codec/fold/leg consumers only in the four owned TS/test paths plus the two bridges; no seventh caller. apps/daemon declares @moe/store workspace:* and lock importer links ../../packages/store; owned bare imports typecheck. Runtime bridge test executed 1 file/5 tests and daemon tsc passed. Consumer fields confirmed from live Moe task list: writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec each dependsOn this leaf. Pre-edit baseline: daemon exit 1, 2 failed files/3 tests, 340 passed files/6975 passed tests/12 todo. Foreign failures: daemon-command-registry-human-approver.test.ts:135 expected 403/OPERATOR_PRINCIPAL_REQUIRED got 401; foundation-attempt-windows.test.ts:864 expected derived worktree absent but it existed; same file :986 expected one launch got zero. Root lane only passed 401 files/9783 tests (apps excluded); root typecheck, foundation 35/756, and store 52/673 passed. No owned path intersects baseline failures.",
-      "startedAt": "2026-09-01T18:46:24.911Z",
-      "completedAt": "2026-09-01T18:54:24.954Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "TDD RED — ADD DIRECT PRODUCTION-SURFACE REGRESSIONS BEFORE SOURCE CHANGES. In policy-waiver-record.test.ts add an otherwise-valid plain outer grant whose only hostile value is a forwarding Proxy around `scope`; count getPrototypeOf/ownKeys/getOwnPropertyDescriptor traps and require exact `{code:'POLICY_WAIVER_RECORD_INVALID',layer:'DAEMON_POLICY_WAIVER',ok:false}` with zero trap calls. Add a codec ownership arm that reads `.bytes` twice, proves distinct Uint8Array objects and buffers with identical canonical contents, mutates the first, requires that corrupted exposure to decode with exact POLICY_WAIVER_RECORD_UNREADABLE@DAEMON_POLICY_WAIVER, then requires a fresh read to remain canonical and decode successfully. In policy-waiver-leg.test.ts capture one accepted leg per use; require successive `.leg` reads to be semantically equal but distinct at leg/events/event/payload/buffer identities, with frozen result/leg/events/event and an own data-property Uint8Array payload. Mutate one exposure, assert its exact unreadable code/layer, reacquire a canonical leg, commit it through the real openStore, mutate that caller copy after commit, then read/decode the persisted original bytes. Run only the named focused cases and record genuine red from the current production aliases/omitted nested guard; if they pass before implementation, stop and re-measure rather than weakening assertions.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "note": "TDD RED added only the two owned test files. Record regression adds a plain outer grant with a forwarding Proxy only at scope, counts getPrototypeOf/ownKeys/getOwnPropertyDescriptor traps, pins HOSTILE_SHAPES=10, exact POLICY_WAIVER_RECORD_INVALID@DAEMON_POLICY_WAIVER, and zero trap calls. It also pins exact enumerable result keys, distinct Uint8Array/buffer exposures, corruption refusal, and fresh canonical decode. Leg regression captures one accepted leg per use, pins semantic equality with distinct leg/events/event/payload/buffer identities, frozen shells, a plain non-Proxy own-data payload descriptor, exact unreadable refusal after caller mutation, canonical reacquisition, and real-store persisted-byte/decode equality after post-commit caller mutation. The commit helper now captures one materialized leg for aggregate/version/events. Focused red 1: record pattern executed 1 file, 2 failed/7 skipped of 9; failures were exact shared-byte identity at record.test.ts:154 and nested scope accepted instead of POLICY_WAIVER_RECORD_INVALID at :237. Focused red 2: leg pattern executed 1 file, 1 failed/8 skipped of 9 at leg.test.ts:113 because successive leg reads were identical. These are genuine current-production failures, not test errors. Test physical lines remain record 278 and leg 286 (<300).",
-      "startedAt": "2026-09-01T18:54:30.997Z",
-      "completedAt": "2026-09-01T18:56:45.794Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "MINIMUM RECORD-BOUNDARY FIX. Make `scopeSnapshot` call `nodeTypes.isProxy(value)` before Array/prototype/key/descriptor inspection so a nested Proxy fails closed without invoking traps; preserve POLICY_WAIVER_RECORD_INVALID at DAEMON_POLICY_WAIVER and every existing own-data/exact-key/bounds/ref/hash rule. Refactor the accepted builder result without changing `PolicyWaiverRecordAccepted`, its four enumerable keys, event type or record shape: close over the canonical JSON string and return an Object.freeze'd result with an enumerable `bytes` getter that encodes a fresh detached Uint8Array on every access. Keep record and scope frozen and never expose the closure's authority through a mutable alias. Make the new record tests green, retain literal exemplar hashes, and compact the touched source so policy-waiver-record.ts remains <=250 physical lines; do not touch the bridge or any canonicalizer/store/schema file.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.ts",
         "apps/daemon/src/bootstrap/policy-waiver-record.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/bootstrap/policy-waiver-record.ts"
-      ],
-      "note": "Minimum record-boundary fix complete. scopeSnapshot now calls nodeTypes.isProxy(value) before Array.isArray, prototype, own-key, or descriptor work, so nested scope Proxies return the existing POLICY_WAIVER_RECORD_INVALID@DAEMON_POLICY_WAIVER without traps. The accepted codec envelope closes over one immutable canonical JSON string and exposes an own enumerable bytes getter that TextEncoder-encodes a fresh detached Uint8Array for every read. Event type, record, public type, exact four-key roster, canonical hashes, and frozen record/scope remain unchanged; no mutable canonical-byte alias is exposed. Fresh full record test: Test Files 1 passed (1), Tests 9 passed (9). Fresh daemon typecheck exited 0 after correcting the new test helper's overly narrow compile-only parameter to the same structural pattern used by the record tests; runtime exact code/layer assertions were not weakened. record.ts is exactly 250 physical lines; bridge remains clean; diff-check exit 0.",
-      "startedAt": "2026-09-01T18:56:50.194Z",
-      "completedAt": "2026-09-01T18:58:56.453Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "MINIMUM LEG/PERSISTENCE-BOUNDARY FIX. Preserve the existing one-snapshot-before-read fold, expectedVersion equality, event/ref semantics, public `PolicyWaiverLegResult` type and two-key `{leg,ok}` shape. Return a frozen accepted envelope whose enumerable `leg` getter materializes on every access a new frozen ExpectedVersionDecisionLeg, new frozen events array, new frozen plain EventDraft, and a fresh detached payload obtained from the codec's copy-on-access bytes. EventDraft.payload must remain an own data property containing a non-Proxy Uint8Array so @moe/store accepts and synchronously snapshots it; do not claim the typed array is Object.freeze'd and do not add getters/Proxies inside EventDraft. Update the test commit helper to capture one materialized leg and use that same aggregate/version/events tuple. Make the real-store mutation test green, including persisted-byte equality and successful exact decode after the caller mutates its discarded copy. Keep policy-waiver-leg.ts <=250 lines and leave store, manifests, lockfile and the .js bridge untouched.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/planning/policy-waiver-leg.ts",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/planning/policy-waiver-leg.ts"
-      ],
-      "note": "Minimum leg/persistence fix complete. The existing snapshot-before-read, single read, aggregate derivation, expectedVersion comparison, fold/ref semantics, public PolicyWaiverLegResult, and exact `{leg,ok}` shape are unchanged. The frozen accepted envelope now exposes an enumerable leg getter. Each read builds a new frozen ExpectedVersionDecisionLeg, frozen events array, frozen plain EventDraft, and fresh own-data non-Proxy Uint8Array payload sourced from the codec copy-on-access getter. No getter or Proxy is placed inside EventDraft. The test commit helper captures one materialized leg and uses that same aggregate/version/events tuple. Fresh full leg suite passed: Test Files 1 passed (1), Tests 9 passed (9), including distinct identity/buffer assertions and real openStore commit whose persisted bytes/decode remain canonical after caller mutation. Fresh daemon typecheck exited 0. leg.ts is 196 physical lines (<250); exact .js bridge, @moe/store, manifests, and lockfile remain untouched; exact-six status contains only the four intended TS/test modifications and diff-check exits 0.",
-      "startedAt": "2026-09-01T18:59:01.562Z",
-      "completedAt": "2026-09-01T18:59:53.229Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "DEDICATED ROSTER-DENOMINATOR GATE. Keep every generated/swept roster as an immutable named constant with these exact nonzero assertions: POLICY_WAIVER_EVENT_TYPES=2, POLICY_WAIVER_GRANTED_KEYS=14, POLICY_WAIVER_REVOKED_KEYS=12, POLICY_WAIVER_RECORD_CODES=3, POLICY_WAIVER_READER_CODES=12, POLICY_WAIVER_WRITER_CODES=1, BOUNDARY_REJECTIONS=5, INVALID_VALUES=8, HOSTILE_SHAPES=10 (the new nested-scope Proxy is the tenth), HOSTILE_BYTES=5, MALFORMED_CASES=6 and CONFLICT_CASES=3. For each roster that drives a sweep, first record exact-path status and a SHA-256 backup outside the repo, delete one member without changing its denominator, run the owning test unpiped and require the named count assertion to fail with nonzero test execution, then restore in a separate command and prove pre/post SHA equality. Preserve the existing bidirectional event/code/key set-equality assertions; a zero-case or self-derived subset check is not acceptable. No drill artifact may remain in the repo.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "note": "Dedicated denominator gate complete. Surviving exact assertions are 2/14/12/3/12/1 for event/grant-key/revoke-key/record-code/reader-code/writer-code rosters and 5/8/10/5/6/3 for BOUNDARY_REJECTIONS, INVALID_VALUES, HOSTILE_SHAPES, HOSTILE_BYTES, MALFORMED_CASES, CONFLICT_CASES. Export rosters retain literal bidirectional equality plus Object.freeze checks; every swept case roster is a named Object.freeze'd constant with an exact nonzero denominator. Six separate deletion drills ran unpiped with nonzero execution and each named denominator went red: boundary 4 vs 5; invalid 7 vs 8; hostile shapes 9 vs 10; hostile bytes 4 vs 5; malformed 5 vs 6; conflict 2 vs 3. The first hostile-shape attempt produced reporter trap noise because the throwing Proxy remained in the failed array display; it was fully restored, then repeated by deleting that throwing member and produced the required explicit 9-vs-10 count failure. For every drill exact-path status and an out-of-repo %TEMP% SHA-256 backup were recorded before mutation, restore was a separate command, and a later command proved target SHA equals backup before deleting it. Final test hashes: record.test DFECE522...D0B0, leg.test 87D901F8...CF55; zero matching backup artifacts remain. Fresh restored suites passed 2 files/18 tests; diff-check exit 0.",
-      "startedAt": "2026-09-01T18:59:58.259Z",
-      "completedAt": "2026-09-01T19:04:11.219Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "PENULTIMATE ADVERSARIAL REVIEW AND RESTORED PRODUCTION MUTATIONS. Invoke adversarial-self-review and inspect the effective plan/diff for double reads, descriptor traps, mutable aliases, caller-supplied refs, aggregate/payload divergence, stale expectedVersion, malformed histories, wrong reason provenance and shape/cap drift. Drill each fence separately against the production surface: (1) remove only the nested `scope` Proxy check; the otherwise-valid nested fixture must become accepted and its exact code/layer/zero-trap arm must red, proving no downstream fence shares the answer; (2) replace the codec copy-on-access getter with one shared buffer; the distinct-buffer/fresh-decode arm must red; (3) cache one materialized leg or reuse one payload buffer; the identity/fresh-leg/real-store arm must red; (4) loosen one humanApprovalRef/waiverRef tuple input and one current-revoke binding; their existing literal production assertions must red. Before drilling, record exact tracked-path status and SHA-256; mutate one mechanism at a time, run the named test with nonzero execution, restore in a separate command, and prove exact pre/post SHA equality plus `git diff --check`. A green mutant is a finding: fix the fixture/implementation or report blocked, never bank it. Reconfirm four TS/test paths are the only edits, both bridges are exact one-line re-exports, result/event key rosters are unchanged, record.ts and leg.ts are <=250, and no production file approaches 400.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.ts",
         "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
         "apps/daemon/src/planning/policy-waiver-leg.ts",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/bootstrap/policy-waiver-record.ts",
-        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "note": "Adversarial review found no blocker. Checked concurrency/double reads, null/exotic/Proxy inputs, descriptor traps, mutable aliases, caller refs, aggregate/payload divergence, expectedVersion races, malformed histories, exact refusal provenance, descriptor/key topology, store compatibility, caps and scope. The leg getter closes over no store/input reference and cannot reread; descriptor topology intentionally changes bytes/leg from data to enumerable accessor, with no measured descriptor-sensitive caller. Five one-mechanism production mutants ran against named production-surface tests and all went red: removing nested scope isProxy made the otherwise-valid Proxy accepted instead of exact INVALID@DAEMON_POLICY_WAIVER; shared codec bytes failed distinct identity; cached leg failed distinct identity; dropping commandId from humanApprovalRef changed the pinned literal digest; dropping current revokedWaiverRef equality made stale revoke accepted instead of exact CONFLICT@DAEMON_POLICY_WAIVER. Each run had nonzero test execution. Before every mutant, exact tracked status and an out-of-repo SHA backup were recorded. Every restore was separate; later SHA proof and diff-check matched. Final hashes: record.ts 2827035A...D17F, record.test DFECE522...D0B0, leg.ts 1680CDCA...A47E, leg.test 87D901F8...CF55. Zero drill backups remain. Fresh restored tests passed 2 files/18 tests. Exact-six status is only those four modified TS/test paths, unstaged; bridges are exact one-line LF re-exports with anchored hashes 600DF7E5...336 and 29A54670...616D. Lines: record.ts 250, leg.ts 196, tests 278/285; diff-check 0. Result/event rosters remain 4/2/3 keys and EventDraft payload is a plain own data Uint8Array.",
-      "startedAt": "2026-09-01T19:04:15.903Z",
-      "completedAt": "2026-09-01T19:08:31.788Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "FINAL FRESH VERIFICATION, EVIDENCE AND QA HANDOFF. Run exactly, foreground and unpiped: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-record.test.ts','src/planning/policy-waiver-leg.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`. Require exit 0, `Test Files 3 passed (3)`, a nonzero `Tests N passed (N)` line, and the daemon `tsc --project tsconfig.json` leg; exit 0 without counts is unverified. In this same final verification phase run standalone/unpiped `pnpm --filter @moe/daemon test`, `pnpm typecheck`, root `pnpm test` (label it root lane only; apps/** excluded), `pnpm verify:foundation`, and `pnpm verify:store`; compare their HEAD failing paths with the Phase-0 pre-edit baseline and require no new failure intersecting the six owned paths, quoting all foreign red verbatim. Recheck line counts, bridge bytes, exact-six status, SHA restore evidence and `git diff --check`. Complete the step with modifiedFiles exactly the four changed TS/test paths, then call moe.complete_task using the exact command and fresh output; summarize nested-Proxy code/layer, copy-on-access identities, real-store post-mutation persistence, roster/mutation denominators, line counts, baseline delta and both consumer task ids within 2000 chars. Stop normally for the wrapper's explicit-path kind=completion commit; never hand-commit, stage broadly, edit .moe, or poll approval/landing. QA must inspect task.commits/landing.lastCompletion rather than treating REVIEW or checkpoint 5fe0fdde as delivery.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.ts",
         "apps/daemon/src/bootstrap/policy-waiver-record.js",
@@ -126,28 +88,19 @@
         "apps/daemon/src/planning/policy-waiver-leg.ts",
         "apps/daemon/src/planning/policy-waiver-leg.js",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/bootstrap/policy-waiver-record.ts",
-        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.ts",
-        "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-      ],
-      "note": "Final phase ran the exact foreground/unpiped completion command verbatim: exit 0; Test Files 3 passed (3); Tests 23 passed (23); daemon `$ tsc --project tsconfig.json` ran and passed. Standalone broad lanes: daemon exit 1 with 1 failed/341 passed files and 1 failed/6979 passed/12 todo tests. Sole current failure is foreign `apps/daemon/src/daemon-command-registry-human-approver.test.ts:135`: expected HTTP 403 with OPERATOR_PRINCIPAL_REQUIRED, received 401 with no matching refusal. Phase-0 baseline had that failure plus `foundation-attempt-windows.test.ts:864` (expected derived worktree absent, got present) and :986 (expected one launch, got zero). Current-minus-baseline failing-path delta is empty, and the owned-six intersection is empty. Fresh root typecheck passed (19/20 projects). Root `pnpm test` passed 401 files/9783 tests with 1 file/44 tests skipped; ROOT LANE ONLY, apps/** excluded. Foundation passed 35 files/756 tests; store passed 52 files/673 tests. Final exact-six status: only record.ts/test and leg.ts/test modified, none staged; both bridges clean, exact one-line LF re-exports. SHA/lines: record.ts 2827035A...D17F/250; record.test DFECE522...D0B0/278; leg.ts 1680CDCA...A47E/196; leg.test 87D901F8...CF55/285; bridges 600DF7E5...336 and 29A54670...616D, one line each. Diff-check 0; no drill backup remains. Mutation evidence: all six swept denominators red on member deletion and all five production fences red (nested Proxy, shared bytes, cached leg, human tuple, current revoke), each with separate SHA restore proof. Consumer fields remain writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec dependsOn this leaf. Adversarial review found no blocker.",
-      "startedAt": "2026-09-01T19:08:38.399Z",
-      "completedAt": "2026-09-01T19:13:47.838Z"
+      ]
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-3b52b1c3",
   "branch": null,
   "prLink": null,
-  "reopenCount": 4,
-  "reopenReason": "The current worktree repair is substantively green, but it is not delivered by any recorded commit. Fresh QA verification of the exact command passed (3 files/23 tests; daemon typecheck), current production sources meet the 250/400 per-file caps, and the dirty diff contains the intended nested-Proxy and copy-on-access fixes. However task.commits contains only checkpoints ca1f05c8 and 5fe0fdde, landing has no lastCompletion, and HEAD is 5fe0fdde. `git show HEAD` proves the delivered tree still lacks the repairs: record.ts:110 admits nested scope Proxies, record.ts:164 exposes one cached mutable bytes buffer, and leg.ts:188-192 exposes one cached mutable event payload/leg. Therefore the 23-test verification is worktree-only and mismatched to the recorded delivery. Preserve the four dirty repaired paths unchanged; call complete_task with the fresh exact gate and exit normally so the wrapper records a kind=completion SHA containing exactly those four paths. QA must then inspect that SHA/branch containment and rerun the same gate.",
+  "reopenCount": 5,
+  "reopenReason": "Reopened from board",
   "createdBy": "WORKER",
   "parentTaskId": "task-5d4628555d364414a16fa9213b393bd8",
   "priority": "HIGH",
-  "order": 8.7,
+  "order": 191.5,
   "comments": [
     {
       "id": "comment-f18914a340cd454889eb5a7119bd16ea",
@@ -170,7 +123,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:07:18.042Z",
-  "updatedAt": "2026-09-01T22:13:34.598Z",
+  "updatedAt": "2026-09-02T09:11:26.373Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T13:11:22.458Z",
     "plannedStepCount": 7,
@@ -180,43 +133,13 @@
     "reopenCount": 4
   },
   "contextFetchedBy": [
-    "governor-c11c29e2",
-    "architect-db6a0906"
+    "qa-3b52b1c3"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7"
-  ],
-  "failedDodItems": [
-    {
-      "item": "DoD 1: the delivered commit does not reject nested scope Proxies or provide copy-owned immutable record bytes; those repairs exist only in the dirty worktree.",
-      "rejectedAt": "2026-09-01T21:18:36.073Z",
-      "rejectedBy": "qa-f2bd3efd"
-    },
-    {
-      "item": "DoD 4: the delivered commit still returns one cached EventDraft payload/leg rather than the repaired fresh immutable event graph.",
-      "rejectedAt": "2026-09-01T21:18:36.073Z",
-      "rejectedBy": "qa-f2bd3efd"
-    },
-    {
-      "item": "DoD 5: the new Proxy/copy-ownership regression arms and mutation-resistant assertions are not present in any recorded delivery commit.",
-      "rejectedAt": "2026-09-01T21:18:36.073Z",
-      "rejectedBy": "qa-f2bd3efd"
-    },
-    {
-      "item": "DoD 6 / verification rail: the fresh 3-file/23-test/typecheck pass was reproduced only against uncommitted worktree bytes, not task.commits or landing.lastCompletion.",
-      "rejectedAt": "2026-09-01T21:18:36.073Z",
-      "rejectedBy": "qa-f2bd3efd"
-    }
-  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
   "planSubmittedAt": "2026-09-01T18:40:34.288Z",
   "planningNotes": {
     "approachesConsidered": "The superseded no-edit delivery replay was rejected because governor comment-ae277d7400d848189c57405de4ba88a4 makes the nested-scope Proxy and mutable byte aliases blocking defects. Literal Object.freeze on a non-empty Uint8Array was rejected because Node 24 throws; a Proxy/read-only-view or payload accessor was rejected because @moe/store admits only a plain, non-Proxy Uint8Array in an own data property. Changing EventDraft, @moe/store, exported result types, manifests, or bridges was rejected as incompatible/out of scope. The minimal compatible fix preserves TypeScript/key shapes but makes the frozen codec result expose freshly encoded canonical bytes and the frozen leg result materialize a fresh plain/frozen decision leg with a detached own-data payload on every access. No external docs change is needed because signatures/event schemas remain unchanged; concise inline rationale guards the non-obvious copy boundary.",
@@ -233,12 +156,11 @@
   },
   "budget": {
     "wallClockMs": 3600000,
-    "warnedAt": "2026-08-31T21:01:42.208Z",
-    "escalatedAt": "2026-08-31T21:01:42.208Z"
+    "warnedAt": "2026-09-02T09:11:26.277Z",
+    "escalatedAt": "2026-09-02T09:11:26.277Z"
   },
   "planApprovedAt": "2026-09-01T18:40:36.397Z",
   "workStartedAt": "2026-08-31T13:32:30.350Z",
-  "reviewStartedAt": "2026-09-01T19:15:00.546Z",
   "verification": {
     "command": "node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-record.test.ts','src/planning/policy-waiver-leg.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"",
     "exitCode": 0,
@@ -254,7 +176,6 @@
     "apps/daemon/src/planning/policy-waiver-leg.test.ts"
   ],
   "completionSummary": "Closed the human-authorized immutable policy-waiver boundary repair in exactly four TS/test paths; both one-line LF bridges remain unchanged. `scopeSnapshot` now rejects a nested scope Proxy before any trap with exact `POLICY_WAIVER_RECORD_INVALID@DAEMON_POLICY_WAIVER`. Codec accepted results retain exact `{bytes,eventType,ok,record}` keys but return a fresh detached Uint8Array/buffer per bytes read. Leg accepted results retain `{leg,ok}` while each read materializes a fresh frozen leg/events/plain EventDraft graph and fresh own-data non-Proxy payload. One pre-read snapshot still binds aggregate, fold and expectedVersion. Real openStore proof shows persisted bytes/decode stay canonical after caller-copy mutation. All exact rosters remain frozen/pinned at 2/14/12/3/12/1 and swept denominators 5/8/10/5/6/3. Six denominator deletions and five production mutants (Proxy, shared bytes, cached leg, human tuple, current revoke) red; separate SHA restores matched. Fresh exact gate: 3/3 files, 23/23 tests, daemon typecheck, exit 0. Broad root typecheck, root lane 401 files/9783 tests (apps excluded), foundation 35/756 and store 52/673 passed. Full daemon improved from baseline 2 failed files/3 tests to one foreign failure: `daemon-command-registry-human-approver.test.ts:135`, expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401; current-minus-baseline owned intersection is empty. Lines/hashes: record 250/2827035A, record test 278/DFECE522, leg 196/1680CDCA, leg test 285/87D901F8; diff-check 0. Consumers remain writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec, each dependsOn this leaf. Wrapper must record a kind=completion landing; checkpoint 5fe0fdde is not delivery.",
-  "reviewCompletedAt": "2026-09-01T21:18:36.073Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 1: the delivered commit does not reject nested scope Proxies or provide copy-owned immutable record bytes; those repairs exist only in the dirty worktree.",
@@ -471,6 +392,5 @@
     "apps/daemon/src/planning/policy-waiver-leg.ts",
     "apps/daemon/src/planning/policy-waiver-leg.js",
     "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-  ],
-  "needsHumanReview": true
+  ]
 }
