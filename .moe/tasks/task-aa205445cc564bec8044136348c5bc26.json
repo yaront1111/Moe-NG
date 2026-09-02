@@ -83,7 +83,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 4,
-  "reopenReason": "The four-path extraction is substantively green in the shared worktree but remains undelivered after the human-authorized no-churn replay. I ran the exact persisted task.verification.command from context: exit 0, Test Files 1 passed (1), Tests 56 passed (56), and daemon typecheck executed. The current four hashes/line counts still match the approved anchors, diff-check passes, and spot-checks confirm pure policy/effect separation, exact seven-key legacy exports, exact 9/nonzero hostile roster, stable refusal provenance, and the containment-only divergence fixture. However task.commits=[], landing={}, and lastCommitOutcome=null. HEAD is 5fe0fdde; git ls-tree shows both new policy files absent, and delivered static-asset-host.ts remains 556 physical lines. Thus the exact gate authenticates dirty/untracked worktree bytes, not a deliverable commit. Preserve all four anchored bytes without source churn. This is a repeated wrapper delivery incident requiring human/runtime intervention to create and record an explicit four-path kind=completion SHA plus landing.lastCompletion; QA must then inspect git show/branch containment/blobs and rerun the exact gate.",
+  "reopenReason": "Human-authorized unpark, 2026-09-02. The 4/3 park premise (\"green in the shared worktree but undeliverable until the moes wrapper repair lands\") was falsified by ec83 the same hour: a CLAUDE QA seat landed ec83's bytes as f40efeb3 (pushed, 0 unattributed, 77 foreign dirty paths correctly skipped), recorded a completion, and the row went DONE with no moes change. The landing defect is specific to the Codex/Gemini long-lived-TUI post-flight path, not to landing in general. aa205's four declared paths are all present and uncommitted in the worktree (M http-listener-static-assets.test.ts, M static-asset-host.ts, ?? static-asset-path-policy.ts, ?? static-asset-path-policy.js) with commits/landing/lastCommitOutcome all empty, so it is the identical shape ec83 was in. Clearing the human-review fence so a Claude QA seat can claim it and run the same route: re-measure the stale premise, land via checkpoint, record completion, then approve or reject on the ACTUAL gate result. QA must not inherit the four prior \"undelivered\" rejections as findings.",
   "createdBy": "WORKER",
   "parentTaskId": "task-7d1ddf298c0340b8b4c26965310699c2",
   "priority": "CRITICAL",
@@ -104,7 +104,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-09-01T22:17:27.708Z",
+  "updatedAt": "2026-09-02T09:22:14.900Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 3,

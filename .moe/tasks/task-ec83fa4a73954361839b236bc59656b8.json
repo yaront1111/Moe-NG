@@ -129,7 +129,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:07:18.042Z",
-  "updatedAt": "2026-09-02T09:20:00.394Z",
+  "updatedAt": "2026-09-02T09:21:41.623Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T13:11:22.458Z",
     "plannedStepCount": 7,
@@ -410,14 +410,29 @@
       "treeId": "032b68ed2c3dc7e126d7789742df9aa406e15574",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "7d34aad95aafcf4c408160c31787553d4844fb4e",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:11:26Z",
+      "paths": [
+        ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:21:41.623Z",
+      "treeId": "ea1057eebee8a0b983b8778c7e9f6f16913f8151",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-3b52b1c3@2026-09-02T12:10:00Z",
-    "at": "2026-09-02T09:17:02.417Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3b52b1c3@2026-09-02T09:11:26Z",
+    "at": "2026-09-02T09:21:41.623Z"
   },
   "declaredFiles": [
     "apps/daemon/src/bootstrap/policy-waiver-record.ts",

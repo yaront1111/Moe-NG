@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 
+import {
+  canonicalizeLiveQuiesceSafeValue,
+  snapshotLiveQuiesceSafeValue,
+} from "./cutover-quiesce-evidence-safe-value.js";
+
 export const LIVE_QUIESCE_EVIDENCE_LAYER = "live-quiesce-evidence";
 export const LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES = Object.freeze([
   "LIVE_QUIESCE_EVIDENCE_INCOMPLETE",
@@ -128,17 +133,6 @@ const ITEM_REFUSALS = new Set([
 ]);
 const DIFFERENCE_KINDS = new Set(["ADDED", "REMOVED", "CONTENT_CHANGED", "LENGTH_CHANGED"]);
 
-function isJsonValue(value: unknown, active = new Set<object>()): boolean {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (typeof value !== "object" || active.has(value)) return false;
-  active.add(value);
-  const children = Array.isArray(value) ? value : Object.values(value);
-  const valid = children.every((child) => isJsonValue(child, active));
-  active.delete(value);
-  return valid;
-}
-
 const isAuthority = (value: unknown): value is LiveQuiesceEvidence["authority"] =>
   isRecord(value) && hasExactKeys(value, AUTHORITY_KEYS) &&
   isNonBlank(value.principal) && isNonBlank(value.moment) && isNonBlank(value.commentId);
@@ -186,7 +180,7 @@ const isStopMoments = (value: unknown): value is LiveQuiesceEvidence["stoppedAt"
     isNonBlank(entry.itemId) && isNonBlank(entry.moment));
 
 function isEvidence(value: unknown): value is LiveQuiesceEvidence {
-  if (!isRecord(value) || !hasExactKeys(value, EVIDENCE_KEYS) || !isJsonValue(value)) return false;
+  if (!isRecord(value) || !hasExactKeys(value, EVIDENCE_KEYS)) return false;
   if (value.runMode !== "LIVE" || !isNonBlank(value.hostFingerprint)) return false;
   if (!isAuthority(value.authority) || !isInventory(value.inventory)) return false;
   if (!Array.isArray(value.results) || !value.results.every(isItemResult) || !isCount(value.resolvedCount)) return false;
@@ -229,30 +223,35 @@ function semanticRefusal(evidence: LiveQuiesceEvidence): LiveQuiesceEvidenceRefu
   return null;
 }
 
-function canonicalText(value: unknown): string {
-  if (value === null) return "null";
-  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalText).join(",")}]`;
-  const record = value as Readonly<Record<string, unknown>>;
-  const fields = Object.keys(record).sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalText(record[key])}`);
-  return `{${fields.join(",")}}`;
-}
-
 const incomplete = (): LiveQuiesceEvidenceRefusal => refusal(
   "LIVE_QUIESCE_EVIDENCE_INCOMPLETE",
   "the durable live-quiesce evidence record is absent or has an incomplete shape",
 );
 
-/** Canonical digest JSON; unlike the migration pretty-printer, this has no display whitespace. */
+/**
+ * Canonical digest JSON; unlike the migration pretty-printer, this has no display whitespace.
+ * The caller's value is snapshotted into a detached own-data graph BEFORE any property or
+ * schema read, so none of their accessors, proxy traps or iterators ever run, deep/oversized
+ * input is refused rather than thrown, and a later caller mutation cannot change the accepted
+ * bytes. Every remaining hostile failure lands on the existing INCOMPLETE code and layer.
+ */
 export function serializeLiveQuiesceEvidenceCanonical(
   evidence: unknown,
 ): LiveQuiesceEvidenceCanonicalResult {
-  if (!isEvidence(evidence)) return incomplete();
-  const semantics = semanticRefusal(evidence);
-  if (semantics !== null) return semantics;
-  return Object.freeze({ ok: true, canonicalJson: canonicalText(evidence) });
+  try {
+    const snapshot = snapshotLiveQuiesceSafeValue(evidence);
+    if (!snapshot.ok) return incomplete();
+    const safe = snapshot.value;
+    const detached: unknown = safe;
+    if (!isEvidence(detached)) return incomplete();
+    const semantics = semanticRefusal(detached);
+    if (semantics !== null) return semantics;
+    const canonical = canonicalizeLiveQuiesceSafeValue(safe);
+    if (!canonical.ok) return incomplete();
+    return Object.freeze({ ok: true, canonicalJson: canonical.canonicalJson });
+  } catch {
+    return incomplete();
+  }
 }
 
 export function deriveLiveQuiesceEvidenceDigest(
