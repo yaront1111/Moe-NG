@@ -37,7 +37,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import type { LegOutcome } from "./hostile-harness.js";
 import {
-  INTEGRITY_HOSTILE_CASES, cleanupRestoreHarnesses, openedStores,
+  INTEGRITY_HOSTILE_CASES, PRE_ROSTER_INTEGRITY_HOSTILE_CASES,
+  cleanupRestoreHarnesses, openedStores,
 } from "./integrity-hostile-cases.js";
 import type { HostileArm, HostileCase } from "./integrity-hostile-cases.js";
 import {
@@ -334,5 +335,199 @@ describe("the whole slice", () => {
 
   it("collected an outcome from every case, so nothing escaped by not running", () => {
     expect(collected).toHaveLength(refusalCases.length + raceCases.length * 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PRE-ROSTER — the GA activation record and the live-quiesce evidence record.
+//
+// EXECUTED here, ADVERTISED by the parent row (task-45839f34c88d4db291146bd6f2216b99).
+// Deliberately outside `HOSTILE_CASES`/`COVERED` and outside the shared `collected` array;
+// both exclusions are mechanical, not stylistic:
+//   * `GA_ACTIVATION_RECORD_LAYER` is rostered on the `scheduler-activation` axis, so folding
+//     these six into the COVERED union of this axis reddens "covered minus roster is empty".
+//   * the whole-slice denominator above is derived from the ROSTERED tables alone, so a
+//     foreign push into `collected` would break it.
+// `LIVE_QUIESCE_EVIDENCE_LAYER` is already rostered on `integrity` and already covered by
+// `RECENT_INTEGRITY_HOSTILE_CASES` — but only by three arms that pass `null` and land on the
+// shape refusal. These six are additive and SEMANTIC: they carry a record that is valid in
+// every other respect and vary exactly one fact.
+// ---------------------------------------------------------------------------
+
+const PRE_ROSTER_CASES = PRE_ROSTER_INTEGRITY_HOSTILE_CASES;
+const ACTIVATION_CONSTANT = "GA_ACTIVATION_RECORD_LAYER";
+const QUIESCE_CONSTANT = "LIVE_QUIESCE_EVIDENCE_LAYER";
+const QUIESCE_UPSTREAM_LAYER = "live-quiesce-evidence";
+
+interface QuiesceUpstream {
+  /** The core code the left (or sole) leg must carry forward. */
+  readonly left: string;
+  /** The core code the right leg must carry forward, on a race arm only. */
+  readonly right?: string;
+}
+
+/**
+ * The EXACT core refusal each quiesce leg must forward, keyed by the case name.
+ *
+ * THIS IS THE DIVERGENCE DISCRIMINATOR, not decoration. The daemon maps a SEMANTIC @moe/core
+ * rejection and a MISSING evidence file onto the same outer
+ * `CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT`; the two branches differ only in `upstream`,
+ * which the missing-file branch leaves NULL. Asserting the outer tuple alone would stay green
+ * against a daemon that never called @moe/core at all, or that lost the forwarding.
+ */
+const QUIESCE_UPSTREAM: ReadonlyMap<string, QuiesceUpstream> = new Map([
+  ["a resolved-count drift cannot mint the quiesce generation",
+    { left: "LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH" }],
+  ["a successful stop without its stop moment cannot mint the generation",
+    { left: "LIVE_QUIESCE_EVIDENCE_STOP_MOMENT_MISSING" }],
+  // Positional, NOT settlement order: `probeRacing` returns the first thunk as `left`, so
+  // this pins the core diagnosis of each leg without pinning which side wins the race.
+  ["count and host divergence refuse regardless of settlement order",
+    { left: "LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH",
+      right: "LIVE_QUIESCE_EVIDENCE_INCOMPLETE" }],
+]);
+
+/** Throws rather than skipping: a renamed or added quiesce leg must declare its upstream. */
+function quiesceUpstreamFor(name: string): QuiesceUpstream {
+  const declared = QUIESCE_UPSTREAM.get(name);
+  if (declared === undefined) {
+    throw new Error(
+      `no upstream core refusal is declared for the quiesce leg "${name}"; `
+      + "a renamed or added case must declare one rather than silently skip the check",
+    );
+  }
+  return declared;
+}
+
+const preRosterCollected: unknown[] = [];
+/** Every upstream code actually observed, so the slice can prove all three were exercised. */
+const preRosterUpstream: string[] = [];
+
+/** Reads the forwarded core refusal of the daemon and asserts it through the shared helper. */
+function assertForwardedUpstream(actual: unknown, code: string, label: string): void {
+  const upstream = (actual as { readonly upstream?: unknown }).upstream;
+  expect(
+    upstream === null || upstream === undefined,
+    `${label}: the daemon must forward the core refusal, not drop it to null`,
+  ).toBe(false);
+  assertRefusedWith(upstream, { code, layer: QUIESCE_UPSTREAM_LAYER });
+  preRosterUpstream.push(code);
+}
+
+const preRosterRefusals = PRE_ROSTER_CASES.filter(
+  (entry): entry is Extract<HostileCase, { arm: "AFTER" | "BEFORE" }> => entry.arm !== "RACE",
+);
+const preRosterRaces = PRE_ROSTER_CASES.filter(
+  (entry): entry is Extract<HostileCase, { arm: "RACE" }> => entry.arm === "RACE",
+);
+
+describe("pre-roster integrity boundaries", () => {
+  it("generates exactly six pre-roster cases", () => {
+    // The LITERAL denominator. vitest reports no failure for an empty `it.each` table, so a
+    // sweep that silently yielded nothing would make every arm below vacuous.
+    expect(PRE_ROSTER_CASES).toHaveLength(6);
+    expect(preRosterRefusals).toHaveLength(4);
+    expect(preRosterRaces).toHaveLength(2);
+  });
+
+  it("covers exactly the two pre-roster constants, three arms each", () => {
+    expect([...new Set(PRE_ROSTER_CASES.map((entry) => entry.constant))].sort())
+      .toEqual([ACTIVATION_CONSTANT, QUIESCE_CONSTANT]);
+    expect([...new Set(PRE_ROSTER_CASES.map((entry) => entry.arm))].sort())
+      .toEqual(["AFTER", "BEFORE", "RACE"]);
+    for (const constant of [ACTIVATION_CONSTANT, QUIESCE_CONSTANT]) {
+      const arms = PRE_ROSTER_CASES
+        .filter((entry) => entry.constant === constant)
+        .map((entry) => entry.arm);
+      expect([...arms].sort(), constant).toEqual(["AFTER", "BEFORE", "RACE"]);
+    }
+  });
+
+  it("keeps the activation boundary out of the covered union of this axis", () => {
+    // Load-bearing: GA_ACTIVATION_RECORD_LAYER is rostered on `scheduler-activation`, so the
+    // moment these six are folded into HOSTILE_CASES the covered-minus-roster assertion
+    // above reddens. This pins the separation rather than leaving it to a comment.
+    expect(new Set(COVERED).has(ACTIVATION_CONSTANT)).toBe(false);
+  });
+});
+
+describe("pre-roster hostile before and after arms", () => {
+  it.each(
+    preRosterRefusals.map((entry) => [`${entry.constant} ${entry.arm}: ${entry.name}`, entry]),
+  )(
+    "%s",
+    async (_name: string, entry: Extract<HostileCase, { arm: "AFTER" | "BEFORE" }>) => {
+      if (entry.integrity !== undefined) {
+        // Same two-half shape as the rostered runner, so a forgery arm added to this set
+        // later cannot degrade into a stale-digest probe.
+        const sealed = await entry.integrity();
+        expect(sealed.ok, `${entry.constant}: the forgery must pass its own seal`).toBe(true);
+      }
+      const outcome = await entry.run();
+      preRosterCollected.push(outcome);
+      // Code AND layer through the shared helper, which rejects a code-only call at compile
+      // time and again at runtime.
+      assertRefusedWith(outcome, entry.expect);
+      if (entry.constant === QUIESCE_CONSTANT) {
+        assertForwardedUpstream(outcome, quiesceUpstreamFor(entry.name).left, entry.name);
+      }
+    },
+  );
+});
+
+describe("pre-roster hostile race arms", () => {
+  it.each(preRosterRaces.map((entry) => [`${entry.constant} RACE: ${entry.name}`, entry]))(
+    "%s",
+    async (_name: string, entry: Extract<HostileCase, { arm: "RACE" }>) => {
+      const outcome = await entry.run();
+      const left = legValue(outcome.left);
+      const right = legValue(outcome.right);
+      preRosterCollected.push(left, right);
+
+      // On the OUTCOME SHAPE, never on which leg won.
+      expect(["left", "right"]).toContain(outcome.firstSettled);
+      expect(entry.expectLeft).toBeDefined();
+      expect(entry.expectRight).toBeDefined();
+      assertRefusedWith(left, entry.expectLeft!);
+      assertRefusedWith(right, entry.expectRight!);
+      if (entry.constant === QUIESCE_CONSTANT) {
+        const declared = quiesceUpstreamFor(entry.name);
+        expect(declared.right, `${entry.name}: a race arm owes both legs an upstream`)
+          .toBeDefined();
+        assertForwardedUpstream(left, declared.left, `${entry.name} left`);
+        assertForwardedUpstream(right, declared.right ?? "", `${entry.name} right`);
+      }
+      // Per side, not on an aggregate: an aggregate can hide a double-admit.
+      expect([admitted(left), admitted(right)].filter(Boolean).length).toBeLessThanOrEqual(1);
+      expect(admitted(left)).toBe(false);
+      expect(admitted(right)).toBe(false);
+    },
+  );
+});
+
+describe("the pre-roster slice", () => {
+  it("admits no activation record and accepts no cutover generation snapshot", () => {
+    expect(preRosterCollected.filter((outcome) => admitted(outcome))).toEqual([]);
+  });
+
+  it("collected an outcome from every pre-roster leg", () => {
+    // Both denominators: the derived one moves with the table, so the literal is what makes a
+    // table that shrank to nothing redden here.
+    expect(preRosterCollected).toHaveLength(
+      preRosterRefusals.length + preRosterRaces.length * 2,
+    );
+    expect(preRosterCollected).toHaveLength(8);
+  });
+
+  it("forwarded all three distinct core diagnoses through the daemon wrapper", () => {
+    // Four quiesce legs, three distinct codes. Set equality, so a leg that silently stopped
+    // reaching the semantic branch (and started refusing on the missing-file branch, or on
+    // the reader/codec branches task-642df965 added beside it) reddens here.
+    expect([...new Set(preRosterUpstream)].sort()).toEqual([
+      "LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH",
+      "LIVE_QUIESCE_EVIDENCE_INCOMPLETE",
+      "LIVE_QUIESCE_EVIDENCE_STOP_MOMENT_MISSING",
+    ]);
+    expect(preRosterUpstream).toHaveLength(4);
   });
 });

@@ -40,6 +40,15 @@ import {
   selectProjectConfiguration,
 } from "../../apps/daemon/src/configuration/project-configuration-selection.js";
 import {
+  CUTOVER_GENERATION_SNAPSHOT_LAYER,
+  LIVE_QUIESCE_EVIDENCE_FILENAME,
+  readCutoverGenerationSnapshot,
+} from "../../apps/daemon/src/cutover/cutover-generation-snapshot.js";
+import type {
+  CutoverGenerationPorts,
+  CutoverGenerationSnapshot,
+} from "../../apps/daemon/src/cutover/cutover-generation-snapshot.js";
+import {
   SESSION_AUTHORITY_DAEMON_LAYERS,
 } from "../../apps/daemon/src/identity/session-authority-contracts.js";
 import { createSessionAuthority } from "../../apps/daemon/src/identity/session-authority.js";
@@ -94,6 +103,16 @@ import {
   PRE_FREEZE_AUDIT_LAYER, preFreezeAuditRefusal, preFreezeAuditVerdict,
 } from "../../packages/benchmark/src/pre-freeze-audit-vocabulary.js";
 import {
+  GA_ACTIVATION_WORK_REF, GO_ACTIVATE_GATE_ID,
+} from "../../packages/benchmark/src/activation-binding.js";
+import {
+  GA_ACTIVATION_RECORD_LAYER, composeActivationRecord,
+} from "../../packages/benchmark/src/activation-record.js";
+import type {
+  ActivationRecordInput,
+} from "../../packages/benchmark/src/activation-record.js";
+import { PINNED_SPEC_SHA256 } from "../../packages/benchmark/src/claim-ladder-contract.js";
+import {
   validateConfirmatoryFreezeAuthorityRecord,
 } from "../../packages/benchmark/src/confirmatory-freeze-authority-contracts.js";
 import {
@@ -117,6 +136,9 @@ import {
   PROJECT_CONFIGURATION_CODEC_LAYERS, createProjectConfigurationManifest,
   decodeProjectConfigurationManifestBytes, encodeProjectConfigurationManifest,
 } from "../../packages/core/src/index.js";
+import type {
+  LiveQuiesceEvidence,
+} from "../../packages/core/src/cutover/cutover-quiesce-evidence.js";
 import {
   ACCEPTANCE_CONTRACT_LAYERS,
   type AcceptanceContract,
@@ -155,6 +177,9 @@ import {
   snapshotIdentityHash, validateGraphSnapshot,
 } from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore, verifyBackupGeneration } from "../../packages/store/src/index.js";
+import {
+  DIGEST as IMPORT_DIGEST, recordOf as importRecordOf, seedImport,
+} from "../../apps/daemon/src/projections/import-shadow-test-fixtures.js";
 
 import { hostileRoot, probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
@@ -240,6 +265,9 @@ const racingExactly = (
   arm: "RACE", constant, expectLeft, expectRight, name,
   run: () => probeRacing(RACE_BOUND, left, right),
 });
+
+/** Defers synchronous production probes so probeRacing installs its bound before either runs. */
+const deferredProbe = <T>(probe: () => T): Promise<T> => Promise.resolve().then(probe);
 
 /**
  * Projects a production refusal that spells its layer `refusedBy` onto the helper's shape.
@@ -2764,6 +2792,232 @@ const preFreezeAuditCases: readonly HostileCase[] = [
     ])),
   ),
 ];
+
+// ---------------------------------------------------------------------------
+// PRE-ROSTER — GA activation record. The parent row advertises it atomically.
+// ---------------------------------------------------------------------------
+
+const ACTIVATION_RECORD = "GA_ACTIVATION_RECORD_LAYER";
+const ACTIVATION_RECORD_REFUSER = soleLayer(
+  GA_ACTIVATION_RECORD_LAYER, "GA_ACTIVATION_RECORD",
+);
+const ACTIVATION_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+const ACTIVATION_CLAIM =
+  "Moe v0.1.0 satisfies its stated correctness invariants (full CORE coverage manifest) "
+  + "and its BENCH-S1–BENCH-S12 corpus oracles (as of 2026-09-01).";
+
+function activationGate() {
+  const minted = grantHumanAuthority(
+    { gateId: GO_ACTIVATE_GATE_ID, grant: null, workRef: GA_ACTIVATION_WORK_REF },
+    { kind: "HUMAN", principalId: "operator-yaron" },
+    1_756_000_000_000,
+  );
+  if (!minted.ok) throw new Error(`activation control gate refused: ${minted.code}`);
+  return minted.gate;
+}
+
+const ACTIVATION_CONTROL_INPUT: ActivationRecordInput = Object.freeze({
+  binding: Object.freeze({
+    authority: activationGate(),
+    decision: GO_ACTIVATE_GATE_ID,
+    generations: Object.freeze({
+      backupGenerationDigest: "a".repeat(64),
+      distributionManifestSha256: "b".repeat(64),
+      importGenerationSha256: "c".repeat(64),
+      quiesceRecordSha256: "d".repeat(64),
+    }),
+    sourceCommit: ACTIVATION_COMMIT,
+  }),
+  campaignVerdicts: Object.freeze({ "G-L1": "PASS" as const }),
+  claimSentences: Object.freeze([ACTIVATION_CLAIM]),
+  familyEvidence: Object.freeze([Object.freeze({
+    countLine: "Tests 1 passed (1)", exitCode: 0, familyId: "property",
+  })]),
+  pinnedSpecSha256: PINNED_SPEC_SHA256,
+  scopeNotEstablished: Object.freeze([]),
+  sourceCommit: ACTIVATION_COMMIT,
+});
+
+function assertActivationControl(): void {
+  const control = composeActivationRecord(ACTIVATION_CONTROL_INPUT);
+  if (!control.ok) throw new Error(`activation positive control refused: ${control.code}`);
+  const property = control.record.gateFamilies.find(({ familyId }) => familyId === "property");
+  if (control.record.reachedRung !== "L1"
+    || control.record.activation.status !== "BINDING_ADMITTED_ACT_PENDING"
+    || property?.verdict !== "PASS") {
+    throw new Error("activation positive control did not reach admitted L1 with property PASS");
+  }
+}
+
+function activationHostile(patch: Partial<ActivationRecordInput>): unknown {
+  assertActivationControl();
+  return composeActivationRecord(Object.freeze({ ...ACTIVATION_CONTROL_INPUT, ...patch }));
+}
+
+const activationExpectation = (code: string): RefusalExpectation => ({
+  code, layer: ACTIVATION_RECORD_REFUSER,
+});
+const hostilePinnedSpec = `${PINNED_SPEC_SHA256[0] === "0" ? "1" : "0"}${PINNED_SPEC_SHA256.slice(1)}`;
+
+const activationRecordCases: readonly HostileCase[] = [
+  before(
+    ACTIVATION_RECORD, "a 39-hex top-level source commit cannot name the admitted record",
+    activationExpectation("ACTIVATION_RECORD_SOURCE_COMMIT_INVALID"),
+    async () => activationHostile({ sourceCommit: ACTIVATION_COMMIT.slice(0, 39) }),
+  ),
+  after(
+    ACTIVATION_RECORD, "a one-nibble spec drift cannot inherit the pinned record authority",
+    activationExpectation("ACTIVATION_RECORD_SPEC_MISMATCH"),
+    async () => activationHostile({ pinnedSpecSha256: hostilePinnedSpec }),
+  ),
+  racingExactly(
+    ACTIVATION_RECORD, "independent source and spec drift refuse regardless of settlement order",
+    activationExpectation("ACTIVATION_RECORD_SOURCE_COMMIT_INVALID"),
+    activationExpectation("ACTIVATION_RECORD_SPEC_MISMATCH"),
+    () => deferredProbe(() => activationHostile({ sourceCommit: ACTIVATION_COMMIT.slice(0, 39) })),
+    () => deferredProbe(() => activationHostile({ pinnedSpecSha256: hostilePinnedSpec })),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// PRE-ROSTER — live quiesce evidence through the daemon's four-source reader.
+// ---------------------------------------------------------------------------
+
+const LIVE_QUIESCE = "LIVE_QUIESCE_EVIDENCE_LAYER";
+const CUTOVER_GENERATION_REFUSER = soleLayer(
+  CUTOVER_GENERATION_SNAPSHOT_LAYER, "DAEMON_CUTOVER_GENERATION",
+);
+const CUTOVER_PROJECT_ID = "integrity-live-quiesce-project";
+const QUIESCE_ITEM = Object.freeze({
+  discoveredBy: "production-process-enumerator",
+  id: "process:4242",
+  kind: "PROCESS" as const,
+  observedBefore: "pid 4242 was live",
+});
+
+const LIVE_QUIESCE_CONTROL: LiveQuiesceEvidence = Object.freeze({
+  authority: Object.freeze({
+    commentId: "comment-live-quiesce-authority",
+    moment: "2026-09-01T12:00:00.000Z",
+    principal: "operator/live",
+  }),
+  citationKey: "live-quiesce-security-control",
+  citedBy: "task-38ec450ae92d486f860c5801c0f28870",
+  hostFingerprint: "host-integrity-a",
+  inventory: Object.freeze({
+    hostFingerprint: "host-integrity-a",
+    itemCount: 1,
+    items: Object.freeze([QUIESCE_ITEM]),
+    runMode: "LIVE" as const,
+    undiscoverableKinds: Object.freeze([]),
+  }),
+  manifestComparison: Object.freeze({
+    comparedEntryCount: 1,
+    differences: Object.freeze([]),
+    matched: true,
+    ok: true as const,
+  }),
+  outcome: "COMPLETE" as const,
+  resolvedCount: 1,
+  results: Object.freeze([Object.freeze({
+    item: QUIESCE_ITEM,
+    observedAfter: Object.freeze({ detail: "pid 4242 is absent", live: false }),
+    ok: true as const,
+    pollsUsed: 1,
+    stopCommand: "terminate pid 4242",
+  })]),
+  runMode: "LIVE" as const,
+  stoppedAt: Object.freeze([Object.freeze({
+    itemId: QUIESCE_ITEM.id, moment: "2026-09-01T12:00:01.000Z",
+  })]),
+});
+
+function commitCutoverWitness(
+  store: SqliteEventStore, eventId: string, eventType: string, witness: unknown,
+): void {
+  store.commit({
+    aggregateId: CUTOVER_PROJECT_ID,
+    commandBytes: new TextEncoder().encode(eventId),
+    commandId: `cmd-${eventId}`,
+    committedAt: "2026-09-01T12:00:00.000Z",
+    events: [{
+      eventId, eventType,
+      payload: new TextEncoder().encode(JSON.stringify({ witness })),
+    }],
+    expectedVersion: store.getAggregateVersion(CUTOVER_PROJECT_ID),
+  });
+}
+
+function readQuiesceSnapshot(
+  evidence: LiveQuiesceEvidence, label: string,
+): CutoverGenerationSnapshot {
+  const root = hostileRoot(label);
+  const store = SqliteEventStore.openForProject(join(root, "store.db"), CUTOVER_PROJECT_ID);
+  openedStores.push(store);
+  commitCutoverWitness(store, `${label}-activated`, "ProjectActivated", {
+    distributionManifestHash: "e".repeat(64), truthClass: "DAEMON_VERIFIED",
+  });
+  commitCutoverWitness(store, `${label}-quiesced`, "ProjectQuiesced", {
+    backupGenerationHash: "f".repeat(64), truthClass: "DAEMON_VERIFIED",
+  });
+  seedImport(store, IMPORT_DIGEST, [importRecordOf()]);
+  const evidencePath = join(root, LIVE_QUIESCE_EVIDENCE_FILENAME);
+  writeFileSync(evidencePath, JSON.stringify(evidence), "utf8");
+  const ports: CutoverGenerationPorts = {
+    config: { storeRoot: root },
+    readFileText: (path) => readFileSync(path, "utf8"),
+    store,
+  };
+  return readCutoverGenerationSnapshot(ports, { projectId: CUTOVER_PROJECT_ID });
+}
+
+function quiesceHostile(evidence: LiveQuiesceEvidence, label: string): CutoverGenerationSnapshot {
+  const control = readQuiesceSnapshot(LIVE_QUIESCE_CONTROL, `${label}-control`);
+  if (!control.ok) throw new Error(`live quiesce positive control refused: ${control.code}`);
+  return readQuiesceSnapshot(evidence, label);
+}
+
+const cutoverExpectation: RefusalExpectation = Object.freeze({
+  code: "CUTOVER_GENERATION_QUIESCE_RECORD_ABSENT",
+  layer: CUTOVER_GENERATION_REFUSER,
+});
+const countMismatchEvidence: LiveQuiesceEvidence = Object.freeze({
+  ...LIVE_QUIESCE_CONTROL, resolvedCount: 0,
+});
+const stopMomentMissingEvidence: LiveQuiesceEvidence = Object.freeze({
+  ...LIVE_QUIESCE_CONTROL, stoppedAt: Object.freeze([]),
+});
+const hostDivergenceEvidence: LiveQuiesceEvidence = Object.freeze({
+  ...LIVE_QUIESCE_CONTROL,
+  inventory: Object.freeze({
+    ...LIVE_QUIESCE_CONTROL.inventory, hostFingerprint: "host-integrity-b",
+  }),
+});
+
+const liveQuiesceCases: readonly HostileCase[] = [
+  before(
+    LIVE_QUIESCE, "a resolved-count drift cannot mint the quiesce generation",
+    cutoverExpectation,
+    async () => quiesceHostile(countMismatchEvidence, "quiesce-count"),
+  ),
+  after(
+    LIVE_QUIESCE, "a successful stop without its stop moment cannot mint the generation",
+    cutoverExpectation,
+    async () => quiesceHostile(stopMomentMissingEvidence, "quiesce-stop-moment"),
+  ),
+  racingExactly(
+    LIVE_QUIESCE, "count and host divergence refuse regardless of settlement order",
+    cutoverExpectation,
+    cutoverExpectation,
+    () => deferredProbe(() => quiesceHostile(countMismatchEvidence, "quiesce-race-count")),
+    () => deferredProbe(() => quiesceHostile(hostDivergenceEvidence, "quiesce-race-host")),
+  ),
+];
+
+export const PRE_ROSTER_INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
+  ...activationRecordCases,
+  ...liveQuiesceCases,
+]);
 
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
