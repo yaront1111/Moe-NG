@@ -194,6 +194,25 @@ const MATERIAL = new WeakMap<object, PlanningMaterial>();
  * planning — while any PRESENT value this reader cannot vouch for answers false, and the
  * caller refuses the frame whole rather than binding the half it could read.
  */
+/** Every entry keyed by its run, or null the moment one refuses. Structural probes only. */
+function materialByRun(
+  raw: object, goalRefs: Readonly<Record<string, string>>,
+): Map<string, PlanningMaterial> | null {
+  if (Array.isArray(raw)) return null;
+  const prototype = Object.getPrototypeOf(raw);
+  if (prototype !== Object.prototype && prototype !== null) return null;
+  const keys = Reflect.ownKeys(raw);
+  if (keys.length > MAX_ENTRIES) return null;
+  const byRun = new Map<string, PlanningMaterial>();
+  for (const key of keys) {
+    if (typeof key !== "string" || boundedId(key) === null) return null;
+    const entry = entryOf(key, ownValue(raw, key), goalRefs);
+    if (entry === null) return null;
+    byRun.set(key, entry);
+  }
+  return byRun;
+}
+
 export function bindPlanningAuthorities(
   offers: readonly Record<string, unknown>[],
   goalRefs: Readonly<Record<string, string>> | undefined,
@@ -201,18 +220,18 @@ export function bindPlanningAuthorities(
 ): boolean {
   if (raw === undefined || raw === null) return true;
   if (goalRefs === undefined) return false;
-  if (typeof raw !== "object" || Array.isArray(raw)) return false;
-  const prototype = Object.getPrototypeOf(raw);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  const keys = Reflect.ownKeys(raw);
-  if (keys.length > MAX_ENTRIES) return false;
-  const byRun = new Map<string, PlanningMaterial>();
-  for (const key of keys) {
-    if (typeof key !== "string" || boundedId(key) === null) return false;
-    const entry = entryOf(key, ownValue(raw, key), goalRefs);
-    if (entry === null) return false;
-    byRun.set(key, entry);
+  if (typeof raw !== "object") return false;
+  // A REVOKED PROXY throws out of isArray, getPrototypeOf and ownKeys alike, at the map or at
+  // any entry nested under it, so the structural probes are themselves hostile ground. A trap
+  // that fights back must still REFUSE: an escaping TypeError is not a fail-closed answer, it
+  // unwinds past the frame the caller was about to render and takes the whole poll with it.
+  let byRun: Map<string, PlanningMaterial> | null;
+  try {
+    byRun = materialByRun(raw, goalRefs);
+  } catch {
+    return false;
   }
+  if (byRun === null) return false;
   for (const offer of offers) {
     if (!PLANNING_AUTHORITY_KINDS.includes(String(offer["commandKind"]))) continue;
     const target = offer["targetAggregateId"];

@@ -199,6 +199,27 @@ export function boundGoalOf(
   }
 }
 
+/** A present-but-unreadable map, distinct from an absent one and from any JSON value. */
+const AUTHORITY_UNREADABLE: unique symbol = Symbol("authority-unreadable");
+
+/**
+ * The authority map read WITHOUT RUNNING ANYTHING. A plain `response["planningAuthorityByRun"]`
+ * invokes an accessor standing where the map goes — the daemon's answer computing itself against
+ * this board at the outermost hop, one level shallower than any accessor inside the map — and a
+ * throwing one escapes the frame entirely. An accessor is a PRESENT value this reader cannot
+ * vouch for, so it answers the sentinel and refuses; it is never mistaken for an absent map,
+ * which stays optional for a legacy surface.
+ */
+function ownAuthorityMap(response: Readonly<Record<string, unknown>>): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(response, "planningAuthorityByRun");
+    if (descriptor === undefined) return undefined;
+    return "value" in descriptor ? descriptor.value : AUTHORITY_UNREADABLE;
+  } catch {
+    return AUTHORITY_UNREADABLE;
+  }
+}
+
 function frame(
   connection: SurfaceFrame["connection"],
   outcome: string,
@@ -269,7 +290,7 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
   // reads — but a PRESENT value this reader cannot vouch for refuses the frame whole, exactly
   // as a malformed binding map does, and without ever invoking an accessor to decide.
   // The material rides a sidecar keyed by these offers, so SurfaceFrame's shape is unchanged.
-  if (!bindPlanningAuthorities(offers, planningGoalRefs, response["planningAuthorityByRun"])) {
+  if (!bindPlanningAuthorities(offers, planningGoalRefs, ownAuthorityMap(response))) {
     return unreadable();
   }
   return frame(

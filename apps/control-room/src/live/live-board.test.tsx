@@ -1374,6 +1374,40 @@ describe("the per-run planning authority material", () => {
     expect(counts).toEqual({ authority: 0, entry: 0, map: 0 });
   });
 
+  /**
+   * A HOSTILE VALUE MUST REFUSE, NOT THROW. Every arm above hands the reader an object whose
+   * traps behave; these two hand it objects whose traps FIGHT BACK. `LIVE_SURFACE_UNREADABLE`
+   * is a fail-CLOSED answer, and an escaping TypeError is not that answer: it unwinds past the
+   * frame the caller was going to render and takes the whole poll with it. Both were measured
+   * escaping before this arm existed.
+   */
+  it("refuses a REVOKED PROXY as the map, without letting a trap throw past the reader", () => {
+    const { proxy, revoke } = Proxy.revocable<Record<string, unknown>>({}, {});
+    revoke();
+    // Every structural probe a reader could open with — isArray, getPrototypeOf, ownKeys —
+    // throws on a revoked proxy, so the refusal cannot be spelled as a shape test alone.
+    expect(() => frameOfSurface(surfaceWithAuthorities(proxy))).not.toThrow();
+    expect(frameOfSurface(surfaceWithAuthorities(proxy))).toEqual(UNREADABLE_FRAME);
+  });
+
+  it("never invokes an accessor installed at the map key ON THE RESPONSE ITSELF", () => {
+    // One level SHALLOWER than the three-depth arm above: not a getter inside the map, but a
+    // getter standing WHERE THE MAP GOES. A plain `response["planningAuthorityByRun"]` read
+    // runs it — the daemon's answer computing itself against this board, at the outermost
+    // hop — and a throwing one escapes the frame entirely.
+    let fired = 0;
+    const response = surfaceWithAuthorities(BOTH_MATERIAL, false) as Record<string, unknown>;
+    Object.defineProperty(response, "planningAuthorityByRun", {
+      configurable: true,
+      enumerable: true,
+      get: () => { fired += 1; throw new Error("hostile getter fired"); },
+    });
+
+    expect(() => frameOfSurface(response)).not.toThrow();
+    expect(frameOfSurface(response)).toEqual(UNREADABLE_FRAME);
+    expect(fired).toBe(0);
+  });
+
   it("refuses a symbol-keyed map, and a symbol-keyed authority body", () => {
     const symbolMap: Record<string, unknown> = { [PLURAL_RUN_A]: MATERIAL_A };
     Object.defineProperty(symbolMap, Symbol("run"), {
