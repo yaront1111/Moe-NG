@@ -99,7 +99,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-6a94d2a2",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -111,10 +111,17 @@
   ],
   "priority": "HIGH",
   "order": 8.8,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-a86aad199a81466eb7835c39e2522f30",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commits recorded on this row (48123000 .. c4a8c30a) are no longer ancestors of HEAD; their content is inside d2629d0d and the objects survive in the local reflog and GitHub refs/pull/5/head. Verify by content at HEAD, not by ancestry or Moe-Task greps; new commits land on moe/work-2026-09-02 (wrapper creates it from main).",
+      "timestamp": "2026-09-02T11:44:57.363Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:08:06.720Z",
-  "updatedAt": "2026-09-02T09:33:07.641Z",
+  "updatedAt": "2026-09-02T11:44:57.363Z",
   "contextFetchedBy": [
     "worker-620f90d0",
     "architect-5e59a71e",

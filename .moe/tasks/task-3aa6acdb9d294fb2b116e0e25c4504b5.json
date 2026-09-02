@@ -79,12 +79,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
-  "reopenReason": "Human-authorized unblock to PLANNING because BLOCKED->WORKING is gate-forbidden. Preserve the verified three-path daemon-store composition and dependent ownership; architect should submit only a no-churn verification/landing replay plan unless fresh measurement finds a real defect.",
+  "reopenReason": "Human-authorized unpark 2026-09-02 14:2xZ by governor-6ddb8f93. Target is PLANNING, not WORKING, per the standing gate rule and the prior human ruling on this same row. This hop NULLS blockedReason, so the parked premise is carried verbatim here and is the only surviving copy:\n\n\"External production prerequisite: exact three-path extraction is intact, under the per-file cap, and fresh focused gate is green (1 file/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.\"\n\nWHY IT IS UNPARKED, clause by clause. Clause 1 (bytes intact) still holds and I re-measured it: apps/daemon/src/daemon-store-foundation-composition.ts is UNTRACKED and apps/daemon/src/daemon-store-dependencies.ts is dirty at +4/-350 against HEAD a1138d52. Clause 2 (commits=[] is a real postflight defect) is a true observation. Clause 3, the CONCLUSION that this repo cannot land it, is FALSIFIED: task-ec83fa4a landed from this checkout on 2026-09-02 with no moes repair, because a live seat's own end-of-session checkpoint swept its dirty bytes onto the branch (f40efeb3, 8 paths landed, 77 foreign dirty paths correctly SKIPPED). The landing route exists and the attribution guard works. This row was never waiting on another repo; it was waiting on a live seat.\n\nURGENCY: both halves of the split are uncommitted in a shared checkout whose work branch was deleted and whose HEAD was reset onto main. Neither half is standalone - drop the untracked file and the -350 donor is a broken import. A git clean or checkout destroys QA-verified work.\n\nSCOPE FOR WHOEVER PLANS THIS: no-churn verification and landing replay ONLY. Preserve the exact existing blobs; do not rewrite sources or re-extract. Land the untracked .ts and the shrunk donor together as one commit, then record it. Do NOT commit the sibling .js bridge artifact into git history. Ancestry complaints are moot: PR #5 merged as d2629d0d and #6 restored ancestry; verify by content at HEAD per the human's 11:44Z ruling.",
   "createdBy": "WORKER",
   "parentTaskId": "task-143c1c19731443d9a0ad1d528d617f0f",
   "priority": "CRITICAL",
@@ -99,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T15:59:00.129Z",
-  "updatedAt": "2026-09-01T22:27:01.587Z",
+  "updatedAt": "2026-09-02T14:23:38.602Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:10:57.225Z",
     "plannedStepCount": 6,
@@ -244,9 +244,9 @@
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-foundation-composition.js"
   ],
-  "blockedReason": "External production prerequisite: exact three-path extraction is intact, under the per-file cap, and fresh focused gate is green (1 file/22 tests plus daemon typecheck); commits=[]/landing={}/lastCommitOutcome=null is the shared long-lived Codex worker/QA postflight lifecycle defect. This moe-next row cannot own D:/projexts/moes wrappers/plugin launcher. Park until the one shared moes six-file one-shot repair is filed, deployed, and live-canary proves REVIEW -> recorded kind=completion/landing; then preserve the exact blobs and run one delivery replay only. No source rewrite or additional no-churn plan.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T22:27:01.587Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null
 }

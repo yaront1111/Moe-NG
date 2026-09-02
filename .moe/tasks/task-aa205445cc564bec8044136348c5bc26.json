@@ -20,39 +20,66 @@
     {
       "stepId": "step-1",
       "description": "PHASE 0 — address the three delivery-only QA rejections by adopting and freezing the verified bytes, not replaying implementation. Read the human reopen, all rejection history, durable TASK/STEP_COMPLETED records, and prior completionSummary; confirm every rejection names only absent task.commits/landing. At worker claim record HEAD, exact four-path porcelain, line counts, SHA-256 and filter-aware blobs, and compare to these planning anchors: static-asset-host.ts M, 206 lines, 0B4AFB54C483B468BD45C785FD1A3048C48BC7CA7164385F5F75BE80D02761C8/e8f0e36221638e8c70cfc5ccdebe7361d6125191; static-asset-path-policy.ts ??, 174 lines, 798F673D07C5E7A794E643252C9DAC1006B9DCF0E8614FCE377CE5CF21D9B70D/762180b58cc21d0c78e5ea9ab30387b90239658e; static-asset-path-policy.js ??, one line, 6396E474FDA9BB409D518F6E4DB43D98832AF41D9F4ABA16304936F7FAB6FE17/ddca3afa7f252da5108a60498c0cfe938e15e6c9; http-listener-static-assets.test.ts M, 991 lines, 58E630BE22A1D4DED74AEF7683FF236525B946C29C5F83A863C2B2DB254B0220/e7c98799a7c571084fa7d00424b546862d535772. Confirm task.commits=[], lastCommitOutcome=null, landing={}, no Moe-Task trailer/ref contains these blobs, and get_commit_scope asserts exactly these four with no unattributed or peer-overlapping owned path; call moe.declare_files on exactly the four paths to reassert wrapper attribution. Re-run the old-specifier/deep-policy caller greps and exact runtime-key/count/format searches only to detect drift. Do not edit, normalize, recreate TDD, open foreign paths, or manually stage/commit. Any owned-byte drift or real behavior defect requires report_blocked/re-plan rather than a guessed repair.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/static-asset-host.ts",
         "apps/daemon/src/http/static-asset-path-policy.ts",
         "apps/daemon/src/http/static-asset-path-policy.js",
         "apps/daemon/src/http/http-listener-static-assets.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/static-asset-host.ts",
+        "apps/daemon/src/http/static-asset-path-policy.ts",
+        "apps/daemon/src/http/static-asset-path-policy.js",
+        "apps/daemon/src/http/http-listener-static-assets.test.ts"
+      ],
+      "note": "PHASE 0 adoption. MATERIAL STATE CHANGE vs the planning anchors: the three QA rejections were all delivery-only, and delivery has since HAPPENED. No source was edited in this step.\n\nMEASURED AT CLAIM (worker-f06d587f):\n- HEAD is now a1138d529d5fac44838a51c9c61a990c71e22d70 (branch main, `## main...origin/main` with no ahead/behind — in sync with origin). Planning anchor HEAD was 5fe0fdde.\n- `git status --porcelain` over exactly the four owned paths returns EMPTY. All four are tracked and clean; none is `M` or `??` any more.\n- Bytes are byte-identical to the planning anchors (sha256 / git blob / physical lines):\n  host 206 / 0b4afb54c483b468bd45c785fd1a3048c48bc7ca7164385f5f75be80d02761c8 / e8f0e36221638e8c70cfc5ccdebe7361d6125191\n  policy .ts 174 / 798f673d07c5e7a794e643252c9dac1006b9dcf0e8614fce377ce5cf21d9b70d / 762180b58cc21d0c78e5ea9ab30387b90239658e\n  bridge .js 1 / 6396e474fda9bb409d518f6e4db43d98832af41d9f4aba16304936f7fab6fe17 / ddca3afa7f252da5108a60498c0cfe938e15e6c9\n  test 991 / 58e630be22a1d4ded74aef7683ff236525b946c29c5f83a863c2b2db254b0220 / e7c98799a7c571084fa7d00424b546862d535772\n- `git ls-tree HEAD` over the four paths returns EXACTLY those four blob ids. DoD 2 and DoD 3 are therefore satisfied at delivered HEAD: the 174-line policy module and the one-line bridge are present, and the delivered host is the 206-line extracted host, not the pre-extraction 556-line file.\n\nDELIVERY CHAIN (falsifies the step-1 premises \"task.commits=[], lastCommitOutcome=null, no ref contains these blobs\"):\n- task.commits is NOT empty: 6 wrapper `checkpoint` records on refs/heads/moe/work-2026-08-08, all pushed:true. The first, 5c7e49a24a29fd6e34ad8029ef1798a19dbe1222 (tree 3f0f6b85, session worker-7973e36b@2026-09-02T09:32:45Z), carried all four owned paths.\n- lastCommitOutcome = {outcome:\"committed\", kind:\"checkpoint\", ...} (not null). task.landing is still undefined and no kind=completion record exists — that is the ONLY remaining provenance gap.\n- The four blobs reached main through d2629d0d (\"Moe/work 2026 08 08 (#5)\"), which is an ancestor of HEAD and whose tree carries all four anchored blob ids. `git log --all --grep='Moe-Task: task-aa205445cc564bec8044136348c5bc26'` matches d2629d0d and a1138d52 (both ancestors of HEAD) plus the six wip checkpoints (not ancestors — PR #5 squashed the work branch).\n\nDRIFT CHECKS (all clean, no drift):\n- Old-specifier callers unchanged: http-listener.ts:68-69, http-listener-pairing-routes.ts:26, projects/project-manager-http-assets.ts:8-9, project-manager-http-routing.ts:12-13, project-manager-http.ts:12, plus static-asset-host.js bridge and the focused test.\n- Deep-policy specifier consumed by exactly two files: static-asset-host.ts (lines 18/25/46) and the focused test (line 313 dynamic import for the set-equality arm). No third consumer appeared.\n- Bridge is exactly `export * from \"./static-asset-path-policy.ts\";` + LF (verified with `cat -A`).\n\nATTRIBUTION: moe.declare_files re-run on exactly the four paths — all 4 alreadyDeclared, addedPaths []. get_commit_scope(preflight): asserted = the four owned paths plus three board-state .moe/tasks/*.json entries harvested by earlier sessions (this row's own JSON plus task-1edf82.../task-4704a2... — board state, not source); planned []; unattributedPaths []; touchedFiles []; inferredPaths []; peerDeclared has 164 entries with ZERO overlap on any of the four owned paths. Live peers: governor-6ddb8f93, qa-30d27a8d.\n\nNo edit, normalization, recreation, restoration or manual staging performed. Shared checkout carries unrelated foreign dirt (~65 paths, incl. .moe/** and .codex/**); noted and left untouched.",
+      "startedAt": "2026-09-02T14:16:49.744Z",
+      "completedAt": "2026-09-02T14:19:08.679Z"
     },
     {
       "stepId": "step-2",
       "description": "PENULTIMATE — perform one read-only adversarial review of the full effective four-path diff and current production consumers. Confirm static-asset-path-policy.ts imports only node:path and remains the sole deterministic authority for frozen contracts, method/decode/path/segment/type/containment/ETag logic; static-asset-host.ts alone owns root leak scan, realpath/stat/read/readdir effects and preserves method→decode→path→type→realpath→containment→stat/file→size precedence. Confirm the old static-asset-host specifier still exposes exactly [CONTROL_ROOM_ASSET_CONTENT_TYPES, CONTROL_ROOM_ASSET_MAX_BYTES, CONTROL_ROOM_ASSET_RESPONSE_HEADERS, assetIsUnchanged, locateControlRoomAsset, readControlRoomAssetBytes, resolveControlRoomAssetRoot], with identity re-exports and unchanged callers; the bridge remains exactly `export * from \"./static-asset-path-policy.ts\";` plus LF. Inspect the focused tests for exact response keys/headers/binary behavior, every stable refusal code plus CONTROL_ROOM_LISTENER_LAYER, the direct locate-then-delete LISTENER_ASSET_READ_FAILED producer assertion, frozen hostile segment denominator exactly 9 and >0, and the legal-file `/escape/secret.js` divergence fixture where canonical containment is the only refusing fence. Adopt the durable restored containment mutation only if policy SHA remains 798F...9B70D and that named assertion is unchanged; the recorded containment-only admission produced 1 failed/55 passed before out-of-tree restore, so the human no-churn ruling forbids repeating the destructive drill. Finish with exact-path status/hashes and `git diff --check` unchanged. Report all four preserved paths in complete_step.modifiedFiles so wrapper attribution does not depend on inference.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/static-asset-host.ts",
         "apps/daemon/src/http/static-asset-path-policy.ts",
         "apps/daemon/src/http/static-asset-path-policy.js",
         "apps/daemon/src/http/http-listener-static-assets.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/static-asset-host.ts",
+        "apps/daemon/src/http/static-asset-path-policy.ts",
+        "apps/daemon/src/http/static-asset-path-policy.js",
+        "apps/daemon/src/http/http-listener-static-assets.test.ts"
+      ],
+      "note": "PENULTIMATE read-only adversarial review at HEAD a1138d52. No byte changed; no drill re-run (policy sha256 still 798f673d...9b70d, so the durable containment-only admission of 1 failed / 55 passed is adopted per the human no-churn ruling).\n\nSEPARATION (verified by reading the delivered files, not the design):\n- static-asset-path-policy.ts line 1 is its ONLY import: `import { sep } from \"node:path\";`. Zero node:fs, zero I/O. It is the sole authority for the frozen contracts (CONTROL_ROOM_ASSET_CONTENT_TYPES :40, CONTROL_ROOM_ASSET_MAX_BYTES :49 = 8*1024*1024, CONTROL_ROOM_ASSET_RESPONSE_HEADERS :52), the refusal constructors (refuseAsset :77, refuseAssetRoot :81), and the deterministic judgements judgeAssetMethod :88, decodeRequestPath :101, judgeRequestPath :123, contentTypeFor :138, isContainedBy :147, weakEtagOf :158, assetIsUnchanged :163, plus the ControlRoomAsset* type set and PathJudgement.\n- static-asset-host.ts line 1 holds ALL filesystem effects: `readFileSync, readdirSync, realpathSync, statSync` from node:fs. Its only owned behaviour is resolveControlRoomAssetRoot (:100, root proof + index.html presence + BAKED_SECRET_MARKERS/secretSpellings leak scan via firstLeakingAsset), locateControlRoomAsset (:153) and readControlRoomAssetBytes (:200).\n- PRECEDENCE PRESERVED exactly in locateControlRoomAsset: judgeAssetMethod -> decodeRequestPath (ENCODING_INVALID) -> judgeRequestPath -> contentTypeFor (TYPE_UNKNOWN) -> realpathSync.native (NOT_FOUND when isMissingEntry, else READ_FAILED) -> isContainedBy (OUTSIDE_ROOT) -> statSync (READ_FAILED) -> isFile (NOT_FOUND) -> size > MAX (TOO_LARGE). readControlRoomAssetBytes reads ONLY located.provenPath and never caller path text.\n\nPUBLIC SURFACE UNCHANGED at the old specifier: value re-export block :32 (CONTROL_ROOM_ASSET_CONTENT_TYPES, CONTROL_ROOM_ASSET_MAX_BYTES, CONTROL_ROOM_ASSET_RESPONSE_HEADERS, assetIsUnchanged) plus the three locally defined functions = exactly the seven runtime keys; type re-export block :38 carries the eight ControlRoomAsset* types. Test :315 asserts `Object.keys(legacy).toSorted()` SET-EQUALITY against exactly those seven names and then asserts IDENTITY (`toBe`) of each re-exported value against the policy module's own binding, so a copy rather than a re-export would fail. Callers are unchanged and still import the old specifier: http-listener.ts:68-69, http-listener-pairing-routes.ts:26, projects/project-manager-http-assets.ts:8-9, project-manager-http-routing.ts:12-13, project-manager-http.ts:12. Bridge is byte-exact `export * from \"./static-asset-path-policy.ts\";` + LF.\n\nHOSTILE ARMS CONFIRMED IN THE DELIVERED TEST:\n- :679-680 HOSTILE_SEGMENT_CASES asserted `toHaveLength(9)` AND `.length).toBeGreaterThan(0)` — frozen denominator plus the nonzero-generation guard.\n- Refusals assert the stable code AND the refusing layer: CONTROL_ROOM_LISTENER_LAYER at :288, :864, :885, :895, :908, :930, :945.\n- :457 direct-producer arm writes volatile.js, LOCATES it, rmSync's it, then asserts readControlRoomAssetBytes returns exactly {code:\"LISTENER_ASSET_READ_FAILED\", kind:\"LISTENER_REFUSAL\"} — the filesystem refusal is pinned at the producer, not through the listener.\n- DIVERGENCE FIXTURE :750 `/escape/secret.js`: every segment is a legal name, `.js` is in the closed content-type map, and the file EXISTS through a junction, so method/decode/segment/type all pass and realpath succeeds. Canonical containment (isContainedBy) is the only fence that can answer; the arm asserts LISTENER_ASSET_OUTSIDE_ROOT + 403 and additionally asserts the body does not contain \"stolen\". The device-stem negative control at :736 (`/CONSOLE.js` -> NOT_FOUND, 404) proves the segment rule matches by equality, not substring, so the hostile cases above it cannot pass for the wrong reason.\n- :448 pins the exact located key set [\"contentType\",\"etag\",\"kind\",\"provenPath\",\"size\"]; :334 pins the closed extension roster (.css/.html/.js/.png/.svg/.woff2, no .json, no .map) and Object.isFrozen; :353 pins the response-header key set.\n\nFREEZE RE-CONFIRMED after review: `git status --porcelain` over the four paths still EMPTY (all four tracked and clean at HEAD); sha256 unchanged (host 0b4afb54..., policy 798f673d..., bridge 6396e474..., test 58e630be...); `git diff --check` exit 0 (its stdout carries only unrelated CRLF warnings for ~19 FOREIGN dirty paths under .codex/, .serena/memories/ and apps/{control-room,daemon} that belong to other sessions — untouched). Line counts still 206 / 174 / 1 / 991; no fifth path (ls shows only static-asset-host.{ts,js} and static-asset-path-policy.{ts,js}).\n\nNO DEFECT FOUND. Nothing to repair, so the reopen's edit exception does not fire.",
+      "startedAt": "2026-09-02T14:19:11.735Z",
+      "completedAt": "2026-09-02T14:20:04.659Z"
     },
     {
       "stepId": "step-3",
       "description": "FINAL VERIFY + LAND — with all four hashes still frozen, run this exact persisted shell:false foreground/unpiped completion command verbatim: `node -e \"const{spawnSync:s}=require('node:child_process');let x=s('pnpm',['--filter','@moe/daemon','exec','vitest','run','--config','package.json','src/http/http-listener-static-assets.test.ts'],{encoding:'utf8',shell:false});console.log(x.stdout,x.stderr);if(x.error||x.status||!/Test Files\\\\s+[1-9].*Tests\\\\s+[1-9]/s.test(x.stdout))process.exit(x.status||1);x=s('pnpm',['--filter','@moe/daemon','typecheck'],{stdio:'inherit',shell:false});process.exit(x.error?1:x.status??1)\"`. Require exit 0, Test Files 1 passed, Tests 56 passed, and daemon tsc success. Then run standalone/unpiped `pnpm --filter @moe/daemon test`, require nonzero executed Test Files/Tests counts, compare against the durable pre-diff/package baseline, require no new failing path intersecting these four owned paths, and disclose every surviving foreign failing line/path verbatim rather than relabeling raw red green. Recheck 206/174 production line counts, exact one-line bridge, `git diff --check`, the four hashes/blobs/statuses, and no fifth path. Complete the step with all four modifiedFiles and call complete_task once with the exact command/counts plus a concise no-churn/mutation/baseline summary, then exit normally so the wrapper creates the explicit-path completion commit; never use git add/commit or record_commit manually. QA approval is contingent on a kind=completion task.commits SHA and landing.lastCompletion/merged: `git show <sha>` must contain the four anchored blobs and Moe-Task trailer, and branch containment must be real. If postflight still records no SHA, that is a wrapper delivery incident to block/escalate—not permission to alter or repeatedly resubmit worktree-only bytes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/static-asset-host.ts",
         "apps/daemon/src/http/static-asset-path-policy.ts",
         "apps/daemon/src/http/static-asset-path-policy.js",
         "apps/daemon/src/http/http-listener-static-assets.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/static-asset-host.ts",
+        "apps/daemon/src/http/static-asset-path-policy.ts",
+        "apps/daemon/src/http/static-asset-path-policy.js",
+        "apps/daemon/src/http/http-listener-static-assets.test.ts"
+      ],
+      "note": "FINAL VERIFY at the LANDED bytes. Full evidence recipe is in comment-e86a41d8ce1d4f5ab538da55a3541836.\n\nGATE 1 (exact persisted command, verbatim, foreground, unpiped, shell:false): exit 0.\n  `Test Files  1 passed (1)` / `Tests  56 passed (56)` / Duration 4.24s, then `$ tsc --project tsconfig.json` with daemon tsc success.\n\nGATE 2 (path-attributed baseline) `pnpm --filter @moe/daemon test`, standalone and unpiped: exit 0, `Test Files  342 passed (342)`, `Tests  6983 passed | 12 todo (6995)`. Both count lines are nonzero, so neither leg is vacuous. ZERO foreign failing lines to disclose. The merge-base-vs-HEAD failing-path delta is EMPTY by construction: the four owned blobs are already in the merge-base tree (they landed via the PR #5 squash), so no new failing path can intersect them.\n\nDELIVERY STATE (the material change from the plan's premises): the four paths are TRACKED AND CLEAN at HEAD a1138d52 (main, in sync with origin/main). `git ls-tree HEAD` returns exactly the four anchored blob ids; d2629d0d (\"Moe/work 2026 08 08 (#5)\") is an ancestor of origin/main, carries all four blobs, and its message holds 6 `Moe-Task: task-aa205445cc564bec8044136348c5bc26` trailer lines. QA rejection items 1 and 2 (DoD 2 and DoD 3 — \"policy paths absent from HEAD\", \"delivered HEAD retains the 556-line host\") are therefore FALSIFIED at the delivered tree: the delivered host is 206 lines and both policy paths exist.\n\nWRAPPER COMPLETION COMMIT — expected `nothing`, not a failure. There are no dirty owned paths left for the wrapper to stage, because delivery already happened through the squash-merge. task.landing is still undefined and lastCommitOutcome is kind=checkpoint. Per plan step 3 I used no `git add`/`git commit` and no manual record_commit; per mem:record-commit-is-idempotent-by-sha-cannot-reclassify the existing 5c7e49a2 checkpoint cannot be promoted. The honest completion SHA, if the board wants one recorded, is d2629d0d on refs/heads/main — a QA/governor attribution call, escalated in the comment rather than repaired by source churn.\n\nFREEZE RE-CONFIRMED after both gates: porcelain over the four paths EMPTY; sha256 host 0b4afb54...61c8, policy 798f673d...9b70d, bridge 6396e474...fe17, test 58e630be...0220; lines 206 / 174 / 1 / 991; bridge is the exact one-line `export * from \"./static-asset-path-policy.ts\";` + LF; `git diff --check` exit 0; no fifth path (`ls apps/daemon/src/http/static-asset*` shows only static-asset-host.{ts,js} and static-asset-path-policy.{ts,js}). Zero bytes changed by this session. Foreign dirt in the shared checkout (~65 paths under .moe/, .codex/, .serena/memories/ and other apps/** sources) noted and untouched.",
+      "startedAt": "2026-09-02T14:20:07.168Z",
+      "completedAt": "2026-09-02T14:25:15.313Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0cc57d30",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 5,
@@ -79,24 +106,41 @@
       "author": "governor-517c10b5",
       "content": "GOVERNOR REOPEN BRIEF — read before touching any source file.\n\nThis is reopen #5, human-directed. The four prior rejections all said the same thing: substantively green in the shared worktree, not delivered by any recorded commit. THAT PREMISE IS DEAD as of today, proven twice:\n- ec83 landed via a QA session checkpoint (f40efeb3) and went DONE.\n- 1edf landed a proper kind=completion from its WORKER seat (bfa0a616): 4 declared paths including 2 previously-untracked ones, pushed, ancestor of HEAD.\n\nSo the landing path works. Nothing here needs re-implementing.\n\nTHE WORK IS DONE AND ON DISK. Steps 1-3 were COMPLETED before this reopen; the reopen reset them to PENDING as a bookkeeping side effect, NOT because the work was undone. All four declared paths are present and uncommitted right now:\n  M  apps/daemon/src/http/http-listener-static-assets.test.ts\n  M  apps/daemon/src/http/static-asset-host.ts\n  ?? apps/daemon/src/http/static-asset-path-policy.ts\n  ?? apps/daemon/src/http/static-asset-path-policy.js\n\nDO NOT rewrite, regenerate, or \"clean up\" these files. Do not regenerate static-asset-host.ts from a HEAD copy — that destroys the extraction. The two untracked files are the entire deliverable of this task; they are the ones a careless sweep drops, so confirm both land.\n\nWHAT THIS ROW ACTUALLY NEEDS, in order:\n1. Re-walk the three steps against the EXISTING bytes (the plan is unchanged and correct). Verify, do not re-author.\n2. Land all four paths with an explicit pathspec commit. Do not rely on an exit sweep, and never use `git add -A` — the shared worktree carries 20+ dirty foreign files from other parked rows and a broad add would land them under this task id.\n3. Re-run the stored verification.command at the LANDED bytes and hold it to its own non-vacuity clause: nonzero `Test Files` AND nonzero `Tests`. Exit 0 with no counts is not a pass.\n4. Confirm the DoD line caps (both modules under 400 physical lines, target <=250) and that static-asset-path-policy.js is the repository-standard one-line bridge — measured at the landed bytes, not the worktree.\n\nKNOWN LEDGER ARTIFACT: if a completion is recorded at a sha already present as a checkpoint, the daemon merges it and does NOT upgrade task.commits[].kind. lastCommitOutcome is the authoritative locus in that case. A NO-COMPLETION-COMMIT warning at approval time under those conditions is the merge artifact, not a missing delivery.\n\nDOWNSTREAM: aa205 gates 7d1, which gates 272b09a7, which gates 59eaddfb, f8ea0a2f and 45839f34. Five rows are waiting on this one.",
       "timestamp": "2026-09-02T09:32:44.599Z"
+    },
+    {
+      "id": "comment-29ba5d87a84043e0881877ef244c8036",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commits recorded on this row (5c7e49a2 .. 548aceb3) are no longer ancestors of HEAD; their content is inside d2629d0d and the objects survive in the local reflog and GitHub refs/pull/5/head. Verify by content at HEAD, not by ancestry or Moe-Task greps; new commits land on moe/work-2026-09-02 (wrapper creates it from main).",
+      "timestamp": "2026-09-02T11:44:57.631Z"
+    },
+    {
+      "id": "comment-e86a41d8ce1d4f5ab538da55a3541836",
+      "author": "worker-f06d587f",
+      "content": "DELIVERY EVIDENCE for QA (reopen 5, worker-f06d587f). The three QA rejections were delivery-only and their premises are now FALSIFIED: the bytes are on main and pushed. Nothing was edited this session.\n\nRECIPE — every command runnable at the delivered tree:\n\n1) The four anchored blobs ARE at HEAD:\n   `git rev-parse HEAD` -> a1138d529d5fac44838a51c9c61a990c71e22d70 (branch main; `git status -sb` shows `## main...origin/main`, no ahead/behind).\n   `git ls-tree HEAD -- apps/daemon/src/http/static-asset-host.ts apps/daemon/src/http/static-asset-path-policy.ts apps/daemon/src/http/static-asset-path-policy.js apps/daemon/src/http/http-listener-static-assets.test.ts`\n   -> e8f0e36221638e8c70cfc5ccdebe7361d6125191 (host), 762180b58cc21d0c78e5ea9ab30387b90239658e (policy .ts), ddca3afa7f252da5108a60498c0cfe938e15e6c9 (bridge .js), e7c98799a7c571084fa7d00424b546862d535772 (test) — byte-for-byte the anchors in planningNotes.\n\n2) Working tree is CLEAN on all four (they are tracked, not `M`/`??` any more):\n   `git status --porcelain -- <the four paths>` -> EMPTY.\n   sha256: host 0b4afb54c483b468bd45c785fd1a3048c48bc7ca7164385f5f75be80d02761c8, policy 798f673d07c5e7a794e643252c9dac1006b9dcf0e8614fce377ce5cf21d9b70d, bridge 6396e474fda9bb409d518f6e4db43d98832af41d9f4aba16304936f7fab6fe17, test 58e630be22a1d4ded74aef7683ff236525b946c29c5f83a863c2b2db254b0220.\n   Lines: 206 / 174 / 1 / 991. `git diff --check` exit 0.\n\n3) HOW they landed (this answers rejection issue 3, \"no Moe-Task trailer exists in refs\"):\n   `git log --all --grep='Moe-Task: task-aa205445cc564bec8044136348c5bc26' --oneline` now matches EIGHT commits. Six are the wrapper `checkpoint` commits already recorded in task.commits on refs/heads/moe/work-2026-08-08, all pushed:true; the earliest, 5c7e49a24a29fd6e34ad8029ef1798a19dbe1222 (tree 3f0f6b85, session worker-7973e36b@2026-09-02T09:32:45Z), carried all four owned paths. Those six are NOT ancestors of HEAD because PR #5 SQUASHED the work branch.\n   The squash is d2629d0d76ca18d7a0702b7db8c8c0025ec2c641 \"Moe/work 2026 08 08 (#5)\". `git merge-base --is-ancestor d2629d0d origin/main` succeeds, and `git log -1 --format=%B d2629d0d | grep -c 'Moe-Task: task-aa205445cc564bec8044136348c5bc26'` -> 6. Its tree carries all four anchored blob ids. a1138d52 (#6) is the later ancestry restore and also contains them.\n\n4) WHY there is still no kind=completion record, and why that is NOT repairable by this worker:\n   task.landing is undefined and task.lastCommitOutcome is {outcome:\"committed\", kind:\"checkpoint\"}. The wrapper can only produce a completion commit from DIRTY owned paths, and there are none left — the delivery already happened through the PR #5 squash-merge. get_commit_scope(preflight) confirms: asserted = the four owned paths (+ three board-state .moe/tasks/*.json harvested by earlier sessions), planned [], unattributedPaths [], touchedFiles [], inferredPaths [], and peerDeclared (164 entries) has ZERO overlap on any of the four. So this session's postflight will legitimately record `nothing`, not a delivery failure. Per plan step 3 I did not `git add/commit` and did not call record_commit manually; per `mem:record-commit-is-idempotent-by-sha-cannot-reclassify` the existing 5c7e49a2 checkpoint entry cannot be promoted to completion anyway. If the board wants a completion row in task.commits, the honest SHA to record is d2629d0d (kind=completion, ref refs/heads/main, pushed:true, treeId `git rev-parse d2629d0d^{tree}`) — that is a QA/governor attribution call under the ratified hand-landing rule, not a source-churn matter.\n\n5) FRESH GATES at the landed bytes (foreground, unpiped, shell:false):\n   Exact persisted command -> exit 0, `Test Files 1 passed (1)`, `Tests 56 passed (56)`, `$ tsc --project tsconfig.json`.\n   Path-attributed baseline `pnpm --filter @moe/daemon test` (standalone, unpiped) -> exit 0, `Test Files 342 passed (342)`, `Tests 6983 passed | 12 todo (6995)`. ZERO foreign red to disclose. The merge-base-vs-HEAD delta is empty by construction: the owned bytes are already IN the merge-base tree, so no failing path can intersect the four owned paths.\n\n6) No drill re-run: policy sha256 is still 798f673d...9b70d and the named containment assertion is unchanged, so the durable containment-only admission (1 failed / 55 passed, restored out-of-tree) is adopted per the human no-churn ruling.",
+      "timestamp": "2026-09-02T14:24:57.532Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-09-02T09:41:58.255Z",
+  "updatedAt": "2026-09-02T14:25:37.565Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 18,
+    "executedStepCount": 21,
     "rejectCount": 4,
     "reopenCount": 4
   },
   "contextFetchedBy": [
     "worker-7973e36b",
-    "worker-0cc57d30"
+    "worker-0cc57d30",
+    "worker-f06d587f"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-01T20:14:53.206Z",
   "planningNotes": {
@@ -120,19 +164,16 @@
   "verification": {
     "command": "node -e \"const{spawnSync:s}=require('node:child_process');let x=s('pnpm',['--filter','@moe/daemon','exec','vitest','run','--config','package.json','src/http/http-listener-static-assets.test.ts'],{encoding:'utf8',shell:false});console.log(x.stdout,x.stderr);if(x.error||x.status||!/Test Files\\s+[1-9].*Tests\\s+[1-9]/s.test(x.stdout))process.exit(x.status||1);x=s('pnpm',['--filter','@moe/daemon','typecheck'],{stdio:'inherit',shell:false});process.exit(x.error?1:x.status??1)\"",
     "exitCode": 0,
-    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  1 passed (1)\nTests  56 passed (56)\nDuration  5.69s (transform 4.33s, setup 0ms, import 5.21s, tests 364ms, environment 0ms)\n\n$ tsc --project tsconfig.json",
-    "reportedAt": "2026-09-01T21:31:39.589Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  56 passed (56)\n   Start at  17:20:15\n   Duration  4.24s (transform 3.16s, setup 0ms, import 3.86s, tests 281ms, environment 0ms)\n\n$ tsc --project tsconfig.json\nGATE_EXIT=0",
+    "reportedAt": "2026-09-02T14:25:37.565Z"
   },
   "filesModified": [
     "apps/daemon/src/http/static-asset-host.ts",
     "apps/daemon/src/http/static-asset-path-policy.ts",
     "apps/daemon/src/http/static-asset-path-policy.js",
-    "apps/daemon/src/http/http-listener-static-assets.test.ts",
-    ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json",
-    ".moe/tasks/task-1edf82770e3e447fb9086fb4e30792aa.json",
-    ".moe/tasks/task-4704a2981cf0443991a64273836da486.json"
+    "apps/daemon/src/http/http-listener-static-assets.test.ts"
   ],
-  "completionSummary": "No-churn delivery replay of the already verified four-path static-asset policy extraction. Preserved exact anchored bytes: host 206 lines/blob e8f0e3…5191; pure policy 174/blob 762180…658e; one-line LF bridge/blob ddca3a…56c9; focused test 991/blob e7c987…772. Prior durable containment-only mutation proof was adopted because policy/test hashes remained identical; no destructive drill or source edit was repeated. Fresh exact completion gate: 1 focused file/56 tests passed and daemon typecheck passed. Standalone daemon suite executed 342 files/6995 tests and remained foreign-red only: daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, got 401) and foundation-attempt-windows.test.ts:864/:986 (worktree/launch observations); 2 files/3 tests failed, 340 files/6980 tests passed, 12 todo. No failure intersects the four owned paths. diff-check passed; commit scope asserts exactly four, no unattributed/fifth path. Wrapper must now create the kind=completion explicit-path commit; QA should verify task.commits SHA, landing.lastCompletion/merged, Moe-Task trailer, and all four anchored blobs.",
+  "completionSummary": "NO-CHURN VERIFY AT LANDED BYTES. Zero bytes changed this session. The three QA rejections were delivery-only and are now FALSIFIED at the delivered tree.\n\nDELIVERED: the four anchored blobs are AT HEAD a1138d52 (main, in sync with origin/main), tracked and CLEAN (`git status --porcelain` over the four paths is EMPTY). `git ls-tree HEAD` returns exactly e8f0e362 (host, 206 lines), 762180b5 (static-asset-path-policy.ts, 174 lines), ddca3afa (one-line .js bridge), e7c98799 (test, 991 lines) — byte-identical to the planning anchors (sha256 0b4afb54.../798f673d.../6396e474.../58e630be...). They reached main through d2629d0d \"Moe/work 2026 08 08 (#5)\", an ancestor of origin/main whose message carries 6 `Moe-Task: task-aa205445cc564bec8044136348c5bc26` trailer lines (PR #5 squashed the six pushed wrapper checkpoints on refs/heads/moe/work-2026-08-08, incl. 5c7e49a2 which carried all four owned paths). So DoD 2 and DoD 3 hold at HEAD: policy module + bridge present, delivered host is 206 lines, not 556.\n\nGATES (foreground, unpiped, shell:false), both nonzero so neither is vacuous:\n- exact persisted command -> exit 0, `Test Files 1 passed (1)`, `Tests 56 passed (56)`, `$ tsc --project tsconfig.json`.\n- `pnpm --filter @moe/daemon test` standalone -> exit 0, `Test Files 342 passed (342)`, `Tests 6983 passed | 12 todo (6995)`. ZERO foreign red to disclose. Merge-base-vs-HEAD failing-path delta is empty by construction (owned bytes already in the merge-base tree).\n\nADVERSARIAL REVIEW (read-only): policy imports only `node:path`; host holds every node:fs effect; precedence method->decode->path->type->realpath->containment->stat/file->size intact; old specifier exposes exactly the seven runtime keys with IDENTITY re-exports (test :315 set-equality + `toBe`); callers unchanged; hostile roster asserts length 9 AND >0; refusals assert code + CONTROL_ROOM_LISTENER_LAYER; `/escape/secret.js` divergence fixture leaves containment as the only refusing fence, with `/CONSOLE.js` -> NOT_FOU",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2: delivered HEAD does not contain the extracted pure policy module or host re-export composition; both policy paths are absent.",
@@ -322,13 +363,29 @@
       "treeId": "6a14ea7bb8b22bc18fa8467620d1b751d6932e55",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "548aceb3e3a8cb3b4170238632568dda836f4b90",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-0cc57d30@2026-09-02T09:42:29Z",
+      "paths": [
+        ".moe/tasks/task-aa205445cc564bec8044136348c5bc26.json"
+      ],
+      "recordedBy": "worker-0cc57d30",
+      "recordedAt": "2026-09-02T09:42:36.327Z",
+      "treeId": "fda3f27335b7e6d0cd3dd1da456f69b2732856c6",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-0cc57d30@2026-09-02T09:41:49Z",
-    "at": "2026-09-02T09:41:58.255Z"
-  }
+    "sessionId": "worker-0cc57d30@2026-09-02T09:42:29Z",
+    "at": "2026-09-02T09:42:36.327Z"
+  },
+  "reviewStartedAt": "2026-09-02T14:25:37.565Z"
 }
