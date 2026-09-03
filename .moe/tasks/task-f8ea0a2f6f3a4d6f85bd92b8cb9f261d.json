@@ -142,7 +142,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-a7d1a426",
+  "assignedWorkerId": "worker-ae3c36ad",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -239,7 +239,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:57.545Z",
-  "updatedAt": "2026-09-03T09:00:54.193Z",
+  "updatedAt": "2026-09-03T09:01:06.629Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:43.597Z",
     "plannedStepCount": 7,
@@ -261,7 +261,8 @@
     "worker-1fde667b",
     "worker-40d3f2ed",
     "architect-a544efc4",
-    "worker-a7d1a426"
+    "worker-a7d1a426",
+    "worker-ae3c36ad"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -305,6 +306,15 @@
   "planApprovedAt": "2026-09-03T09:00:38.084Z",
   "workStartedAt": "2026-08-30T22:38:23.130Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 COMPLETED and drilled green (safe-observation cross-key fix landed, budget + worktree tamper rosters named and counted, DURABLE_STORE_ arms closed). Step 6 IN_PROGRESS with its owned slice already EXIT 0 on all six legs. The row was parked waiting on successor task-ad5a1bfe, which is now DONE (6/6, completion c31a6ee2a85c18b6ee1a59f121a2bbda4ee967d9) - so the lookup-first repair to deriveSafeBoundary that this row's three remaining reds needed is LANDED at HEAD. dependsOnUnmet 0. Governor promoted PLANNING -> AWAITING_APPROVAL -> WORKING at 08:5xZ.",
+      "whatRemains": "Re-run step 6's gate now that ad5a1bfe's fix is at HEAD - the three arms were red ONLY because that fix was missing, which is why the row was parked rather than re-planned - then complete step 7's restored mutation drills. Do NOT re-walk steps 1-5.",
+      "pitfalls": "DO NOT CALL submit_plan ON THIS ROW. It looks like a plan-shaped row but planStepCount is 7 with completedStepCount 5; submit_plan REPLACES implementationPlan and rebuilds every step as PENDING, destroying five completed drilled steps. Read comment-d6cf39f6 and comment-b7db41ca first - they carry the reasoning and the exact promote recipe. Also: this row's older blockedReason snapshots are STALE and do NOT reflect later step amendments; read each step's effective description and check activeAmendmentId instead. The shared worktree is dirty with peer work - declare only paths you actually changed and never git add -A.",
+      "openQuestions": "None blocking. There is currently NO live architect seat on this board, so if a genuine planning question arises, report blocked with measured evidence (a reverse drill, not prose) rather than resolving a DoD conflict on your own authority.",
+      "releasedAt": "2026-09-03T09:01:02.199Z",
+      "releasedBy": "governor-c69613d7",
+      "reason": "Governor crash-recovery release of a STALE assignment to a CONFIRMED DEAD seat, on human authority (\"unblock more\"). architect-a544efc4 has isAlive false, last activity 2026-09-03T07:53:26Z (60+ minutes), currentTaskId null, and holds no other row - it died shortly after filing its step-5 and step-6 amendments on task-ad5a1bfe. It is not mid-build and this is NOT a release on idle time: the seat is gone, and the row would otherwise sit WORKING under a name that cannot advance it. force:true because I am not the assignee. Row stays WORKING and claimable in place; no step is touched."
+    },
     {
       "whatIsDone": "Steps 1-5 are COMPLETED and green (safe-observation cross-key fix landed, budget + worktree tamper rosters named and counted, DURABLE_STORE_CLOSURE_NAMES with 9 production-driven arms). Step 6 IN_PROGRESS with its owned slice EXIT 0 on all six legs. As architect I executed governor-6ddb8f93's successor route: filed task-ad5a1bfe935d4019bc12c9b3298b0ce7 (approved, claimed), wired it into this row's dependsOn, and recorded the full rationale plus two measured corrections to the proposed patch in comment-671acd7d.",
       "whatRemains": "Nothing for an architect. When task-ad5a1bfe reaches DONE this row auto-clears its dep; a governor then hops it PLANNING -> WORKING. Its worker re-runs step 6 and owes step 7's restored mutation drills.",
@@ -517,6 +527,25 @@
       "treeId": "9df3ef85f43c867a1aec208f3de4e0802cc3b0cf",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "5b88723810ff5ae194b40bc0bc085c828b3f3d58",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a7d1a426@2026-09-03T09:00:54Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-ad5a1bfe935d4019bc12c9b3298b0ce7.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+      ],
+      "recordedBy": "worker-a7d1a426",
+      "recordedAt": "2026-09-03T09:00:58.901Z",
+      "treeId": "6d0def302cb4d08440dcb321c73de60c0fbc03b2",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -529,14 +558,17 @@
     "tests/security/safe-boundary-observation-scenarios.ts",
     ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
     ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
-    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json"
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+    ".moe/project.json",
+    ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+    ".moe/tasks/task-ad5a1bfe935d4019bc12c9b3298b0ce7.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-40d3f2ed@2026-09-02T21:58:33Z",
-    "at": "2026-09-02T22:23:34.539Z"
+    "sessionId": "worker-a7d1a426@2026-09-03T09:00:54Z",
+    "at": "2026-09-03T09:00:58.901Z"
   },
   "touchedFiles": [
     "apps/daemon/src/budget/budget-durable-binding.test.ts",
