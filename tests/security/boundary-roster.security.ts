@@ -18,6 +18,33 @@
  * vacuously when both sides are empty, and passes just as happily when a
  * silently-narrowed scan is compared against a roster built from that same narrow scan.
  *
+ * WHAT "SCAN MINUS ROSTER IS EMPTY" CLAIMS, AND WHAT IT DOES NOT. It is a completeness result
+ * OVER EXPORTED DECLARATIONS ONLY. `DECLARATION_PATTERN` is anchored `^export const`, so three
+ * populations sit outside every arm above, and this paragraph carries its own falsifier for
+ * each — the file's convention is that a prose claim names the assertion that reds if it rots.
+ *   MODULE-PRIVATE DECLARATIONS, 60 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
+ *   no `^export const` anchor can ever reach. Reddened by "TASK-LV allowlists every scanned
+ *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
+ *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
+ *   exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width".
+ *   BARE LITERALS AT REFUSAL SITES, 94 distinct values of which 29 resolve to NO declared
+ *   constant — a layer that is never a declaration, so no pattern width reaches it. Reddened by
+ *   "TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", its
+ *   allowlist-minus-scan twin, and "TASK-LV counts exactly
+ *   EXPECTED_UNRESOLVED_LITERAL_COUNT unresolved literals".
+ *   DECLARATIONS OUTSIDE `SCAN_ROOTS` — reddened by "TASK-LV exempts every declaring root
+ *   outside SCAN_ROOTS by name" the moment a fourth top-level root starts declaring layers.
+ * The SCANNER'S REACH is itself only asserted by "TASK-LV matches a planted DIGIT-BEARING
+ * exported declaration, guarding the f4c3992a widening": narrow the class back to `[A-Z_]+`
+ * and every other arm in this file stays green while sixteen live boundaries leave the scan,
+ * because the roster would then be compared against the same narrowed scan that produced it.
+ *
+ * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. The invisible share is 60 of 228 (26.3%)
+ * with a WIDE numerator over a WIDE denominator; the narrow width measures 59 of 227 and is
+ * equally correct at its own width. Two seats argued 45 versus 46 across two rounds as though
+ * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
+ * share at the wide pattern width, numerator and denominator both named".
+ *
  * THE COVERAGE RATCHET IS NOW CLOSED, and it is closed NEXT DOOR rather than here.
  * `completeness.security.ts` reduces the five sibling slices' REAL case entries to one
  * `Map<constant, Set<arm>>` and asserts that every entry below resolves to a BEFORE, an
@@ -51,6 +78,23 @@ import {
   withHostileRoot,
 } from "./hostile-harness.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
+import {
+  declaringTopLevelDirectories,
+  derivedPrivatePatternSource,
+  EXPECTED_LITERAL_COUNT,
+  EXPECTED_PRIVATE_COUNT,
+  EXPECTED_UNRESOLVED_LITERAL_COUNT,
+  keyOfDeclaration,
+  resolvedLayerLiterals,
+  PRIVATE_DECLARATION_PATTERN,
+  scanLayerLiterals,
+  scanPrivateLayerDeclarations,
+  topLevelDirectories,
+  UNRESOLVED_LAYER_LITERALS,
+  unresolvedLayerLiterals,
+  UNSCANNED_PRIVATE_LAYERS,
+  UNSCANNED_PRODUCTION_ROOTS,
+} from "./layer-visibility-cases.js";
 
 /**
  * The five coverage axes, one per sibling slice. Closed union: a typo in an entry's
@@ -742,6 +786,220 @@ describe("scanner matches the annotated declaration form", () => {
   });
 });
 
+/**
+ * TASK-LV — WHAT THE SCAN ABOVE CANNOT SEE, part 1 of 2.
+ *
+ * Every arm before this one measures EXPORTED declarations, because `DECLARATION_PATTERN` is
+ * anchored `^export const`. A column-0 `const FOO_LAYER` is structurally unreachable by that
+ * anchor no matter how wide its character class gets, and sixty of them stamp live refusals.
+ * These four arms make that population a DECLARED NUMBER instead of an unmeasured remainder.
+ *
+ * SET EQUALITY IN BOTH DIRECTIONS, and the reason is the defect this closes. An arm that walks
+ * only `UNSCANNED_PRIVATE_LAYERS` shrinks when the allowlist shrinks: delete an entry and it
+ * stays green while a live layer leaves the enumeration in silence. Scan-minus-allowlist is the
+ * direction that catches a NEW invisible layer; allowlist-minus-scan is the direction that
+ * catches a DELETED or renamed one. Neither substitutes for the other, and the count arm
+ * substitutes for neither — it catches a same-size swap that both set arms would net out.
+ */
+/**
+ * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
+ * 60 module-private declarations against those 60 plus the 168 exported ones.
+ */
+const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
+const EXPECTED_INVISIBLE_DENOMINATOR = 228;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 263;
+
+describe("TASK-LV module-private layer declarations are bounded", () => {
+  it("TASK-LV scans a non-empty module-private population", () => {
+    expect(scanPrivateLayerDeclarations().length).toBeGreaterThan(0);
+  });
+
+  it("TASK-LV allowlists every scanned module-private declaration (scan minus allowlist is empty)", () => {
+    const allowed = new Set(UNSCANNED_PRIVATE_LAYERS.map(keyOfDeclaration));
+    const unlisted = scanPrivateLayerDeclarations()
+      .filter((found) => !allowed.has(keyOfDeclaration(found)))
+      .map(keyOfDeclaration);
+    expect(unlisted).toEqual([]);
+  });
+
+  it("TASK-LV has no allowlist entry absent from source (allowlist minus scan is empty)", () => {
+    const scanned = new Set(scanPrivateLayerDeclarations().map(keyOfDeclaration));
+    const stale = UNSCANNED_PRIVATE_LAYERS.filter((e) => !scanned.has(keyOfDeclaration(e))).map(
+      keyOfDeclaration,
+    );
+    expect(stale).toEqual([]);
+  });
+
+  it("TASK-LV counts exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width", () => {
+    expect(scanPrivateLayerDeclarations()).toHaveLength(EXPECTED_PRIVATE_COUNT);
+    expect(UNSCANNED_PRIVATE_LAYERS).toHaveLength(EXPECTED_PRIVATE_COUNT);
+  });
+
+  it("TASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named", () => {
+    // NUMERATOR: module-private declarations. DENOMINATOR: those plus every EXPORTED one.
+    // Both at the WIDE `[A-Z0-9_]+` width — the narrow width measures 59 of 227 and is equally
+    // correct at its own width, which is exactly the units mismatch that was twice mistaken for
+    // a factual dispute. Naming both sides is what stops the ratio drifting by moving one:
+    // export ten private layers and the numerator falls while the denominator holds, so the
+    // per-mille pin reds even though the total population never moved.
+    const numerator = scanPrivateLayerDeclarations().length;
+    const denominator = numerator + SCANNED.length;
+    expect(numerator).toBe(EXPECTED_INVISIBLE_NUMERATOR);
+    expect(SCANNED.length).toBe(EXPECTED_ROSTER_SIZE);
+    expect(denominator).toBe(EXPECTED_INVISIBLE_DENOMINATOR);
+    expect(Math.round((numerator / denominator) * 1000)).toBe(EXPECTED_INVISIBLE_SHARE_PER_MILLE);
+  });
+
+  it("TASK-LV differs from the exported pattern by exactly the `export ` token, at the same width", () => {
+    // If the exported class ever widens and the private twin does not, the private population
+    // silently SHRINKS relative to the thing it is supposed to be the complement of, and every
+    // arm above stays green. This is the arm that reddens instead.
+    expect(PRIVATE_DECLARATION_PATTERN.source).toBe(derivedPrivatePatternSource());
+    expect(PRIVATE_DECLARATION_PATTERN.flags).toBe(DECLARATION_PATTERN.flags);
+  });
+});
+
+/**
+ * TASK-LV — THE SCANNER'S REACH, PROVED BY PLANTING RATHER THAN INFERRED FROM A GREEN SCAN.
+ *
+ * "scan minus roster is empty" is satisfied just as happily by a scanner that matches NOTHING
+ * NEW as by one that works. The arms above compare a scan against a hand list; none of them
+ * demonstrates that the pattern would SEE a declaration it had never seen before. These do,
+ * against synthetic lines in memory — never by writing a file into `apps/` or `packages/`,
+ * which would mutate the production tree and move what every other arm measures.
+ *
+ * THE DIGIT CASE IS THE POINT. Commit f4c3992a widened the class from `[A-Z_]+` to
+ * `[A-Z0-9_]+` and rostered the sixteen `V2`/`GATE1` constants the old class had never seen.
+ * NOTHING in this lane guarded that fix: narrow the class back and the roster, the
+ * distribution, the axis partition and every completeness arm stay green while sixteen live
+ * boundaries leave the scan, because the roster would then be compared against the same
+ * narrowed scan that produced it. The digit control below is the only arm that reddens.
+ *
+ * THE NEGATIVE CONTROL IS A DIVERGENCE FIXTURE, not a formality: the SAME line without
+ * `export ` must be rejected by `DECLARATION_PATTERN` and ACCEPTED by
+ * `PRIVATE_DECLARATION_PATTERN`. One input, two mechanisms, opposite answers — so the pair
+ * proves the ANCHOR is the discriminator, which no single-pattern assertion can show.
+ */
+describe("TASK-LV the declaration scanner demonstrably sees a planted declaration", () => {
+  const PLANTED = 'export const PROBE_CONTROL_LAYER = "PROBE_CONTROL";';
+  const PLANTED_DIGIT = 'export const PROBE_CONTROL_2_LAYER = "PROBE_CONTROL_2";';
+  const PLANTED_PRIVATE = 'const PROBE_CONTROL_LAYER = "PROBE_CONTROL";';
+
+  it("TASK-LV matches a planted exported declaration and captures its name", () => {
+    expect(DECLARATION_PATTERN.exec(PLANTED)?.[1]).toBe("PROBE_CONTROL_LAYER");
+  });
+
+  it("TASK-LV matches a planted DIGIT-BEARING exported declaration, guarding the f4c3992a widening", () => {
+    expect(DECLARATION_PATTERN.exec(PLANTED_DIGIT)?.[1]).toBe("PROBE_CONTROL_2_LAYER");
+  });
+
+  it("TASK-LV rejects the same line without `export`, which the private pattern accepts", () => {
+    expect(DECLARATION_PATTERN.exec(PLANTED_PRIVATE)).toBeNull();
+    expect(PRIVATE_DECLARATION_PATTERN.exec(PLANTED_PRIVATE)?.[1]).toBe("PROBE_CONTROL_LAYER");
+  });
+
+  it("TASK-LV keeps the planted names out of the real scan, so the control cannot inflate a count", () => {
+    expect(SCANNED.filter((e) => e.constant.startsWith("PROBE_CONTROL"))).toEqual([]);
+    expect(
+      scanPrivateLayerDeclarations().filter((e) => e.constant.startsWith("PROBE_CONTROL")),
+    ).toEqual([]);
+  });
+});
+
+/**
+ * TASK-LV — WHAT THE SCAN CANNOT SEE, part 2 of 2: THE BARE LITERAL.
+ *
+ * A layer spelled as a string at the refusal site is not a declaration, so no declaration
+ * pattern of any width reaches it. The scan resolves each literal against the VALUES of
+ * declared constants — exported and module-private alike — because a literal equal to a
+ * declared layer's value is already covered and is not a finding. The unresolved remainder is
+ * what is actually unmeasured, and freezing it with an exact count is this section's whole job.
+ *
+ * THE SUM ARM IS NOT DECORATION. Resolved and unresolved must add up to the scanned total, so
+ * neither side can be quietly dropped: without it, a scan that silently stopped finding
+ * literals would shrink both sets in step and every set-equality arm would still pass.
+ */
+describe("TASK-LV bare literals at refusal sites are bounded", () => {
+  it("TASK-LV scans a non-empty literal population", () => {
+    expect(scanLayerLiterals().length).toBeGreaterThan(0);
+    expect(scanLayerLiterals()).toHaveLength(EXPECTED_LITERAL_COUNT);
+  });
+
+  it("TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", () => {
+    const allowed = new Set(UNRESOLVED_LAYER_LITERALS);
+    expect(unresolvedLayerLiterals().filter((value) => !allowed.has(value))).toEqual([]);
+  });
+
+  it("TASK-LV has no allowlisted literal that now resolves (allowlist minus scan is empty)", () => {
+    const unresolved = new Set(unresolvedLayerLiterals());
+    expect(UNRESOLVED_LAYER_LITERALS.filter((value) => !unresolved.has(value))).toEqual([]);
+  });
+
+  it("TASK-LV counts exactly EXPECTED_UNRESOLVED_LITERAL_COUNT unresolved literals", () => {
+    expect(unresolvedLayerLiterals()).toHaveLength(EXPECTED_UNRESOLVED_LITERAL_COUNT);
+    expect(UNRESOLVED_LAYER_LITERALS).toHaveLength(EXPECTED_UNRESOLVED_LITERAL_COUNT);
+  });
+
+  it("TASK-LV splits the scanned literals into resolved plus unresolved with nothing dropped", () => {
+    // Both sides are computed by their OWN filter, never by subtracting one from the total. A
+    // subtracted complement makes this sum an identity that holds whatever the scan does, so
+    // the arm would assert nothing the count arm above does not already assert.
+    const resolved = resolvedLayerLiterals();
+    const unresolved = unresolvedLayerLiterals();
+    expect(resolved.length).toBeGreaterThan(0);
+    expect(resolved.length + unresolved.length).toBe(EXPECTED_LITERAL_COUNT);
+    expect(resolved.filter((value) => unresolved.includes(value))).toEqual([]);
+  });
+
+  it("TASK-LV sees the positional DomainRefusal pair a `layer:` scan alone cannot reach", () => {
+    // DAEMON_COMPOSITION is passed positionally in daemon-command-registry.ts and appears at no
+    // `layer:` property in any production module. If this arm ever goes green by accident —
+    // because the positional pattern stopped matching — the literal census would silently lose
+    // an entire refusal shape while every count arm above still balanced.
+    const sites = new Map(scanLayerLiterals().map((literal) => [literal.value, literal.files]));
+    expect(sites.get("DAEMON_COMPOSITION")).toContain("apps/daemon/src/daemon-command-registry.ts");
+    expect(sites.get("DAEMON_AUTHORIZATION")).toContain("apps/daemon/src/daemon-command-registry.ts");
+  });
+});
+
+/**
+ * TASK-LV — ESCAPE (4): SCAN_ROOTS COVERAGE. `SCAN_ROOTS` is three names in a frozen array and
+ * nothing asserted that a fourth top-level directory could not start declaring layers tomorrow.
+ * The forward direction closes that: a declaring root outside `SCAN_ROOTS` must be a declared
+ * exemption. The reverse direction stops the exemption list rotting into a blanket waiver.
+ */
+describe("TASK-LV every declaring top-level root is scanned or explicitly exempt", () => {
+  it("TASK-LV enumerates a non-empty set of declaring roots", () => {
+    expect(declaringTopLevelDirectories().length).toBeGreaterThan(0);
+  });
+
+  it("TASK-LV has every SCAN_ROOTS entry present on disk", () => {
+    const present = new Set(topLevelDirectories());
+    expect(SCAN_ROOTS.filter((root) => !present.has(root))).toEqual([]);
+  });
+
+  it("TASK-LV exempts every declaring root outside SCAN_ROOTS by name", () => {
+    const exempt = new Set(UNSCANNED_PRODUCTION_ROOTS.map((root) => root.directory));
+    const undeclared = declaringTopLevelDirectories().filter(
+      (directory) => !SCAN_ROOTS.includes(directory) && !exempt.has(directory),
+    );
+    expect(undeclared).toEqual([]);
+  });
+
+  it("TASK-LV keeps no stale exemption: every required exempt root still declares", () => {
+    const declaring = new Set(declaringTopLevelDirectories());
+    const stale = UNSCANNED_PRODUCTION_ROOTS.filter(
+      (root) => !root.optional && !declaring.has(root.directory),
+    ).map((root) => root.directory);
+    expect(stale).toEqual([]);
+  });
+
+  it("TASK-LV never exempts a directory that SCAN_ROOTS already covers", () => {
+    const overlap = UNSCANNED_PRODUCTION_ROOTS.filter((root) => SCAN_ROOTS.includes(root.directory));
+    expect(overlap).toEqual([]);
+  });
+});
+
 describe("coverage axis partition", () => {
   it("tags every entry with exactly one axis from the closed set", () => {
     expect(BOUNDARY_ROSTER.filter((e) => !COVERAGE_AXES.includes(e.axis)).map(keyOf)).toEqual([]);
@@ -948,5 +1206,11 @@ describe("refusal helper pins code AND layer", () => {
   });
 });
 
-export { BOUNDARY_ROSTER, COVERAGE_AXES, findRepoRoot, isProductionModule, SCAN_ROOTS };
+/**
+ * `DECLARATION_PATTERN` is exported for ONE reason, and it is not convenience. Every
+ * re-derivation of this scan used to retype the regex by hand, which is the measured cause of a
+ * 45-versus-46 width divergence two seats argued over twice as though it were a factual
+ * dispute. Both were right at their own width. One reachable identifier ends the class.
+ */
+export { BOUNDARY_ROSTER, COVERAGE_AXES, DECLARATION_PATTERN, findRepoRoot, isProductionModule, SCAN_ROOTS };
 export type { ScannedBoundary };
