@@ -257,7 +257,9 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
 
   it("binds the served-root roster to every chooseRoot production arm", () => {
     const main = readFileSync(join(repoRoot(), "apps/control-room/src/main.tsx"), "utf8");
-    for (const component of ["ProjectManagerApp", "ShellModeRoot", "CordumApp"]) {
+    // STATICALLY IMPORTED ARMS. Both ship in the production bundle, so demanding the
+    // import AND the return in main.tsx is the honest shape for these two.
+    for (const component of ["ProjectManagerApp", "CordumApp"]) {
       expect(main, `main.tsx imports ${component}`).toMatch(
         new RegExp(`import\\s+\\{\\s*${component}\\s*\\}\\s+from`, "u"),
       );
@@ -265,6 +267,45 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
         new RegExp(`return\\s+<${component}\\b`, "u"),
       );
     }
+    // THE LEGACY ARM MOVED; IT DID NOT DISAPPEAR (task-2c952438c41546b3a736623f3956c778).
+    // This leg used to demand `import { ShellModeRoot } from` plus `return <ShellModeRoot`
+    // in main.tsx. That STATIC edge is exactly what dragged `shell/frame.tsx` -- and the
+    // `cr.shell.root` selector with it -- into the production bundle, which that task
+    // fences out. Do NOT "restore" the static form: every string satisfying it re-reds the
+    // smoke lane artifact fence. The arm still reaches the real ShellModeRoot, one module
+    // further out, and that composition is what is asserted below.
+    expect(main, "main.tsx must not statically import ShellModeRoot").not.toMatch(
+      /import\s+\{\s*ShellModeRoot\s*\}\s+from/u,
+    );
+    // The gate is the COMPILE-TIME fact and it gates the IMPORT, not merely the render.
+    // Deleting the gate, or making the import unconditional, reds this arm: a production
+    // build would then ship the legacy shell again.
+    expect(main, "DEVELOPMENT_BUILD is the compile-time build fact").toMatch(
+      /const DEVELOPMENT_BUILD: boolean = import\.meta\.env\.DEV;/u,
+    );
+    expect(main, "the legacy module sits behind a DEVELOPMENT_BUILD-gated dynamic import").toMatch(
+      /DEVELOPMENT_BUILD\s*\?\s*await import\("\.\/development-legacy-root\.js"\)\s*:\s*null/u,
+    );
+    expect(main, "the gated module becomes DevelopmentLegacyRoot via lazy()").toMatch(
+      /const DevelopmentLegacyRoot = developmentLegacyModule === null\s*\?\s*null\s*:\s*lazy\(/u,
+    );
+    // Both conditions, and the Suspense boundary the return actually sits in.
+    expect(main, "chooseRoot gates the legacy arm on the component AND v1=1").toMatch(
+      /DevelopmentLegacyRoot !== null && new URLSearchParams\(search\)\.get\("v1"\) === "1"/u,
+    );
+    expect(main, "chooseRoot returns DevelopmentLegacyRoot inside Suspense").toMatch(
+      /<Suspense fallback=\{null\}>\s*<DevelopmentLegacyRoot\b/u,
+    );
+    // ...and the roster entry stays bound to the REAL component so this leg cannot pass
+    // while the legacy shell has been hollowed out into a stub.
+    const legacy = readFileSync(
+      join(repoRoot(), "apps/control-room/src/development-legacy-root.tsx"),
+      "utf8",
+    );
+    expect(legacy, "the legacy module imports ShellModeRoot").toMatch(
+      /import\s+\{\s*ShellModeRoot\s*\}\s+from/u,
+    );
+    expect(legacy, "the legacy module returns ShellModeRoot").toMatch(/return\s+<ShellModeRoot\b/u);
   });
 
   it.each(SERVED_ENTRY_POINTS)("%s still composes no pending state (%s)", (file) => {

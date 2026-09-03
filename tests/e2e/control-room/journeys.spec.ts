@@ -67,10 +67,19 @@ test("CR-J1-002: production v2 never mounts a graph canvas", async ({ page }) =>
     await expect(driven.getByTestId("cr.shell.navrail")).toBeVisible();
     await expect(driven.getByTestId("cr.nav.goals")).toHaveAttribute("aria-current", "page");
     await expect(driven.locator("[data-testid^='cr.graph.']")).toHaveCount(0);
-    const approvals = driven.getByTestId("cr.nav.approvals");
-    await expect(approvals).toBeDisabled();
-    await expect(approvals)
+    // THE UNBUILT DESTINATION IS "resources", NOT "approvals" (re-aimed by
+    // task-2c952438c41546b3a736623f3956c778). "approvals" entered BUILT_NAV_ROUTES in
+    // 1f7346ac, "feat(control-room): a Needs-you queue of every decision waiting on a
+    // human", which reached this branch through the PR #15 merge AFTER this file last
+    // ran green, so the old example became stale. "resources" is the one NAV_ID that
+    // apps/control-room/src/v2/shell/shell-routes.ts still leaves out of
+    // BUILT_NAV_ROUTES. Both truth classes stay asserted here on purpose: an unbuilt
+    // destination must refuse ACCESSIBLY, and a shipped one must not be fenced.
+    const resources = driven.getByTestId("cr.nav.resources");
+    await expect(resources).toBeDisabled();
+    await expect(resources)
       .toHaveAccessibleDescription("This destination is not built yet in this release.");
+    await expect(driven.getByTestId("cr.nav.approvals")).toBeEnabled();
   }, page);
 });
 
