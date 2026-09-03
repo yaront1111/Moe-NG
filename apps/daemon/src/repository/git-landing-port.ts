@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 
@@ -106,9 +106,19 @@ function parseStatus(output: string): readonly { readonly deleted: boolean; read
 }
 
 export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort {
+  // The repository root as git states it (a real path); the workspace resolved the same way,
+  // so a temp directory reached through a symlink (macOS /var -> /private/var) does not read
+  // as a path outside the repository when the two are made relative.
   const root = async (workspace: string): Promise<string | null> => {
     const top = await run(workspace, ["rev-parse", "--show-toplevel"]);
     return top.code === 0 ? top.stdout.trim() : null;
+  };
+  const realWorkspace = (workspace: string): string => {
+    try {
+      return realpathSync.native(workspace);
+    } catch {
+      return workspace;
+    }
   };
 
   const observe = async (workspace: string): Promise<GitObserveResult> => {
@@ -117,7 +127,10 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
       return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, ok: false };
     }
     // Only the workspace subtree, named relative to the root so the paths agree everywhere.
-    const scope = relative(top, workspace).split(sep).join("/");
+    const scope = relative(realWorkspace(top), realWorkspace(workspace)).split(sep).join("/");
+    if (scope.startsWith("..")) {
+      return { code: "NOT_A_REPOSITORY", detail: `${workspace} is outside ${top}`, ok: false };
+    }
     const status = await run(top, [
       "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all",
       "--", scope === "" ? "." : scope,
