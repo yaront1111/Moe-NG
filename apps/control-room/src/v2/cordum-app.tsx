@@ -24,6 +24,8 @@ import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { PrdCoverage } from "./goals/prd-coverage.js";
 import { LivePrd } from "./goals/prd-panel.js";
+import { GOAL_SECTION_IDS, LiveGoalStatus } from "./goals/goal-status-strip.js";
+import { LiveGoalNodes } from "./goals/goal-nodes.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
@@ -229,31 +231,66 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         // WORK BOARD (UI-5) so the operator sees the plan and the current work
         // steps in one body. Both are read-only over the same attached session.
         <>
-          {gate1Read !== null && gate1Port !== null ? (
-            <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
-          ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
-            <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
-          ) : null}
+          {readCoverage === null ? null : (
+            <LiveGoalStatus
+              goalId={open.goalId}
+              onNeedsYou={(): void => { navigate({ kind: "approvals" }); }}
+              read={readCoverage}
+              runId={open.planningRunRef}
+              surface={boardFrame}
+            />
+          )}
+          <div id={GOAL_SECTION_IDS.contract}>
+            {gate1Read !== null && gate1Port !== null ? (
+              <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
+            ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
+              <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
+            ) : null}
+          </div>
+          {/* The plan stays in the open while it waits for a decision; once decided (or not
+              yet proposed) it folds, so the board and the evidence come first. */}
+          <details
+            className="cr2-goal-fold"
+            data-testid="cr.goal.planfold"
+            id={GOAL_SECTION_IDS.plan}
+            open={approval?.authorization.status === "AUTHORIZED"}
+          >
+            <summary className="cr2-goal-fold-summary">
+              {approval?.authorization.status === "AUTHORIZED"
+                ? "The plan and its acceptance criteria - waiting for your approval"
+                : "The plan and its acceptance criteria"}
+            </summary>
+            <ApprovePlan
+              approval={approval}
+              goalId={open.goalId}
+              onBack={back}
+              read={readRun}
+              runId={open.planningRunRef}
+              title={open.title}
+            />
+          </details>
+          <div id={GOAL_SECTION_IDS.board}>
+            <LiveGoalNodes goalId={open.goalId} headers={attached.headers} />
+            {/* The raw affordance surface is project-wide and mostly session commands; it stays
+                readable for anyone who needs the daemon's exact offers, folded by default. */}
+            <details className="cr2-goal-fold" data-testid="cr.goal.surfacefold">
+              <summary className="cr2-goal-fold-summary">Everything the daemon offers this session, as it states it</summary>
+              <LiveWorkBoard
+                goalId={open.goalId}
+                headers={attached.headers}
+                onConnection={reportConnection}
+                onFrame={reportFrame}
+                runId={open.planningRunRef}
+              />
+            </details>
+          </div>
           {readCoverage === null ? null : (
             <PrdCoverage goalId={open.goalId} read={readCoverage} />
           )}
-          <ApprovePlan
-            approval={approval}
-            goalId={open.goalId}
-            onBack={back}
-            read={readRun}
-            runId={open.planningRunRef}
-            title={open.title}
-          />
-          <LiveWorkBoard
-            goalId={open.goalId}
-            headers={attached.headers}
-            onConnection={reportConnection}
-            onFrame={reportFrame}
-            runId={open.planningRunRef}
-          />
           <LivePrd goalRef={open.goalId} headers={attached.headers} />
-          <LiveActivity goalRef={open.goalId} headers={attached.headers} scopeLabel={open.title} />
+          <div id={GOAL_SECTION_IDS.activity}>
+            <LiveActivity goalRef={open.goalId} headers={attached.headers} scopeLabel={open.title} />
+          </div>
         </>
       );
   } else if (fixtures) {

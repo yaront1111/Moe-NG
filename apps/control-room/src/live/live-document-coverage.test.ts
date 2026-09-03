@@ -22,7 +22,7 @@ const REQUIREMENT = Object.freeze({
   statement: "Evidence is immutable (PRD 11).",
 });
 const CONTRACT = Object.freeze({
-  contractId: "contract-1", gate1: "APPROVED", requirements: [REQUIREMENT],
+  contractId: "contract-1", gate1: "APPROVED", plane: "V1", requirements: [REQUIREMENT],
   revisionDigest: "d".repeat(64), revisionId: "rev-1",
 });
 const COVERAGE = Object.freeze({
@@ -34,7 +34,7 @@ const COVERAGE = Object.freeze({
     { cited: 1, criteria: 1, heading: "11. Evidence", number: "11", verified: 1 },
     { cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 },
   ] },
-  totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 1 },
+  totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 1 },
 });
 
 function response(status: number, body: unknown): Response {
@@ -45,7 +45,7 @@ describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
   it("maps a full COVERAGE frame, carrying the advisory section map", () => {
     expect(mapDocumentCoverageAnswer(200, COVERAGE)).toStrictEqual({
       contracts: [{
-        contractId: "contract-1", gate1: "APPROVED",
+        contractId: "contract-1", gate1: "APPROVED", plane: "V1",
         requirements: [{
           criteria: [
             { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep their fields.", status: "VERIFIED" },
@@ -62,7 +62,7 @@ describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
         { cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 },
       ],
       status: "COVERAGE",
-      totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 1 },
+      totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 1 },
     });
   });
 
@@ -70,7 +70,7 @@ describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
     const outcome = mapDocumentCoverageAnswer(200, {
       ...COVERAGE, contracts: [], goals: [],
       document: { byteLength: null, contentSha256: SHA, displayPath: null }, sections: null,
-      totals: { contracts: 0, criteria: 0, goals: 0, planned: 0, requirements: 0, verified: 0 },
+      totals: { contracts: 0, criteria: 0, goals: 0, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
     });
     expect(outcome).toMatchObject({ contracts: [], sections: null, status: "COVERAGE" });
   });

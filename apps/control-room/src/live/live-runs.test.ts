@@ -69,6 +69,9 @@ describe("readRuns", () => {
     const outcome = await readRuns({ "x-moe-csrf": "t" }, async (body) => { bodies.push(body); return response(200, RUNS); });
     expect(bodies).toEqual(["{}"]);
     expect(outcome.status).toBe("RUNS");
+    const scoped: string[] = [];
+    await readRuns({}, async (body) => { scoped.push(body); return response(200, RUNS); }, "goal-1");
+    expect(scoped).toEqual([JSON.stringify({ goalRef: "goal-1" })]);
     expect(await readRuns({}, async () => { throw new Error("down"); }))
       .toStrictEqual({ code: "TRANSPORT_REQUEST_FAILED", layer: "CONTROL_ROOM_LIVE_RUNS", status: "ERROR" });
   });

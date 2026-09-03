@@ -1329,3 +1329,119 @@
 .cr2-policy-steps {
   margin-bottom: 12px;
 }
+
+/* WHERE THIS GOAL STANDS: the strip above every card on an opened goal. Two columns on a
+   wide screen (the state, then the one next step), stacked below 720px. */
+.cr2-goal-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
+  gap: 16px 24px;
+  align-items: start;
+  margin: 0 0 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--cr-line);
+  border-left: 4px solid var(--cr-accent);
+  border-radius: 10px;
+  background: var(--cr-panel-bg);
+}
+.cr2-goal-status[data-stage="CONTRACT"],
+.cr2-goal-status[data-stage="PLAN"],
+.cr2-goal-status[data-stage="ESCALATION"] {
+  border-left-color: var(--cr-truth-agent, #b7791f);
+}
+.cr2-goal-status[data-stage="READY_TO_CLOSE"],
+.cr2-goal-status[data-stage="CLOSED"] {
+  border-left-color: var(--cr-truth-verified, var(--cr-accent));
+}
+.cr2-goal-status-stage {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  text-transform: uppercase;
+  color: var(--cr-ink-soft);
+}
+.cr2-goal-status-headline {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--cr-ink);
+}
+.cr2-goal-status-facts {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--cr-ink-soft);
+}
+.cr2-goal-status-next {
+  display: grid;
+  gap: 4px;
+  padding-left: 16px;
+  border-left: 1px solid var(--cr-hairline);
+}
+.cr2-goal-status-next-kicker {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  text-transform: uppercase;
+  color: var(--cr-ink-soft);
+}
+.cr2-goal-status-next-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  text-decoration: none;
+}
+a.cr2-goal-status-next-label:hover,
+a.cr2-goal-status-next-label:focus-visible {
+  text-decoration: underline;
+}
+.cr2-goal-status-next-detail {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cr-ink-soft);
+}
+@media (max-width: 720px) {
+  .cr2-goal-status { grid-template-columns: 1fr; }
+  .cr2-goal-status-next { padding-left: 0; border-left: 0; border-top: 1px solid var(--cr-hairline); padding-top: 12px; }
+}
+
+/* A folded section on the opened goal: the summary is a full-width, readable target. */
+.cr2-goal-fold {
+  margin: 0 0 16px;
+  border: 1px solid var(--cr-line);
+  border-radius: 10px;
+  background: var(--cr-panel-bg);
+}
+.cr2-goal-fold-summary {
+  cursor: pointer;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cr-ink);
+  list-style: none;
+}
+.cr2-goal-fold-summary::before {
+  content: "\25B8";
+  display: inline-block;
+  width: 1.2em;
+  color: var(--cr-ink-soft);
+}
+.cr2-goal-fold[open] > .cr2-goal-fold-summary::before { content: "\25BE"; }
+.cr2-goal-fold[open] > .cr2-goal-fold-summary { border-bottom: 1px solid var(--cr-hairline); }
+.cr2-goal-fold > :not(summary) { padding: 0 20px 8px; }
+
+.cr2-goal-status-next-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+.cr2-goal-status-next-button:hover,
+.cr2-goal-status-next-button:focus-visible { text-decoration: underline; }
