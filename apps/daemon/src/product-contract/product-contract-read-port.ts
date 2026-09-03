@@ -19,7 +19,7 @@ import { readProductContractRevision } from "./product-contract-revision-reader.
  * way the affordance surface and the compile dispatcher resolve it.
  */
 
-export const PRODUCT_CONTRACT_READ_LAYER = "PRODUCT_CONTRACT_READ" as const;
+const PRODUCT_CONTRACT_READ_LAYER = "PRODUCT_CONTRACT_READ" as const;
 
 export interface ProductContractReadRequirement {
   readonly requirementId: string;

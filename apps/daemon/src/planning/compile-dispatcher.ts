@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * `planning.submit_decomposition` — the MIDDLE of the PRD product: an agent
  * submits plan STRUCTURE; the daemon verifies the human's Gate 1 approval,
@@ -109,8 +110,12 @@ function stringField(value: unknown): value is string {
 }
 
 /** One derived identity family per approved revision: restartable by construction. */
-function idsOf(revisionDigest: string): Record<string, string> {
-  const stem = `compile-${revisionDigest.slice(0, 12)}`;
+// Keyed on the revision AND the run: an approved revision is keyed by the PRD's content sha,
+// so two goals over the same PRD compile the same revision, and event ids keyed on the digest
+// alone collided (DURABLE_ID_CONFLICT on the second goal's first submit, measured 2026-09-03
+// on UnAI with a real planning seat). The run is the goal's own.
+function idsOf(revisionDigest: string, runId: string): Record<string, string> {
+  const stem = `compile-${revisionDigest.slice(0, 12)}-${createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8)}`;
   return {
     claim: `${stem}-claim`, create: `${stem}-create`, finalize: `${stem}-finalize`,
     propose: `${stem}-propose`, ready: `${stem}-ready`, stem,
@@ -234,7 +239,7 @@ export function runSubmitDecomposition(
   });
   if (!compiled.ok) return refused(compiled.code, compiled.layer);
 
-  const ids = idsOf(ref.revisionDigest);
+  const ids = idsOf(ref.revisionDigest, runId);
   // MEASURED, not inferred: the whole propose fold commits ONE run event (v1)
   // and the finalize a second (v2) - the chain items' 0..4 are fold-internal.
   const runVersion = store.getAggregateVersion(runId);

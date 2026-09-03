@@ -108,7 +108,9 @@ export function compilerMission(
     ];
   const close = [
     "Renew your claim with work_renew if you need longer, and finish by calling",
-    `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
+    `work_release with payload {"workItemId": "${workItemId}"}, targetAggregateId`,
+    `"${workItemId}" and expectedVersion = the claimAggregateVersion your step shows in`,
+    "work_get_context (re-read it right before releasing). Every refusal carries",
     "a stable reason code - read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
   ];
