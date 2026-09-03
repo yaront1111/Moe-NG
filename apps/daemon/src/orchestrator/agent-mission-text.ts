@@ -61,10 +61,12 @@ export function compilerMission(
   const shared = [
     `You are a moe-next PLANNING agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
-    `First call work_get_context and find the daemon's offered command for your step;`,
-    `then call documents_source_read with payload {"goalRef": "..."} for ${goal}`,
-    "and read the FULL product requirements text it answers - it is the only product",
-    "authority you have. Never invent a product decision the text does not state.",
+    `First call work_get_context and find the daemon's offered command for your step.`,
+    `The product authority is the PRD text and, once approved, the contract. Read the PRD for`,
+    `${goal} with documents_source_read: payload {"goalRef": "...", "offset": 0, "limit": 30000}`,
+    "answers one page (text, offset, totalLength, nextOffset) - follow nextOffset until null;",
+    "a payload of only {\"goalRef\"} answers the whole text at once. Never invent a product",
+    "decision the text does not state.",
   ];
   const step = kind === "product_contract.propose_revision"
     ? [
@@ -88,6 +90,10 @@ export function compilerMission(
       ...(gateRef === null ? [] : [
         `The Gate 1 approval for this goal is gateRef ${JSON.stringify(gateRef)}.`,
       ]),
+      "Call product_contract_read with payload {\"goalRef\": \"...\"}: it answers the",
+      "APPROVED revision - gateRef, requirements, and criteria with their criterionIds and",
+      "statements. Those ids are what your structure binds; read the PRD pages only where a",
+      "criterion's statement needs its context.",
       "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
       "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
       "\"structure\": {completionNodeKey, nodes: [{nodeKey, objective, criterionIds,",

@@ -93,7 +93,7 @@ describe("runtime vocabulary is closed and disjoint", () => {
     expect(RUNTIME_QUERY_KINDS).toEqual([
       "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
       "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
-      "graph.preview", "project.get", "quarantine.get", "reconciliation.get",
+      "graph.preview", "product_contract.read", "project.get", "quarantine.get", "reconciliation.get",
       "scheduler.readiness_explain", "work.get_context",
     ]);
     expect(RUNTIME_TELEMETRY_KINDS).toEqual(["presence.ping"]);

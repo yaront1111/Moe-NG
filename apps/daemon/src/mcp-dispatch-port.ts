@@ -3,6 +3,7 @@ import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { ProductContractReadPort } from "./product-contract/product-contract-read-port.js";
 import {
   eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
 } from "./http/event-stream-access.js";
@@ -48,6 +49,8 @@ import { DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
 export interface McpDispatchPortConfig {
   /** The daemon's affordance surface, served to agents as work.get_context. */
   readonly affordances?: AffordancePort | undefined;
+  /** The goal's approved Product Contract reader; absent means product_contract.read refuses. */
+  readonly contract?: ProductContractReadPort | undefined;
   /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
   readonly documents?: GoalSourceReadPort | undefined;
   /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
@@ -229,10 +232,55 @@ const answerDocumentsSourceRead: QueryHandler = (envelope, context, config) => {
     return queryRefusal();
   }
   const request = payload as Record<string, unknown>;
+  const keys = Object.keys(request);
+  if (typeof request["goalRef"] !== "string") return queryRefusal();
+  // The whole text with `{goalRef}` alone (the original shape), or ONE PAGE with
+  // `{goalRef, offset, limit}`. Measured 2026-09-03: a real planning seat cannot
+  // carry a ~121 KB answer in one tool result, so a page is what it reads.
+  const paged = keys.length === 3 && "offset" in request && "limit" in request;
+  if (!paged && keys.length !== 1) return queryRefusal();
+  const answer = config.documents.read(request["goalRef"]);
+  if (!paged || !answer.ok) return bytesOf(answer);
+  const offset = request["offset"];
+  const limit = request["limit"];
+  if (!Number.isSafeInteger(offset) || (offset as number) < 0
+    || !Number.isSafeInteger(limit) || (limit as number) < 1
+    || (limit as number) > SOURCE_PAGE_MAX_CHARS) return queryRefusal();
+  const totalLength = answer.text.length;
+  const start = Math.min(offset as number, totalLength);
+  const end = Math.min(start + (limit as number), totalLength);
+  return bytesOf({
+    ...answer,
+    limit,
+    nextOffset: end < totalLength ? end : null,
+    offset: start,
+    text: answer.text.slice(start, end),
+    totalLength,
+  });
+};
+
+/** The largest PRD page a seat may ask for, in UTF-16 code units. */
+const SOURCE_PAGE_MAX_CHARS = 32_768;
+
+// The planning seat's read of the goal's APPROVED contract: the Gate 1 triple and the
+// revision's requirements and criteria — resolved from durable state, never from the seat.
+const answerProductContractRead: QueryHandler = (envelope, context, config) => {
+  if (config.contract === undefined) return queryRefusal();
+  const authenticated = authenticateHttpRequest(
+    authenticatorOf(config.deps),
+    context?.credential ?? config.fallbackCredential ?? null,
+    WIRE_PROTOCOL_VERSION,
+  );
+  if (!authenticated.ok) return bytesOf(authenticated);
+  const payload = envelope["payload"];
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return queryRefusal();
+  }
+  const request = payload as Record<string, unknown>;
   if (Object.keys(request).length !== 1 || typeof request["goalRef"] !== "string") {
     return queryRefusal();
   }
-  return bytesOf(config.documents.read(request["goalRef"]));
+  return bytesOf(config.contract.read(request["goalRef"]));
 };
 
 /** Every query kind this port serves, and the only place that set is decided. */
@@ -241,6 +289,7 @@ const QUERY_HANDLERS: Readonly<Record<string, QueryHandler>> = Object.freeze({
   "events.read": answerEventsRead,
   "graph.get": answerGraphGet,
   "graph.preview": answerGraphPreview,
+  "product_contract.read": answerProductContractRead,
   "work.get_context": answerWorkContext,
 });
 

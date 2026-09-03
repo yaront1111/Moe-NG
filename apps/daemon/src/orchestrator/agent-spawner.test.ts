@@ -202,6 +202,7 @@ describe("claudeSpawner", () => {
       ANTHROPIC_API_KEY: "provider-key-is-preserved",
       CLAUDE_CODE_SKIP_PROMPT_HISTORY: "1",
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
+      MAX_MCP_OUTPUT_TOKENS: "120000",
       NO_PROXY: "127.0.0.1,localhost,::1",
       no_proxy: "127.0.0.1,localhost,::1",
     });

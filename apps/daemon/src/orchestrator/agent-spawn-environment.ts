@@ -47,6 +47,8 @@ export function trustedMcpOrigin(value: string): string {
   return parsed.origin;
 }
 
+const DEFAULT_MCP_OUTPUT_TOKENS = "120000";
+
 export function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
@@ -62,6 +64,11 @@ export function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   // no resumable transcript containing mission or tool output.
   environment["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1";
   environment["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1";
+  // The size of one MCP tool result the seat may read in context. Claude's default
+  // (25000 tokens) spills a PRD-sized answer to disk, where an MCP-only planning seat
+  // cannot follow it (measured 2026-09-03 on UnAI's ~121 KB PRD). The operator's own
+  // setting wins when present.
+  environment["MAX_MCP_OUTPUT_TOKENS"] = source["MAX_MCP_OUTPUT_TOKENS"] ?? DEFAULT_MCP_OUTPUT_TOKENS;
   // Claude honors standard proxy variables. Force its loopback MCP connection
   // around any enterprise proxy so the scoped bearer never leaves this host.
   const bypass = [source["NO_PROXY"], source["no_proxy"]]

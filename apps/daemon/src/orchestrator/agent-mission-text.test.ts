@@ -18,6 +18,7 @@ describe("compilerMission", () => {
       "product_contract.propose_revision", EXPIRES, "goal-1",
     );
     expect(text).toContain("documents_source_read");
+    expect(text).toContain("nextOffset");
     expect(text).toContain('goal "goal-1"');
     expect(text).toContain("Never invent a product decision");
     expect(text).toContain('"draft"');
@@ -32,6 +33,7 @@ describe("compilerMission", () => {
       "planning.submit_decomposition", EXPIRES, "run-1",
     );
     expect(text).toContain("gateRef");
+    expect(text).toContain("product_contract_read");
     expect(text).toContain("SMALLEST COMPLETE SLICE");
     expect(text).toContain("exactly ONE node");
     expect(text).toContain("never authority bytes");

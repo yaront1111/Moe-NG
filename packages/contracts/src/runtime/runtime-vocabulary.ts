@@ -74,7 +74,7 @@ export const RUNTIME_AGGREGATES: readonly RuntimeAggregate[] = Object.freeze(
 export const RUNTIME_QUERY_KINDS = Object.freeze([
   "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
   "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
-  "graph.preview", "project.get", "quarantine.get", "reconciliation.get",
+  "graph.preview", "product_contract.read", "project.get", "quarantine.get", "reconciliation.get",
   "scheduler.readiness_explain", "work.get_context",
 ] as const);
 

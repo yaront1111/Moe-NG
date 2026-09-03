@@ -35,7 +35,7 @@ describe("agentEnvironment codex credentials", () => {
     expect(Object.keys(environment).toSorted()).toEqual([
       "CLAUDE_CODE_SKIP_PROMPT_HISTORY", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
       "CODEX_ACCESS_TOKEN", "CODEX_API_KEY", "CODEX_HOME",
-      "NO_PROXY", "OPENAI_API_KEY", "no_proxy",
+      "MAX_MCP_OUTPUT_TOKENS", "NO_PROXY", "OPENAI_API_KEY", "no_proxy",
     ]);
   });
 

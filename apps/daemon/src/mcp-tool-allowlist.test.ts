@@ -10,6 +10,7 @@ import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
+import { createProductContractReadPort } from "./product-contract/product-contract-read-port.js";
 import {
   MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds,
 } from "./mcp-tool-allowlist.js";
@@ -42,8 +43,10 @@ setupStore.close();
 const subscriptions = provider.subscriptions?.();
 if (subscriptions === undefined) throw new Error("provider serves no subscription port");
 
+const contractStore = SqliteEventStore.openForProject(storePath, PROJECT);
 const port = createMcpDispatchPort({
   affordances: provider.affordances?.(),
+  contract: createProductContractReadPort({ projectId: PROJECT, store: contractStore }),
   deps: provider.provide(),
   documents: provider.goalSource?.(),
   fallbackCredential: CREDENTIAL,
@@ -52,6 +55,7 @@ const port = createMcpDispatchPort({
 });
 
 afterAll(() => {
+  contractStore.close();
   provider.close();
   try {
     rmSync(directory, { force: true, recursive: true });
@@ -65,6 +69,7 @@ const decoder = new TextDecoder();
 
 const PAYLOAD_FOR: Readonly<Record<string, Record<string, unknown>>> = Object.freeze({
   "documents.source_read": { goalRef: "goal-allowlist-probe" },
+  "product_contract.read": { goalRef: "goal-allowlist-probe" },
   "events.read": { limit: 5, projection: "moe.board", subscriberId: "control-room-1" },
   "graph.get": { projectId: PROJECT },
   "work.get_context": { projectId: PROJECT },
@@ -156,7 +161,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 5, queries: 5, vocabulary: 45, wired: 45 });
+    }).toEqual({ excluded: 5, queries: 6, vocabulary: 45, wired: 46 });
   });
 
   it("is deterministic and frozen", () => {

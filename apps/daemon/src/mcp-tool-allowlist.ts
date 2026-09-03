@@ -28,6 +28,7 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
   "work.get_context",
   "graph.get",
   "graph.preview",
+  "product_contract.read",
   "events.read",
   "documents.source_read",
 ]);

@@ -397,6 +397,7 @@ export interface GeneratedQueryBuilders {
   readonly ["goal.list"]: QueryBuilder<"goal.list">;
   readonly ["graph.get"]: QueryBuilder<"graph.get">;
   readonly ["graph.preview"]: QueryBuilder<"graph.preview">;
+  readonly ["product_contract.read"]: QueryBuilder<"product_contract.read">;
   readonly ["project.get"]: QueryBuilder<"project.get">;
   readonly ["quarantine.get"]: QueryBuilder<"quarantine.get">;
   readonly ["reconciliation.get"]: QueryBuilder<"reconciliation.get">;
@@ -417,6 +418,7 @@ export const GENERATED_QUERY_BUILDERS: GeneratedQueryBuilders = Object.freeze({
   ["goal.list"]: queryBuilderFor("goal.list"),
   ["graph.get"]: queryBuilderFor("graph.get"),
   ["graph.preview"]: queryBuilderFor("graph.preview"),
+  ["product_contract.read"]: queryBuilderFor("product_contract.read"),
   ["project.get"]: queryBuilderFor("project.get"),
   ["quarantine.get"]: queryBuilderFor("quarantine.get"),
   ["reconciliation.get"]: queryBuilderFor("reconciliation.get"),
@@ -898,7 +900,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572";
+export const GENERATED_CONTRACT_DIGEST = "2def5def206bea31c2d530f93125dc179824d825e5ebed5bbbd07c3d65cfc591";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

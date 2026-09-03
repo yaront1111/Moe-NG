@@ -14,6 +14,7 @@ import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { NODE_DELIVER_KIND } from "../http/affordance-contract.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createGitLandingPort } from "../repository/git-landing-port.js";
+import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
 import {
   createVerifierAuthorityProvider, readVerifierStandingAuthority,
 } from "../review/verifier-authority-provider.js";
@@ -297,6 +298,8 @@ async function main(): Promise<void> {
     // authority; the per-agent config contains only its scoped bearer and this origin.
     mcpHost = createMcpHttpHost({
       affordances,
+      // The planning seat's contract read: the approved revision's criteria, by id.
+      contract: createProductContractReadPort({ projectId: config.projectId, store: verifierStore }),
       deps: provider.provide(),
       documents: provider.goalSource?.(),
       subscriptions,
