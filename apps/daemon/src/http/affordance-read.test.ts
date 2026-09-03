@@ -668,7 +668,7 @@ describe("a node whose review is exhausted waits on a human escalation", () => {
       decidedAt: "2026-08-09T12:31:00.000Z",
       expectedVersion: ledger.version,
       kind: "escalation.decide",
-      payload: { escalationRef: "ui-escalation-node-code-1", subjectRef: "node-code-1" },
+      payload: { decision: "ALLOW_MORE_ATTEMPTS", escalationRef: "ui-escalation-node-code-1", subjectRef: "node-code-1" },
       principalId: "operator-local",
       projectId: PROJECT,
       schemaVersion: "moe-review-command/1",
@@ -678,5 +678,61 @@ describe("a node whose review is exhausted waits on a human escalation", () => {
     expect(node).toMatchObject({ aggregateId: "node-code-1", missing: [], status: "READY" });
     expect(nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind)).toEqual(["review.submit"]);
+  });
+});
+
+describe("a REPLAN decision retires the node", () => {
+  let replanMinted = 0;
+  const replanPort = createAffordancePort({
+    mintId: () => `afford-replan-${String(replanMinted += 1)}`,
+    nodes: () => [{ nodeRef: "node-code-2", title: "Implement multiply()" }],
+    projectId: PROJECT,
+    store,
+  });
+  function surfaceOf() {
+    const result = replanPort.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result;
+  }
+  function failRound(label: string): void {
+    const ledger = readReviewLedger(store, PROJECT, "node-code-2");
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: `cmd-replan-fail-${label}`,
+      correlationId: "corr-affordance-replan",
+      decidedAt: "2026-09-03T12:30:00.000Z",
+      expectedVersion: ledger.version,
+      kind: "review.submit",
+      payload: {
+        findings: [finding({ ruleId: `rule-${label}`, subject: { kind: "NODE", locator: `locator-${label}` } })],
+        packageItems: packageItems(), round: ledger.lineage.highestRound + 1, subjectRef: "node-code-2",
+      },
+      principalId: "sess-agent-affordance",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    if (!outcome.ok) throw new Error(`failing round ${label} refused: ${outcome.code}`);
+  }
+
+  it("blocks the node on replan and offers nothing for it once a human answers REPLAN", () => {
+    failRound("a");
+    failRound("b");
+    failRound("c");
+    const ledger = readReviewLedger(store, PROJECT, "node-code-2");
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: "cmd-affordance-replan",
+      correlationId: "corr-affordance-replan",
+      decidedAt: "2026-09-03T12:31:00.000Z",
+      expectedVersion: ledger.version,
+      kind: "escalation.decide",
+      payload: { decision: "REPLAN", escalationRef: "ui-escalation-node-code-2", subjectRef: "node-code-2" },
+      principalId: "operator-local",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    expect(outcome.ok).toBe(true);
+    expect(readReviewLedger(store, PROJECT, "node-code-2")).toMatchObject({ escalated: true, replanned: true });
+    const node = surfaceOf().steps.find((entry) => entry.aggregateId === "node-code-2");
+    expect(node).toMatchObject({ kind: "node.deliver", missing: ["replan"], status: "BLOCKED" });
+    expect(surfaceOf().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-2")).toEqual([]);
   });
 });

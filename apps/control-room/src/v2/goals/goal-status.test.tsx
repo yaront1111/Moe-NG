@@ -55,6 +55,9 @@ describe("deriveGoalStatus", () => {
     );
     expect(deriveGoalStatus({ coverage: coverage(), goalId: GOAL, runId: RUN, surface: exhausted }))
       .toMatchObject({ agents: { accepted: 1, blocked: 1, total: 2, working: 0 }, headline: "1 node has used every review attempt.", stage: "ESCALATION" });
+    const replanned = surface([], [node("n1", "COMMITTED"), node("n2", "BLOCKED", { missing: ["replan"] })]);
+    expect(deriveGoalStatus({ coverage: coverage(), goalId: GOAL, runId: RUN, surface: replanned }))
+      .toMatchObject({ agents: { accepted: 1, blocked: 0, replanned: 1, total: 2, working: 0 }, headline: "1 node was replanned into a successor goal.", next: { anchor: "board" }, stage: "REPLANNED" });
     const working = surface([], [node("n1", "COMMITTED"), node("n2", "READY", { claim: { claimedBy: "sess-wrap-1", expiresAt: "2026-09-03T11:00:00.000Z" } })]);
     expect(deriveGoalStatus({ coverage: coverage(), goalId: GOAL, runId: RUN, surface: working }))
       .toMatchObject({ headline: "Agents are working: 1 of 2 nodes accepted.", next: { anchor: "board" }, progress: { criteria: 4, verified: 2 }, stage: "WORKING" });

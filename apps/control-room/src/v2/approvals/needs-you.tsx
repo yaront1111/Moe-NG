@@ -18,14 +18,21 @@ import type { OfferOutcome } from "./offer-wire.js";
 /** What a decision's port answered for one item, kept beside its card. */
 export interface DecisionResult {
   readonly busy: boolean;
+  /** Which answer this result belongs to; absent means the card's primary decision. */
+  readonly choice?: NeedsYouChoice | undefined;
   readonly outcome: OfferOutcome | null;
 }
+
+const REPLAN_DONE_LINE = "Replanned. A successor goal now carries the findings; the planning agent takes it next.";
+
+/** The second answer an exhausted review takes: re-plan the work instead of retrying it. */
+export type NeedsYouChoice = "REPLAN";
 
 export interface NeedsYouProps {
   readonly data: NeedsYouData;
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
   /** Spends the daemon's offer this item carries; absent means no inline decision. */
-  readonly onDecide?: ((item: NeedsYouItem) => void) | undefined;
+  readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
 }
 
@@ -79,7 +86,7 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   if (result.busy) return "Recording your decision...";
   if (result.outcome === null) return null;
   return result.outcome.ok
-    ? decision.doneLine
+    ? (result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine)
     : `REFUSED ${MIDDOT} ${result.outcome.code} ${MIDDOT} ${result.outcome.layer}`;
 }
 
@@ -95,6 +102,7 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
   const decision = decisionOf(item);
   const line = decision === null ? null : resultLine(decision, result);
   const done = result?.outcome?.ok === true;
+  const replan = item.escalation === undefined ? null : item.escalation;
   return (
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
@@ -126,6 +134,17 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
             Keep it open
           </ActionButton>
         ) : null}
+        {replan === null || onDecide === undefined ? null : (
+          <ActionButton
+            ariaLabel={`Replan ${replan.nodeKey} from its findings`}
+            disabled={result?.busy === true || done}
+            onClick={(): void => { setArmed(false); onDecide(item, "REPLAN"); }}
+            testId={`cr.needsyou.replan.${replan.nodeKey}`}
+            variant="secondary"
+          >
+            Replan from the findings
+          </ActionButton>
+        )}
         {item.planningRunRef === "" ? null : (
           <ActionButton
             ariaLabel={`${item.actionLabel} for ${item.title}`}

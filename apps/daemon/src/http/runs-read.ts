@@ -43,7 +43,7 @@ const MAX_FINDINGS = 8;
 
 /** The review facts a node's status is derived from; an injectable slice of the ledger. */
 export type NodeReviewFacts = Pick<
-  ReviewLedger, "accepted" | "escalated" | "rounds" | "unreadable" | "version"
+  ReviewLedger, "accepted" | "escalated" | "replanned" | "rounds" | "unreadable" | "version"
 > & { readonly lineage: Pick<ReviewLedger["lineage"], "unsuccessfulRounds"> & Partial<Pick<ReviewLedger["lineage"], "records">> };
 
 export interface NodeReviews {
@@ -99,8 +99,8 @@ function sharedKeysOf(nodes: readonly SealedNode[]): ReadonlySet<string> {
 }
 
 const EMPTY_FACTS: NodeReviewFacts = Object.freeze({
-  accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, rounds: [],
-  unreadable: false, version: 0,
+  accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, replanned: false,
+  rounds: [], unreadable: false, version: 0,
 });
 
 function reviewOf(facts: NodeReviewFacts): RunNodeReview {
@@ -123,10 +123,13 @@ function reviewOf(facts: NodeReviewFacts): RunNodeReview {
   });
 }
 
-function statusOf(review: RunNodeReview, accepted: boolean, claimActive: boolean, shared: boolean): RunNodeStatus {
+function statusOf(
+  review: RunNodeReview, accepted: boolean, claimActive: boolean, shared: boolean, replanned: boolean,
+): RunNodeStatus {
   if (shared) return "UNATTRIBUTABLE";
   if (accepted) return "ACCEPTED";
   if (review.unreadable) return "BLOCKED";
+  if (replanned) return "REPLANNED";
   if (review.escalated) return "ESCALATED";
   if (review.unsuccessfulRounds >= ESCALATION_ROUND_LIMIT) return "ESCALATION_REQUIRED";
   if (review.latestRoute === "ACCEPT") return "DELIVERED";
@@ -187,7 +190,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           }),
           review,
           sharedKey: isShared,
-          status: statusOf(review, facts.accepted !== undefined, active, isShared),
+          status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned),
         });
       })),
       run: run === null || run.outcome !== "RUN" ? null : Object.freeze({
@@ -220,7 +223,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
       const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now));
       const totals: Record<RunNodeStatus, number> = {
         ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
-        IN_PROGRESS: 0, READY: 0, UNATTRIBUTABLE: 0,
+        IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0,
       };
       let nodeCount = 0;
       for (const view of views) {

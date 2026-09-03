@@ -61,6 +61,8 @@ export interface ReviewLedger {
   readonly delta: DeltaRecord | undefined;
   readonly escalated: boolean;
   readonly lineage: ReviewLineage;
+  /** True once a human answered the exhausted review with REPLAN: no further round is admissible. */
+  readonly replanned: boolean;
   readonly rounds: readonly ReviewRoundRecord[];
   readonly unreadable: boolean;
   readonly version: number;
@@ -197,14 +199,15 @@ interface Accumulator {
   delta: DeltaRecord | undefined;
   escalated: boolean;
   receipt: VerifierExecutionEvidence | undefined;
+  replanned: boolean;
   readonly rounds: ReviewRoundRecord[];
   unreadable: boolean;
   version: number;
 }
 
 const freshAccumulator = (): Accumulator => ({
-  accepted: undefined, delta: undefined, escalated: false, receipt: undefined, rounds: [],
-  unreadable: false, version: 0,
+  accepted: undefined, delta: undefined, escalated: false, receipt: undefined, replanned: false,
+  rounds: [], unreadable: false, version: 0,
 });
 
 /** One committed decision on the subject, folded exactly as the single-subject read folds it. */
@@ -216,7 +219,13 @@ function fold(
   }>,
 ): void {
   acc.version = decision.currentVersion;
-  if (decision.commandKind === "escalation.decide") acc.escalated = true;
+  if (decision.commandKind === "escalation.decide") {
+    acc.escalated = true;
+    // The decision travels in the committed result; REPLAN closes the node to further rounds.
+    const result = decodeResult(decision.resultBytes);
+    if (isPlainJsonObject(result) && result["decision"] === "REPLAN") acc.replanned = true;
+    return;
+  }
   if (decision.commandKind === "integration.accept_output") {
     const parsed = parseAcceptance(decodeResult(decision.resultBytes));
     if (parsed === undefined) acc.unreadable = true;
@@ -255,6 +264,7 @@ function ledgerOf(acc: Accumulator, decisionCount: number): ReviewLedger {
     delta: acc.delta,
     escalated: acc.escalated,
     lineage: latest === undefined ? EMPTY_REVIEW_LINEAGE : latest.lineage,
+    replanned: acc.replanned,
     rounds: Object.freeze(acc.rounds),
     unreadable: acc.unreadable,
     version: acc.version,

@@ -56,6 +56,7 @@ export function codeMission(
 export function compilerMission(
   workItemId: string, kind: string, expiresAt: string, goalRef: string | null,
   gateRef: Readonly<Record<string, unknown>> | null = null,
+  instructions: string | null = null,
 ): string {
   const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
   const shared = [
@@ -106,6 +107,12 @@ export function compilerMission(
       "If the answer parks with RUN_POLICY_UNCLASSIFIABLE, report it and stop - the",
       "operator installs the policy tiers; never work around a policy park.",
     ];
+  const operator = instructions === null || instructions.trim() === "" ? [] : [
+    "The operator's own instructions for this goal follow between the markers; honor them.",
+    "When they describe a REPLAN, they carry the findings that exhausted the previous attempt:",
+    "plan a DIFFERENT decomposition that addresses those findings, under NEW node keys.",
+    `<<<OPERATOR INSTRUCTIONS\n${instructions.trim()}\nOPERATOR INSTRUCTIONS>>>`,
+  ];
   const close = [
     "Renew your claim with work_renew if you need longer, and finish by calling",
     `work_release with payload {"workItemId": "${workItemId}"}, targetAggregateId`,
@@ -114,7 +121,7 @@ export function compilerMission(
     "a stable reason code - read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
   ];
-  return [...shared, ...step, ...close].join(" ");
+  return [...shared, ...step, ...operator, ...close].join(" ");
 }
 
 export function mission(

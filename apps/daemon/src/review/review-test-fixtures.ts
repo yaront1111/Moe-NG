@@ -461,7 +461,7 @@ export function replanPayload(
 }
 
 export function escalationPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { escalationRef: "escalation-1", subjectRef: SUBJECT_REF, ...overrides };
+  return { decision: "ALLOW_MORE_ATTEMPTS", escalationRef: "escalation-1", subjectRef: SUBJECT_REF, ...overrides };
 }
 
 /**

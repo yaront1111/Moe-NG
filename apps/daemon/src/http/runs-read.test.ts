@@ -62,7 +62,7 @@ function activeGraphFor(goalRef: string, keys: readonly [string, string] = ["nod
 }
 
 const quiet: NodeReviewFacts = Object.freeze({
-  accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, rounds: [],
+  accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, replanned: false, rounds: [],
   unreadable: false, version: 0,
 });
 const round = (route: string, number = 1): NodeReviewFacts["rounds"][number] =>
@@ -173,6 +173,12 @@ describe("createRunsReadPort", () => {
     expect(view.goals[0]?.nodes.map((node) => [node.nodeKey, node.status, node.review.unsuccessfulRounds])).toEqual([
       ["node-a", "ESCALATION_REQUIRED", 3], ["node-b", "ESCALATED", 3],
     ]);
+    // A REPLAN decision retires the node: its own status, counted in the totals.
+    view = runs(portFor(store, {
+      readReviews: reviewsOf({ "node-a": { ...exhausted, escalated: true, replanned: true } }),
+    }).readRuns({}));
+    expect(view.goals[0]?.nodes[0]?.status).toBe("REPLANNED");
+    expect(view.totals).toMatchObject({ ESCALATED: 0, REPLANNED: 1 });
     view = runs(portFor(store, { readReviews: reviewsOf({ "node-a": { ...quiet, unreadable: true }, "node-b": { ...quiet, unreadable: true } }) }).readRuns({}));
     expect(view.goals[0]?.nodes.every((node) => node.status === "BLOCKED")).toBe(true);
     expect(view.totals).toMatchObject({ BLOCKED: 2, READY: 0 });

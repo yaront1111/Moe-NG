@@ -136,6 +136,11 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   if (ledger.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && !ledger.escalated) {
     return refuse(request.kind, "REVIEW_ESCALATION_REQUIRED", "DAEMON_PREREQUISITE");
   }
+  // A REPLAN decision retires the node: its work continues under a successor plan, and a round
+  // submitted here would be effort against a subject nobody will accept.
+  if (ledger.replanned) {
+    return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
+  }
   // A recorded escalation admits the human-in-loop fix round; it does not open an unbounded
   // resubmission channel. Each admitted round re-snapshots the FULL lineage into its result,
   // so a subject that rounds forever is an unbounded write amplifier. The ceiling counts

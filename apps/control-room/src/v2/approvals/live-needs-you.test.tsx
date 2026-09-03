@@ -91,7 +91,7 @@ describe("LiveNeedsYou", () => {
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
         status: "ESCALATION_REQUIRED" }], run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
-      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
     };
     const submit = vi.fn(async () => ({ commandId: "cmd-esc", ok: true as const }));
     render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={async () => runs} setup={SETUP} />);
@@ -99,7 +99,37 @@ describe("LiveNeedsYou", () => {
     expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("Plan me");
     button.click();
     await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed."); });
-    expect(submit).toHaveBeenCalledWith(offer, "node-x");
+    expect(submit).toHaveBeenCalledWith(offer, "node-x", "ALLOW_MORE_ATTEMPTS");
+  });
+
+  it("replans through the escalation port, then mints the successor goal, and says so", async () => {
+    stubWire();
+    const offer = {
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-esc", commandKind: "escalation.decide",
+      expectedVersion: 4, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: [offer] }), status: 200 } as unknown as Response;
+      if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as unknown as Response;
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const runs: RunsOutcome = {
+      goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
+        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
+        receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
+        status: "ESCALATION_REQUIRED" }], run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+      status: "RUNS",
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
+    };
+    const submit = vi.fn(async () => ({ commandId: "cmd-esc", ok: true as const }));
+    const create = vi.fn(async () => ({ commandId: "cmd-successor", ok: true as const }));
+    render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={async () => runs} setup={SETUP} successorPort={{ create }} />);
+    const button = await screen.findByTestId("cr.needsyou.replan.node-x");
+    button.click();
+    await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Replanned."); });
+    expect(submit).toHaveBeenCalledWith(offer, "node-x", "REPLAN");
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ goalId: "goal-plan", kind: "ESCALATION" }), runs);
   });
 
   it("closes a goal through the close port when the daemon offers goal.close", async () => {

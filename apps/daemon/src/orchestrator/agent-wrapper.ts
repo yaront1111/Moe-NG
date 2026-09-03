@@ -85,6 +85,8 @@ export interface AgentWrapperConfig {
    * wrong answer here buys a refusal, never a compile.
    */
   readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
+  /** The goal's own operator instructions (a replan's findings live there); null when absent. */
+  readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
   /**
    * Bearer lifetime per spawn, independent of the claim's. The exit-path
    * release runs under the agent's own secret, so the bearer must outlive the
@@ -296,7 +298,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         missionText = compilerMission(workItemId, step.kind, expiresAt, step.aggregateId,
           step.kind === "planning.submit_decomposition"
             ? config.compilerGateRef?.(step.aggregateId) ?? null
-            : null);
+            : null,
+          config.compilerInstructions?.(step.aggregateId) ?? null);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
         missionText = mission(workItemId, step.kind, expiresAt, hint);

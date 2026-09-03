@@ -66,7 +66,7 @@ describe("the runs screen", () => {
       { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], run: null, title: null },
     ],
     status: "RUNS",
-    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
+    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
   };
 
   it("renders the totals, each goal's run line, and the node ladder with status words", async () => {

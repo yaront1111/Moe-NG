@@ -10,7 +10,7 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   OPEN_SESSION: "paired a browser seat",
   "approval.decide": "decided the plan",
   "approval.decide_intent": "approved the plan",
-  "escalation.decide": "allowed more review attempts",
+  "escalation.decide": "decided an exhausted review",
   "goal.close": "closed the goal",
   "goal.create": "created a goal",
   "goal.create_with_source": "created a goal from a PRD",

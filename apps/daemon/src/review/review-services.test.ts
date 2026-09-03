@@ -405,7 +405,7 @@ describe("a refusal names the code AND the layer that produced it", () => {
     // guard the round's decision would be handed back as an accepted escalation.
     const outcome = send(
       store,
-      envelope("escalation.decide", 1, { escalationRef: "e-1", subjectRef: SUBJECT_REF },
+      envelope("escalation.decide", 1, { decision: "ALLOW_MORE_ATTEMPTS", escalationRef: "e-1", subjectRef: SUBJECT_REF },
         "cmd-round-1"),
     );
 

@@ -66,6 +66,7 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_INPUT_REJECTED",
   "REVIEW_LINEAGE_UNREADABLE",
+  "REVIEW_NODE_REPLANNED",
   "REVIEW_PAYLOAD_INVALID",
   "REVIEW_REPLAN_WITHOUT_ROUND",
   "REVIEW_REQUEST_INVALID",
@@ -95,6 +96,13 @@ function driveDaemonRefusals(): readonly string[] {
   expect(submit(reuseStore, 1).ok).toBe(true);
   const cappedStore = openStore();
   driveRounds(cappedStore, 3);
+  // Three failed rounds, then the human answers REPLAN: the node takes no further round.
+  const replannedStore = openStore();
+  driveRounds(replannedStore, 3);
+  const replanned = send(replannedStore, envelope(
+    "escalation.decide", 3, escalationPayload({ decision: "REPLAN" }), "cmd-replan-decision",
+  ));
+  if (!replanned.ok) throw new Error(replanned.code);
   const callerEvidenceStore = openStore();
   driveRounds(callerEvidenceStore, 1);
   const corruptStore = openStore();
@@ -199,6 +207,9 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("fourth round with no recorded escalation", send(cappedStore, envelope(
       "review.submit", 3, submitPayload(4), "cmd-fourth-round",
+    ))),
+    daemonCode("round after a REPLAN decision", send(replannedStore, envelope(
+      "review.submit", 4, submitPayload(4), "cmd-round-after-replan",
     ))),
     daemonCode("stored round that does not parse", send(corruptStore, envelope(
       "review.submit", 1, submitPayload(2), "cmd-after-corrupt",

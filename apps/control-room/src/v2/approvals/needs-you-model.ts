@@ -153,7 +153,8 @@ function escalationItems(
       actionLabel: "Open the goal",
       detail: `${nodeKey} failed review ${rounds === null ? "three or more" : String(rounds)} times`
         + (route === null ? "" : ` (last: ${route})`)
-        + ". The daemon refuses further rounds until you allow more attempts.",
+        + ". The daemon refuses further rounds until you decide: allow more attempts, or replan the work"
+        + " into a successor goal that carries these findings.",
       escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
       goalId: goal?.goalId ?? "",
       headline: "A node's review is exhausted",

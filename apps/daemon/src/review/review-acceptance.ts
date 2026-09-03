@@ -40,7 +40,8 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   const { ledger, request, store } = context;
   const escalationRef = payloadRef(request.payload, "escalationRef");
   const subjectRef = payloadRef(request.payload, "subjectRef");
-  if (escalationRef === null || subjectRef === null) {
+  const decision = escalationDecisionOf(request.payload);
+  if (escalationRef === null || subjectRef === null || decision === null) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
   if (ledger.unreadable) {
@@ -54,15 +55,31 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   }
   return commitAccepted(store, request, {
     aggregateId: subjectRef,
-    eventPayload: { escalationRef, unsuccessfulRounds: ledger.lineage.unsuccessfulRounds },
+    eventPayload: { decision, escalationRef, unsuccessfulRounds: ledger.lineage.unsuccessfulRounds },
     eventType: "ReviewEscalated",
     expectedVersion: ledger.version,
     result: {
+      decision,
       escalationRef,
       unsuccessfulRounds: ledger.lineage.unsuccessfulRounds,
     } as unknown as JsonValue,
   });
 };
+
+/**
+ * The human's two answers to an exhausted review. ALLOW_MORE_ATTEMPTS admits the fix round the
+ * kernel refuses without a decision; REPLAN closes the node to rounds for good: the work is
+ * re-planned (a successor goal carrying the findings), never re-tried under the same node.
+ */
+export const ESCALATION_DECISIONS = Object.freeze(["ALLOW_MORE_ATTEMPTS", "REPLAN"] as const);
+export type EscalationDecision = (typeof ESCALATION_DECISIONS)[number];
+
+function escalationDecisionOf(payload: unknown): EscalationDecision | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const raw = (payload as Record<string, unknown>)["decision"];
+  return (ESCALATION_DECISIONS as readonly string[]).includes(String(raw))
+    ? raw as EscalationDecision : null;
+}
 
 /**
  * Accepts the reviewed output, if `@moe/review` qualifies it.

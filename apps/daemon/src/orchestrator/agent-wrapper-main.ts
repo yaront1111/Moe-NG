@@ -12,6 +12,7 @@ import {
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { NODE_DELIVER_KIND } from "../http/affordance-contract.js";
+import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createGitLandingPort } from "../repository/git-landing-port.js";
 import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
@@ -226,6 +227,19 @@ async function main(): Promise<void> {
           : null;
       },
       affordances,
+      // The goal's operator instructions, read from its durable catalog entry: a replan's
+      // successor goal carries the exhausted attempt's findings there.
+      compilerInstructions: (goalId) => {
+        const laneStore = verifierStore;
+        if (goalId === null || laneStore === undefined) return null;
+        const event: unknown = laneStore.readAggregateEvents(goalId, 0, 1).items[0];
+        if (event === undefined) return null;
+        const decoded = decodeGoalCatalogEntry(
+          event as Parameters<typeof decodeGoalCatalogEntry>[0], config.projectId,
+        );
+        return decoded.ok && decoded.entry.goalId === goalId
+          ? decoded.entry.brief?.instructions ?? null : null;
+      },
       // Both horizons come from the knobs, where the bearer TTL is derived from
       // the agent lifetime: a session bound to the claim TTL expired under a
       // long task that was still renewing its claim, and the exit-path release

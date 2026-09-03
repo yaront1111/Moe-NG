@@ -24,6 +24,7 @@ export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.free
   ESCALATION_REQUIRED: "Needs escalation",
   IN_PROGRESS: "In progress",
   READY: "Ready for an agent",
+  REPLANNED: "Replanned into a successor goal",
   UNATTRIBUTABLE: "Shared key, not attributable",
 });
 
@@ -182,7 +183,7 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
 function totalsLine(outcome: Extract<RunsOutcome, { status: "RUNS" }>): string {
   const { totals } = outcome;
   const parts = [`${String(totals.nodes)} node${totals.nodes === 1 ? "" : "s"}`];
-  for (const status of ["ACCEPTED", "DELIVERED", "IN_PROGRESS", "READY", "ESCALATION_REQUIRED", "ESCALATED", "BLOCKED", "UNATTRIBUTABLE"] as const) {
+  for (const status of ["ACCEPTED", "DELIVERED", "IN_PROGRESS", "READY", "ESCALATION_REQUIRED", "ESCALATED", "BLOCKED", "REPLANNED", "UNATTRIBUTABLE"] as const) {
     if (totals[status] > 0) parts.push(`${String(totals[status])} ${STATUS_WORDS[status].toLowerCase()}`);
   }
   return `${String(totals.goals)} goal${totals.goals === 1 ? "" : "s"} ${MIDDOT} ${parts.join(` ${MIDDOT} `)}`;

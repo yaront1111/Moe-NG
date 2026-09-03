@@ -25,7 +25,7 @@ const GOAL = Object.freeze({
 });
 const TOTALS = Object.freeze({
   ACCEPTED: 1, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 0,
-  UNATTRIBUTABLE: 0, goals: 1, nodes: 1,
+  REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1,
 });
 const RUNS = Object.freeze({ goals: [GOAL], outcome: "RUNS", totals: TOTALS });
 

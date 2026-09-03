@@ -36,12 +36,12 @@ function wireWith(answer: unknown, delivered = true): { readonly built: unknown[
 describe("createEscalationPort", () => {
   it("builds escalation.decide from the daemon's offer with only escalationRef and subjectRef", async () => {
     const { built, sent, wire } = wireWith({ ok: true });
-    const outcome = await createEscalationPort(wire).submit(OFFER, "node-a");
+    const outcome = await createEscalationPort(wire).submit(OFFER, "node-a", "ALLOW_MORE_ATTEMPTS");
     expect(outcome).toEqual({ commandId: "cmd-escalate-1", ok: true });
     expect(built).toHaveLength(1);
     const call = built[0] as { affordance: unknown; input: Record<string, unknown> };
     expect(call.affordance).toBe(OFFER);
-    expect(call.input["payload"]).toEqual({ escalationRef: "ui-escalation-node-a-v4", subjectRef: "node-a" });
+    expect(call.input["payload"]).toEqual({ decision: "ALLOW_MORE_ATTEMPTS", escalationRef: "ui-escalation-node-a-v4", subjectRef: "node-a" });
     expect(call.input["sessionCredential"]).toBe("cred-live-1");
     expect(String(call.input["correlationId"])).toMatch(/^ui-escalate-[0-9a-f]{16}$/u);
     expect(sent).toHaveLength(1);
@@ -49,10 +49,10 @@ describe("createEscalationPort", () => {
 
   it("carries the daemon's refusal at its own layer, and a transport failure at the transport layer", async () => {
     const refused = wireWith({ ok: false, refusal: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE" } });
-    expect(await createEscalationPort(refused.wire).submit(OFFER, "node-a"))
+    expect(await createEscalationPort(refused.wire).submit(OFFER, "node-a", "REPLAN"))
       .toEqual({ code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false });
     const down = wireWith(null, false);
-    expect(await createEscalationPort(down.wire).submit(OFFER, "node-a"))
+    expect(await createEscalationPort(down.wire).submit(OFFER, "node-a", "ALLOW_MORE_ATTEMPTS"))
       .toEqual({ code: "TRANSPORT_REQUEST_FAILED", layer: "CONTROL_ROOM_TRANSPORT", ok: false });
   });
 });

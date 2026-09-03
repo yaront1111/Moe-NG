@@ -284,7 +284,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // the daemon clock. `record` is the GO_ACTIVATE binding and the only thing a caller may
     // present, so an activation cannot name its own decision time or project.
     [CUTOVER_ACTIVATE_COMMAND_KIND]: ["record"],
-    "escalation.decide": ["escalationRef", "subjectRef"],
+    "escalation.decide": ["decision", "escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
     // authenticated command identity, the project and principal come from authentication, and

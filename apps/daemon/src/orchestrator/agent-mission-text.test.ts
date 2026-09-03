@@ -43,6 +43,20 @@ describe("compilerMission", () => {
     expect(text).not.toContain("The Gate 1 approval for this goal");
   });
 
+  it("carries the goal's own operator instructions between markers, and none when absent", () => {
+    const withInstructions = compilerMission(
+      "planning.submit_decomposition@goal-2", "planning.submit_decomposition", EXPIRES, "goal-2",
+      null, "REPLAN of goal-1: node node-a failed review 3 times.\n- [MAJOR verifier-test-failed] tests fail",
+    );
+    expect(withInstructions).toContain("<<<OPERATOR INSTRUCTIONS");
+    expect(withInstructions).toContain("REPLAN of goal-1: node node-a failed review 3 times.");
+    expect(withInstructions).toContain("under NEW node keys");
+    const without = compilerMission(
+      "planning.submit_decomposition@goal-2", "planning.submit_decomposition", EXPIRES, "goal-2", null, "  ",
+    );
+    expect(without).not.toContain("OPERATOR INSTRUCTIONS");
+  });
+
   it("embeds the daemon-resolved Gate 1 triple when the wrapper supplies it", () => {
     const text = compilerMission(
       "planning.submit_decomposition@goal-1",

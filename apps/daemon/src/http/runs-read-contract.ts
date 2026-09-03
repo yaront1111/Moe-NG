@@ -26,7 +26,7 @@ export type RunsReadCode = (typeof RUNS_READ_CODES)[number];
 
 export const RUN_NODE_STATUSES = Object.freeze([
   "ACCEPTED", "BLOCKED", "DELIVERED", "ESCALATED", "ESCALATION_REQUIRED", "IN_PROGRESS", "READY",
-  "UNATTRIBUTABLE",
+  "REPLANNED", "UNATTRIBUTABLE",
 ] as const);
 export type RunNodeStatus = (typeof RUN_NODE_STATUSES)[number];
 

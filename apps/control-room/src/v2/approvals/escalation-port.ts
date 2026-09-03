@@ -17,15 +17,23 @@ const ESCALATION_LAYER = "CONTROL_ROOM_ESCALATION" as const;
 export type EscalationWire = OfferWire;
 export type EscalationOutcome = OfferOutcome;
 
+/** The human's two answers to an exhausted review; the daemon refuses any other word. */
+export type EscalationDecision = "ALLOW_MORE_ATTEMPTS" | "REPLAN";
+
 export interface EscalationPort {
-  submit(affordance: Readonly<Record<string, unknown>>, nodeKey: string): Promise<EscalationOutcome>;
+  submit(
+    affordance: Readonly<Record<string, unknown>>, nodeKey: string, decision: EscalationDecision,
+  ): Promise<EscalationOutcome>;
 }
 
 export function createEscalationPort(wire: EscalationWire): EscalationPort {
   return Object.freeze({
-    submit: (affordance: Readonly<Record<string, unknown>>, nodeKey: string): Promise<EscalationOutcome> => {
+    submit: (
+      affordance: Readonly<Record<string, unknown>>, nodeKey: string, decision: EscalationDecision,
+    ): Promise<EscalationOutcome> => {
       const version = affordance["expectedVersion"];
       const payload = {
+        decision,
         escalationRef: `ui-escalation-${nodeKey}-v${typeof version === "number" ? String(version) : "unknown"}`,
         subjectRef: nodeKey,
       };

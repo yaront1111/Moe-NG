@@ -374,6 +374,15 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // round remains blocked until the daemon consumes its receipt; an
         // unreadable ledger must never be staffed as writable work.
         const awaitingVerify = review.unreadable || latestRound?.routing.route === "ACCEPT";
+        // A human answered the exhausted review with REPLAN: the node takes no further round
+        // and offers nothing; its work continues under the successor plan.
+        if (review.replanned) {
+          steps.push(Object.freeze({
+            aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
+            missing: ["replan"], status: "BLOCKED" as const, version: review.version,
+          }));
+          continue;
+        }
         // Three unsuccessful rounds and no escalation decision: the review kernel refuses
         // every further round (REVIEW_ESCALATION_REQUIRED), so the node is BLOCKED on a human
         // and the only command the surface offers for it is the escalation decision itself.

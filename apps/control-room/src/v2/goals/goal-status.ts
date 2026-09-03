@@ -17,6 +17,7 @@ export type GoalStage =
   | "NO_PRD"
   | "PLAN"
   | "READY_TO_CLOSE"
+  | "REPLANNED"
   | "UNKNOWN"
   | "WORKING";
 
@@ -28,7 +29,10 @@ export interface GoalNext {
 }
 
 export interface GoalStatus {
-  readonly agents: { readonly accepted: number; readonly blocked: number; readonly total: number; readonly working: number } | null;
+  readonly agents: {
+    readonly accepted: number; readonly blocked: number; readonly replanned: number; readonly total: number;
+    readonly working: number;
+  } | null;
   readonly headline: string;
   readonly next: GoalNext;
   readonly progress: { readonly criteria: number; readonly verified: number } | null;
@@ -70,6 +74,7 @@ function agentsOf(steps: readonly SurfaceStep[]): GoalStatus["agents"] {
   return Object.freeze({
     accepted: steps.filter((step) => step.status === "COMMITTED").length,
     blocked: steps.filter((step) => step.status === "BLOCKED" && step.missing.includes("escalation")).length,
+    replanned: steps.filter((step) => step.status === "BLOCKED" && step.missing.includes("replan")).length,
     total: steps.length,
     working: steps.filter((step) => step.status !== "COMMITTED" && step.claim !== null).length,
   });
@@ -117,6 +122,13 @@ export function deriveGoalStatus(input: {
   if (offered(surface, "approval.decide_intent", runId)) {
     return status("PLAN", "The plan is waiting for your approval.", {
       anchor: "plan", detail: "Read the steps and the acceptance criteria, then approve to start the agents.", label: "Review the plan",
+    }, { agents, progress });
+  }
+  if (agents !== null && agents.replanned > 0 && agents.replanned + agents.accepted === agents.total) {
+    return status("REPLANNED", `${String(agents.replanned)} ${agents.replanned === 1 ? "node was" : "nodes were"} replanned into a successor goal.`, {
+      anchor: "board",
+      detail: "The findings that led here are on the board. Close this goal once the successor's work is verified.",
+      label: "Read the findings",
     }, { agents, progress });
   }
   if (agents !== null && agents.blocked > 0 && offered(surface, "escalation.decide", null)) {

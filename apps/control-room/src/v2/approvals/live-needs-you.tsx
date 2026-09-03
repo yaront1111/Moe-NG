@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { createBoardFeed } from "../../live/live-board-feed.js";
@@ -12,6 +12,9 @@ import { useGoalCoverage } from "../goals/use-goal-coverage.js";
 import type { CoverageReader } from "../goals/use-goal-coverage.js";
 import { createEscalationPort } from "./escalation-port.js";
 import type { EscalationPort } from "./escalation-port.js";
+import { createReplanSuccessorPort } from "./replan-successor-port.js";
+import type { ReplanSuccessorPort } from "./replan-successor-port.js";
+import type { NeedsYouChoice } from "./needs-you.js";
 import { createGoalClosePort } from "./goal-close-port.js";
 import type { GoalClosePort } from "./goal-close-port.js";
 import { NeedsYou, decisionKeyOf } from "./needs-you.js";
@@ -37,6 +40,8 @@ export interface LiveNeedsYouProps {
   readonly closePort?: GoalClosePort | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly escalationPort?: EscalationPort | undefined;
+  /** Injectable for tests; the default creates the successor goal through the session's wire. */
+  readonly successorPort?: ReplanSuccessorPort | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
   readonly onCount?: ((count: number) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
@@ -48,6 +53,7 @@ export interface LiveNeedsYouProps {
 
 export function LiveNeedsYou({
   closePort, escalationPort, onConnection, onCount, onOpenBoard, readCoverage, readRuns: readRunsProp, setup,
+  successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
@@ -88,23 +94,33 @@ export function LiveNeedsYou({
   const data = useMemo(
     () => deriveNeedsYou({ catalog, coverage, runs, surface }), [catalog, coverage, runs, surface],
   );
-  const onDecide = useCallback((item: NeedsYouItem) => {
+  const surfaceRef = useRef<SurfaceFrame | null>(null);
+  surfaceRef.current = surface;
+  const [successor] = useState(() => successorPort ?? createReplanSuccessorPort(setup, () => surfaceRef.current));
+  const onDecide = useCallback((item: NeedsYouItem, choice?: NeedsYouChoice) => {
     const key = decisionKeyOf(item);
-    const spend = item.escalation !== undefined
-      ? escalate.submit(item.escalation.affordance, item.escalation.nodeKey)
+    const escalation = item.escalation;
+    const spend = escalation !== undefined
+      ? (choice === "REPLAN"
+        // REPLAN is two durable acts: the decision on the node, then the successor goal that
+        // carries the findings. The second runs only once the first was accepted.
+        ? escalate.submit(escalation.affordance, escalation.nodeKey, "REPLAN").then(async (outcome) =>
+          outcome.ok ? successor.create(item, runs) : outcome)
+        : escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS"))
       : item.close !== undefined
         ? close.submit(item.close.affordance, item.goalId)
         : null;
     if (spend === null) return;
-    setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
+    setResults((previous) => new Map(previous).set(key, { busy: true, choice, outcome: null }));
     void spend.then((outcome) => {
-      setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
+      setResults((previous) => new Map(previous).set(key, { busy: false, choice, outcome }));
     }, () => {
       setResults((previous) => new Map(previous).set(key, {
-        busy: false, outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
+        busy: false, choice,
+        outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
       }));
     });
-  }, [close, escalate]);
+  }, [close, escalate, runs, successor]);
   useEffect(() => { onCount?.(data.items.length); }, [data.items.length, onCount]);
 
   return <NeedsYou data={data} decisionResults={results} onDecide={onDecide} onOpenBoard={onOpenBoard} />;

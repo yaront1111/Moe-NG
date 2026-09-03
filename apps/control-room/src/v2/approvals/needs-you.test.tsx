@@ -55,6 +55,12 @@ describe("the Needs-you queue", () => {
     expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("REVIEW EXHAUSTED · Alpha");
     await userEvent.click(screen.getByTestId("cr.needsyou.escalate.node-x"));
     expect(onEscalate).toHaveBeenCalledWith(item);
+    // The second answer: replan the work instead of retrying it.
+    await userEvent.click(screen.getByTestId("cr.needsyou.replan.node-x"));
+    expect(onEscalate).toHaveBeenLastCalledWith(item, "REPLAN");
+    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, choice: "REPLAN", outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Replanned.");
+    expect((screen.getByTestId("cr.needsyou.replan.node-x") as HTMLButtonElement).disabled).toBe(true);
     rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);

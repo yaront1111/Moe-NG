@@ -399,6 +399,25 @@ it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
+### Replan (when a review is exhausted)
+
+After three unsuccessful review rounds the review kernel refuses every further
+round and the node blocks on a human. Needs you offers the two answers
+`escalation.decide` takes (its `decision` field):
+
+- **Allow more attempts** (`ALLOW_MORE_ATTEMPTS`): the node returns to READY and
+  agents may submit new rounds.
+- **Replan from the findings** (`REPLAN`): the node is RETIRED. It takes no
+  further round (`REVIEW_NODE_REPLANNED`), the surface shows it BLOCKED on
+  `replan` and offers nothing for it, and the Runs screen says `Replanned`. The
+  browser then creates a SUCCESSOR goal over the same PRD (`goal.create_with_source`;
+  Gate 1 is keyed by the PRD content sha, so the approved contract carries over)
+  whose instructions carry the retired node's findings. The wrapper hands a
+  goal's instructions to the compiler mission between `<<<OPERATOR INSTRUCTIONS`
+  markers, and the decomposition seat is told to plan a different decomposition
+  under new node keys. The predecessor goal reads `Replanned` on its status
+  strip; close it when the successor's work is verified.
+
 ### Verifier authority (why a delivered node can wait forever)
 
 The wrapper's verifier pass runs `MOE_NODE_TEST_COMMAND` in `MOE_NODE_WORKSPACE`
