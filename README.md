@@ -14,34 +14,60 @@ Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRI
 
 ## What runs today
 
-The full agent loop runs on the durable pipeline; it was live-proven end to end
-on 2026-08-09/10 — operational evidence from that dated run, not a release or
-security-boundary claim (see
+The loop the vision describes runs, on a real project, with real agents: a PRD
+dropped in the browser becomes a Product Contract a planning agent proposes and a
+human approves (Gate 1), a decomposition the daemon compiles and a human approves
+(the plan gate), code a coding agent writes in the project's repository, a
+verification the daemon runs itself, and a local git commit of exactly the
+files that delivery changed. This was live-proven on 2026-09-02/03 on a real
+TypeScript project with real `claude -p` seats (the first proof of the
+bootstrap chain alone dates from 2026-08-09/10). That is operational evidence,
+not a release or security-boundary claim; see
 [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
-entry points, environment, and knobs):
+entry points, environment, and knobs.
 
-- **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`,
-  `/events/read`, `/events/ack`, `/affordances/read`, `/documents/dossier/read`. Boots
-  fail-closed on a fresh SQLite store, mints genesis recovery binding, and
-  refuses unauthenticated, cross-origin, stale-protocol, or malformed requests
-  with stable reason codes from the runtime error registry.
+- **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
+  agent reads it (paged) and proposes a versioned Product Contract with
+  requirements and falsifiable criteria, asking the human only material
+  clarifications; the human approves at Gate 1; a second planning run submits
+  the decomposition the daemon compiles into a sealed plan; the human approves
+  the plan; the PRD coverage read joins every criterion to the node that
+  verified it. Two goals over the same PRD share the approved contract.
+- **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`, the
+  event stream, the affordance surface, and the operator's reads (goals, goal
+  source, planning run, product-contract gate, document coverage, runs, policy,
+  health, activity, sessions). Boots fail-closed on a fresh SQLite store, mints
+  the genesis recovery binding, and refuses unauthenticated, cross-origin,
+  stale-protocol, or malformed requests with stable reason codes from the
+  runtime error registry.
 - **Scoped MCP surface**: the standalone stdio entry is
   `apps/daemon/src/mcp-main.ts`; the wrapper uses one trusted loopback HTTP host
-  and per-agent bearer credentials. The daemon's decoder stays the only payload
-  authority.
+  and per-agent bearer credentials. A seat reads the PRD by page and the
+  approved contract by id; the human-only kinds (approvals, clarification
+  answers, goal closure, publishing, cutover) are never reachable over MCP.
 - **Wrapper** (`apps/daemon/src/orchestrator/agent-wrapper-main.ts`): staffs
-  READY, unclaimed non-human steps with a scoped agent session and a real
-  `claude -p` process; human approval and goal closure are never delegated. A
-  daemon-side development verifier reruns a node test before acceptance.
-- **Control room** (`apps/control-room`): the truth-preserving board and the
-  operating surface. Packaged Windows runs serve it from the manager or the
+  READY, unclaimed non-human steps (planning and coding) with a scoped agent
+  session and a real `claude -p` process authenticated with the operator's own
+  `claude` sign-in (or an exported API key; a `codex` seat is the same
+  contract). A daemon-side verifier reruns the node's test before acceptance;
+  the lander then commits exactly the paths the seat changed, on the
+  workspace's current branch, and the publisher pushes only when a human
+  names a remote on the goal.
+- **Review loop**: three unsuccessful review rounds block a node on a human,
+  who either allows more attempts or replans the work into a successor goal
+  that carries the findings.
+- **Control room** (`apps/control-room`): the operating surface. Goals with
+  progress from coverage; an opened goal that says where it stands and what
+  to do next; Needs you (Gate 1, plan approval, exhausted reviews, goals ready
+  to close); Runs with per-node review rounds, verifier receipts and landings;
+  Policy (the standard verifier slices install from the browser); Health,
+  Activity and Seats. Packaged Windows runs serve it from the manager or the
   selected project's own loopback daemon and attach through a one-use pairing
-  ticket; the Vite proxy remains a development path. Every step the daemon marks
-  READY dispatches from its card — the daemon's own gates answer each click,
-  refusals render verbatim, and cards move only when the ledger does. Frozen fixtures
-  are available only from the Vite development server behind `?fixtures=1`; production
-  entry routing strips that selector and the Windows pack gate rejects fixture bytes.
-  A build with no credentials shows a configuration notice, never fixtures in their place.
+  ticket; the Vite proxy remains a development path. Every offer the daemon
+  states dispatches from its card, refusals render verbatim, and cards move
+  only when the ledger does. Frozen fixtures are available only from the Vite
+  development server behind `?fixtures=1`.
+
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
   decision storage, subscriptions, snapshots, recovery), `runner`,
@@ -57,7 +83,14 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
 ## What this is not
 
-Nothing here is a readiness, GA, or comparative claim. The design's Phase 0
+Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-03,
+these are still missing or manual: a fresh project cannot be started from the
+browser alone (goal creation waits on the project activation chain, which the
+seed script or the wrapper drives); an initial plan seals one node, so a goal
+is built one node at a time and growth goes through a successor goal; there is
+no working preview and no release gate, so the vision's Gates 2 and 3 do not
+exist yet; a Codex seat is wired but was last proven only to reach the API; and
+the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in
 [docs/plans/2026-08-09-node-sqlite-driver-decision.md](./docs/plans/2026-08-09-node-sqlite-driver-decision.md)
