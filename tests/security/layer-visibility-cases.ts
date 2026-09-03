@@ -148,16 +148,18 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 59 at
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 61 at
  * this HEAD; the single wide-only name is PRODUCT_CONTRACT_GATE_1_READ_LAYER, hidden twice
  * over — module-private AND digit-bearing. Quoting a private count against an exported count
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 60;
+const EXPECTED_PRIVATE_COUNT = 62;
 
 /**
- * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`.
+ * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
+ * plus the two control-room layers PR #16 (d49c9c17) added: LIVE_GOAL_SOURCE_LAYER and
+ * POLICY_INSTALL_LAYER, absorbed at the 20d28fbe merge.
  * An ALLOWLIST OF KNOWN-INVISIBLE BOUNDARIES, not an approval of the invisibility: its job is
  * to make the population a number that cannot move without an arm going red.
  */
@@ -198,6 +200,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "LIVE_COVERAGE_LAYER", file: "apps/control-room/src/live/live-document-coverage.ts" },
   { constant: "LIVE_DOCUMENT_LAYER", file: "apps/control-room/src/live/live-document-dossier.ts" },
   { constant: "LIVE_DOCUMENT_LAYER", file: "apps/control-room/src/live/live-document-ingest.ts" },
+  { constant: "LIVE_GOAL_SOURCE_LAYER", file: "apps/control-room/src/live/live-goal-source.ts" },
   { constant: "LIVE_OPS_LAYER", file: "apps/control-room/src/live/live-ops.ts" },
   { constant: "LIVE_PLANNING_LAYER", file: "apps/control-room/src/live/live-planning-run.ts" },
   { constant: "LIVE_RUNS_LAYER", file: "apps/control-room/src/live/live-runs.ts" },
@@ -206,6 +209,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "OBSERVATION_CODEC_LAYER", file: "apps/daemon/src/provider-profile/provider-runtime-observation.ts" },
   { constant: "OBSERVATION_READER_LAYER", file: "apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts" },
   { constant: "PLANNING_RUN_READ_LAYER", file: "apps/daemon/src/http/planning-run-read.ts" },
+  { constant: "POLICY_INSTALL_LAYER", file: "apps/control-room/src/v2/ops/policy-install-port.ts" },
   { constant: "PRODUCER_LAYER", file: "apps/daemon/src/work/launch-template-authority.ts" },
   { constant: "PRODUCT_CONTRACT_GATE_1_READ_LAYER", file: "apps/daemon/src/http/product-contract-gate-1-read.ts" },
   { constant: "PROJECTION_LAYER", file: "apps/daemon/src/budget/budget-ledger-contracts.ts" },
