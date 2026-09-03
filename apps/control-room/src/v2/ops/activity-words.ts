@@ -5,6 +5,9 @@
  */
 
 const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  CLOSE_SESSION: "closed a browser seat",
+  CREATE_PRINCIPAL: "minted a principal",
+  OPEN_SESSION: "paired a browser seat",
   "approval.decide": "decided the plan",
   "approval.decide_intent": "approved the plan",
   "escalation.decide": "allowed more review attempts",
@@ -38,6 +41,22 @@ export function kindWords(commandKind: string): string {
   return KIND_WORDS[commandKind] ?? commandKind;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/** Seat and pairing records: true for the handshake's own decisions and every session command. */
+export function isSeatRecord(commandKind: string, targetAggregateId: string): boolean {
+  return commandKind.startsWith("session.") || commandKind === "OPEN_SESSION" || commandKind === "CREATE_PRINCIPAL"
+    || commandKind === "CLOSE_SESSION" || targetAggregateId.startsWith("moe.session-authority");
+}
+
+/** What a seat is, from its id: the wrapper mints `sess-wrap-`, a browser pairing mints a uuid. */
+export function seatWords(sessionId: string): string {
+  if (sessionId.startsWith("sess-wrap-")) return "an agent seat";
+  if (sessionId.startsWith("sess-double-")) return "a planning agent";
+  if (UUID.test(sessionId)) return "a paired browser";
+  return sessionId;
+}
+
 /** Who a principal is, in a person's words, keeping the id in reach for the mono line. */
 export function principalWords(principalId: string): string {
   if (principalId === "operator-local" || principalId.startsWith("principal-")) return "the operator";
@@ -45,6 +64,7 @@ export function principalWords(principalId: string): string {
   if (principalId === "daemon:node-verifier") return "the daemon's verifier";
   if (principalId.startsWith("daemon:")) return "the daemon";
   if (principalId.startsWith("sess-")) return "a paired session";
+  if (UUID.test(principalId)) return "a paired browser";
   return principalId;
 }
 

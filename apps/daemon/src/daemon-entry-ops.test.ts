@@ -11,9 +11,9 @@ import { GOOD_CREDENTIAL, authenticator } from "./http/http-test-fixtures.js";
 const CSRF = "ops-entry-csrf";
 
 async function post(
-  started: { readonly origin: string; readonly port: number }, path: string,
+  started: { readonly origin: string; readonly port: number }, path: string, body: unknown = {},
 ): Promise<{ readonly body: unknown; readonly status: number }> {
-  const payload = "{}";
+  const payload = JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const request = httpRequest({
       headers: {
@@ -88,6 +88,7 @@ it("resolves and forwards the project-bound activity and sessions readers", asyn
         boundProjectId: "proj-0001",
         readActivity: () => ({ code: "ACTIVITY_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" as const }),
       }),
+      goalSource: () => ({ read: () => ({ code: "GOAL_SOURCE_INVALID", layer: "TEST_READER", ok: false as const }) }),
       provide: () => ({ ...fixtureDependencies(), authenticator: authenticator([CAPABILITIES.GOAL]) }),
       sessions: () => ({
         boundProjectId: "proj-0001",
@@ -102,6 +103,9 @@ it("resolves and forwards the project-bound activity and sessions readers", asyn
     });
     expect(await post(started, "/sessions/read")).toEqual({
       body: { code: "SESSIONS_READ_UNREADABLE", layer: "TEST_READER", outcome: "REFUSED" }, status: 200,
+    });
+    expect(await post(started, "/goals/source/read", { goalRef: "goal-1" })).toEqual({
+      body: { code: "GOAL_SOURCE_INVALID", layer: "TEST_READER", outcome: "REFUSED" }, status: 200,
     });
   } finally {
     await started.shutdown();

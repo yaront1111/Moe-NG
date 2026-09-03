@@ -37,7 +37,7 @@ function coverage(
 ): DocumentCoverageOutcome {
   return {
     contracts: [{
-      contractId: `contract-${goalId}`, gate1,
+      contractId: `contract-${goalId}`, gate1, plane: "V1",
       requirements: [{
         criteria: Array.from({ length: criteria }, (_, i) => ({
           criterionId: `crit-${String(i)}`, nodeKey: null, statement: "s",
@@ -51,7 +51,7 @@ function coverage(
     goals: [{ goalId, lastActivityAt: null, lifecycle, planningRunRef: `run-${goalId}`, title: "t" }],
     sections: null,
     status: "COVERAGE",
-    totals: { contracts: 1, criteria, goals: 1, planned: criteria - verified, requirements: 1, verified },
+    totals: { contracts: 1, criteria, goals: 1, planned: criteria - verified, requirements: 1, unattributable: 0, verified },
   };
 }
 

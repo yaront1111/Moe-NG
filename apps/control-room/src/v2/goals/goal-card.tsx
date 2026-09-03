@@ -1,7 +1,7 @@
 import type { CSSProperties, JSX } from "react";
 
 import "./goal-card.css";
-import { ActionButton, FactRow, StatusChip } from "../components/primitives.js";
+import { ActionButton, FactRow } from "../components/primitives.js";
 import { TruthChip } from "../components/truth-chip.js";
 import { ARROW_RIGHT } from "../glyphs.js";
 import type { ProofPayload } from "../shell/proof-context.js";
@@ -30,7 +30,6 @@ const TONE_VAR: Readonly<Record<HeadlineTone, string>> = Object.freeze({
   verified: "--cr-truth-verified",
 });
 
-const OFFLINE_TONE = "--cr-conn-offline";
 
 /**
  * Why a card with no durable planning run cannot open a board. Named once: the
@@ -110,7 +109,7 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
           <div className="cr2-goal-progress-top">
             <span className="cr2-goal-progress-label" data-testid={`cr.goals.card.${goal.goalId}.progress`}>
               {goal.progress === undefined
-                ? goal.progressNote ?? "Progress coming online"
+                ? goal.progressNote ?? "Progress unavailable"
                 : `${String(goal.progress.done)} of ${String(goal.progress.total)} ${goal.progress.noun}`}
             </span>
             {goal.lastEventLabel === undefined
@@ -119,29 +118,6 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
           </div>
           <div className="cr2-goal-bar" title={goal.progressComingOnline}>
             <div className="cr2-goal-bar-fill" style={{ width: `${String(progressPct)}%` } as CSSProperties} />
-          </div>
-          <div className="cr2-goal-budget">
-            {goal.lastEventLabel === undefined ? (
-              <StatusChip
-                label="LAST EVENT COMING ONLINE"
-                testId={`cr.goals.card.${goal.goalId}.lastevent.comingonline`}
-                title="The event relay is not attached to this surface yet."
-                toneVar={OFFLINE_TONE}
-              />
-            ) : null}
-            {goal.budgetLabel === undefined ? (
-              <StatusChip
-                label="BUDGET COMING ONLINE"
-                testId={`cr.goals.card.${goal.goalId}.budget.comingonline`}
-                title={goal.budgetComingOnline}
-                toneVar={OFFLINE_TONE}
-              />
-            ) : (
-              <>
-                <span className="cr2-goal-budget-label">{goal.budgetLabel}</span>
-                <TruthChip compact interactive={false} truthClass={goal.budgetTruthClass} />
-              </>
-            )}
           </div>
         </div>
 
@@ -204,14 +180,6 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
                 truthClass={fact.truthClass}
                 value={fact.value}
               />
-            </div>
-          ))}
-          {goal.comingOnlineFacts.map((fact) => (
-            <div className="cr2-goal-facts-cell" key={`co.${slug(fact.label)}`}>
-              <div className="cr2-goal-comingonline" data-testid={`cr.goals.comingonline.${slug(fact.label)}`}>
-                <span className="cr2-factrow-label">{fact.label}</span>
-                <StatusChip label="COMING ONLINE" title={fact.reason} toneVar={OFFLINE_TONE} />
-              </div>
             </div>
           ))}
         </div>

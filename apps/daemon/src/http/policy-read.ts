@@ -18,6 +18,7 @@ import { readDurableLedger, stateOf, versionOf } from "../bootstrap/bootstrap-le
 import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { reviewerCalibrationSlice, validatablePolicySlice, verifierPolicySlice } from "../orchestrator/demo-seed-policy.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import type { VerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
@@ -51,11 +52,25 @@ export interface PolicyEvaluationView {
   readonly policyRef: string;
   readonly principalId: string | null;
 }
+/**
+ * One of the three slices a fresh project needs before delivered work can be accepted,
+ * with the body the daemon would install: the browser spends the daemon's own
+ * `policy.install` offer with this body verbatim, so what a person installs is what the
+ * seed installs. `installed` is read off the same aggregate as `slices`.
+ */
+export interface StandardSliceView {
+  readonly installed: boolean;
+  readonly kind: "EVALUATION" | "REVIEWER_CALIBRATION" | "VERIFIER_POLICY";
+  readonly slice: Readonly<Record<string, unknown>>;
+  readonly sliceRef: string;
+}
 export interface PolicyView {
   readonly aggregateVersion: number;
   readonly evaluations: readonly PolicyEvaluationView[];
   readonly outcome: "POLICY";
   readonly slices: readonly PolicySliceView[];
+  /** The standard slices in install order; the verifier reads the first two by ref. */
+  readonly standard: readonly StandardSliceView[];
   readonly verifier: VerifierStandingAuthority;
   readonly waivers: { readonly reason: string; readonly supported: false };
 }
@@ -83,6 +98,28 @@ function decisionWord(value: unknown): string | null {
   const record = dataRecord(value);
   const word = record?.["outcome"] ?? record?.["decision"];
   return typeof word === "string" ? word : null;
+}
+
+/**
+ * The standard bodies for a project, in the order the seed installs them. PURE. The verifier
+ * policy and the calibration are installed by REF (the verifier reads those refs); the
+ * evaluation row is satisfied by ANY installed evaluation slice, because a project may
+ * install its own classifying policy at its own digest and the finalize terminal accepts it.
+ */
+export function standardSlicesOf(projectId: string, installed: Readonly<Record<string, unknown>>): readonly StandardSliceView[] {
+  const installedRefs = new Set(Object.keys(installed));
+  const evaluationInstalled = Object.entries(installed).some(([ref, slice]) => sliceKindOf(ref, slice) === "EVALUATION");
+  const bodies: readonly { readonly kind: StandardSliceView["kind"]; readonly slice: Readonly<Record<string, unknown>> }[] = [
+    { kind: "VERIFIER_POLICY", slice: verifierPolicySlice({ projectId }) },
+    { kind: "REVIEWER_CALIBRATION", slice: reviewerCalibrationSlice({ projectId }) },
+    { kind: "EVALUATION", slice: validatablePolicySlice() },
+  ];
+  return Object.freeze(bodies.map(({ kind, slice }) => {
+    const sliceRef = slice["sliceRef"];
+    if (typeof sliceRef !== "string") throw new Error(`standard ${kind} slice carries no sliceRef`);
+    const isInstalled = kind === "EVALUATION" ? evaluationInstalled || installedRefs.has(sliceRef) : installedRefs.has(sliceRef);
+    return Object.freeze({ installed: isInstalled, kind, slice: Object.freeze({ ...slice }), sliceRef });
+  }));
 }
 
 export function createPolicyReadPort(options: {
@@ -136,6 +173,7 @@ export function createPolicyReadPort(options: {
         evaluations: Object.freeze(evaluations.reverse().slice(0, MAX_EVALUATIONS)),
         outcome: "POLICY" as const,
         slices: Object.freeze(rows),
+        standard: standardSlicesOf(projectId, slices),
         verifier: readVerifier(store, projectId),
         waivers: Object.freeze({
           reason: "No command on this daemon records a policy waiver; the evaluator resolves waivers as empty.",

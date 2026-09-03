@@ -30,6 +30,7 @@ import { POLICY_READ_PATH, handlePolicyReadRequest } from "./policy-read.js";
 import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
+import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
 } from "./http-listener-guards.js";
@@ -83,6 +84,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   HEALTH_READ_PATH,
   ACTIVITY_READ_PATH,
   SESSIONS_READ_PATH,
+  GOAL_SOURCE_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -322,6 +324,16 @@ function serveSessions(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveGoalSource(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleGoalSourceReadRequest({
+    authenticator: options.deps.authenticator, goalSource: options.goalSource,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveDocumentIngest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -420,6 +432,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_SESSIONS_REQUEST_INVALID");
     return;
   }
+  if (path === GOAL_SOURCE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -464,6 +480,8 @@ export async function serveReadDispatch(
     serveActivity(response, request, options, body);
   } else if (path === SESSIONS_READ_PATH) {
     serveSessions(response, request, options, body);
+  } else if (path === GOAL_SOURCE_READ_PATH) {
+    serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
     servePolicy(response, request, options, body);
   } else if (path === HEALTH_READ_PATH) {

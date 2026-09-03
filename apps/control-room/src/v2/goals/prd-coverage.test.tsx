@@ -17,7 +17,7 @@ type Coverage = Extract<DocumentCoverageOutcome, { status: "COVERAGE" }>;
 function coverage(overrides: Partial<Coverage> = {}): Coverage {
   return {
     contracts: [{
-      contractId: "contract-1", gate1: "APPROVED",
+      contractId: "contract-1", gate1: "APPROVED", plane: "V1",
       requirements: [{
         criteria: [
           { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep fields.", status: "VERIFIED" },
@@ -31,18 +31,18 @@ function coverage(overrides: Partial<Coverage> = {}): Coverage {
     document: { byteLength: 120, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
     goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1", title: "Build it" }],
     sections: [
-      { cited: 1, heading: "11. Evidence", number: "11", verified: 1 },
-      { cited: 0, heading: "Appendix", number: null, verified: 0 },
+      { cited: 1, criteria: 1, heading: "11. Evidence", number: "11", verified: 1 },
+      { cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 },
     ],
     status: "COVERAGE",
-    totals: { contracts: 1, criteria: 3, goals: 1, planned: 1, requirements: 1, verified: 1 },
+    totals: { contracts: 1, criteria: 3, goals: 1, planned: 1, requirements: 1, unattributable: 0, verified: 1 },
     ...overrides,
   };
 }
 
 const complete = (): Coverage => coverage({
   contracts: [{
-    contractId: "contract-1", gate1: "APPROVED",
+    contractId: "contract-1", gate1: "APPROVED", plane: "V1",
     requirements: [{
       criteria: [
         { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep fields.", status: "VERIFIED" },
@@ -52,7 +52,7 @@ const complete = (): Coverage => coverage({
     }],
     revisionDigest: "d".repeat(64), revisionId: "rev-1",
   }],
-  totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 2 },
+  totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 2 },
 });
 
 describe("coverageComplete", () => {
@@ -65,7 +65,7 @@ describe("coverageComplete", () => {
     })).toBe(false);
     // Zero criteria is never "complete": an empty contract proves nothing.
     expect(coverageComplete(coverage({
-      contracts: [], totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+      contracts: [], totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
     }))).toBe(false);
   });
 
@@ -76,7 +76,7 @@ describe("coverageComplete", () => {
     expect(coverageBanner(complete())).toContain("All 2 acceptance criteria VERIFIED");
     expect(coverageBanner(complete())).toContain("Closing the goal is your call");
     expect(coverageBanner(coverage({
-      contracts: [], totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+      contracts: [], totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
     }))).toContain("No Product Contract cites this PRD yet");
   });
 });

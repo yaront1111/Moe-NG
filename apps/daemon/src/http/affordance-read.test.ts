@@ -504,12 +504,23 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
       .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)
         && !BOARD_PLANNING_KINDS.includes(entry.commandKind))
       .map((entry) => entry.commandKind).sort();
+    // policy.install is the one REPEATABLE chain kind: a COMMITTED install still offers the
+    // next slice at the aggregate's current version, so it counts on the expected side too.
     const expected = read.steps
       .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.kind)
-        && entry.status === "READY" && !BOARD_PLANNING_KINDS.includes(entry.kind))
+        && (entry.status === "READY" || (entry.kind === "policy.install" && entry.status === "COMMITTED"))
+        && !BOARD_PLANNING_KINDS.includes(entry.kind))
       .map((entry) => entry.kind).sort();
     expect(offered).toEqual(expected);
     expect(offered).toContain("goal.create_with_source");
+  });
+
+  it("keeps offering policy.install at the aggregate's current version after an install", () => {
+    const read = surface();
+    const installStep = read.steps.find((entry) => entry.kind === "policy.install");
+    expect(installStep?.status).toBe("COMMITTED");
+    const installOffer = read.nextAllowedCommands.find((entry) => entry.commandKind === "policy.install");
+    expect(installOffer).toMatchObject({ expectedVersion: installStep?.version, targetAggregateId: installStep?.aggregateId });
   });
 
   it("keeps both creation kinds as fresh minted offers after a source create", () => {

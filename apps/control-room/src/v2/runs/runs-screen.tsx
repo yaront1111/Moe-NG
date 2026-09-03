@@ -129,29 +129,34 @@ function runLine(goal: RunGoalView): string {
   return `Run ${goal.run.runId} ${MIDDOT} ${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
 }
 
-function GoalSection({ goal, nowMs, onOpenBoard }: {
-  readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
+/** One goal's run and node ladder. `embedded` (the opened goal's own page) drops the title link and kicker. */
+export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
+  readonly embedded?: boolean; readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
 }): JSX.Element {
   const title = goal.title ?? goal.goalId;
   const runRef = goal.run?.runId ?? "";
   return (
-    <section className="cr2-run-goal" data-testid={`cr.runs.goal.${goal.goalId}`}>
+    <section className="cr2-run-goal" data-embedded={embedded ? "true" : undefined} data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
         <div>
-          <p className="cr2-slot-kicker">
-            {`GOAL ${MIDDOT} ${goal.lifecycle === null ? "lifecycle unknown" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}`}
-          </p>
-          <h2 className="cr2-run-goal-title">
-            <button
-              className="cr2-goal-titlebutton"
-              data-testid={`cr.runs.goal.${goal.goalId}.open`}
-              disabled={runRef === ""}
-              onClick={(): void => onOpenBoard(goal.goalId, runRef, title)}
-              type="button"
-            >
-              {title}
-            </button>
-          </h2>
+          {embedded ? null : (
+            <p className="cr2-slot-kicker">
+              {`GOAL ${MIDDOT} ${goal.lifecycle === null ? "lifecycle unknown" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}`}
+            </p>
+          )}
+          {embedded ? null : (
+            <h2 className="cr2-run-goal-title">
+              <button
+                className="cr2-goal-titlebutton"
+                data-testid={`cr.runs.goal.${goal.goalId}.open`}
+                disabled={runRef === ""}
+                onClick={(): void => onOpenBoard(goal.goalId, runRef, title)}
+                type="button"
+              >
+                {title}
+              </button>
+            </h2>
+          )}
           <p className="cr2-run-goal-run" data-testid={`cr.runs.goal.${goal.goalId}.run`}>{runLine(goal)}</p>
         </div>
       </div>

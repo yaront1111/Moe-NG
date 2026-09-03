@@ -261,15 +261,16 @@ export function mapRunsAnswer(status: number, response: unknown): RunsOutcome {
 }
 
 /** POSTs exactly `{}` and maps the reply; `post` is injectable for tests. */
+/** POSTs exactly `{}` (every goal) or `{ goalRef }` (one goal) and maps the reply; `post` is injectable for tests. */
 export async function readRuns(
-  headers: Readonly<Record<string, string>>, post?: (body: string) => Promise<Response>,
+  headers: Readonly<Record<string, string>>, post?: (body: string) => Promise<Response>, goalRef?: string,
 ): Promise<RunsOutcome> {
   const send = post ?? ((body: string): Promise<Response> => fetch(RUNS_READ_PATH, {
     body, headers, method: "POST", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }));
   let response: Response;
   try {
-    response = await send("{}");
+    response = await send(goalRef === undefined ? "{}" : JSON.stringify({ goalRef }));
   } catch {
     return errored(TRANSPORT_FAILED_CODE, LIVE_RUNS_LAYER);
   }

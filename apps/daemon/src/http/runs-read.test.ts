@@ -13,6 +13,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
 import type { RunsView } from "./runs-read-contract.js";
 import { createRunsReadPort } from "./runs-read.js";
@@ -194,6 +195,21 @@ describe("createRunsReadPort", () => {
     // Control: the same acceptance with a unique key IS this goal's.
     const unique = runs(portFor(store, { readReviews: reviewsOf({ "node-a": accepted }) }).readRuns({ goalRef: GOAL_ID }));
     expect(unique.goals[0]?.nodes[0]?.status).toBe("ACCEPTED");
+  });
+
+  it("carries the verifier's real receipt and a clean round through the default review reader", () => {
+    const store = boundWorld();
+    // The daemon's own receipt production: a clean round, then the receipt decision on the node.
+    seedVerifierReceipt(store, "node-a", PROJECT_ID);
+    const view = runs(createRunsReadPort({
+      clock: () => NOW, projectId: PROJECT_ID, readActive: () => [activeGraphFor(GOAL_ID)], readClaims: () => new Map(),
+      readRun: (_s, _p, runId) => ({ acceptance: null, approval: "BOUND", authority: null, lifecycle: "ACTIVATED", outcome: "RUN", plan: null, reviewable: false, runId, submissionHash: "h" }),
+      store,
+    }).readRuns({}));
+    const node = view.goals[0]?.nodes[0];
+    expect(node?.status).toBe("DELIVERED");
+    expect(node?.review).toMatchObject({ findings: [], latestRoute: "ACCEPT", rounds: 1 });
+    expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", workspace: "/fixture-workspace" });
   });
 
   it("reports a claim as inactive once expired or released, at the daemon's clock", () => {

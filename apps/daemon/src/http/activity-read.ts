@@ -23,6 +23,17 @@ const DECISION_PAGE_SIZE = 512;
 const PROJECT_LIMIT = 80;
 const GOAL_LIMIT = 200;
 const ACTIVITY_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
+/**
+ * Seat and pairing records: the handshake's own decisions and every session command. They
+ * are not work on the project (the sessions read reports seats), and on a daemon with many
+ * paired browsers they outnumber work decisions many times over, so they are left out of
+ * the ledger rather than allowed to push every work decision past the page limit.
+ */
+const SEAT_KINDS: ReadonlySet<string> = new Set(["CLOSE_SESSION", "CREATE_PRINCIPAL", "OPEN_SESSION"]);
+const SEAT_TARGET_PREFIX = "moe.session-authority";
+export function isSeatRecord(commandKind: string, targetAggregateId: string): boolean {
+  return SEAT_KINDS.has(commandKind) || commandKind.startsWith("session.") || targetAggregateId.startsWith(SEAT_TARGET_PREFIX);
+}
 
 export const ACTIVITY_READ_CODES = Object.freeze([
   "ACTIVITY_READ_CAPABILITY_DENIED", "ACTIVITY_READ_GOAL_UNKNOWN",
@@ -96,6 +107,7 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
         for (const decision of page.items) {
           if (decision.key.projectId !== projectId) continue;
           if (targets !== null && !targets.has(decision.targetAggregateId)) continue;
+          if (isSeatRecord(decision.commandKind, decision.targetAggregateId)) continue;
           totalDecisions += 1;
           const committed = decision.effectDisposition === "EFFECTS_COMMITTED";
           entries.push(Object.freeze({

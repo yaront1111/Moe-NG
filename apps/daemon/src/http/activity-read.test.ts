@@ -9,7 +9,7 @@ import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest } from "./activity-read.js";
+import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord } from "./activity-read.js";
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
@@ -94,5 +94,15 @@ describe("handleActivityReadRequest", () => {
       .toEqual({ code: "LISTENER_ACTIVITY_REQUEST_INVALID", kind: "LISTENER_REFUSAL" });
     expect(handleActivityReadRequest({ activity: port, authenticator: authenticator([CAPABILITIES.GOAL]) }, request(new Uint8Array())))
       .toEqual({ body: { code: "ACTIVITY_READ_UNREADABLE", layer: "ACTIVITY_READ", outcome: "REFUSED" }, httpStatus: 200, kind: "REPLY" });
+  });
+});
+
+describe("isSeatRecord", () => {
+  it("names the handshake's own decisions and every session command, and nothing else", () => {
+    expect(isSeatRecord("OPEN_SESSION", "moe.session-authority.v1/session/s")).toBe(true);
+    expect(isSeatRecord("CREATE_PRINCIPAL", "moe.session-authority.v1/principal/p")).toBe(true);
+    expect(isSeatRecord("session.renew", "session/x")).toBe(true);
+    expect(isSeatRecord("work.claim", "work/x")).toBe(false);
+    expect(isSeatRecord("integration.accept_output", "node-a")).toBe(false);
   });
 });

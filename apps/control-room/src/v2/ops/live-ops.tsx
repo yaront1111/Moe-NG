@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { readActivity } from "../../live/live-activity.js";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import { readHealth, readPolicy } from "../../live/live-ops.js";
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
+import type { LiveSetup } from "../../live/live-config.js";
 import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
 import { HealthScreen, PolicyScreen } from "./ops-screens.js";
+import type { PolicyInstallState } from "./ops-screens.js";
+import { createPolicyInstallPort, installStandardPolicy, readSurfaceOnce } from "./policy-install-port.js";
+import type { PolicyInstallPort } from "./policy-install-port.js";
+import type { SurfaceFrame } from "../../live/live-board-feed.js";
 
 /**
  * The LIVE policy and health screens: one read on mount and every few seconds after, each
@@ -22,10 +27,11 @@ type Connection = "CONNECTED" | "DISCONNECTED";
 
 function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
   read: () => Promise<T>, failure: T, pollMs: number, onConnection: ((connection: Connection) => void) | undefined,
-): { readonly nowMs: number; readonly outcome: T | null } {
+): { readonly nowMs: number; readonly outcome: T | null; readonly refresh: () => void } {
   const [outcome, setOutcome] = useState<T | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const generation = useRef(0);
+  const tickRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     const run = generation.current + 1;
     generation.current = run;
@@ -44,11 +50,13 @@ function useOpsRead<T extends { readonly status: string; readonly code?: string 
         if (generation.current === run) setOutcome(failure);
       });
     };
+    tickRef.current = tick;
     tick();
     const timer = setInterval(tick, pollMs);
-    return (): void => { generation.current += 1; clearInterval(timer); };
+    return (): void => { generation.current += 1; tickRef.current = () => undefined; clearInterval(timer); };
   }, [failure, onConnection, pollMs, read]);
-  return { nowMs, outcome };
+  const refresh = useCallback((): void => { tickRef.current(); }, []);
+  return { nowMs, outcome, refresh };
 }
 
 const POLICY_FAILURE: PolicyOutcome = Object.freeze({ code: "POLICY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
@@ -63,10 +71,35 @@ export interface LiveOpsProps<T> {
   readonly read?: (() => Promise<T>) | undefined;
 }
 
-export function LivePolicy({ headers, onConnection, pollMs, read }: LiveOpsProps<PolicyOutcome>): JSX.Element {
+export interface LivePolicyProps extends LiveOpsProps<PolicyOutcome> {
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly installPort?: PolicyInstallPort | undefined;
+  /** Injectable for tests; the default reads POST /affordances/read with the session's headers. */
+  readonly readSurface?: (() => Promise<SurfaceFrame>) | undefined;
+  /** The attached session; absent (fixtures, tests) means the screen can read but not install. */
+  readonly setup?: LiveSetup | undefined;
+}
+
+export function LivePolicy({ headers, installPort, onConnection, pollMs, read, readSurface, setup }: LivePolicyProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<PolicyOutcome> => readPolicy(headers)));
-  const { nowMs, outcome } = useOpsRead(reader, POLICY_FAILURE, pollMs ?? POLL_MS, onConnection);
-  return <PolicyScreen nowMs={nowMs} outcome={outcome} />;
+  const { nowMs, outcome, refresh } = useOpsRead(reader, POLICY_FAILURE, pollMs ?? POLL_MS, onConnection);
+  const [port] = useState<PolicyInstallPort | null>(() => installPort ?? (setup === undefined ? null : createPolicyInstallPort(setup)));
+  const [surfaceReader] = useState(() => readSurface ?? ((): Promise<SurfaceFrame> => readSurfaceOnce(headers)));
+  const [busy, setBusy] = useState(false);
+  const [steps, setSteps] = useState<PolicyInstallState["steps"]>([]);
+  const onInstall = useCallback((): void => {
+    if (port === null || outcome === null || outcome.status !== "POLICY" || busy) return;
+    const missing = outcome.standard.filter((row) => !row.installed);
+    setBusy(true);
+    setSteps([]);
+    void installStandardPolicy(port, surfaceReader, missing).then((done) => {
+      setSteps(done);
+      setBusy(false);
+      refresh();
+    }, () => { setBusy(false); });
+  }, [busy, outcome, port, refresh, surfaceReader]);
+  const install: PolicyInstallState = { busy, onInstall: port === null ? null : onInstall, steps };
+  return <PolicyScreen install={install} nowMs={nowMs} outcome={outcome} />;
 }
 
 export function LiveHealth({ headers, onConnection, pollMs, read }: LiveOpsProps<HealthOutcome>): JSX.Element {

@@ -248,14 +248,14 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
     verified: number, criteria: number, gate1: "APPROVED" | "PENDING",
   ): DocumentCoverageOutcome => ({
     contracts: [{
-      contractId: "contract-1", gate1, requirements: [], revisionDigest: "d".repeat(64),
+      contractId: "contract-1", gate1, plane: "V1", requirements: [], revisionDigest: "d".repeat(64),
       revisionId: "rev-1",
     }],
     document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
     goals: [{ goalId: "goal-cov", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-cov", title: "Build it" }],
     sections: null,
     status: "COVERAGE",
-    totals: { contracts: 1, criteria, goals: 1, planned: 0, requirements: 1, verified },
+    totals: { contracts: 1, criteria, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified },
   });
 
   it("turns the daemon's verified count into the card's progress bar and headline", () => {
@@ -298,7 +298,7 @@ describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
     expect(unbound?.progressNote).toBe("No PRD bound to this goal");
     const uncontracted = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
       ...coverage(0, 0, "APPROVED"), contracts: [],
-      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
     }]])).goals[0];
     expect(uncontracted?.progress).toBeUndefined();
     expect(uncontracted?.progressComingOnline).toBe("No Product Contract cites this goal PRD yet.");
@@ -313,14 +313,14 @@ describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the sta
   } as const;
   const withLifecycle = (lifecycle: string | null): DocumentCoverageOutcome => ({
     contracts: [{
-      contractId: "contract-1", gate1: "APPROVED", requirements: [], revisionDigest: "d".repeat(64),
+      contractId: "contract-1", gate1: "APPROVED", plane: "V1", requirements: [], revisionDigest: "d".repeat(64),
       revisionId: "rev-1",
     }],
     document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
     goals: [{ goalId: "goal-cov", lastActivityAt: null, lifecycle, planningRunRef: "run-cov", title: "Build it" }],
     sections: null,
     status: "COVERAGE",
-    totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 2 },
+    totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 2 },
   });
   it.each([
     ["COMPLETED", "DONE"], ["EXECUTION_ENABLED", "ACTIVE"], ["CLOSING", "ACTIVE"],
@@ -353,7 +353,7 @@ describe("relativeActivityLabel", () => {
       goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:35:00.000Z", lifecycle: "PLANNING",
         planningRunRef: "run-1", title: "Build it" }],
       sections: null, status: "COVERAGE",
-      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
     };
     const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-1", outcome]]), NOW).goals[0];
     expect(card?.lastEventLabel).toBe("Last activity 25 min ago");

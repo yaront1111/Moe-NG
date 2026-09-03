@@ -14,7 +14,7 @@ const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
 const DOCUMENT_COVERAGE_READ_PATH = "/documents/coverage/read";
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export const CRITERION_COVERAGE_STATUSES = ["PLANNED", "UNPLANNED", "VERIFIED"] as const;
+export const CRITERION_COVERAGE_STATUSES = ["PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED"] as const;
 export type CriterionCoverageStatus = (typeof CRITERION_COVERAGE_STATUSES)[number];
 
 export interface CoverageCriterionView {
@@ -31,6 +31,8 @@ export interface CoverageRequirementView {
 export interface CoverageContractView {
   readonly contractId: string;
   readonly gate1: "APPROVED" | "PENDING";
+  /** Which contract family the revision lives on; the daemon states it, the card shows it. */
+  readonly plane: "V1" | "V2";
   readonly requirements: readonly CoverageRequirementView[];
   readonly revisionDigest: string;
   readonly revisionId: string;
@@ -45,6 +47,8 @@ export interface CoverageGoalView {
 }
 export interface CoverageSectionView {
   readonly cited: number;
+  /** Criteria under the citing requirements; verified counts against this. */
+  readonly criteria: number;
   readonly heading: string;
   readonly number: string | null;
   readonly verified: number;
@@ -55,6 +59,8 @@ export interface CoverageTotals {
   readonly goals: number;
   readonly planned: number;
   readonly requirements: number;
+  /** Criteria whose node key is shared by more than one active graph: attributable to no goal. */
+  readonly unattributable: number;
   readonly verified: number;
 }
 
@@ -76,7 +82,7 @@ export type DocumentCoverageOutcome =
   | { readonly status: "ERROR"; readonly code: string; readonly layer: string };
 
 const VIEW_KEYS = ["contracts", "document", "goals", "outcome", "sections", "totals"] as const;
-const TOTALS_KEYS = ["contracts", "criteria", "goals", "planned", "requirements", "verified"] as const;
+const TOTALS_KEYS = ["contracts", "criteria", "goals", "planned", "requirements", "unattributable", "verified"] as const;
 
 function refused(code: string, layer: string): DocumentCoverageOutcome {
   return Object.freeze({ code, layer, status: "REFUSED" as const });
@@ -184,15 +190,15 @@ function requirementOf(value: unknown): CoverageRequirementView | null {
 
 function contractOf(value: unknown): CoverageContractView | null {
   const record = exactDataRecord(value, [
-    "contractId", "gate1", "requirements", "revisionDigest", "revisionId",
+    "contractId", "gate1", "plane", "requirements", "revisionDigest", "revisionId",
   ]);
   if (record === null || !nonEmptyString(record.contractId) || !nonEmptyString(record.revisionId)
-    || !nonEmptyString(record.revisionDigest)
+    || !nonEmptyString(record.revisionDigest) || (record.plane !== "V1" && record.plane !== "V2")
     || (record.gate1 !== "APPROVED" && record.gate1 !== "PENDING")) return null;
   const requirements = listOf(record.requirements, requirementOf);
   if (requirements === null) return null;
   return Object.freeze({
-    contractId: record.contractId, gate1: record.gate1, requirements,
+    contractId: record.contractId, gate1: record.gate1, plane: record.plane, requirements,
     revisionDigest: record.revisionDigest, revisionId: record.revisionId,
   });
 }
@@ -211,11 +217,11 @@ function goalOf(value: unknown): CoverageGoalView | null {
 }
 
 function sectionOf(value: unknown): CoverageSectionView | null {
-  const record = exactDataRecord(value, ["cited", "heading", "number", "verified"]);
-  if (record === null || !count(record.cited) || !count(record.verified)
+  const record = exactDataRecord(value, ["cited", "criteria", "heading", "number", "verified"]);
+  if (record === null || !count(record.cited) || !count(record.criteria) || !count(record.verified)
     || typeof record.heading !== "string" || !nullableString(record.number)) return null;
   return Object.freeze({
-    cited: record.cited, heading: record.heading, number: record.number, verified: record.verified,
+    cited: record.cited, criteria: record.criteria, heading: record.heading, number: record.number, verified: record.verified,
   });
 }
 
@@ -225,7 +231,8 @@ function totalsOf(value: unknown): CoverageTotals | null {
   return Object.freeze({
     contracts: record.contracts as number, criteria: record.criteria as number,
     goals: record.goals as number, planned: record.planned as number,
-    requirements: record.requirements as number, verified: record.verified as number,
+    requirements: record.requirements as number, unattributable: record.unattributable as number,
+    verified: record.verified as number,
   });
 }
 

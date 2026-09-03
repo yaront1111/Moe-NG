@@ -47,7 +47,7 @@ export function NavRail({
   badges,
   destinations,
   onNavigate,
-  initialLegendOpen = true,
+  initialLegendOpen = false,
 }: NavRailProps): JSX.Element {
   const [legendOpen, setLegendOpen] = useState(initialLegendOpen);
   const railId = useId();

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
@@ -17,6 +17,11 @@ const POLICY: PolicyOutcome = {
   slices: [
     { autoApprovalOptIns: 0, contentDigestMatches: true, installedAt: "2026-09-02T18:00:00.000Z", kind: "EVALUATION", riskClassifications: 7, rules: 0, sliceRef: "f".repeat(64) },
     { autoApprovalOptIns: null, contentDigestMatches: null, installedAt: "2026-09-02T18:00:00.000Z", kind: "VERIFIER_POLICY", riskClassifications: null, rules: null, sliceRef: "moe-verifier-policy/1" },
+  ],
+  standard: [
+    { installed: true, kind: "VERIFIER_POLICY", slice: { sliceRef: "moe-verifier-policy/1" }, sliceRef: "moe-verifier-policy/1" },
+    { installed: false, kind: "REVIEWER_CALIBRATION", slice: { sliceRef: "moe-reviewer-calibration/1" }, sliceRef: "moe-reviewer-calibration/1" },
+    { installed: true, kind: "EVALUATION", slice: { sliceRef: "f".repeat(64) }, sliceRef: "f".repeat(64) },
   ],
   status: "POLICY",
   verifier: { calibration: false, policy: true },
@@ -47,6 +52,35 @@ describe("PolicyScreen", () => {
     expect(screen.getByTestId("cr.policy.verifier").textContent).toContain("reviewer calibration");
     expect(screen.getByTestId("cr.policy.evaluations").textContent).toContain("ALLOW · 30 min ago · by operator-local");
     expect(screen.getByTestId("cr.policy.waivers").textContent).toContain("not supported here");
+  });
+
+  it("names the missing standard slices and offers one install when a wire is attached", () => {
+    render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
+    expect(screen.getByTestId("cr.policy.standard").textContent).toContain("1 OF 3 SLICES MISSING");
+    expect(screen.getByTestId("cr.policy.standard.REVIEWER_CALIBRATION").getAttribute("data-installed")).toBe("false");
+    expect(screen.getByTestId("cr.policy.install.nowire")).toBeTruthy();
+    expect(screen.queryByTestId("cr.policy.install")).toBeNull();
+    cleanup();
+    const onInstall = vi.fn();
+    render(<PolicyScreen install={{ busy: false, onInstall, steps: [] }} nowMs={NOW} outcome={POLICY} />);
+    const button = screen.getByTestId("cr.policy.install");
+    expect(button.textContent).toBe("Install the standard policy (1 slice)");
+    fireEvent.click(button);
+    expect(onInstall).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<PolicyScreen install={{ busy: true, onInstall, steps: [
+      { kind: "REVIEWER_CALIBRATION", outcome: { code: "BOOTSTRAP_POLICY_SLICE_INVALID", layer: "DAEMON", ok: false }, sliceRef: "moe-reviewer-calibration/1" },
+    ] }} nowMs={NOW} outcome={POLICY} />);
+    expect(screen.getByTestId("cr.policy.install").textContent).toBe("Installing...");
+    expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("Reviewer calibration · refused");
+    expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("BOOTSTRAP_POLICY_SLICE_INVALID · DAEMON");
+    cleanup();
+    // Once everything is installed the block clears, but the receipts of what was installed from here stay.
+    render(<PolicyScreen install={{ busy: false, onInstall, steps: [
+      { kind: "REVIEWER_CALIBRATION", outcome: { ok: true }, sliceRef: "moe-reviewer-calibration/1" },
+    ] }} nowMs={NOW} outcome={{ ...POLICY, standard: POLICY.standard.map((row) => ({ ...row, installed: true })) }} />);
+    expect(screen.queryByTestId("cr.policy.standard")).toBeNull();
+    expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("Reviewer calibration · installed from here");
   });
 
   it("shows loading, a refusal and the empty project", () => {

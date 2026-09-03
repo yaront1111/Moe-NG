@@ -85,6 +85,10 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
         {`CONTRACT ${MIDDOT} ${contract.contractId} ${MIDDOT} ${contract.revisionId}`
           + ` ${MIDDOT} GATE 1 ${contract.gate1}`}
       </h3>
+      <details className="cr2-approve-inspect" data-testid={`cr.coverage.contract.${contract.contractId}.requirements`}>
+        <summary className="cr2-approve-inspect-summary">
+          {`${String(contract.requirements.length)} requirements ${MIDDOT} ${String(contract.requirements.reduce((sum, row) => sum + row.criteria.length, 0))} acceptance criteria ${MIDDOT} each with its status`}
+        </summary>
       <ul className="cr2-approve-obligations">
         {contract.requirements.map((requirement) => (
           <li
@@ -102,6 +106,7 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
           </li>
         ))}
       </ul>
+      </details>
     </section>
   );
 }

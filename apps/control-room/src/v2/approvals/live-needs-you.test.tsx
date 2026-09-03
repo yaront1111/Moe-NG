@@ -48,11 +48,11 @@ function stubWire(): void {
 }
 
 const gatePending: DocumentCoverageOutcome = {
-  contracts: [{ contractId: "contract-gate", gate1: "PENDING", requirements: [], revisionDigest: "d".repeat(64), revisionId: "rev-1" }],
+  contracts: [{ contractId: "contract-gate", gate1: "PENDING", plane: "V1", requirements: [], revisionDigest: "d".repeat(64), revisionId: "rev-1" }],
   document: { byteLength: 1, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
   goals: [{ goalId: "goal-gate", lastActivityAt: null, lifecycle: "DRAFT", planningRunRef: "run-gate", title: "Gate me" }],
   sections: null, status: "COVERAGE",
-  totals: { contracts: 1, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+  totals: { contracts: 1, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
 };
 
 describe("LiveNeedsYou", () => {
@@ -114,9 +114,9 @@ describe("LiveNeedsYou", () => {
     }));
     const verified: DocumentCoverageOutcome = {
       ...gatePending,
-      contracts: [{ ...gatePending.contracts[0]!, gate1: "APPROVED", requirements: [{ criteria: [{ criterionId: "c", nodeKey: "n", statement: "s", status: "VERIFIED" }], requirementId: "r", statement: "r" }] }],
+      contracts: [{ ...gatePending.contracts[0]!, gate1: "APPROVED", plane: "V1", requirements: [{ criteria: [{ criterionId: "c", nodeKey: "n", statement: "s", status: "VERIFIED" }], requirementId: "r", statement: "r" }] }],
       goals: [{ goalId: "goal-gate", lastActivityAt: null, lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-gate", title: "Gate me" }],
-      totals: { contracts: 1, criteria: 1, goals: 1, planned: 0, requirements: 1, verified: 1 },
+      totals: { contracts: 1, criteria: 1, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 1 },
     };
     const submit = vi.fn(async () => ({ commandId: "cmd-close", ok: true as const }));
     render(<LiveNeedsYou closePort={{ submit }} onOpenBoard={vi.fn()} readCoverage={async () => verified} readRuns={async () => ({ code: "x", layer: "y", status: "ERROR" })} setup={SETUP} />);
