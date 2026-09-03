@@ -68,6 +68,12 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
     lines.push(`verifier ran ${node.receipt.test} in ${node.receipt.workspace}, exit ${String(node.receipt.exitCode)},`
       + ` output ${node.receipt.outputSha256.slice(0, 12)} (${String(node.receipt.byteCount)} bytes)`);
   }
+  if (node.landing !== null) {
+    lines.push(node.landing.outcome === "COMMITTED"
+      ? `landed as commit ${(node.landing.sha ?? "").slice(0, 10)} on ${node.landing.branch ?? "?"}`
+        + ` ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
+      : `not landed in git: ${node.landing.code ?? "REFUSED"}`);
+  }
   if (node.review.rounds > 0) {
     const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;
     lines.push(`${String(node.review.rounds)} review round${node.review.rounds === 1 ? "" : "s"}${route}`);

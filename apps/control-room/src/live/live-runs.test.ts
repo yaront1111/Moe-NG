@@ -13,6 +13,7 @@ const NODE = Object.freeze({
   claim: { active: false, claimedBy: "sess-wrap-1", expiresAt: "2026-09-02T21:00:00.000Z", status: "RELEASED" },
   criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: "2026-09-02T19:00:00.000Z",
   nodeKey: "node-a", objective: "Keep fields.",
+  landing: null,
   receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
   review: { escalated: false, findings: [{ detail: "Fine.", round: 1, ruleId: "rule-1", severity: "MINOR", subject: "NODE node-a" }], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
   sharedKey: false,
@@ -33,6 +34,15 @@ const response = (status: number, body: unknown): Response => ({ json: async () 
 describe("mapRunsAnswer", () => {
   it("maps a full RUNS frame with every node fact intact", () => {
     expect(mapRunsAnswer(200, RUNS)).toStrictEqual({ goals: [GOAL], status: "RUNS", totals: TOTALS });
+  });
+
+  it("maps a landed node's commit and a refused landing's code", () => {
+    const committed = { branch: "main", code: null, files: ["src/a.ts"], outcome: "COMMITTED", sha: "a".repeat(40) };
+    const refused = { branch: null, code: "NOTHING_TO_COMMIT", files: [], outcome: "REFUSED", sha: null };
+    for (const landing of [committed, refused]) {
+      const outcome = mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, landing }] }] });
+      expect(outcome).toMatchObject({ goals: [{ nodes: [{ landing }] }], status: "RUNS" });
+    }
   });
 
   it("keeps a run-less, node-less goal honest", () => {
@@ -57,6 +67,8 @@ describe("mapRunsAnswer", () => {
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, status: "DONE" }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, claim: { active: true } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, receipt: { exitCode: 0 } }] }] })).toStrictEqual(invalid);
+    expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, landing: { outcome: "PUSHED" } }] }] })).toStrictEqual(invalid);
+    expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, landing: { branch: "main", code: null, files: [1], outcome: "COMMITTED", sha: "a" } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, review: { ...NODE.review, findings: [{ detail: 1 }] } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, run: { ...GOAL.run, approval: "MAYBE" } }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, totals: { ...TOTALS, extra: 1 } })).toStrictEqual(invalid);

@@ -63,11 +63,21 @@ export interface RunNodeReview {
   /** The review aggregate version, the expectedVersion any review command must carry. */
   readonly version: number;
 }
+/** What the lander did with the accepted node's files: a commit, or a refusal by code. */
+export interface RunNodeLanding {
+  readonly branch: string | null;
+  readonly code: string | null;
+  readonly files: readonly string[];
+  readonly outcome: "COMMITTED" | "REFUSED";
+  readonly sha: string | null;
+}
 export interface RunNodeView {
   readonly accepted: { readonly verifierReceiptId: string } | null;
   readonly claim: RunNodeClaim | null;
   readonly criterionIds: readonly string[];
   readonly dependsOn: readonly string[];
+  /** The git landing of the accepted delivery, when the lander recorded one. */
+  readonly landing: RunNodeLanding | null;
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
   readonly objective: string;

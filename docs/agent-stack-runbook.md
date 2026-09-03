@@ -365,12 +365,39 @@ claim's expiry is also the reap horizon), and spawns
 code-node agents also get
 Edit/Write/Read/Glob/Grep/Bash and run in their workspace. Knobs:
 `MOE_WRAPPER_ONCE=1`, `MOE_WRAPPER_INTERVAL_MS` (15000), `MOE_AGENT_COMMAND`
-(default `claude`). A pass that staffs nothing says so
+(default `claude`), `MOE_NODE_LANDING` (git landing below; default on). A pass that staffs nothing says so
 (`[wrapper] nothing to staff (surface SURFACE, active N)`). The per-agent MCP
 config file lives in a wrapper-owned temp directory, is removed when that
 agent exits, and the directory goes when the wrapper process does. The wrapper
 also closes the durable scoped session after the child exits; expiry is the
 fallback if cleanup cannot reach the daemon.
+
+### Git landing (what happens to the files after acceptance)
+
+Once the daemon accepts a node (its verifier receipt consumed by
+`integration.accept_output`), the wrapper's LANDER commits what the seat changed
+as ONE git commit on the workspace's current branch, authored `Moe <moe@moe.local>`,
+and records a `moe-landing-receipt/1` beside the node. Nothing is pushed: the
+commit sits in the operator's repository until publishing, which is a separate
+human decision. The Runs screen (and the opened goal) shows
+`landed as commit <sha> on <branch> · N files, local only`, or
+`not landed in git: <code>`.
+
+What the seat changed is measured, not trusted. The moment a `node.deliver` seat
+is staffed the lander records a BASELINE of every dirty path in the workspace
+with its blob id (`[lander] <node>: BASELINE_RECORDED (N dirty path(s) before
+the seat)`); at landing it commits exactly the paths whose content differs from
+that baseline, so the operator's own uncommitted work is never swept into a Moe
+commit. `.moe-next/` and `.moe/` are never part of a landing. The commit stages
+only those paths (`git add` + `git commit --only`), so other staged changes stay
+staged; the repository's own hooks run.
+
+One landing per acceptance: `[lander] <node>: COMMITTED (<sha> on <branch>, N
+file(s))`, or `REFUSED (<code>: <detail>)` recorded durably and never retried —
+`LANDING_BASELINE_MISSING` (the node was delivered without the wrapper staffing
+it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
+words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
+only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
 ### Verifier authority (why a delivered node can wait forever)
 

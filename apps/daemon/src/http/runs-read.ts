@@ -47,6 +47,7 @@ export type NodeReviewFacts = Pick<
 > & { readonly lineage: Pick<ReviewLedger["lineage"], "unsuccessfulRounds"> & Partial<Pick<ReviewLedger["lineage"], "records">> };
 
 export interface NodeReviews {
+  readonly landings: ReviewLedgers["landings"];
   readonly ledgers: ReadonlyMap<string, NodeReviewFacts>;
   readonly receipts: ReviewLedgers["receipts"];
 }
@@ -160,6 +161,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
         const record = claims.get(workItemIdFor(NODE_DELIVER_KIND, node.nodeKey));
         const active = activeClaim(record, now) !== null;
         const receipt = reviews.receipts.get(node.nodeKey);
+        const landing = reviews.landings.get(node.nodeKey);
         const isShared = shared.has(node.nodeKey);
         return Object.freeze({
           accepted: facts.accepted === undefined
@@ -169,6 +171,13 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           }),
           criterionIds: node.criterionIds,
           dependsOn: node.dependsOn,
+          landing: landing === undefined ? null : Object.freeze({
+            branch: landing.commit?.branch ?? null,
+            code: landing.refusal?.code ?? null,
+            files: landing.commit?.files ?? [],
+            outcome: landing.outcome,
+            sha: landing.commit?.sha ?? null,
+          }),
           lastActivityAt: latest.get(node.nodeKey) ?? null,
           nodeKey: node.nodeKey,
           objective: node.objective,

@@ -69,9 +69,12 @@ const round = (route: string, number = 1): NodeReviewFacts["rounds"][number] =>
   ({ round: number, routing: { route } } as unknown as NodeReviewFacts["rounds"][number]);
 const claim = (nodeKey: string, expiresAt: string, status: "OPEN" | "RELEASED" = "OPEN"): [string, WorkClaimRecord] =>
   [`node.deliver@${nodeKey}`, { claimedBy: "sess-wrap-1", expiresAt, status, version: 1, workItemId: `node.deliver@${nodeKey}` }];
-const reviewsOf = (facts: Record<string, NodeReviewFacts>, receipts: NodeReviews["receipts"] = new Map()) =>
+const reviewsOf = (
+  facts: Record<string, NodeReviewFacts>, receipts: NodeReviews["receipts"] = new Map(),
+  landings: NodeReviews["landings"] = new Map(),
+) =>
   (_s: unknown, _p: unknown, keys: ReadonlySet<string>): NodeReviews => ({
-    ledgers: new Map([...keys].map((key) => [key, facts[key] ?? quiet])), receipts,
+    landings, ledgers: new Map([...keys].map((key) => [key, facts[key] ?? quiet])), receipts,
   });
 
 function portFor(store: SqliteEventStore, overrides: Partial<RunsReadOptions> = {}) {
@@ -210,6 +213,26 @@ describe("createRunsReadPort", () => {
     expect(node?.status).toBe("DELIVERED");
     expect(node?.review).toMatchObject({ findings: [], latestRoute: "ACCEPT", rounds: 1 });
     expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", workspace: "/fixture-workspace" });
+    expect(node?.landing).toBeNull();
+  });
+
+  it("carries the lander's receipt per node: a commit's sha, branch and files, or a refusal code", () => {
+    const store = boundWorld();
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const landed = (outcome: "COMMITTED" | "REFUSED") => ({
+      commit: outcome === "COMMITTED"
+        ? { branch: "main", files: ["src/a.ts", "src/a.test.ts"], message: "Land\n", parentSha: null, sha } : null,
+      decidedAt: NOW, outcome, projectId: PROJECT_ID, receiptId: "r".repeat(64),
+      refusal: outcome === "REFUSED" ? { code: "NOTHING_TO_COMMIT", detail: "" } : null,
+      subjectRef: "node-a", verifierReceiptId: "v".repeat(64), version: "moe-landing-receipt/1" as const,
+      workspace: "/fixture-workspace",
+    });
+    const view = runs(portFor(store, {
+      readReviews: reviewsOf({}, new Map(), new Map([["node-a", landed("COMMITTED")], ["node-b", landed("REFUSED")]])),
+    }).readRuns({}));
+    const byKey = new Map(view.goals[0]?.nodes.map((node) => [node.nodeKey, node.landing]));
+    expect(byKey.get("node-a")).toEqual({ branch: "main", code: null, files: ["src/a.ts", "src/a.test.ts"], outcome: "COMMITTED", sha });
+    expect(byKey.get("node-b")).toEqual({ branch: null, code: "NOTHING_TO_COMMIT", files: [], outcome: "REFUSED", sha: null });
   });
 
   it("reports a claim as inactive once expired or released, at the daemon's clock", () => {

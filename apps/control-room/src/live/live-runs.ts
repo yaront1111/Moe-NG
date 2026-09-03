@@ -47,11 +47,20 @@ export interface RunNodeReviewView {
   readonly unsuccessfulRounds: number;
   readonly version: number;
 }
+/** The git landing of an accepted delivery: a commit on the workspace's branch, or a refusal. */
+export interface RunNodeLandingView {
+  readonly branch: string | null;
+  readonly code: string | null;
+  readonly files: readonly string[];
+  readonly outcome: "COMMITTED" | "REFUSED";
+  readonly sha: string | null;
+}
 export interface RunNodeView {
   readonly accepted: { readonly verifierReceiptId: string } | null;
   readonly claim: RunNodeClaimView | null;
   readonly criterionIds: readonly string[];
   readonly dependsOn: readonly string[];
+  readonly landing: RunNodeLandingView | null;
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
   readonly objective: string;
@@ -174,6 +183,15 @@ function receiptOf(value: unknown): RunNodeReceiptView | null {
   return Object.freeze({ byteCount: record.byteCount, exitCode: record.exitCode, outputSha256: record.outputSha256, test: record.test, workspace: record.workspace });
 }
 
+function landingOf(value: unknown): RunNodeLandingView | null {
+  const record = exactDataRecord(value, ["branch", "code", "files", "outcome", "sha"]);
+  if (record === null || !nullableString(record.branch) || !nullableString(record.code)
+    || !nullableString(record.sha) || (record.outcome !== "COMMITTED" && record.outcome !== "REFUSED")) return null;
+  const files = stringList(record.files);
+  if (files === null) return null;
+  return Object.freeze({ branch: record.branch, code: record.code, files, outcome: record.outcome, sha: record.sha });
+}
+
 function reviewOf(value: unknown): RunNodeReviewView | null {
   const record = exactDataRecord(value, ["escalated", "findings", "latestRoute", "rounds", "unreadable", "unsuccessfulRounds", "version"]);
   if (record === null || typeof record.escalated !== "boolean" || !nullableString(record.latestRoute)
@@ -189,8 +207,8 @@ function reviewOf(value: unknown): RunNodeReviewView | null {
 
 function nodeOf(value: unknown): RunNodeView | null {
   const record = exactDataRecord(value, [
-    "accepted", "claim", "criterionIds", "dependsOn", "lastActivityAt", "nodeKey", "objective", "receipt", "review",
-    "sharedKey", "status",
+    "accepted", "claim", "criterionIds", "dependsOn", "landing", "lastActivityAt", "nodeKey", "objective", "receipt",
+    "review", "sharedKey", "status",
   ]);
   if (record === null || !nonEmptyString(record.nodeKey) || typeof record.objective !== "string"
     || !nullableString(record.lastActivityAt) || typeof record.status !== "string"
@@ -216,8 +234,13 @@ function nodeOf(value: unknown): RunNodeView | null {
     receipt = receiptOf(record.receipt);
     if (receipt === null) return null;
   }
+  let landing: RunNodeLandingView | null = null;
+  if (record.landing !== null) {
+    landing = landingOf(record.landing);
+    if (landing === null) return null;
+  }
   return Object.freeze({
-    accepted, claim, criterionIds, dependsOn, lastActivityAt: record.lastActivityAt,
+    accepted, claim, criterionIds, dependsOn, landing, lastActivityAt: record.lastActivityAt,
     nodeKey: record.nodeKey, objective: record.objective, receipt, review, sharedKey: record.sharedKey,
     status: record.status as RunNodeStatus,
   });
