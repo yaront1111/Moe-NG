@@ -232,7 +232,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-03T05:58:09.885Z",
-  "updatedAt": "2026-09-03T08:34:10.106Z",
+  "updatedAt": "2026-09-03T08:34:14.818Z",
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -293,7 +293,36 @@
     "apps/daemon/src/work/attempt-finalization-sources.ts",
     "apps/daemon/src/work/attempt-finalization-service.test.ts",
     "apps/daemon/src/work/attempt-release-disposition.test.ts",
-    "apps/daemon/src/work/attempt-release-boundary.test.ts"
+    "apps/daemon/src/work/attempt-release-boundary.test.ts",
+    ".moe/tasks/task-ad5a1bfe935d4019bc12c9b3298b0ce7.json"
   ],
-  "completionSummary": "DELIVERED: deriveSafeBoundary now ASKS BEFORE IT WRITES. The three named red arms are green; drill ledger with verbatim failing lines is comment-be92dddb. (Verification command field is abbreviated to fit its 500-char cap; the literal launcher is in step-5 amend-1 and quoted in the step-5 note.)\n\nFIX (4 paths). attempt-release-boundary.ts (109->161): lookup-first via readCurrentSafeBoundaryObservation; standing.ok returns standing.observation.safeBoundaryObserved; non-ABSENT refusal travels out through a LOCAL carryLookupRefusal at the lookup's own code + DAEMON_SAFE_BOUNDARY_LOOKUP with the delegate's code as message; ABSENT falls through to the byte-unchanged producer body. Header section 2 corrected. attempt-release-store.ts (386->394, under the 400 cap): TYPE WIDENING ONLY - SafeBoundaryLookupCode into AttemptReleaseRefused[\"code\"], SafeBoundaryLookupLayer into AttemptReleaseLayer, type-only import, union doc. Carrier lives in boundary.ts per step-3/4 amend-1 (measured: carryBoundaryRefusal and carryTerminalRefusal each have exactly ONE importer). attempt-release-boundary.test.ts NEW, 217 lines, 7 TASK-RB arms over a real file-backed store. attempt-finalization-service.test.ts: ONE arm re-aimed under step-5 amend-1.\n\nDoD. 1 lookup-first + sibling at attempt-finalization-sources.ts:155-175 RETAINED byte-unchanged (git diff --exit-code EXIT 0). 2 ARM A calls deriveSafeBoundary DIRECTLY varying only bound.commandId; same boundary, exactly ONE row counted from the store's own event stream; the arm states why the direct call is the only divergence input. 3 ARM B1/B2 pin LOOKUP code AND layer; controls C1 (0->1 write survives) and C2 (unrecorded run still refuses SAFE_BOUNDARY_RUN_UNREADABLE at the producer's layer). 4 ARM D: producer still refuses a different-key re-observation SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION, upstreamCode EXPECTED_VERSION_CONFLICT retained. No code, layer, signature or event shape changed. 5 AS AMENDED: two consumer ar"
+  "completionSummary": "DELIVERED: deriveSafeBoundary now ASKS BEFORE IT WRITES. The three named red arms are green; drill ledger with verbatim failing lines is comment-be92dddb. (Verification command field is abbreviated to fit its 500-char cap; the literal launcher is in step-5 amend-1 and quoted in the step-5 note.)\n\nFIX (4 paths). attempt-release-boundary.ts (109->161): lookup-first via readCurrentSafeBoundaryObservation; standing.ok returns standing.observation.safeBoundaryObserved; non-ABSENT refusal travels out through a LOCAL carryLookupRefusal at the lookup's own code + DAEMON_SAFE_BOUNDARY_LOOKUP with the delegate's code as message; ABSENT falls through to the byte-unchanged producer body. Header section 2 corrected. attempt-release-store.ts (386->394, under the 400 cap): TYPE WIDENING ONLY - SafeBoundaryLookupCode into AttemptReleaseRefused[\"code\"], SafeBoundaryLookupLayer into AttemptReleaseLayer, type-only import, union doc. Carrier lives in boundary.ts per step-3/4 amend-1 (measured: carryBoundaryRefusal and carryTerminalRefusal each have exactly ONE importer). attempt-release-boundary.test.ts NEW, 217 lines, 7 TASK-RB arms over a real file-backed store. attempt-finalization-service.test.ts: ONE arm re-aimed under step-5 amend-1.\n\nDoD. 1 lookup-first + sibling at attempt-finalization-sources.ts:155-175 RETAINED byte-unchanged (git diff --exit-code EXIT 0). 2 ARM A calls deriveSafeBoundary DIRECTLY varying only bound.commandId; same boundary, exactly ONE row counted from the store's own event stream; the arm states why the direct call is the only divergence input. 3 ARM B1/B2 pin LOOKUP code AND layer; controls C1 (0->1 write survives) and C2 (unrecorded run still refuses SAFE_BOUNDARY_RUN_UNREADABLE at the producer's layer). 4 ARM D: producer still refuses a different-key re-observation SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION, upstreamCode EXPECTED_VERSION_CONFLICT retained. No code, layer, signature or event shape changed. 5 AS AMENDED: two consumer ar",
+  "commits": [
+    {
+      "sha": "b86fabfd95d206d49f5c95af4b6d52bcc1239243",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-5d6b2faf@2026-09-03T08:34:10Z",
+      "paths": [
+        ".moe/tasks/task-ad5a1bfe935d4019bc12c9b3298b0ce7.json",
+        "apps/daemon/src/work/attempt-finalization-service.test.ts",
+        "apps/daemon/src/work/attempt-release-boundary.test.ts",
+        "apps/daemon/src/work/attempt-release-boundary.ts",
+        "apps/daemon/src/work/attempt-release-store.ts"
+      ],
+      "recordedBy": "qa-5d6b2faf",
+      "recordedAt": "2026-09-03T08:34:14.818Z",
+      "treeId": "d32575ca41ea6f39aff0e51c30af9d5974bdecd4",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-5d6b2faf@2026-09-03T08:34:10Z",
+    "at": "2026-09-03T08:34:14.818Z"
+  }
 }
