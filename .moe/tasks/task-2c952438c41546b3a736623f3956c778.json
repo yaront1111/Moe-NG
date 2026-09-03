@@ -162,7 +162,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.394Z",
-  "updatedAt": "2026-09-03T06:03:23.026Z",
+  "updatedAt": "2026-09-03T06:03:27.560Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:58:26.538Z",
     "plannedStepCount": 5,
@@ -231,22 +231,40 @@
       "treeId": "7b16657db83022201950fa9a6606f61e946240c7",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "7f69fe65d062ac67c93e1c2971a6f8b52e25b510",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-5d6b2faf@2026-09-03T06:03:23Z",
+      "paths": [
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+        "tests/e2e/control-room/journey-coverage.test.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "recordedBy": "qa-5d6b2faf",
+      "recordedAt": "2026-09-03T06:03:27.560Z",
+      "treeId": "2737d155a6cf09591e4746627ab5d2038aee9dcf",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "tests/e2e/control-room/control-room-smoke.spec.ts",
     "apps/control-room/src/main.tsx",
     "tests/e2e/control-room/journeys.spec.ts",
-    "tests/e2e/control-room/journey-coverage.test.ts"
+    "tests/e2e/control-room/journey-coverage.test.ts",
+    ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
   ],
-  "unattributedPaths": [
-    "tests/e2e/control-room/journey-coverage.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-ae3c36ad@2026-09-03T05:53:11Z",
-    "at": "2026-09-03T05:53:16.023Z"
+    "sessionId": "qa-5d6b2faf@2026-09-03T06:03:23Z",
+    "at": "2026-09-03T06:03:27.560Z"
   },
   "declaredFiles": [
     "tests/e2e/control-room/journey-coverage.test.ts",
