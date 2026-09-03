@@ -106,8 +106,8 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "AWAITING_APPROVAL",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-ae3c36ad",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.394Z",
-  "updatedAt": "2026-09-02T21:59:29.222Z",
+  "updatedAt": "2026-09-03T05:53:11.550Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:58:26.538Z",
     "plannedStepCount": 5,
@@ -164,7 +164,9 @@
     "architect-5e59a71e",
     "governor-c11c29e2",
     "worker-6fab73fa",
-    "worker-50445f7a"
+    "worker-50445f7a",
+    "worker-17897c78",
+    "worker-ae3c36ad"
   ],
   "stepsCompleted": [
     "step-1",
@@ -188,7 +190,7 @@
       "tests/e2e/control-room/journeys.spec.ts"
     ]
   },
-  "planApprovedAt": "2026-09-02T20:41:51.226Z",
+  "planApprovedAt": "2026-09-03T05:48:48.528Z",
   "workStartedAt": "2026-08-31T12:19:56.992Z",
   "blockedReason": null,
   "blockedResourceId": null,
