@@ -49,6 +49,8 @@ import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import type {
   ReleaseTerminalCode, ReleaseTerminalLayer, ReleaseTerminalRefusal,
 } from "./release-terminal-evidence.js";
+import type { SafeBoundaryLookupCode, SafeBoundaryLookupLayer }
+  from "./attempt-safe-boundary-lookup.js";
 import type {
   SafeBoundaryObservationLayer, SafeBoundaryRefusalCode, SafeBoundaryRefused,
 } from "./safe-boundary-observation.js";
@@ -89,10 +91,16 @@ export const SCHEDULER_PROVIDER_SLOT_RELEASE = "SCHEDULER_PROVIDER_SLOT_RELEASE"
  *  evidence MOVED between its read and the commit is a decision taken by
  *  `./attempt-release-fence-legs.js`, not by a kernel and not by a producer — and it
  *  is a different fact, and a different repair, from the terminality deferral
- *  `DAEMON_ATTEMPT_RELEASE` already names. Its four codes ride the union below. */
+ *  `DAEMON_ATTEMPT_RELEASE` already names. Its four codes ride the union below.
+ *  THE SEVENTH, the attempt-keyed safe-boundary LOOKUP, is a DIFFERENT refuser from the
+ *  producer above it rather than a second spelling of it: ABSENT, UNRESOLVED,
+ *  SCAN_UNREADABLE and QUERY_MALFORMED all say the standing observation could not be
+ *  REACHED, repaired at the query or the scan — never by re-observing the run, which is
+ *  what every producer code asks for. Collapsing the two would send a reader to rebuild
+ *  evidence that is already durable and merely unreadable. */
 export type AttemptReleaseLayer = typeof DAEMON_ATTEMPT_RELEASE
   | AttemptReleaseFenceLegLayer
-  | ReleaseHandoffLayer | ReleaseTerminalLayer | SafeBoundaryObservationLayer
+  | ReleaseHandoffLayer | ReleaseTerminalLayer | SafeBoundaryLookupLayer | SafeBoundaryObservationLayer
   | typeof SCHEDULER_LEASE_DRAIN | typeof SCHEDULER_PROVIDER_SLOT_RELEASE;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
@@ -120,7 +128,7 @@ export interface AttemptReleaseRefused {
   readonly advisoryOnly: true; readonly authority: "NONE";
   readonly code: AttemptReleaseCode | AttemptReleaseFenceLegCode
     | AttemptReleaseResourceFenceCode | AuthorityErrorCode
-    | ReleaseHandoffCode | ReleaseTerminalCode | SafeBoundaryRefusalCode;
+    | ReleaseHandoffCode | ReleaseTerminalCode | SafeBoundaryLookupCode | SafeBoundaryRefusalCode;
   /** The refusing layer's own words when it had any; never rewritten here. */
   readonly message: string | null;
   readonly ok: false; readonly refusedBy: AttemptReleaseLayer;

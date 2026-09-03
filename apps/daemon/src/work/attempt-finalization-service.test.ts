@@ -576,14 +576,25 @@ describe("attempt finalization — task-922c3b3d59894c90925e85c7a0564355 carries
     });
     const measuredVersion = world.store.getAggregateVersion(DISPATCH_AGGREGATE);
     let boundaryCommits = 0;
+    let bindingCommits = 0;
     let releaseCommits = 0;
     let releaseLegs: readonly SeenLeg[] = [];
     const raced = withStoreOverride(world.store, {
       commitExpectedVersionDecision: (input: unknown): unknown => {
-        const commandId = typeof input === "object" && input !== null
-          ? (input as { key?: { commandId?: unknown } }).key?.commandId : null;
-        if (commandId === `${who.commandId}:FINALIZE:SAFE_BOUNDARY`) {
+        const seen = typeof input === "object" && input !== null
+          ? input as { commandKind?: unknown; key?: { commandId?: unknown } } : null;
+        if (seen?.key?.commandId === `${who.commandId}:FINALIZE:SAFE_BOUNDARY`) {
           boundaryCommits += 1;
+        }
+        // THE VEHICLE MOVED, NOT THE SUBJECT (task-ad5a1bfe). This arm used to
+        // advance DISPATCH inside the safe-boundary commit; lookup-first retired
+        // that commit for a second derivation, so the release-handoff binding —
+        // the other commit landing in the same finalizer-to-release window, on a
+        // DIFFERENT aggregate, so its own `bindings: 1` is undisturbed — carries
+        // it now. `commandKind` is the discriminator because "attempt.release" is
+        // declared once in production, at release-handoff-binding.ts:56.
+        if (seen?.commandKind === "attempt.release") {
+          bindingCommits += 1;
           advanceDispatch(world.store, world.bound, "finalizer-window");
         }
         return (world.store.commitExpectedVersionDecision as unknown as
@@ -604,7 +615,13 @@ describe("attempt finalization — task-922c3b3d59894c90925e85c7a0564355 carries
 
     const outcome = finalizeVerifiedAttempt(raced, who, select());
 
-    expect([boundaryCommits, releaseCommits]).toEqual([1, 1]);
+    // THE RETIRED VEHICLE IS KEPT AS POSITIVE EVIDENCE: under lookup-first this
+    // second derivation performs NO boundary commit, so the counter reads 0. And
+    // `bindingCommits` is asserted NONZERO — a hook that never fired would leave
+    // DISPATCH still and let this arm pass while testing nothing.
+    expect(boundaryCommits).toBe(0);
+    expect(bindingCommits).toBeGreaterThan(0);
+    expect(releaseCommits).toBe(1);
     expect(world.store.getAggregateVersion(DISPATCH_AGGREGATE)).toBe(measuredVersion + 1);
     if (!outcome.ok) throw new Error(`finalization refused above release: ${outcome.code}`);
     expect(outcome.outcome).toBe("BINDING_WRITTEN_RELEASE_REFUSED");

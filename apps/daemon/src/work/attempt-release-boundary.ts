@@ -18,13 +18,18 @@
  *    read, so it carries `ATTEMPT_RELEASE_REQUEST_MALFORMED` under this module's
  *    layer.
  *
- * 2. DERIVATION BY COMPOSITION. The boundary comes from
- *    `recordSafeBoundaryObservation`, which reads the durable provider-run record
- *    the host committed and applies its own predicate — PROVEN truth, an EXITED
- *    or SIGNALLED exit, a classified terminal and a recorded end. NOTHING HERE
- *    RE-CHECKS AN EXIT FACT. A second opinion over the same evidence would drift
- *    from the producer's the first time either changed, and the whole point of
- *    the field is that exactly one place decides it.
+ * 2. DERIVATION BY COMPOSITION, AND IT ASKS BEFORE IT WRITES. The boundary is
+ *    DECIDED by `recordSafeBoundaryObservation`, which reads the durable
+ *    provider-run record the host committed and applies its own predicate —
+ *    PROVEN truth, an EXITED or SIGNALLED exit, a classified terminal and a
+ *    recorded end. That producer runs only on the FIRST observation of an
+ *    attempt: a derivation looks the STANDING observation up first and returns it
+ *    when one exists, so a re-release reads the answer the first one decided
+ *    rather than asking for a second. NOTHING HERE RE-CHECKS AN EXIT FACT, and
+ *    lookup-first does not weaken that — the lookup returns a durable row it did
+ *    not compose, so exactly one place still DECIDES the boundary. A second
+ *    opinion over the same evidence would drift from the producer's the first
+ *    time either changed, and the whole point of the field is that it cannot.
  *
  * WHY THE WRITER AND NOT THE READER. `readSafeBoundaryObservation` is keyed by an
  * `observationRef`: a digest the producer derives, under a domain it does not
@@ -47,6 +52,8 @@ import type { SqliteEventStore } from "@moe/store";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { carryBoundaryRefusal, refuse } from "./attempt-release-store.js";
 import type { AttemptReleaseRefused } from "./attempt-release-store.js";
+import { readCurrentSafeBoundaryObservation } from "./attempt-safe-boundary-lookup.js";
+import type { SafeBoundaryLookupRefused } from "./attempt-safe-boundary-lookup.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { recordSafeBoundaryObservation } from "./safe-boundary-observation.js";
 
@@ -78,17 +85,62 @@ export function carriesBoundaryClaim(request: unknown): boolean {
 }
 
 /**
+ * The attempt-keyed LOOKUP's refusal, carried out under ITS code and ITS layer and
+ * never restamped with this module's — the rule `carryBoundaryRefusal` and
+ * `carryTerminalRefusal` already follow, and `source` is the delegate that actually
+ * refused (`null` when nothing upstream was consulted).
+ *
+ * IT LIVES HERE, not beside those two, because `deriveSafeBoundary` is its only
+ * consumer — exactly as this module is `carryBoundaryRefusal`'s only importer and
+ * `./attempt-release-terminal.js` is `carryTerminalRefusal`'s. Those are
+ * single-consumer carriers that happen to be co-located, not a shared vocabulary.
+ */
+function carryLookupRefusal(refusal: SafeBoundaryLookupRefused): AttemptReleaseRefused {
+  return Object.freeze({
+    advisoryOnly: true as const, authority: "NONE" as const, code: refusal.code,
+    message: refusal.source?.code ?? null, ok: false as const, refusedBy: refusal.layer,
+  });
+}
+
+/**
  * The boundary for THIS attempt, derived from what the host durably recorded.
  *
  * The decision metadata is composed from the bound attempt and the durable
  * activation — never from a caller — and the command id is suffixed so the
  * observation cannot collide with the release decision the same command lands.
+ *
+ * ASK BEFORE WRITING, AND THIS ORDER IS LOAD-BEARING. The producer commits at
+ * `expectedVersion: 0` on a ref-derived aggregate, so the FIRST decision key owns
+ * that row: a re-observation under a DIFFERENT key is refused
+ * `SAFE_BOUNDARY_COMMIT_CONFLICT` even though it derived byte-identical bytes. A
+ * second release over one attempt NECESSARILY carries a different `commandId`, so
+ * asking the producer unconditionally refuses exactly the sequence a re-release
+ * exists to serve. Looking up first also keeps the common path READ-ONLY: only a
+ * first-ever derivation writes.
+ *
+ * THE SIBLING'S IDENTICAL LOOKUP IS RETAINED, not deduplicated.
+ * `attempt-finalization-sources.ts:155-175` fences the same way over the same
+ * delegate, and deleting it so this guard becomes the only one would make a mutant
+ * of this guard GREEN and read as "no guard needed". The redundancy is the cost of
+ * being able to prove this guard refuses on its own.
+ *
+ * A NON-ABSENT lookup refusal travels out under the LOOKUP's layer rather than
+ * falling through: "the standing observation cannot be READ" and "this attempt
+ * observed nothing" demand opposite repairs, and letting the producer answer over
+ * an unreadable row would overwrite the second with the first.
  */
 export function deriveSafeBoundary(
   store: SqliteEventStore, bound: FoundationAttemptBound, durable: ActivationLedgerRecord,
 ): SafeBoundaryDerivation {
   const { commandId, correlationId, principalId, projectId } = bound;
   const attemptRef = durable.attempt.attemptId;
+  const standing = readCurrentSafeBoundaryObservation(store, { attemptRef, projectId });
+  if (standing.ok) {
+    return Object.freeze({
+      ok: true as const, safeBoundaryObserved: standing.observation.safeBoundaryObserved,
+    });
+  }
+  if (standing.code !== "SAFE_BOUNDARY_LOOKUP_ABSENT") return carryLookupRefusal(standing);
   const observed = recordSafeBoundaryObservation(store, {
     attemptRef, correlationId: `${correlationId}:SAFE_BOUNDARY`,
     key: { commandId: `${commandId}:SAFE_BOUNDARY`, principalId, projectId },
