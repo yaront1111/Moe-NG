@@ -5,6 +5,12 @@ import type { EvidenceReceipt, VerifierCapture } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// The seeded attempt is production-backed: its completion authority pins the Claude
+// runtime, and that pin is win32-only by design (every path must be an absolute
+// local-drive Windows path, so a POSIX tmpdir refuses CLAUDE_RUNTIME_PATH_INVALID).
+// The four cases that seed it run only where the production path can.
+const WINDOWS_ONLY = process.platform === "win32";
+
 const cleanupCloseProbe = vi.hoisted(() => ({
   beforeClose: null as (() => void) | null,
   calls: 0,
@@ -243,7 +249,7 @@ afterEach(() => {
 });
 
 describe("goal closure qualification — the reachable receipt reader", () => {
-  it("closes real fixture stores before removing their candidate roots", async () => {
+  it.runIf(WINDOWS_ONLY)("closes real fixture stores before removing their candidate roots", async () => {
     const store = openStore();
     const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
     let candidateRootExistedAtClose: boolean | undefined;
@@ -260,7 +266,7 @@ describe("goal closure qualification — the reachable receipt reader", () => {
     expect(existsSync(seeded.candidateRoot)).toBe(false);
   }, GOAL_WORLD_BOUND_MS);
 
-  it("retains a root for a later cleanup attempt when bounded removal throws", async () => {
+  it.runIf(WINDOWS_ONLY)("retains a root for a later cleanup attempt when bounded removal throws", async () => {
     const store = openStore();
     const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
     cleanupRemoveProbe.failPath = seeded.candidateRoot;
@@ -280,7 +286,7 @@ describe("goal closure qualification — the reachable receipt reader", () => {
     }
   }, GOAL_WORLD_BOUND_MS);
 
-  it("preserves both close and removal failures while retaining the root", async () => {
+  it.runIf(WINDOWS_ONLY)("preserves both close and removal failures while retaining the root", async () => {
     const store = openStore();
     const seeded = await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY);
     const closeFailure = new Error("injected fixture store close failure");
@@ -310,7 +316,7 @@ describe("goal closure qualification — the reachable receipt reader", () => {
     }
   }, GOAL_WORLD_BOUND_MS);
 
-  it("derives both closure witnesses from one production-backed verified attempt", async () => {
+  it.runIf(WINDOWS_ONLY)("derives both closure witnesses from one production-backed verified attempt", async () => {
     const store = openStore();
     expect(seedProvenAttempt).toBeTypeOf("function");
 

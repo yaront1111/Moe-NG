@@ -249,6 +249,30 @@ jobs:
         run: |
           node -p "JSON.stringify({platform: process.platform, arch: process.arch, node: process.version})"
 
+      # The rustup proxy resolves `rust-toolchain.toml` from the CURRENT DIRECTORY,
+      # not from `--manifest-path`, so the nested native pin never reached this lane:
+      # the broker was built by whatever toolchain the image shipped, and the pinned
+      # 1.96.0 directory that tools/packaging/cargo-toolchain-pins.json names did not
+      # exist for the packaging suites. Install and default the pin explicitly, the
+      # way the release candidate build does.
+      - name: Pin the Windows Rust toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          rustup toolchain install 1.96.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install exited $LASTEXITCODE" }
+          rustup default 1.96.0
+          if ($LASTEXITCODE -ne 0) { throw "rustup default exited $LASTEXITCODE" }
+          $rustcVersion = (rustc --version).Trim()
+          $cargoVersion = (cargo --version).Trim()
+          Write-Output "$rustcVersion / $cargoVersion"
+          if (-not [String]::Equals($rustcVersion, 'rustc 1.96.0 (ac68faa20 2026-05-25)', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($cargoVersion, 'cargo 1.96.0 (30a34c682 2026-05-25)', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=gate-windows::GATE_WINDOWS_RUST_TOOLCHAIN_MISMATCH'
+            exit 1
+          }
+
       # ENVIRONMENT PARITY, NOT AN EXTRA GATE. `dist/` is git-ignored, so a
       # runner starts with no Windows Job native binaries, while a developer box
       # has them — which is the only reason `pnpm test` is green locally. Two

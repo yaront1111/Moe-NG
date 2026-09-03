@@ -184,6 +184,12 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
   },
   {
     expectedCurrentCaptureCount: 1,
+    id: "integrity-hostile-activation-claim",
+    path: "tests/security/integrity-hostile-cases.ts",
+    pattern: /"Moe v([0-9]+\.[0-9]+\.[0-9]+) satisfies its stated correctness invariants/u,
+  },
+  {
+    expectedCurrentCaptureCount: 1,
     id: "pack-inventory-history",
     path: "tools/packaging/pack-inventory.ts",
     pattern: /shipping (v[0-9]+\.[0-9]+) once carried/u,
@@ -806,13 +812,13 @@ describe("release version surfaces", () => {
       discovered.map(({ key }) => key),
     );
 
-    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(7);
+    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(8);
     for (const exclusion of VERSION_OCCURRENCE_EXCLUSIONS) {
       expect(exclusion.expectedCurrentCaptureCount, `empty exclusion: ${exclusion.id}`)
         .toBeGreaterThan(0);
     }
     expect(surfaces.length).toBe(11);
-    expect(exclusions.length).toBe(11);
+    expect(exclusions.length).toBe(12);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);

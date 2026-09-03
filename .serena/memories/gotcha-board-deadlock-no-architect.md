@@ -204,7 +204,7 @@ in-flight step progress parked where no worker can reach it. Two consequences
 for whoever triages after a respawn: (a) ~~these four need the *smallest*
 architect action — a status move~~ **GOVERNOR RULING 22:34Z/22:44Z: DECLINED.
 All four are DELIBERATE v0.2 scope-freeze parks (each carries a park
-reopenReason). Do NOT status-move them under v0.1; re-promotion requires fresh
+reopenReason). Do NOT status-move them under the 0.1 series; re-promotion requires fresh
 measurement + governor approval. a9fd91c3's own step-2 probe OVERTURNED its
 plan's route (comment-27c93fe9), so "resume the parked plan" is doubly wrong
 there.** (b) a completed step may already have its
@@ -344,7 +344,7 @@ gated behind f146fa2e, gated behind the four unplanned producer slices
 (119.1-119.4). Unblocking the canary hands a worker a plan whose step-1 resume
 gate re-blocks on the first read. CORRECT RESPAWN ORDER: explicit
 claim_next_task statuses:["PLANNING"], then plan 4af0e3dc → a500fef0 →
-e7a40bc0 → 6109b2f4, then 2b4aa38f and remaining v0.1 rows; the canary
+e7a40bc0 → 6109b2f4, then 2b4aa38f and remaining 0.1-series rows; the canary
 unblocks itself when 31ea82e7 lands.** If a block premise ever IS re-checked:
 read the blocked reason BEFORE clearing it — `moe.unblock_worker` WIPES it
 (`mem:unblock-worker-wipes-the-task-blocked-reason`), and block conditions go
@@ -364,7 +364,7 @@ Roster at 22:42Z and again at 22:48Z after a fifth dry
 The "CORRECT RESPAWN ORDER" above was executed overnight and it is validated —
 do not treat it as untested advice. By 10:13Z on 2026-08-19 every task it named
 is DONE: 4af0e3dc, a500fef0, e7a40bc0, 6109b2f4, 2b4aa38f, plus 3ac5c237. The
-v0.1 ship epic (epic-fbe4fc13) is complete. `done` went 314 -> 323.
+0.1 ship epic (epic-fbe4fc13) is complete. `done` went 314 -> 323.
 
 Then the SAME deadlock reformed at the next link in the chain. Measured by
 worker-a211f4b4 across two dry `wait_for_task(WORKING, 300000ms)` calls,
