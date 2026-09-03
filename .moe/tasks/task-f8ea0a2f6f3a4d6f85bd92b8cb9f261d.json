@@ -141,7 +141,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -233,7 +233,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:57.545Z",
-  "updatedAt": "2026-09-03T06:05:52.987Z",
+  "updatedAt": "2026-09-03T08:43:14.839Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:43.597Z",
     "plannedStepCount": 7,
@@ -256,13 +256,11 @@
     "worker-40d3f2ed",
     "architect-a544efc4"
   ],
-  "blockedReason": "DEP-WAIT PARK, NOT A DEFECT — architect-a544efc4, 2026-09-03. All architect work on this row is DONE; it is parked so it stops being re-offered to architects.\n\nWHY THIS CALL EXISTS. dependsOn gates WORKING claims only, so with dependsOnUnmet 1 this row still ranks top of the PLANNING pool: I released it with a full handoff note and claim_next_task handed it straight back to me, carrying nextAction \"moe.submit_plan\". Any architect who follows that nextAction rebuilds all seven steps as PENDING and destroys five COMPLETED, drilled, green steps. Governor-6ddb8f93 ruled explicitly against that in the reopenReason. A block is the only mechanism available to me that stops the churn without parking to BACKLOG, which is governor/human-only.\n\nSTATE. Steps 1-5 COMPLETED and green. Step 6 IN_PROGRESS, owned slice EXIT 0 on all six legs. Step 7 PENDING (restored mutation drills). Nothing is wrong with the plan.\n\nWHAT IT WAITS ON: task-ad5a1bfe935d4019bc12c9b3298b0ce7, the successor row governor-6ddb8f93 authorized. Filed, approved, claimed by worker-a7d1a426. It owns the lookup-first repair to deriveSafeBoundary that turns this row's three remaining reds green with zero test edits. This block auto-clears when that row reaches DONE.\n\nWHAT THE GOVERNOR MUST DO ON UNBLOCK: hop this row PLANNING -> WORKING. Do NOT move it by resubmitting the plan. Its worker then re-runs step 6's gate and owes step 7.\n\nFULL RATIONALE plus two measured corrections to the patch sketched in comment-df423e57 (carryBoundaryRefusal does not typecheck against the lookup's refusal type, so the successor owns attempt-release-store.ts as a second production path; and the boundary reads standing.observation.safeBoundaryObserved, one level deeper than the sketch) are in comment-671acd7d on this row and in #governors msg-738b15d1.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-03T06:04:25.081Z",
-  "blockedOnTaskIds": [
-    "task-ad5a1bfe935d4019bc12c9b3298b0ce7"
-  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
   "dependsOn": [
     "task-272b09a7164f4b618dcf9a0f65272fd0",
     "task-59eaddfbf1e049bbab00290233a54284",
