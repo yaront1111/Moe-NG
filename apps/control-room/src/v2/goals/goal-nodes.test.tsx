@@ -15,7 +15,7 @@ const RUNS: RunsOutcome = {
     goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
     nodes: [{
       accepted: { verifierReceiptId: "receipt-1" }, claim: null, criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: "2026-09-03T09:00:00.000Z",
-      nodeKey: "node-a", objective: "Build the ledger", receipt: null,
+      nodeKey: "node-a", objective: "Build the ledger", landing: null, receipt: null,
       review: { escalated: false, findings: [], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
       sharedKey: false, status: "ACCEPTED",
     }],

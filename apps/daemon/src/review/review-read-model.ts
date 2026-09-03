@@ -10,6 +10,10 @@ import { parseStoredPackageItems } from "./review-round-items.js";
 import type { StoredPackageItems } from "./review-round-items.js";
 import { VERIFIER_RECEIPT_COMMAND_KIND, decodeVerifierReceiptBytes } from "./verifier-receipt-contracts.js";
 import type { VerifierExecutionEvidence } from "./verifier-receipt-contracts.js";
+import {
+  LANDING_RECEIPT_COMMAND_KIND, decodeLandingReceiptBytes, landingAggregateId,
+} from "../repository/landing-receipt-contracts.js";
+import type { LandingReceiptV1 } from "../repository/landing-receipt-contracts.js";
 
 /**
  * The read half of the review composition: every committed decision for one reviewed subject,
@@ -258,6 +262,8 @@ function ledgerOf(acc: Accumulator, decisionCount: number): ReviewLedger {
 }
 
 export interface ReviewLedgers {
+  /** The lander's receipt per subject (a commit, or a refusal with its code), where it decodes. */
+  readonly landings: ReadonlyMap<string, LandingReceiptV1>;
   readonly ledgers: ReadonlyMap<string, ReviewLedger>;
   /** The verifier's execution evidence per subject, where its receipt decision decodes. */
   readonly receipts: ReadonlyMap<string, VerifierExecutionEvidence>;
@@ -274,7 +280,14 @@ export function readReviewLedgers(
   subjectRefs: ReadonlySet<string>,
 ): ReviewLedgers {
   const accumulators = new Map<string, Accumulator>();
-  for (const subjectRef of subjectRefs) accumulators.set(subjectRef, freshAccumulator());
+  // Landings sit on a sibling aggregate (`landing:<subject>`), so the node's own version is
+  // never moved by a commit; the same walk picks them up by that aggregate id.
+  const landingSubjects = new Map<string, string>();
+  for (const subjectRef of subjectRefs) {
+    accumulators.set(subjectRef, freshAccumulator());
+    landingSubjects.set(landingAggregateId(subjectRef), subjectRef);
+  }
+  const landings = new Map<string, LandingReceiptV1>();
   let decisionCount = 0;
   let cursor = 0n;
   for (;;) {
@@ -285,6 +298,11 @@ export function readReviewLedgers(
       if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
       const acc = accumulators.get(decision.targetAggregateId);
       if (acc !== undefined) fold(acc, decision);
+      const landed = landingSubjects.get(decision.targetAggregateId);
+      if (landed !== undefined && decision.commandKind === LANDING_RECEIPT_COMMAND_KIND) {
+        const decoded = decodeLandingReceiptBytes(decision.resultBytes);
+        if (decoded.ok && decoded.receipt.subjectRef === landed) landings.set(landed, decoded.receipt);
+      }
     }
     if (!page.hasMore || page.nextCursor === null) break;
     cursor = page.nextCursor;
@@ -295,7 +313,7 @@ export function readReviewLedgers(
     ledgers.set(subjectRef, ledgerOf(acc, decisionCount));
     if (acc.receipt !== undefined) receipts.set(subjectRef, acc.receipt);
   }
-  return Object.freeze({ ledgers, receipts });
+  return Object.freeze({ landings, ledgers, receipts });
 }
 
 export function readReviewLedger(

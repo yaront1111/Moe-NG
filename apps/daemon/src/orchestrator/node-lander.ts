@@ -1,0 +1,193 @@
+import type { SqliteEventStore } from "@moe/store";
+
+import type { GitLandingPort } from "../repository/git-landing-port.js";
+import {
+  readLandingReceipt, readLatestLandingBaseline, recordLandingBaseline, recordLandingReceipt,
+} from "../repository/landing-ledger.js";
+import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
+import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing-receipt-contracts.js";
+import { readReviewLedger } from "../review/review-read-model.js";
+import type { NodeMission } from "./agent-wrapper.js";
+
+/**
+ * THE LANDER: once the daemon has accepted a node (a verifier receipt consumed
+ * by `integration.accept_output`), commit what the seat changed in the
+ * workspace as ONE git commit on the workspace's current branch, and record a
+ * receipt beside the node. Local only — nothing here pushes; publishing is a
+ * separate human decision.
+ *
+ * What the seat changed is measured, not trusted: a BASELINE of every dirty
+ * path (with its blob id) is recorded the moment the seat is staffed, and the
+ * landing commits exactly the paths whose content differs from that baseline.
+ * The operator's own uncommitted work, present before the seat started, is
+ * never swept into a Moe commit.
+ *
+ * One landing per acceptance: the receipt id is a function of the verifier
+ * receipt, so a wrapper restart lands nothing twice, and a refusal is recorded
+ * with its code rather than retried forever.
+ */
+
+export interface NodeLanderConfig {
+  readonly clock?: () => string;
+  readonly git: GitLandingPort;
+  readonly nodeMission: (nodeRef: string) => NodeMission | null;
+  readonly nodes: () => readonly { nodeRef: string }[];
+  readonly projectId: string;
+  /** INJECTED in tests; production reads the node's review ledger. */
+  readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;
+  readonly store: SqliteEventStore;
+}
+
+export interface LanderReport {
+  readonly detail: string;
+  readonly nodeRef: string;
+  readonly outcome: "BASELINE_RECORDED" | "COMMITTED" | "REFUSED" | string;
+}
+
+const SUBJECT_MAX = 72;
+
+function subjectLine(title: string): string {
+  const first = title.split(/\r?\n/u)[0]?.trim() ?? "";
+  const text = first === "" ? "Moe: landed a verified node" : first;
+  return text.length <= SUBJECT_MAX ? text : `${text.slice(0, SUBJECT_MAX - 1)}…`;
+}
+
+/** The paths whose content the seat changed: present now, and not identical in the baseline. */
+export function deliveredPaths(
+  baseline: readonly LandingBaselineEntry[], observed: readonly LandingBaselineEntry[],
+): readonly string[] {
+  const before = new Map(baseline.map((entry) => [entry.path, entry.blobId]));
+  return observed
+    .filter((entry) => before.get(entry.path) !== entry.blobId)
+    .map((entry) => entry.path);
+}
+
+export function landingMessage(
+  brief: NodeMission, nodeRef: string, verifierReceiptId: string,
+): string {
+  return [
+    subjectLine(brief.title),
+    "",
+    `Moe landed node ${nodeRef} after the daemon verified it.`,
+    `Verified: ${brief.test} in ${brief.workspace}`,
+    `Verifier receipt: ${verifierReceiptId}`,
+    "",
+  ].join("\n");
+}
+
+export function createNodeLander(config: NodeLanderConfig) {
+  const clock = config.clock ?? ((): string => new Date().toISOString());
+  const readAccepted = config.readAccepted ?? ((nodeRef: string) => {
+    const ledger = readReviewLedger(config.store, config.projectId, nodeRef);
+    return ledger.accepted === undefined
+      ? null : { verifierReceiptId: ledger.accepted.verifierReceiptId };
+  });
+
+  /** Record what is dirty NOW, before the seat for this node starts working. */
+  const baseline = async (nodeRef: string): Promise<LanderReport> => {
+    const brief = config.nodeMission(nodeRef);
+    if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
+    const observed = await config.git.observe(brief.workspace);
+    if (!observed.ok) return { detail: observed.detail, nodeRef, outcome: observed.code };
+    const recorded = recordLandingBaseline(config.store, {
+      entries: observed.observation.entries,
+      observedAt: clock(),
+      projectId: config.projectId,
+      subjectRef: nodeRef,
+      workspace: brief.workspace,
+    });
+    if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
+    return {
+      detail: `${String(observed.observation.entries.length)} dirty path(s) before the seat`,
+      nodeRef,
+      outcome: "BASELINE_RECORDED",
+    };
+  };
+
+  const refuse = (
+    nodeRef: string, workspace: string, verifierReceiptId: string, refusal: LandingRefusal,
+  ): LanderReport => {
+    const recorded = recordLandingReceipt(config.store, {
+      commit: null, decidedAt: clock(), projectId: config.projectId, refusal,
+      subjectRef: nodeRef, verifierReceiptId, workspace,
+    });
+    return {
+      detail: recorded.ok ? `${refusal.code}: ${refusal.detail}` : recorded.code,
+      nodeRef,
+      outcome: recorded.ok ? "REFUSED" : recorded.code,
+    };
+  };
+
+  const landOne = async (nodeRef: string, verifierReceiptId: string): Promise<LanderReport | null> => {
+    const receiptId = landingReceiptId(config.projectId, nodeRef, verifierReceiptId);
+    const existing = readLandingReceipt(config.store, config.projectId, receiptId);
+    if (existing.ok) return null;
+    if (existing.code === "LANDING_RECEIPT_INVALID") {
+      return { detail: existing.code, nodeRef, outcome: existing.code };
+    }
+    const brief = config.nodeMission(nodeRef);
+    if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
+    const before = readLatestLandingBaseline(config.store, config.projectId, nodeRef);
+    if (before === null) {
+      return refuse(nodeRef, brief.workspace, verifierReceiptId, {
+        code: "LANDING_BASELINE_MISSING",
+        detail: "no baseline was recorded when this node was staffed, so its changes cannot be told apart",
+      });
+    }
+    const observed = await config.git.observe(brief.workspace);
+    if (!observed.ok) {
+      if (observed.code === "NOT_A_REPOSITORY") {
+        return refuse(nodeRef, brief.workspace, verifierReceiptId, {
+          code: observed.code, detail: observed.detail,
+        });
+      }
+      // A git failure that is not structural is reported, not recorded: the next pass retries.
+      return { detail: observed.detail, nodeRef, outcome: observed.code };
+    }
+    const paths = deliveredPaths(before.entries, observed.observation.entries);
+    if (paths.length === 0) {
+      return refuse(nodeRef, brief.workspace, verifierReceiptId, {
+        code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
+      });
+    }
+    const message = landingMessage(brief, nodeRef, verifierReceiptId);
+    const committed = await config.git.commit(brief.workspace, paths, message);
+    if (!committed.ok) {
+      return refuse(nodeRef, brief.workspace, verifierReceiptId, {
+        code: committed.code, detail: committed.detail,
+      });
+    }
+    const recorded = recordLandingReceipt(config.store, {
+      commit: {
+        branch: committed.receipt.branch, files: paths, message,
+        parentSha: committed.receipt.parentSha, sha: committed.receipt.sha,
+      },
+      decidedAt: clock(),
+      projectId: config.projectId,
+      refusal: null,
+      subjectRef: nodeRef,
+      verifierReceiptId,
+      workspace: brief.workspace,
+    });
+    if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
+    return {
+      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)`,
+      nodeRef,
+      outcome: "COMMITTED",
+    };
+  };
+
+  /** Land every accepted node that has no landing receipt yet. Silent for the rest. */
+  const landOnce = async (): Promise<readonly LanderReport[]> => {
+    const reports: LanderReport[] = [];
+    for (const { nodeRef } of config.nodes()) {
+      const accepted = readAccepted(nodeRef);
+      if (accepted === null) continue;
+      const report = await landOne(nodeRef, accepted.verifierReceiptId);
+      if (report !== null) reports.push(report);
+    }
+    return reports;
+  };
+
+  return Object.freeze({ baseline, landOnce });
+}
