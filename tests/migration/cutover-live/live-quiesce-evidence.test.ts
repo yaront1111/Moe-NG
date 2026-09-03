@@ -82,7 +82,8 @@ const resultsFor = (items: readonly LiveQuiesceItem[]): QuiesceItemResult[] =>
 const manifestOf = (sha: string): CutoverManifest => ({
   root: "D:/legacy-root",
   entryCount: 1,
-  entries: [{ path: "state.json", byteLength: 12, sha256: sha }],
+  entries: [{ kind: "FILE", path: "state.json", byteLength: 12, sha256: sha }],
+  excludedDirectories: ["node_modules"],
 });
 
 /** A real comparison from the real harness, not a hand-built literal. */
@@ -229,7 +230,12 @@ describe("task-e60b874b: the evidence record refuses anything a reader could mis
   });
 
   it("refuses when the manifest comparison itself refused — no byte evidence, no claim", () => {
-    const empty: CutoverManifest = { root: "D:/legacy-root", entryCount: 0, entries: [] };
+    const empty: CutoverManifest = {
+      root: "D:/legacy-root",
+      entryCount: 0,
+      entries: [],
+      excludedDirectories: ["node_modules"],
+    };
     const refusedComparison = compareCutoverManifests(empty, empty);
     // Guard: the harness must really have refused, or this arm proves nothing.
     expect("ok" in refusedComparison && refusedComparison.ok).toBe(false);

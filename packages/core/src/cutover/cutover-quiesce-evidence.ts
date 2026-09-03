@@ -70,7 +70,9 @@ export interface LiveQuiesceEvidence {
     matched: boolean;
     differences: readonly Readonly<{
       path: string;
-      kind: "ADDED" | "REMOVED" | "CONTENT_CHANGED" | "LENGTH_CHANGED";
+      kind:
+        | "ADDED" | "REMOVED" | "CONTENT_CHANGED" | "LENGTH_CHANGED"
+        | "LINK_TARGET_CHANGED" | "KIND_CHANGED";
     }>[];
     comparedEntryCount: number;
   }>;
@@ -131,7 +133,10 @@ const ITEM_REFUSALS = new Set([
   "LIVE_QUIESCE_ITEM_STILL_LIVE", "LIVE_QUIESCE_ITEM_UNDENIABLE",
   "LIVE_QUIESCE_OBSERVATION_UNAVAILABLE",
 ]);
-const DIFFERENCE_KINDS = new Set(["ADDED", "REMOVED", "CONTENT_CHANGED", "LENGTH_CHANGED"]);
+const DIFFERENCE_KINDS = new Set([
+  "ADDED", "REMOVED", "CONTENT_CHANGED", "LENGTH_CHANGED",
+  "LINK_TARGET_CHANGED", "KIND_CHANGED",
+]);
 
 const isAuthority = (value: unknown): value is LiveQuiesceEvidence["authority"] =>
   isRecord(value) && hasExactKeys(value, AUTHORITY_KEYS) &&

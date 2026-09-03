@@ -14,7 +14,15 @@
 import { refuseManifest } from "./cutover-manifest.js";
 import type { CutoverManifest, CutoverManifestEntry, CutoverRefusal } from "./cutover-manifest.js";
 
-export type CutoverDifferenceKind = "ADDED" | "REMOVED" | "CONTENT_CHANGED" | "LENGTH_CHANGED";
+export type CutoverDifferenceKind =
+  | "ADDED"
+  | "REMOVED"
+  | "CONTENT_CHANGED"
+  | "LENGTH_CHANGED"
+  /** A symlink still at the same path, now pointing somewhere else. */
+  | "LINK_TARGET_CHANGED"
+  /** A file became a link, or a link became a file. Never collapsed into a content difference. */
+  | "KIND_CHANGED";
 
 export interface CutoverDifference {
   readonly path: string;
@@ -46,15 +54,45 @@ const selfInconsistent = (manifest: CutoverManifest, side: string): CutoverRefus
   return undefined;
 };
 
-/** Length is the more specific fact, so it wins over the hash difference it implies. */
+/**
+ * Sits with the `selfInconsistent` guards for the same reason they exist. A
+ * capture that excluded MORE than its counterpart compares a smaller population,
+ * so a widened exclusion between the two captures could report a clean match
+ * over exactly the files that moved. That has to fail closed rather than answer.
+ */
+const exclusionsDisagree = (
+  before: CutoverManifest,
+  after: CutoverManifest,
+): CutoverRefusal | undefined => {
+  const beforeKeys = [...before.excludedDirectories].sort();
+  const afterKeys = [...after.excludedDirectories].sort();
+  if (beforeKeys.length === afterKeys.length && beforeKeys.every((key, at) => key === afterKeys[at])) {
+    return undefined;
+  }
+  const detail = `before excluded [${beforeKeys.join(", ")}] but after excluded [${afterKeys.join(", ")}]`;
+  return refuseManifest("CUTOVER_MANIFEST_EXCLUSION_MISMATCH", before.root, detail);
+};
+
+/**
+ * Length is the more specific fact, so it wins over the hash difference it
+ * implies. A kind change is more specific still: something REPLACED a file with
+ * a link (or the reverse), and calling that a content difference would describe
+ * a smaller event than the one that happened.
+ */
 const differenceFor = (
   before: CutoverManifestEntry,
   after: CutoverManifestEntry,
 ): CutoverDifferenceKind | undefined => {
-  if (before.byteLength !== after.byteLength) {
-    return "LENGTH_CHANGED";
+  if (before.kind === "FILE" && after.kind === "FILE") {
+    if (before.byteLength !== after.byteLength) {
+      return "LENGTH_CHANGED";
+    }
+    return before.sha256 === after.sha256 ? undefined : "CONTENT_CHANGED";
   }
-  return before.sha256 === after.sha256 ? undefined : "CONTENT_CHANGED";
+  if (before.kind === "LINK" && after.kind === "LINK") {
+    return before.target === after.target ? undefined : "LINK_TARGET_CHANGED";
+  }
+  return "KIND_CHANGED";
 };
 
 export const compareCutoverManifests = (
@@ -68,6 +106,10 @@ export const compareCutoverManifests = (
   const afterBad = selfInconsistent(after, "after");
   if (afterBad !== undefined) {
     return afterBad;
+  }
+  const widened = exclusionsDisagree(before, after);
+  if (widened !== undefined) {
+    return widened;
   }
 
   const afterByPath = new Map(after.entries.map((entry) => [entry.path, entry]));
