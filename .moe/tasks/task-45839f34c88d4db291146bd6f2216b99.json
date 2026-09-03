@@ -179,7 +179,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:57:15.097Z",
-  "updatedAt": "2026-09-03T10:41:06.282Z",
+  "updatedAt": "2026-09-03T10:41:10.549Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-5e59a71e",
@@ -281,7 +281,34 @@
   "filesModified": [
     "tests/security/boundary-roster.security.ts",
     "tests/security/completeness.security.ts",
-    "tests/security/layer-visibility-cases.ts"
+    "tests/security/layer-visibility-cases.ts",
+    ".moe/tasks/task-45839f34c88d4db291146bd6f2216b99.json"
   ],
-  "completionSummary": "Delivered the RE-SCOPED row per comment-b510472d (the description/DoD fields are stale by design; the original fifteen-identifier work landed months of commits ago — comment-83bc0e96). Subject: the boundary roster certifies a name-space it does not measure. `scan minus roster is empty` is true only over EXPORTED declarations, because DECLARATION_PATTERN is anchored `^export const`.\n\nFILES (2 of 3 declared): NEW tests/security/layer-visibility-cases.ts (467 lines, scanners + frozen censuses); MODIFIED tests/security/boundary-roster.security.ts (952 -> 1215). completeness.security.ts untouched — no axis assertion moved.\n\nMEASURED AT HEAD 6d0ce466 through the suite's own isProductionModule + SCAN_ROOTS: exported 168, module-private 60 (wide) / 59 (narrow), literals 94 distinct with 29 unresolved, invisible share 60/228 = 26.3% wide-over-wide. Private 60 and roster 168 matched the architect's figures exactly; the literal count did not (94 vs an expected 116+9) and the measured number governs — full delta and cause in comment-cc37dbca.\n\n21 NEW ARMS, all bidirectional where they bound a population: module-private set equality both directions + exact count; bare-literal set equality both directions + exact count + an independently-computed resolved/unresolved partition; SCAN_ROOTS coverage forward and reverse; a pinned invisible share with numerator, denominator and SCANNED.length each pinned separately; DECLARATION_PATTERN exported and the private twin asserted equal to it minus the `export ` token; and a planted positive control including the DIGIT-BEARING case that guards f4c3992a's widening, which nothing in the lane guarded before.\n\nVERIFICATION: `pnpm test:security` EXIT 0, Test Files 12 passed (12), Tests 959 passed (959) (938 baseline + 21). tsc leg proved non-vacuous by a planted TS2322. No partial run was used to judge anything, so the completeness RUNTIME_RECEIPTS false red was never in play. No foreign red to disclose.\n\nFIVE DRILLS, each SHA-verified as landed "
+  "completionSummary": "Delivered the RE-SCOPED row per comment-b510472d (the description/DoD fields are stale by design; the original fifteen-identifier work landed months of commits ago — comment-83bc0e96). Subject: the boundary roster certifies a name-space it does not measure. `scan minus roster is empty` is true only over EXPORTED declarations, because DECLARATION_PATTERN is anchored `^export const`.\n\nFILES (2 of 3 declared): NEW tests/security/layer-visibility-cases.ts (467 lines, scanners + frozen censuses); MODIFIED tests/security/boundary-roster.security.ts (952 -> 1215). completeness.security.ts untouched — no axis assertion moved.\n\nMEASURED AT HEAD 6d0ce466 through the suite's own isProductionModule + SCAN_ROOTS: exported 168, module-private 60 (wide) / 59 (narrow), literals 94 distinct with 29 unresolved, invisible share 60/228 = 26.3% wide-over-wide. Private 60 and roster 168 matched the architect's figures exactly; the literal count did not (94 vs an expected 116+9) and the measured number governs — full delta and cause in comment-cc37dbca.\n\n21 NEW ARMS, all bidirectional where they bound a population: module-private set equality both directions + exact count; bare-literal set equality both directions + exact count + an independently-computed resolved/unresolved partition; SCAN_ROOTS coverage forward and reverse; a pinned invisible share with numerator, denominator and SCANNED.length each pinned separately; DECLARATION_PATTERN exported and the private twin asserted equal to it minus the `export ` token; and a planted positive control including the DIGIT-BEARING case that guards f4c3992a's widening, which nothing in the lane guarded before.\n\nVERIFICATION: `pnpm test:security` EXIT 0, Test Files 12 passed (12), Tests 959 passed (959) (938 baseline + 21). tsc leg proved non-vacuous by a planted TS2322. No partial run was used to judge anything, so the completeness RUNTIME_RECEIPTS false red was never in play. No foreign red to disclose.\n\nFIVE DRILLS, each SHA-verified as landed ",
+  "commits": [
+    {
+      "sha": "e26d1557bc9a434550d3d8d297d1795df12dcd1f",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-5d6b2faf@2026-09-03T10:41:06Z",
+      "paths": [
+        ".moe/tasks/task-45839f34c88d4db291146bd6f2216b99.json",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/layer-visibility-cases.ts"
+      ],
+      "recordedBy": "qa-5d6b2faf",
+      "recordedAt": "2026-09-03T10:41:10.549Z",
+      "treeId": "0606ec57ff89dfb8b702fd17d8a0b0a0139d6763",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-5d6b2faf@2026-09-03T10:41:06Z",
+    "at": "2026-09-03T10:41:10.549Z"
+  }
 }
