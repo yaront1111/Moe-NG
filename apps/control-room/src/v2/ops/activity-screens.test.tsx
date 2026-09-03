@@ -87,7 +87,10 @@ describe("SessionsPanel", () => {
     expect(live.getAttribute("data-liveness")).toBe("LIVE");
     expect(live.textContent).toContain("live until 2026-09-03T11:00:00.000Z");
     expect(live.textContent).toContain("an agent seat · working on node.deliver@node-a");
+    // Past seats fold away; the row is still there to read.
+    expect(screen.getByTestId("cr.sessions.past").textContent).toContain("1 past agent seats");
     expect(screen.getByTestId("cr.sessions.row.sess-op-1").textContent).toContain("expired 1 h ago");
+    expect(screen.getByTestId("cr.sessions.list").textContent).not.toContain("sess-op-1");
   });
 });
 

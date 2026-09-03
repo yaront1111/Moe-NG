@@ -135,7 +135,8 @@ describe("shell controls keep their own shape and say what they do", () => {
   it("styles a toggle that carries aria-expanded and is named by its visible span alone", () => {
     const root = mount("CONNECTED");
     const toggle = root.querySelector(".cr2-legend-toggle") as HTMLElement;
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    // Folded by default; the attribute is what a reader checks, not the glyph.
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     // The glyph this sheet hides is real text: without aria-hidden it would be
     // read out as part of the name, "- HOW TO ..." - so prove it is non-empty AND
     // that the name is exactly the other span. What that span SAYS belongs to

@@ -31,8 +31,8 @@ const COVERAGE = Object.freeze({
   goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1", title: "Build it" }],
   outcome: "COVERAGE",
   sections: { advisoryOnly: true, entries: [
-    { cited: 1, heading: "11. Evidence", number: "11", verified: 1 },
-    { cited: 0, heading: "Appendix", number: null, verified: 0 },
+    { cited: 1, criteria: 1, heading: "11. Evidence", number: "11", verified: 1 },
+    { cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 },
   ] },
   totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 1 },
 });
@@ -58,8 +58,8 @@ describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
       document: { byteLength: 120, contentSha256: SHA, displayPath: "PRD.md" },
       goals: [{ goalId: "goal-1", lastActivityAt: "2026-09-02T19:00:00.000Z", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1", title: "Build it" }],
       sections: [
-        { cited: 1, heading: "11. Evidence", number: "11", verified: 1 },
-        { cited: 0, heading: "Appendix", number: null, verified: 0 },
+        { cited: 1, criteria: 1, heading: "11. Evidence", number: "11", verified: 1 },
+        { cited: 0, criteria: 0, heading: "Appendix", number: null, verified: 0 },
       ],
       status: "COVERAGE",
       totals: { contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, verified: 1 },

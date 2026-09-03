@@ -626,11 +626,11 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
     expect(fetchedPaths().every((path) => path === "/affordances/read" || path === "/goals/read")).toBe(true);
   });
 
-  it("keeps saying progress is coming online when no reader is attached", async () => {
+  it("says progress is unavailable when no reader is attached", async () => {
     const state = wire(() => OK_ANSWER, [catalogRow("goal-plain")]);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
     await screen.findByTestId("cr.goals.card.goal-plain.progress");
-    expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress coming online");
+    expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress unavailable");
   });
 });

@@ -119,7 +119,9 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
           {outcome.sessions.length === 0 ? (
             <p className="cr2-needs-note" data-testid="cr.sessions.empty">No seat has been opened on this daemon.</p>
           ) : (() => {
-            const agents = outcome.sessions.filter((session) => seatWords(session.sessionId) !== "a paired browser");
+            const agentSeats = outcome.sessions.filter((session) => seatWords(session.sessionId) !== "a paired browser");
+            const agents = agentSeats.filter((session) => session.liveness === "LIVE");
+            const past = agentSeats.filter((session) => session.liveness !== "LIVE");
             const browsers = outcome.sessions.filter((session) => seatWords(session.sessionId) === "a paired browser");
             const row = (session: SessionView): JSX.Element => (
               <li className="cr2-activity-row" data-liveness={session.liveness} data-testid={`cr.sessions.row.${session.sessionId}`} key={session.sessionId}>
@@ -134,8 +136,14 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
             return (
               <>
                 {agents.length === 0 ? (
-                  <p className="cr2-needs-note" data-testid="cr.sessions.noagents">No agent seat is open. Agents appear here while the wrapper is running.</p>
+                  <p className="cr2-needs-note" data-testid="cr.sessions.noagents">No agent seat is open right now. Agents appear here while the wrapper is running.</p>
                 ) : <ul className="cr2-activity-list" data-testid="cr.sessions.list">{agents.map(row)}</ul>}
+                {past.length === 0 ? null : (
+                  <details className="cr2-approve-inspect" data-testid="cr.sessions.past">
+                    <summary className="cr2-approve-inspect-summary">{`${String(past.length)} past agent seats ${MIDDOT} expired or closed`}</summary>
+                    <ul className="cr2-activity-list">{past.map(row)}</ul>
+                  </details>
+                )}
                 {browsers.length === 0 ? null : (
                   <details className="cr2-approve-inspect" data-testid="cr.sessions.browsers">
                     <summary className="cr2-approve-inspect-summary">

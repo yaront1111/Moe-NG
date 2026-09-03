@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within, fireEvent } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -67,6 +67,8 @@ describe("the Cordum shell renders its frame", () => {
     render(<CordumShell />);
     const legend = screen.getByTestId("cr.shell.legend");
     expect(legend.textContent).toContain("HOW TO READ CHIPS");
+    // Folded by default: the legend explains chips, it is not the first thing a person needs.
+    fireEvent.click(within(legend).getByRole("button"));
     for (const truthClass of CORDUM_TRUTH_CLASSES) {
       const row = within(legend).getByTestId(`cr.legend.${truthClass.toLowerCase()}`);
       const presentation = cordumTruthPresentation(truthClass);
@@ -79,13 +81,10 @@ describe("the Cordum shell renders its frame", () => {
       .toEqual(["OBS", "AGT", "VER", "HUM", "UNK"]);
   });
 
-  it("carries the cards treatment switch and the proof toggle in the context bar", () => {
+  it("carries the title and the proof toggle in the context bar, and no dead card-treatment switch", () => {
     render(<CordumShell title="Goals" />);
     expect(screen.getByTestId("cr.shell.context.title").textContent).toBe("Goals");
-    for (const treatment of ["compact", "instrument", "ledger"]) {
-      expect(screen.getByTestId(`cr.shell.treatment.${treatment}`)).toBeTruthy();
-    }
-    expect(screen.getByTestId("cr.shell.treatment.compact").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByTestId("cr.shell.treatment.compact")).toBeNull();
     expect(screen.getByTestId("cr.shell.proof.toggle")).toBeTruthy();
   });
 });

@@ -284,25 +284,16 @@ describe("a goal without a durable planning run has no board-opening door", () =
   });
 });
 
-describe("goalshome-04: the last-event coming-online chip cannot overflow the progress row", () => {
-  it("renders the chip under the bar, not beside the progress label", () => {
+describe("goalshome-04: the card carries no placeholder chips", () => {
+  it("renders the progress label alone in its row and no COMING ONLINE chip anywhere", () => {
     const card = renderCard();
-    const chip = screen.getByTestId("cr.goals.card.goal-live-1.lastevent.comingonline");
-    expect(chip.textContent).toBe("LAST EVENT COMING ONLINE");
-    expect(chip.closest(".cr2-goal-progress-top")).toBeNull();
-    expect(chip.closest(".cr2-goal-budget")).not.toBeNull();
-
-    const bar = card.querySelector(".cr2-goal-bar");
-    expect(bar).not.toBeNull();
-    // eslint-disable-next-line no-bitwise
-    expect((bar as Element).compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
+    expect(card.textContent).not.toContain("COMING ONLINE");
+    expect(screen.queryByTestId("cr.goals.card.goal-live-1.lastevent.comingonline")).toBeNull();
+    expect(screen.queryByTestId("cr.goals.card.goal-live-1.budget.comingonline")).toBeNull();
     const label = screen.getByTestId("cr.goals.card.goal-live-1.progress");
     expect(label.textContent).toBe("7 of 16 committed");
     expect(label.parentElement?.className).toBe("cr2-goal-progress-top");
     expect(label.parentElement?.children).toHaveLength(1);
-    expect(screen.getByTestId("cr.goals.card.goal-live-1.budget.comingonline").textContent)
-      .toBe("BUDGET COMING ONLINE");
   });
 
   it("keeps a supplied last-event label in the top row and renders no chip", () => {
@@ -314,12 +305,9 @@ describe("goalshome-04: the last-event coming-online chip cannot overflow the pr
   it("ships wrap rules that select the rendered rows, and imports the sheet", () => {
     const card = renderCard();
     const top = card.querySelector(".cr2-goal-progress-top");
-    const budget = card.querySelector(".cr2-goal-budget");
     expect(top).not.toBeNull();
-    expect(budget).not.toBeNull();
 
     expectStyled(top as Element, "flex-wrap", "wrap");
-    expectStyled(budget as Element, "flex-wrap", "wrap");
     expect(CARD_TSX).toContain('import "./goal-card.css"');
   });
 
@@ -334,22 +322,6 @@ describe("goalshome-04: the last-event coming-online chip cannot overflow the pr
       const pinned = declaredValues(label, property).filter((value) => !wrapping.has(value));
       expect(pinned, `goal-card.css pins the progress label to one line via ${property}`).toEqual([]);
     }
-  });
-});
-
-describe("goalshome-07: the expanded coming-online cell wraps instead of overflowing the card", () => {
-  it("wraps the placeholder row and never lets its label run past the cell", () => {
-    const card = renderCard({}, true);
-    const row = screen.getByTestId("cr.goals.comingonline.suppliedfactsbundle");
-    expect(row.textContent).toContain("Supplied-facts bundle");
-    expect(row.textContent).toContain("COMING ONLINE");
-    expect(row.closest(".cr2-goal-facts-cell")).not.toBeNull();
-    expect(card.contains(row)).toBe(true);
-
-    expectStyled(row, "flex-wrap", "wrap");
-    const rowLabel = row.querySelector(".cr2-factrow-label");
-    expect(rowLabel).not.toBeNull();
-    expectStyled(rowLabel as Element, "overflow-wrap", "anywhere");
   });
 });
 
@@ -384,6 +356,6 @@ describe("the progress label names the reason when the model carries one", () =>
     cleanup();
     const plain: GoalCardModel = { ...base, goalId: "goal-plain", progress: undefined };
     render(<GoalCard expanded={false} goal={plain} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
-    expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress coming online");
+    expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress unavailable");
   });
 });

@@ -16,7 +16,7 @@ import { ProofProvider } from "./proof-context.js";
 import type { ProofController, ProofPayload } from "./proof-context.js";
 import { ConnectionBanner, StatusStrip } from "./status-strip.js";
 import { describeConnection } from "./shell-model.js";
-import type { CardTreatment, ConnectionState, NavId, NavItem } from "./shell-model.js";
+import type { ConnectionState, NavId, NavItem } from "./shell-model.js";
 
 /**
  * The Cordum shell frame: nav rail, context bar, connection banner, an empty main
@@ -51,7 +51,6 @@ export interface CordumShellProps {
   readonly initialConnection?: ConnectionState | null;
   /** Fixtures mode: show the SIMULATE relay control. */
   readonly simulatable?: boolean;
-  readonly initialTreatment?: CardTreatment;
   readonly initialProofOpen?: boolean;
 }
 
@@ -110,14 +109,12 @@ export function CordumShell({
   connection,
   initialConnection = null,
   simulatable = false,
-  initialTreatment = "Compact",
   initialProofOpen = false,
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
   const [simulatedConnection, setSimulatedConnection] =
     useState<ConnectionState | null>(initialConnection);
-  const [treatment, setTreatment] = useState<CardTreatment>(initialTreatment);
   const [proof, setProof] = useState<ProofPayload | null>(null);
   // The projection chords (g b / g r / g t) update inert tab state until a board
   // slice renders the projections; the wiring is real, the destination is not yet.
@@ -147,7 +144,6 @@ export function CordumShell({
         data-connection={descriptor.key}
         data-inspector={proofOpen ? "open" : "closed"}
         data-testid="cr2.shell.root"
-        data-treatment={treatment}
         ref={keyboard.rootRef}
       >
         <a
@@ -172,10 +168,8 @@ export function CordumShell({
             eyebrow={eyebrow}
             onBack={onBack}
             onToggleProof={keyboard.toggleInspector}
-            onTreatment={setTreatment}
             proofOpen={proofOpen}
             title={title}
-            treatment={treatment}
           />
           <div className="cr2-bannerslot">
             <ConnectionBanner state={shownConnection} />

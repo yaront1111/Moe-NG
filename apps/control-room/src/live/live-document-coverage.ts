@@ -45,6 +45,8 @@ export interface CoverageGoalView {
 }
 export interface CoverageSectionView {
   readonly cited: number;
+  /** Criteria under the citing requirements; verified counts against this. */
+  readonly criteria: number;
   readonly heading: string;
   readonly number: string | null;
   readonly verified: number;
@@ -211,11 +213,11 @@ function goalOf(value: unknown): CoverageGoalView | null {
 }
 
 function sectionOf(value: unknown): CoverageSectionView | null {
-  const record = exactDataRecord(value, ["cited", "heading", "number", "verified"]);
-  if (record === null || !count(record.cited) || !count(record.verified)
+  const record = exactDataRecord(value, ["cited", "criteria", "heading", "number", "verified"]);
+  if (record === null || !count(record.cited) || !count(record.criteria) || !count(record.verified)
     || typeof record.heading !== "string" || !nullableString(record.number)) return null;
   return Object.freeze({
-    cited: record.cited, heading: record.heading, number: record.number, verified: record.verified,
+    cited: record.cited, criteria: record.criteria, heading: record.heading, number: record.number, verified: record.verified,
   });
 }
 

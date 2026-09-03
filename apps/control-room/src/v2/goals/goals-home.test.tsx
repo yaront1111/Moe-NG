@@ -60,8 +60,8 @@ describe("coming-online fields never render a fabricated number", () => {
 
     expect(screen.getByTestId("cr.goals.card.goal-durable-alpha")).toBeTruthy();
     expect(screen.getByTestId("cr.goals.card.goal-durable-beta")).toBeTruthy();
-    const budget = screen.getByTestId("cr.goals.card.goal-durable-alpha.budget.comingonline");
-    expect(budget.textContent).toBe("BUDGET COMING ONLINE");
+    // No placeholder chip: a fact the catalog cannot source is left out, not announced as coming.
+    expect(screen.getByTestId("cr.goals.card.goal-durable-alpha").textContent).not.toContain("COMING ONLINE");
     // The card body carries no minutes-spent number the catalog cannot source.
     expect(screen.getByTestId("cr.goals.card.goal-durable-alpha").textContent).not.toContain("min spent");
 
@@ -71,13 +71,12 @@ describe("coming-online fields never render a fabricated number", () => {
     expect(expander.textContent).not.toContain("16");
   });
 
-  it("lists the un-sourced fields as coming online in the expanded facts", async () => {
+  it("expands only the supplied facts; un-sourced fields are left out rather than announced", async () => {
     const user = userEvent.setup();
     const data = deriveGoalCatalog(catalog());
     render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
     await user.click(screen.getByTestId("cr.goals.card.goal-durable-alpha.expand"));
-    expect(screen.getByTestId("cr.goals.comingonline.budgetandspend").textContent).toContain("COMING ONLINE");
-    expect(screen.getByTestId("cr.goals.comingonline.acceptanceprogress").textContent).toContain("COMING ONLINE");
+    expect(screen.getByTestId("cr.goals.card.goal-durable-alpha.facts").textContent).not.toContain("COMING ONLINE");
   });
 });
 
