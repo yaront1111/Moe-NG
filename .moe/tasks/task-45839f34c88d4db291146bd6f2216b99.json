@@ -17,12 +17,12 @@
     "Use production surfaces, not copied helpers. Preserve foreign WIP; explicit pathspec only; target 250 lines per production file and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-authorized SPIDR re-split: measured reachability exceeds exact-10 path cap; see comment-cba6f6ea146e44dd8b9323dee20ac91e.",
+  "reopenReason": "UNBLOCKED TO PLANNING ONLY, governor-c69613d7 on human authority (\"unblock more\"). ITS BLOCK PREMISE IS MEASURABLY STALE. The blockedReason names FIVE unmet dependencies; I checked all seven declared deps on disk just now and SIX are DONE - task-272b09a7, task-59eaddfb, task-cb40f3d8, task-38ec450a, task-09008b4c and task-2bf8fa1a all landed since that reason was written. Exactly ONE remains: task-f8ea0a2f, which is WORKING right now under worker-ae3c36ad with dependsOnUnmet 0 and its lookup-first prerequisite already landed. dependsOnUnmet on this row is 1, not 5.\n\nWHY PLANNING AND NOT WORKING, and this is the safety property that makes it correct: dependsOn gates WORKING CLAIMS. This row still declares task-f8ea0a2f, so even after submit_plan auto-approves it to WORKING under SPEED, no worker can claim it until f8ea0a2f is DONE. So the plan gets written in parallel with f8ea0a2f's execution and the row is QUEUED, not raced. Nothing can run a gate that needs f8ea0a2f's code before that code exists.\n\nNOTHING IS DESTROYED BY PLANNING THIS ROW: planStepCount is 0 and completedStepCount is 0. This is a genuine first plan, NOT a re-plan, so submit_plan here is correct and carries none of the step-destroying hazard that applies to task-f8ea0a2f.\n\nWHAT THE ARCHITECT MUST DO FIRST, quoting this row's own reason: \"then remeasure and plan an atomic <=10-path seam.\" REMEASURE, do not inherit. The \"six measured RUNTIME_PROVIDER_PARTITION consumers\" and \"33 served versus 31 advertised\" figures are a snapshot from when five deps were outstanding; four of those five have since landed and the delta may have closed on its own. Governor's own cheap re-measure at HEAD: `grep -rl RUNTIME_PROVIDER_PARTITION --include=*.ts --include=*.tsx` returns SEVEN files, all under tests/security/ (runtime-provider-control-room.security.ts, -evidence.security.ts, -invariants.ts, -launch.security.ts, -ledger.ts, -platform.security.ts, -projects.security.ts). That is a starting point, not the answer - derive the served/advertised counts properly rather than trusting my grep. If the delta closed, the plan shrinks and that is a finding worth recording.\n\nSIZE WARNING: this is a fifteen-row boundary roster against a <=10-path atomic ceiling and a repo where a new *_LAYER constant means a coupled roster backfill. Size it before committing to one row; if the honest seam is fifteen paths, SPLIT via SPIDR and say so rather than quietly widening the ceiling.",
   "createdBy": "WORKER",
   "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
   "dependsOn": [
@@ -48,11 +48,17 @@
       "author": "architect-db6a0906",
       "content": "ARCHITECT RE-MEASUREMENT at delivered tree HEAD 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d: `git status --porcelain` over the proposed integrity leaf is empty; production lines are activation-record 160, cutover-quiesce-evidence 269, cutover-generation-snapshot 348. The focused boundary roster executes 1 file/34 tests and has exactly the expected two reds: scan 146 vs roster 131 and scan-minus-roster exactly 15. Fresh shape reachability found 13 consumers for the combined closure: seven roster/count surfaces plus six additional direct RUNTIME_PROVIDER_PARTITION consumers. Therefore the human two-concern split still needs a third path-cap slice; no count/caller may be hidden. Created leaf task-38ec450ae92d486f860c5801c0f28870 for the exact five producer/case paths and asked governor to append it to this row's dependencies after runtime misclassified the architect role. Proposed successor split: seven-path runtime-partition prerequisite, then seven-path final roster closure. Current dirty scheduler sheet belongs to blocked predecessor and must be adopted only after that dependency lands.",
       "timestamp": "2026-09-01T17:38:31.512Z"
+    },
+    {
+      "id": "comment-83bc0e96c4874085988ace9e0002f53a",
+      "author": "architect-a544efc4",
+      "content": "DO NOT PLAN THIS ROW — ITS WORK IS ALREADY LANDED. architect-a544efc4, 2026-09-03, measured at HEAD 898f3e95 (root D:/projexts/moe-next, branch moe/work-2026-09-02). I was asked to plan it, re-measured first per the stale-by-default rail, and the gap this row exists to close is CLOSED.\n\nTHE DECISIVE MEASUREMENT. `pnpm test:security` -> EXIT 0, `Test Files 12 passed (12)`, `Tests 917 passed (917)`. That single result settles DoD 2, 3 and 4 transitively, because `completeness.security.ts` is IN that lane and it asserts BEFORE/AFTER/RACE coverage with positive executed counts for every roster entry, in both directions, plus the five-way axis partition. A green completeness cannot coexist with an unrostered or unarmed identifier.\n\nDoD BY DoD, against HEAD:\n1. UNSATISFIABLE AS WRITTEN, and that is the tell. It requires the scan-minus-roster set to be \"exactly the fifteen named identifiers or block on drift\". It is EMPTY — `boundary-roster.security.ts` passes. The clause presumes the fifteen are missing; they are not.\n2. SATISFIED. `GA_ACTIVATION_RECORD_LAYER` (integrity-hostile-cases.ts:109, :2800-2802) and `LIVE_QUIESCE_EVIDENCE_LAYER` (:2886) both carry arms, and completeness green proves they execute nonzero.\n3. SATISFIED. `EXPECTED_ROSTER_SIZE = 168` (boundary-roster.security.ts:525), asserted at :665, :683, :703 and :771. Axis totals at :107-108 — transport 26, integrity 41, durable-store 22, runtime-provider 33, scheduler-activation 46 — sum to 168. Spot-checked all six identifiers this row names, including all three durable-store ones: GA_ACTIVATION_RECORD_LAYER, LIVE_QUIESCE_EVIDENCE_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER, CUTOVER_ATTEMPT_LAYER, CUTOVER_GENERATION_SNAPSHOT_LAYER, IMPORT_GENERATION_READ_LAYER. All present.\n4. SATISFIED. Full lane green, 917 tests, no foreign red to attribute.\n5. Drills are not observable from a green lane; they belong to whichever rows landed the work.\n\nWHO LANDED IT: `git log -- tests/security/boundary-roster.security.ts` shows f4c3992a \"make the boundary scanner digit-aware and roster the 16 constants it reveals\" and fe3bf1eb \"roster the six v2 contract boundaries with their hostile arms\", among others. Note f4c3992a also closed the digit-escape in `DECLARATION_PATTERN` that was a known latent hole — that was never in this row's DoD and is a bonus, not a duplicate.\n\nA CORRECTION TO MY OWN FIRST MEASUREMENT, recorded because it would mislead the next reader. My first run was the two suites alone: `vitest run --config tests/security/vitest.config.ts boundary-roster.security.ts completeness.security.ts` -> EXIT 1, `Tests 9 failed | 37 passed (46)`, with 33 entries \"rostered runtime-provider, covered by nothing\" and axis sum 135 vs 168. THAT WAS A FALSE RED AND I NEARLY FILED IT. `completeness.security.ts:255` reads `RUNTIME_RECEIPTS`, emitted by the five `runtime-provider-*.security.ts` slice suites during the SAME lane run; running completeness without them yields 0 of 5 receipts and cascades into all nine failures. Completeness must only ever be judged from a full-lane run.\n\nWHY THIS MATTERS BEYOND THIS ROW. Planning this row as written would have produced a plan to re-publish fifteen already-published identifiers, across ten paths, five of which are live security suites — a silent duplicate colliding with its real owner in a shared worktree, and the DoD 1 clause would have made a worker block on \"drift\" that is actually completion.\n\nRECOMMENDATION, and it is a governor/human call, not mine: close this row rather than plan it. If there is residual value, it is not what the description says — the honest residue would be a small row asserting the axis-total paragraph at :107-108 stays in step with `EXPECTED_ROSTER_SIZE`, and that is already asserted at :683 and :771. I see nothing left to build.\n\nONE REAL CONSTRAINT SURVIVES REGARDLESS: this row's taskRails serialize it after task-f8ea0a2f to avoid a shared-file collision on `tests/security/durable-store-boundaries.security.ts`, which both rosters own. That serialization reason is still valid even though the work is not. task-f8ea0a2f is PLANNING at 5/7 and awaiting a governor hop to WORKING.",
+      "timestamp": "2026-09-03T09:01:57.064Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T20:57:15.097Z",
-  "updatedAt": "2026-09-01T20:09:47.586Z",
+  "updatedAt": "2026-09-03T09:01:57.064Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "architect-5e59a71e",
@@ -64,17 +70,11 @@
   "metrics": {
     "firstClaimAt": "2026-08-31T09:30:54.921Z"
   },
-  "blockedReason": "Build-order block on the five declared unmet dependencies: task-272b09a7164f4b618dcf9a0f65272fd0, task-59eaddfbf1e049bbab00290233a54284, task-cb40f3d833f14c3089d812b9bf2d291f, task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d, and task-38ec450ae92d486f860c5801c0f28870. Planning now would either omit six measured RUNTIME_PROVIDER_PARTITION consumers or knowingly make completeness red at 33 served versus 31 advertised. Auto-unblock when all are DONE; then remeasure and plan an atomic <=10-path seam.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-01T20:08:45.671Z",
-  "blockedOnTaskIds": [
-    "task-272b09a7164f4b618dcf9a0f65272fd0",
-    "task-59eaddfbf1e049bbab00290233a54284",
-    "task-cb40f3d833f14c3089d812b9bf2d291f",
-    "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
-    "task-38ec450ae92d486f860c5801c0f28870"
-  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-read all prior handoffs, current task context, the human/governor split ruling, and task-38ec's new REVIEW completion record. Confirmed task-38ec is merged but not DONE and four other producer rows remain BLOCKED; this final row still has five unmet declared dependencies. No workspace files or task fields were changed.",
@@ -118,5 +118,6 @@
       "releasedBy": "architect-db6a0906",
       "reason": "Build-order handoff: human-authorized integrity dependency leaf must be planned first; combined successor still exceeds path cap on fresh shape reachability."
     }
-  ]
+  ],
+  "priorBlockedReason": "Build-order block on the five declared unmet dependencies: task-272b09a7164f4b618dcf9a0f65272fd0, task-59eaddfbf1e049bbab00290233a54284, task-cb40f3d833f14c3089d812b9bf2d291f, task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d, and task-38ec450ae92d486f860c5801c0f28870. Planning now would either omit six measured RUNTIME_PROVIDER_PARTITION consumers or knowingly make completeness red at 33 served versus 31 advertised. Auto-unblock when all are DONE; then remeasure and plan an atomic <=10-path seam."
 }
