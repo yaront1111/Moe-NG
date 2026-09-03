@@ -33,8 +33,10 @@ import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import type { HealthReadPort } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import type { ActivityReadPort } from "./activity-read.js";
+import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
 import type { SessionsReadPort } from "./sessions-read.js";
+import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
 import {
   PRODUCT_CONTRACT_PENDING_READ_PATH, handleProductContractPendingReadRequest,
@@ -214,6 +216,8 @@ export interface StartListenerOptions {
   readonly activity?: ActivityReadPort;
   /** Absent means the sessions read refuses as unavailable. */
   readonly sessions?: SessionsReadPort;
+  /** Absent means the goal-source (PRD text) read refuses as unavailable. */
+  readonly goalSource?: GoalSourceReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */
@@ -292,6 +296,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   HEALTH_READ_PATH,
   ACTIVITY_READ_PATH,
   SESSIONS_READ_PATH,
+  GOAL_SOURCE_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
   V2_COMMAND_PATH,
 ]);
@@ -729,6 +734,16 @@ function serveSessions(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveGoalSource(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleGoalSourceReadRequest({
+    authenticator: options.deps.authenticator, goalSource: options.goalSource,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveProductContractPending(
   response: ServerResponse,
   request: IncomingMessage,
@@ -1096,6 +1111,10 @@ async function serve(
     refuseRequest(response, "LISTENER_SESSIONS_REQUEST_INVALID");
     return;
   }
+  if (path === GOAL_SOURCE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -1156,6 +1175,8 @@ async function serve(
     serveActivity(response, request, options, body);
   } else if (path === SESSIONS_READ_PATH) {
     serveSessions(response, request, options, body);
+  } else if (path === GOAL_SOURCE_READ_PATH) {
+    serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
     servePolicy(response, request, options, body);
   } else if (path === HEALTH_READ_PATH) {

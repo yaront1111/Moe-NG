@@ -28,6 +28,15 @@ describe("createPolicyReadPort", () => {
     const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: false, policy: false }) }).readPolicy());
     expect(view).toMatchObject({ aggregateVersion: 0, evaluations: [], slices: [], verifier: { calibration: false, policy: false } });
     expect(view.waivers.supported).toBe(false);
+    // The three standard slices, none installed, each carrying the body the seed would install.
+    expect(view.standard.map((row) => [row.kind, row.sliceRef, row.installed])).toEqual([
+      ["VERIFIER_POLICY", "moe-verifier-policy/1", false],
+      ["REVIEWER_CALIBRATION", "moe-reviewer-calibration/1", false],
+      ["EVALUATION", view.standard[2]?.sliceRef, false],
+    ]);
+    expect(view.standard[2]?.sliceRef).toMatch(/^[0-9a-f]{64}$/u);
+    expect(view.standard[0]?.slice).toMatchObject({ action: "integration.accept_output", sliceRef: "moe-verifier-policy/1" });
+    expect(view.standard[1]?.slice).toMatchObject({ corpusRevision: `${PROJECT_ID}-demo-seed-declared-corpus-1`, sliceRef: "moe-reviewer-calibration/1" });
   });
 
   it("lists the installed slices with their kind, digest check and counts, and the evaluations latest first", () => {
@@ -36,6 +45,11 @@ describe("createPolicyReadPort", () => {
     const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: true, policy: false }) }).readPolicy());
     expect(view.aggregateVersion).toBe(3);
     expect(view.slices).toHaveLength(2);
+    // Two evaluation slices at their own digests satisfy the standard EVALUATION row; the
+    // verifier's two are still missing by ref.
+    expect(view.standard.map((row) => [row.kind, row.installed])).toEqual([
+      ["VERIFIER_POLICY", false], ["REVIEWER_CALIBRATION", false], ["EVALUATION", true],
+    ]);
     for (const slice of view.slices) {
       expect(slice.kind).toBe("EVALUATION");
       expect(slice.contentDigestMatches).toBe(true);

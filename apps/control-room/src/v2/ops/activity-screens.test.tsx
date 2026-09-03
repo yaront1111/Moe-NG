@@ -35,6 +35,7 @@ describe("activity words", () => {
   it("translate known kinds and principals and keep unknown ones as spelled", () => {
     expect(kindWords("integration.accept_output")).toBe("accepted the delivered work");
     expect(kindWords("cutover.activate")).toBe("cutover.activate");
+    expect(kindWords("OPEN_SESSION")).toBe("paired a browser seat");
     expect(principalWords("operator-local")).toBe("the operator");
     expect(principalWords("sess-wrap-abc")).toBe("an agent seat");
     expect(principalWords("daemon:node-verifier")).toBe("the daemon's verifier");
@@ -51,7 +52,7 @@ describe("activity words", () => {
 describe("ActivityPanel", () => {
   it("renders each decision as who did what, latest first, and says refusals are not recorded", () => {
     render(<ActivityPanel nowMs={NOW} outcome={ACTIVITY} scopeLabel="Alpha" />);
-    expect(screen.getByTestId("cr.activity.count").textContent).toContain("3 of 12 decisions");
+    expect(screen.getByTestId("cr.activity.count").textContent).toContain("2 work decisions of 12 recorded");
     // Seat and pairing records fold away behind one line instead of crowding the ledger.
     expect(screen.queryByTestId("cr.activity.entry.2")).toBeNull();
     expect(screen.getByTestId("cr.activity.seats").textContent).toContain("1 seat and pairing records");

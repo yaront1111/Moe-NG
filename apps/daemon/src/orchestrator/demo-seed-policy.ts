@@ -112,7 +112,7 @@ export function validatablePolicySlice(): Record<string, unknown> {
  * receipt that carries it - can see the calibration came from the bootstrap and not from a
  * measured corpus. A real deployment installs its own slice at the same ref and overwrites it.
  */
-export function reviewerCalibrationSlice(input: DemoSeedInput): Record<string, unknown> {
+export function reviewerCalibrationSlice(input: Pick<DemoSeedInput, "projectId">): Record<string, unknown> {
   return {
     corpusRevision: `${input.projectId}-demo-seed-declared-corpus-1`,
     sentinelPassed: true,
@@ -136,7 +136,7 @@ export function reviewerCalibrationSlice(input: DemoSeedInput): Record<string, u
  * `evaluatePolicy` refuses a `policyRevisionRef` that is not 64 hex - so a slice living at a
  * non-hex ref can never be named as a policy revision by a caller who notices it installed.
  */
-export function verifierPolicySlice(input: DemoSeedInput): Record<string, unknown> {
+export function verifierPolicySlice(input: Pick<DemoSeedInput, "projectId">): Record<string, unknown> {
   return {
     action: DEMO_ACCEPTANCE_ACTION,
     actor: NODE_VERIFIER_PRINCIPAL_ID,

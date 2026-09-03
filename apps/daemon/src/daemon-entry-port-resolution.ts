@@ -101,6 +101,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly health?: HealthReadPort;
   readonly activity?: ActivityReadPort;
   readonly sessions?: SessionsReadPort;
+  readonly goalSource?: GoalSourceReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -130,7 +131,7 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs", "policy", "health", "activity", "sessions",
+  "reconciliation", "runs", "policy", "health", "activity", "sessions", "goalSource",
   "sessionHandshake",
 ] as const);
 
@@ -286,6 +287,14 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(sessions, ["readSessions"]) || typeof Reflect.get(sessions, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const goalSourceFactory = provider.goalSource;
+    if (goalSourceFactory !== undefined && typeof goalSourceFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const goalSource = goalSourceFactory?.call(provider);
+    if (goalSource !== undefined && !hasMethods(goalSource, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -376,6 +385,7 @@ export function resolveOptionalDaemonPorts(
       ...(health === undefined ? {} : { health }),
       ...(activity === undefined ? {} : { activity }),
       ...(sessions === undefined ? {} : { sessions }),
+      ...(goalSource === undefined ? {} : { goalSource }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

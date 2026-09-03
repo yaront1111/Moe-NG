@@ -10,6 +10,9 @@ const POLICY = Object.freeze({
     { autoApprovalOptIns: 0, contentDigestMatches: true, installedAt: "2026-09-02T18:00:00.000Z", kind: "EVALUATION", riskClassifications: 7, rules: 0, sliceRef: "f".repeat(64) },
     { autoApprovalOptIns: null, contentDigestMatches: null, installedAt: null, kind: "VERIFIER_POLICY", riskClassifications: null, rules: null, sliceRef: "moe-verifier-policy/1" },
   ],
+  standard: [
+    { installed: false, kind: "VERIFIER_POLICY", slice: { action: "integration.accept_output", sliceRef: "moe-verifier-policy/1" }, sliceRef: "moe-verifier-policy/1" },
+  ],
   verifier: { calibration: true, policy: true },
   waivers: { reason: "No command on this daemon records a policy waiver.", supported: false },
 });
@@ -23,7 +26,7 @@ const response = (status: number, body: unknown): Response => ({ json: async () 
 describe("mapPolicyAnswer / mapHealthAnswer", () => {
   it("map exact frames verbatim", () => {
     expect(mapPolicyAnswer(200, POLICY)).toStrictEqual({
-      aggregateVersion: 3, evaluations: POLICY.evaluations, slices: POLICY.slices, status: "POLICY",
+      aggregateVersion: 3, evaluations: POLICY.evaluations, slices: POLICY.slices, standard: POLICY.standard, status: "POLICY",
       verifier: { calibration: true, policy: true }, waivers: { reason: POLICY.waivers.reason, supported: false },
     });
     expect(mapHealthAnswer(200, HEALTH)).toStrictEqual({
@@ -39,6 +42,9 @@ describe("mapPolicyAnswer / mapHealthAnswer", () => {
     const invalid = { code: "OPS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_OPS", status: "ERROR" };
     expect(mapPolicyAnswer(200, { ...POLICY, slices: [{ ...POLICY.slices[0], kind: "OTHER" }] })).toStrictEqual(invalid);
     expect(mapPolicyAnswer(200, { ...POLICY, waivers: { reason: "r", supported: true } })).toStrictEqual(invalid);
+    // A standard body whose sliceRef disagrees with its row is not a body the browser may install.
+    expect(mapPolicyAnswer(200, { ...POLICY, standard: [{ ...POLICY.standard[0], slice: { sliceRef: "other" } }] })).toStrictEqual(invalid);
+    expect(mapPolicyAnswer(200, { ...POLICY, standard: [{ ...POLICY.standard[0], kind: "ARTIFACT" }] })).toStrictEqual(invalid);
     expect(mapHealthAnswer(200, { ...HEALTH, daemon: { ...HEALTH.daemon, pid: "4242" } })).toStrictEqual(invalid);
     expect(mapHealthAnswer(200, { ...HEALTH, extra: 1 })).toStrictEqual(invalid);
     expect(mapHealthAnswer(500, {})).toStrictEqual(invalid);

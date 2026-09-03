@@ -30,12 +30,22 @@ export interface PolicyEvaluationView {
   readonly principalId: string | null;
 }
 export interface VerifierStanding { readonly calibration: boolean; readonly policy: boolean }
+export const STANDARD_SLICE_KINDS = ["EVALUATION", "REVIEWER_CALIBRATION", "VERIFIER_POLICY"] as const;
+export type StandardSliceKind = (typeof STANDARD_SLICE_KINDS)[number];
+/** A slice the project needs, with the body the daemon would install; `installed` is read off the same aggregate. */
+export interface StandardSliceView {
+  readonly installed: boolean;
+  readonly kind: StandardSliceKind;
+  readonly slice: Readonly<Record<string, unknown>>;
+  readonly sliceRef: string;
+}
 export type PolicyOutcome =
   | {
     readonly status: "POLICY";
     readonly aggregateVersion: number;
     readonly evaluations: readonly PolicyEvaluationView[];
     readonly slices: readonly PolicySliceView[];
+    readonly standard: readonly StandardSliceView[];
     readonly verifier: VerifierStanding;
     readonly waivers: { readonly reason: string; readonly supported: false };
   }
@@ -147,6 +157,18 @@ function sliceOf(value: unknown): PolicySliceView | null {
   });
 }
 
+function standardOf(value: unknown): StandardSliceView | null {
+  const record = exactDataRecord(value, ["installed", "kind", "slice", "sliceRef"]);
+  if (record === null || typeof record.installed !== "boolean" || !nonEmptyString(record.sliceRef)
+    || typeof record.kind !== "string" || !(STANDARD_SLICE_KINDS as readonly string[]).includes(record.kind)
+    || typeof record.slice !== "object" || record.slice === null || Array.isArray(record.slice)) return null;
+  const slice = record.slice as Readonly<Record<string, unknown>>;
+  if (slice["sliceRef"] !== record.sliceRef) return null;
+  return Object.freeze({
+    installed: record.installed, kind: record.kind as StandardSliceKind, slice: Object.freeze({ ...slice }), sliceRef: record.sliceRef,
+  });
+}
+
 function evaluationOf(value: unknown): PolicyEvaluationView | null {
   const record = exactDataRecord(value, ["decidedAt", "decision", "policyRef", "principalId"]);
   if (record === null || !nonEmptyString(record.decidedAt) || !nullableString(record.decision)
@@ -171,16 +193,17 @@ export function mapPolicyAnswer(status: number, response: unknown): PolicyOutcom
   const refusal = refusalFrom(response);
   if (refusal !== null) return refusal;
   if (status !== 200) return invalidResponse();
-  const record = exactDataRecord(response, ["aggregateVersion", "evaluations", "outcome", "slices", "verifier", "waivers"]);
+  const record = exactDataRecord(response, ["aggregateVersion", "evaluations", "outcome", "slices", "standard", "verifier", "waivers"]);
   if (record === null || record.outcome !== "POLICY" || !count(record.aggregateVersion)) return invalidResponse();
   const evaluations = listOf(record.evaluations, evaluationOf);
   const slices = listOf(record.slices, sliceOf);
+  const standard = listOf(record.standard, standardOf);
   const verifier = verifierOf(record.verifier);
   const waivers = exactDataRecord(record.waivers, ["reason", "supported"]);
-  if (evaluations === null || slices === null || verifier === null || waivers === null
+  if (evaluations === null || slices === null || standard === null || verifier === null || waivers === null
     || waivers.supported !== false || typeof waivers.reason !== "string") return invalidResponse();
   return Object.freeze({
-    aggregateVersion: record.aggregateVersion, evaluations, slices, status: "POLICY" as const, verifier,
+    aggregateVersion: record.aggregateVersion, evaluations, slices, standard, status: "POLICY" as const, verifier,
     waivers: Object.freeze({ reason: waivers.reason, supported: false as const }),
   });
 }

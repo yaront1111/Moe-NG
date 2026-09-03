@@ -1302,3 +1302,26 @@
     grid-column: 1;
   }
 }
+
+/* The PRD, as stored: monospace, wrapped, scrolling inside its own box past ~60vh. */
+.cr2-prd-text {
+  margin: 8px 0 0;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--cr-line);
+  border-radius: 8px;
+  background: var(--cr-surface-sunken, var(--cr-surface));
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  line-height: 1.5;
+  color: var(--cr-ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cr2-policy-standard {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}

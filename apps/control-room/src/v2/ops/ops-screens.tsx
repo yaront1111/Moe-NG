@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
+import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 
 /**
@@ -71,7 +72,16 @@ export function verifierWords(verifier: { readonly calibration: boolean; readonl
   return `Delivered work cannot be accepted until ${missing.join(" and ")} is installed with policy.install.`;
 }
 
-export function PolicyScreen({ nowMs, outcome }: { readonly nowMs: number; readonly outcome: PolicyOutcome | null }): JSX.Element {
+/** What the screen knows about installing: the handler (null when no wire is attached), whether one is running, and each step's answer. */
+export interface PolicyInstallState {
+  readonly busy: boolean;
+  readonly onInstall: (() => void) | null;
+  readonly steps: readonly { readonly kind: string; readonly sliceRef: string; readonly outcome: { readonly ok: true } | { readonly code: string; readonly layer: string; readonly ok: false } }[];
+}
+
+export function PolicyScreen({ install, nowMs, outcome }: {
+  readonly install?: PolicyInstallState | undefined; readonly nowMs: number; readonly outcome: PolicyOutcome | null;
+}): JSX.Element {
   if (outcome === null) {
     return <section className="cr2-ops" data-testid="cr.policy.root"><p className="cr2-slot-kicker" data-testid="cr.policy.loading">Reading the policy...</p></section>;
   }
@@ -87,6 +97,43 @@ export function PolicyScreen({ nowMs, outcome }: { readonly nowMs: number; reado
       >
         {verifierWords(outcome.verifier)}
       </p>
+      {outcome.standard.some((row) => !row.installed) ? (() => {
+        const missing = outcome.standard.filter((row) => !row.installed);
+        return (
+          <div className="cr2-ops-card cr2-policy-standard" data-testid="cr.policy.standard">
+            <p className="cr2-slot-kicker">{`STANDARD POLICY ${MIDDOT} ${String(missing.length)} OF ${String(outcome.standard.length)} SLICES MISSING`}</p>
+            <ul className="cr2-approve-obligations" data-testid="cr.policy.standard.list">
+              {outcome.standard.map((row) => (
+                <li className="cr2-coverage-section" data-installed={row.installed ? "true" : "false"} data-testid={`cr.policy.standard.${row.kind}`} key={row.sliceRef}>
+                  <span className="cr2-approve-step-body">{`${KIND_WORDS[row.kind]} ${MIDDOT} ${row.installed ? "installed" : "missing"}`}</span>
+                  <span className="cr2-approve-mono">{row.sliceRef}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="cr2-needs-detail">
+              The daemon states these bodies; installing spends its own policy.install offer once per missing slice, in this order.
+              The reviewer calibration is self-declared by the bootstrap, not a measured corpus.
+            </p>
+            {install === undefined || install.onInstall === null ? (
+              <p className="cr2-needs-note" data-testid="cr.policy.install.nowire">Pair a session with project.admin to install from here.</p>
+            ) : (
+              <ActionButton disabled={install.busy} onClick={install.onInstall} testId="cr.policy.install">
+                {install.busy ? "Installing..." : `Install the standard policy (${String(missing.length)} ${missing.length === 1 ? "slice" : "slices"})`}
+              </ActionButton>
+            )}
+            {install === undefined || install.steps.length === 0 ? null : (
+              <ol className="cr2-approve-obligations" data-testid="cr.policy.install.steps">
+                {install.steps.map((step) => (
+                  <li className="cr2-coverage-section" data-ok={step.outcome.ok ? "true" : "false"} key={step.sliceRef}>
+                    <span className="cr2-approve-step-body">{`${KIND_WORDS[step.kind as PolicySliceKind] ?? step.kind} ${MIDDOT} ${step.outcome.ok ? "installed" : "refused"}`}</span>
+                    <span className="cr2-approve-mono">{step.outcome.ok ? step.sliceRef : `${step.outcome.code} ${MIDDOT} ${step.outcome.layer}`}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        );
+      })() : null}
       <span className="cr2-goals-count" data-testid="cr.policy.count">
         {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATION${outcome.evaluations.length === 1 ? "" : "S"} ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
       </span>

@@ -944,8 +944,12 @@ it("routes the activity and sessions reads through their ports and refuses them 
     expect(await send(listener, { body: "{}", path: "/sessions/read" })).toEqual({
       body: { code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }, status: 200,
     });
-    expect(seen).toEqual([{ goalRef: "goal-1" }]);
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/goals/source/read" })).toEqual({
+      body: { code: "GOAL_SOURCE_UNBOUND", layer: "TEST", outcome: "REFUSED" }, status: 200,
+    });
+    expect(seen).toEqual([{ goalRef: "goal-1" }, "goal-1"]);
     expectListenerRefusal(await send(listener, { method: "GET", path: "/activity/read" }), "LISTENER_ACTIVITY_REQUEST_INVALID");
+    expectListenerRefusal(await send(listener, { body: "{}", path: "/goals/source/read" }), "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
     expectListenerRefusal(await send(listener, { body: JSON.stringify({ x: 1 }), path: "/sessions/read" }), "LISTENER_SESSIONS_REQUEST_INVALID");
   }, {
     activity: { boundProjectId: "proj-0001", readActivity: (selector: unknown) => {
@@ -953,10 +957,12 @@ it("routes the activity and sessions reads through their ports and refuses them 
       return { code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "TEST", outcome: "REFUSED" };
     } },
     deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) },
+    goalSource: { read: (goalRef: unknown) => { seen.push(goalRef); return { code: "GOAL_SOURCE_UNBOUND", layer: "TEST", ok: false }; } },
     sessions: { boundProjectId: "proj-0001", readSessions: () => ({ code: "SESSIONS_READ_UNREADABLE", layer: "TEST", outcome: "REFUSED" }) },
   });
   await withListener(async (listener) => {
     expectListenerRefusal(await send(listener, { body: "{}", path: "/activity/read" }), "LISTENER_ACTIVITY_UNAVAILABLE");
     expectListenerRefusal(await send(listener, { body: "{}", path: "/sessions/read" }), "LISTENER_SESSIONS_UNAVAILABLE");
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-1" }), path: "/goals/source/read" }), "LISTENER_GOAL_SOURCE_UNAVAILABLE");
   }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.GOAL]) } });
 });

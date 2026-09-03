@@ -23,6 +23,7 @@ import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { PrdCoverage } from "./goals/prd-coverage.js";
+import { LivePrd } from "./goals/prd-panel.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
@@ -251,6 +252,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             onFrame={reportFrame}
             runId={open.planningRunRef}
           />
+          <LivePrd goalRef={open.goalId} headers={attached.headers} />
           <LiveActivity goalRef={open.goalId} headers={attached.headers} scopeLabel={open.title} />
         </>
       );
@@ -278,7 +280,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     body = view === "runs" && live.setup.ok
       ? <LiveRuns headers={live.setup.headers} onConnection={reportConnection} onOpenBoard={openBoard} />
       : view === "policy" && live.setup.ok
-      ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} />
+      ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} setup={live.setup} />
       : view === "health" && live.setup.ok
       ? <LiveHealth headers={live.setup.headers} onConnection={reportConnection} />
       : view === "approvals" && live.setup.ok

@@ -18,6 +18,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/events/read",
   "/events/resume",
   "/goals/read",
+  "/goals/source/read",
   "/health/read",
   "/graph/get",
   "/planning/run/read",

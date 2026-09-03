@@ -22,6 +22,12 @@ function Refusal({ outcome, testId }: {
   );
 }
 
+type ActivityEntries = Extract<ActivityOutcome, { readonly entries: unknown }>["entries"];
+
+function seatsOf(entries: ActivityEntries): ActivityEntries {
+  return entries.filter((entry) => isSeatRecord(entry.commandKind, entry.targetAggregateId));
+}
+
 export interface ActivityPanelProps {
   readonly nowMs: number;
   readonly outcome: ActivityOutcome | null;
@@ -42,7 +48,7 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
       ) : (
         <>
           <p className="cr2-needs-note" data-testid="cr.activity.count">
-            {`${String(outcome.entries.length)} of ${String(outcome.totalDecisions)} decisions, latest first.`
+            {`${String(outcome.entries.length - seatsOf(outcome.entries).length)} work decisions of ${String(outcome.totalDecisions)} recorded, latest first.`
               + " Refused commands are not recorded, so they do not appear here."}
           </p>
           <ol className="cr2-activity-list" data-testid="cr.activity.list">
@@ -67,7 +73,7 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
             ))}
           </ol>
           {(() => {
-            const seats = outcome.entries.filter((entry) => isSeatRecord(entry.commandKind, entry.targetAggregateId));
+            const seats = seatsOf(outcome.entries);
             return seats.length === 0 ? null : (
               <details className="cr2-approve-inspect" data-testid="cr.activity.seats">
                 <summary className="cr2-approve-inspect-summary">

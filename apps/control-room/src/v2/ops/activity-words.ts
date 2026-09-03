@@ -5,6 +5,9 @@
  */
 
 const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  CLOSE_SESSION: "closed a browser seat",
+  CREATE_PRINCIPAL: "minted a principal",
+  OPEN_SESSION: "paired a browser seat",
   "approval.decide": "decided the plan",
   "approval.decide_intent": "approved the plan",
   "escalation.decide": "allowed more review attempts",

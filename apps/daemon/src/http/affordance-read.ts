@@ -211,6 +211,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       }
       const aggregateId = bootstrapAggregateId(kind, config.projectId, planningSubject);
       if (ledger.kinds.has(kind)) {
+        // policy.install is REPEATABLE: every slice is one more install on the same
+        // aggregate (the seed installs three at versions 0, 1, 2), so a committed
+        // install still offers the next one at the aggregate's current version. The
+        // step stays COMMITTED - the chain has its policy - only the offer continues.
+        if (kind === "policy.install") {
+          offers.push(offer(kind, aggregateId, versionOf(ledger, aggregateId), BOOTSTRAP_SCHEMA_VERSION));
+        }
         return Object.freeze({
           aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
           missing: [], status: "COMMITTED" as const,
