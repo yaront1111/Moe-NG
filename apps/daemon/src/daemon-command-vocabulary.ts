@@ -69,6 +69,7 @@ export const CAPABILITIES = {
 
 export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
+  "repository.publish": CAPABILITIES.GOAL,
   "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
   "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
@@ -312,6 +313,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "policy.install": ["slice"], "policy.validate": ["input"],
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
     "project.register": ["owner"], "provider.probe": ["observation"],
+    "repository.publish": ["goalId", "remoteUrl"],
     "qualification.replan": [
       "nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions",
     ],
@@ -348,6 +350,9 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // fence exists to refuse. MCP-excluded on the same standing contract.
   PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
   "goal.close",
+  // Publishing pushes the operator's repository to a remote the operator named: the human's
+  // own act on their own code, and MCP-unreachable for the same reason as the approvals.
+  "repository.publish",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
   // `approval.decide` is reserved for. The other three propose, release or request and activate

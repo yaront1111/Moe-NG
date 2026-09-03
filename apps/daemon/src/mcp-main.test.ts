@@ -200,7 +200,7 @@ const ENTRY = "stdio";
  *
  * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
  * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 5 x 2 = 10, and the arm below
+ * them, so the row's total case count is kinds x entries = 6 x 2 = 12, and the arm below
  * asserts both this file's share and that documented total.
  */
 const MCP_TRANSPORT_ENTRY_COUNT = 2;
@@ -210,6 +210,7 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "product_contract.answer_clarification",
   "cutover.activate",
   "graph.approve",
+  "repository.publish",
 ]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
@@ -224,9 +225,9 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(5);
+    expect(EXCLUSION_CASES.length).toBe(6);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(10);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(12);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

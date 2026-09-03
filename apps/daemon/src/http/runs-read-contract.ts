@@ -88,10 +88,22 @@ export interface RunNodeView {
   readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }
+/** The goal's latest publish decision and what the publisher did with it. */
+export interface RunGoalPublish {
+  readonly branch: string | null;
+  readonly code: string | null;
+  readonly decisionId: string;
+  readonly outcome: "PENDING" | "PUSHED" | "REFUSED";
+  readonly remoteUrl: string;
+  readonly requestedAt: string;
+  readonly sha: string | null;
+  readonly url: string | null;
+}
 export interface RunGoalView {
   readonly goalId: string;
   readonly lifecycle: string | null;
   readonly nodes: readonly RunNodeView[];
+  readonly publish: RunGoalPublish | null;
   readonly run: {
     readonly approval: PlanningRunApprovalState;
     readonly lifecycle: string;

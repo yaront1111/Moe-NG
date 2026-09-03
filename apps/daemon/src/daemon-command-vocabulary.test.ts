@@ -182,6 +182,8 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["owner"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "provider.probe",
     payloadKeys: ["observation"] },
+  { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "repository.publish",
+    payloadKeys: ["goalId", "remoteUrl"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "qualification.replan",
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "review.submit",
@@ -221,6 +223,8 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // wire used to accept, so gating one and not the other would leave the derived wire reachable
   // by a non-operator principal and hand back exactly the authority this seam removes.
   "approval.decide", "approval.decide_intent", "goal.close",
+  // Publishing pushes the operator's repository to the remote the operator named.
+  "repository.publish",
   // The operator ANSWERS a material product question -- the human act the clarification
   // fence exists to keep off every agent wire.
   "product_contract.answer_clarification",
@@ -233,11 +237,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the forty-five wired kinds in their registration order", () => {
+  it("carries exactly the forty-six wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(45);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(45);
+    expect(ROWS).toHaveLength(46);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(46);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -276,14 +280,14 @@ describe("command vocabulary", () => {
 
   it("holds no family entry beyond the transcribed kinds", () => {
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(34);
+    expect(declared).toHaveLength(35);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(11);
+    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(12);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
@@ -320,11 +324,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly ten kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(10);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(10);
+  it("gates exactly eleven kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(11);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(11);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // thirty-five that must stay open, one dropped reddens on the ten that must not.
+    // thirty-five that must stay open, one dropped reddens on the eleven that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }

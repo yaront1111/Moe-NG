@@ -21,7 +21,7 @@ const NODE = Object.freeze({
 });
 const GOAL = Object.freeze({
   goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", nodes: [NODE],
-  run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
+  publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
 });
 const TOTALS = Object.freeze({
   ACCEPTED: 1, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 0,
@@ -47,10 +47,10 @@ describe("mapRunsAnswer", () => {
 
   it("keeps a run-less, node-less goal honest", () => {
     const outcome = mapRunsAnswer(200, {
-      goals: [{ goalId: "goal-0", lifecycle: "DRAFT", nodes: [], run: null, title: null }],
+      goals: [{ goalId: "goal-0", lifecycle: "DRAFT", nodes: [], publish: null, run: null, title: null }],
       outcome: "RUNS", totals: { ...TOTALS, ACCEPTED: 0, nodes: 0 },
     });
-    expect(outcome).toMatchObject({ goals: [{ goalId: "goal-0", nodes: [], run: null, title: null }], status: "RUNS" });
+    expect(outcome).toMatchObject({ goals: [{ goalId: "goal-0", nodes: [], publish: null, run: null, title: null }], status: "RUNS" });
   });
 
   it("carries refusals at their own layer", () => {

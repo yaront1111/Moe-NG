@@ -61,6 +61,7 @@ const OWNED_KINDS = [
   "project.bind_repository",
   "project.register",
   "provider.probe",
+  "repository.publish",
 ] as const;
 
 function bytes(value: unknown): Uint8Array {
@@ -82,10 +83,10 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the eleven command kinds this surface owns", () => {
+  it("covers exactly the twelve command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(11);
-    expect(OWNED_KINDS).toHaveLength(11);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(12);
+    expect(OWNED_KINDS).toHaveLength(12);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

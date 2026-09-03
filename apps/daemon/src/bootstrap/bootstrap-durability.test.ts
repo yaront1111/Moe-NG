@@ -131,13 +131,13 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
   it("drives every owned command kind, with plan.propose and policy.install twice each", () => {
-    // Twelve requests over ten driven kinds: `goal.create_with_source` is exercised through the
+    // Thirteen requests over eleven driven kinds: `goal.create_with_source` is exercised through the
     // real registry describe instead of this legacy goal.create journey. TWO kinds repeat, and
     // each repetition is load-bearing rather than incidental: the second `plan.propose` is the
     // finalize terminal, and the second `policy.install` is the RISK-CLASSIFYING slice the
     // finalize terminal now requires (task-a888038d) — without it every sealed run refuses
     // RUN_POLICY_UNCLASSIFIABLE, so the world could not reach approval at all.
-    expect(sequence).toHaveLength(12);
+    expect(sequence).toHaveLength(13);
     expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length + 1);
     expect(new Set(sequence.map((entry) => entry.kind)))
       .toEqual(new Set<string>(

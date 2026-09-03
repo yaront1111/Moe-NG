@@ -154,7 +154,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 64;
+const EXPECTED_PRIVATE_COUNT = 65;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -211,6 +211,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "OBSERVATION_READER_LAYER", file: "apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts" },
   { constant: "PLANNING_RUN_READ_LAYER", file: "apps/daemon/src/http/planning-run-read.ts" },
   { constant: "POLICY_INSTALL_LAYER", file: "apps/control-room/src/v2/ops/policy-install-port.ts" },
+  { constant: "PUBLISH_LAYER", file: "apps/control-room/src/v2/goals/publish-port.ts" },
   { constant: "PRODUCER_LAYER", file: "apps/daemon/src/work/launch-template-authority.ts" },
   { constant: "PRODUCT_CONTRACT_GATE_1_READ_LAYER", file: "apps/daemon/src/http/product-contract-gate-1-read.ts" },
   { constant: "PROJECTION_LAYER", file: "apps/daemon/src/budget/budget-ledger-contracts.ts" },

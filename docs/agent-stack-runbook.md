@@ -399,6 +399,25 @@ it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
+### Publishing (your decision, your remote)
+
+Landed commits stay in the workspace's repository until a human publishes them.
+The opened goal carries a PUBLISH card: type the git remote (an `https://` or
+ssh URL, no embedded credentials) and confirm. That spends the daemon's
+`repository.publish` offer for the goal — a bootstrap-family, operator-only
+command that is never reachable over MCP — and records the decision on the
+goal's publish aggregate. Nothing is pushed by the browser or the daemon.
+
+The wrapper's PUBLISHER performs the push as the effect of that decision on its
+next pass: `git push <remote> HEAD:refs/heads/<current branch>` in
+`MOE_NODE_WORKSPACE`, then one `moe-publish-receipt/1` per decision —
+`[publisher] <goal>: PUSHED (<sha> <branch> -> <remote> (<link>))` or
+`REFUSED (GIT_PUSH_FAILED: <git's words>)`. A refused push is never retried
+under the same decision; decide again to retry. The card reads the runs read's
+`publish` state: waiting for the wrapper, pushed with the branch link (GitHub
+remotes get a browse link), or refused with the code. The remote you typed last
+is remembered in this browser only.
+
 ### Replan (when a review is exhausted)
 
 After three unsuccessful review rounds the review kernel refuses every further

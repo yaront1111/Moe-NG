@@ -636,6 +636,8 @@ export function bootstrapSequence(): readonly Envelope[] {
     // durable graphRevisionRef instead of the PLANNING state a propose-only chain leaves.
     envelope("plan.propose", 0, { commands: finalizeChain(), runId: RUN_ID }, "cmd-finalize"),
     envelope("approval.decide", 0, approvalPayload()),
+    // The publish decision lands on the goal's publish aggregate (fresh, version 0), not the goal.
+    envelope("repository.publish", 0, { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish"),
     // The goal is at domain version 2 here: `goal.create` left it at 1 and the approval's
     // activation half advanced it to 2 in the same decision.
     envelope("goal.close", 2, acceptancePayload()),

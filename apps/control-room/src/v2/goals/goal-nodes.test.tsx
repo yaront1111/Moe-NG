@@ -19,7 +19,7 @@ const RUNS: RunsOutcome = {
       review: { escalated: false, findings: [], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
       sharedKey: false, status: "ACCEPTED",
     }],
-    run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Alpha",
+    publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Alpha",
   }],
   status: "RUNS",
   totals: { ACCEPTED: 1, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },

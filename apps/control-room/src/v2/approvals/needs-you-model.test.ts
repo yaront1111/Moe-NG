@@ -144,7 +144,7 @@ describe("deriveNeedsYou", () => {
           objective: "o", landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
           status: "ESCALATION_REQUIRED",
         }],
-        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-goal-a" }, title: "Alpha",
+        publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-goal-a" }, title: "Alpha",
       }],
       status: "RUNS",
       totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },

@@ -77,6 +77,8 @@ export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // would otherwise arrive as the operator and be indistinguishable from a browser one.
   "cutover.activate",
   "graph.approve",
+  // The push to the operator's remote is the operator's own act on their own repository.
+  "repository.publish",
 ]);
 
 const WIRED_KINDS: readonly string[] = Object.freeze([

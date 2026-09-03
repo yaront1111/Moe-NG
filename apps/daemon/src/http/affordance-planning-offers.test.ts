@@ -101,8 +101,10 @@ describe("per-goal planning offers", () => {
   it("offers goal.close on the goal once execution is enabled or closing", () => {
     for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
       const offers = offersFor("PLAN_REVIEW", lifecycle);
-      expect(offers.map((entry) => entry.commandKind)).toEqual(["goal.close"]);
+      expect(offers.map((entry) => entry.commandKind)).toEqual(["goal.close", "repository.publish"]);
       expect(offers[0]?.targetAggregateId).toBe(GOAL_ID);
+      // Publishing targets the goal's own publish aggregate, so its version fence never moves the goal's.
+      expect(offers[1]?.targetAggregateId).toBe(`publish:${GOAL_ID}`);
     }
   });
 

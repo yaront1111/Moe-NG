@@ -20,6 +20,9 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // Acceptance can only follow the approval that activated the graph, so the goal it accepts
   // is durably EXECUTION_ENABLED before the core is ever asked.
   "goal.close": Object.freeze(["approval.decide"]),
+  // Publishing follows the approval that activated the graph: before it there is nothing
+  // landed to push. The decision names a remote; the wrapper's publisher performs the push.
+  "repository.publish": Object.freeze(["approval.decide"]),
   "goal.create": Object.freeze(["project.activate"]),
   "goal.create_with_source": Object.freeze(["project.activate"]),
   "plan.propose": Object.freeze(["goal.create"]),
@@ -108,6 +111,11 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
     case "policy.install":
     case "policy.validate":
       return policyAggregateId(request.projectId);
+    case "repository.publish": {
+      // The chain card carries no payload; a real request names its goal.
+      const goalId = request.payload === undefined ? null : payloadRef(request.payload, "goalId");
+      return `publish:${goalId ?? subject ?? request.projectId}`;
+    }
     default:
       return subject ?? request.projectId;
   }

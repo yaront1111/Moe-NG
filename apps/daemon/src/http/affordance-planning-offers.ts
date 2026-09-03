@@ -95,7 +95,8 @@ function durableGoals(ledger: DurableLedger, projectId: string): readonly Durabl
 function offer(
   input: PlanningOfferInput,
   kind: CompilerOfferKind
-    | "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose",
+    | "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose"
+    | "repository.publish",
   aggregateId: string,
 ): NextAllowedCommand {
   return Object.freeze({
@@ -137,9 +138,14 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
       offer(input, "approval.decide_intent", goal.planningRunRef),
     ];
   }
+  // Publishing is offered on every goal whose graph has been activated (its work may be
+  // landed locally), targeting the goal's publish aggregate so the decision's own version
+  // fence never moves the goal's.
+  const publish = offer(input, "repository.publish", `publish:${goal.goalId}`);
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
-    return [offer(input, "goal.close", goal.goalId)];
+    return [offer(input, "goal.close", goal.goalId), publish];
   }
+  if (lifecycle === "COMPLETED") return [publish];
   return [];
 }
 

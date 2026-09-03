@@ -202,6 +202,8 @@ const ROWS: readonly Row[] = [
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
+    layer: PREREQ_LAYER, payloadKeys: ["goalId", "remoteUrl"] },
   // ADMIN is the reach fence only: an empty payload never reaches the R3
   // approval gate, which is what actually makes this command human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
@@ -287,7 +289,8 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
-  "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
+  "project.bind_repository", "project.register", "provider.probe", "repository.publish",
+  "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
   "work.claim", "work.release", "work.renew",
 ];
@@ -303,6 +306,8 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
   "approval.decide", "approval.decide_intent", "goal.close",
+  // Publishing pushes the operator's repository to the remote the operator named.
+  "repository.publish",
   // The operator ANSWERS a material product question; an agent transport presenting
   // that answer would be quiet invention with a human label (see the vocabulary set).
   "product_contract.answer_clarification",
@@ -799,18 +804,18 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the forty-five characterized kinds and nothing else", () => {
+  it("serves exactly the forty-six characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(45);
-    expect(deps.registry.size).toBe(45);
+    expect(ROWS).toHaveLength(46);
+    expect(deps.registry.size).toBe(46);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(45);
+    expect(REGISTRATION_ORDER).toHaveLength(46);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -980,8 +985,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the ten transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(10);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(10);
+      expect(OPERATOR_ONLY).toHaveLength(11);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(11);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1585,7 +1590,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(45);
+    expect(ports.registry.size).toBe(46);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1607,7 +1612,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(45);
+    expect(supplied.registry.size).toBe(46);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1639,7 +1644,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(45);
+    expect(snapshotPorts.registry.size).toBe(46);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

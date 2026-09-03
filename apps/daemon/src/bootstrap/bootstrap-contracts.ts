@@ -39,6 +39,7 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "project.register",
   "provider.probe",
   "goal.close",
+  "repository.publish",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];

@@ -26,6 +26,7 @@ import { PrdCoverage } from "./goals/prd-coverage.js";
 import { LivePrd } from "./goals/prd-panel.js";
 import { GOAL_SECTION_IDS, LiveGoalStatus } from "./goals/goal-status-strip.js";
 import { LiveGoalNodes } from "./goals/goal-nodes.js";
+import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
@@ -270,7 +271,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             />
           </details>
           <div id={GOAL_SECTION_IDS.board}>
-            <LiveGoalNodes goalId={open.goalId} headers={attached.headers} />
+            <LiveGoalNodes
+              goalId={open.goalId}
+              headers={attached.headers}
+              publishing={{ frame: boardFrame, port: createPublishPort(attached) }}
+            />
             {/* The raw affordance surface is project-wide and mostly session commands; it stays
                 readable for anyone who needs the daemon's exact offers, folded by default. */}
             <details className="cr2-goal-fold" data-testid="cr.goal.surfacefold">

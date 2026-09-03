@@ -89,7 +89,7 @@ describe("LiveNeedsYou", () => {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
         accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
-        status: "ESCALATION_REQUIRED" }], run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+        status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
       totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
     };
@@ -117,7 +117,7 @@ describe("LiveNeedsYou", () => {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
         accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
-        status: "ESCALATION_REQUIRED" }], run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+        status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
       totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
     };

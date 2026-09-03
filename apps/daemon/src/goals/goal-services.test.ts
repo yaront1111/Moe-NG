@@ -149,7 +149,7 @@ afterEach(closeStores);
 describe("goal service surface", () => {
   it("contributes the create, close, and source-bound handlers in append order", () => {
     expect(Object.keys(GOAL_HANDLERS)).toEqual([
-      "goal.create", "goal.close", "goal.create_with_source",
+      "goal.create", "goal.close", "goal.create_with_source", "repository.publish",
     ]);
   });
 

@@ -741,6 +741,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "product_contract.ask_clarification", "product_contract.propose_revision",
         "project.activate", "project.bind_repository", "project.register",
         "provider.probe", "qualification.replan", "recovery.complete",
+        "repository.publish",
         "resource.confirm_released", "resource.reconcile",
         "review.submit",
         "session.close", "session.open", "session.renew",

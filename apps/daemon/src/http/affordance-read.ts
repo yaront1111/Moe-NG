@@ -138,6 +138,7 @@ function bootstrapAggregateId(
   if (planningSubject !== null) {
     if (kind === "plan.propose" || kind === "approval.decide") return planningSubject.runId;
     if (kind === "goal.close") return planningSubject.goalId;
+    if (kind === "repository.publish") return `publish:${planningSubject.goalId}`;
   }
   return aggregateIdFor(
     { kind, projectId } as Parameters<typeof aggregateIdFor>[0],
@@ -241,7 +242,8 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       const version = versionOf(ledger, aggregateId);
       // Planning offers are emitted per durable goal below. These steps remain
       // the demo seed chain's compatibility status until R3-10b scopes the board.
-      if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close") {
+      if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close"
+        && kind !== "repository.publish") {
         offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       }
       return Object.freeze({

@@ -106,7 +106,7 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
-  "recovery.reconcile_external", "replan.propose_unblock", "resource.confirm_released",
+  "recovery.reconcile_external", "replan.propose_unblock", "repository.publish", "resource.confirm_released",
   "resource.reconcile", "resource.release", "resource.renew", "resource.request",
   "review.release", "review.start", "review.submit", "safe_boundary.observe",
   "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",

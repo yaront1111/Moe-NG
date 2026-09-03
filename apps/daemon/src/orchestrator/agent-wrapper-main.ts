@@ -26,6 +26,7 @@ import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createNodeLander } from "./node-lander.js";
+import { createNodePublisher } from "./node-publisher.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import {
   createWrapperStopSignal,
@@ -205,6 +206,14 @@ async function main(): Promise<void> {
       store: verifierStore,
     });
     const NODE_DELIVER_PREFIX = `${NODE_DELIVER_KIND}@`;
+    // PUBLISHING: the effect behind a human's repository.publish decision — the workspace's
+    // current branch pushed to the remote the decision names, one receipt per decision.
+    const publisher = createNodePublisher({
+      git: createGitLandingPort(),
+      projectId: config.projectId,
+      store: verifierStore,
+      workspace: compiledWorkspace,
+    });
 
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
@@ -356,6 +365,9 @@ async function main(): Promise<void> {
         for (const landed of await lander.landOnce()) {
           process.stdout.write(`[lander] ${landed.nodeRef}: ${landed.outcome} (${landed.detail})\n`);
         }
+      }
+      for (const published of await publisher.publishOnce()) {
+        process.stdout.write(`[publisher] ${published.goalId}: ${published.outcome} (${published.detail})\n`);
       }
       if (stop.requested()) return;
       // Awaits STARTUP ADMISSION only. Every agent's exit stays in flight, so a

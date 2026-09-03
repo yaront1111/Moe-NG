@@ -69,10 +69,22 @@ export interface RunNodeView {
   readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }
+/** The goal's latest publish decision and what the publisher did with it. */
+export interface RunGoalPublishView {
+  readonly branch: string | null;
+  readonly code: string | null;
+  readonly decisionId: string;
+  readonly outcome: "PENDING" | "PUSHED" | "REFUSED";
+  readonly remoteUrl: string;
+  readonly requestedAt: string;
+  readonly sha: string | null;
+  readonly url: string | null;
+}
 export interface RunGoalView {
   readonly goalId: string;
   readonly lifecycle: string | null;
   readonly nodes: readonly RunNodeView[];
+  readonly publish: RunGoalPublishView | null;
   readonly run: {
     readonly approval: (typeof APPROVAL_STATES)[number];
     readonly lifecycle: string;
@@ -246,8 +258,20 @@ function nodeOf(value: unknown): RunNodeView | null {
   });
 }
 
+function publishOf(value: unknown): RunGoalPublishView | null {
+  const record = exactDataRecord(value, ["branch", "code", "decisionId", "outcome", "remoteUrl", "requestedAt", "sha", "url"]);
+  if (record === null || !nullableString(record.branch) || !nullableString(record.code) || !nonEmptyString(record.decisionId)
+    || !nonEmptyString(record.remoteUrl) || !nonEmptyString(record.requestedAt) || !nullableString(record.sha)
+    || !nullableString(record.url)
+    || (record.outcome !== "PENDING" && record.outcome !== "PUSHED" && record.outcome !== "REFUSED")) return null;
+  return Object.freeze({
+    branch: record.branch, code: record.code, decisionId: record.decisionId, outcome: record.outcome,
+    remoteUrl: record.remoteUrl, requestedAt: record.requestedAt, sha: record.sha, url: record.url,
+  });
+}
+
 function goalOf(value: unknown): RunGoalView | null {
-  const record = exactDataRecord(value, ["goalId", "lifecycle", "nodes", "run", "title"]);
+  const record = exactDataRecord(value, ["goalId", "lifecycle", "nodes", "publish", "run", "title"]);
   if (record === null || !nonEmptyString(record.goalId) || !nullableString(record.lifecycle)
     || !nullableString(record.title)) return null;
   const nodes = listOf(record.nodes, nodeOf);
@@ -262,7 +286,12 @@ function goalOf(value: unknown): RunGoalView | null {
       reviewable: row.reviewable, runId: row.runId,
     });
   }
-  return Object.freeze({ goalId: record.goalId, lifecycle: record.lifecycle, nodes, run, title: record.title });
+  let publish: RunGoalPublishView | null = null;
+  if (record.publish !== null) {
+    publish = publishOf(record.publish);
+    if (publish === null) return null;
+  }
+  return Object.freeze({ goalId: record.goalId, lifecycle: record.lifecycle, nodes, publish, run, title: record.title });
 }
 
 const TOTAL_KEYS = [...RUN_NODE_STATUSES, "goals", "nodes"] as const;

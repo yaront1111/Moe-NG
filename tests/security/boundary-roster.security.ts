@@ -40,7 +40,7 @@
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
  * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. The invisible share is 60 of 228 (26.3%)
- * with a WIDE numerator over a WIDE denominator; the narrow width measures 64 of 232 and is
+ * with a WIDE numerator over a WIDE denominator; the narrow width measures 65 of 233 and is
  * equally correct at its own width. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
  * share at the wide pattern width, numerator and denominator both named".
@@ -806,8 +806,8 @@ describe("scanner matches the annotated declaration form", () => {
  * 62 module-private declarations against those 62 plus the 168 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 232;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 276;
+const EXPECTED_INVISIBLE_DENOMINATOR = 233;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 279;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {
@@ -837,7 +837,7 @@ describe("TASK-LV module-private layer declarations are bounded", () => {
 
   it("TASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named", () => {
     // NUMERATOR: module-private declarations. DENOMINATOR: those plus every EXPORTED one.
-    // Both at the WIDE `[A-Z0-9_]+` width — the narrow width measures 64 of 232 and is equally
+    // Both at the WIDE `[A-Z0-9_]+` width — the narrow width measures 65 of 233 and is equally
     // correct at its own width, which is exactly the units mismatch that was twice mistaken for
     // a factual dispute. Naming both sides is what stops the ratio drifting by moving one:
     // export ten private layers and the numerator falls while the denominator holds, so the

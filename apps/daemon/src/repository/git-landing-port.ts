@@ -42,6 +42,20 @@ export interface GitLandingPort {
   observe(workspace: string): Promise<GitObserveResult>;
 }
 
+export interface GitPushReceipt {
+  readonly branch: string;
+  readonly sha: string;
+}
+
+export type GitPushResult =
+  | Readonly<{ readonly ok: true; readonly receipt: GitPushReceipt }>
+  | Readonly<{ readonly code: "GIT_PUSH_FAILED" | "NOT_A_REPOSITORY" | "DETACHED_HEAD"; readonly detail: string; readonly ok: false }>;
+
+/** The publisher's effect: push the workspace's current branch to a remote the human named. */
+export interface GitPublishPort {
+  push(workspace: string, remoteUrl: string): Promise<GitPushResult>;
+}
+
 export interface GitRunResult {
   readonly code: number | null;
   readonly stderr: string;
@@ -105,7 +119,7 @@ function parseStatus(output: string): readonly { readonly deleted: boolean; read
   return entries;
 }
 
-export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort {
+export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort & GitPublishPort {
   // The repository root as git states it (a real path); the workspace resolved the same way,
   // so a temp directory reached through a symlink (macOS /var -> /private/var) does not read
   // as a path outside the repository when the two are made relative.
@@ -194,5 +208,24 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     };
   };
 
-  return Object.freeze({ commit, observe });
+  const push = async (workspace: string, remoteUrl: string): Promise<GitPushResult> => {
+    const top = await root(workspace);
+    if (top === null) return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, ok: false };
+    const branch = await run(top, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const head = await run(top, ["rev-parse", "HEAD"]);
+    if (branch.code !== 0 || head.code !== 0) {
+      return { code: "GIT_PUSH_FAILED", detail: tail(branch.stderr + head.stderr), ok: false };
+    }
+    const name = branch.stdout.trim();
+    if (name === "HEAD") return { code: "DETACHED_HEAD", detail: "the workspace has no branch checked out", ok: false };
+    // The remote is the URL the human named, never a configured remote name: the decision
+    // says where the bytes go, and a renamed origin cannot redirect it.
+    const pushed = await run(top, ["push", "--", remoteUrl, `HEAD:refs/heads/${name}`]);
+    if (pushed.code !== 0) {
+      return { code: "GIT_PUSH_FAILED", detail: tail(`${pushed.stdout}${pushed.stderr}`), ok: false };
+    }
+    return { ok: true, receipt: Object.freeze({ branch: name, sha: head.stdout.trim() }) };
+  };
+
+  return Object.freeze({ commit, observe, push });
 }

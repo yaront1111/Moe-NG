@@ -252,6 +252,7 @@ export interface GeneratedCommandBuilders {
   readonly ["recovery.inspect_external"]: CommandBuilder<"recovery.inspect_external">;
   readonly ["recovery.reconcile_external"]: CommandBuilder<"recovery.reconcile_external">;
   readonly ["replan.propose_unblock"]: CommandBuilder<"replan.propose_unblock">;
+  readonly ["repository.publish"]: CommandBuilder<"repository.publish">;
   readonly ["resource.confirm_released"]: CommandBuilder<"resource.confirm_released">;
   readonly ["resource.reconcile"]: CommandBuilder<"resource.reconcile">;
   readonly ["resource.release"]: CommandBuilder<"resource.release">;
@@ -358,6 +359,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["recovery.inspect_external"]: commandBuilderFor("recovery.inspect_external"),
     ["recovery.reconcile_external"]: commandBuilderFor("recovery.reconcile_external"),
     ["replan.propose_unblock"]: commandBuilderFor("replan.propose_unblock"),
+    ["repository.publish"]: commandBuilderFor("repository.publish"),
     ["resource.confirm_released"]: commandBuilderFor("resource.confirm_released"),
     ["resource.reconcile"]: commandBuilderFor("resource.reconcile"),
     ["resource.release"]: commandBuilderFor("resource.release"),
@@ -900,7 +902,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "2def5def206bea31c2d530f93125dc179824d825e5ebed5bbbd07c3d65cfc591";
+export const GENERATED_CONTRACT_DIGEST = "ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

@@ -317,10 +317,10 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
   it("serves approval.decide from the registry while MCP neither advertises nor serves it", () => {
     const expectedExclusions: readonly string[] = Object.freeze([
       "approval.decide", "approval.decide_intent", "cutover.activate", "graph.approve",
-      "product_contract.answer_clarification",
+      "product_contract.answer_clarification", "repository.publish",
     ]);
-    expect(expectedExclusions).toHaveLength(5);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(5);
+    expect(expectedExclusions).toHaveLength(6);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(6);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

@@ -55,6 +55,7 @@ const OWNED_KINDS = [
   "project.bind_repository",
   "project.register",
   "provider.probe",
+  "repository.publish",
 ] as const;
 
 const HANDLERS: daemon.HandlerTable = Object.freeze({
@@ -155,10 +156,10 @@ function isHumanAction(kind: string): boolean {
 afterEach(closeStores);
 
 describe("J1 command vocabulary", () => {
-  it("publishes exactly the eleven owned kinds from the package root", () => {
+  it("publishes exactly the twelve owned kinds from the package root", () => {
     expect(new Set<string>(daemon.BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(11);
-    expect(OWNED_KINDS).toHaveLength(11);
+    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(12);
+    expect(OWNED_KINDS).toHaveLength(12);
   });
 
   it("routes every owned kind to a handler reachable from the package root", () => {

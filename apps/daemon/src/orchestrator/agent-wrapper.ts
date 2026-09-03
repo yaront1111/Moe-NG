@@ -123,6 +123,9 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // from a self-staffed agent.
   "approval.decide", "approval.decide_intent",
   "goal.close", "goal.create", "goal.create_with_source",
+  // Pushing the operator's repository to a remote is the operator's decision; the wrapper
+  // performs it as an effect of that decision, never as staffed work.
+  "repository.publish",
 ]);
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
 const COMPILER_STEPS: ReadonlySet<string> = new Set([

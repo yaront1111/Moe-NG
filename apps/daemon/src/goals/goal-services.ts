@@ -23,6 +23,7 @@ import {
   refsOfGoal,
 } from "./goal-identity.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
+import { admitRemoteUrl, publishAggregateId } from "../repository/publish-receipt-contracts.js";
 
 /**
  * Goal creation.
@@ -174,9 +175,49 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
   });
 };
 
+/** Lifecycles whose goal may be published: the graph was activated, so work may be landed. */
+const PUBLISHABLE_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
+
+/**
+ * The human names a remote; the wrapper's publisher pushes the workspace's current branch
+ * there and records a receipt beside this decision. The decision lands on the goal's publish
+ * aggregate (`publish:<goalId>`), so its version fence never moves the goal's own. Nothing
+ * here touches git: a refusal is about the goal or the URL, never about the push.
+ */
+const publishRepository: CommandHandler = (context): ServiceOutcome => {
+  const { ledger, request, store } = context;
+  const goalId = payloadRef(request.payload, "goalId");
+  const remoteUrl = admitRemoteUrl(request.payload["remoteUrl"]);
+  if (goalId === null || remoteUrl === null) {
+    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  const goal = stateOf(ledger, goalId);
+  const state = typeof goal === "object" && goal !== null && !Array.isArray(goal)
+    ? goal as Record<string, unknown> : null;
+  if (state === null || state["goalId"] !== goalId) {
+    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
+  }
+  if (!PUBLISHABLE_LIFECYCLES.has(String(state["lifecycle"]))) {
+    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
+  }
+  const aggregateId = publishAggregateId(goalId);
+  if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
+    return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
+  }
+  const result = { goalId, remoteUrl, requestedAt: request.decidedAt };
+  return commitAccepted(store, request, {
+    aggregateId,
+    eventPayload: result,
+    eventType: "RepositoryPublishRequested",
+    expectedVersion: versionOf(ledger, aggregateId),
+    result,
+  });
+};
+
 /** Appended, never reordered: existing suites assert against this table's key order. */
 export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.create": createGoal,
   "goal.close": closeGoal,
   "goal.create_with_source": createGoalWithSourceHandler,
+  "repository.publish": publishRepository,
 });

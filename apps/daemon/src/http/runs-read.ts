@@ -18,6 +18,8 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { readPublishLedger } from "../repository/publish-ledger.js";
+import type { GoalPublishState } from "../repository/publish-ledger.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { ReviewLedger, ReviewLedgers } from "../review/review-read-model.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
@@ -31,9 +33,26 @@ import { createPlanningRunReadPort } from "./planning-run-read.js";
 import type { PlanningRunReadResult } from "./planning-run-read.js";
 import { runsRefused as refused } from "./runs-read-contract.js";
 import type {
-  RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
+  RunGoalPublish, RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
   RunsReadResult, RunsSelector, RunsView,
 } from "./runs-read-contract.js";
+
+/** The latest publish request and its receipt, as one view; null when never requested. */
+function publishOf(state: GoalPublishState | undefined): RunGoalPublish | null {
+  const request = state?.requests[state.requests.length - 1];
+  if (state === undefined || request === undefined) return null;
+  const receipt = state.receipts.get(request.decisionId);
+  return Object.freeze({
+    branch: receipt?.branch ?? null,
+    code: receipt?.refusal?.code ?? null,
+    decisionId: request.decisionId,
+    outcome: receipt === undefined ? "PENDING" : receipt.outcome,
+    remoteUrl: request.remoteUrl,
+    requestedAt: request.decidedAt,
+    sha: receipt?.sha ?? null,
+    url: receipt?.url ?? null,
+  });
+}
 
 const RUN_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 /** The review kernel's escalation limit (`REVIEW_ESCALATION_ROUND_LIMIT`), spelled here so the
@@ -60,6 +79,8 @@ export interface RunsReadOptions {
   readonly readClaims?: (store: SqliteEventStore, projectId: string) => ReadonlyMap<string, WorkClaimRecord>;
   readonly readReviews?: (store: SqliteEventStore, projectId: string, nodeRefs: ReadonlySet<string>) => NodeReviews;
   readonly readRun?: (store: SqliteEventStore, projectId: string, runId: string) => PlanningRunReadResult;
+  /** Injectable for tests; the default walks the decision ledger for publish requests and receipts. */
+  readonly readPublish?: (store: SqliteEventStore, projectId: string) => ReadonlyMap<string, GoalPublishState>;
   readonly store: SqliteEventStore;
 }
 
@@ -147,11 +168,12 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
   const readReviews = options.readReviews ?? readReviewLedgers;
   const readRun = options.readRun ?? ((s: SqliteEventStore, p: string, runId: string) =>
     createPlanningRunReadPort({ projectId: p, store: s }).readPlanningRun(runId));
+  const readPublish = options.readPublish ?? readPublishLedger;
 
   const goalView = (
     goal: BoundGoalRow, nodes: readonly SealedNode[], shared: ReadonlySet<string>,
     claims: ReadonlyMap<string, WorkClaimRecord>, reviews: NodeReviews,
-    latest: ReadonlyMap<string, string>, now: string,
+    latest: ReadonlyMap<string, string>, now: string, publishes: ReadonlyMap<string, GoalPublishState>,
   ): RunGoalView => {
     const run = goal.planningRunRef === null ? null : readRun(store, projectId, goal.planningRunRef);
     const own = nodes.filter((node) => node.goalRef === goal.goalId);
@@ -193,6 +215,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned),
         });
       })),
+      publish: publishOf(publishes.get(goal.goalId)),
       run: run === null || run.outcome !== "RUN" ? null : Object.freeze({
         approval: run.approval, lifecycle: run.lifecycle, reviewable: run.reviewable, runId: run.runId,
       }),
@@ -220,7 +243,8 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
       const reviews = readReviews(store, projectId, nodeKeys);
       const latest = lastDecidedAt(store, projectId, nodeKeys);
       const now = clock();
-      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now));
+      const publishes = readPublish(store, projectId);
+      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now, publishes));
       const totals: Record<RunNodeStatus, number> = {
         ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
         IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0,
