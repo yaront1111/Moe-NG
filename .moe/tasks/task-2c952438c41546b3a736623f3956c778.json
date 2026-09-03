@@ -168,7 +168,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.394Z",
-  "updatedAt": "2026-09-03T06:10:28.096Z",
+  "updatedAt": "2026-09-03T06:11:25.471Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:58:26.538Z",
     "plannedStepCount": 5,
@@ -272,6 +272,22 @@
       "treeId": "d9d3e00d01501f0c18e878e4fafa1d05636212ff",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "97252e1ff9173c22c629e237510919c94c5712c0",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-5d6b2faf@2026-09-03T06:03:23Z",
+      "paths": [
+        ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
+        ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
+      ],
+      "recordedBy": "qa-5d6b2faf",
+      "recordedAt": "2026-09-03T06:11:25.471Z",
+      "treeId": "2cff0c3e6db9abf31791a4385ef41f5f09937f13",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -280,14 +296,15 @@
     "tests/e2e/control-room/journeys.spec.ts",
     "tests/e2e/control-room/journey-coverage.test.ts",
     ".moe/tasks/task-2c952438c41546b3a736623f3956c778.json",
-    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+    ".moe/tasks/task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-ae3c36ad@2026-09-03T05:53:11Z",
-    "at": "2026-09-03T06:04:03.080Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-5d6b2faf@2026-09-03T06:03:23Z",
+    "at": "2026-09-03T06:11:25.471Z"
   },
   "declaredFiles": [
     "tests/e2e/control-room/journey-coverage.test.ts",
