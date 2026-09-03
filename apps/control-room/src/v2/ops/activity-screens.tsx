@@ -1,9 +1,9 @@
 import type { JSX } from "react";
 
 import type { ActivityOutcome } from "../../live/live-activity.js";
-import type { SessionsOutcome } from "../../live/live-sessions.js";
+import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
 import { MIDDOT } from "../glyphs.js";
-import { agoWords, kindWords, principalWords } from "./activity-words.js";
+import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -46,7 +46,9 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
               + " Refused commands are not recorded, so they do not appear here."}
           </p>
           <ol className="cr2-activity-list" data-testid="cr.activity.list">
-            {outcome.entries.map((entry, index) => (
+            {outcome.entries.map((entry, index) => ({ entry, index }))
+              .filter(({ entry }) => !isSeatRecord(entry.commandKind, entry.targetAggregateId))
+              .map(({ entry, index }) => (
               <li
                 className="cr2-activity-row"
                 data-disposition={entry.disposition}
@@ -64,6 +66,25 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
               </li>
             ))}
           </ol>
+          {(() => {
+            const seats = outcome.entries.filter((entry) => isSeatRecord(entry.commandKind, entry.targetAggregateId));
+            return seats.length === 0 ? null : (
+              <details className="cr2-approve-inspect" data-testid="cr.activity.seats">
+                <summary className="cr2-approve-inspect-summary">
+                  {`${String(seats.length)} seat and pairing records ${MIDDOT} sessions opened, renewed, closed`}
+                </summary>
+                <ol className="cr2-activity-list">
+                  {seats.map((entry, index) => (
+                    <li className="cr2-activity-row" key={`seat:${entry.decidedAt}:${String(index)}`}>
+                      <span className="cr2-activity-when">{agoWords(entry.decidedAt, nowMs)}</span>
+                      <span className="cr2-activity-what">{`${principalWords(entry.principalId)} ${kindWords(entry.commandKind)}`}</span>
+                      <span className="cr2-approve-mono cr2-activity-target">{`${entry.commandKind} ${MIDDOT} ${entry.targetAggregateId}`}</span>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            );
+          })()}
         </>
       )}
     </section>
@@ -91,20 +112,35 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
           </p>
           {outcome.sessions.length === 0 ? (
             <p className="cr2-needs-note" data-testid="cr.sessions.empty">No seat has been opened on this daemon.</p>
-          ) : (
-            <ul className="cr2-activity-list" data-testid="cr.sessions.list">
-              {outcome.sessions.map((session) => (
-                <li className="cr2-activity-row" data-liveness={session.liveness} data-testid={`cr.sessions.row.${session.sessionId}`} key={session.sessionId}>
-                  <span className="cr2-activity-when">{session.liveness === "LIVE"
-                    ? `live until ${session.expiresAt}` : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
-                  <span className="cr2-activity-what">
-                    {`${principalWords(session.principalId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
-                  </span>
-                  <span className="cr2-approve-mono cr2-activity-target">{`${session.sessionId} ${MIDDOT} ${session.capabilities.join(" ")}`}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          ) : (() => {
+            const agents = outcome.sessions.filter((session) => seatWords(session.sessionId) !== "a paired browser");
+            const browsers = outcome.sessions.filter((session) => seatWords(session.sessionId) === "a paired browser");
+            const row = (session: SessionView): JSX.Element => (
+              <li className="cr2-activity-row" data-liveness={session.liveness} data-testid={`cr.sessions.row.${session.sessionId}`} key={session.sessionId}>
+                <span className="cr2-activity-when">{session.liveness === "LIVE"
+                  ? `live until ${session.expiresAt}` : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
+                <span className="cr2-activity-what">
+                  {`${seatWords(session.sessionId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
+                </span>
+                <span className="cr2-approve-mono cr2-activity-target">{`${session.sessionId} ${MIDDOT} ${session.capabilities.join(" ")}`}</span>
+              </li>
+            );
+            return (
+              <>
+                {agents.length === 0 ? (
+                  <p className="cr2-needs-note" data-testid="cr.sessions.noagents">No agent seat is open. Agents appear here while the wrapper is running.</p>
+                ) : <ul className="cr2-activity-list" data-testid="cr.sessions.list">{agents.map(row)}</ul>}
+                {browsers.length === 0 ? null : (
+                  <details className="cr2-approve-inspect" data-testid="cr.sessions.browsers">
+                    <summary className="cr2-approve-inspect-summary">
+                      {`${String(browsers.filter((session) => session.liveness === "LIVE").length)} paired browsers live ${MIDDOT} ${String(browsers.length)} in all`}
+                    </summary>
+                    <ul className="cr2-activity-list">{browsers.map(row)}</ul>
+                  </details>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </section>

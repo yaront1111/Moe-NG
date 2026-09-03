@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
-import { agoWords, kindWords, principalWords } from "./activity-words.js";
+import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 import { LiveActivity, LiveSessions } from "./live-ops.js";
 
 beforeAll(() => {
@@ -17,6 +17,7 @@ const ACTIVITY: ActivityOutcome = {
   entries: [
     { commandKind: "integration.accept_output", decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: "node-a", version: 4 },
     { commandKind: "work.claim", decidedAt: "2026-09-03T08:00:00.000Z", disposition: "VERSION_CONFLICT", principalId: "sess-wrap-abc", targetAggregateId: "work/node.deliver@node-a", version: null },
+    { commandKind: "OPEN_SESSION", decidedAt: "2026-09-03T07:00:00.000Z", disposition: "COMMITTED", principalId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", targetAggregateId: "moe.session-authority.v1/session/session-1", version: 1 },
   ],
   refusalsRecorded: false, scope: { goalId: "goal-1", targets: 3 }, status: "ACTIVITY", totalDecisions: 12,
 };
@@ -25,6 +26,7 @@ const SESSIONS: SessionsOutcome = {
   sessions: [
     { capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", sessionId: "sess-wrap-abc", status: "OPEN" },
     { capabilities: ["project.admin"], expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", sessionId: "sess-op-1", status: "OPEN" },
+    { capabilities: ["project.admin"], expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", status: "OPEN" },
   ],
   status: "SESSIONS", totals: { closed: 0, expired: 1, live: 1 }, unreadable: false,
 };
@@ -38,13 +40,21 @@ describe("activity words", () => {
     expect(principalWords("daemon:node-verifier")).toBe("the daemon's verifier");
     expect(principalWords("someone-else")).toBe("someone-else");
     expect(agoWords("2026-09-03T09:35:00.000Z", NOW)).toBe("25 min ago");
+    expect(seatWords("sess-wrap-abc")).toBe("an agent seat");
+    expect(seatWords("4be93d1a-902e-41f4-ad1a-89fc588d2ff4")).toBe("a paired browser");
+    expect(isSeatRecord("OPEN_SESSION", "moe.session-authority.v1/session/s")).toBe(true);
+    expect(isSeatRecord("session.renew", "session/x")).toBe(true);
+    expect(isSeatRecord("work.claim", "work/x")).toBe(false);
   });
 });
 
 describe("ActivityPanel", () => {
   it("renders each decision as who did what, latest first, and says refusals are not recorded", () => {
     render(<ActivityPanel nowMs={NOW} outcome={ACTIVITY} scopeLabel="Alpha" />);
-    expect(screen.getByTestId("cr.activity.count").textContent).toContain("2 of 12 decisions");
+    expect(screen.getByTestId("cr.activity.count").textContent).toContain("3 of 12 decisions");
+    // Seat and pairing records fold away behind one line instead of crowding the ledger.
+    expect(screen.queryByTestId("cr.activity.entry.2")).toBeNull();
+    expect(screen.getByTestId("cr.activity.seats").textContent).toContain("1 seat and pairing records");
     expect(screen.getByTestId("cr.activity.count").textContent).toContain("Refused commands are not recorded");
     expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("25 min ago");
     expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("the operator accepted the delivered work");
@@ -69,6 +79,9 @@ describe("SessionsPanel", () => {
   it("lists live seats first with what they hold, and the totals", () => {
     render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
     expect(screen.getByTestId("cr.sessions.count").textContent).toBe("1 live · 1 expired · 0 closed");
+    // A paired browser is folded away; agent seats stay in the open list.
+    expect(screen.getByTestId("cr.sessions.browsers").textContent).toContain("1 paired browsers live · 1 in all");
+    expect(screen.getByTestId("cr.sessions.list").textContent).not.toContain("4be93d1a");
     const live = screen.getByTestId("cr.sessions.row.sess-wrap-abc");
     expect(live.getAttribute("data-liveness")).toBe("LIVE");
     expect(live.textContent).toContain("live until 2026-09-03T11:00:00.000Z");

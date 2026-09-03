@@ -228,7 +228,7 @@ function fold(
   if (decision.commandKind === VERIFIER_RECEIPT_COMMAND_KIND) {
     // The daemon's own execution evidence for the node; a receipt that does not decode is
     // simply absent here (the acceptance that consumed it is the fact that counts).
-    const decoded = decodeVerifierReceiptBytes(decodeResult(decision.resultBytes));
+    const decoded = decodeVerifierReceiptBytes(decision.resultBytes);
     if (decoded.ok) acc.receipt = decoded.receipt.execution;
     return;
   }
