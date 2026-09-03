@@ -75,8 +75,12 @@ describe("PolicyScreen", () => {
     expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("Reviewer calibration · refused");
     expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("BOOTSTRAP_POLICY_SLICE_INVALID · DAEMON");
     cleanup();
-    render(<PolicyScreen nowMs={NOW} outcome={{ ...POLICY, standard: POLICY.standard.map((row) => ({ ...row, installed: true })) }} />);
+    // Once everything is installed the block clears, but the receipts of what was installed from here stay.
+    render(<PolicyScreen install={{ busy: false, onInstall, steps: [
+      { kind: "REVIEWER_CALIBRATION", outcome: { ok: true }, sliceRef: "moe-reviewer-calibration/1" },
+    ] }} nowMs={NOW} outcome={{ ...POLICY, standard: POLICY.standard.map((row) => ({ ...row, installed: true })) }} />);
     expect(screen.queryByTestId("cr.policy.standard")).toBeNull();
+    expect(screen.getByTestId("cr.policy.install.steps").textContent).toContain("Reviewer calibration · installed from here");
   });
 
   it("shows loading, a refusal and the empty project", () => {

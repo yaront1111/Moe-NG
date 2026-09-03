@@ -121,19 +121,19 @@ export function PolicyScreen({ install, nowMs, outcome }: {
                 {install.busy ? "Installing..." : `Install the standard policy (${String(missing.length)} ${missing.length === 1 ? "slice" : "slices"})`}
               </ActionButton>
             )}
-            {install === undefined || install.steps.length === 0 ? null : (
-              <ol className="cr2-approve-obligations" data-testid="cr.policy.install.steps">
-                {install.steps.map((step) => (
-                  <li className="cr2-coverage-section" data-ok={step.outcome.ok ? "true" : "false"} key={step.sliceRef}>
-                    <span className="cr2-approve-step-body">{`${KIND_WORDS[step.kind as PolicySliceKind] ?? step.kind} ${MIDDOT} ${step.outcome.ok ? "installed" : "refused"}`}</span>
-                    <span className="cr2-approve-mono">{step.outcome.ok ? step.sliceRef : `${step.outcome.code} ${MIDDOT} ${step.outcome.layer}`}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
           </div>
         );
       })() : null}
+      {install === undefined || install.steps.length === 0 ? null : (
+        <ol className="cr2-approve-obligations cr2-policy-steps" data-testid="cr.policy.install.steps">
+          {install.steps.map((step) => (
+            <li className="cr2-coverage-section" data-ok={step.outcome.ok ? "true" : "false"} key={step.sliceRef}>
+              <span className="cr2-approve-step-body">{`${KIND_WORDS[step.kind as PolicySliceKind] ?? step.kind} ${MIDDOT} ${step.outcome.ok ? "installed from here" : "refused"}`}</span>
+              <span className="cr2-approve-mono">{step.outcome.ok ? step.sliceRef : `${step.outcome.code} ${MIDDOT} ${step.outcome.layer}`}</span>
+            </li>
+          ))}
+        </ol>
+      )}
       <span className="cr2-goals-count" data-testid="cr.policy.count">
         {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATION${outcome.evaluations.length === 1 ? "" : "S"} ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
       </span>
