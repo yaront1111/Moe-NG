@@ -20,7 +20,7 @@ import type { OfferOutcome } from "./offer-wire.js";
  * same dispatcher the New goal form uses, and every refusal is the daemon's, verbatim.
  */
 
-export const REPLAN_LAYER = "CONTROL_ROOM_REPLAN" as const;
+const REPLAN_LAYER = "CONTROL_ROOM_REPLAN" as const;
 const MAX_FINDINGS = 8;
 const MAX_DETAIL_CHARS = 600;
 

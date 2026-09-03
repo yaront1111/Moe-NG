@@ -140,7 +140,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: null, capability: ADMIN, family: "STANDALONE", kind: "cutover.activate",
     payloadKeys: ["record"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
-    payloadKeys: ["escalationRef", "subjectRef"] },
+    payloadKeys: ["decision", "escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",

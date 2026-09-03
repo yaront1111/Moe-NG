@@ -154,7 +154,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 63;
+const EXPECTED_PRIVATE_COUNT = 64;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -190,6 +190,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "GATE_LAYER", file: "packages/core/src/planning/approval-authority.ts" },
   { constant: "GOAL_CATALOG_READ_LAYER", file: "apps/daemon/src/http/goal-catalog-read.ts" },
   { constant: "GOAL_CLOSE_LAYER", file: "apps/control-room/src/v2/approvals/goal-close-port.ts" },
+  { constant: "REPLAN_LAYER", file: "apps/control-room/src/v2/approvals/replan-successor-port.ts" },
   { constant: "GRAPH_LAYER", file: "packages/scheduler/src/node-authority/node-authority-recursion.ts" },
   { constant: "GRAPH_QUERY_LAYER", file: "apps/daemon/src/planning/graph-query.ts" },
   { constant: "HISTORY_LAYER", file: "apps/daemon/src/planning/supersession-preparation-history.ts" },
