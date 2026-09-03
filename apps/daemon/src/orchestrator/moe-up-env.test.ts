@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,10 +19,21 @@ const FOUNDATION_SEAL_KEYS = [
 /** A fixed randomness source: the resolver's only nondeterministic input. */
 const fixedHex = (bytes: number): string => "ab".repeat(bytes);
 
+/** A fixture home: the sign-in lookup must never touch the test host's profile. */
+const HOME = "D:/fixture-home";
+const CLAUDE_LOGIN_FILE = join(HOME, ".claude", ".credentials.json");
+const CODEX_LOGIN_FILE = join(HOME, ".codex", "auth.json");
+/** The default: nothing on disk, so every arm below is about the environment. */
+const noFiles = (): boolean => false;
+const onlyFile = (path: string) => (candidate: string): boolean => candidate === path;
+
 function resolved(
   env: Readonly<Record<string, string | undefined>>,
+  fileExists: (path: string) => boolean = noFiles,
 ): Extract<LaunchEnvResolution, { ok: true }> {
-  const result = resolveLaunchEnv({ env, randomHex: fixedHex, repoRoot: REPO_ROOT });
+  const result = resolveLaunchEnv({
+    env: { USERPROFILE: HOME, ...env }, fileExists, randomHex: fixedHex, repoRoot: REPO_ROOT,
+  });
   if (!result.ok) {
     throw new Error(`expected a launch config, got ${result.refusals.map((r) => r.variable).join(",")}`);
   }
@@ -29,8 +42,11 @@ function resolved(
 
 function refused(
   env: Readonly<Record<string, string | undefined>>,
+  fileExists: (path: string) => boolean = noFiles,
 ): Extract<LaunchEnvResolution, { ok: false }> {
-  const result = resolveLaunchEnv({ env, randomHex: fixedHex, repoRoot: REPO_ROOT });
+  const result = resolveLaunchEnv({
+    env: { USERPROFILE: HOME, ...env }, fileExists, randomHex: fixedHex, repoRoot: REPO_ROOT,
+  });
   if (result.ok) throw new Error("expected a refusal, got a launch config");
   return result;
 }
@@ -47,7 +63,8 @@ const API_KEY = "tok-fixture-api";
 const ACCEPTED_VARIABLES =
   "CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY";
 const REFUSAL_MESSAGE = `${MOE_UP_ENV_MISSING}: ${ACCEPTED_VARIABLES}`
-  + " (set one; run `claude setup-token` for a subscription token)";
+  + " (set one, or sign in once: run `claude` and `/login`; `claude setup-token` also works)"
+  + `; no sign-in at ${CLAUDE_LOGIN_FILE}`;
 
 /** Obviously-fake codex fixtures; CODEX_HOME is a path, never a real profile. */
 const CODEX_HOME = "D:/fixture/.codex";
@@ -59,7 +76,8 @@ const CODEX_API_KEY = "tok-fixture-codex-api";
 const CODEX_ACCEPTED_VARIABLES =
   "CODEX_HOME, CODEX_ACCESS_TOKEN, OPENAI_API_KEY, CODEX_API_KEY";
 const CODEX_REFUSAL_MESSAGE = `${MOE_UP_ENV_MISSING}: ${CODEX_ACCEPTED_VARIABLES}`
-  + " (set one; run `codex login` once, then export CODEX_HOME so the seat travels)";
+  + " (set one, or run `codex login` once)"
+  + `; no sign-in at ${CODEX_LOGIN_FILE}`;
 
 const entryOf = (
   config: Extract<LaunchEnvResolution, { ok: true }>,
@@ -424,6 +442,65 @@ describe("resolveLaunchEnv codex credential acceptance", () => {
     for (const value of [CODEX_ACCESS_TOKEN, CODEX_API_KEY, CODEX_HOME, OPENAI_API_KEY]) {
       expect(joined).not.toContain(value);
     }
+  });
+});
+
+describe("resolveLaunchEnv sign-in files", () => {
+  it("accepts the claude sign-in under the default config dir and delivers that dir, unhidden", () => {
+    const config = resolved({}, onlyFile(CLAUDE_LOGIN_FILE));
+    const entry = entryOf(config, "CLAUDE_CONFIG_DIR");
+    expect(entry).toEqual({
+      name: "CLAUDE_CONFIG_DIR", secret: false, source: "DEFAULTED", value: join(HOME, ".claude"),
+    });
+    expect(config.env["CLAUDE_CONFIG_DIR"]).toBe(join(HOME, ".claude"));
+    expect(describeLaunchVariables(config.variables).join(LINE_BREAK))
+      .toContain(`CLAUDE_CONFIG_DIR=${join(HOME, ".claude")} (defaulted)`);
+    for (const name of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]) {
+      expect(config.env[name]).toBeUndefined();
+    }
+  });
+
+  it("looks for the claude sign-in under a preset CLAUDE_CONFIG_DIR and reports it as preset", () => {
+    const config = resolved(
+      { CLAUDE_CONFIG_DIR: "E:/relocated" }, onlyFile(join("E:/relocated", ".credentials.json")),
+    );
+    expect(entryOf(config, "CLAUDE_CONFIG_DIR")).toEqual({
+      name: "CLAUDE_CONFIG_DIR", secret: false, source: "PRESET", value: "E:/relocated",
+    });
+  });
+
+  it("names the sign-in path it looked for when a preset dir holds no credentials file", () => {
+    const result = refused({ CLAUDE_CONFIG_DIR: "E:/relocated" }, onlyFile(CLAUDE_LOGIN_FILE));
+    expect(result.refusals[0]?.message)
+      .toContain(`; no sign-in at ${join("E:/relocated", ".credentials.json")}`);
+  });
+
+  it("falls back to HOME when USERPROFILE is absent", () => {
+    const config = resolved(
+      { HOME: "/home/operator", USERPROFILE: undefined },
+      onlyFile(join("/home/operator", ".claude", ".credentials.json")),
+    );
+    expect(entryOf(config, "CLAUDE_CONFIG_DIR")?.value).toBe(join("/home/operator", ".claude"));
+  });
+
+  it("lets an environment credential win over a present sign-in, delivering no config dir", () => {
+    const config = resolved({ ANTHROPIC_API_KEY: API_KEY }, () => true);
+    expect(entryOf(config, "ANTHROPIC_API_KEY")?.source).toBe("PRESET");
+    expect(entryOf(config, "CLAUDE_CONFIG_DIR")).toBeUndefined();
+  });
+
+  it("accepts the codex sign-in under the default CODEX_HOME and delivers that dir, unhidden", () => {
+    const config = resolved({ MOE_AGENT_COMMAND: "codex" }, onlyFile(CODEX_LOGIN_FILE));
+    expect(entryOf(config, "CODEX_HOME")).toEqual({
+      name: "CODEX_HOME", secret: false, source: "DEFAULTED", value: join(HOME, ".codex"),
+    });
+    expect(config.env["CODEX_HOME"]).toBe(join(HOME, ".codex"));
+  });
+
+  it("does not let a claude sign-in satisfy a codex command, nor the reverse", () => {
+    expect(refused({ MOE_AGENT_COMMAND: "codex" }, onlyFile(CLAUDE_LOGIN_FILE)).refusals[0]?.variable)
+      .toBe(CODEX_ACCEPTED_VARIABLES);
+    expect(refused({}, onlyFile(CODEX_LOGIN_FILE)).refusals[0]?.variable).toBe(ACCEPTED_VARIABLES);
   });
 });
 

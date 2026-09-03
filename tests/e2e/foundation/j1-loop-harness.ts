@@ -246,16 +246,18 @@ export function runSeed(
 }
 
 /**
- * The live `claude -p --bare` probe, run WITH the resolved credential injected and BEFORE any
- * journey starts. `--bare` reads no keychain, so this is the one call that can tell a missing
- * credential apart from an orchestration fault: without it a spawn failure inside the wrapper
- * would be reported as an agent process failure and read as a moe-next defect.
+ * The live `claude -p` probe, run WITH the resolved credential injected and BEFORE any
+ * journey starts. This is the one call that can tell a missing credential apart from an
+ * orchestration fault: without it a spawn failure inside the wrapper would be reported as
+ * an agent process failure and read as a moe-next defect. (Not `--bare`: production seats
+ * run without it so the operator's sign-in counts as a credential.)
  */
 export function probeBareAgent(command: string, credential: AgentCredential): Promise<ProcessRun> {
-  // ONE SPACE-FREE ARGUMENT. Production spawns this CLI through cmd.exe with `shell: true`,
-  // which concatenates argv unescaped (DEP0190), so a multi-word prompt arrives as separate
-  // positional arguments and the child answers an EMPTY prompt while still exiting 0.
-  const child = spawn(command, ["-p", "--bare", "ping"], {
+  // ONE SPACE-FREE ARGUMENT, and NO empty argument. Production spawns this CLI through
+  // cmd.exe with `shell: true`, which concatenates argv unescaped (DEP0190), so a multi-word
+  // prompt arrives as separate positional arguments (the child answers an EMPTY prompt while
+  // still exiting 0) and an empty argument vanishes entirely.
+  const child = spawn(command, ["-p", "--strict-mcp-config", "--disable-slash-commands", "ping"], {
     cwd: REPOSITORY_ROOT,
     env: { ...process.env, [credential.deliveredAs]: credential.value },
     shell: IS_WINDOWS,
@@ -280,7 +282,7 @@ export interface RealAgentRun {
 }
 
 /**
- * The REAL wrapper staffing the exclusive node with the REAL `claude -p --bare` child.
+ * The REAL wrapper staffing the exclusive node with the REAL `claude -p` child.
  *
  * The credential reaches that child by production's own rule and not by a special case:
  * `agentEnvironment()` forwards the ANTHROPIC_ prefix from the wrapper's environment, so

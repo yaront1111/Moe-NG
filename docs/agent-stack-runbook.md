@@ -98,31 +98,46 @@ printed). Any of the three you export yourself is used as-is. Do not use these
 dev defaults for anything you care about keeping.
 
 An agent credential is the one thing the launcher refuses rather than invents.
-The refusal lands before either child is spawned, since `claude --bare` reads
-no keychain and has no other way to authenticate:
+The refusal lands before either child is spawned, and it names both the
+variables it accepts and the sign-in file it looked for:
 
 ```
-MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY (set one; run `claude setup-token` for a subscription token)
+MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY (set one, or sign in once: run `claude` and `/login`; `claude setup-token` also works); no sign-in at C:\Users\you\.claude\.credentials.json
 ```
 
-Any ONE of those three satisfies it. Setting `MOE_AGENT_COMMAND` to `codex`
-gates on the Codex roster instead (see below); any other command waives the
-check entirely.
+Any ONE of those three variables satisfies it, and so does the sign-in file
+alone. Setting `MOE_AGENT_COMMAND` to `codex` gates on the Codex roster instead
+(see below); any other command waives the check entirely.
 
 ## Agent credentials
 
-For an individual user on a Claude subscription, this is the default path:
+For an individual user on a Claude subscription, the default path is the
+sign-in you already have: run `claude` once, `/login`, done. The seats are
+spawned WITHOUT `--bare` (bare mode authenticates from the environment only and
+never reads a sign-in), so a child with no `ANTHROPIC_*` variable answers from
+`~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`). The
+launcher discloses which one it found:
 
 ```
-claude setup-token
-$env:CLAUDE_CODE_OAUTH_TOKEN = "<token printed by setup-token>"
+  CLAUDE_CONFIG_DIR=C:\Users\you\.claude (defaulted)
 ```
 
-An API key (`$env:ANTHROPIC_API_KEY = "<your key>"`) is the alternative, and
-configured Bedrock/Vertex/Foundry credentials still work as before.
+The isolation `--bare` used to give is restated flag by flag on the seat:
+`--setting-sources ""` (no user/project/local settings, so none of YOUR hooks
+or plugins run inside a seat), `--disable-slash-commands`,
+`--no-session-persistence`, `--strict-mcp-config` with the per-agent MCP config.
+Measured 2026-09-03 on claude 2.1.x: a user-settings hook that a default
+`claude -p` injects is absent under `--setting-sources ""`. Two things bare mode
+skipped are NOT restated: a seat working in a project directory reads that
+project's `CLAUDE.md`, and it may write auto-memory under your profile.
+
+An environment credential still wins over the sign-in, matching the CLI's own
+precedence: a headless host exports `ANTHROPIC_API_KEY` (or configured
+Bedrock/Vertex/Foundry credentials), or a subscription token from
+`claude setup-token` as `CLAUDE_CODE_OAUTH_TOKEN`.
 
 One measured caveat, true of Claude Code **2.1.235** and re-checkable with one
-command: `claude -p --bare` does NOT read `CLAUDE_CODE_OAUTH_TOKEN` — supplying
+command: `claude -p` does NOT read `CLAUDE_CODE_OAUTH_TOKEN` — supplying
 the token under that name refuses `Not logged in` byte-identically to supplying
 no credential at all, while the SAME value under `ANTHROPIC_AUTH_TOKEN` answers
 exit 0. So the launcher accepts the subscription variable and DELIVERS it to its
@@ -210,10 +225,11 @@ need a fixed port, a `--csrf-token`, or one component without the other.
 | `MOE_PROJECT_ID` | Project scope for every durable decision |
 | `MOE_DAEMON_CREDENTIAL` | Operator secret (all capabilities) |
 | `MOE_NODE_SPECS_DIR` | Optional: dir of code-node specs (see below) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token from `claude setup-token`; accepted, and delivered to children as `ANTHROPIC_AUTH_TOKEN` (2.1.235 does not read it under `--bare`) |
-| `ANTHROPIC_AUTH_TOKEN` | The name `claude --bare` actually authenticates with; export it directly to skip the mapping |
-| `ANTHROPIC_API_KEY` or configured Bedrock/Vertex/Foundry credentials | The API-key alternative. ONE of these three variables is required by the wrapper's `claude --bare` child; bare mode does not read OAuth/keychain auth |
-| `CODEX_HOME` | Codex state directory holding `auth.json`; carries a ChatGPT SUBSCRIPTION seat after one interactive `codex login`. First of the four the Codex gate looks for |
+| `CLAUDE_CONFIG_DIR` | Where the claude sign-in lives (`.credentials.json`); defaults to `~/.claude`. A present sign-in satisfies the gate with no variable set, and the launcher delivers this name so the seats agree |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token from `claude setup-token`; accepted, and delivered to children as `ANTHROPIC_AUTH_TOKEN` (2.1.235 does not read it under that name) |
+| `ANTHROPIC_AUTH_TOKEN` | The environment name the claude CLI authenticates with; export it directly to skip the mapping |
+| `ANTHROPIC_API_KEY` or configured Bedrock/Vertex/Foundry credentials | The API-key alternative. Any environment credential takes precedence over the sign-in file |
+| `CODEX_HOME` | Codex state directory holding `auth.json`; carries a ChatGPT SUBSCRIPTION seat after one interactive `codex login`. First of the four the Codex gate looks for; defaults to `~/.codex` when `auth.json` is there |
 | `CODEX_ACCESS_TOKEN` | Codex seat token, read straight from the environment and parsed as a JWT |
 | `OPENAI_API_KEY` or `CODEX_API_KEY` | The Codex API-key alternatives. ONE of these four is required when `MOE_AGENT_COMMAND` names `codex` |
 
@@ -344,8 +360,8 @@ Each pass: for every READY, unclaimed non-human step (code nodes first;
 `MOE_WRAPPER_MAX_AGENTS`, default 2)
 it opens a scoped session, claims the item under the AGENT'S credential (the
 claim's expiry is also the reap horizon), and spawns
-`claude -p --bare --strict-mcp-config --no-session-persistence --mcp-config
-<per-agent> ...` with the mission over stdin. Chain agents get MCP tools only;
+`claude -p --setting-sources "" --disable-slash-commands --no-session-persistence
+--strict-mcp-config --mcp-config <per-agent> ...` with the mission over stdin. Chain agents get MCP tools only;
 code-node agents also get
 Edit/Write/Read/Glob/Grep/Bash and run in their workspace. Knobs:
 `MOE_WRAPPER_ONCE=1`, `MOE_WRAPPER_INTERVAL_MS` (15000), `MOE_AGENT_COMMAND`

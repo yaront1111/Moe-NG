@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  DEFAULT_AGENT_COMMAND, present, providerCredentials, providerFor, refuseCredential,
+  DEFAULT_AGENT_COMMAND, loginCredentialPath, present, providerCredentials, providerFor,
+  refuseCredential,
 } from "./moe-up-credentials.js";
 import type {
-  LaunchRefusal, LaunchValueSource, LaunchVariable,
+  FileExists, LaunchRefusal, LaunchValueSource, LaunchVariable,
 } from "./moe-up-credentials.js";
 
 /**
@@ -23,7 +25,7 @@ import type {
 // Re-exported so this module's published surface is unchanged by the split.
 export { MOE_UP_ENV_MISSING } from "./moe-up-credentials.js";
 export type {
-  LaunchRefusal, LaunchValueSource, LaunchVariable,
+  FileExists, LaunchRefusal, LaunchValueSource, LaunchVariable,
 } from "./moe-up-credentials.js";
 
 export interface LaunchConfig {
@@ -46,6 +48,8 @@ export type LaunchEnvResolution = LaunchConfig | LaunchRefused;
 
 export interface LaunchEnvInputs {
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** INJECTED so the sign-in lookup never reads the test host's home directory. */
+  readonly fileExists?: FileExists;
   /** INJECTED so two runs over identical inputs produce an identical config. */
   readonly randomHex?: (bytes: number) => string;
   readonly repoRoot: string;
@@ -81,17 +85,21 @@ export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
     () => DEFAULT_AGENT_COMMAND, "DEFAULTED",
   );
 
-  // The one thing this launcher cannot invent: without a credential the
-  // wrapper's `claude --bare` children have no auth at all (bare mode reads no
-  // keychain), so they would spawn, fail, and look like an orchestration bug.
-  // A codex child on a subscription seat fails the same way with no CODEX_HOME.
+  // The one thing this launcher cannot invent: a seat with no credential spawns,
+  // fails, and looks like an orchestration bug. A credential is EITHER a named
+  // environment variable OR the sign-in the operator already holds on disk (the
+  // seats run without `--bare`, so the CLI reads its own login); the gate
+  // refuses only when neither exists. A codex child is gated the same way.
   const provider = providerFor(agentCommand.value);
   let credentials: readonly LaunchVariable[] = [];
   if (provider !== undefined) {
-    const accepted = providerCredentials(provider, env);
+    const accepted = providerCredentials(provider, env, inputs.fileExists ?? existsSync);
     if (accepted === null) {
       return Object.freeze({
-        ok: false, refusals: Object.freeze([refuseCredential(provider)]),
+        ok: false,
+        refusals: Object.freeze([
+          refuseCredential(provider, loginCredentialPath(provider, env)),
+        ]),
       });
     }
     credentials = accepted;

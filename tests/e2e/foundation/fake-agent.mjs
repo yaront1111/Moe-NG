@@ -9,7 +9,7 @@
  * `agentEnvironment()` scrubs every key outside its allowlist and drops all `MOE_*`, so an
  * env var cannot reach this process at all: the ARM is selected by argv the generated .cmd
  * shim prepends, the mission arrives on STDIN, and the loopback url plus the per-agent scoped
- * bearer are read from the JSON at `--mcp-config`. Reading `--bare` off argv would NOT prove
+ * bearer are read from the JSON at `--mcp-config`. Reading a flag off argv would NOT prove
  * the spawner passed it, so no flag here is treated as evidence of anything.
  *
  * Its stdout is the WRAPPER's stdout (`stdio: ["pipe", "inherit", "inherit"]`), which is where

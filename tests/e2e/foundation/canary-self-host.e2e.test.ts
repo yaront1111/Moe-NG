@@ -1,10 +1,10 @@
 /**
- * THE FOUNDATION SELF-HOST CANARY: the wrapper's `--bare` spawner flags against the REAL
+ * THE FOUNDATION SELF-HOST CANARY: the wrapper's seat spawner flags against the REAL
  * Claude CLI, staffing the exclusive seeded node.
  *
  * THE FIRST LIVE PROOF of those flags. Every arm in `j1-loop-real-process.e2e.test.ts`
  * staffs a scripted `.mjs` coder, which exercises the loop but can never exercise the CLI
- * contract: `--bare`, `--strict-mcp-config` and the per-agent MCP config are claims about a
+ * contract: `--setting-sources ""`, `--strict-mcp-config` and the per-agent MCP config are claims about a
  * real `claude` process, and only a real one can refute them.
  *
  * WHAT WOULD MAKE THIS A TAUTOLOGY, and is therefore absent: no mocked child, no fake
@@ -41,7 +41,7 @@ import { pidReaped } from "./orphan-reap.js";
 
 /**
  * `MOE_AGENT_COMMAND` carries the real CLI name, so the wrapper builds its own
- * `-p --bare --no-session-persistence --strict-mcp-config` invocation: the flags are
+ * `-p --setting-sources "" --no-session-persistence --strict-mcp-config` invocation: the flags are
  * exercised as production emits them, never restated here.
  */
 const CANARY_AGENT_COMMAND = "claude";
@@ -79,9 +79,9 @@ function authoredDelta(scratch: J1Scratch): { readonly bytes: string; readonly p
   return { bytes: "", path: `${scratch.workspace}/math.mjs` };
 }
 
-describe("Foundation self-host canary: the wrapper's --bare flags against the REAL Claude CLI", () => {
+describe("Foundation self-host canary: the wrapper's seat flags against the REAL Claude CLI", () => {
   it.skipIf(!CANARY_OPT_IN)(
-    "carries the exclusive node to COMMITTED through a real claude -p --bare child",
+    "carries the exclusive node to COMMITTED through a real claude -p child",
     async () => {
       if (CANARY_CREDENTIAL === null) {
         // Opted in and unresolvable: the lane FAILS. Falling back to a skip here would let the
@@ -91,7 +91,7 @@ describe("Foundation self-host canary: the wrapper's --bare flags against the RE
         );
       }
       const credential = CANARY_CREDENTIAL;
-      // The probe FIRST, because `--bare` reads no keychain: without it a credential fault
+      // The probe FIRST, because a seat needs a credential: without it a credential fault
       // arrives later disguised as an agent process failure and reads as an orchestration bug.
       const probe = await probeBareAgent(CANARY_AGENT_COMMAND, credential);
       // eslint-disable-next-line no-console
@@ -99,10 +99,10 @@ describe("Foundation self-host canary: the wrapper's --bare flags against the RE
         code: probe.code, credential: credentialProvenance(credential),
       })}`);
       if (probe.code !== 0) {
-        throw new Error(`claude -p --bare refused the resolved credential: ${probe.output}`);
+        throw new Error(`claude -p refused the resolved credential: ${probe.output}`);
       }
       // The probe grades AUTHENTICATION, not model semantics: a reply's wording is not a
-      // contract, but an unauthenticated `--bare` child is — it exits 1 and says so.
+      // contract, but an unauthenticated child is — it exits 1 and says so.
       expect(probe.output.trim().length).toBeGreaterThan(0);
       expect(probe.output).not.toContain("Not logged in");
 

@@ -6,7 +6,7 @@
  * WHAT THIS TURNS INTO EVIDENCE. The "full loop live-proven Aug 9-10" premise is graded
  * PARTIAL: two agents over two chain steps are ledger-proven at d8a5632, full-chain code-node
  * delivery was prose in the runbook. This test is the ledger evidence for the whole chain with
- * a SCRIPTED coder. It does NOT cover the wrapper's `--bare` spawner flags — those belong to
+ * a SCRIPTED coder. It does NOT cover the wrapper's seat spawner flags — those belong to
  * `canary-self-host.e2e.test.ts`, which staffs the same node with a real `claude` child.
  *
  * EVERY VERDICT COMES FROM THE DURABLE LEDGER, read from the store FILE after the processes

@@ -212,7 +212,11 @@ function hostedRoot(): { readonly bundle: string; readonly root: string } {
 
 function start(
   env: Readonly<Record<string, string | undefined>>,
-  extra: { readonly originTimeoutMs?: number; readonly repoRoot?: string } = {},
+  extra: {
+    readonly fileExists?: (path: string) => boolean;
+    readonly originTimeoutMs?: number;
+    readonly repoRoot?: string;
+  } = {},
 ): Harness {
   const { calls, spawn } = recordingSpawn();
   const lines: string[] = [];
@@ -221,6 +225,9 @@ function start(
   tempRoots.push(storeRoot);
   const result = runMoeUp({
     env: { ...env, MOE_STORE_PATH: join(storeRoot, "store.sqlite") },
+    // No sign-in on disk unless a case says so: the host's real profile must
+    // never decide whether the launcher refuses.
+    fileExists: () => false,
     log: (line) => lines.push(line),
     onSignal: (handler) => { signal = handler; },
     repoRoot: REPO_ROOT,
@@ -240,6 +247,20 @@ describe("runMoeUp refuses before it spawns", () => {
     expect(harness.lines.join(String.fromCharCode(10))).toContain(
       "MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY",
     );
+  });
+
+  it("starts on the operator's claude sign-in alone and discloses the config dir it found", async () => {
+    const home = "D:/fixture-home";
+    const harness = start(
+      { USERPROFILE: home },
+      { fileExists: (path) => path === join(home, ".claude", ".credentials.json") },
+    );
+    await settle();
+    expect(harness.calls.length).toBeGreaterThan(0);
+    expect(harness.lines.join(String.fromCharCode(10)))
+      .toContain(`CLAUDE_CONFIG_DIR=${join(home, ".claude")} (defaulted)`);
+    harness.calls[0]?.child.exit(0);
+    await harness.result;
   });
 });
 

@@ -91,7 +91,15 @@ function spawnRuntime(
         "-",
       ] : [
         "-p",
-        "--bare",
+        // Not `--bare`: bare mode authenticates from the environment only and
+        // never reads the operator's `claude` sign-in. The isolation bare mode
+        // gave is restated flag by flag — no user/project/local settings (so no
+        // hooks or plugins), no skills, no session file, only the per-agent MCP
+        // config. Measured 2026-09-03 on claude 2.1.x: `--setting-sources ""`
+        // drops the user-settings hook a default `claude -p` injects, and a
+        // child with no ANTHROPIC_* variable answers from the sign-in file.
+        "--setting-sources", "",
+        "--disable-slash-commands",
         "--no-session-persistence",
         "--strict-mcp-config",
         "--mcp-config", mcpConfigPath,

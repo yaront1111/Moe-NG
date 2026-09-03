@@ -207,7 +207,11 @@ describe("claudeSpawner", () => {
     });
     // The credential is not on the command line.
     expect(`${child.file} ${child.args.join(" ")}`).not.toContain(req.credential);
-    expect(`${child.file} ${child.args.join(" ")}`).toContain("--bare");
+    // Bare mode would refuse the operator's sign-in; isolation is restated flag by flag.
+    expect(`${child.file} ${child.args.join(" ")}`).not.toContain("--bare");
+    const sources = child.args.indexOf("--setting-sources");
+    expect(child.args.slice(sources, sources + 2)).toEqual(["--setting-sources", ""]);
+    expect(`${child.file} ${child.args.join(" ")}`).toContain("--disable-slash-commands");
     expect(`${child.file} ${child.args.join(" ")}`).toContain("--strict-mcp-config");
     expect(`${child.file} ${child.args.join(" ")}`).toContain("--no-session-persistence");
     expect(child.args).toContain("");

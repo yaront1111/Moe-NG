@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 const IS_WINDOWS = process.platform === "win32";
 
 export type CredentialScope = "Machine" | "Process" | "User";
-/** The two names `claude --bare` actually reads. */
+/** The two environment names a `claude -p` seat actually reads. */
 export type DeliveredCredentialName = "ANTHROPIC_API_KEY" | "ANTHROPIC_AUTH_TOKEN";
 
 export interface AgentCredential {
@@ -36,7 +36,7 @@ export interface AgentCredential {
 
 /**
  * `CLAUDE_CODE_OAUTH_TOKEN` is READ FOR ITS VALUE AND DELIVERED UNDER ANOTHER NAME: measured
- * on this host with a scrubbed-env discriminating pair, `claude -p --bare` ignores that name
+ * on this host with a scrubbed-env discriminating pair, `claude -p` ignores that name
  * and authenticates on the same bytes presented as ANTHROPIC_AUTH_TOKEN. Resolving it without
  * renaming it would find a credential and still spawn an unauthenticated child.
  */

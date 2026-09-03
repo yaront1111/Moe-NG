@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describeLaunchVariables, resolveLaunchEnv } from "./moe-up-env.js";
+import type { FileExists } from "./moe-up-env.js";
 import {
   NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
@@ -55,6 +56,8 @@ function suppressDaemonLine(line: string): boolean {
 
 export interface MoeUpOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** The sign-in lookup; injected so a test never reads the host's home directory. */
+  readonly fileExists?: FileExists;
   readonly log: (line: string) => void;
   /** Registers the console interrupt handler; injected so a test can fire it. */
   readonly onSignal: (handler: () => void) => void;
@@ -244,6 +247,7 @@ function announce(
 export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   const resolution = resolveLaunchEnv({
     env: options.env,
+    ...(options.fileExists === undefined ? {} : { fileExists: options.fileExists }),
     ...(options.randomHex === undefined ? {} : { randomHex: options.randomHex }),
     repoRoot: options.repoRoot,
   });
