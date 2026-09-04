@@ -186,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:04:07.338Z",
-  "updatedAt": "2026-09-04T21:38:29.772Z",
+  "updatedAt": "2026-09-04T21:40:28.895Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:33:53.166Z",
     "plannedStepCount": 8,
@@ -250,7 +250,115 @@
     "apps/daemon/src/orchestrator/agent-wrapper-reclaim-dispatch.js",
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json"
   ],
-  "completionSummary": "Dead seats are reclaimed on wrapper start. Two halves that only work together, plus the runbook.\n\nDAEMON RULE (work-claim-services.ts 228->245, code and layer UNCHANGED, semantics widened for RELEASE ONLY): the non-claimant branch in `decide` now consults `holderHasLiveSession` for `work.release`. A holder with NO live session (every session naming that principal CLOSED, expired, or absent at `decidedAt`) falls through to the unchanged release commit, which still records `claimedBy: held.claimedBy`. LIVE (`true`) and UNREADABLE (`null`) both refuse `WORK_CLAIM_NOT_CLAIMANT` / `DAEMON_PREREQUISITE` — the fail-closed shape is `if (live !== false)`. `work.renew` hard-codes `true` and never reads the session ledger.\nNEW: apps/daemon/src/work/work-claim-holder-liveness.ts (52) + .js bridge — `holderHasLiveSession(store, projectId, claimant, decidedAt): boolean|null`; matches `sessionId === claimant || principalId === claimant` (a seat's working principal IS its session id, session-authenticator.ts:137), status OPEN, exclusive expiry by lexicographic ISO compare. Split out so the services file stays <=250. `identity/session-read-model.ts` imports nothing from `work/`: no cycle.\n\nWRAPPER BOOT PASS, three new modules + bridges under apps/daemon/src/orchestrator/:\n- agent-wrapper-reclaim.ts (235): `RECLAIM_OUTCOMES` = RECLAIMED, KEPT_ALIVE, KEPT_PID_UNKNOWN, KEPT_LIVENESS_UNKNOWN, CLOSE_REFUSED, RELEASE_REFUSED, RETIRE_FAILED; `ReclaimReport {code, outcome, sessionId, workItemId}` (the refusing code is its OWN field, not a `RELEASE_REFUSED:<code>` substring); `enumerateLiveChildren(store, log?)` over `enumerateAggregateIdsByPrefix(\"wrapper-staffing/\")` + `readEvents`; `runReclaimPass(config)`.\n- agent-wrapper-reclaim-records.ts (79): `liveChildOf(events)` — last transition wins, ADMITTED=live, RETIRED=idle, unknown type/undecodable payload = UNREADABLE (skipped with a log line, never a throw).\n- agent-wrapper-reclaim-dispatch.ts (83): `createReclaimDispatch` + `actualVersion"
+  "completionSummary": "Dead seats are reclaimed on wrapper start. Two halves that only work together, plus the runbook.\n\nDAEMON RULE (work-claim-services.ts 228->245, code and layer UNCHANGED, semantics widened for RELEASE ONLY): the non-claimant branch in `decide` now consults `holderHasLiveSession` for `work.release`. A holder with NO live session (every session naming that principal CLOSED, expired, or absent at `decidedAt`) falls through to the unchanged release commit, which still records `claimedBy: held.claimedBy`. LIVE (`true`) and UNREADABLE (`null`) both refuse `WORK_CLAIM_NOT_CLAIMANT` / `DAEMON_PREREQUISITE` — the fail-closed shape is `if (live !== false)`. `work.renew` hard-codes `true` and never reads the session ledger.\nNEW: apps/daemon/src/work/work-claim-holder-liveness.ts (52) + .js bridge — `holderHasLiveSession(store, projectId, claimant, decidedAt): boolean|null`; matches `sessionId === claimant || principalId === claimant` (a seat's working principal IS its session id, session-authenticator.ts:137), status OPEN, exclusive expiry by lexicographic ISO compare. Split out so the services file stays <=250. `identity/session-read-model.ts` imports nothing from `work/`: no cycle.\n\nWRAPPER BOOT PASS, three new modules + bridges under apps/daemon/src/orchestrator/:\n- agent-wrapper-reclaim.ts (235): `RECLAIM_OUTCOMES` = RECLAIMED, KEPT_ALIVE, KEPT_PID_UNKNOWN, KEPT_LIVENESS_UNKNOWN, CLOSE_REFUSED, RELEASE_REFUSED, RETIRE_FAILED; `ReclaimReport {code, outcome, sessionId, workItemId}` (the refusing code is its OWN field, not a `RELEASE_REFUSED:<code>` substring); `enumerateLiveChildren(store, log?)` over `enumerateAggregateIdsByPrefix(\"wrapper-staffing/\")` + `readEvents`; `runReclaimPass(config)`.\n- agent-wrapper-reclaim-records.ts (79): `liveChildOf(events)` — last transition wins, ADMITTED=live, RETIRED=idle, unknown type/undecodable payload = UNREADABLE (skipped with a log line, never a throw).\n- agent-wrapper-reclaim-dispatch.ts (83): `createReclaimDispatch` + `actualVersion",
+  "commits": [
+    {
+      "sha": "86657cac647352d12aca25886d3e0ead54c7d3a8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-04T20:19:57Z",
+      "paths": [
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim.js",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim-dispatch.js",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim-dispatch.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim-records.js",
+        "apps/daemon/src/orchestrator/agent-wrapper-reclaim-records.ts",
+        "apps/daemon/src/work/work-claim-holder-liveness.js",
+        "apps/daemon/src/work/work-claim-holder-liveness.ts",
+        "apps/daemon/src/work/work-claim-services.test.ts",
+        "apps/daemon/src/work/work-claim-services.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-04T21:40:28.895Z",
+      "treeId": "0cccb3db7bb8727d5f0c6aa8fde27e3e91129e86",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
+          "taskId": "task-4109c1a0e1154ca89576183dae7a5336"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+          "taskId": "task-4109c1a0e1154ca89576183dae7a5336"
+        },
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim-dispatch.js",
+    "docs/agent-stack-runbook.md",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim.test.ts",
+    "apps/daemon/src/work/work-claim-services.ts",
+    "apps/daemon/src/work/work-claim-holder-liveness.js",
+    "apps/daemon/src/work/work-claim-services.test.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim-dispatch.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim-records.js",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim.js",
+    "apps/daemon/src/work/work-claim-holder-liveness.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-reclaim-records.ts"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/a11y/keyboard-map.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-columns.ts",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/components/outcome-note.tsx",
+    "apps/control-room/src/v2/goals/approve-plan.tsx",
+    "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+    "apps/control-room/src/v2/goals/gate1-card.tsx",
+    "apps/control-room/src/v2/goals/gate1-v1-card.tsx",
+    "apps/control-room/src/v2/goals/goal-card.tsx",
+    "apps/control-room/src/v2/goals/goal-catalog-model.test.ts",
+    "apps/control-room/src/v2/goals/goal-catalog-model.ts",
+    "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/outcome-words.test.ts",
+    "apps/control-room/src/v2/outcome-words.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.tsx",
+    "apps/control-room/src/v2/runs/run-words.ts",
+    "apps/control-room/src/v2/shell/nav-rail.tsx",
+    "apps/control-room/src/v2/shell/shell-model.ts",
+    "apps/control-room/src/v2/styles/cordum-board.css",
+    "apps/control-room/src/v2/styles/cordum-goals.css",
+    "apps/control-room/src/v2/styles/cordum-shell.css",
+    "apps/control-room/src/v2/styles/cordum-tokens.css"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-04T20:19:57Z",
+    "at": "2026-09-04T21:40:28.895Z"
+  }
 }
