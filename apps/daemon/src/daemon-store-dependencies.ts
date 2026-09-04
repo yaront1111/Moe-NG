@@ -99,6 +99,13 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the sessions reader is always wired");
     return port();
   },
+  repositoryRemote: () => {
+    const port = fromEnv().repositoryRemote;
+    if (port === undefined) {
+      throw new Error("unreachable: the repository-remote reader is always wired");
+    }
+    return port();
+  },
   goalSource: () => {
     const port = fromEnv().goalSource;
     if (port === undefined) throw new Error("unreachable: the goal-source reader is always wired");

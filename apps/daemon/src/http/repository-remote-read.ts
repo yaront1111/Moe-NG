@@ -4,10 +4,15 @@
  * cost and never walks a decision page. Nothing here binds or resolves a remote: `readRemote`
  * projects what `repository.publish` already committed, and answers NULLS while nothing is bound.
  *
- * Unbound and unreadable are DIFFERENT answers on purpose. Nothing bound is a legitimate state
- * the Publish control renders ("no remote yet"); a store that cannot be read is a refusal. A url
- * whose binding no longer passes today's admission rule reads as unbound rather than as a bad
- * url, because `readProjectRemote` fails closed rather than grandfathering it.
+ * Unbound is a legitimate state, not an error: the Publish control renders an all-null view as
+ * "no remote yet". Note what the shipped reader collapses INTO that state, because a consumer
+ * cannot tell the cases apart from the response and must not try: `readProjectRemote` catches
+ * its own store failure and re-applies today's admission rule on the read, so a broken store,
+ * an undecodable binding, and a url the rule no longer admits ALL read as unbound. That is
+ * deliberate fail-closed behaviour -- surfacing a superseded remote would point a push at a
+ * repository the operator has already moved away from -- and it means REFUSED is reachable only
+ * when the injected reader itself throws, never from a store fault. Both paths are pinned by
+ * arms in this module's test.
  */
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";

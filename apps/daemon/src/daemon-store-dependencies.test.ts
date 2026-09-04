@@ -646,6 +646,12 @@ try {
   const first = dispatch();
   const second = dispatch();
   const sourceSnapshotPublisher = provider.sourceSnapshotPublisher();
+  // CALLED, not merely counted: \`providerKeys\` reads the default provider object, so a port
+  // whose key is present there but absent from the COMPOSITION's return would pass that arm
+  // and throw "unreachable" the first time production asked for it. Invoking it is what binds
+  // the composition factory to the shipped provider.
+  const remote = provider.repositoryRemote();
+  const remoteView = remote.readRemote();
   const shapeOf = (result) => ({
     commandId: result.decision?.commandId ?? null,
     disposition: result.decision?.disposition ?? null,
@@ -662,6 +668,10 @@ try {
     registerHandler: typeof entry.handler,
     registerPayloadKeys: entry.payloadKeys,
     registryKinds: [...deps.registry.keys()].sort(),
+    remoteBoundProjectId: remote.boundProjectId,
+    remoteKeys: Object.keys(remoteView).sort(),
+    remoteOutcome: remoteView.outcome,
+    remoteUrl: remoteView.remoteUrl,
     sameEffect: first.decision?.effectId === second.decision?.effectId,
     sameSourceSnapshotPublisher:
       sourceSnapshotPublisher === provider.sourceSnapshotPublisher(),
@@ -715,10 +725,18 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "pairingOpenSessions",
         "planningRuns", "policy", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
-        "provide", "provideV2", "reconciliation", "restore", "runs",
+        "provide", "provideV2", "reconciliation", "repositoryRemote", "restore", "runs",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",
         "subscriptions",
       ],
+      // The repository-remote read, resolved through the REAL composition in this child: the
+      // provider key alone cannot prove the composition supplies it. Nothing has published in
+      // this fresh store, so the honest answer is the unbound view -- all nulls under an
+      // `outcome: "REMOTE"`, never a refusal -- bound to this child's own project.
+      remoteBoundProjectId: "proj-child-smoke",
+      remoteKeys: ["boundAt", "boundBy", "outcome", "readAt", "remoteUrl"],
+      remoteOutcome: "REMOTE",
+      remoteUrl: null,
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],

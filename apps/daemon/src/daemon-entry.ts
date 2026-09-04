@@ -282,6 +282,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.health === undefined ? {} : { health: resolved.health }),
     ...(resolved.activity === undefined ? {} : { activity: resolved.activity }),
     ...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions }),
+    ...(resolved.repositoryRemote === undefined ? {} : { repositoryRemote: resolved.repositoryRemote }),
     ...(resolved.goalSource === undefined ? {} : { goalSource: resolved.goalSource }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
     ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),

@@ -44,6 +44,8 @@ import { createActivityReadPort } from "./http/activity-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import { createSessionsReadPort } from "./http/sessions-read.js";
 import type { SessionsReadPort } from "./http/sessions-read.js";
+import { createRepositoryRemoteReadPort } from "./http/repository-remote-read.js";
+import type { RepositoryRemoteReadPort } from "./http/repository-remote-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
@@ -349,6 +351,9 @@ export function createStoreDependencies(
   const activity = (): ActivityReadPort => createActivityReadPort({ projectId: config.projectId, store });
   /** Who holds a seat, with the work each seat claims, at this root clock. */
   const sessions = (): SessionsReadPort => createSessionsReadPort({ projectId: config.projectId, store });
+  /** The remote the first publish bound for this project, at this root clock. */
+  const repositoryRemote = (): RepositoryRemoteReadPort =>
+    createRepositoryRemoteReadPort({ clock, projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -457,6 +462,7 @@ export function createStoreDependencies(
     provide,
     provideV2,
     reconciliation,
+    repositoryRemote,
     runs,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,

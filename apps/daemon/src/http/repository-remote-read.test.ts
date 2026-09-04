@@ -81,6 +81,35 @@ describe("createRepositoryRemoteReadPort", () => {
       .toEqual({ boundAt: null, boundBy: null, outcome: "REMOTE", readAt: NOW, remoteUrl: null });
   });
 
+  it("reads an unreadable STORE as unbound, not as a refusal", () => {
+    const real = openStore();
+    driveThrough(real, "goal.close");
+    // ADVERSARIAL, and the answer is not the obvious one. `readProjectRemote` catches its own
+    // `store.readEvents` failure and returns null, so with the SHIPPED reader a broken store is
+    // indistinguishable from "nothing published yet". That is child 1's deliberate fail-closed
+    // rule -- a superseded or unreadable binding must never resolve to a url the operator has
+    // moved away from -- and it means UNREADABLE is reachable only when the INJECTED reader
+    // throws, never from a store fault. Pinned here because child 3's decoder has to render an
+    // all-nulls view as "no remote yet" and would otherwise expect a refusal it can never get.
+    // Methods are bound to the target so the store's `#private` state still resolves.
+    const broken = new Proxy(real, {
+      get(target, property, _receiver) {
+        if (property === "readEvents") return () => { throw new Error("disk gone"); };
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const result = createRepositoryRemoteReadPort({ clock: () => NOW, projectId: PROJECT_ID, store: broken }).readRemote();
+
+    expect(result).toEqual({
+      boundAt: null, boundBy: null, outcome: "REMOTE", readAt: NOW, remoteUrl: null,
+    });
+    // A POSITIVE CONTROL: the same store read through the real seam DOES carry the binding, so
+    // the all-nulls answer above is the proxy's fault injection and not an empty fixture.
+    expect(readProjectRemote(real, PROJECT_ID)).not.toBeNull();
+  });
+
   it("refuses UNREADABLE, with its own layer, when the fold throws", () => {
     const store = openStore();
     const port = createRepositoryRemoteReadPort({

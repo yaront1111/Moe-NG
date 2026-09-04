@@ -7,6 +7,7 @@ import type { PolicyReadPort } from "./http/policy-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import type { SessionsReadPort } from "./http/sessions-read.js";
+import type { RepositoryRemoteReadPort } from "./http/repository-remote-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -52,6 +53,8 @@ export interface OptionalDaemonPortProvider {
   activity?(): ActivityReadPort;
   /** Who holds a seat, bound to this daemon own project. */
   sessions?(): SessionsReadPort;
+  /** The git remote the first publish bound, for this daemon own project. */
+  repositoryRemote?(): RepositoryRemoteReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /** The budget commitment read port, bound to this daemon's own project. */
@@ -101,6 +104,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly health?: HealthReadPort;
   readonly activity?: ActivityReadPort;
   readonly sessions?: SessionsReadPort;
+  readonly repositoryRemote?: RepositoryRemoteReadPort;
   readonly goalSource?: GoalSourceReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
@@ -131,7 +135,7 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs", "policy", "health", "activity", "sessions", "goalSource",
+  "reconciliation", "runs", "policy", "health", "activity", "sessions", "repositoryRemote", "goalSource",
   "sessionHandshake",
 ] as const);
 
@@ -287,6 +291,15 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(sessions, ["readSessions"]) || typeof Reflect.get(sessions, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const remoteFactory = provider.repositoryRemote;
+    if (remoteFactory !== undefined && typeof remoteFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const repositoryRemote = remoteFactory?.call(provider);
+    if (repositoryRemote !== undefined
+      && (!hasMethods(repositoryRemote, ["readRemote"]) || typeof Reflect.get(repositoryRemote, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const goalSourceFactory = provider.goalSource;
     if (goalSourceFactory !== undefined && typeof goalSourceFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -385,6 +398,7 @@ export function resolveOptionalDaemonPorts(
       ...(health === undefined ? {} : { health }),
       ...(activity === undefined ? {} : { activity }),
       ...(sessions === undefined ? {} : { sessions }),
+      ...(repositoryRemote === undefined ? {} : { repositoryRemote }),
       ...(goalSource === undefined ? {} : { goalSource }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
