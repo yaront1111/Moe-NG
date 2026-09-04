@@ -2,8 +2,19 @@ import type { JSX } from "react";
 
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
-import { MIDDOT } from "../glyphs.js";
-import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
+import { ARROW_RIGHT, MIDDOT } from "../glyphs.js";
+import { untilWords } from "../board/board-columns.js";
+import { agoWords, decisionWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
+
+/** Who or what a project-wide decision landed on, without a goal's objectives to name nodes by. */
+function targetWords(targetAggregateId: string): string {
+  if (targetAggregateId.startsWith("goal-")) return `goal ${targetAggregateId.slice(5, 13)}`;
+  if (targetAggregateId.startsWith("run-")) return `the plan of goal ${targetAggregateId.slice(4, 12)}`;
+  if (targetAggregateId.startsWith("work/")) return `the work item ${targetAggregateId.slice(5)}`;
+  if (targetAggregateId.startsWith("landing:")) return `the landing of ${targetAggregateId.slice(8)}`;
+  if (targetAggregateId.startsWith("publish:")) return `the publish of goal ${targetAggregateId.slice(13, 21)}`;
+  return targetAggregateId;
+}
 import { refusalWords } from "../components/refusal-words.js";
 
 /**
@@ -48,9 +59,8 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
         <p className="cr2-needs-note" data-testid="cr.activity.empty">Nothing has been decided here yet.</p>
       ) : (
         <>
-          <p className="cr2-needs-note" data-testid="cr.activity.count">
-            {`${String(outcome.entries.length - seatsOf(outcome.entries).length)} work decisions of ${String(outcome.totalDecisions)} recorded, latest first.`
-              + " Refused commands are not recorded, so they do not appear here."}
+          <p className="cr2-needs-note" data-testid="cr.activity.count" title="Refused commands are not recorded, so they do not appear here.">
+            {`${String(outcome.entries.length - seatsOf(outcome.entries).length)} work decisions of ${String(outcome.totalDecisions)} recorded, latest first.`}
           </p>
           <ol className="cr2-activity-list" data-testid="cr.activity.list">
             {outcome.entries.map((entry, index) => ({ entry, index }))
@@ -61,15 +71,14 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
                 data-disposition={entry.disposition}
                 data-testid={`cr.activity.entry.${String(index)}`}
                 key={`${entry.decidedAt}:${entry.targetAggregateId}:${String(index)}`}
+                title={`${entry.commandKind} ${MIDDOT} ${entry.targetAggregateId}${entry.version === null ? "" : ` ${MIDDOT} v${String(entry.version)}`}`}
               >
                 <span className="cr2-activity-when">{agoWords(entry.decidedAt, nowMs)}</span>
                 <span className="cr2-activity-what">
-                  {`${principalWords(entry.principalId)} ${kindWords(entry.commandKind)}`}
+                  {`${principalWords(entry.principalId)} ${decisionWords(entry.commandKind, entry.verdict)}`}
                   {entry.disposition === "VERSION_CONFLICT" ? " (version conflict, nothing changed)" : ""}
                 </span>
-                <span className="cr2-approve-mono cr2-activity-target">
-                  {`${entry.commandKind} ${MIDDOT} ${entry.targetAggregateId}${entry.version === null ? "" : ` ${MIDDOT} v${String(entry.version)}`}`}
-                </span>
+                <span className="cr2-activity-target">{`${ARROW_RIGHT} ${targetWords(entry.targetAggregateId)}`}</span>
               </li>
             ))}
           </ol>
@@ -126,8 +135,9 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
             const browsers = outcome.sessions.filter((session) => seatWords(session.sessionId) === "a paired browser");
             const row = (session: SessionView): JSX.Element => (
               <li className="cr2-activity-row" data-liveness={session.liveness} data-testid={`cr.sessions.row.${session.sessionId}`} key={session.sessionId}>
-                <span className="cr2-activity-when">{session.liveness === "LIVE"
-                  ? `live until ${session.expiresAt}` : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
+                <span className="cr2-activity-when" title={session.expiresAt}>{session.liveness === "LIVE"
+                  ? `live ${MIDDOT} lease ends ${untilWords(session.expiresAt, nowMs) ?? "now"}`
+                  : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
                 <span className="cr2-activity-what">
                   {`${seatWords(session.sessionId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
                 </span>

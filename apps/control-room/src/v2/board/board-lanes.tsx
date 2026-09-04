@@ -4,7 +4,7 @@ import type { RunNodeView } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
 import { agoWords } from "../ops/activity-words.js";
 import { ROUTE_WORDS, STATUS_WORDS } from "../runs/runs-screen.js";
-import { BOARD_COLUMNS, COLUMN_WORDS } from "./board-columns.js";
+import { BOARD_COLUMNS, COLUMN_WORDS, untilWords } from "./board-columns.js";
 import type { BoardCard, BoardFold } from "./board-columns.js";
 
 /**
@@ -49,7 +49,7 @@ function landingWords(node: RunNodeView): string | null {
 function claimWords(node: RunNodeView, nowMs: number): string | null {
   if (node.claim === null) return null;
   return node.claim.active
-    ? `${node.claim.claimedBy} ${MIDDOT} until ${node.claim.expiresAt}`
+    ? `${node.claim.claimedBy} ${MIDDOT} lease ends ${untilWords(node.claim.expiresAt, nowMs) ?? "now"}`
     : `${node.claim.claimedBy} ${MIDDOT} ${node.claim.status === "RELEASED" ? "released" : "expired"}`
       + (node.lastActivityAt === null ? "" : ` ${MIDDOT} last activity ${agoWords(node.lastActivityAt, nowMs)}`);
 }

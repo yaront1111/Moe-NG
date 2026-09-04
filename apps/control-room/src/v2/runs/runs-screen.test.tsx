@@ -40,7 +40,7 @@ describe("nodeEvidence", () => {
     }), NOW)[1]).toBe("3 unsuccessful: the daemon refuses more rounds until a human escalates");
     expect(nodeEvidence(node({
       claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T21:00:00.000Z", status: "OPEN" }, status: "IN_PROGRESS",
-    }), NOW)).toEqual(["held by sess-wrap-2 until 2026-09-02T21:00:00.000Z"]);
+    }), NOW)).toEqual(["held by sess-wrap-2 · lease ends in 1 h"]);
     expect(nodeEvidence(node({
       receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
     }), NOW)).toEqual(["verifier ran pnpm test in D:/unai, exit 0, output oooooooooooo (120 bytes)"]);

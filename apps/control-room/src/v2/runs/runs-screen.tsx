@@ -2,7 +2,7 @@ import type { JSX } from "react";
 
 import "../styles/cordum-board.css";
 import type { RunGoalView, RunNodeStatus, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
-import { BOARD_COLUMNS, COLUMN_WORDS, foldBoard, nodesLine } from "../board/board-columns.js";
+import { BOARD_COLUMNS, COLUMN_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
 import type { BoardColumn, BoardFold } from "../board/board-columns.js";
 import { BoardLanes } from "../board/board-lanes.js";
 import { MIDDOT } from "../glyphs.js";
@@ -86,7 +86,7 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
   }
   if (node.claim !== null) {
     lines.push(node.claim.active
-      ? `held by ${node.claim.claimedBy} until ${node.claim.expiresAt}`
+      ? `held by ${node.claim.claimedBy} ${MIDDOT} lease ends ${untilWords(node.claim.expiresAt, nowMs) ?? "now"}`
       : `last held by ${node.claim.claimedBy} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
   }
   if (node.dependsOn.length > 0) lines.push(`after ${node.dependsOn.join(", ")}`);

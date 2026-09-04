@@ -3,6 +3,7 @@ import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
+import { ROUTE_WORDS } from "../runs/runs-screen.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
@@ -93,8 +94,7 @@ function itemsFor(
     items.push(Object.freeze({
       ...base,
       actionLabel: "Review the plan",
-      detail: `The daemon offers approval for planning run ${entry.planningRunRef}.`
-        + " Read the plan and its acceptance criteria before approving.",
+      detail: "A compiled plan is waiting. Read its steps and the acceptance criteria they cover before approving.",
       headline: "A plan is waiting for your approval",
       kind: "PLAN_APPROVAL",
     }));
@@ -152,7 +152,7 @@ function escalationItems(
     items.push(Object.freeze({
       actionLabel: "Open the goal",
       detail: `${nodeKey} failed review ${rounds === null ? "three or more" : String(rounds)} times`
-        + (route === null ? "" : ` (last: ${route})`)
+        + (route === null ? "" : ` (last round: ${ROUTE_WORDS[route] ?? route})`)
         + ". The daemon refuses further rounds until you decide: allow more attempts, or replan the work"
         + " into a successor goal that carries these findings.",
       escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),

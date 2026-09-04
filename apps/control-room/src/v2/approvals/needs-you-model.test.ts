@@ -155,7 +155,7 @@ describe("deriveNeedsYou", () => {
       escalation: { affordance: offer, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
       goalId: "goal-a", kind: "ESCALATION", planningRunRef: "run-goal-a", title: "Alpha",
     });
-    expect(data.items[0]?.detail).toBe("node-x failed review 3 times (last: REJECT_PLAN). The daemon refuses further rounds until you decide: allow more attempts, or replan the work into a successor goal that carries these findings.");
+    expect(data.items[0]?.detail).toBe("node-x failed review 3 times (last round: rejected: same finding again). The daemon refuses further rounds until you decide: allow more attempts, or replan the work into a successor goal that carries these findings.");
     // Without the runs read the node is still listed, named by itself, with no goal to open.
     const bare = deriveNeedsYou({ catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(), surface: surface([offer]) });
     expect(bare.items[0]).toMatchObject({ goalId: "", planningRunRef: "", title: "node node-x" });
