@@ -17,8 +17,27 @@
     "NEVER GUESS A LIMIT: an exit that matches no roster pattern is FAILED; the roster is pinned by fixtures quoting real provider lines, never regexes over 'limit' alone.",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records live evidence on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) in a row comment."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE. dependsOn is set on this row (the runtime withholds WORKING claims until the children are DONE), but confirm on disk anyway: children 1 task-756d81f117fb4ef6aeca2c676f433c91 (classifier + tail + pause ledger), 2 task-4109c1a0e1154ca89576183dae7a5336 (wrapper tee/classify/refund/pause gate), 3 task-ac71a55ead3d468eab7329131f04ab7e (health read + Seats/shell/board + e2e + runbook) each have `git log main --grep \"Moe-Task: task-<id>\" --oneline` = 1+ line; `ls apps/daemon/src/orchestrator/seat-exit-classifier.ts provider-pause-ledger.ts seat-output-tail.ts`; `grep -n \"provider limit\" apps/daemon/src/orchestrator/agent-wrapper*.ts` >= 1; `grep -n \"agents\" apps/daemon/src/http/health-read.ts` >= 1; runbook has '### Provider limits'. Anything missing -> `moe.report_blocked` with blockedOnTaskIds and the grep results; this row owns 0 files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "LIVE EVIDENCE (parent DoD 5) on the UnAI lane (scripts/up.ps1). Force a limit honestly: point a seat at an exhausted or invalid credential ONLY if the provider answers with a line from the roster (a 'Not logged in' refusal is FAILED, not a limit - record that it classified FAILED as designed); otherwise wait for the next real limit hit. Record with timestamps: the seat's exit line in wrapper stdout, the `[wrapper] provider limit: <provider> paused until <resetAt> (...)` line, `/health/read` showing `agents.paused`, the Seats/shell banner and the board next-step (screenshot paths), the absence of a second SPAWNED for that provider before resetAt, and the first SPAWNED after it. A refusal or a missing limit is recorded verbatim - never a fabricated pause. Transcript in a row comment under 4500 chars.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES + COMPLETE (parent DoD 6). From the repo root quote count lines for `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security` (path-attributed baseline for foreign red). Adversarial pass: (a) a seat that prints a roster line but exits 0 -> COMPLETED (the roster never overrides exit 0); (b) two providers paused independently (claude paused, codex free) - staffing continues for the free one; (c) a pause record whose resetAt is in the past on wrapper boot is ignored (read answers null); (d) the tee never truncates operator-visible output (byte-equality test from child 2 re-run). `moe.complete_task` with verification = the daemon count line and a completionSummary listing the three child ids, the live evidence, and the five DoD re-anchorings in comment-8fec3e60 (no wrapper.resume kind - bounded default pause; refund at exit; the existing exit cleanup releases the claim; spawner stdio tee; the pause on /health/read).",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +47,52 @@
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 1004,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8fec3e604f7c4540a71d89f8e055ce04",
+      "author": "architect-16a01670",
+      "content": "PLANNING RECORD (architect-16a01670, 2026-09-04, measured at main 68eb1c5d). SPIDR-split into 3 children under this row (parent = 0-file verification + live evidence): 1 pure modules (exit classifier with verbatim provider lines, bounded output tail, provider-pause ledger as internal record kinds) - leaf; 2 wrapper behaviour (spawner tee, exit classification, attempt refund, per-provider pause gate, log line) - dependsOn 1; 3 `/health/read` carries the pause + Seats/shell/board rendering + e2e + runbook - dependsOn 2. Ids follow.\n\nDoD RE-ANCHORS (grade the measured truth):\n1) No `wrapper.resume` command and no Needs-you Resume card: a new command kind is the ~20-file roster backfill; a limit line with NO reset instant pauses the provider for a bounded default (30 minutes, documented) and re-probes once - the human always sees \"resumes at <time>\". DoD 3's Resume clause is void.\n2) \"attempt counter unchanged\": attempts are charged at spawn (agent-wrapper.ts:362-370), so a PROVIDER_LIMIT exit REFUNDS the attempt at classification time - same observable count.\n3) \"claim released with the observed version\": the exit-path authority cleanup already releases the claim and closes the seat's session (orchestrator/agent-authority-cleanup.ts, createAgentAuthorityCleanup) - no new release path; child 2 asserts it runs on a PROVIDER_LIMIT exit.\n4) The spawner's seat stdio is [\"pipe\",\"inherit\",\"inherit\"] (agent-spawner.ts:157) - child 2 switches stdout/stderr to pipe and TEES them to the wrapper's own stdout/stderr byte-for-byte while feeding child 1's bounded tail; agent-spawner.ts is 417 lines (pre-existing over-cap) - the edit stays minimal and the size is recorded.\n5) The pause lives on `/health/read` (HealthView, health-read.ts:29-48; exact-key decoders at health-read.test.ts and apps/control-room/src/live/live-ops.ts:215) rather than /sessions/read; the seat's provider is `providerFor(command)` (moe-up-credentials.ts:143).",
+      "timestamp": "2026-09-04T10:46:48.384Z"
+    },
+    {
+      "id": "comment-5e7fff6c560a43bdb85e463a736f61ef",
+      "author": "architect-16a01670",
+      "content": "Child ids (completing comment-8fec3e60): 1 task-756d81f117fb4ef6aeca2c676f433c91 (classifier + tail + pause ledger, leaf) -> 2 task-4109c1a0e1154ca89576183dae7a5336 (wrapper tee/classify/refund/pause gate, dependsOn 1) -> 3 task-ac71a55ead3d468eab7329131f04ab7e (health read + Seats/shell/board + e2e + runbook, dependsOn 2). dependsOn on this parent is now SET (set_task_dependencies works again for architect seats as of ~10:44Z); its plan (3 steps, 0 files) gates, records the live evidence and quotes the gates.",
+      "timestamp": "2026-09-04T10:48:42.131Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:44:09.114Z",
-  "updatedAt": "2026-09-04T09:44:09.114Z"
+  "updatedAt": "2026-09-04T10:48:42.131Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:43:42.120Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:48:36.819Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A `wrapper.resume` command + Needs-you Resume card - REJECTED: a new command kind is the ~20-file roster backfill and most provider lines carry a reset instant; a line without one pauses for a bounded default (30 min) and re-probes. (2) Classifying from the exit code alone - IMPOSSIBLE: the seat exits 1 for a limit and for a crash alike; the roster keys on verbatim provider lines, which requires teeing the seat's piped stdout/stderr (today inherited, agent-spawner.ts:157) while keeping the console byte-identical. (3) Not charging an attempt until exit - REJECTED: attempts are charged at spawn (agent-wrapper.ts:362-370) and that ordering is what the existing exhaustion arms pin; refunding at classification keeps the observable count unchanged with no re-ordering. (4) The pause on /sessions/read - REJECTED for /health/read (project-level fact; one exact-key decoder at live-ops.ts:215). (5) One row - REJECTED: spawner (417 lines, over cap), staffing, wrapper, ledger, health read, three screens, e2e and runbook exceed the thresholds; three children in build order with the parent as the live-evidence gate.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: agent-spawner.ts stdio [pipe, inherit, inherit] :157, AgentProcessFailureError(reason, exitCode, signal) :196-204, exit log :314, timeout kill :331; agent-wrapper-staffing.ts trackLifetime :76-90 runs cleanupAuthority(true) + retire on resolve and reject (createAgentAuthorityCleanup, agent-authority-cleanup.ts:74 releases the claim + closes the session); agent-wrapper.ts attempts :155-159, re-arm :340-346, charge-at-spawn :362-370, STAFFING_ATTEMPTS_EXHAUSTED :364, idle log once per state agent-wrapper-main.ts:384; internal record kinds committed via store.commitExpectedVersionDecision without registry entries (publish-ledger.ts:173 'internal.repository.publish_receipt'; verifier-receipt-ledger.ts:138); providerFor(command) moe-up-credentials.ts:143; HealthView health-read.ts:29-48 with exact-key pins at health-read.test.ts and live-ops.ts:215; Seats panel activity-screens.tsx:100-140; board next-step goal-status.ts:153-158; runbook Wrapper section :352. Real limit lines: claude 'You've hit your session limit · resets 12:10am Asia/Jerusalem' (memory productize-loop-2026-09-03), codex quota 'exhausted until 2026-09-08' - fixtures must quote the exact bytes from the lane logs.",
+    "risks": "(a) Teeing changes the spawner's stdio; the byte-equality test is the safeguard for the operator console. (b) Wall-clock reset parsing across DST/time zones - the classifier pins Asia/Jerusalem examples; unparseable instants fall back to the bounded default. (c) A limit during the verifier (not a seat) is out of scope. (d) The live evidence may not be reproducible on demand - the parent records a FAILED classification of a non-limit refusal honestly rather than forcing a fake line. (e) Peer dirt never staged.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/orchestrator/agent-authority-cleanup.ts",
+      "apps/daemon/src/repository/publish-ledger.ts",
+      "apps/daemon/src/http/health-read.ts",
+      "apps/control-room/src/live/live-ops.ts",
+      "apps/control-room/src/v2/ops/activity-screens.tsx",
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:48:39.016Z",
+  "dependsOn": [
+    "task-756d81f117fb4ef6aeca2c676f433c91",
+    "task-4109c1a0e1154ca89576183dae7a5336",
+    "task-ac71a55ead3d468eab7329131f04ab7e"
+  ]
 }

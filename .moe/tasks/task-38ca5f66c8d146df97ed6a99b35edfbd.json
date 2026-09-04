@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:02:46.375Z",
-  "updatedAt": "2026-09-04T10:43:28.395Z",
+  "updatedAt": "2026-09-04T10:44:19.350Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:05:33.312Z",
     "plannedStepCount": 6,
@@ -209,7 +209,13 @@
     ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
     ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
     ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
-    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json",
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
   ],
   "completionSummary": "`work.get_context` gained a per-item form. NEW apps/daemon/src/mcp-work-context-query.ts (152 lines) + .js bridge + .test.ts (12 arms); mcp-dispatch-port.ts 366->376 lines, answerWorkContext is now a delegate; runbook sentence at the '## MCP surfaces' prose. QUERY_HANDLERS unchanged - no new query kind - and mcp-tool-allowlist.test.ts was never edited (absent from git status), its served/unserved arms green.\n\nEXPORTED CONSTANTS: SURFACE_ITEM = \"SURFACE_ITEM\", WORK_ITEM_UNKNOWN = \"WORK_ITEM_UNKNOWN\".\nSurfaceItem KEYS, in emitted order: step, outcome, readAt, nextAllowedCommands, planningGoalRef, planningAuthority.\n\nLAYER REUSED: the not-found refusal is the AffordanceRefused shape {code, detail, layer, outcome:\"REFUSED\"} under the EXISTING AFFORDANCE_SURFACE_LAYER (affordance-contract.ts:18). No new *_LAYER. DoD-2 READING (architect's, confirmed on disk): WORK_ITEM_UNKNOWN is a PRODUCT refusal, not a runtime-error-registry code - registering it in packages/contracts runtime-error-registry.ts would touch 5 pinned consumers including two generated digest mirrors, for one leaf refusal decided entirely inside the surface just read. Code AND layer are asserted at both levels.\n\nPRE-CHANGE GOLDEN sha256, captured against the UNCHANGED port in step 1 and still green after: surface a4c344c3f69d33e308e1be07bb71a0e749091f0f54639e4a23524bcacda8a101; REFUSED pass-through 45e961e2ee907e0136380f1d0e87ab35ce4ce501f9368a3185e303137db524d0. Both asserted for payload-absent AND payload:{}. The payload-less path returns the surface BY REFERENCE, which is what makes byte identity hold.\n\nDELIBERATE DEVIATION: DoD 1 names readAt but AffordanceSurface has no timestamp field, so answerWorkContextQuery takes it as a third parameter and stays pure; the port supplies new Date().toISOString().\n\nADVERSARIAL PASS FIXED TWO REAL DEFECTS, both drilled red: (1) the refusal echoed an UNBOUNDED caller id into detail - dispatchQueryBytes does a plain JSON.parse with no bounded decode - now capped at ECH",
   "commits": [
@@ -253,6 +259,32 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7a05dd9159c3521aedba9e03122c1b924a911487",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-9aeff9d2@2026-09-04T10:29:59Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-38ca5f66c8d146df97ed6a99b35edfbd.json",
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
+      ],
+      "recordedBy": "qa-9aeff9d2",
+      "recordedAt": "2026-09-04T10:44:19.350Z",
+      "treeId": "f75026023d9d49f0496db84360c185952c203e31",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -266,9 +298,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-c846071b@2026-09-04T10:08:17Z",
-    "at": "2026-09-04T10:30:00.957Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-9aeff9d2@2026-09-04T10:29:59Z",
+    "at": "2026-09-04T10:44:19.350Z"
   },
   "completedAt": "2026-09-04T10:43:28.395Z",
   "reviewCompletedAt": "2026-09-04T10:43:28.395Z",

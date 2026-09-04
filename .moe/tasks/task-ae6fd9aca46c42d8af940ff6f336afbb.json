@@ -19,19 +19,26 @@
     {
       "stepId": "step-1",
       "description": "LIVE-LEG TESTS FIRST (red). Create apps/daemon/src/goals/goal-live-evidence.test.ts using the same harness as goal-qualification.test.ts (openStore, cleanupGoalClosureFixtures, PROJECT_ID, GOAL_ID, `approvedWorld` = approveNodes + seedReviewAcceptance from goal-closure-test-fixtures.ts:675/:697, snapshot/expectUnmoved). Add to goal-closure-test-fixtures.ts (fixtures are exempt from the line cap) a helper `seedLandingReceipt(store, nodeRef, outcome: \"COMMITTED\" | { refusalCode: string })` that calls `recordLandingReceipt(store, { commit, decidedAt, projectId: PROJECT_ID, refusal, subjectRef: nodeRef, verifierReceiptId: <the id seedReviewAcceptance recorded - return it from seedReviewAcceptance or read it back through readReviewLedger(...).accepted.verifierReceiptId>, workspace })` (repository/landing-ledger.ts:153, input shape :39-47). ARMS (each names code + layer 'DAEMON_PREREQUISITE' + message through `expectRefusedExactly`, and asserts `expectUnmoved` - qualification is a read): (1) approved + accepted, landing COMMITTED -> `qualifyGoalClosure` ok with `legs` = {node-1:'LIVE'} and both witnesses present; (2) landing REFUSED NOTHING_TO_COMMIT -> ok; (3) landing REFUSED 'GIT_COMMIT_FAILED' -> refused GOAL_CLOSE_VERIFICATION_NOT_PASSED, message 'the landing receipt refused GIT_COMMIT_FAILED'; (4) no landing receipt -> ok and the live leg records landing 'NONE' (assert through an exported pure `landingOf(receipt|undefined)` or the `legs` detail - state which); (5) approved but NOT accepted -> GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED (unchanged message); (6) MIXED goal: seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY) + seedReviewAcceptance for it (the Foundation pattern at goal-qualification.test.ts:323-348) plus a live node-2 -> ok, legs {ACTIVATION_WORLD_NODE_KEY:'FOUNDATION', node-2:'LIVE'}; (7) REF INEQUALITY: the closure witness refs of arm 1 differ from the refs of a Foundation-proven goal with the same nodeRef (build both worlds in two stores, compare acceptanceClosureRef and zeroAuthorityProofRef with `not.toBe`); (8) REAL COMMAND PATH (DoD 1): mirror goal-services.test.ts:258-304 - `driveThrough(store, <the bootstrap kind immediately preceding \"goal.close\" in BOOTSTRAP sequence order; read apps/daemon/src/bootstrap/bootstrap-sequence.ts and name it in the test comment>)`, then approveNodes + seedReviewAcceptance + seedLandingReceipt COMMITTED for the goal's node, then `send(store, envelope(\"goal.close\", <version>, acceptancePayload()))` -> ok, resultCode/lifecycle COMPLETED and a `GoalCompleted` event in the store (read it back); a second close on the same goal is refused by core (existing lifecycle arm, code asserted). Run from apps/daemon: `pnpm exec vitest run --root . --config package.json src/goals/goal-live-evidence.test.ts` - RED (module missing); quote the failing line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-live-evidence.test.ts",
         "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
       ],
       "newFiles": [
         "apps/daemon/src/goals/goal-live-evidence.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-live-evidence.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "note": "LIVE-LEG TESTS FIRST — RED.\n\nRED LINE (from apps/daemon, `pnpm exec vitest run --root . --config package.json src/goals/goal-live-evidence.test.ts`):\n  Error: Cannot find module './goal-live-evidence.js' imported from D:/projexts/moe-next/apps/daemon/src/goals/goal-live-evidence.test.ts\n  Test Files  1 failed (1) / Tests  no tests\n\nFIXTURES ADDED to goal-closure-test-fixtures.ts (exempt from line cap):\n- `dispatchAsOperator(store, request, transport)` — EXTRACTED from the body of `seedReviewAcceptance` (behaviour byte-identical; it now calls the extraction with commandKind \"integration.accept_output\", transport \"NODE_VERIFIER\"). It is the published, authenticated package-root path under the configured operator principal — the seat both `integration.accept_output` and `goal.close` require (OPERATOR_PRINCIPAL_KINDS, daemon-command-vocabulary.ts:337-364).\n- `closeGoalThroughCommandPath(store, expectedVersion, commandId?)` — `goal.close` through `daemon.handleCommandRequest` (DoD 1's literal wire), transport HTTP_LISTENER, payload = the inert `acceptancePayload()` witnesses.\n- `seedLandingReceipt(store, nodeRef, \"COMMITTED\" | {refusalCode}, verifierReceiptId?)` over the lander's OWN writer `recordLandingReceipt` (landing-ledger.ts:153). Default verifierReceiptId is read back from `readReviewLedger(...).accepted.verifierReceiptId` (the only pairing production makes); the override exists solely for the stale-landing arm.\n- `seedProvenAttempt`/`seedVerifiedNode`/`bootstrapGoalWorld` gained an optional `approvedScope` (defaults to `[nodeRef]`, so every existing call site is unchanged). REQUIRED because `readApprovedNodeScope` demands EXACTLY ONE GoalExecutionEnabled event (goal-close-prerequisite.ts:92) — a second `approval.decide` can never widen the scope, so the MIXED arm has to widen the world's own approval.\n\nHARNESS PROVED BEFORE WRITING THE ARMS (throwaway probe, deleted in the same session): approveNodes + seedReviewAcceptance + seedLandingReceipt COMMITTED, then closeGoalThroughCommandPath(store, 2) answers\n  {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT\",\"httpStatus\":422,\"layer\":\"DAEMON_PREREQUISITE\"},\"stage\":\"DISPATCH\"}\ni.e. the operator wire reaches exactly the fence this row opens, and the goal aggregate version at that point is 2.\n\nARMS (10, in goal-live-evidence.test.ts): (1) landing COMMITTED -> ok, legs {node-1:LIVE}, both witness key ROSTERS asserted exactly (core's CLOSURE_KEYS/ZERO_KEYS); (2) NOTHING_TO_COMMIT -> ok; (3) landing refused GIT_COMMIT_FAILED -> GOAL_CLOSE_VERIFICATION_NOT_PASSED + layer DAEMON_PREREQUISITE + message \"the landing receipt refused GIT_COMMIT_FAILED\"; (4) NO landing -> ok, `readLiveNodeEvidence` (the production surface, not a helper) answers landing \"NONE\"/landingReceiptId null; (5) approved but not accepted -> GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED; (6) durable re-plan -> GOAL_CLOSE_REVIEW_PACKAGE_STALE, with the delta's presence measured first; (7) landing attests a DIFFERENT verifier receipt -> GOAL_CLOSE_REVIEW_PACKAGE_STALE \"the landing receipt attests a different verifier receipt\" (step-5 adversarial arm, pulled forward); (8) two landings -> latest wins; (9) MIXED goal (win32-only: seedVerifiedNode pins the Claude runtime) -> legs {dev-solo:FOUNDATION, node-2:LIVE}; (10) REF INEQUALITY across two stores for the SAME nodeRef — acceptanceClosureRef, obligationsHoldRef and zeroAuthorityProofRef all differ, while completionNodeAcceptedRef (over the node set alone) is asserted EQUAL so the inequality is not a whole-witness accident.\nPlus the real-command-path arm: qualify -> legs LIVE, `closeGoalThroughCommandPath` ok with decision.resultCode, exactly one GoalCompleted event, lifecycle COMPLETED, and a second close refused at a layer that is NOT DAEMON_PREREQUISITE.\nEvery refusal arm also asserts `expectUnmoved` (qualification is a pure read).\n\nPeer dirt in the shared checkout, untouched: scripts/up.ps1, scripts/watch.ps1, .moe/**, apps/daemon/src/index.ts, apps/daemon/src/index-surface.test.ts, apps/daemon/src/bootstrap/activation-receipts*, tests/security/*.",
+      "startedAt": "2026-09-04T10:30:42.856Z",
+      "completedAt": "2026-09-04T10:37:50.264Z"
     },
     {
       "stepId": "step-2",
       "description": "NEW MODULE apps/daemon/src/goals/goal-live-evidence.ts (<=250 physical lines) + bridge apps/daemon/src/goals/goal-live-evidence.js (`export * from \"./goal-live-evidence.ts\";`). Exports: `type ClosureLeg = Readonly<{ leg: \"FOUNDATION\"; accepted: AcceptanceRecord; nodeRef: string; receipt: DurableReceipt }> | Readonly<{ leg: \"LIVE\"; accepted: AcceptanceRecord; landing: \"COMMITTED\" | \"NOTHING_TO_COMMIT\" | \"NONE\"; landingReceiptId: string | null; nodeRef: string; verifierReceiptSha256: string }>`; `readLiveNodeEvidence(store, projectId, nodeRef, accepted): ClosureLeg | GoalClosureRefused` - reads `readReviewLedgers(store, projectId, new Set([nodeRef])).landings.get(nodeRef)` (review/review-read-model.ts:287; the map is keyed by the BARE node key): undefined -> landing NONE; outcome COMMITTED -> COMMITTED with receiptId; outcome REFUSED with refusal.code === \"NOTHING_TO_COMMIT\" (the lander's own literal, orchestrator/node-lander.ts:150 - import nothing from the orchestrator, spell the literal and cite it) -> NOTHING_TO_COMMIT; any other refusal -> `refuse(GOAL_CLOSE_VERIFICATION_NOT_PASSED, `the landing receipt refused ${code}`)`; `verifierReceiptSha256 = accepted.verifierReceiptSha256`; the whole read wrapped so a thrown store answers the caller's fail-closed path (return the refusal, never throw). `composeClosure(approvalRef, nodes, legs: readonly ClosureLeg[], activations): GoalClosureQualified` - MOVED from goal-qualification.ts:168-197 and generalised: the acceptance preimage per entry is [leg, nodeRef, ...(FOUNDATION ? [receipt.receiptSha256] : [verifierReceiptSha256, landing, landingReceiptId ?? \"NONE\"]), accepted.verifierReceiptSha256, accepted.reviewInputDigest]; obligationsHoldRef per entry [leg, nodeRef, FOUNDATION ? receipt.obligations : verifierReceiptSha256]; zeroAuthorityProofRef [String(activations), ...FOUNDATION entries' leaseIdentity/effectIdentity, ...LIVE entries' [\"LIVE\", nodeRef]] - the leg tag is in every preimage so a Foundation proof and a live proof of one node never derive the same ref; the witness objects keep EXACTLY core's key roster (packages/core/src/goal/goal-validation.ts:27); the result adds `legs: Object.freeze(Object.fromEntries(legs.map((l) => [l.nodeRef, l.leg])))` as a sibling field (goal-services.ts:149-160 passes only the two witnesses to core). Move `derivedRef` (goal-qualification.ts:87-93) along with compose or import it - one copy only. Keep `GoalClosureQualified`/`GoalClosureRefused`/`refuse` where they are and import them.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-live-evidence.ts",
         "apps/daemon/src/goals/goal-live-evidence.js"
@@ -39,17 +46,25 @@
       "newFiles": [
         "apps/daemon/src/goals/goal-live-evidence.ts",
         "apps/daemon/src/goals/goal-live-evidence.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-live-evidence.ts",
+        "apps/daemon/src/goals/goal-live-evidence.js"
+      ],
+      "note": "NEW MODULE apps/daemon/src/goals/goal-live-evidence.ts (234 physical lines, <= 250) + bridge goal-live-evidence.js (`export * from \"./goal-live-evidence.ts\";`).\n\nONE DEVIATION FROM THE STEP TEXT, and why it is strictly better. The step said \"Keep `GoalClosureQualified`/`GoalClosureRefused`/`refuse` where they are and import them.\" Done literally that creates a CIRCULAR import (goal-qualification -> goal-live-evidence -> goal-qualification) whose only safe leg is that `refuse` is a `const` arrow read from inside a function body at call time — a TDZ hazard one refactor away from a crash. The closure VOCABULARY therefore moves DOWN into the new module instead, making the edge one-directional (goal-qualification -> goal-live-evidence, no cycle):\n- `GOAL_CLOSURE_WITNESS_VERSION`, `GoalClosureQualified` (now carrying `legs`), `GoalClosureRefused`, `GoalClosureQualification` and `refuseClosure` (the ex-`refuse`, promoted to a `function` declaration and exported) are defined here.\n- goal-qualification.ts will RE-EXPORT the four public names in step 3, so its only external consumer — apps/daemon/src/foundation/foundation-surface.ts:99-100, which imports GOAL_CLOSURE_WITNESS_VERSION + all three types from ./goal-qualification.js — needs NO edit and no roster backfill. Measured with `grep -rn` over apps/packages/adapters/tests: foundation-surface.ts is the ONLY consumer outside the goals directory.\n- goal-qualification.ts will import it as `{ refuseClosure as refuse }`, so its twelve existing `refuse(...)` Foundation call sites stay byte-identical (an import alias, not a wrapper, not a second copy).\n\nEXPORTS: `LiveLanding = \"COMMITTED\" | \"NOTHING_TO_COMMIT\" | \"NONE\"`; `ClosureLeg` = the FOUNDATION variant {accepted, leg, nodeRef, receipt} | the LIVE variant {accepted, landing, landingReceiptId, leg, nodeRef, verifierReceiptSha256}; `derivedRef` (MOVED from goal-qualification.ts:87-93 — one copy, deleted there in step 3); `readLiveNodeEvidence(store, projectId, nodeRef, accepted)`; `composeClosure(approvalRef, nodes, legs, activations)`.\n\nLANDING RULE (`landingLeg`): no receipt -> landing NONE, landingReceiptId null (landing is a wrapper knob, MOE_NODE_LANDING=0, and pre-feature nodes have none, so absence is admitted); receipt whose `verifierReceiptId` !== the acceptance's -> GOAL_CLOSE_REVIEW_PACKAGE_STALE \"the landing receipt attests a different verifier receipt\" (a stale landing attests bytes the acceptance never saw); COMMITTED -> COMMITTED + receiptId; REFUSED with code \"NOTHING_TO_COMMIT\" -> NOTHING_TO_COMMIT + receiptId; any other refusal code -> GOAL_CLOSE_VERIFICATION_NOT_PASSED `the landing receipt refused ${code}`. The NOTHING_TO_COMMIT literal is SPELLED here, not imported (node-lander.ts:150 is the producer; qualification must not depend on the orchestrator) — and if the lander ever renames it this leg refuses rather than admits, which is the safe direction.\n`readLiveNodeEvidence` wraps the `readReviewLedgers(store, projectId, new Set([nodeRef])).landings.get(nodeRef)` read in its own try/catch and returns a refusal naming the LANDING (\"the durable landing evidence could not be read\") rather than leaning on qualifyGoalClosure's outer catch, which would mislabel every store fault as an acceptance problem. Exactly one subject is passed so the ledger walk stays cheap; the map is keyed by the BARE node key while the receipt lives on the sibling `landing:<nodeRef>` aggregate.\n\ncomposeClosure PREIMAGES (leg tag first in all three, so a Foundation proof and a live proof of the same node can never derive the same ref): acceptance = [approvalRef, ...per entry [leg, nodeRef, FOUNDATION ? receiptSha256 : (verifierReceiptSha256, landing, landingReceiptId ?? \"NONE\"), accepted.verifierReceiptSha256, accepted.reviewInputDigest]]; obligations = per entry [leg, nodeRef, FOUNDATION ? receipt.obligations : verifierReceiptSha256]; zero-authority = [String(activations), ...FOUNDATION [leaseIdentity, effectIdentity] / LIVE [\"LIVE\", nodeRef]] — a live entry still contributes, so the proof binds the WHOLE approved set instead of silently shrinking to the Foundation subset. Both witness objects keep EXACTLY core's key rosters (goal-validation.ts CLOSURE_KEYS/ZERO_KEYS); `legs` is a frozen SIBLING field, and goal-services.ts:149-160 forwards only the two witnesses to core.\n\nNot yet wired — goal-qualification.ts still defines its own copies until step 3, so no gate is run at this step.",
+      "startedAt": "2026-09-04T10:37:53.118Z",
+      "completedAt": "2026-09-04T10:39:48.622Z"
     },
     {
       "stepId": "step-3",
       "description": "WIRE THE LEG INTO goal-qualification.ts (248 lines today; removing compose/derivedRef must leave it <= 250 - quote `wc -l`). In `qualify` (:199-233): after `indexDurableReceipts`, for each nodeRef: `const receipt = indexed.index.get(nodeRef); const accepted = reviewClosure(store, projectId, nodeRef); if (\"ok\" in accepted) return accepted;` (reviewClosure FIRST for both legs - it is what both share: acceptance present, no re-plan delta, verifier receipt reads back and matches, latest round attested); then `if (receipt !== undefined) { if (receipt.verdict !== \"PASSED\") refuse NOT_PASSED (unchanged message); if (!verifiedResultHolds(store, receipt)) refuse RESULT_DIGEST_MISMATCH (unchanged); legs.push({ leg: \"FOUNDATION\", accepted, nodeRef, receipt }); } else { const live = readLiveNodeEvidence(store, projectId, nodeRef, accepted); if (\"ok\" in live) return live; legs.push(live); }`. NOTE the ORDER CHANGE for Foundation nodes (reviewClosure now runs before the verdict/digest checks): the Foundation arms at goal-qualification.test.ts:470-476 (NOT_PASSED) and the digest arm build worlds with acceptance present, so their codes are unchanged - re-run the whole file after wiring and confirm every arm except :378-390 is green UNTOUCHED; if any other arm's expected code changes because of the order, restore the original order for Foundation nodes (verdict/digest before reviewClosure) and take the live leg only in the `receipt === undefined` branch - the byte-identity of the Foundation path outranks the tidier order. `zeroAuthority` builds its map from FOUNDATION legs only (`legs.filter((l) => l.leg === \"FOUNDATION\")`), everything else unchanged. Replace the local `NodeClosure` interface (:79-83) and `compose` with the imports from ./goal-live-evidence.js. Then edit EXACTLY ONE arm in apps/daemon/src/goals/goal-qualification.test.ts: :378-390 becomes 'closes through the LIVE leg for an approved, accepted node no Foundation receipt names' asserting ok:true, `legs` equal {node-1:'LIVE', node-2:'LIVE'} and `expectUnmoved(store, before)`; `git diff -U0 -- apps/daemon/src/goals/goal-qualification.test.ts` must show that single hunk (quote it in the step note). Run from apps/daemon: `pnpm exec vitest run --root . --config package.json src/goals/goal-live-evidence.test.ts src/goals/goal-qualification.test.ts src/goals/goal-services.test.ts src/bootstrap/bootstrap-finalize-journey.test.ts src/goals/j1-command-path.test.ts` - green, count line quoted.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-qualification.ts",
         "apps/daemon/src/goals/goal-qualification.test.ts",
         "apps/daemon/src/goals/goal-live-evidence.ts"
-      ]
+      ],
+      "startedAt": "2026-09-04T10:39:51.354Z"
     },
     {
       "stepId": "step-4",
@@ -72,7 +87,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-c846071b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -91,16 +106,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:17:45.379Z",
-  "updatedAt": "2026-09-04T10:22:56.066Z",
+  "updatedAt": "2026-09-04T10:39:51.354Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:20:34.302Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T10:22:53.859Z",
   "planningNotes": {
@@ -120,5 +139,9 @@
       "packages/core/src/goal/goal-validation.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T10:22:56.066Z"
+  "planApprovedAt": "2026-09-04T10:22:56.066Z",
+  "contextFetchedBy": [
+    "worker-c846071b"
+  ],
+  "workStartedAt": "2026-09-04T10:30:42.856Z"
 }

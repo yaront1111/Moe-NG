@@ -1,0 +1,35 @@
+{
+  "id": "task-4109c1a0e1154ca89576183dae7a5336",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A provider limit pauses staffing: the wrapper tees seat output, classifies the exit, refunds the attempt and parks the provider until the reset",
+  "description": "SPIDR child 2 of task-2723a9b400984ab7b1b10f97c3523c81. dependsOn child 1 (task-756d81f117fb4ef6aeca2c676f433c91: classifySeatExit, createOutputTail, recordSeatExit/recordProviderPause/readProviderPause). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify child 1 first: `ls apps/daemon/src/orchestrator/seat-exit-classifier.ts seat-output-tail.ts provider-pause-ledger.ts`.\n\nWHAT THIS ROW OWNS: the wrapper/spawner behaviour. No read route, no UI, no docs (child 3).\n\nMEASURED (re-measure before planning):\n- Spawner: apps/daemon/src/orchestrator/agent-spawner.ts (417 lines, pre-existing over-cap - minimal edit, record the size) spawns with `stdio: [\"pipe\", \"inherit\", \"inherit\"]` (:157); the exit is `AgentProcessFailureError(reason, exitCode, signal)` (:196-204) or the resolved `exit` promise; `[wrapper] <item> agent exited <code>` logged at :314; the hard timeout kill at :331.\n- Lifetime: apps/daemon/src/orchestrator/agent-wrapper-staffing.ts (145 lines) `trackLifetime(input, exit, retire)` (:76-90) runs `cleanupAuthority(true)` + `retire()` on resolve AND reject - the claim release + session close already happen there through createAgentAuthorityCleanup (agent-authority-cleanup.ts:74).\n- Attempts: apps/daemon/src/orchestrator/agent-wrapper.ts:155-159 (`maxItemAttempts`, `attempts` map), :340-346 (leaving READY re-arms), :362-370 (charged at spawn: `attempts.set(workItemId, tried + 1)` unless a GATE_REFUSAL), STAFFING_ATTEMPTS_EXHAUSTED at :364. The wrapper has `config.clock`? (measure: the knobs at wrapper-knobs.ts, `now` sources in agent-wrapper.ts:228-234 use Date.now() - inject a clock port for the pause gate so the tests can move time). The seat command/provider: agent-wrapper-main.ts passes the command; `providerFor(command)` (moe-up-credentials.ts:143) yields the leaf.\n- Log lines are the operator's only wrapper UI today (`[wrapper] ...`, `[lander] ...`, `[publisher] ...`).\n\nFEATURE: (1) Spawner: stdout/stderr become \"pipe\"; each chunk is written verbatim to the wrapper's own process.stdout/process.stderr (byte-identical console output) AND pushed into child 1's `createOutputTail()`; on exit the spawner exposes `{ exitCode, signal, tail: tail.lines() }` to the lifetime (extend the exit promise's resolution/rejection with the tail - the FailureError gains a `tail` field; a resolved exit resolves with the tail). (2) Lifetime: on exit, `classifySeatExit({ provider, exitCode, signal, tail })` from child 1; `recordSeatExit(...)` for EVERY exit (COMPLETED/FAILED/PROVIDER_LIMIT); on PROVIDER_LIMIT: `recordProviderPause({ provider, resetAt: classified.resetAt ?? now + 30 min, since: now, cause })`, REFUND the attempt (`attempts.set(item, max(0, tried - 1))` through a callback the wrapper hands the staffing state), log `[wrapper] provider limit: <provider> paused until <resetAt> (<lastLine>)`; the existing cleanup (claim release + session close) runs unchanged. (3) Wrapper pass: before staffing, `readProviderPause(store, projectId, provider, now)`; while a pause is live for the seat's provider the pass staffs NOTHING for that provider, reports `surfaceOutcome: \"PROVIDER_PAUSED\"`-style outcome in the RunOnceReport (name it; the idle log line at agent-wrapper-main.ts:384 prints once per distinct state), and keeps polling; the first pass at or after resetAt staffs normally. A FAILED exit keeps today's attempt behaviour byte-for-byte.",
+  "definitionOfDone": [
+    "Spawner test: with a fake child that writes 'hello' to stdout and the claude limit line to stderr then exits 1, the wrapper process's stdout/stderr receive the SAME bytes (spy on the writable, byte-equal) and the exit carries `tail` containing both lines in order; a child exiting 0 resolves with its tail; the hard-timeout kill path still produces its existing log line (existing spawner tests green unchanged, count line quoted).",
+    "Wrapper test (fake spawn + injected clock, real store): a seat exit classified PROVIDER_LIMIT leaves the item's attempt count unchanged (charged at spawn, refunded at exit - assert the count observed on the NEXT pass equals the pre-spawn count), records `moe-seat-exit/1` and `moe-provider-pause/1` (read back from the store), logs `[wrapper] provider limit: claude paused until <resetAt> (...)`, and the claim is released + the session closed by the existing cleanup (store shows WorkReleased + SessionClosed); the next N passes before resetAt spawn nothing for that provider and report the paused outcome; the first pass at resetAt spawns; a FAILED exit consumes the attempt exactly as today (existing attempt-exhaustion arms green unchanged).",
+    "A limit line with no reset instant pauses for the bounded default (30 minutes from the exit; constant exported and named in the log line) and staffs again after it; a second PROVIDER_LIMIT within a live pause extends nothing (one pause record per limit exit, read returns the latest).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`; agent-spawner.ts grows by no more than 25 lines (pre-existing 417 recorded), agent-wrapper.ts and agent-wrapper-staffing.ts stay under 400 (`wc -l` quoted; extract the pause gate into a sibling module if needed)."
+  ],
+  "taskRails": [
+    "BYTE-IDENTICAL CONSOLE: teeing the seat's output must not change what the operator sees in the wrapper console; assert byte equality.",
+    "NEVER RELEASE OR RETIRE TWICE: the existing exit cleanup stays the single release path; classification only adds records, a refund and a gate.",
+    "FAILED stays FAILED: unmatched exits keep today's attempt behaviour byte-for-byte (existing tests unchanged). Refusals/records assert exact values; mutate to prove red (global rail 1). Minimal edits to the over-cap spawner; <=250 lines per new production source."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-2723a9b400984ab7b1b10f97c3523c81",
+  "dependsOn": [
+    "task-756d81f117fb4ef6aeca2c676f433c91"
+  ],
+  "priority": "MEDIUM",
+  "order": 1004.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:47:26.148Z",
+  "updatedAt": "2026-09-04T10:47:26.148Z"
+}

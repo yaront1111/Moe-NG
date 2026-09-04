@@ -1,0 +1,132 @@
+{
+  "id": "task-756d81f117fb4ef6aeca2c676f433c91",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Seat exits are classified from real provider lines: limit roster, bounded output tail, durable pause ledger",
+  "description": "SPIDR child 1 of task-2723a9b400984ab7b1b10f97c3523c81 (leaf; no sibling dependency). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: three PURE modules under apps/daemon/src/orchestrator/ with their tests. No spawner, wrapper, read or UI change (children 2-3).\n\nMEASURED (re-measure before planning):\n- The spawner starts the seat with `stdio: [\"pipe\", \"inherit\", \"inherit\"]` (apps/daemon/src/orchestrator/agent-spawner.ts:157) - stdout/stderr are inherited, nothing is captured, and the exit is reported as `AgentProcessFailureError(reason, exitCode, signal)` (:196-204) with only `[wrapper] <item> agent exited <code>` logged (:314). agent-spawner.ts is 417 lines (already over the 400 hard cap): the tee + tail logic must live in a new module so child 2's spawner edit stays minimal.\n- Durable records the wrapper writes without a registry kind: `recordPublishReceipt` (apps/daemon/src/repository/publish-ledger.ts:173 `commandKind: PUBLISH_RECEIPT_COMMAND_KIND = \"internal.repository.publish_receipt\"`, publish-receipt-contracts.ts:17) and the verifier receipt (review/verifier-receipt-ledger.ts:138, \"internal.integration.verifier_receipt\") commit through `store.commitExpectedVersionDecision` with an internal kind and a daemon principal id (NODE_PUBLISHER_PRINCIPAL_ID = \"daemon:node-publisher\") - the same pattern serves the seat-exit receipt and the provider pause.\n- Real limit lines to quote verbatim in fixtures: the claude session-limit line recorded 2026-09-03 21:04 local (memory productize-loop-2026-09-03: \"You've hit your session limit · resets 12:10am Asia/Jerusalem\"), the codex quota refusal (memory: exhausted until 2026-09-08) - pull the exact bytes from D:/projexts/UnAI/.moe-next/wrapper.log (or the scratchpad drive logs) and from a fresh `claude -p` / `codex exec` refusal if reachable; never invent a line. The seat's provider = `providerFor(command)` (orchestrator/moe-up-credentials.ts:143; leaf \"claude\" | \"codex\").\n\nFEATURE: (1) `seat-exit-classifier.ts`: `classifySeatExit({ provider, exitCode, signal, tail: readonly string[] }) -> { kind: \"COMPLETED\" | \"FAILED\" | \"PROVIDER_LIMIT\", resetAt: string | null, lastLine: string | null, matched: string | null }`; exit 0 -> COMPLETED; otherwise the tail (last 40 lines) is scanned against a FROZEN per-provider roster of patterns, each entry carrying the verbatim sample line it was written from and an optional reset-instant parser (claude \"resets 12:10am Asia/Jerusalem\" -> the next such wall-clock instant in that zone from the exit time, ISO; codex \"until 2026-09-08\" -> that date at 00:00Z); no match -> FAILED (never guessed); the roster is exported so a bidirectional test can enumerate it. (2) `seat-output-tail.ts`: `createOutputTail(limitLines = 40, limitBytes = 16 KiB)` with `push(chunk: Buffer|string)` splitting lines, keeping the last N, and `lines()`; pure, no process access - child 2 tees the seat's piped stdout/stderr into it while still writing them to the wrapper's own stdout/stderr byte-for-byte. (3) `provider-pause-ledger.ts`: `recordSeatExit(store, input)` -> `moe-seat-exit/1` {sessionId, workItemId, provider, kind, resetAt, lastLine, exitCode, decidedAt} and `recordProviderPause(store, input)` -> `moe-provider-pause/1` {provider, resetAt, since, cause: {workItemId, lastLine}} on aggregate `provider-pause:<projectId>:<provider>` with internal kinds \"internal.wrapper.seat_exit\" / \"internal.wrapper.provider_pause\" and principal \"daemon:agent-wrapper\"; `readProviderPause(store, projectId, provider, now)` -> the latest pause when `resetAt > now`, else null; `clearProviderPause` is a record with resetAt = now (the same event type, so a read at or after it answers null).",
+  "definitionOfDone": [
+    "Classifier test with VERBATIM fixture lines (each fixture cites where it was captured): at least three claude limit lines (session limit with a wall-clock reset, usage limit, rate limit) and one codex quota line classify PROVIDER_LIMIT with the parsed `resetAt` (or null when the line carries no instant), and `matched` names the roster entry; an ordinary stack trace, an ENOENT, and exit 0 classify FAILED/FAILED/COMPLETED; a bidirectional arm asserts every roster entry is matched by its own sample line and every sample line matches exactly one entry.",
+    "Reset parsing pinned: '12:10am Asia/Jerusalem' from an exit at 2026-09-03T18:04:00Z resolves to 2026-09-03T21:10:00Z (next occurrence in that zone), and an exit AFTER that wall-clock time resolves to the following day; a date-only codex line resolves to that date 00:00:00Z; an unparseable instant yields resetAt null with kind still PROVIDER_LIMIT.",
+    "Output tail test: 100 pushed lines keep the last 40; a 64 KiB single chunk keeps the last 16 KiB split on newlines; CRLF and partial trailing lines handled; no unbounded growth (assert the internal buffer length).",
+    "Pause ledger test over a REAL store: recordProviderPause then readProviderPause(now < resetAt) returns it, (now >= resetAt) returns null, a later record with resetAt = now clears it; recordSeatExit writes an exact-key `moe-seat-exit/1` decision under principal daemon:agent-wrapper readable by decision kind; both internal kinds are absent from the daemon command registry and MCP allowlist (roster tests unchanged, count lines quoted).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`; each new production module <= 250 lines with its `.js` bridge (`wc -l` quoted)."
+  ],
+  "taskRails": [
+    "NEVER GUESS A LIMIT: the roster is built only from verbatim provider lines with their capture source cited in the fixture; anything unmatched is FAILED.",
+    "PURE LEAF: no spawner, wrapper, read-route or UI change; internal record kinds ride commitExpectedVersionDecision like the publish/verifier receipts and never enter the command registry.",
+    "Refusals/kinds assert exact values; mutate to prove each arm red (global rail 1). <=250 lines per production source, hard stop 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CLASSIFIER TESTS FIRST (red). Create apps/daemon/src/orchestrator/seat-exit-classifier.test.ts (vitest style of wrapper-knobs.test.ts). FIXTURES ARE VERBATIM: pull the exact bytes of every provider line from the lane logs - `grep -n -i \"session limit\\|usage limit\\|rate limit\\|resets\\|exhausted\" D:/projexts/UnAI/.moe-next/wrapper.log` (and the drive logs under the scratchpad 'drive' directory named in memory productize-loop-2026-09-03); the two lines already on record are the claude `You've hit your session limit · resets 12:10am Asia/Jerusalem` (2026-09-03 21:04 local) and the codex quota refusal (`exhausted until 2026-09-08`, 2026-09-03); if the log holds no usage-limit or rate-limit line, obtain one from a fresh `claude -p` refusal (quote the command and time) - NEVER type a line from memory; each fixture is a `{ line, capturedFrom, capturedAt }` record. Arms: (1) each claude fixture with `provider: \"claude\", exitCode: 1, signal: null, tail: [\"...noise...\", line]` -> { kind: \"PROVIDER_LIMIT\", matched: <roster id>, lastLine: line, resetAt: <expected ISO or null> }; (2) the codex fixture -> PROVIDER_LIMIT with resetAt \"2026-09-08T00:00:00.000Z\"; (3) a Node stack trace tail, an ENOENT line, and an empty tail with exitCode 1 -> FAILED with matched null; (4) exitCode 0 with a roster line in the tail -> COMPLETED (exit 0 always wins); (5) BIDIRECTIONAL ROSTER: `for (const entry of SEAT_EXIT_ROSTER)` its own `sample` classifies to exactly `entry.id`, and the set of ids reached by all fixtures equals the set of roster ids (set-equality both ways, global rail 9); (6) RESET PARSING pinned: `resolveResetInstant(\"12:10am Asia/Jerusalem\", \"2026-09-03T18:04:00.000Z\")` === \"2026-09-03T21:10:00.000Z\" (that date is UTC+3 in Jerusalem), the same wall clock from an exit at \"2026-09-03T21:30:00.000Z\" -> \"2026-09-04T21:10:00.000Z\" (next day), a date-only `until 2026-09-08` -> \"2026-09-08T00:00:00.000Z\", an unknown zone or garbage -> null while kind stays PROVIDER_LIMIT. Run from apps/daemon: `pnpm exec vitest run --root . --config package.json src/orchestrator/seat-exit-classifier.test.ts` - RED (module missing); quote it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CLASSIFIER MODULE (green). Create apps/daemon/src/orchestrator/seat-exit-classifier.ts (<=250 lines) + bridge apps/daemon/src/orchestrator/seat-exit-classifier.js (`export * from \"./seat-exit-classifier.ts\";`). Exports: `SEAT_EXIT_KINDS = [\"COMPLETED\",\"FAILED\",\"PROVIDER_LIMIT\"] as const`; `SeatExitRosterEntry = Readonly<{ id: string; provider: \"claude\" | \"codex\"; pattern: RegExp; sample: string; capturedFrom: string; resetOf: ((line: string, exitAt: string) => string | null) | null }>`; `SEAT_EXIT_ROSTER: readonly SeatExitRosterEntry[]` (frozen; every `pattern` is anchored on the provider's own wording, e.g. /hit your session limit/i, /usage limit/i, /rate limit/i, /exhausted until (\\d{4}-\\d{2}-\\d{2})/i - never a bare /limit/); `resolveResetInstant(text, exitAt)` for the claude wall-clock form `(\\d{1,2}):(\\d{2})\\s*(am|pm)\\s+([A-Za-z_]+\\/[A-Za-z_]+)`: compute the zone's offset at `exitAt` with `Intl.DateTimeFormat(\"en-US\", { timeZone, hour12: false, ...parts })` formatToParts (Node ships full ICU - assert `Intl.supportedValuesOf(\"timeZone\")` contains the zone, else null), build the candidate instant for that wall clock on the exit's local date in that zone, and if it is <= exitAt add one day (recompute the offset for DST safety); `classifySeatExit(input: { provider: string; exitCode: number | null; signal: string | null; tail: readonly string[]; exitAt: string }): SeatExitClassification` (frozen `{ kind, matched, lastLine, resetAt }`): exitCode === 0 -> COMPLETED; else scan the LAST 40 lines newest-first for the first roster entry of that provider whose pattern matches -> PROVIDER_LIMIT with resetOf(line, exitAt) ?? null; nothing -> FAILED with lastLine = the last non-empty line (or null). No I/O, no clock reads (exitAt is an input). Re-run the test: green, count line quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.ts",
+        "apps/daemon/src/orchestrator/seat-exit-classifier.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.ts",
+        "apps/daemon/src/orchestrator/seat-exit-classifier.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "OUTPUT TAIL (test first, then module). apps/daemon/src/orchestrator/seat-output-tail.test.ts then seat-output-tail.ts (+ .js bridge). `createOutputTail(options?: { maxLines?: number; maxBytes?: number })` (defaults 40 / 16384) -> `{ push(chunk: Buffer | string): void; lines(): readonly string[]; bytes(): number }`: chunks are decoded as UTF-8 with a streaming decoder (a multi-byte sequence split across chunks must not corrupt - use `new TextDecoder(\"utf-8\", { fatal: false })` with `stream: true`), split on \\n with \\r stripped, a partial trailing line kept until the next chunk or `lines()`; keep at most maxLines entries and at most maxBytes total (drop oldest first); `lines()` returns a frozen copy. Arms: 100 lines -> last 40 in order; one 64 KiB chunk -> the retained lines total <= 16384 bytes and end with the chunk's last line; CRLF input -> no \\r in lines; a chunk ending mid-line then a chunk completing it -> one joined line; a UTF-8 sequence split across two pushes -> the character intact; `bytes()` never exceeds maxBytes after any push (property-style loop over random chunk sizes with a seeded PRNG). Run the file: green, count line quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/seat-output-tail.ts",
+        "apps/daemon/src/orchestrator/seat-output-tail.js",
+        "apps/daemon/src/orchestrator/seat-output-tail.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/seat-output-tail.ts",
+        "apps/daemon/src/orchestrator/seat-output-tail.js",
+        "apps/daemon/src/orchestrator/seat-output-tail.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PAUSE LEDGER (test first, then module) over a REAL store: apps/daemon/src/orchestrator/provider-pause-ledger.test.ts using `openStore`/`closeStores`/`PROJECT_ID` from ../review/review-test-fixtures.js (as publish-ledger.test.ts:3 does), then provider-pause-ledger.ts (+ .js). Copy the internal-kind commit pattern from apps/daemon/src/repository/publish-ledger.ts:150-191 (`store.commitExpectedVersionDecision` with `commandKind`, `committedResultBytes`, `correlationId`, `decidedAt`, `events: [EventDraft]`, `expectedVersion: store.getAggregateVersion(aggregateId)`, `key: { commandId, principalId, projectId }`, `requestBytes`, `targetAggregateId`) - never through the command registry. Exports: `SEAT_EXIT_COMMAND_KIND = \"internal.wrapper.seat_exit\"`, `PROVIDER_PAUSE_COMMAND_KIND = \"internal.wrapper.provider_pause\"`, `AGENT_WRAPPER_PRINCIPAL_ID = \"daemon:agent-wrapper\"`, `SEAT_EXIT_VERSION = \"moe-seat-exit/1\"`, `PROVIDER_PAUSE_VERSION = \"moe-provider-pause/1\"`, `providerPauseAggregateId(projectId, provider)` = `provider-pause:${projectId}:${provider}`, `seatExitAggregateId(projectId, sessionId)` = `seat-exit:${projectId}:${sessionId}`; `recordSeatExit(store, input: { projectId; sessionId; workItemId; provider; kind; resetAt; lastLine; exitCode; decidedAt })` -> `{ ok: true, receipt } | { ok: false, code: \"SEAT_EXIT_RECORD_INVALID\" | \"EXPECTED_VERSION_CONFLICT\" }` with an exact-key receipt {version, projectId, sessionId, workItemId, provider, kind, resetAt, lastLine, exitCode, decidedAt} (decode-then-commit like the publish receipt; `lastLine` truncated to 512 chars); `recordProviderPause(store, input: { projectId; provider; resetAt; since; cause: { workItemId; lastLine } })` -> the same shape of result with an exact-key `moe-provider-pause/1` record; `readProviderPause(store, projectId, provider, now)` -> the LATEST pause record on the provider's aggregate (fold decisions of PROVIDER_PAUSE_COMMAND_KIND for that aggregate in ledger order, decode the result bytes, ignore undecodable) when `resetAt > now`, else null; `clearProviderPause(store, { projectId, provider, now })` = recordProviderPause with resetAt = now and cause null. Arms: record -> read(now < resetAt) returns it with exact keys; read(now === resetAt) and (now > resetAt) -> null; clear -> null; a second pause after the first -> the latest wins; recordSeatExit -> `store.getCommandDecision`/readEvents on `seat-exit:<projectId>:<sessionId>` shows the decision with commandKind SEAT_EXIT_COMMAND_KIND and principal daemon:agent-wrapper; corrupt result bytes planted on a pause decision -> read ignores it (null); replaying the same commandId -> no second decision. Run the file: green, count line quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/provider-pause-ledger.ts",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.js",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/provider-pause-ledger.ts",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.js",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` + `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo); roster absence: `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts src/daemon-command-registry.test.ts src/daemon-command-vocabulary.test.ts` from apps/daemon green UNCHANGED (the internal kinds never enter the registry; count line quoted) and `grep -rn \"internal.wrapper\" apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/daemon-command-registry.ts` = 0; `wc -l` of the three new production files <= 250 each. DRILL (global rail 1) - all new files are UNTRACKED until the completion commit: copy the three production modules and the three tests to %TEMP%\\moe-drill-<workerId>\\ with SHA256 recorded BEFORE mutating; one mutation at a time, focused run, SHA256-proven restore in a SEPARATE command: (1) roster pattern widened to /limit/i -> the stack-trace/ENOENT arm still FAILED? make the mutation `/./` instead so the FAILED arm goes red; (2) exit 0 no longer wins -> arm 4 red; (3) resolveResetInstant skips the add-a-day rule -> the next-day arm red; (4) tail keeps maxLines+1 -> the 40-line arm red; (5) readProviderPause returns a pause at resetAt === now -> the boundary arm red; (6) readProviderPause returns the FIRST record -> the latest-wins arm red. Record the six red lines + restore hashes in the step note (under 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.ts",
+        "apps/daemon/src/orchestrator/seat-output-tail.ts",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a tail line of 1 MB (a single line longer than maxBytes) - the tail keeps its last maxBytes without hanging; a roster line embedded inside a JSON blob a seat printed (false positive?) - patterns stay anchored on the provider's sentence, document the accepted risk; `resolveResetInstant` on the DST transition day in Asia/Jerusalem (2026-10-25) - add one arm; `Intl.supportedValuesOf` absent on an old Node -> null (guarded); a pause aggregate for an unknown provider string is still a valid aggregate (no roster gate on the ledger - the wrapper keys it). Fix what you find, re-run the three test files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the exported API (classifySeatExit, SEAT_EXIT_ROSTER ids + their capture sources, resolveResetInstant, createOutputTail, recordSeatExit, recordProviderPause, readProviderPause, clearProviderPause, the two internal kinds, the principal id, both aggregate id shapes). Then `moe.add_comment` on child 2 (task-4109c1a0e1154ca89576183dae7a5336) with that API so its architect plans against landed symbols. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/seat-exit-classifier.ts",
+        "apps/daemon/src/orchestrator/provider-pause-ledger.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-2723a9b400984ab7b1b10f97c3523c81",
+  "priority": "MEDIUM",
+  "order": 1004.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:46:41.128Z",
+  "updatedAt": "2026-09-04T10:53:01.561Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:49:13.729Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:52:59.361Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A registered command kind for the pause/seat-exit records - REJECTED: the ~20-file roster backfill; the daemon already writes wrapper-side facts as internal kinds through store.commitExpectedVersionDecision (publish-ledger.ts:150-191 'internal.repository.publish_receipt', verifier-receipt-ledger.ts:138 'internal.integration.verifier_receipt') - same pattern, no registry, no MCP exposure. (2) Regex on the word 'limit' - REJECTED (row rail): patterns are anchored on verbatim provider sentences and each roster entry carries its captured sample; a bidirectional arm binds fixtures and roster. (3) A moment-style library for zone math - REJECTED: Node's Intl (full ICU) resolves a wall clock in a named zone; the helper is pure with exitAt injected. (4) Storing the pause in memory only - REJECTED: a wrapper restart must still see the pause (durable record), and child 3 reads it from the daemon. (5) One mutable `clear` kind - REJECTED: clearing is a pause record with resetAt = now, so one event type and one read rule.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: agent-spawner.ts stdio [pipe, inherit, inherit] (:157) and AgentProcessFailureError(reason, exitCode, signal) (:196-204; the reason type is re-exported from agent-spawner-contracts.ts) - child 2 supplies the tail; internal-kind commit template publish-ledger.ts:150-191 (commandKind, committedResultBytes, correlationId, decidedAt, events [EventDraft], expectedVersion via store.getAggregateVersion, key {commandId, principalId, projectId}, requestBytes, targetAggregateId; decode-then-commit; replay = same commandId); store test helpers review-test-fixtures.js openStore/closeStores/PROJECT_ID (publish-ledger.test.ts:3); unit test style wrapper-knobs.test.ts; real limit lines on record: claude session-limit line (memory productize-loop-2026-09-03, 21:04 local 2026-09-03) and codex quota until 2026-09-08 - the worker must copy exact bytes from D:/projexts/UnAI/.moe-next/wrapper.log or the scratchpad drive logs (a grep over the whole Temp tree times out - target the drive directory named in that memory).",
+    "risks": "(a) Fixture provenance is the whole value: a line typed from memory would let the roster drift from the provider - the DoD requires capturedFrom on every fixture. (b) DST arithmetic: the add-a-day rule recomputes the offset; the adversarial step adds the transition-day arm. (c) A seat could print a roster-like sentence inside its own output (false PROVIDER_LIMIT) - accepted and documented; child 2 refunds only one attempt and the pause is bounded. (d) The store's decision replay keys on commandId: recordSeatExit/recordProviderPause must derive commandIds from their inputs (sessionId + decidedAt; provider + since) so a wrapper retry replays instead of duplicating. (e) New files are untracked until the completion commit - drill restores by SHA256. (f) Peer dirt never staged.",
+    "keyFiles": [
+      "apps/daemon/src/repository/publish-ledger.ts",
+      "apps/daemon/src/repository/publish-ledger.test.ts",
+      "apps/daemon/src/review/review-test-fixtures.ts",
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/orchestrator/wrapper-knobs.test.ts",
+      "apps/daemon/src/orchestrator/moe-up-credentials.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:53:01.561Z"
+}

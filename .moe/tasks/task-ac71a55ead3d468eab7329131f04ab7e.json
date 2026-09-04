@@ -1,0 +1,35 @@
+{
+  "id": "task-ac71a55ead3d468eab7329131f04ab7e",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The browser says agents are paused: the pause on /health/read, the Seats and shell banner, the board next-step, e2e and runbook",
+  "description": "SPIDR child 3 of task-2723a9b400984ab7b1b10f97c3523c81. dependsOn child 2 (task-4109c1a0e1154ca89576183dae7a5336), which dependsOn child 1 (task-756d81f117fb4ef6aeca2c676f433c91). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify children first: `grep -n readProviderPause apps/daemon/src/orchestrator/provider-pause-ledger.ts`; `grep -n \"provider limit\" apps/daemon/src/orchestrator/agent-wrapper*.ts`.\n\nWHAT THIS ROW OWNS: the read + the human-visible surfaces + the e2e + the runbook section. No wrapper change.\n\nMEASURED (re-measure before planning):\n- `/health/read`: apps/daemon/src/http/health-read.ts (150 lines) `HealthView` (:29-48) = {daemon{commandAuthorityPlane, nodeSpecsDir, pid, projectId, protocolVersion, startedAt, storePath}, ledger{aggregates, commandKinds, decisionCount, goals, lastDecidedAt}, outcome:\"HEALTH\", readAt, verifier}; exact-key consumers: health-read.test.ts and apps/control-room/src/live/live-ops.ts:215 `exactDataRecord(response, [\"daemon\",\"ledger\",\"outcome\",\"readAt\",\"verifier\"])` (:215-239 builds the HEALTH outcome). Adding a top-level `agents` key = both pins + the control-room HealthOutcome type + every fixture that builds a HEALTH frame (grep `\"HEALTH\"` under apps/control-room/src --include=*.test.* and name each).\n- Screens: Seats = apps/control-room/src/v2/ops/activity-screens.tsx SessionsPanel (:100-140, `cr.sessions.*`, \"No agent seat is open right now\" :139); Health = ops-screens.tsx:180-206 (cr.health.*); the shell status strip lives in apps/control-room/src/v2/shell/ (context-bar.tsx / shell-model.ts) and is fed by the shell's pollers; the board header next-step for WORKING is goal-status.ts:153-158 (\"Watch the board\").\n- e2e lane: tests/e2e/control-room/playwright.config.ts (`pnpm test:e2e:browser`); the seat double pattern = a scripted `MOE_AGENT_COMMAND` script that prints the verbatim claude limit line to stderr and exits 1 (the wrapper's command is any executable; the launcher's credential gate waives unknown commands - runbook 'Agent credentials').\n- Runbook: docs/agent-stack-runbook.md '## Wrapper (staffs the board)' (:352) - the new section '### Provider limits' goes under it.\n\nFEATURE: `HealthView.agents = { paused: null | { provider, resetAt, since, lastLine } }` read from child 1's `readProviderPause` for each known provider (claude, codex) at the daemon's clock; the Seats screen and the shell status strip render \"Agents paused: <provider> limit, resumes <local time>\" while a pause is live (and the seat-exit receipt's lastLine on Seats); the board header's next-step for a WORKING goal reads \"Waiting for the provider limit to reset at <time>\" instead of \"Watch the board\" while paused; the Health screen shows the same fact. Runbook '### Provider limits' documents the roster (by provider, with the sample lines), the bounded default pause, the log line and where it shows in the browser.",
+  "definitionOfDone": [
+    "`/health/read` carries `agents: { paused }` with exact keys (health-read.test.ts pin updated by running it red first; null when no pause, the pause object when one is live at the daemon's clock, and null again after resetAt - three arms over a REAL store using child 1's records); every control-room HEALTH fixture and the live-ops.ts:215 decoder updated and named.",
+    "Seats + shell banner + Health tests: with a live pause the Seats screen and the shell strip render 'Agents paused: claude limit, resumes <time>' (time formatted in the viewer's locale from resetAt), the seat-exit lastLine shows on Seats; without a pause nothing of it renders; board header test: a WORKING goal's next-step reads 'Waiting for the provider limit to reset at <time>' while paused and 'Watch the board' otherwise (goal-status.test).",
+    "Playwright journey against a REAL daemon + wrapper with a scripted seat double that prints the verbatim claude limit line and exits 1: the pause appears on /health/read within one poll and the banner renders; no second seat spawns before the reset (wrapper log asserted); after the injected reset (a short resetAt in the fixture line or a clock knob child 2 exposes) the item is staffed; `pnpm test:e2e:browser` count line quoted.",
+    "docs/agent-stack-runbook.md gains '### Provider limits' under the Wrapper section naming the roster with its sample lines, the 30-minute default, the `[wrapper] provider limit: ...` line and the browser surfaces; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`; every production file touched stays under 250 lines (`wc -l` quoted); sources ASCII-only, JSX text apostrophe-free."
+  ],
+  "taskRails": [
+    "NO WRAPPER CHANGE: a wrapper gap belongs to child 2 - stop, comment there, report_blocked with blockedOnTaskIds.",
+    "SHAPE CHANGE NAMED: the HealthView key roster changes exactly once (`agents`), and every exact-key decoder, test pin and fixture that builds a HEALTH frame is listed in the plan before the edit (global rail: grep the SHAPE).",
+    "REAL FRAMES ONLY for control-room fixtures; the e2e seat double prints a VERBATIM roster line. Sources ASCII-only, JSX text without apostrophes; <=250 lines per production source."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-2723a9b400984ab7b1b10f97c3523c81",
+  "dependsOn": [
+    "task-4109c1a0e1154ca89576183dae7a5336"
+  ],
+  "priority": "MEDIUM",
+  "order": 1004.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:48:00.466Z",
+  "updatedAt": "2026-09-04T10:48:00.466Z"
+}

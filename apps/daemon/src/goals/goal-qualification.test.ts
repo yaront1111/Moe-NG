@@ -349,9 +349,13 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     expect(qualified.ok).toBe(true);
     if (!qualified.ok) return;
+    // The roster is EXACT and includes `legs`, the sibling field naming which leg proved each
+    // node. It is a sibling and never a witness key: core validates both witnesses against its
+    // own exact rosters, so a `leg` inside one would refuse instead of closing.
     expect(Object.keys(qualified).sort()).toStrictEqual([
-      "closureWitness", "ok", "zeroAuthorityWitness",
+      "closureWitness", "legs", "ok", "zeroAuthorityWitness",
     ]);
+    expect(qualified.legs).toEqual({ [ACTIVATION_WORLD_NODE_KEY]: "FOUNDATION" });
     expect(qualified.closureWitness["truthClass"]).toBe("DAEMON_VERIFIED");
     expect(qualified.zeroAuthorityWitness["truthClass"]).toBe("DAEMON_VERIFIED");
     expectUnmoved(store, before);
@@ -375,7 +379,15 @@ describe("goal closure qualification — the reachable receipt reader", () => {
       "the verified result no longer reads back as the record its receipt names");
   });
 
-  it("refuses RECEIPT_ABSENT for an approved node no verification receipt names", () => {
+  /**
+   * RE-AIMED (task-ae6fd9ac). This arm used to assert RECEIPT_ABSENT, and the world it builds —
+   * approved, reviewed, accepted, with no Foundation receipt anywhere — is EXACTLY the world the
+   * running loop leaves behind and the live leg now closes. The code it pinned is therefore no
+   * longer reachable from `qualify`; `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` stays in
+   * `GOAL_PREREQUISITE_REFUSAL_CODES` declared rather than raised. The live leg's own refusal
+   * arms live in `goal-live-evidence.test.ts`.
+   */
+  it("closes through the LIVE leg for approved, accepted nodes no Foundation receipt names", () => {
     const store = openStore();
     // Both nodes are fully reviewed and accepted, so the review guard cannot answer for either.
     approvedWorld(store, ["node-1", "node-2"]);
@@ -383,8 +395,9 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expectRefusedExactly(outcome, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      "no durable verification receipt names this approved node");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.legs).toEqual({ "node-1": "LIVE", "node-2": "LIVE" });
     expectUnmoved(store, before);
   });
 
@@ -413,7 +426,12 @@ describe("goal closure qualification — the reachable receipt reader", () => {
    * A decoy row is committed to its OWN aggregate while naming another verification's id, so the
    * scanned bytes claim `node-1` and the row those bytes point at is the out-of-scope `node-src`
    * one. Reading the SCANNED value would admit a receipt for a node nothing verified; reading the
-   * STORED row skips it and leaves `node-1` with no evidence at all.
+   * STORED row skips it and leaves `node-1` with no Foundation evidence at all.
+   *
+   * RE-AIMED (task-ae6fd9ac) WITHOUT LOSING ITS SUBJECT. `node-1` no longer refuses for want of a
+   * Foundation receipt — it closes on the live leg — so the question "was the decoy admitted?" is
+   * now asked of the LEG: a composer that trusted the scanned bytes would prove `node-1`
+   * FOUNDATION off a receipt naming `node-src`, and the assertion below is that it does not.
    */
   it("indexes the stored row a receipt points at, never the bytes that pointed at it", () => {
     const store = openStore();
@@ -436,8 +454,10 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expectRefusedExactly(outcome, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      "no durable verification receipt names this approved node");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.legs).toEqual({ "node-1": "LIVE" });
+    expect(outcome.legs["node-1"]).not.toBe("FOUNDATION");
     expectUnmoved(store, before);
   });
 
