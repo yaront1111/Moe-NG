@@ -7,7 +7,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
 import type { PublishPort } from "./publish-port.js";
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * THE PUBLISH CARD on an opened goal: what is landed locally, where it was last pushed, and
@@ -123,12 +123,12 @@ export function GoalPublish({ frame, goal, goalId, port }: GoalPublishProps): JS
           ) : null}
         </div>
       )}
-      {answer === null ? null : (
+      {answer === null ? null : answer.ok ? (
         <p aria-live="polite" className="cr2-needs-note" data-testid="cr.publish.answer" role="status">
-          {answer.ok
-            ? "Recorded. The wrapper pushes on its next pass; this card says when it did."
-            : refusalWords(answer)}
+          Recorded. The wrapper pushes on its next pass; this card says when it did.
         </p>
+      ) : (
+        <RefusalNote refusal={answer} role="status" testId="cr.publish.answer" />
       )}
     </section>
   );

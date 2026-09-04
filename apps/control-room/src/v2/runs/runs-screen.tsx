@@ -7,6 +7,7 @@ import type { BoardColumn, BoardFold } from "../board/board-columns.js";
 import { BoardLanes } from "../board/board-lanes.js";
 import { Freshness } from "../components/freshness.js";
 import type { FreshnessProps } from "../components/freshness.js";
+import { RefusalNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { publishLine } from "../goals/goal-publish.js";
 
@@ -206,9 +207,11 @@ export function RunsScreen({ freshness, nowMs, onOpenBoard, outcome }: RunsScree
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.runs.loading">Reading the runs...</p>
       ) : outcome.status !== "RUNS" ? (
-        <p className="cr2-approve-refusal" data-testid="cr.runs.refusal" title={`${outcome.code} ${MIDDOT} ${outcome.layer}`}>
-          {`The runs could not be read right now (${outcome.code}).`}
-        </p>
+        <RefusalNote
+          refusal={outcome}
+          said="The runs could not be read right now."
+          testId="cr.runs.refusal"
+        />
       ) : (
         <>
           <Totals freshness={freshness} nowMs={nowMs} outcome={outcome} />

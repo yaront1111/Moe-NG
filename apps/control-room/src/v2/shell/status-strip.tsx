@@ -80,7 +80,7 @@ export function StatusStrip({
         data-testid="cr.shell.link.label"
         title={title}
       >
-        DAEMON LINK
+        Daemon link
       </span>
       <span
         aria-hidden="true"
@@ -102,7 +102,7 @@ export function StatusStrip({
 
       {simulatable ? (
         <div className="cr2-simulate" data-testid="cr.shell.simulate">
-          <span className="cr2-simulate-label">SIMULATE</span>
+          <span className="cr2-simulate-label">Simulate</span>
           {CONNECTION_STATES.map((state) => {
             const active = state === descriptor.key;
             return (

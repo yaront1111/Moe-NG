@@ -1,9 +1,7 @@
 /**
- * What a refused or failed daemon answer means, in a person's words. The sentence leads; the
- * code and the layer that answered follow in parentheses, because they are the provenance a
- * person searches for and the tests pin. The raw "STATUS . CODE . LAYER" triple no longer
- * reaches the eye first. A code this table does not know renders as the daemon spelled it,
- * never as a guess.
+ * What a refused or failed daemon answer means, in a person's words. The sentence is the
+ * glance; the code and layer stay behind Details (OutcomeNote). A code this table does not
+ * know is never guessed.
  */
 
 const CODE_WORDS: Readonly<Record<string, string>> = Object.freeze({
@@ -33,15 +31,18 @@ export interface RefusalLike {
   readonly status?: string | undefined;
 }
 
-/** "The nodes could not be read (RUNS_READ_FAILED at RUNS_READ)". */
+/** "The nodes could not be read" — never the code. */
 export function refusalWords(refusal: RefusalLike): string {
   const words = CODE_WORDS[refusal.code];
-  const provenance = `${refusal.code} at ${refusal.layer}`;
-  if (words !== undefined) return `${words} (${provenance})`;
-  // A layer of this page's own (CONTROL_ROOM_*) never reached the daemon: say so.
-  if (refusal.layer.startsWith("CONTROL_ROOM")) return `Not available from this page yet (${provenance})`;
-  if (refusal.status === "ERROR") return `This did not complete (${provenance})`;
-  return `The daemon refused this (${provenance})`;
+  if (words !== undefined) return words;
+  if (refusal.layer.startsWith("CONTROL_ROOM")) return "Not available from this page yet";
+  if (refusal.status === "ERROR") return "This did not complete";
+  return "The daemon refused this";
+}
+
+/** Provenance a person searches for, shown only behind Details. */
+export function refusalProvenance(refusal: RefusalLike): string {
+  return `${refusal.code} @ ${refusal.layer}`;
 }
 
 /** The tooltip behind a refusal line: the status when known, and the layer that answered. */

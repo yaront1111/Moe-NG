@@ -31,7 +31,7 @@ describe("the Cordum shell renders its frame", () => {
     }
     // The six the design names, in order, and nothing else claimed as a destination.
     expect(CORDUM_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Goals", "Needs you", "Runs & leases", "Resources", "Health", "Policy",
+      "Goals", "Needs you", "Runs", "Resources", "Health", "Policy",
     ]);
   });
 
@@ -66,7 +66,7 @@ describe("the Cordum shell renders its frame", () => {
   it("shows the chip legend naming all five truth classes", () => {
     render(<CordumShell />);
     const legend = screen.getByTestId("cr.shell.legend");
-    expect(legend.textContent).toContain("HOW TO READ CHIPS");
+    expect(legend.textContent).toContain("What these marks mean");
     // Folded by default: the legend explains chips, it is not the first thing a person needs.
     fireEvent.click(within(legend).getByRole("button"));
     for (const truthClass of CORDUM_TRUTH_CLASSES) {
@@ -94,15 +94,15 @@ describe("the status strip reports the connection state", () => {
     render(<CordumShell initialConnection="CONNECTED" />);
     const strip = screen.getByTestId("cr.shell.statusstrip");
     expect(strip.getAttribute("data-connection")).toBe("CONNECTED");
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("CONNECTED");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
     expect(screen.queryByTestId("cr.banner.connected")).toBeNull();
     expect(screen.queryByTestId("cr.shell.stale")).toBeNull();
   });
 
   it("renders DISCONNECTED with a stale marker and its banner", () => {
     render(<CordumShell initialConnection="DISCONNECTED" />);
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
-    expect(screen.getByTestId("cr.shell.stale").textContent).toBe("SHOWING STALE DATA");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Disconnected");
+    expect(screen.getByTestId("cr.shell.stale").textContent).toBe("Showing stale data");
     expect(screen.getByTestId("cr.banner.disconnected").textContent)
       .toContain("Disconnected from the daemon");
   });
@@ -110,22 +110,22 @@ describe("the status strip reports the connection state", () => {
   it("renders a live build with no feed as an honest coming-online state", () => {
     render(<CordumShell />);
     expect(screen.getByTestId("cr.shell.statusstrip").getAttribute("data-connection")).toBe("OFFLINE");
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Coming online");
     expect(screen.getByTestId("cr.banner.offline").textContent)
-      .toContain("The event relay attaches when the daemon feed lands");
+      .toContain("Connecting to the daemon");
   });
 
   it("tracks controlled connection changes delivered after the shell mounts", () => {
     const { rerender } = render(<CordumShell connection={null} />);
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Coming online");
 
     rerender(<CordumShell connection="CONNECTED" />);
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("CONNECTED");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
     expect(screen.queryByTestId("cr.banner.connected")).toBeNull();
 
     rerender(<CordumShell connection="DISCONNECTED" />);
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
-    expect(screen.getByTestId("cr.shell.stale").textContent).toBe("SHOWING STALE DATA");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Disconnected");
+    expect(screen.getByTestId("cr.shell.stale").textContent).toBe("Showing stale data");
   });
 
   it("shows SIMULATE only in fixtures mode, and cycles the relay state", async () => {
@@ -136,7 +136,7 @@ describe("the status strip reports the connection state", () => {
     rerender(<CordumShell initialConnection="CONNECTED" simulatable />);
     expect(screen.getByTestId("cr.shell.simulate")).toBeTruthy();
     await user.click(screen.getByTestId("cr.shell.simulate.disconnected"));
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Disconnected");
     expect(screen.getByTestId("cr.banner.disconnected")).toBeTruthy();
   });
 

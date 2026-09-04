@@ -44,7 +44,7 @@ describe("verifierWords", () => {
 describe("PolicyScreen", () => {
   it("lists each slice by kind with its digest check and counts, the evaluations, and the waiver note", () => {
     render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
-    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 INSTALLED · 1 EVALUATION · VERSION 3");
+    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 installed · 1 evaluation · version 3");
     const evaluation = screen.getByTestId(`cr.policy.slice.${"f".repeat(64)}`);
     expect(evaluation.textContent).toContain("Evaluation policy · installed 2 h ago · bytes match the ref");
     expect(evaluation.textContent).toContain("0 rules · 0 auto-approval opt-ins · 7 risk classifications");
@@ -88,7 +88,8 @@ describe("PolicyScreen", () => {
     expect(screen.getByTestId("cr.policy.loading")).toBeTruthy();
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ code: "LISTENER_POLICY_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.policy.refusal").textContent).toBe("The daemon is not serving the policy read (LISTENER_POLICY_UNAVAILABLE at CONTROL_ROOM_LISTENER)");
+    expect(screen.getByTestId("cr.policy.refusal").textContent).toContain("The daemon is not serving the policy read");
+    expect(screen.getByTestId("cr.policy.refusal").textContent).toContain("LISTENER_POLICY_UNAVAILABLE @ CONTROL_ROOM_LISTENER");
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ ...POLICY, evaluations: [], slices: [] }} />);
     expect(screen.getByTestId("cr.policy.empty").textContent).toContain("No policy installed.");

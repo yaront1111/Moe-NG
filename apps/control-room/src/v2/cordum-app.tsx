@@ -75,7 +75,7 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
   source: "live",
   goals: Object.freeze([]),
   triage: Object.freeze([]),
-  goalCountLabel: "CONNECTING",
+  goalCountLabel: "Connecting",
   comingOnlineNote: "Pairing with the daemon over the runtime handshake. Nothing is shown until it answers.",
 });
 
@@ -139,7 +139,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
 
   const title = open !== null ? open.title
-    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs & leases"
+    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
       : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals";
 
   // Only an attached operator session carries the authenticated header set the

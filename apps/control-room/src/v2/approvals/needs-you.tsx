@@ -5,7 +5,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import type { OfferOutcome } from "./offer-wire.js";
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * The NEEDS YOU queue: one card per decision the daemon is waiting on, in the order a
@@ -38,10 +38,10 @@ export interface NeedsYouProps {
 }
 
 const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
-  ESCALATION: "REVIEW EXHAUSTED",
-  GATE_1: "PRODUCT CONTRACT",
-  PLAN_APPROVAL: "PLAN",
-  READY_TO_CLOSE: "READY TO CLOSE",
+  ESCALATION: "Review exhausted",
+  GATE_1: "Product contract",
+  PLAN_APPROVAL: "Plan",
+  READY_TO_CLOSE: "Ready to close",
 });
 
 interface InlineDecision {
@@ -85,10 +85,8 @@ function decisionOf(item: NeedsYouItem): InlineDecision | null {
 function resultLine(decision: InlineDecision, result: DecisionResult | undefined): string | null {
   if (result === undefined) return null;
   if (result.busy) return "Recording your decision...";
-  if (result.outcome === null) return null;
-  return result.outcome.ok
-    ? (result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine)
-    : refusalWords(result.outcome);
+  if (result.outcome === null || !result.outcome.ok) return null;
+  return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
 function DecisionCard({ item, onDecide, onOpenBoard, result }: {
@@ -156,7 +154,9 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
             {`${item.actionLabel} →`}
           </ActionButton>
         )}
-        {line === null ? null : (
+        {result?.outcome !== undefined && result.outcome !== null && !result.outcome.ok ? (
+          <RefusalNote refusal={result.outcome} role="status" testId={`cr.needsyou.result.${key}`} />
+        ) : line === null ? null : (
           <p aria-live="polite" className="cr2-needs-note" data-testid={`cr.needsyou.result.${key}`} role="status">{line}</p>
         )}
       </div>

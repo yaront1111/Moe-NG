@@ -40,7 +40,7 @@ function DossierSection({
   return (
     <section className="cr2-approve-block" data-testid={`cr.gate1.contract.${sectionId}`}>
       <h3 className="cr2-approve-heading">
-        {`${title} ${MIDDOT} ${items === undefined ? "REVISION LEDGER" : items.length}`}
+        {`${title} ${MIDDOT} ${items === undefined ? "revision ledger" : items.length}`}
       </h3>
       {items === undefined ? children : items.length === 0 ? (
         <p className="cr2-approve-note">None recorded in this revision.</p>
@@ -87,7 +87,7 @@ function requirements(
 
 function Provenance({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
   return (
-    <DossierSection sectionId="provenance" title="PROVENANCE">
+    <DossierSection sectionId="provenance" title="Provenance">
       <dl className="cr2-approve-hashes">
         <dt>author</dt><dd className="cr2-approve-mono">{revision.authorRef}</dd>
         <dt>version</dt><dd className="cr2-approve-mono">{revision.version}</dd>
@@ -119,14 +119,14 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           id: row.objectiveId, statement: row.statement,
         }))}
         sectionId="objectives"
-        title="WHAT WE WILL BUILD"
+        title="What we will build"
       />
       <DossierSection
         items={revision.negativeScope.map((row) => ({
           id: row.scopeId, statement: row.statement,
         }))}
         sectionId="negative-scope"
-        title="WHAT WE WILL NOT BUILD"
+        title="What we will not build"
       />
       <DossierSection
         items={revision.criteria.map((row) => ({
@@ -141,7 +141,7 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           statement: row.statement,
         }))}
         sectionId="criteria"
-        title="HOW WE WILL KNOW IT IS DONE"
+        title="How we will know it is done"
       />
       <DossierSection
         items={revision.materialDecisions.map((row) => ({
@@ -155,7 +155,7 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           statement: row.question,
         }))}
         sectionId="material-decisions"
-        title="PRODUCT DECISIONS"
+        title="Product decisions"
       />
     </>
   );
@@ -170,7 +170,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           details: [`user ${row.user}`], id: row.userJobId, statement: row.job,
         }))}
         sectionId="user-jobs"
-        title="USER JOBS"
+        title="User jobs"
       />
       <DossierSection
         items={revision.journeys.map((row) => ({
@@ -179,26 +179,26 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: row.statement,
         }))}
         sectionId="journeys"
-        title="JOURNEYS"
+        title="Journeys"
       />
-      {requirements("requirements.functional", "FUNCTIONAL REQUIREMENTS", revision.functionalRequirements)}
+      {requirements("requirements.functional", "Functional requirements", revision.functionalRequirements)}
       {requirements(
-        "requirements.non-functional", "NON-FUNCTIONAL REQUIREMENTS",
+        "requirements.non-functional", "Non-functional requirements",
         revision.nonFunctionalRequirements,
       )}
       {requirements(
-        "requirements.security-privacy", "SECURITY + PRIVACY REQUIREMENTS",
+        "requirements.security-privacy", "Security and privacy requirements",
         revision.securityPrivacyRequirements,
       )}
       {requirements(
-        "requirements.technology", "TECHNOLOGY REQUIREMENTS", revision.technologyRequirements,
+        "requirements.technology", "Technology requirements", revision.technologyRequirements,
       )}
       {requirements(
-        "requirements.ux-accessibility", "UX + ACCESSIBILITY REQUIREMENTS",
+        "requirements.ux-accessibility", "UX and accessibility requirements",
         revision.uxAccessibilityRequirements,
       )}
       {requirements(
-        "requirements.deployment", "DEPLOYMENT REQUIREMENTS", revision.deploymentRequirements,
+        "requirements.deployment", "Deployment requirements", revision.deploymentRequirements,
       )}
       <DossierSection
         items={revision.assumptions.map((row) => ({
@@ -207,7 +207,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: row.statement,
         }))}
         sectionId="assumptions"
-        title="ASSUMPTIONS"
+        title="Assumptions"
       />
       <DossierSection
         items={revision.budgets.map((row) => ({
@@ -216,7 +216,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: `${String(row.limit)} ${row.unit}`,
         }))}
         sectionId="budgets"
-        title="BUDGETS"
+        title="Budgets"
       />
       <DossierSection
         items={revision.successMetrics.map((row) => ({
@@ -229,7 +229,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: row.statement,
         }))}
         sectionId="success-metrics"
-        title="SUCCESS METRICS"
+        title="Success metrics"
       />
       <DossierSection
         items={[{
@@ -238,7 +238,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: revision.productCompleteDefinition.statement,
         }]}
         sectionId="product-complete"
-        title="PRODUCT COMPLETE"
+        title="Product complete"
       />
       <Provenance revision={revision} />
       <DossierSection
@@ -253,7 +253,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           },
         ]}
         sectionId="retired"
-        title="RETIRED IDENTIFIERS"
+        title="Retired identifiers"
       />
     </>
   );

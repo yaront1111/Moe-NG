@@ -79,7 +79,8 @@ describe("GoalPublish", () => {
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await waitFor(() => {
-      expect(screen.getByTestId("cr.publish.answer").textContent).toBe("Something changed since this page last read the daemon; it will refresh (BOOTSTRAP_EXPECTED_VERSION_STALE at DAEMON_PREREQUISITE)");
+      expect(screen.getByTestId("cr.publish.answer").textContent).toContain("Something changed since this page last read the daemon; it will refresh");
+      expect(screen.getByTestId("cr.publish.answer").textContent).toContain("BOOTSTRAP_EXPECTED_VERSION_STALE @ DAEMON_PREREQUISITE");
     });
   });
 });

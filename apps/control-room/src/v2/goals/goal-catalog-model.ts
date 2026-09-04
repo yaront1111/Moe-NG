@@ -322,19 +322,19 @@ export function deriveGoalCatalog(
 ): GoalsData {
   if (frame === null) {
     return empty(
-      "GOAL CATALOG COMING ONLINE",
+      "Waiting for goals",
       "Waiting for the daemon's durable goal catalog. Nothing is shown until it answers.",
     );
   }
   if (frame.connection === "DISCONNECTED") {
     return empty(
-      `DISCONNECTED \u00b7 ${frame.detail}`,
+      "Could not reach the daemon",
       `The durable goal catalog was not delivered: ${frame.detail}.`,
     );
   }
   if (frame.outcome !== "GOALS") {
     return empty(
-      `${frame.outcome} \u00b7 ${frame.detail}`,
+      "The goals could not be read",
       `The durable goal catalog answered ${frame.outcome}: ${frame.detail}.`,
     );
   }
@@ -345,7 +345,7 @@ export function deriveGoalCatalog(
   }));
   return Object.freeze({
     comingOnlineNote: goals.length === 0 ? "This project has no durable goals yet." : undefined,
-    goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"}`,
+    goalCountLabel: `${String(goals.length)} goal${goals.length === 1 ? "" : "s"}`,
     goals,
     source: "live",
     triage: live === undefined ? Object.freeze([]) : triageOf(goals, live),

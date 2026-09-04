@@ -15,7 +15,7 @@ import "./nav-rail.css";
 
 /**
  * The left navigation rail: the Moe wordmark, the destination list, and - pinned
- * to the bottom - the "HOW TO READ CHIPS" legend naming all five truth classes.
+ * to the bottom - the "What these marks mean" legend naming all five truth classes.
  *
  * Badges (Approvals, Health) are supplied by the caller, never invented here:
  * they light up only when a surface can count them. The live build passes none,
@@ -148,7 +148,7 @@ export function NavRail({
           type="button"
         >
           <span aria-hidden="true">{legendOpen ? ENDASH : "+"}</span>
-          <span>HOW TO READ CHIPS</span>
+          <span>What these marks mean</span>
         </button>
         {legendOpen ? (
           <div className="cr2-legend-body">
