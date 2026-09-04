@@ -17,6 +17,7 @@ import {
   PUBLISH_REMOTE_UNBOUND,
   PUBLISH_REMOTE_URL_INVALID,
   REMOTE_BOUND_EVENT_TYPE,
+  REPOSITORY_PUBLISH_COMMAND_KIND,
   publishAggregateId,
   remoteAggregateId,
 } from "../repository/publish-receipt-contracts.js";
@@ -40,6 +41,7 @@ const REMOTE_A = "https://github.com/fixture/repo.git";
 const REMOTE_B = "git@github.com:fixture/other.git";
 const DECIDED_AT = "2026-08-08T00:00:00.000Z";
 const PRINCIPAL = "principal-1";
+const encoder = new TextEncoder();
 
 afterEach(closeStores);
 
@@ -81,6 +83,53 @@ function expectRefusal(
   expect(outcome.refusedBy).toBe(refusedBy);
   expect(outcome.advisoryOnly).toBe(true);
   expect(outcome.authority).toBe("NONE");
+}
+
+/**
+ * A `RepositoryRemoteBound` event written straight to the project's remote aggregate, bypassing
+ * the handler — the only way to model a binding that WAS admissible when it was written and is
+ * not any more.
+ */
+function bindRaw(store: SqliteEventStore, commandId: string, remoteUrl: string): void {
+  const aggregateId = remoteAggregateId(PROJECT_ID);
+  const payload = { boundAt: DECIDED_AT, boundBy: PRINCIPAL, remoteUrl };
+  const response = store.commitExpectedVersionDecision({
+    commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+    committedResultBytes: encoder.encode(JSON.stringify(payload)),
+    correlationId: "test-bind-raw",
+    decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${commandId}-${REMOTE_BOUND_EVENT_TYPE}`,
+      eventType: REMOTE_BOUND_EVENT_TYPE,
+      payload: encoder.encode(JSON.stringify(payload)),
+    }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+    key: { commandId, principalId: PRINCIPAL, projectId: PROJECT_ID },
+    requestBytes: encoder.encode(JSON.stringify({ remoteUrl })),
+    targetAggregateId: aggregateId,
+  });
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error("the raw binding did not commit");
+  }
+}
+
+/**
+ * The same store, reporting a STALE version for the remote aggregate only. Methods are bound to
+ * the real store rather than to the proxy so the private state a class method reads still
+ * resolves; every other aggregate answers untouched, so the publish leg's fence stays correct.
+ */
+function staleRemoteFence(store: SqliteEventStore): SqliteEventStore {
+  const remoteId = remoteAggregateId(PROJECT_ID);
+  return new Proxy(store, {
+    get(target, property) {
+      if (property === "getAggregateVersion") {
+        return (aggregateId: string): number =>
+          aggregateId === remoteId ? 0 : target.getAggregateVersion(aggregateId);
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 describe("repository.publish binds the project remote", () => {
@@ -261,5 +310,50 @@ describe("repository.publish binds the project remote", () => {
     const bound = readProjectRemote(store, PROJECT_ID);
     expect(bound?.boundBy).toBe(PRINCIPAL);
     expect(bound?.boundBy).not.toContain("@");
+  });
+
+  /**
+   * FAIL CLOSED END TO END. `publish-ledger.test.ts` proves `readProjectRemote` answers null for a
+   * binding whose url no longer admits; the claim that PRODUCTION then refuses instead of pushing
+   * to it is a different sentence, and this is where it is asserted. A handler that read the raw
+   * event payload rather than the admitted url would publish to a remote the ingress rule now
+   * forbids — the exact defect the re-admission on read exists to prevent.
+   */
+  it("refuses a null publish when the bound url no longer admits, instead of pushing to it", () => {
+    const store = openStore();
+    driveThrough(store, "repository.publish");
+    bindRaw(store, "cmd-bind-legacy", "http://github.com/fixture/plaintext.git");
+    expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
+    expect(boundEvents(store)).toHaveLength(1);
+
+    const outcome = publish(store, 0, remotePayload(null), "cmd-publish-1");
+
+    expectRefusal(outcome, PUBLISH_REMOTE_UNBOUND, "DAEMON_PREREQUISITE");
+    expect(store.readEvents(publishAggregateId(GOAL_ID))).toHaveLength(0);
+  });
+
+  /**
+   * THE BINDING LEG'S OWN FENCE, and the only arm that can reach it. Both fences are read inside
+   * one synchronous handler call, so a second operator cannot interleave between them through the
+   * public seam; the fence exists for the store the daemon does NOT own alone, and the seam that
+   * models that is `store.getAggregateVersion` reporting the version this handler read a moment
+   * before another writer moved it. The assertion that matters is the SECOND half: the publish
+   * leg's own fence was CORRECT, and it still did not land, because the legs share one decision.
+   */
+  it("fences the binding leg and lands NEITHER leg when the remote aggregate moved underneath", () => {
+    const store = openStore();
+    driveThrough(store, "repository.publish");
+    expect(publish(store, 0, remotePayload(REMOTE_A), "cmd-publish-1").ok).toBe(true);
+    const staleFence = staleRemoteFence(store);
+
+    const outcome = publish(staleFence, 1, remotePayload(REMOTE_B), "cmd-publish-2");
+
+    expectRefusal(outcome, "EXPECTED_VERSION_CONFLICT", "DURABLE_STORE");
+    // Nothing half-written: the remote still holds only the FIRST binding, and the publish
+    // request whose own fence was current never landed either.
+    expect(boundEvents(store)).toHaveLength(1);
+    expect(boundEvents(store)[0]?.["remoteUrl"]).toBe(REMOTE_A);
+    expect(store.readEvents(publishAggregateId(GOAL_ID))).toHaveLength(1);
+    expect(readProjectRemote(store, PROJECT_ID)?.remoteUrl).toBe(REMOTE_A);
   });
 });

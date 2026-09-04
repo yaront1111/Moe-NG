@@ -116,15 +116,17 @@
     {
       "stepId": "step-7",
       "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a detail value that is not a safe scalar cannot reach the string (createRuntimeError sanitises through RUNTIME_SAFE_DETAIL_KEYS - assert in a unit arm that a planted non-numeric observedVersion in resultBytes yields error null / bare code); `detailOf` on an outcome whose `error.details` is empty renders just the code (today's bytes for every other refusal - the registry HTTP test already covers one non-conflict refusal; add an arm if not); the generic renderer must not throw on a frozen details object; the seat retry is bounded to ONE by the mission wording (no loop). Fix what you find, re-run the focused files (`src/bootstrap/bootstrap-durability.test.ts src/work/work-claim-services.test.ts src/daemon-command-registry.test.ts src/mcp-dispatch-port-conflict.test.ts src/orchestrator/agent-mission-text.test.ts`), then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the exact wire string format, the exported `conflictError` helper, the registry row that made the details free (runtime-error-registry.ts:101), the `git diff --stat` proof of zero control-room/packages changes, and the seat-double result (1 rejected record vs the 7-record negative control). Then `moe.add_comment` on child C task-7945f38da29249a291004f78b4024262 confirming the landed detail format and the helper name. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*, and never touch mcp-dispatch-port.test.ts (child A's file).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-dispatch.ts",
         "apps/daemon/src/mcp-dispatch-port-conflict.test.ts"
       ],
-      "startedAt": "2026-09-04T15:01:52.338Z"
+      "note": "ADVERSARIAL SELF-REVIEW + GATES - no defect found, ZERO files edited this step (the four review items were already covered by committed arms; re-measured, not assumed).\n\nFRESH GATES, exit codes CAPTURED (not piped - `> log 2>&1; echo $?`):\n- `pnpm --filter @moe/daemon test` GATE_EXIT=0, `Test Files 403 passed (403)` / `Tests 8028 passed (8028)`. (An earlier run 6 min before read 8027; a peer landed one test between runs. Both green.)\n- `pnpm typecheck` TYPECHECK_EXIT=0, execution echo `apps/daemon typecheck$ tsc --project tsconfig.json` + `apps/daemon typecheck: Done`.\n- Focused five: `Test Files 5 passed (5)` / `Tests 376 passed (376)`.\n- `pnpm test` (root) and `pnpm test:security` NOT required: DoD 5 gates both on packages/contracts / the registry being touched, and neither was (proof below).\n\nDoD 2 PROVEN AT THE COMMITS, not the worktree (my work is already committed by the wrapper, so `git diff` on the tree would have certified nothing). Union of the six `Moe-Task: task-f99cec0b` commits (1031a7e8 0c1dd447 40069873 09ee6363 308cdc57 862b983e), `git show --format=\"\" --name-only | sort -u` = 11 source paths, ALL under apps/daemon/src/. `grep -E '^(apps/control-room/|packages/)'` over that union = NONE. Zero control-room decoders, zero packages, so the REFUSED key roster {code, detail, httpStatus, layer} is untouched (also pinned live by daemon-command-registry.test.ts:1122).\n\nTHE FOUR REVIEW ITEMS, each measured:\n1. Non-safe-scalar version cannot reach the wire - bootstrap-durability.test.ts:404-441 sweeps SEVEN planted resultBytes shapes (string \"1\", nested {value:1}, float 1.5, negative -1, string expectedVersion, each key missing) and asserts `outcome.error` is null + bare code for every one. NON-VACUOUS: `expect(planted).toHaveLength(7)` pins the case count, so a sweep that silently yields zero cases cannot pass. Guard is `versionOf` (bootstrap-conflict-error.ts:39) = safe integer >= 0; 0 is admitted deliberately (a fresh aggregate's real expectedVersion).\n2. Empty details renders just the code - daemon-command-registry.test.ts:1077 asserts `Object.keys(error.details)` length 0 then `detail === \"CAPABILITY_DENIED\"`; :1128-1131 covers the error-null path on the real wire (`detail === \"WORK_CLAIM_PAYLOAD_INVALID\"`). Both bare.\n3. Frozen details does not throw - both frozen shapes go through production: the empty case is a frozen NULL-PROTOTYPE object (contracts EMPTY_DETAILS = Object.freeze(Object.create(null))) and the conflict case is my own Object.freeze({actualVersion, expectedVersion}) rendered end-to-end at :1118. `Object.keys` is total on both.\n4. Retry bounded to ONE by wording, not by a loop - RETRY_ON_CONFLICT (agent-mission-text.ts:29-32) says \"resend that one command ONCE ... then stop and report if it refuses again\". Present in all THREE missions (:62, :145, :165) and each asserted separately (drill 5 in step 6 proved that).\n\nONE THEORETICAL NOTE, no fix, recorded per the skill: the `CODE key=value key=value` format is only unambiguously parseable because no detail VALUE can contain a space. Verified at the source - contracts runtime-error-factory.ts:35 `SAFE_SCALAR = /^[A-Za-z0-9._:\\/-]{1,64}$/` bars whitespace for strings, numbers are safe integers, booleans render \"true\"/\"false\"; and my own path never calls the sanitiser, admitting only safe non-negative integers. So the seat's `/actualVersion=(\\d+)/` cannot be fooled by a value. No registry-wide no-space sweep added: that property lives in packages/contracts (outside this row's paths, and the row rail forbids touching it) and the concrete format is already pinned by exact-string arms. Follow-up item, not a gap in this row.\n\nNOT A CONCERN, checked and dismissed: no concurrency surface (conflictError and detailOf are pure, no shared mutable state, no check-then-act); no TOCTOU; no cycle from work-claim-services.ts -> ../bootstrap/bootstrap-conflict-error.js (that module imports only @moe/contracts and @moe/store TYPES, and bootstrap never imports work); `detailOf` keeps the PRE-EXISTING choice of `error.code` over `outcome.code`, so no behaviour changed for any refusal that already carried an error.\n\nPEER DIRT NOTED, NEVER STAGED: apps/daemon/src/goals/goal-publish-remote.test.ts, apps/daemon/src/planning/approval-intent.test.ts, apps/daemon/src/goals/goal-services.test.ts, docs/agent-stack-runbook.md, scripts/up.ps1, scripts/watch.ps1, .moe/messages/*. mcp-dispatch-port.test.ts (child A's file) untouched throughout.",
+      "startedAt": "2026-09-04T15:01:52.338Z",
+      "completedAt": "2026-09-04T17:26:02.601Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -150,12 +152,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:03:16.816Z",
-  "updatedAt": "2026-09-04T16:54:27.382Z",
+  "updatedAt": "2026-09-04T17:27:01.129Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:08:54.142Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -166,7 +168,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T10:11:59.686Z",
@@ -186,7 +189,8 @@
   },
   "planApprovedAt": "2026-09-04T10:12:01.813Z",
   "contextFetchedBy": [
-    "worker-00bf35cc"
+    "worker-00bf35cc",
+    "worker-80f8bfe1"
   ],
   "workStartedAt": "2026-09-04T13:57:23.127Z",
   "declaredFiles": [
@@ -317,19 +321,17 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
-    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
-    "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
-    "apps/daemon/src/bootstrap/bootstrap-conflict-error.ts",
     "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/work/work-claim-services.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.ts",
     "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+    "apps/daemon/src/work/work-claim-services.ts",
     "apps/daemon/src/daemon-command-dispatch.ts",
     "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
     "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
-    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
     "apps/daemon/src/orchestrator/agent-mission-text.ts",
-    "apps/daemon/src/work/work-claim-services.test.ts",
-    "apps/daemon/src/work/work-claim-services.ts"
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
@@ -350,5 +352,13 @@
     "kind": "checkpoint",
     "sessionId": "worker-00bf35cc@2026-09-04T15:10:37Z",
     "at": "2026-09-04T15:10:48.031Z"
-  }
+  },
+  "reviewStartedAt": "2026-09-04T17:27:01.129Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  403 passed (403)\n      Tests  8028 passed (8028)\n   Start at  20:19:36\n   Duration  347.96s (transform 27.43s, setup 0ms, import 274.29s, tests 1031.00s, environment 28ms)\n\nGATE_EXIT=0 (captured with `> /tmp/gate.log 2>&1; echo $?`, NOT through a pipe)",
+    "reportedAt": "2026-09-04T17:27:01.129Z"
+  },
+  "completionSummary": "Conflict refusals now NAME the version to retry at, on both wires, and the seat mission tells the seat to use it.\n\nWIRE FORMAT (exact, in the EXISTING `refusal.detail` string — NO frame-shape change):\n    EXPECTED_VERSION_CONFLICT actualVersion=<observed head> expectedVersion=<sent>\nTwo names, one number: the store calls it `observedVersion` (store-digests.ts:181-193), the registry calls it `actualVersion`. The wire follows the REGISTRY, because runtime-error-registry.ts:101 ALREADY declared requiredDetailKeys actualVersion+expectedVersion — that row is why this shipped with ZERO packages/contracts changes. The parent DoD's word `observedVersion` is the store-side name; child C (task-7945f38d) has been commented with the parse instruction.\n\nHOW: new exported helper `conflictError(decision: CommandDecisionRecord): RuntimeError | null` (apps/daemon/src/bootstrap/bootstrap-conflict-error.ts, re-exported from bootstrap-ledger.ts) DECODES the store's resultBytes — never recomputes, since a daemon-computed version would only echo the value already known wrong. Both commit seams call it: bootstrap `decided()` and work-claim `commitAccepted()`, so the decode lives once. work-claim `refuse()` gained an optional 4th `error` param; its key roster {advisoryOnly,authority,code,error,kind,ok,refusedBy} is unchanged (`error` already existed). `detailOf` (daemon-command-dispatch.ts:108) is GENERIC — error code + every detail key as sorted `key=value` — nothing is special-cased, so every registered detail key becomes wire-readable the same way.\n\nFAIL-CLOSED: undecodable bytes, or a version that is not a safe integer >= 0, leave the BARE code with error null. Nothing is ever invented. Seven malformed shapes swept (non-vacuous: `expect(planted).toHaveLength(7)`).\n\nDoD 2 PROVEN AT THE COMMITS, not the tree (my work was already committed, so a tree diff would certify nothing): union of the six Moe-Task commits = 11 paths, ALL under apps/daemon/src/; `grep -E '^(apps/control-room/|packag"
 }

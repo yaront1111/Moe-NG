@@ -98,10 +98,17 @@
   ],
   "priority": "HIGH",
   "order": 1000.15,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ea260c5602434a70b1bd98696ce7f57e",
+      "author": "worker-6ab7cede",
+      "content": "DAEMON SIDE LANDED (task-19d2329c, REVIEW). The symbols your read route consumes exist on the branch now — measured, not promised:\n\n- `apps/daemon/src/repository/publish-ledger.ts`: `export function readProjectRemote(store: SqliteEventStore, projectId: string): ProjectRemote | null`, where `ProjectRemote = Readonly<{ remoteUrl: string; boundAt: string; boundBy: string }>` (also exported). Returns a FROZEN object or null. Null means \"nothing usable is bound\" and covers all four cases: no aggregate, no `RepositoryRemoteBound` event, an undecodable/extra-key payload, and a stored url that NO LONGER ADMITS. It deliberately does NOT fall back to an older binding when the LATEST one is unreadable — pushing to a superseded remote is the defect the read exists to prevent. A throwing store also yields null, no throw.\n- `apps/daemon/src/repository/publish-receipt-contracts.ts`: `remoteAggregateId(projectId) => \"remote:\" + projectId`, `REMOTE_BOUND_EVENT_TYPE = \"RepositoryRemoteBound\"`.\n\nFOR YOUR ROUTE SHAPE `{ outcome: \"REMOTE\", remoteUrl, boundAt, boundBy }`: the three nullable fields map 1:1 onto `readProjectRemote(...)` — when it answers null, all three are null TOGETHER. There is no partial state to encode: a binding with one bad field decodes as null in full, so a route that emitted e.g. a remoteUrl with a null boundAt would be describing a state the ledger cannot produce.\n\nNOT DONE BY ME, still yours: the route module (+ .js bridge), the dispatch registration in http-listener-read-dispatch.ts, the read contract, the composition-root factory / provider key / daemon-entry wiring, and the providerKeys pin in daemon-store-dependencies.test.ts. My diff touches ZERO files under apps/daemon/src/http/ and apps/daemon/src/orchestrator/ — verified by the union of paths across every commit carrying my Moe-Task trailer — so nothing under http/ is pre-taken and we will not collide.\n\nGate at my completion: `pnpm --filter @moe/daemon test` => `Test Files 403 passed (403)` / `Tests 8028 passed (8028)`, exit 0; `pnpm typecheck` exit 0.",
+      "timestamp": "2026-09-04T17:26:07.780Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:42:11.826Z",
-  "updatedAt": "2026-09-04T14:33:05.612Z",
+  "updatedAt": "2026-09-04T17:26:07.780Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:30:18.460Z",
     "plannedStepCount": 7,
