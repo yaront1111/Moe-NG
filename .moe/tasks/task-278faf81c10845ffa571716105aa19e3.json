@@ -148,7 +148,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:17:27.768Z",
-  "updatedAt": "2026-09-04T22:41:05.482Z",
+  "updatedAt": "2026-09-04T22:42:01.156Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:19:57.747Z",
     "plannedStepCount": 7,
@@ -209,7 +209,8 @@
     "apps/control-room/src/v2/ops/ops-screens.tsx",
     "apps/control-room/src/v2/ops/ops-screens.test.tsx",
     ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
-    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json"
+    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+    ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json"
   ],
   "completionSummary": "The pause is readable end to end: /health/read carries agents.paused, the browser decodes it exact-key, the Health screen says it.\n\nDAEMON. apps/daemon/src/http/health-read.ts (150 -> 194, cap 250): `HealthView` gains ONE key, `agents: { paused: ProviderPauseView | null }`. `export const KNOWN_PROVIDERS = Object.freeze([\"claude\",\"codex\"])`; `export interface ProviderPauseView { lastLine; provider; resetAt; since; workItemId }` (five required strings). Private `pausedAgent(store, projectId, now)` iterates KNOWN_PROVIDERS, calls child 1's `readProviderPause(store, projectId, provider, now)` - `now` an ISO STRING, its landed form - and freezes the FIRST live record, mapping `cause?.lastLine ?? \"\"` and `cause?.workItemId ?? \"\"` so a null cause or a line-less cause is carried, never refused. `readHealth` now reads `const now = clock()` ONCE and feeds BOTH the pause window and `readAt` (was `readAt: clock()`), so one read cannot straddle two instants. All of it inside the existing try/catch, so a store throw still answers HEALTH_READ_UNREADABLE (asserted by code, not by \"did not answer HEALTH\").\nCOMPOSITION. daemon-store-foundation-composition.ts (475 -> 478): `createHealthReadPort` now receives the composition's own `clock` (:136) - the same clock every authority decision reads. The provider-key roster at daemon-store-dependencies.test.ts:724 is unchanged and green.\n\nCONTROL ROOM. live-ops.ts (278 -> 298 = the +20 budget EXACTLY): `export interface ProviderPauseView` DECLARED HERE, not imported - @moe/control-room has no dep on @moe/daemon and the repo has no tsconfig paths, so the daemon's twin is unreachable (TS6059); the exact-key decoder is what keeps them in step. `HealthOutcome`'s HEALTH arm gains `agents`; the roster is now [\"agents\",\"daemon\",\"ledger\",\"outcome\",\"readAt\",\"verifier\"]; `pausedOf` returns `ProviderPauseView | false | null` - THREE-VALUED so \"this build may not read the frame\" can never collapse into \"nothing is paused\" - and its `false` is folded into",
   "commits": [
@@ -241,6 +242,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7e448f7209db198101c9cc7713b8ec6648dda7d1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T22:29:30Z",
+      "paths": [
+        ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
+        ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T22:42:01.156Z",
+      "treeId": "979c7ab5e7d3c8abb10bf93e627d6c7544bd26ad",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -255,9 +272,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-cceb207f@2026-09-04T21:43:18Z",
-    "at": "2026-09-04T22:23:43.439Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T22:29:30Z",
+    "at": "2026-09-04T22:42:01.156Z"
   },
   "completedAt": "2026-09-04T22:41:05.482Z",
   "reviewCompletedAt": "2026-09-04T22:41:05.482Z",
