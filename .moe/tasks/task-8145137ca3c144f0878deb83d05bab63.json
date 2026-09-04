@@ -159,7 +159,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T23:20:01.781Z",
+  "updatedAt": "2026-09-04T23:20:54.926Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
@@ -344,6 +344,24 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "416ecc6b1a1225c35c9f55eb7af70253ee4d2186",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-12c76c19@2026-09-04T23:05:26Z",
+      "paths": [
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
+      ],
+      "recordedBy": "worker-12c76c19",
+      "recordedAt": "2026-09-04T23:20:54.926Z",
+      "treeId": "f4068c7690f4cd0e348db9c4b8f96e4e5e0a041f",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -355,7 +373,11 @@
     "apps/daemon/src/goals/goal-services.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts",
     "apps/daemon/src/http/affordance-planning-offers.test.ts",
-    "apps/daemon/src/http/affordance-read.ts"
+    "apps/daemon/src/http/affordance-read.ts",
+    ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/http/affordance-read.ts",
@@ -370,12 +392,15 @@
     "apps/daemon/src/goals/goal-close-prerequisite.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    ".moe-tmp-step4.py",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-12c76c19@2026-09-04T23:05:26Z",
-    "at": "2026-09-04T23:05:44.223Z"
+    "at": "2026-09-04T23:20:54.926Z"
   },
   "priorHandoffs": [
     {
