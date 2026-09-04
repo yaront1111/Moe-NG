@@ -14,8 +14,60 @@
     "OFFER ROSTER TESTS ARE BIDIRECTIONAL: served offers == expected set, never a subset (global rail 9); every fixture that loses or gains the publish offer is named in the plan.",
     "Refusals/offers assert exact sets; mutate to prove red (global rail 1). <=250 lines per production source, hard stop 400 (affordance-read.ts already at 422: extract, do not grow)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY BOTH PREREQUISITES LANDED, THEN RE-MEASURE (no edits). dependsOn is now a FIELD: [task-19d2329c25934099b2ff10086987d1c5 (remote binding), task-8145137ca3c144f0878deb83d05bab63 (goal-close readiness - it edits the SAME two ladder files this row extends)]. (a) `git log main --grep \"Moe-Task: task-8145137ca3c144f0878deb83d05bab63\" --oneline` and `grep -n \"closeReadiness\" apps/daemon/src/http/affordance-planning-offers.ts apps/daemon/src/http/affordance-read.ts` - the ladder must already read facts through `PlanningOfferInput.closeReadiness` (the landing fact goes BESIDE it); `grep -n \"export function seedLandingReceipt\" apps/daemon/src/goals/goal-closure-test-fixtures.ts` (child task-ae6fd9ac's fixture, :802 at plan time). Any miss -> moe.report_blocked with blockedOnTaskIds naming the row. (b) Re-measure (2026-09-04 at main 9e9b7b04): apps/daemon/src/http/affordance-planning-offers.ts `offersForGoal` publish minting (:144 `offer(input, \"repository.publish\", `publish:${goal.goalId}`)`, :145-148 returned for EXECUTION_ENABLED/CLOSING/COMPLETED) - re-read the landed lines after 8145137c; `PlanningOfferInput` (:36-41 + closeReadiness); affordance-read.ts composition (:264-269 + closeReadiness; 422+ lines, PRE-EXISTING OVER CAP - minimal edit, record the size); apps/daemon/src/review/review-read-model.ts `readReviewLedgers(store, projectId, subjectRefs).landings: Map<bareNodeKey, LandingReceiptV1>` (:274-320; landings sit on `landing:<subject>` aggregates); LandingReceiptV1.outcome \"COMMITTED\" | \"REFUSED\" (repository/landing-receipt-contracts.ts:56-67); apps/daemon/src/orchestrator/compiled-node-source.ts `activeCompiledGraphs(store, projectId, lifecycles?, folded?)` :86-96 -> `{ goalRef, content: GraphRevisionContent }[]` - RECORD how the node keys are read off `content` (the same accessor document-coverage-read.ts uses to build its SealedNode rows - cite the line). Pinned publish consumers (grep -rn \"repository.publish\" apps/daemon/src/http/*.test.ts tests/e2e apps/control-room/src): affordance-planning-offers.test.ts:101-108 is the ONLY daemon test that lists the publish offer; affordance-read.test.ts:454/:498 and affordance-read-planning.test.ts never list it; board-chain.spec.ts asserts only the goal.close card; control-room goal-publish.tsx:43-47 and board-header.tsx:23 render on the offer's presence (no shape change - child 3 task-e6000b57 owns the browser). PROBE the fixture world: on `openStore()` + `driveThrough(store, \"goal.close\")` (goal-services.test.ts:271 pattern) call `activeCompiledGraphs(store, PROJECT_ID)` and print the node keys of the goal's graph - the seed world must expose `node-1` so `seedLandingReceipt(store, \"node-1\", \"COMMITTED\")` lands on a node the walk names; if the seed world has no activated graph content, say so and use the world child 1's goal-closure-test-fixtures builds (approveNodes :683). (c) Baseline: `pnpm --filter @moe/daemon test` at the merge-base, count line + failing files quoted.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE LANDING FACT, test first, over a REAL store. Create apps/daemon/src/repository/goal-landing-facts.test.ts then apps/daemon/src/repository/goal-landing-facts.ts (<= 90 lines) + bridge goal-landing-facts.js (`export * from \"./goal-landing-facts.ts\";`). Export `goalHasLandedCommit(store, projectId, goalId, folded?: DurableLedger): boolean` - node keys = the goal's activated graph content from `activeCompiledGraphs(store, projectId, LANDABLE_LIFECYCLES, folded)` filtered by `goalRef === goalId` (LANDABLE_LIFECYCLES = EXECUTION_ENABLED, CLOSING, COMPLETED - the same set the ladder offers publish for); no graph or no nodes -> false; `readReviewLedgers(store, projectId, new Set(nodeKeys)).landings` -> true iff some receipt has `outcome === \"COMMITTED\"`; a thrown store -> false (fail closed: no offer). Arms (fixtures from ../goals/goal-closure-test-fixtures.js: openStore/driveThrough/PROJECT_ID/GOAL_ID via ../bootstrap/bootstrap-test-fixtures.js, seedReviewAcceptance, seedLandingReceipt): (1) an enabled goal with no landing -> false; (2) after `seedReviewAcceptance(store, \"node-1\")` + `seedLandingReceipt(store, \"node-1\", \"COMMITTED\")` -> true; (3) a goal whose only landing is REFUSED (`seedLandingReceipt(store, \"node-1\", { refusalCode: \"NOTHING_TO_COMMIT\" })`) -> false; (4) a landing on a node key the goal's graph does NOT carry (seed on \"node-stranger\" after opening a review acceptance for it if the fixture requires one) -> false (the walk is goal-scoped); (5) a goal in DRAFT/PLAN_REVIEW (before activation) -> false; (6) a store closed before the read -> false, no throw. Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/repository/goal-landing-facts.test.ts` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/goal-landing-facts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/goal-landing-facts.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE OFFER GATE, test first. (1) apps/daemon/src/http/affordance-planning-offers.test.ts: the `offersFor`/`resolutionFor` helper's PlanningOfferInput gains `landedCommit: () => false` (default) beside 8145137c's `closeReadiness`; RE-AIM :101-108: with the default the EXECUTION_ENABLED/CLOSING roster is exactly [\"goal.close\"] (set-equality; the publish offer is gone until a commit lands) and COMPLETED is []; NEW arms: `landedCommit: () => true` -> EXECUTION_ENABLED/CLOSING [\"goal.close\", \"repository.publish\"] with the publish target `publish:<GOAL_ID>` (:105-107's assertions move here) and COMPLETED [\"repository.publish\"]; the fact is consulted only for those three lifecycles (a spy counts zero calls for DRAFT and compiler-lane goals); with 8145137c's `closeReadiness: () => \"NOT_READY\"` AND `landedCommit: () => true` -> [\"repository.publish\"] only (the two gates are independent). Run red. (2) apps/daemon/src/http/affordance-planning-offers.ts (<= 200 lines): `PlanningOfferInput` gains `readonly landedCommit: (goalId: string) => boolean`; the publish minting becomes `const publish = input.landedCommit(goal.goalId) ? [offer(input, \"repository.publish\", `publish:${goal.goalId}`)] : [];` and the three returns spread it (`[...close, ...publish]`), with a comment: publishing is offered only once at least one node of the goal is landed as a commit - a goal with nothing to push gets no PUBLISH card (seen live on UnAI 2026-09-04). (3) apps/daemon/src/http/affordance-read.ts (:264-269; +2 lines on a pre-existing over-cap file, record the size): `landedCommit: (goalId) => goalHasLandedCommit(config.store, config.projectId, goalId, ledger)` (import from ../repository/goal-landing-facts.js; the folded `ledger` is the one already read at :263 - never a second fold). (4) Real-store surface arms in goal-landing-facts.test.ts (second describe, `createAffordancePort({...})` over the seed world - copy the port config affordance-read.test.ts uses, cite the lines): the surface carries NO `repository.publish` offer for the enabled goal; after `seedReviewAcceptance` + `seedLandingReceipt(... \"COMMITTED\")` the offer appears targeting `publish:<GOAL_ID>` (assert with set-equality on `commandKind@target` over the whole offer list, so a duplicate or a stray offer reds); a fresh store whose only landing is REFUSED stays unoffered; the goal.close offer's presence is unchanged across all three (8145137c's NO_CONTRACT invariant holds for the seed world). Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/http/affordance-planning-offers.test.ts src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/repository/goal-landing-facts.test.ts` (count lines quoted; the pinned rosters at affordance-read.test.ts:454/:498 and affordance-read-planning.test.ts:290/:514-545 green UNCHANGED).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` / `Tests N passed`), `pnpm --filter @moe/control-room test` (the publish card renders on the offer - no control-room source changes, but its tests build their own surface frames; count line quoted, must be unchanged), `pnpm typecheck` (quote the `$ tsc` echo), `pnpm test:e2e:browser` from PowerShell (board-chain.spec.ts asserts the goal.close card, never the publish card - count line quoted). PATH-ATTRIBUTED BASELINE: HEAD failures minus the step 1c baseline, intersected with the six owned paths, EMPTY; foreign red disclosed verbatim. `wc -l` quoted: goal-landing-facts.ts <= 90, affordance-planning-offers.ts <= 200, affordance-read.ts <= (its landed size + 2; pre-existing over cap, recorded). DRILL (global rail 1): the three new files are UNTRACKED -> SHA256 backups in %TEMP%\\moe-drill-<workerId>\\, restore proven in a separate command; tracked files: capture `git diff -- <path>` before, compare after. One mutation at a time, red line quoted: (1) `goalHasLandedCommit` counts a REFUSED landing -> arm 3 and the surface REFUSED arm red; (2) the goal scope dropped (any landing in the project counts) -> arm 4 red; (3) the ladder ignores the fact (always mints publish) -> the re-aimed :101-108 arm red and the surface ABSENT arm red; (4) the fact read with a SECOND ledger fold (`readDurableLedger` inside the lambda) - not a red, but a spy arm on the store's decision-page reads before/after proves one fold per surface read (add it: count `readCommandDecisionsAfter` calls via a wrapped store); (5) COMPLETED goals offered without a landing -> the COMPLETED [] arm red. Record the red lines + restore proofs in the step note (< 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a goal landed, then its node REPLANNED into a successor goal - the original keeps its committed landing and stays publishable (correct: the commit exists); a landing receipt whose subjectRef names the node but whose `commit` is null with outcome COMMITTED (malformed) - decodeLandingReceiptBytes refuses it upstream, confirm with one arm if cheap; the surface read now performs one graph walk + one review-ledger walk per enabled/closing/completed goal per poll - measure a 3-goal surface read before/after and record it (the ledger fold is shared, the review walk is per goal: if it exceeds ~50 ms on the fixture store, batch the subjects of all goals into ONE readReviewLedgers call and note it); a goal whose lifecycle is COMPLETED but never landed (Foundation seed) - no publish offer (accepted; the seed never pushes). Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names `goalHasLandedCommit` + its scope rule, the `landedCommit` fact on PlanningOfferInput, the re-aimed pin, every pinned consumer left green, the measured read cost, and every file size. Then `moe.add_comment` on child 3 (task-e6000b57fd374f78ba074b9f0f0f2c67): the publish offer now appears only after a landed commit, so its Publish control renders nothing for an unlanded goal (name the surface arm). Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -24,12 +76,39 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-a8317bb46e36476e8399c611b41d9612",
   "dependsOn": [
-    "task-19d2329c25934099b2ff10086987d1c5"
+    "task-19d2329c25934099b2ff10086987d1c5",
+    "task-8145137ca3c144f0878deb83d05bab63"
   ],
   "priority": "HIGH",
   "order": 1000.2,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:38:07.858Z",
-  "updatedAt": "2026-09-04T10:38:07.858Z"
+  "updatedAt": "2026-09-04T14:43:03.225Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:41:09.806Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:43:01.093Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Reading landings inside the offer ladder - rejected: `offersForGoal` is pure over PlanningOfferInput facts (8145137c already added `closeReadiness` there); a second lazy fact `landedCommit(goalId)` keeps it pure. (2) Reusing the goal-close readiness module for landings - rejected: coverage readiness (goals/) and landing facts (repository/) are different ledgers and different consumers. (3) Blocking mid-flight on 8145137c as the description said - replaced by a dependsOn FIELD (set at plan time), so the runtime withholds the WORKING claim until both prerequisites are DONE and the shared-file hazard never arises. (4) Gating the publish COMMAND as well - out of scope: repository.publish's own preconditions belong to the publish command's owner; this row gates the OFFER only.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04. affordance-planning-offers.ts mints publish at :144 for EXECUTION_ENABLED/CLOSING/COMPLETED (:145-148) regardless of landings (the live PUBLISH card over 'No node landed' on UnAI); PlanningOfferInput :36-41 (+ closeReadiness after 8145137c); affordance-read.ts composes it at :264-269 with the folded ledger from :263 (422 lines, over cap). Landings: readReviewLedgers(store, projectId, subjectRefs).landings keyed by BARE node key (review-read-model.ts:274-320, landing aggregates `landing:<subject>`), LandingReceiptV1.outcome COMMITTED|REFUSED (landing-receipt-contracts.ts:56-67); the fixture writer seedLandingReceipt (goal-closure-test-fixtures.ts:802, child task-ae6fd9ac) goes through recordLandingReceipt. Node keys of a goal: activeCompiledGraphs(store, projectId, lifecycles, folded) (compiled-node-source.ts:86-96) -> content per goalRef (document-coverage-read.ts builds SealedNode rows from it). The ONLY daemon test listing the publish offer is affordance-planning-offers.test.ts:101-108; the e2e chain asserts only goal.close; the browser (goal-publish.tsx:43-47, board-header.tsx:23) keys on the offer's presence.",
+    "risks": "(1) Both prerequisites must be DONE (dependsOn field); step 1 re-reads the ladder as 8145137c landed it. (2) The seed world's activated graph must name node-1 for the fixture landing to count - step 1 probes it. (3) affordance-read.ts is pre-existing over cap: +2 lines. (4) The per-goal review walk is a cost on every surface poll - measured and batched if needed. (5) Never stage peer WIP, scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+    "keyFiles": [
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/daemon/src/http/affordance-planning-offers.test.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/review/review-read-model.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/daemon/src/orchestrator/compiled-node-source.ts",
+      "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:43:03.225Z"
 }

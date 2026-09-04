@@ -66,7 +66,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-c846071b",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,7 +85,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:37:25.873Z",
-  "updatedAt": "2026-09-04T10:56:53.462Z",
+  "updatedAt": "2026-09-04T14:02:00.812Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:40:00.036Z",
     "plannedStepCount": 5,
@@ -186,6 +186,21 @@
       "treeId": "d2b95badf726ab440e15dac23a244d8bfe0f358b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f55305beddd3527d1bd9b4d5b1afee29304c85c7",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T10:57:24Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T10:57:31.724Z",
+      "treeId": "599379a984693e8a59a3660757d0c1d53955167a",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -195,7 +210,18 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-c846071b@2026-09-04T10:56:46Z",
-    "at": "2026-09-04T10:56:53.462Z"
-  }
+    "sessionId": "worker-c846071b@2026-09-04T10:57:24Z",
+    "at": "2026-09-04T10:57:31.724Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Row had barely started: every checkpoint is 1 path with cli-exit=1 (7c5ba4b0, da2f548c, a8f534b2, b17f9859, 2d4ac55a, f55305be). Treat as effectively unstarted - the plan is intact and auto-approved, but no substantive implementation landed. dependsOn is empty and this is the leaf of the a8317bb4 publish family, so it is claimable immediately.",
+      "whatRemains": "The whole row: repository.publish accepts null, refuses unbound, serves the remote read. Follow the approved plan from step 1.",
+      "pitfalls": "The five prior sessions did NOT die on this row's own code. pnpm typecheck reds on a sibling row's file - apps/daemon/src/goals/goal-live-evidence.test.ts(325,18) TS2339, owned by task-ae6fd9ac and held by worker-71a60ba7. Your verification gate will fail on it too until that row fixes it. Do not hand-patch a file you do not own; disclose it as a foreign red with a merge-base baseline. Also leave apps/daemon/src/goals/j1-command-path.test.ts alone - dirty in the shared worktree, declared on task-ae6fd9ac.",
+      "openQuestions": "None. Scope is unchanged and the plan was never disputed.",
+      "releasedAt": "2026-09-04T14:02:00.811Z",
+      "releasedBy": "governor-62e22dd8",
+      "reason": "Confirmed crash, human-approved release. worker-c846071b: 5 consecutive cli-exit=1 (commits f55305be, 2d4ac55a, b17f9859, a8f534b2), wrapper paused auto-resume, seat self-escalated to @governors requesting release, then silent 2h42m (isAlive false, 9734s). Not idle time. ROOT CAUSE FOUND: pnpm typecheck fails on a FOREIGN red - apps/daemon/src/goals/goal-live-evidence.test.ts(325,18) TS2339 'refusal' does not exist on type HttpPortRefused | HttpRefused. That file belongs to task-ae6fd9ac, not this row, but the daemon typecheck is repo-wide so it reds this row's verification gate every session. Bytes are safe: every crash checkpointed and pushed."
+    }
+  ]
 }

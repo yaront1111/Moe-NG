@@ -1,0 +1,119 @@
+{
+  "id": "task-53160801515546259fecc8aa2616acce",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Seats and the board say agents are paused: the Seats banner with the seat's last line, the WORKING next-step names the reset time",
+  "description": "SPIDR child 3c of task-ac71a55ead3d468eab7329131f04ab7e. dependsOn child 3b task-66dc48690fd94b07905a2aa6ffb9568d (`useProviderPause()` in apps/control-room/src/v2/shell/pause-context.tsx). Filed by architect-16a01670 2026-09-04, measured at main 9e9b7b04.\n\nWHAT THIS ROW OWNS: the Seats panel banner + the seat-exit last line, and the board header's next-step while paused. NO daemon, shell, e2e or runbook change.\n\nMEASURED (re-measure before planning):\n- apps/control-room/src/v2/ops/activity-screens.tsx (162): `SessionsPanel({ nowMs, outcome })` :104-160, test ids `cr.sessions.*`, the empty line \"No agent seat is open right now...\" :139; activity-screens.test.tsx (107) `describe(\"SessionsPanel\")` :79. The live host is v2/ops/live-ops.tsx `LiveSessions` :117-121 (passes only nowMs + outcome).\n- apps/control-room/src/v2/goals/goal-status.ts (164): `deriveGoalStatus(input: { coverage, goalId, runId, surface })` :89-94; the WORKING branch :151-159 answers `next = { anchor: \"board\", label: \"Watch the board\", detail: ... }`; stage precedence is the order of the returns (:98-160). goal-status.test.tsx (99). Call sites: v2/board/board-screen.tsx:70 (`deriveGoalStatus({ coverage, goalId, runId, surface })`, 218 lines) and v2/goals/goal-status-strip.tsx:107 (`LiveGoalStatus`, 108 lines); the header renders `next.label` at v2/board/board-header.tsx:31-44 (`cr.kanban.next`).\n- The pause shape: 3b's `ProviderPause` = { lastLine, provider, resetAt, since, workItemId }.\n\nFEATURE: `SessionsPanel` gains `paused?: ProviderPause | null` (LiveSessions passes `useProviderPause()`) and renders, above the list and before the empty line, `<p className=\"cr2-needs-note\" data-testid=\"cr.sessions.paused\">Agents paused: <provider> limit, resumes <time> - the seat's last line: <lastLine></p>` while paused, nothing otherwise. `deriveGoalStatus` input gains `paused?: ProviderPause | null`; when the stage is WORKING and `paused` is set, `next = { anchor: \"board\", label: \"Waiting for the provider limit to reset at <time>\", detail: \"The <provider> seat hit its limit on <workItemId>; the wrapper staffs again at <resetAt>.\" }` - every other stage is unchanged (a READY_TO_CLOSE or ESCALATION goal ignores the pause). Both call sites pass `useProviderPause()`.",
+  "definitionOfDone": [
+    "activity-screens.test.tsx arms: with `paused` the Seats panel renders cr.sessions.paused with the exact sentence including the fixture's lastLine (time formatted in the test from the same resetAt), and it renders even when no agent seat is live (the 'No agent seat is open' line stays too); without `paused` queryByTestId is null; existing SessionsPanel arms green unchanged (count line quoted).",
+    "goal-status.test.tsx arms: a WORKING goal with `paused` answers label 'Waiting for the provider limit to reset at <time>' and the detail naming the provider and workItemId; the same input without `paused` answers 'Watch the board' byte-for-byte as today; a READY_TO_CLOSE goal with `paused` keeps its own next-step (precedence unchanged).",
+    "Both call sites and the Seats host are wired: `grep -n \"useProviderPause\" apps/control-room/src/v2/board/board-screen.tsx apps/control-room/src/v2/goals/goal-status-strip.tsx apps/control-room/src/v2/ops/live-ops.tsx` = 3 hits, each covered by a render test that wraps the component in ProviderPauseProvider and asserts the banner / next-step text (board-screen.test / goal-status-strip.test / live-ops.test - name the files that exist).",
+    "Gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`; every touched production file stays <= 250 (`wc -l` quoted); sources ASCII-only, JSX text apostrophe-free (use ' - ' not an apostrophe in the sentences); every arm mutated red once."
+  ],
+  "taskRails": [
+    "CONSUME THE CONTEXT: read the pause through useProviderPause(); never a second health poll on a screen.",
+    "PRECEDENCE UNCHANGED: only the WORKING branch of deriveGoalStatus reads the pause; every other stage answers exactly as today (existing goal-status arms unchanged).",
+    "NO daemon/shell/e2e/docs change; <=250 lines per production source; ASCII-only sources; JSX apostrophe-free."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY 3b LANDED, THEN RE-MEASURE (no edits). (a) 3b = task-66dc48690fd94b07905a2aa6ffb9568d: `git log main --grep \"Moe-Task: task-66dc48690fd94b07905a2aa6ffb9568d\" --oneline` (or get_context.epicSiblings landing.merged); `grep -n \"^export\" apps/control-room/src/v2/shell/pause-context.tsx` must list `ProviderPause`, `ProviderPauseProvider`, `useProviderPause`; `grep -n \"ProviderPauseProvider\" apps/control-room/src/v2/cordum-app.tsx` (the provider wraps CordumShell, so LiveSessions / LiveBoard / LiveGoalStatus all render inside it); read 3b's completionSummary and the comment it left on THIS row (the exact strip sentence, so Seats and the board match it). Absent -> moe.report_blocked with blockedOnTaskIds [task-66dc48690fd94b07905a2aa6ffb9568d]. (b) Re-measure (2026-09-04 at main 9e9b7b04): `wc -l` activity-screens.tsx=162, activity-screens.test.tsx=107, ops/live-ops.tsx=133, goal-status.ts=164, goal-status.test.tsx=99, goal-status-strip.tsx=108, board-screen.tsx=218, board-screen.test.tsx; `grep -n \"deriveGoalStatus({\" apps/control-room/src/v2/board/board-screen.tsx apps/control-room/src/v2/goals/goal-status-strip.tsx` (=board-screen.tsx:70 inside the PURE BoardScreen, goal-status-strip.tsx:107 inside the LiveGoalStatus HOST); `grep -n \"export function LiveSessions\\|<SessionsPanel\" apps/control-room/src/v2/ops/live-ops.tsx` (=117,120); `grep -n \"label: \\\"Watch the board\\\"\" apps/control-room/src/v2/goals/goal-status.ts` (=158); `grep -n \"No agent seat is open\" apps/control-room/src/v2/ops/activity-screens.tsx` (=139). (c) Baseline: `pnpm --filter @moe/control-room test` at the merge-base, count line + failing files quoted.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "BOARD NEXT-STEP DERIVATION, test first. apps/control-room/src/v2/goals/goal-status.test.tsx: `const PAUSE = { lastLine: \"<3a fixture line>\", provider: \"claude\", resetAt: \"2026-09-03T11:30:00.000Z\", since: \"2026-09-03T10:00:00.000Z\", workItemId: \"node.deliver@n2\" }`; new arms in describe(\"deriveGoalStatus\"): (1) the existing `working` surface (:61) with `paused: PAUSE` -> toMatchObject({ stage: \"WORKING\", next: { anchor: \"board\", label: `Waiting for the provider limit to reset at ${new Date(PAUSE.resetAt).toLocaleString()}`, detail: `The claude seat hit its limit on node.deliver@n2; the wrapper staffs again at 2026-09-03T11:30:00.000Z.` } }) and the headline unchanged (\"Agents are working: 1 of 2 nodes accepted.\"); (2) the same input with `paused: null` and with the key omitted -> `next.label` toBe(\"Watch the board\") and `next.detail` byte-identical to today's sentence (copy it from goal-status.ts:154-157 into the test as a literal); (3) the READY_TO_CLOSE input (:64-66) with `paused: PAUSE` -> next.label still \"Close the goal\" (precedence unchanged); (4) the ESCALATION input (:52-57) with `paused: PAUSE` -> stage still \"ESCALATION\". Run red. Then apps/control-room/src/v2/goals/goal-status.ts (164 -> <= 180): import type `ProviderPause` from ../shell/pause-context.js; `deriveGoalStatus` input gains `readonly paused?: ProviderPause | null | undefined`; ONLY the WORKING branch (:151-159) changes: `const paused = input.paused ?? null;` and when `paused !== null` the `next` becomes `{ anchor: \"board\", detail: `The ${paused.provider} seat hit its limit on ${paused.workItemId}; the wrapper staffs again at ${paused.resetAt}.`, label: `Waiting for the provider limit to reset at ${new Date(paused.resetAt).toLocaleString()}` }` - headline, agents and progress untouched; every other branch untouched (the existing :44-78 arms must stay green with no edit). Gate from apps/control-room: `pnpm exec vitest run src/v2/goals/goal-status.test.tsx` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "SEATS BANNER, test first. apps/control-room/src/v2/ops/activity-screens.test.tsx, describe(\"SessionsPanel\") new arms with the same PAUSE fixture: (1) `render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} paused={PAUSE} />)` -> `screen.getByTestId(\"cr.sessions.paused\").textContent` toBe(`Agents paused: claude limit, resumes ${new Date(PAUSE.resetAt).toLocaleString()} - last line from the seat: ${PAUSE.lastLine}`); (2) the banner renders even when NO agent seat is live: an outcome with only the paired browser session -> both `cr.sessions.paused` and `cr.sessions.noagents` present; (3) without `paused` / with `paused={null}` -> `queryByTestId(\"cr.sessions.paused\")` null; (4) the existing `lists live seats first` arm green untouched. Also in describe(\"LiveActivity / LiveSessions\"): `render(<ProviderPauseProvider value={PAUSE}><LiveSessions headers={{}} pollMs={60_000} read={async () => SESSIONS} /></ProviderPauseProvider>)` -> `await screen.findByTestId(\"cr.sessions.paused\")` present, and without the provider absent. Run red. Then apps/control-room/src/v2/ops/activity-screens.tsx (162 -> <= 180): `SessionsPanelProps` gains `readonly paused?: ProviderPause | null | undefined`; inside the SESSIONS branch, before the count line, `{paused === undefined || paused === null ? null : (<p className=\"cr2-needs-note\" data-testid=\"cr.sessions.paused\">{`Agents paused: ${paused.provider} limit, resumes ${new Date(paused.resetAt).toLocaleString()} - last line from the seat: ${paused.lastLine}`}</p>)}`; and apps/control-room/src/v2/ops/live-ops.tsx (133 -> <= 138): `import { useProviderPause } from \"../shell/pause-context.js\";` LiveSessions: `const paused = useProviderPause();` and `<SessionsPanel nowMs={nowMs} outcome={outcome} paused={paused} />`. ASCII-only, apostrophe-free (\"last line from the seat\", never \"seat's\"). Gate: `pnpm exec vitest run src/v2/ops/activity-screens.test.tsx` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE TWO BOARD CALL SITES, test first. (1) apps/control-room/src/v2/board/board-screen.test.tsx: in describe(\"BoardScreen\") an arm rendering the existing WORKING fixture (:84 props) plus `paused={PAUSE}` -> `screen.getByTestId(\"cr.kanban.next\").textContent` toContain(\"Waiting for the provider limit to reset at\"); the same render without `paused` -> the label it renders today (copy the literal from the existing arm's expectation); in describe(\"LiveBoard\") an arm wrapping the :161 render in `<ProviderPauseProvider value={PAUSE}>` -> the same waiting label appears (`findByTestId`). (2) goal-status.test.tsx describe(\"LiveGoalStatus\"): an arm with a coverage reader answering a WORKING coverage, `surface` = the working surface, wrapped in `<ProviderPauseProvider value={PAUSE}>` -> `cr.goalstatus.next` textContent contains \"Waiting for the provider limit to reset at\", and without the provider \"Watch the board\". Run red. Then: apps/control-room/src/v2/board/board-screen.tsx (218 -> <= 228): `BoardScreenProps` gains `readonly paused?: ProviderPause | null | undefined`; BoardScreen (:70) passes `paused` into deriveGoalStatus; `LiveBoard` (the host, :181) reads `const paused = useProviderPause();` and passes `paused={paused}` to BoardScreen. apps/control-room/src/v2/goals/goal-status-strip.tsx (108 -> <= 115): `LiveGoalStatus` (:87) reads `const paused = useProviderPause();` and passes it into deriveGoalStatus at :107 - the pure `GoalStatusStrip` is untouched. Gate: `pnpm exec vitest run src/v2/board/board-screen.test.tsx src/v2/goals/goal-status.test.tsx` (count lines quoted); then `grep -n \"useProviderPause\" apps/control-room/src/v2/board/board-screen.tsx apps/control-room/src/v2/goals/goal-status-strip.tsx apps/control-room/src/v2/ops/live-ops.tsx` = exactly 3 files, each with an import and a call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/board/board-screen.test.tsx",
+        "apps/control-room/src/v2/board/board-screen.tsx",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/goals/goal-status.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/control-room test` (quote `Test Files N passed` / `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo); PATH-ATTRIBUTED BASELINE: HEAD failures minus the step 1c baseline, intersected with the eight owned paths, EMPTY; foreign red disclosed verbatim. `wc -l` quoted for every touched production file (all <= 250: activity-screens.tsx <= 180, live-ops.tsx <= 138, goal-status.ts <= 180, goal-status-strip.tsx <= 115, board-screen.tsx <= 228). ASCII: `grep -nP \"[^\\x00-\\x7F]\"` over the eight files = 0 (MIDDOT/ARROW_RIGHT come from ../glyphs.js). DRILL (all eight paths are TRACKED and hold this row's own edits: capture `git diff -- <path>` BEFORE each mutation and prove the after-restore diff is byte-identical - never `git checkout --` the path): (1) the WORKING branch ignores `paused` -> step 2 arm 1 red; (2) the pause read in EVERY branch (move the check above the READY_TO_CLOSE return) -> step 2 arm 3 red; (3) SessionsPanel drops the banner when no agent is live -> step 3 arm 2 red; (4) LiveSessions passes `paused={null}` -> the LiveSessions provider arm red while the pure-panel arms stay green; (5) LiveBoard stops passing `paused` -> the LiveBoard provider arm red; (6) LiveGoalStatus stops passing `paused` -> the LiveGoalStatus provider arm red. Record the six red lines + restore proofs in the step note (< 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/board/board-screen.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a pause whose workItemId belongs to ANOTHER goal still changes this goal's WORKING next-step (the wrapper serves one provider, so every WORKING goal waits - accepted, and the detail names the item so the person can tell; note in the completionSummary); a paused goal whose surface shows zero claimed nodes (working 0) still reads WORKING + waiting (correct: nothing will be staffed); the Seats banner with an EMPTY lastLine renders \"last line from the seat: \" - render \"(no output)\" instead and add an arm; the label's toLocaleString is computed on every derive (cheap; derive runs per poll). Fix what you find, re-run the four focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/control-room test` and its fresh count line; completionSummary names the two sentences (Seats, board), the `paused?` inputs on SessionsPanel / BoardScreen / deriveGoalStatus, the three hosts that read useProviderPause, and every file size. Then `moe.add_comment` on child 3d (task-c81cc93d1190496e870816f486c146ae) with the exact test ids and sentences its journey asserts (cr.shell.paused, cr.sessions.paused, cr.kanban.next waiting label, cr.health.agents). Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-ac71a55ead3d468eab7329131f04ab7e",
+  "dependsOn": [
+    "task-66dc48690fd94b07905a2aa6ffb9568d"
+  ],
+  "priority": "MEDIUM",
+  "order": 1004.23,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T14:18:26.749Z",
+  "updatedAt": "2026-09-04T14:27:09.578Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:25:20.604Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:27:07.407Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Reading the pause inside the pure screens (SessionsPanel / BoardScreen / deriveGoalStatus calling the hook) - rejected: those are pure today and their tests render them bare; the HOSTS (LiveSessions, LiveBoard, LiveGoalStatus) read useProviderPause() and pass a prop, matching the existing pure-screen + live-host split. (2) A new GoalStage PAUSED - rejected: a pause is the provider's state, not a goal stage; only the WORKING next-step changes so stage precedence, headline, facts and the strip's STAGE_WORDS roster stay untouched. (3) One combined sentence for Seats and the strip - the Seats line adds the seat's last line (the operator's only clue which limit fired); the strip stays short.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04. goal-status.ts: deriveGoalStatus input {coverage, goalId, runId, surface} :89-94, stage returns in precedence order :98-160, WORKING branch :151-159 (label \"Watch the board\", detail sentence :154-157); goal-status.test.tsx builds coverage()/node()/surface() fixtures (:17-41) and pins every stage with toMatchObject (:44-78) - adding an optional input breaks none. board-screen.tsx: BoardScreen is PURE (:68-70 derives status from props), LiveBoard is the host (:181+ with usePolled readers); board-screen.test.tsx renders both (:84, :161). goal-status-strip.tsx: GoalStatusStrip pure (status prop), LiveGoalStatus host (:87-108) derives at :107. activity-screens.tsx: SessionsPanel({nowMs, outcome}) :104-160 (cr.sessions.count :113, noagents :139); ops/live-ops.tsx LiveSessions host :117-121; activity-screens.test.tsx SESSIONS fixture :24-31 and a LiveSessions arm with an injected reader (:96-106). 3b's provider wraps CordumShell in cordum-app.tsx, so all three hosts render inside it in production.",
+    "risks": "(1) 3b must have landed pause-context.tsx with the three exports - step 1 blocks otherwise. (2) The detail sentence carries `;` and `-` only - never an apostrophe (JSX rail). (3) toLocaleString: every arm computes its expectation with the same call. (4) board-screen.test.tsx's existing WORKING expectation text must be copied, not guessed, for the no-pause control arm. (5) Never stage peer WIP, scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "apps/control-room/src/v2/goals/goal-status.test.tsx",
+      "apps/control-room/src/v2/ops/activity-screens.tsx",
+      "apps/control-room/src/v2/ops/live-ops.tsx",
+      "apps/control-room/src/v2/board/board-screen.tsx",
+      "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+      "apps/control-room/src/v2/shell/pause-context.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:27:09.577Z"
+}

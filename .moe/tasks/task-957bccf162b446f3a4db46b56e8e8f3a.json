@@ -15,8 +15,27 @@
     "ONE-NODE FENCE UNTOUCHED: the INITIAL/REVISION submission keeps SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL; growth is the EXPANSION row's (task-4423d2a4).",
     "No UI change (child 3); a surface or read SHAPE change names every exact-key decoder and digest mirror in the plan (global rail: grep the SHAPE). Refusals assert code AND layer; mutate to prove red. <=250 lines per production source."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR PARENT - VERIFICATION ONLY, NO EDITS. Split on 2026-09-04 by architect-16a01670 into two children that carry every edit; dependsOn names them and the runtime withholds this row until both are DONE: 2a task-138fab3075884df98c3c220e74c1a3e9 (offer ladder + compile dispatcher follow the current run, activity verdict for approval kinds) and 2b task-2c016c04dedc4eb88982a1d8d5108ddf (rejection reason in the compiler mission + the real-process reject/re-plan/approve journey). STEP 1 - prove each landed ON DISK: `git log main --grep \"Moe-Task: <id>\" --oneline` for both (or get_context.epicSiblings landing.merged); `grep -n \"currentRun\" apps/daemon/src/http/affordance-planning-offers.ts apps/daemon/src/http/affordance-read.ts`, `grep -n \"currentPlanningRun\\|REVISION\" apps/daemon/src/planning/compile-dispatcher.ts`, `grep -n \"approval.decide_intent\" apps/daemon/src/http/activity-read.ts`, `ls apps/daemon/src/planning/rejection-instructions.ts tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts`. Any miss -> moe.report_blocked with blockedOnTaskIds naming the child; never patch here.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "STEP 2 - re-run the children's gates READ-ONLY at the delivered tree and quote every count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e` (the j5 journey listed). Walk this row's five DoD sentences and map each to the child arm that discharges it (file + test name); a sentence with no arm -> comment on the owning child and report_blocked with blockedOnTaskIds. No new tests here.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "STEP 3 - adversarial pass over the whole re-plan feature: a goal rejected TWICE compiles a third run (2a's resolver follows the chain; 2b's reason is the latest); a rejected run's stale decide_intent offer can never be dispatched (the surface withholds it and the daemon's fences on the run version refuse a late approve - name the code); the mission fence holds for a reason that embeds the operator markers. Then `moe.complete_task` with verification = `pnpm test:e2e` and its fresh count line; completionSummary lists both children with their landed SHAs. Report no files; never stage peer WIP, scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +44,8 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-6061e05cd17540a1bbe08b965da58b64",
   "dependsOn": [
-    "task-3780109018bb49b2bf3a00b18952d7ff"
+    "task-138fab3075884df98c3c220e74c1a3e9",
+    "task-2c016c04dedc4eb88982a1d8d5108ddf"
   ],
   "priority": "HIGH",
   "order": 1002.2,
@@ -39,5 +59,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:27:30.045Z",
-  "updatedAt": "2026-09-04T10:32:10.318Z"
+  "updatedAt": "2026-09-04T14:46:11.791Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:43:17.427Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:46:09.620Z",
+  "planningNotes": {
+    "approachesConsidered": "One row - rejected: the measured edit set (offer ladder + read composition + their tests, compile dispatcher + test, activity read + test, a new planning module + main wiring + main test, a node-lane journey) is ~14 files against the 10-file hard cap, and three of those files (affordance-planning-offers.ts, affordance-read.ts, agent-wrapper-main.ts) are shared with rows in flight (8145137c, f6f33a39, 4109c1a0, 7945f38d) - so the children carry dependsOn on the last editors of each shared file and land serially.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04: every ladder read of the goal's run keys on the immutable planningRunRef (affordance-planning-offers.ts:115/:129/:137-138/:157-168); the ladder has no store, so the current run becomes a PlanningOfferInput fact composed in affordance-read.ts; compile-dispatcher.ts:184 takes runId from provenance.planningRunRef, :245-300 drives by run version (0 = create INITIAL chain, 1 = fall-through to finalize at v4 - measured as unreachable today), ids keyed on digest+runId (:117-125); activity-read.ts:77 VERDICT_KINDS excludes approval kinds; the compiler mission quotes operator instructions between markers (agent-mission-text.ts:133-138) from agent-wrapper-main.ts:238-250; the node e2e lane (tests/e2e/foundation) already holds J4's replan harness with fake-agent.mjs.",
+    "risks": "The children land after four in-flight rows; the epic is at 46 rows (advisory ceiling 40) - a re-slice into a second epic is the human's call.",
+    "keyFiles": [
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/daemon/src/planning/compile-dispatcher.ts",
+      "apps/daemon/src/http/activity-read.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+      "tests/e2e/foundation/j4-replan-harness.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:46:11.791Z"
 }

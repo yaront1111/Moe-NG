@@ -1,0 +1,37 @@
+{
+  "id": "task-2c016c04dedc4eb88982a1d8d5108ddf",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The re-staffed compiler seat reads the rejection reason in its mission, and a real-process journey proves reject, re-plan, approve",
+  "description": "SPIDR child 2b of task-957bccf162b446f3a4db46b56e8e8f3a (grandparent task-6061e05cd17540a1bbe08b965da65b64 - note: the parent's description carries a typo'd grandparent id; the parentTaskId FIELD is authoritative). dependsOn child 2a task-138fab3075884df98c3c220e74c1a3e9 (offers + compiler follow the current run) AND the two other rows that edit apps/daemon/src/orchestrator/agent-wrapper-main.ts (task-4109c1a0 provider pause, task-7945f38d reclaim pass) - serialised so no two rows edit the pre-existing over-cap main file at once. Filed by architect-16a01670 2026-09-04, measured at main 9e9b7b04.\n\nWHAT THIS ROW OWNS: (a) the mission text a re-staffed compiler seat receives after a REJECT; (b) the real-process journey. No offer/dispatcher/read change (2a), no UI (child 3).\n\nMEASURED (re-measure before planning):\n- The compiler mission quotes the goal's operator instructions between `<<<OPERATOR INSTRUCTIONS` markers with the REPLAN sentence (apps/daemon/src/orchestrator/agent-mission-text.ts:133-138, `compilerMission` :78); the text comes from `compilerInstructions(goalId)` in agent-wrapper-main.ts:238-250 (reads the goal catalog brief). The rejection reason lives on the REJECTED run's `approval.decide_intent` decision result (`decisionReason`, child 1 task-37801090) and the rejected run is reachable from the goal's immutable `planningRunRef` through child 1's `currentPlanningRun` fold (successorRunId on the PlanningRunRejected event). FEATURE (a): a new pure module apps/daemon/src/planning/rejection-instructions.ts (+ .js + test) exporting `latestRejectionReason(store, projectId, planningRunRef): { reason: string; rejectedRunId: string } | null` (walk the run chain from the immutable ref; the LATEST rejected run's decisionReason; null when never rejected; never throws) and `composeCompilerInstructions(brief: string | null, rejection): string | null` returning the brief plus, when a rejection exists, the sentence `PLAN REJECTED by the operator: <reason verbatim>. Submit a DIFFERENT decomposition that addresses it.`; agent-wrapper-main.ts's `compilerInstructions` calls it (growth <= 6 lines on the over-cap file; a source-text pin in agent-wrapper-main.test.ts like the fence pin at :135-166). The marker fence: child 1 stores the reason verbatim - the composer must neutralise a reason containing the marker text (`<<<OPERATOR INSTRUCTIONS` / `OPERATOR INSTRUCTIONS>>>`) so a hostile reason cannot close the operator block early (replace the marker sequences, assert it).\n- FEATURE (b), the journey, in the NODE e2e lane (`pnpm test:e2e` = vitest over tests/**/*.test.ts; tests/e2e/foundation holds the J-series harnesses: j4-replan-harness.ts + j4-replan-handoff.e2e.test.ts (replan through a successor goal, real daemon + real wrapper + fake-agent.mjs seat double), j1-loop-harness.ts, e2e-harness.ts, e2e-process.ts, fake-agent.mjs) - measure how J4 scripts the seat double's MCP calls and drives the wrapper, then add `tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts` (+ a j5 harness only if J4's cannot be parameterised - prefer reuse): a source-bound goal compiles (the double submits a one-node decomposition), the operator REJECTs with a reason over the real HTTP wire (approval.decide_intent, decision REJECT), the wrapper re-staffs the compiler step, the double's mission carries `PLAN REJECTED by the operator: <reason>` (the double echoes its mission to a file the test reads), the double submits a DIFFERENT decomposition (new node key), the successor is offered for approval, the operator APPROVEs, the activation event is read back from the store. Every process real except the seat.",
+  "definitionOfDone": [
+    "rejection-instructions.test.ts over a REAL store using child 1's reject fixture: never rejected -> null and the brief passes through unchanged; rejected once -> the composed text ends with `PLAN REJECTED by the operator: <reason>. Submit a DIFFERENT decomposition that addresses it.` and names the rejected run; rejected twice -> the LATEST reason; a reason containing the marker sequences is neutralised (the composed text contains no `<<<OPERATOR INSTRUCTIONS` inside the sentence); a corrupt run chain -> null, never a throw.",
+    "agent-wrapper-main.ts wires the composer into `compilerInstructions` (source-text pin: the call text present exactly once, positive control that stripping it reds the pin); the compiler mission for a rejected goal, built through `compilerMission` with that instructions string, contains the sentence between the operator markers (agent-mission-text.test.ts arm or the main pin plus a compilerMission arm - name which).",
+    "Real-process journey in the node e2e lane: compile -> REJECT with reason (real HTTP approval.decide_intent) -> re-staffed seat double reads the reason in its mission (asserted from the double's echoed mission) -> submits a different decomposition -> the successor is offered for approval -> APPROVE activates it (activation event read back from the store); `pnpm test:e2e` count line quoted with this test listed; teardown proves no surviving process.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e`; rejection-instructions.ts <= 120 lines; agent-wrapper-main.ts growth <= 6 (pre-existing size recorded); sources ASCII-only; every arm mutated red once."
+  ],
+  "taskRails": [
+    "VERBATIM REASON, FENCED MARKERS: the reason reaches the seat verbatim except the two marker sequences, which are neutralised - never dropped silently, never rewritten into the brief.",
+    "NO offer/dispatcher/read/UI change (2a, child 3); the only production edits are the new planning module and the six-line wiring in agent-wrapper-main.ts.",
+    "REAL PROCESSES in the journey (daemon, wrapper, store); only the seat is doubled, and it must go through the real MCP wire with a scoped bearer, never a store write."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-957bccf162b446f3a4db46b56e8e8f3a",
+  "dependsOn": [
+    "task-138fab3075884df98c3c220e74c1a3e9",
+    "task-4109c1a0e1154ca89576183dae7a5336",
+    "task-7945f38da29249a291004f78b4024262"
+  ],
+  "priority": "HIGH",
+  "order": 1002.22,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T14:45:43.617Z",
+  "updatedAt": "2026-09-04T14:45:43.617Z"
+}

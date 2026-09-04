@@ -139,18 +139,30 @@ function indexed(
   return new Map(receipts.members.map((receipt) => [receipt.member, receipt]));
 }
 
+/** The two members core validates as a 64-hex digest rather than as a ref. */
+const NEEDS_HASH: ReadonlySet<string> = new Set(["distribution", "policy"]);
+/** Provider alone carries a load-bearing `detail`: the credential presence ref. */
+const NEEDS_DETAIL: ReadonlySet<string> = new Set(["provider"]);
+
 /**
  * A member is usable only when it is measured AND carries every field the witness
- * reads from it. A measured member that lost its digest is reported as that
- * member's own refusal rather than padded into a value core would then accept.
+ * reads from it, each NON-EMPTY. A measured member that lost a field is reported as
+ * that member's own refusal rather than padded into a value core would then accept:
+ * core's `validProjectRef` would refuse an empty ref anyway, but the refusal has to
+ * name THIS layer and THIS member, and receipts reaching `activationWitnessOf` from
+ * a parsed HTTP body are not necessarily the ones this daemon measured.
  */
 function usable(
-  found: ActivationReceipt | undefined, member: ActivationReceiptMember, needsHash: boolean,
+  found: ActivationReceipt | undefined, member: ActivationReceiptMember,
 ): MeasuredReceipt | UnmeasuredReceipt {
   if (found === undefined) return unmeasuredReceipt(member, `no ${member} receipt`);
   if (!found.measured) return found;
-  if (needsHash && (found.hash === undefined || found.hash === "")) {
+  if (found.ref === "") return unmeasuredReceipt(member, `${member} receipt carries no ref`);
+  if (NEEDS_HASH.has(member) && (found.hash === undefined || found.hash === "")) {
     return unmeasuredReceipt(member, `${member} receipt carries no digest`);
+  }
+  if (NEEDS_DETAIL.has(member) && found.detail === "") {
+    return unmeasuredReceipt(member, `${member} receipt carries no credential ref`);
   }
   return found;
 }
@@ -161,8 +173,7 @@ function usable(
  */
 export function activationWitnessOf(receipts: ActivationReceipts): WitnessAssembly {
   const found = indexed(receipts);
-  const resolved = ACTIVATION_RECEIPT_MEMBERS.map((member) =>
-    usable(found.get(member), member, member === "distribution" || member === "policy"));
+  const resolved = ACTIVATION_RECEIPT_MEMBERS.map((member) => usable(found.get(member), member));
   const refusals = resolved.filter((receipt): receipt is UnmeasuredReceipt => !receipt.measured);
   if (refusals.length > 0) return Object.freeze({ ok: false as const, refusals: Object.freeze(refusals) });
   const measured = new Map(resolved.map((receipt) => [receipt.member, receipt as MeasuredReceipt]));

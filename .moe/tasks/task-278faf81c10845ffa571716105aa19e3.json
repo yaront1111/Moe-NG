@@ -1,0 +1,126 @@
+{
+  "id": "task-278faf81c10845ffa571716105aa19e3",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The pause is readable: /health/read carries agents.paused, the control-room decoder and fixtures follow, the Health screen says it",
+  "description": "SPIDR child 3a of task-ac71a55ead3d468eab7329131f04ab7e (parent: \"the browser says agents are paused\"; grandparent task-2723a9b400984ab7b1b10f97c3523c81). dependsOn child 1 task-756d81f117fb4ef6aeca2c676f433c91 (readProviderPause / recordProviderPause on apps/daemon/src/orchestrator/provider-pause-ledger.ts). Filed by architect-16a01670 2026-09-04, measured at main 9e9b7b04.\n\nWHAT THIS ROW OWNS: the daemon read, the control-room decoder + every HEALTH fixture, and the Health screen line. NO shell banner, Seats panel, board next-step, e2e or runbook (children 3b-3d).\n\nMEASURED (re-measure before planning):\n- apps/daemon/src/http/health-read.ts (150 lines): `HealthView` :29-49 = {daemon, ledger, outcome:\"HEALTH\", readAt, verifier}; `HealthReadOptions` :59-69 already carries `clock?: () => string`, `projectId`, `store`; `readHealth` :91-119 builds the frozen view; composition apps/daemon/src/daemon-store-foundation-composition.ts:340-347 builds the port (no clock passed; `config.clock` exists at :339).\n- apps/daemon/src/http/health-read.test.ts (77 lines) over a REAL store (`openStore`/`driveThrough` from ../bootstrap/bootstrap-test-fixtures.js): pins `view.daemon` and `view.ledger` with toEqual (:32, :52) - not the whole view - so the new key needs its own arms.\n- Control room, THE ONLY exact-key decoder: apps/control-room/src/live/live-ops.ts:215 `exactDataRecord(response, [\"daemon\",\"ledger\",\"outcome\",\"readAt\",\"verifier\"])`; `HealthOutcome` type :56-78; `mapHealthAnswer` :211-240 (278-line file, pre-existing over the 250 target - record it). Every file that builds a HEALTH frame (grep -rn 'status: \"HEALTH\"\\|outcome: \"HEALTH\"' apps/control-room/src tests --include=*.ts --include=*.tsx): live-ops.test.ts:20-24 (HEALTH fixture) + :33 (toStrictEqual mapping) + :46-47 (drift arms), ops-screens.test.tsx:31-35 (HEALTH: HealthOutcome), ops-screens.tsx:180-206 (HealthScreen, cr.health.*). Nothing else.\n\nFEATURE: `HealthView.agents = { paused: null | { lastLine: string; provider: string; resetAt: string; since: string; workItemId: string } }`. The daemon reads child 1's `readProviderPause(store, projectId, provider, now)` for each provider of a frozen `KNOWN_PROVIDERS = [\"claude\", \"codex\"]` at the port's `clock()` and reports the first live pause (claude first) or null; `lastLine`/`workItemId` come from the pause record's `cause`. `mapHealthAnswer` decodes `agents` with exact keys (a missing `agents`, an unknown key inside `paused`, or a non-string field is OPS_RESPONSE_INVALID; `paused: null` is accepted) and `HealthOutcome` carries it. `HealthScreen` renders a Fact \"Agents\" with data-testid `cr.health.agents`: \"paused: <provider> limit, resumes <resetAt in the viewer's locale>\" while paused, \"not paused\" otherwise.",
+  "definitionOfDone": [
+    "`/health/read` carries `agents: { paused }` with exact keys: health-read.test.ts arms over a REAL store using child 1's recordProviderPause - null with no record; the exact pause object (lastLine, provider, resetAt, since, workItemId) when a claude pause is live at the injected clock; null again at a clock at/after resetAt; a codex pause found when claude has none - written red first, count lines quoted.",
+    "live-ops.ts:215 roster, HealthOutcome and mapHealthAnswer carry `agents`; live-ops.test.ts HEALTH fixture + toStrictEqual mapping updated and three drift arms added (agents missing -> OPS_RESPONSE_INVALID; paused with an extra key -> invalid; paused null -> accepted); ops-screens.test.tsx HEALTH fixture updated; HealthScreen renders cr.health.agents 'paused: claude limit, resumes <time>' when paused and 'not paused' otherwise (two ops-screens.test.tsx arms, the time formatted from the fixture's resetAt in the test's own locale).",
+    "The composition passes `clock` and the store to the health port; any test pinning the composition's port roster (grep daemon-store-dependencies.test.ts / daemon-store-foundation-composition.test.ts for `health`) stays green and is named in the step note.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`; health-read.ts and ops-screens.tsx stay <= 250 (`wc -l` quoted), live-ops.ts growth <= 20 lines over its pre-existing 278; sources ASCII-only, JSX text apostrophe-free; every arm mutated red once (global rail 1)."
+  ],
+  "taskRails": [
+    "SHAPE CHANGE NAMED: the HealthView key roster changes exactly once (`agents`); every exact-key decoder, pin and fixture listed in the description is in the plan's affectedFiles before the edit.",
+    "READ ONLY: no wrapper, shell, Seats, board, e2e or docs change - those are children 3b-3d; a wrapper gap belongs to task-4109c1a0.",
+    "REAL FRAMES ONLY for fixtures; refusal codes asserted exactly; <=250 lines per production source; ASCII-only sources."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY CHILD 1 LANDED, THEN RE-MEASURE (no edits). (a) `git log main --grep \"Moe-Task: task-756d81f117fb4ef6aeca2c676f433c91\" --oneline` (or get_context.epicSiblings landing.merged) and `grep -n \"^export\" apps/daemon/src/orchestrator/provider-pause-ledger.ts`; RECORD in the step note the landed signature of `readProviderPause(store, projectId, provider, now)` - the exact `now` form (ISO string or ms) and the returned record's field names (the ones carrying provider, resetAt, since and the cause {workItemId, lastLine}) - and of `recordProviderPause(store, input)` (input keys) which the test arms use. Read child 1's completionSummary. Any symbol absent -> moe.report_blocked with blockedOnTaskIds [task-756d81f117fb4ef6aeca2c676f433c91]; never reimplement the read. (b) Re-measure this row's anchors (measured 2026-09-04 at main 9e9b7b04): `wc -l` health-read.ts=150, health-read.test.ts=77, daemon-store-foundation-composition.ts=469, live-ops.ts=278, live-ops.test.ts, ops-screens.tsx=209, ops-screens.test.tsx; `grep -n '\"daemon\", \"ledger\", \"outcome\", \"readAt\", \"verifier\"' apps/control-room/src/live/live-ops.ts` (=215, the ONLY exact-key decoder); `grep -rn 'status: \"HEALTH\"\\|outcome: \"HEALTH\"' apps/control-room/src tests --include=*.ts --include=*.tsx -l` (= live-ops.test.ts, live-ops.ts, ops-screens.test.tsx, ops-screens.tsx - nothing else builds a HEALTH frame; if a new file appears, STOP and report: it must enter affectedFiles before any edit, task rail 1); `grep -n \"const clock = config.clock\" apps/daemon/src/daemon-store-foundation-composition.ts` (=134) and `grep -n \"createHealthReadPort({\" ` (=340). (c) Baseline for the path-attributed gate: `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test` at the merge-base, count lines + failing files quoted (peer WIP under apps/daemon/src/bootstrap and goals is on the shared checkout - never touch).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "DAEMON READ, test first. apps/daemon/src/http/health-read.test.ts: import child 1's `recordProviderPause` (and its aggregate helper if needed) from ../orchestrator/provider-pause-ledger.js; new describe \"agents.paused\" over `openStore()` + `PROJECT_ID` from ../bootstrap/bootstrap-test-fixtures.js with an injected `clock`: ARM 1 no record -> `view.agents` toEqual({ paused: null }); ARM 2 `recordProviderPause(store, { projectId: PROJECT_ID, provider: \"claude\", resetAt: \"2026-09-02T20:30:00.000Z\", since: \"2026-09-02T20:00:00.000Z\", cause: { workItemId: \"node.deliver@node-1\", lastLine: \"<child 1's claude fixture line, copied verbatim from seat-exit-classifier.test.ts>\" } })` (adapt the key names to the landed signature) then a read at clock \"2026-09-02T20:10:00.000Z\" -> `view.agents.paused` toEqual EXACTLY { lastLine: <that line>, provider: \"claude\", resetAt: \"2026-09-02T20:30:00.000Z\", since: \"2026-09-02T20:00:00.000Z\", workItemId: \"node.deliver@node-1\" } and `Object.keys(view.agents.paused).sort()` equals those five; ARM 3 the same store read at clock \"2026-09-02T20:30:00.000Z\" (= resetAt) -> paused null; ARM 4 a fresh store with only a codex pause live -> paused.provider \"codex\"; ARM 5 both live -> claude wins (KNOWN_PROVIDERS order). Run red. Then apps/daemon/src/http/health-read.ts (150 -> <= 185): `export const KNOWN_PROVIDERS = Object.freeze([\"claude\", \"codex\"] as const);` `export interface ProviderPauseView { readonly lastLine: string; readonly provider: string; readonly resetAt: string; readonly since: string; readonly workItemId: string }`; `HealthView` gains `readonly agents: { readonly paused: ProviderPauseView | null }` (declare it between `daemon` and `ledger` so the interface stays alphabetical like the rest); a private `pausedAgents(store, projectId, now)` iterates KNOWN_PROVIDERS, calls child 1's readProviderPause with `now` in the landed form (convert the port's ISO clock if it wants ms) and maps the first live record to a frozen view (lastLine/workItemId from its cause); `readHealth` adds `agents: Object.freeze({ paused: pausedAgents(store, projectId, now) })` where `now = clock()` is read ONCE and reused for `readAt` (one instant per read). A throw inside stays under the existing try/catch -> HEALTH_READ_UNREADABLE (unchanged refusal path; add one arm: a store closed before the read still answers that code). Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/http/health-read.test.ts` (count line quoted) + `pnpm --filter @moe/daemon typecheck`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/health-read.test.ts",
+        "apps/daemon/src/http/health-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "COMPOSITION (apps/daemon/src/daemon-store-foundation-composition.ts:340-347, 469 lines - one-line edit, record the size): pass `clock,` (the composition's own `const clock = config.clock ?? ...` from :134 - the SAME clock every authority decision uses, so the pause read and the daemon's decisions agree on now) into `createHealthReadPort({...})`. The provider-key roster pinned at apps/daemon/src/daemon-store-dependencies.test.ts:711-720 (`\"graph\", \"health\", ...`) is unchanged - name it in the step note and run it: from apps/daemon `pnpm exec vitest run --root . --config package.json src/daemon-store-dependencies.test.ts` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "CONTROL-ROOM DECODER, test first. apps/control-room/src/live/live-ops.test.ts: the HEALTH fixture (:20-24) gains `agents: { paused: null }`; the toStrictEqual mapping (:33) gains `agents: HEALTH.agents`; new arms: (1) a frame whose `agents.paused` is the exact five-key object maps verbatim (toStrictEqual with the same object); (2) `{ ...HEALTH, agents: undefined }` / a frame without `agents` -> the `invalid` outcome (OPS_RESPONSE_INVALID at CONTROL_ROOM_LIVE_OPS, the existing `invalid` constant); (3) paused with an extra key `{ ...paused, extra: 1 }` -> invalid; (4) paused with `resetAt: 5` -> invalid; (5) `agents: { paused: null, extra: 1 }` -> invalid. Run red. Then apps/control-room/src/live/live-ops.ts (278, pre-existing over the 250 target; growth <= 20 lines): `export interface ProviderPauseView { readonly lastLine: string; readonly provider: string; readonly resetAt: string; readonly since: string; readonly workItemId: string }` (the name children 3b/3c import); `HealthOutcome`'s HEALTH arm gains `readonly agents: { readonly paused: ProviderPauseView | null }`; the roster at :215 becomes `[\"agents\", \"daemon\", \"ledger\", \"outcome\", \"readAt\", \"verifier\"]`; decode with `exactDataRecord(record.agents, [\"paused\"])`, then `paused === null ? null : exactDataRecord(agents.paused, [\"lastLine\", \"provider\", \"resetAt\", \"since\", \"workItemId\"])` requiring `typeof lastLine === \"string\"` (may be empty) and nonEmptyString for the other four; any miss -> `invalidResponse()`; the returned outcome carries `agents: Object.freeze({ paused })`. Gate from apps/control-room: `pnpm exec vitest run src/live/live-ops.test.ts` (count line quoted) + `pnpm --filter @moe/control-room typecheck` (ops-screens.test.tsx's HEALTH fixture now fails to typecheck until step 5 - expected, fixed next).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-ops.test.ts",
+        "apps/control-room/src/live/live-ops.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "HEALTH SCREEN, test first. apps/control-room/src/v2/ops/ops-screens.test.tsx: the HEALTH fixture (:31-35) gains `agents: { paused: null }`; two arms in describe(\"HealthScreen\"): (1) `render(<HealthScreen nowMs={NOW} outcome={HEALTH} />)` -> `screen.getByTestId(\"cr.health.agents\").textContent` toBe(\"not paused\"); (2) with `agents: { paused: { lastLine: \"<child 1 fixture line>\", provider: \"claude\", resetAt: \"2026-09-02T20:30:00.000Z\", since: \"2026-09-02T20:00:00.000Z\", workItemId: \"node.deliver@node-1\" } }` -> textContent toBe(`paused: claude limit, resumes ${new Date(\"2026-09-02T20:30:00.000Z\").toLocaleString()}`) - the test computes the expectation with the SAME call the screen uses, so the locale of the box never matters. Run red. Then apps/control-room/src/v2/ops/ops-screens.tsx (209 -> <= 225): a private `agentsWords(paused: ProviderPauseView | null): string` returning \"not paused\" or `paused: ${provider} limit, resumes ${new Date(resetAt).toLocaleString()}`; `HealthScreen` renders `<Fact label=\"Agents\" testId=\"cr.health.agents\" value={agentsWords(outcome.agents.paused)} />` after the \"Goals bound to a PRD\" fact. JSX text apostrophe-free, ASCII-only. Gate from apps/control-room: `pnpm exec vitest run src/v2/ops/ops-screens.test.tsx` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+        "apps/control-room/src/v2/ops/ops-screens.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` (quote both `Test Files N passed` / `Tests N passed` lines), `pnpm typecheck` (quote the `$ tsc` echo). PATH-ATTRIBUTED BASELINE: failing files at HEAD minus the step 1c baseline, intersected with this row's seven owned paths, must be EMPTY; disclose any foreign red verbatim, never fix or stage it. `wc -l` quoted: health-read.ts <= 250, ops-screens.tsx <= 250, live-ops.ts <= 298 (pre-existing 278 + 20). ASCII check: `grep -nP \"[^\\x00-\\x7F]\" ` over the seven files = 0 hits (the existing MIDDOT glyph comes from ../glyphs.js, never a literal). DRILL (global rail 1; all seven paths are TRACKED -> restore proof is `git diff --exit-code -- <path>` after `git checkout -- <path>`... NO: never checkout a path that holds your own unstaged work - restore each mutation by reverting the exact edit and prove with `git diff -- <path>` showing ONLY your intended diff hunks, compared against a `git diff` capture taken BEFORE the drill (diff the two diffs)): (1) KNOWN_PROVIDERS reversed -> step 2 arm 5 red; (2) `pausedAgents` returns the record even when `resetAt <= now` (i.e. bypass readProviderPause's window by reading the raw record) - if that mutation is not expressible, mutate the clock plumbing so `now` is the composed startedAt instead of `clock()` -> arm 3 red; (3) the decoder roster without \"agents\" -> the toStrictEqual mapping arm red; (4) the paused extra-key roster widened (drop the key check by passing `Object.keys(value)`) -> drift arm 3 red; (5) `agentsWords` returns \"not paused\" unconditionally -> screen arm 2 red. Record the five red lines + the before/after diff comparison in the step note (< 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/health-read.ts",
+        "apps/control-room/src/live/live-ops.ts",
+        "apps/control-room/src/v2/ops/ops-screens.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a pause record whose cause lacks lastLine (an older child-1 record shape) - map to \"\" rather than refusing the whole health read (add an arm); readProviderPause throwing on a corrupt aggregate -> the read answers HEALTH_READ_UNREADABLE (existing catch; arm added in step 2); a resetAt in the far future renders a date + time (toLocaleString, not toLocaleTimeString) - confirmed by the screen arm; two providers paused -> claude reported, codex hidden until claude clears (accepted, documented in the completionSummary; 3b/3c render one banner). Fix what you find, re-run the three focused test files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line (the control-room count line goes in the completionSummary); completionSummary names `HealthView.agents`, `ProviderPauseView` (exported from BOTH apps/daemon/src/http/health-read.ts and apps/control-room/src/live/live-ops.ts - the control room cannot import the daemon's), `KNOWN_PROVIDERS`, the decoder roster, the `cr.health.agents` sentences, and every file size. Then `moe.add_comment` on child 3b (task-66dc48690fd94b07905a2aa6ffb9568d) naming the exported `ProviderPauseView` path and the HealthOutcome field it reads (`outcome.agents.paused`). Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-ops.ts",
+        "apps/daemon/src/http/health-read.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-ac71a55ead3d468eab7329131f04ab7e",
+  "dependsOn": [
+    "task-756d81f117fb4ef6aeca2c676f433c91"
+  ],
+  "priority": "MEDIUM",
+  "order": 1004.21,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T14:17:27.768Z",
+  "updatedAt": "2026-09-04T14:22:10.307Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:19:57.747Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7
+  },
+  "contextFetchedBy": [
+    "architect-16a01670"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:22:08.147Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Report every provider's pause as an array - rejected: the browser renders one banner and the wrapper serves one provider per process; `paused: null | object` is the smallest honest shape, KNOWN_PROVIDERS order decides ties. (2) Share one ProviderPauseView type across daemon and control room - impossible: @moe/control-room does not depend on @moe/daemon (package.json deps = contracts, control-room-client, control-room-model, core) and the repo has no tsconfig paths; both sides declare the five-key interface and the decoder pins it by exact keys. (3) A composition test for the clock pass-through - skipped: the composition's port-key roster (daemon-store-dependencies.test.ts:711-720) is unchanged and the pass-through is one identifier; the DoD names that roster test as the guard.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04. health-read.ts:29-49 HealthView; :59-69 HealthReadOptions already has clock/store/projectId; :91-119 readHealth under one try/catch -> HEALTH_READ_UNREADABLE. health-read.test.ts pins view.daemon/view.ledger (not the whole view); uses openStore/driveThrough/PROJECT_ID from bootstrap-test-fixtures. Composition: daemon-store-foundation-composition.ts:134 `const clock = config.clock ?? (...)`, :340-347 createHealthReadPort({nodeSpecsDir, projectId, readPlane, startedAt, store, storePath}) - no clock passed today. Control room: live-ops.ts:87 exactDataRecord (own-enumerable exact keys, null-prototype snapshot), :137-140 nonEmptyString/nullableString/count helpers, :211-240 mapHealthAnswer, :273 readHealth; the HEALTH frames are built ONLY in live-ops.test.ts:20-24 (+:33 mapping, :46-47 drift arms) and ops-screens.test.tsx:31-35; HealthScreen ops-screens.tsx:180-206 renders Facts (Fact :55, ago :21, upFor :33); ops-screens.test.tsx:98-107 pins the existing facts by testid. Control-room tests run with `pnpm --filter @moe/control-room test` (vitest run) - a single file from apps/control-room: `pnpm exec vitest run <path>`. Child 1 (task-756d81f1) is WORKING at plan time: step 1 records its landed signatures.",
+    "risks": "(1) readProviderPause's `now` form (ISO vs ms) is child 1's to land - convert at the port, never guess. (2) The decoder is EXACT-key: adding `agents` without updating both fixture files reds the toStrictEqual mapping and the HealthOutcome type (ops-screens.test.tsx) - steps 4-5 do both. (3) live-ops.ts is already 278 lines: keep the decode to ~15 lines. (4) toLocaleString in a jsdom test uses the box's locale - the arm computes its expectation with the same call. (5) Drill restore on TRACKED files that also hold this row's own edits: compare before/after `git diff` captures, never `git checkout --` the path. (6) Never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or the peer WIP under apps/daemon/src/bootstrap and goals.",
+    "keyFiles": [
+      "apps/daemon/src/http/health-read.ts",
+      "apps/daemon/src/http/health-read.test.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/control-room/src/live/live-ops.ts",
+      "apps/control-room/src/live/live-ops.test.ts",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+      "apps/daemon/src/orchestrator/provider-pause-ledger.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:22:10.307Z"
+}

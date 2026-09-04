@@ -32,6 +32,12 @@ export {
 export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+// The goal's CURRENT run: a rejected run names its successor on its rejection event, so every
+// reader that starts from the goal's immutable `planningRunRef` resolves through this.
+export {
+  CURRENT_RUN_HOP_LIMIT, currentPlanningRun, foldCurrentRun, type CurrentPlanningRun,
+  type PlanningRunEventReader, type RejectedRunHop,
+} from "./planning/current-planning-run.js";
 // v2 compiler composition is public only through its server-bound factory; the
 // factory captures every authority reader and never accepts caller-owned readers.
 export {

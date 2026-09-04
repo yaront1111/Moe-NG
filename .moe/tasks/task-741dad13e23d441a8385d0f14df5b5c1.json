@@ -119,16 +119,22 @@
     {
       "stepId": "step-6",
       "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill and read the diff as an attacker: (1) two activations racing in the same millisecond - the destination-exists refusal must fire, and the fixed clock test must show the name is millisecond-precise; (2) a store of several GiB - the digest is streamed, the backup is the node:sqlite online API, nothing buffers the file; (3) storePath \"\" or artifactRoot \"\" - each yields its member's UNMEASURED, never a path join on an empty root; (4) git missing on PATH (ENOENT from execFile) - repository and distribution report UNMEASURED with the ENOENT detail, no throw; (5) a credential value in env - grep the whole receipts JSON in the canary test, and re-check the provider `detail` string builder never interpolates a value; (6) the sqlite handle is closed on every backup exit path (finally), and no `.sqlite-wal`/`-shm` files are left beside the destination; (7) frozen outputs everywhere. Fix what you find, re-run step 5's daemon leg, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line, and a completionSummary that lists: the six exported value symbols, the ActivationReceiptPorts contract (every port name with its type) for child B, the three consumer pins you bumped (EXPECTED_EXPORTS count, EXPECTED_PRIVATE_COUNT, allowlist entry), and the DoD-1 reading recorded by the architect (layer constant module-private + allowlist; type-exported as ActivationReceiptsLayer). Also `moe.add_comment` on child B task-4b9c394debe94b41a80e2b46c6d55ab8 with the same port contract so its architect plans against landed symbols. Report every touched path in complete_step.modifiedFiles; do not touch scripts/up.ps1, scripts/watch.ps1 or .moe/messages/* (peer dirt).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/activation-receipts.ts",
         "apps/daemon/src/bootstrap/activation-receipts-measure.ts"
       ],
-      "startedAt": "2026-09-04T10:34:08.957Z"
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.test.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW. Seven named items walked; six already held, one produced a real production fix.\n\n1. SAME-MILLISECOND RACE: holds. measureBackup mkdirs, then refuses on fs.exists(destination) with ACTIVATION_BACKUP_FAILED detail \"backup destination already exists\" before calling the copy port; the comment states plainly it is check-then-act, NOT mutual exclusion, and that serialising concurrent activations is the caller's gate. Arms: \"never overwrites a backup another activation already wrote in the same millisecond\" and \"stamps the backup with the same clock reading it reports as measuredAt\". backupStamp keeps millisecond precision (17 digits, 20260904091500123), and measureActivationReceipts takes ONE clock reading so measuredAt and the file name cannot drift while a multi-GiB copy runs.\n2. MULTI-GiB STORE: holds. node:sqlite online backup() (not a file copy - the daemon holds the store open in WAL mode), then streamSha256 over createReadStream. No readFileSync of the store anywhere in production; the source handle closes in finally.\n3. EMPTY ROOTS: holds. Arms \"refuses each member on an empty root instead of joining onto nothing\" and \"refuses an empty agent command instead of minting a leafless credential ref\". Every member guards its own input before any join.\n4. GIT MISSING ON PATH: holds. runGit catches the thrown execFile and returns {code:null, stderr:String(error)}, so repository and distribution refuse with the ENOENT text and the promise resolves. Arm: \"turns a thrown git runner into a repository refusal instead of a rejection\".\n5. CREDENTIAL VALUE: holds, and re-checked the builder by reading providerCredentials (moe-up-credentials.ts:211) rather than trusting the name. It returns EITHER [secretEntry(envName)] (optionally + a MINTED alias) OR exactly [{name: provider.login.variable, secret:false}], so `first.secret === false` is equivalent to \"sign-in file found\" and the login-file branch cannot mislabel a value-bearing variable. Only first.name is ever interpolated. Three arms plus the JSON canary.\n6. SQLITE HANDLE / WAL SIBLINGS: holds. close() in finally on both readApplicationId and copyStore; a partial copy is discarded so it cannot survive looking like a backup. Already asserted, not merely commented: the real-backup arm does expect(readdirSync(dirname(destination))).toEqual([basename(destination)]) - no -wal/-shm sibling.\n7. FROZEN: holds. Arm \"freezes what it returns and keeps every digest at 64 hex\".\n\nFIX MADE (item 5/embarrassment test). activationWitnessOf is an EXPORTED surface and children B/C will call it with receipts that round-trip through an HTTP body, so the receipts it assembles are not necessarily the ones this daemon measured. usable() guarded a lost HASH but not an empty REF, and not the provider's `detail` - which IS the credentialRef. An emptied ref would have travelled to core and been refused there by validProjectRef, i.e. fail-closed but with CORE's generic refusal instead of this layer's per-member code. usable() now refuses an empty ref for any member and an empty detail for provider, and NEEDS_HASH/NEEDS_DETAIL replace the inline `member === \"distribution\" || member === \"policy\"` at the call site so the knowledge lives in one place. +11 lines; file 206 -> 217, under the 250 target.\n\nTwo new arms in activation-receipts.test.ts: \"refuses an emptied ref or credential detail at THIS layer, never padding core\" (asserts code AND layer for both) and \"refuses a member missing from the receipt list entirely\" (the found === undefined path had no arm).\n\nDRILL - 3 mutations, all RED, all restores proven by SHA256 in a SEPARATE call (backup at /tmp/moe-drill-worker-d018e522, baseline f6d29086770e8d8c1cbab8fd82c60dabbf83dc9475e1b0c3a7ca1e0d2d81c596):\n- delete the empty-ref guard -> FAIL \"refuses an emptied ref or credential detail at THIS layer, never padding core\", AssertionError: expected true to be false. Restored, sha256 equal.\n- NEEDS_DETAIL condition -> false -> same arm FAIL, same assertion. Restored, sha256 equal.\n- found === undefined returns a fabricated measuredReceipt(hash 64 zeros) -> FAIL \"refuses a member missing from the receipt list entirely\". Restored, sha256 equal.\n\nGATES (fresh, repo root):\n- pnpm --filter @moe/daemon test -> exit 0, \"Test Files 402 passed (402)\", \"Tests 7997 passed (7997)\".\n- pnpm typecheck -> exit 0, every package prints its `$ tsc --project tsconfig.json` echo, apps/daemon typecheck: Done.\n- pnpm test:security -> exit 1, \"Test Files 1 failed | 11 passed (12)\", \"Tests 9 failed | 950 passed (959)\". FOREIGN, measured not assumed - see below.\n- wc -l: activation-receipts.ts 217, activation-receipts-measure.ts 249, activation-receipts-ports.ts 195. All <= 250.\n\nFOREIGN SECURITY RED, PATH-ATTRIBUTED (disclosed verbatim, never hidden). All 9 are in tests/security/scheduler-activation-boundaries.security.ts, every one a GOAL_PREREQUISITE_LAYER arm: \"GOAL_PREREQUISITE_LAYER BEFORE: a close against an approved node with no durable verificati",
+      "startedAt": "2026-09-04T10:34:08.957Z",
+      "completedAt": "2026-09-04T14:52:37.260Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f2c0503a",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -140,12 +146,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:35:27.718Z",
-  "updatedAt": "2026-09-04T10:57:28.307Z",
+  "updatedAt": "2026-09-04T14:53:04.292Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:45:15.979Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -155,7 +161,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T09:54:41.100Z",
@@ -178,7 +185,8 @@
   },
   "planApprovedAt": "2026-09-04T09:54:43.207Z",
   "contextFetchedBy": [
-    "worker-f2c0503a"
+    "worker-f2c0503a",
+    "worker-d018e522"
   ],
   "workStartedAt": "2026-09-04T09:56:02.373Z",
   "commits": [
@@ -284,23 +292,36 @@
       "treeId": "402bb190df03a55e3aede871e25b949324e65b12",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9e9b7b043b3a38e393a9cda3c8294ba2cb2cf842",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-f2c0503a@2026-09-04T10:57:59Z",
+      "paths": [
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json"
+      ],
+      "recordedBy": "worker-f2c0503a",
+      "recordedAt": "2026-09-04T10:58:07.313Z",
+      "treeId": "c066c225b697f3d6e223b899de26e9aade0e2057",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
-    ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
     "apps/daemon/src/bootstrap/activation-receipts.js",
     "apps/daemon/src/bootstrap/activation-receipts.test.ts",
-    "apps/daemon/src/bootstrap/activation-receipts.ts",
-    "apps/daemon/src/bootstrap/activation-receipts-measure.js",
-    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
     "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
-    "apps/daemon/src/bootstrap/activation-receipts-ports.js",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.js",
     "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.js",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts",
-    "tests/security/boundary-roster.security.ts",
-    "tests/security/layer-visibility-cases.ts"
+    "tests/security/layer-visibility-cases.ts",
+    "tests/security/boundary-roster.security.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/bootstrap/activation-receipts-measure.js",
@@ -322,7 +343,26 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-f2c0503a@2026-09-04T10:57:21Z",
-    "at": "2026-09-04T10:57:28.306Z"
-  }
+    "sessionId": "worker-f2c0503a@2026-09-04T10:57:59Z",
+    "at": "2026-09-04T10:58:07.313Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Activation receipts module landed across earlier sessions: apps/daemon/src/bootstrap/activation-receipts.ts + .js bridge, activation-receipts-measure.ts + bridge, activation-receipts-ports.ts, and index.ts roster exports. Steps 1-5 reported complete; last good completion commit 844f3a03917a (14 paths). Subsequent commits 1e5106a4, 1a229953, 02101a59, f0843aed, 94d658a4, 9e9b7b04 are 1-path crash-loop checkpoints, not new work.",
+      "whatRemains": "Verification gate + drill. The gate CANNOT pass until the foreign typecheck red is fixed - see pitfalls. Re-run pnpm --filter @moe/daemon test and pnpm typecheck, quote the count lines and the $ tsc echo.",
+      "pitfalls": "DO NOT fix apps/daemon/src/goals/goal-live-evidence.test.ts yourself - it is task-ae6fd9ac's owned file, currently held by worker-71a60ba7. Its TS2339 at line 325 ('refusal' missing on HttpRefused) reds the repo-wide daemon typecheck and is what killed five sessions here. Report it as a disclosed foreign red with the merge-base vs HEAD baseline rather than hiding it or hand-patching it. Also: apps/daemon/src/goals/j1-command-path.test.ts is dirty in the shared worktree and is NOT this row's work - it is declared on task-ae6fd9ac; leave it alone.",
+      "openQuestions": "None on this row's own scope. The blocker is entirely in a sibling row's file.",
+      "releasedAt": "2026-09-04T14:01:51.317Z",
+      "releasedBy": "governor-62e22dd8",
+      "reason": "Confirmed crash, human-approved release. worker-f2c0503a: 5 consecutive cli-exit=1 (commits 9e9b7b04, 94d658a4, f0843aed, 02101a59), wrapper paused auto-resume, seat self-escalated to @governors requesting release, then silent 2h42m (isAlive false, 9730s). Not idle time. ROOT CAUSE FOUND: pnpm typecheck fails on a FOREIGN red - apps/daemon/src/goals/goal-live-evidence.test.ts(325,18) TS2339 'refusal' does not exist on type HttpPortRefused | HttpRefused. That file belongs to task-ae6fd9ac, not this row, but the daemon typecheck is repo-wide so it reds this row's verification gate every session. Bytes are safe: every crash checkpointed and pushed."
+    }
+  ],
+  "reviewStartedAt": "2026-09-04T14:53:04.292Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n\n Test Files  402 passed (402)\n      Tests  7997 passed (7997)\n   Start at  17:45:43\n   Duration  363.17s (transform 27.40s, setup 0ms, import 257.41s, tests 1103.12s, environment 21ms)",
+    "reportedAt": "2026-09-04T14:53:04.292Z"
+  },
+  "completionSummary": "A PURE daemon module measuring the six activation receipts of a real project through injected ports, refusing per member with a stable code + layer. No handler, route, UI or docs (row rail 1).\n\nTHREE PRODUCTION MODULES, each with its .js bridge, all under apps/daemon/src/bootstrap/ (NOT src/activation/, which is the scheduler's run-activation domain): activation-receipts.ts (217 lines, contracts + witness assembly), activation-receipts-measure.ts (249, the measurement), activation-receipts-ports.ts (195, the ONLY file touching a node API). The measure module was split in two under row rail 2 - written as one file it was 385 lines, past the 250 target.\n\nSIX EXPORTED VALUE SYMBOLS (all from the @moe/daemon root barrel): ACTIVATION_RECEIPT_MEMBERS, ACTIVATION_RECEIPT_CODES, activationWitnessOf, repositoryObservationOf, measureActivationReceipts, nodeActivationReceiptPorts.\n\nActivationReceiptPorts CONTRACT for child B (task-4b9c394d, also posted there as a comment): backup(storePath, destination) => Promise<{ok:true;sha256:string;byteLength:number} | {ok:false;detail:string}>; committedProbeRef() => Promise<string|null>; env: Readonly<Record<string,string|undefined>>; fs: {exists(path):boolean; mkdir(path):void; readBytes(path):Uint8Array|null; stat(path):{size:number}|null}; git: GitRunner (the existing nodeGitRunner - this module never imports node:child_process, pinned by a source-text arm); installedPolicySliceRefs() => Promise<readonly string[]>; now() => Date; sqliteApplicationId(storePath) => number|null. nodeActivationReceiptPorts(overrides) supplies all of them, but committedProbeRef and installedPolicySliceRefs default to ABSENT (null/[]) on purpose - an unwired caller gets an honest refusal, never an invented ref. CHILD B MUST OVERRIDE THOSE TWO (readProbe's envelopeRef; installedSlices(stateOf(ledger, aggregateId))).\n\nFOUR CONSUMER PINS BUMPED (the step named three; the fourth was found by running the lane red first): apps/daemon/src/index-surface.test.ts EX"
 }

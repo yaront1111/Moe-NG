@@ -14,8 +14,78 @@
     "EXACT-KEY READ: the response roster is fixed and asserted; every wiring touchpoint is named in the plan (8-touchpoint pattern) - a missing `.js` bridge kills the daemon at boot.",
     "Refusals assert code AND layer; mutate to prove red (global rail 1). <=250 lines per new production source; the dispatch file is pre-existing debt - touch it minimally and record its size."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY CHILD 1 LANDED, THEN RE-MEASURE (no edits). (a) Child 1 = task-19d2329c25934099b2ff10086987d1c5: `git log main --grep \"Moe-Task: task-19d2329c25934099b2ff10086987d1c5\" --oneline` (or get_context.epicSiblings landing.merged); `grep -n \"export function readProjectRemote\\|export interface ProjectRemote\\|ProjectRemote =\" apps/daemon/src/repository/publish-ledger.ts apps/daemon/src/repository/project-remote-ledger.ts 2>/dev/null` - child 1's plan puts `readProjectRemote(store, projectId): ProjectRemote | null` with `ProjectRemote = { remoteUrl: string; boundAt: string; boundBy: string }` in publish-ledger.ts OR a new repository/project-remote-ledger.ts (+ .js) if it did not fit; RECORD the file and the exact field names in the step note and read child 1's completionSummary + the comment it left on this row. Absent -> moe.report_blocked with blockedOnTaskIds [task-19d2329c25934099b2ff10086987d1c5]; never reimplement the fold. (b) Re-measure the 8-touchpoint template (2026-09-04 at main 9e9b7b04): apps/daemon/src/http/sessions-read.ts (135 lines; SESSIONS_READ_PATH :19, `const LAYER = \"SESSIONS_READ\" as const;` :20 - a bare `LAYER` name, NOT `*_LAYER`, so the layer-visibility census (tests/security/layer-visibility-cases.ts, keyed on the `_LAYER` suffix) never counts it: copy THAT declaration shape verbatim; codes roster :22-24; port :46-49; emptyBody :112-117; handler :119-135); composition apps/daemon/src/daemon-store-foundation-composition.ts:45-46 (import) + :351 (factory) + :464 (return key); apps/daemon/src/daemon-store-dependencies.ts:97-101 (provider key); apps/daemon/src/daemon-entry-port-resolution.ts:54 (provider method type), :103 (resolved type), :134 (the RESOLVED key list), :281-289 (the sessions resolution block - copy it); apps/daemon/src/daemon-entry.ts:284 (spread); apps/daemon/src/http/http-listener.ts:16 (type import) + :146-147 (StartListenerOptions.sessions); apps/daemon/src/http/http-listener-read-dispatch.ts (502 lines, PRE-EXISTING OVER THE 400 CAP - touch minimally, record the size): :32 import, :86 JSON_ROUTES entry, :317-325 serveSessions, :431-434 method refusal, :481-482 dispatch branch; the providerKeys pin apps/daemon/src/daemon-store-dependencies.test.ts:711-720 (exact sorted set). `ls apps/daemon/src/http/sessions-read.js` (bridge exists: `export * from \"./sessions-read.ts\";`). (c) Baseline: `pnpm --filter @moe/daemon test` at the merge-base, count line + failing files quoted (peer WIP under apps/daemon/src/bootstrap and goals on this checkout - never touch).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "ROUTE MODULE, test first. Create apps/daemon/src/http/repository-remote-read.test.ts (copy sessions-read.test.ts's shape: `openStore`/`closeStores`/`PROJECT_ID` from ../bootstrap/bootstrap-test-fixtures.js, `authenticator`/`GOOD_CREDENTIAL` from ./http-test-fixtures.js, WIRE_PROTOCOL_VERSION): describe(\"createRepositoryRemoteReadPort\") over a REAL store - (1) fresh store -> `readRemote()` toEqual({ boundAt: null, boundBy: null, outcome: \"REMOTE\", readAt: NOW, remoteUrl: null }) and `Object.keys(view).sort()` equals exactly [\"boundAt\",\"boundBy\",\"outcome\",\"readAt\",\"remoteUrl\"]; (2) after child 1's binding - write the RepositoryRemoteBound event the way child 1's own test does (dispatch `repository.publish` with a string remoteUrl through the bootstrap fixture's handler harness, or, if that is heavy, append the event to `remote:<PROJECT_ID>` with the store API child 1's ledger test uses - name which) -> the view carries the bound {remoteUrl, boundAt, boundBy} verbatim; (3) an injected `readRemote` that throws -> `{ code: \"REPOSITORY_REMOTE_READ_UNREADABLE\", layer: \"REPOSITORY_REMOTE_READ\", outcome: \"REFUSED\" }`. describe(\"handleRepositoryRemoteReadRequest\") (copy sessions-read.test.ts's handler arms): a PLANNING-capability credential -> body code REPOSITORY_REMOTE_READ_CAPABILITY_DENIED + layer REPOSITORY_REMOTE_READ, httpStatus 200; port absent -> { code: \"LISTENER_REPOSITORY_REMOTE_UNAVAILABLE\", kind: \"LISTENER_REFUSAL\" }; boundProjectId \"elsewhere\" -> REPOSITORY_REMOTE_READ_PROJECT_MISMATCH; body `{\"x\":1}` -> LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID; empty Uint8Array and `{}` both forward to the port. Run red. Then create apps/daemon/src/http/repository-remote-read.ts (<= 110 lines) mirroring sessions-read.ts line for line: `export const REPOSITORY_REMOTE_READ_PATH = \"/repository/remote/read\" as const;` `const LAYER = \"REPOSITORY_REMOTE_READ\" as const;` (the bare-LAYER shape, never `*_LAYER`); `export const REPOSITORY_REMOTE_READ_CODES = Object.freeze([\"REPOSITORY_REMOTE_READ_CAPABILITY_DENIED\", \"REPOSITORY_REMOTE_READ_PROJECT_MISMATCH\", \"REPOSITORY_REMOTE_READ_UNREADABLE\"] as const);` `export interface RepositoryRemoteView { readonly boundAt: string | null; readonly boundBy: string | null; readonly outcome: \"REMOTE\"; readonly readAt: string; readonly remoteUrl: string | null }`; `RepositoryRemoteRefused`, `RepositoryRemoteReadResult`, `export interface RepositoryRemoteReadPort { readonly boundProjectId: string; readRemote(): RepositoryRemoteReadResult }`; `createRepositoryRemoteReadPort({ clock?, projectId, readRemote?: (store, projectId) => ProjectRemote | null, store })` (default readRemote = child 1's readProjectRemote, imported from its landed module); `handleRepositoryRemoteReadRequest(dependencies: { authenticator; repositoryRemote?: RepositoryRemoteReadPort }, request)` gated on CAPABILITIES.GOAL exactly like the sessions handler with listener codes LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID / LISTENER_REPOSITORY_REMOTE_UNAVAILABLE; and the bridge apps/daemon/src/http/repository-remote-read.js = `export * from \"./repository-remote-read.ts\";`. Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/http/repository-remote-read.test.ts` (count line quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/repository-remote-read.test.ts",
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/http/repository-remote-read.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/repository-remote-read.test.ts",
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/http/repository-remote-read.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "COMPOSITION + PROVIDER KEY + PIN (run the pin red first). (1) apps/daemon/src/daemon-store-dependencies.test.ts:711-720 `providerKeys`: insert \"repositoryRemote\" in sorted position (between \"reconciliation\" and \"restore\"? - keep the list's existing sort: it is alphabetical case-sensitive; place it accordingly and quote the diff) - run the file: RED (the shipped default object lacks the key). (2) apps/daemon/src/daemon-store-foundation-composition.ts (469 lines, pre-existing over the 250 target): import `createRepositoryRemoteReadPort` + type `RepositoryRemoteReadPort` from ./http/repository-remote-read.js beside the sessions import (:45-46); factory beside :351: `/** The remote the first publish bound for this project, at this root clock. */ const repositoryRemote = (): RepositoryRemoteReadPort => createRepositoryRemoteReadPort({ clock, projectId: config.projectId, store });` (the composition's own `clock` from :134); add `repositoryRemote,` to the frozen return object (:455-468, alphabetical beside `reconciliation`/`restore`). (3) apps/daemon/src/daemon-store-dependencies.ts:97-101 pattern: `repositoryRemote: () => { const port = fromEnv().repositoryRemote; if (port === undefined) throw new Error(\"unreachable: the repository-remote reader is always wired\"); return port(); },`. Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/daemon-store-dependencies.test.ts` GREEN with the updated pin (count line quoted) + `pnpm --filter @moe/daemon typecheck`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "ENTRY RESOLUTION + LISTENER OPTIONS. (1) apps/daemon/src/daemon-entry-port-resolution.ts (410 lines, pre-existing over the 400 cap - minimal edit, record the size): type import; `repositoryRemote?(): RepositoryRemoteReadPort;` beside :54; `readonly repositoryRemote?: RepositoryRemoteReadPort;` beside :103; \"repositoryRemote\" appended to the RESOLVED key list at :128-136 (beside \"sessions\"); a resolution block copied from the sessions one (:281-289) validating `hasMethods(port, [\"readRemote\"])` + string `boundProjectId`, and the resolved object gains `repositoryRemote` wherever `sessions` is assembled (grep `sessions` in this file for every site - name each). (2) apps/daemon/src/daemon-entry.ts:284 pattern: `...(resolved.repositoryRemote === undefined ? {} : { repositoryRemote: resolved.repositoryRemote }),`. (3) apps/daemon/src/http/http-listener.ts:16 type import + beside :146-147: `/** Absent means the repository remote read refuses as unavailable. */ readonly repositoryRemote?: RepositoryRemoteReadPort;`. If daemon-entry-port-resolution.test.ts pins the RESOLVED key list or the provider method roster (`grep -n \"sessions\" apps/daemon/src/daemon-entry-port-resolution.test.ts`), STOP: that file is not in this plan - report it and the architect amends (do not take the 11th path silently). Gate: `pnpm --filter @moe/daemon typecheck` + from apps/daemon `pnpm exec vitest run --root . --config package.json src/daemon-entry-port-resolution.test.ts src/daemon-entry.test.ts` (whichever exist; count lines quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/http/http-listener.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "LISTENER DISPATCH (apps/daemon/src/http/http-listener-read-dispatch.ts, 502 lines, PRE-EXISTING OVER THE 400 CAP: growth <= the import + 12 lines, record before/after `wc -l`, no reformatting): (1) `import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from \"./repository-remote-read.js\";` beside :32; (2) `REPOSITORY_REMOTE_READ_PATH,` in JSON_ROUTES beside SESSIONS_READ_PATH (:86); (3) `serveRepositoryRemote(response, request, options, body)` copied from serveSessions (:317-325) calling `handleRepositoryRemoteReadRequest({ authenticator: options.deps.authenticator, repositoryRemote: options.repositoryRemote }, ...)`; (4) the method refusal beside :431-434: `if (path === REPOSITORY_REMOTE_READ_PATH && request.method !== \"POST\") { refuseRequest(response, \"LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID\"); return; }`; (5) the dispatch branch beside :481-482. Then, in repository-remote-read.test.ts, add describe(\"through the real listener\") copying the minimal `withListener`/`send` harness from apps/daemon/src/http/http-listener.test.ts:49-90 (that harness is module-private; ~25 lines copied, cite the source lines): (a) POST `{}` with a GOAL credential and a port answering `{ code: \"REPOSITORY_REMOTE_READ_UNREADABLE\", layer: \"TEST\", outcome: \"REFUSED\" }` -> status 200 with that body (proves the dispatch branch); (b) GET -> LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID; (c) POST `{\"x\":1}` -> LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID; (d) no port -> LISTENER_REPOSITORY_REMOTE_UNAVAILABLE; (e) the MCP surface never serves it: from apps/daemon `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts` green UNCHANGED (count line quoted) and `grep -n \"repository/remote\" apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/mcp-dispatch-port.ts` = 0. Gate: the new test file + `pnpm exec vitest run --root . --config package.json src/http/http-listener.test.ts` green unchanged (count lines quoted).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/repository-remote-read.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` / `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo), `pnpm test:security` (the layer census: EXPECTED_PRIVATE_COUNT stays 66 because the route declares a bare `LAYER`, not a `*_LAYER` - quote the count line; if the census moves, the declaration shape drifted from sessions-read.ts - fix the shape, never the census). PATH-ATTRIBUTED BASELINE: HEAD failures minus the step 1c baseline, intersected with the ten owned paths, EMPTY; foreign red disclosed verbatim. `wc -l` quoted: repository-remote-read.ts <= 110; http-listener-read-dispatch.ts <= 515 (pre-existing 502), daemon-entry-port-resolution.ts <= 425 (pre-existing 410), daemon-store-foundation-composition.ts <= 476 (pre-existing 469) - all three pre-existing over-cap, recorded not fixed. `ls apps/daemon/src/http/repository-remote-read.js` (a missing bridge kills the daemon at boot: also run `node --experimental-transform-types apps/daemon/src/daemon-main.ts --help` or the smoke the runbook names, quote the first line). DRILL (global rail 1): the three new files are UNTRACKED -> SHA256 backups in %TEMP%\\moe-drill-<workerId>\\, restore proven in a separate command; tracked files: capture `git diff -- <path>` before, compare after. One mutation at a time, red line quoted: (1) the view returns `remoteUrl: \"\"` instead of null when unbound -> step 2 arm 1 red; (2) the capability gate checks CAPABILITIES.PLANNING -> the capability arm red; (3) the dispatch branch removed -> listener arm (a) red while the handler arms stay green; (4) the providerKeys pin without the new key -> red (proves the pin is exact); (5) `emptyBody` accepts `{\"x\":1}` -> arm (c) red. Record the five red lines + restore proofs in the step note (< 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a bound URL that child 1's admitRemoteUrl no longer admits reads as null (child 1's rule) - the view then says unbound, never a bad URL (add an arm if child 1's ledger exposes the case cheaply); the read walks one aggregate's events per call (`remote:<projectId>`) - constant cost, no decision-page walk; `boundBy` is a principal id, never a credential (assert the value equals the operator principal from the fixture); a body of `{}` with trailing whitespace -> decodeBoundedJsonBytes accepts it (same as sessions); two projects on one store never see each other's remote (the aggregate id carries the projectId - one arm with a second projectId). Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names REPOSITORY_REMOTE_READ_PATH, the exact view keys, the three codes + LISTENER_* codes + layer, every wiring touchpoint (file:line), the bare-LAYER census note, and every file size. Then `moe.add_comment` on child 3 (task-e6000b57fd374f78ba074b9f0f0f2c67) with the path, the exact response roster and the refusal codes its decoder and proxy pins need. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/repository-remote-read.ts",
+        "apps/daemon/src/http/repository-remote-read.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +101,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:42:11.826Z",
-  "updatedAt": "2026-09-04T10:42:11.826Z"
+  "updatedAt": "2026-09-04T14:33:05.612Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:30:18.460Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:33:03.484Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Serving the remote off /health/read instead of a new route - rejected: the parent row's design names one read route the Publish control polls, and the HEALTH exact-key decoder is already being widened by task-278faf81 (agents) - two rows widening one roster is a shared-file hazard. (2) A `*_LAYER` export for the refusal layer - rejected: it would be a BOUNDARY_ROSTER entry (four coupled edits + tests/security arms); the sessions route's bare `const LAYER` shape is invisible to the census and is the shipped precedent for every operator read. (3) Editing http-listener.test.ts for the listener arms - rejected by the 10-file cap: the new test copies the 25-line private `withListener`/`send` harness instead.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04, the 8-touchpoint read pattern (memory ui-connect-everything-built-2026-09-02): sessions-read.ts:19-24 (path, bare LAYER, codes), :46-49 port, :53-59 options with an injectable reader + clock, :112-117 emptyBody, :119-135 handler gated on CAPABILITIES.GOAL; composition :45-46/:351/:464; store-dependencies :97-101; port-resolution :54/:103/:134/:281-289 (410 lines, over cap); daemon-entry :284; http-listener :16/:146-147; read-dispatch :32/:86/:317-325/:431-434/:481-482 (502 lines, over cap); providerKeys pin dependencies.test.ts:711-720 (exact sorted set incl. \"sessions\"); http-listener.test.ts:983-1012 drives the real listener with fake ports (harness :49-90, module-private); bridges exist for every http route (`export * from \"./x.ts\";`). tests/security/layer-visibility-cases.ts keys its census on the `_LAYER` suffix (EXPECTED_PRIVATE_COUNT 66) - sessions-read's `const LAYER` is not in it. Child 1 (task-19d2329c) is WORKING: its plan lands readProjectRemote in publish-ledger.ts or repository/project-remote-ledger.ts - step 1 records which. The MCP allowlist never serves operator reads (mcp-tool-allowlist.test.ts).",
+    "risks": "(1) Child 1's readProjectRemote location and field names are its to land - step 1 records them. (2) Three pre-existing over-cap files are touched minimally; record sizes, never reformat. (3) If daemon-entry-port-resolution.test.ts pins the RESOLVED key list, the worker stops and the architect amends (11th file). (4) A missing .js bridge or a missing entry spread makes the route 'unavailable' in production while every unit test stays green - the listener arm (a) + the providerKeys pin + the boot smoke are the guards. (5) Never stage peer WIP, scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+    "keyFiles": [
+      "apps/daemon/src/http/sessions-read.ts",
+      "apps/daemon/src/http/sessions-read.test.ts",
+      "apps/daemon/src/http/http-listener-read-dispatch.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/daemon/src/daemon-entry-port-resolution.ts",
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/repository/publish-ledger.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:33:05.612Z"
 }

@@ -14,8 +14,27 @@
     "SHAPE CHANGE NAMED: the HealthView key roster changes exactly once (`agents`), and every exact-key decoder, test pin and fixture that builds a HEALTH frame is listed in the plan before the edit (global rail: grep the SHAPE).",
     "REAL FRAMES ONLY for control-room fixtures; the e2e seat double prints a VERBATIM roster line. Sources ASCII-only, JSX text without apostrophes; <=250 lines per production source."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR PARENT - VERIFICATION ONLY, NO EDITS. This row was split on 2026-09-04 by architect-16a01670 into four children that carry every edit; this row's dependsOn names them and the runtime withholds it until all four are DONE: 3a task-278faf81c10845ffa571716105aa19e3 (/health/read agents.paused + control-room decoder + Health screen), 3b task-66dc48690fd94b07905a2aa6ffb9568d (app-level pause poll + context + shell strip banner), 3c task-53160801515546259fecc8aa2616acce (Seats banner + board next-step), 3d task-c81cc93d1190496e870816f486c146ae (Playwright journey over the real wrapper + runbook '### Provider limits'). STEP 1 - prove each landed ON DISK, never from the board: for each id `git log main --grep \"Moe-Task: <id>\" --oneline` (or get_context.epicSiblings[*].landing.merged) and read its completionSummary/reviewSummary; then `grep -n \"agents\" apps/daemon/src/http/health-read.ts` (the view key), `grep -n '\"agents\"' apps/control-room/src/live/live-ops.ts` (the decoder roster), `grep -rn \"cr.shell.paused\\|cr.sessions.paused\\|cr.health.agents\\|Waiting for the provider limit\" apps/control-room/src --include=*.tsx --include=*.ts -l` (four surfaces), `ls tests/e2e/control-room/provider-pause.spec.ts`, `grep -n \"### Provider limits\" docs/agent-stack-runbook.md`. Any miss -> moe.report_blocked with blockedOnTaskIds naming the child that owns it; never patch it here.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "STEP 2 - re-run the children's gates READ-ONLY at the delivered tree and quote every count line: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser` (the provider-pause spec must be listed in its output). Walk this row's four DoD sentences one by one and map each to the child arm that discharges it (file + test name); a sentence with no arm is a gap -> comment on the owning child and report_blocked with blockedOnTaskIds. Do not add tests here (evidence rows are not their own row - global rail).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "STEP 3 - adversarial pass over the WHOLE feature (parent of children 1-3 of task-2723a9b4): a pause recorded for codex while the wrapper runs claude - the read reports codex (KNOWN_PROVIDERS order) and the banner says codex; a pause whose resetAt is past at page load never renders; a detached browser (no session) renders no banner and no crash; the e2e's clearProviderPause path is documented in the runbook as the operator's early-clear recipe. Then `moe.complete_task` with verification = `pnpm test:e2e:browser` and its fresh count line; completionSummary lists the four children with their landed SHAs and the one sentence each surface renders. Report no files (this row owns none); never stage peer WIP, scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -24,12 +43,41 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-2723a9b400984ab7b1b10f97c3523c81",
   "dependsOn": [
-    "task-4109c1a0e1154ca89576183dae7a5336"
+    "task-278faf81c10845ffa571716105aa19e3",
+    "task-66dc48690fd94b07905a2aa6ffb9568d",
+    "task-53160801515546259fecc8aa2616acce",
+    "task-c81cc93d1190496e870816f486c146ae"
   ],
   "priority": "MEDIUM",
   "order": 1004.3,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:48:00.466Z",
-  "updatedAt": "2026-09-04T10:48:00.466Z"
+  "updatedAt": "2026-09-04T14:19:53.317Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T14:12:15.323Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "contextFetchedBy": [
+    "architect-16a01670"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T14:19:51.150Z",
+  "planningNotes": {
+    "approachesConsidered": "One row for everything - rejected: the measured edit set is ~20 files (daemon read + composition + 2 daemon tests, control-room decoder + 2 fixture files + Health screen, app poll + context + shell + strip + tests, Seats + board + 2 call sites + tests, e2e spec + runbook) against the 10-file hard cap. Split by consumer edge in build order: 3a the read (leaf, only child 1 needed), 3b one app-level poll + context (so no screen polls health twice), 3c the two consumers of the context, 3d the live proof + docs (needs child 2's wrapper too). An app-level context was chosen over per-screen health polls because /health/read walks every decision for lastDecidedAt on each call.",
+    "codebaseInsights": "MEASURED 2026-09-04 at main 9e9b7b04: HealthView health-read.ts:29-49 (exact-key consumer live-ops.ts:215 is the ONLY decoder; HEALTH frames are built in live-ops.test.ts:20-24/:33/:46-47 and ops-screens.test.tsx:31-35 only); the Health screen polls only while mounted (ops/live-ops.tsx:106-110, cordum-app.tsx:323-324) so no shell-wide pause fact exists; deriveGoalStatus input {coverage, goalId, runId, surface} (goal-status.ts:89-94) with two call sites (board-screen.tsx:70, goal-status-strip.tsx:107); SessionsPanel props {nowMs, outcome} (activity-screens.tsx:104); no e2e spec starts the real wrapper (pairing spec stands it in); on win32 the spawner shells `<command> -p ...` so a seat double must be a .cmd ignoring its args; a wall-clock reset cannot be made short, so 3d clears the pause with child 1's clearProviderPause from the spec process. NOTE: get_context reports isEpicFinal=true for this row only because its order (1004.3) is the epic's highest - the true epic-final proof row is task-161b7e9d (order 999); a human should raise that row's order (the order field has no tool; editing .moe/tasks on disk was refused by the sandbox).",
+    "risks": "The children land in order 3a -> 3b -> 3c -> 3d and 3d also waits on child 2 (task-4109c1a0); this parent completes only after all four. Peer WIP is present on the shared checkout (apps/daemon/src/bootstrap, goals) - never touch. The epic is past the 40-row advisory ceiling (44 after this split): a re-slice into a second epic is the human's call, flagged in the session summary.",
+    "keyFiles": [
+      "apps/daemon/src/http/health-read.ts",
+      "apps/control-room/src/live/live-ops.ts",
+      "apps/control-room/src/v2/shell/status-strip.tsx",
+      "apps/control-room/src/v2/ops/activity-screens.tsx",
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T14:19:53.316Z"
 }

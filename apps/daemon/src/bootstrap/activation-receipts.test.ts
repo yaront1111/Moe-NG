@@ -182,6 +182,38 @@ describe("activation receipt contracts", () => {
       .toEqual(["ACTIVATION_POLICY_UNMEASURED"]);
   });
 
+  it("refuses an emptied ref or credential detail at THIS layer, never padding core", () => {
+    const blanked = activationWitnessOf(receiptsFixture([], {
+      store: measured("store", "", "opened read-only"),
+    }));
+    expect(blanked.ok).toBe(false);
+    if (blanked.ok) return;
+    expect(blanked.refusals.map((refusal) => refusal.code))
+      .toEqual(["ACTIVATION_STORE_UNMEASURED"]);
+    expect(blanked.refusals[0]?.layer).toBe(LAYER);
+    expect(blanked.refusals[0]?.detail).toContain("no ref");
+    const credentialless = activationWitnessOf(receiptsFixture([], {
+      provider: measured("provider", "probe/abc", ""),
+    }));
+    expect(credentialless.ok).toBe(false);
+    if (credentialless.ok) return;
+    expect(credentialless.refusals.map((refusal) => refusal.code))
+      .toEqual(["ACTIVATION_PROVIDER_UNMEASURED"]);
+    expect(credentialless.refusals[0]?.layer).toBe(LAYER);
+  });
+
+  it("refuses a member missing from the receipt list entirely", () => {
+    const full = receiptsFixture();
+    const short = Object.freeze({
+      ...full, members: full.members.filter((receipt) => receipt.member !== "backup"),
+    });
+    const assembled = activationWitnessOf(short);
+    expect(assembled.ok).toBe(false);
+    if (assembled.ok) return;
+    expect(assembled.refusals.map((refusal) => refusal.code)).toEqual(["ACTIVATION_BACKUP_FAILED"]);
+    expect(assembled.refusals[0]?.layer).toBe(LAYER);
+  });
+
   it("derives a 64-hex baseRevisionHash from the 40-hex git sha", () => {
     const observation = repositoryObservationOf(receiptsFixture());
     expect(observation).not.toBeNull();

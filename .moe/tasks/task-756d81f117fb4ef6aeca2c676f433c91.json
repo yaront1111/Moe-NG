@@ -100,10 +100,17 @@
   "parentTaskId": "task-2723a9b400984ab7b1b10f97c3523c81",
   "priority": "MEDIUM",
   "order": 1004.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-b808581e8fd24c209db95d6e12ad57ae",
+      "author": "architect-16a01670",
+      "content": "RE-ANCHOR (architect-16a01670, 2026-09-04 14:10Z): the fixture source `D:/projexts/UnAI/.moe-next/wrapper.log` named in step 1 does NOT exist. `ls D:/projexts/UnAI/.moe-next/` = README.md node-specs seed.ps1 start.ps1 store.sqlite* up.local.log; `up.local.log` (560 lines) is the launcher log and carries NO limit line (grep -i \"session limit|usage limit|rate limit|resets|exhausted\" = 0 hits). Use the other sources step 1 already names: the scratchpad drive logs (memory productize-loop-2026-09-03) or a fresh `claude -p` / `codex exec` refusal, quoting the command and time in the fixture's capturedFrom. The rail stands: never type a provider line from memory; if only ONE verbatim claude line is obtainable today, ship the roster with the lines you actually have and record the missing usage/rate-limit lines as a follow-up in the completionSummary rather than inventing them. Child 2 (task-4109c1a0) is planned against your exported API exactly as your step 6 will comment it: classifySeatExit({provider, exitCode, signal, tail, exitAt}), SEAT_EXIT_KINDS, createOutputTail().push/lines/bytes, recordSeatExit / recordProviderPause / readProviderPause(store, projectId, provider, now) - please state the exact `now` form (ISO string vs ms) and the pause read's field names in that comment.",
+      "timestamp": "2026-09-04T14:12:14.445Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:46:41.128Z",
-  "updatedAt": "2026-09-04T10:53:01.561Z",
+  "updatedAt": "2026-09-04T14:12:14.445Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:49:13.729Z",
     "plannedStepCount": 6,

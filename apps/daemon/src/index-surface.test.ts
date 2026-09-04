@@ -297,6 +297,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["CONTINUATION_COMMAND_KIND", "string"],
   ["CONTINUATION_PAYLOAD_KEYS", "object"],
   ["CONTROL_ROOM_LISTENER_LAYER", "string"],
+  ["CURRENT_RUN_HOP_LIMIT", "number"],
   ["DAEMON_ENTRY_LAYER", "string"],
   ["DAEMON_ENTRY_REFUSAL_CODES", "object"],
   ["DAEMON_FOUNDATION_ATTEMPT", "string"],
@@ -398,12 +399,14 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["createRecoveryIncarnationService", "function"],
   ["createRecoverySuccessionService", "function"],
   ["createV2Compiler", "function"],
+  ["currentPlanningRun", "function"],
   ["decodeBootstrapRequestBytes", "function"],
   ["decodeReviewRequestBytes", "function"],
   ["deriveRecipeAggregateId", "function"],
   ["deriveVerificationAggregateId", "function"],
   ["evaluateDoctorCommandBytes", "function"],
   ["evaluateGraphPreviewRequestBytes", "function"],
+  ["foldCurrentRun", "function"],
   ["handleCommandRequest", "function"],
   ["isDependencyProvider", "function"],
   ["measureActivationReceipts", "function"],
@@ -506,7 +509,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(152);
+    expect(EXPECTED_EXPORTS.length).toBe(155);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
