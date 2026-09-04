@@ -1,0 +1,43 @@
+{
+  "id": "task-b8a389bb78604b2e8224f0bd11675ee3",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Prove a goal builds to completion: a 3-node graph, staffed in parallel, landed on one goal",
+  "description": "SPIDR child 5 of parent task-4423d2a4c3084d579c132b253d36b502 (architect-20a6d1eb, 2026-09-04). THE HARDENING AND PROOF ROW for this parent - it owns the e2e, the live drive, the docs sweep and the adversarial pass for the whole multi-node feature, so no sibling child files its own evidence row (global rail 21).\n\ndependsOn ALL four production children plus the leaf; each is named because this row certifies the capability THEY shipped (global rail 4 clause 2):\n- task-6c05745519844bf39cdebca6d75bb72a - EXPECTED_VERSION_CONFLICT discloses observedVersion (a real seat can release; without it the second seat's claim lapses at the 30-min TTL and the live drive stalls).\n- task-f79d38b119984ae1ae51eba887a28b7d - the compiler seals N nodes.\n- task-1d7b9df2579c491992b55de791c99f4f - a node is READY only when its HARD dependencies are ACCEPTED.\n- task-92d84d384e4443d7bf78c76024af5688 - parallel seats + the disclosed concurrency limit.\n- task-0b26dc9e8582428ea1af8032d9277550 - the status strip's coverage words.\n\nWHAT THIS ROW PROVES: the parent's headline claim - a goal is built to completion as ONE goal, not one node at a time and not through a successor goal. Per owner ruling comment-fbe64776 the growth path is the sealed multi-node INITIAL graph, NOT graph.request_expansion; the parent's DoD 2 phrase \"expansion run\" reads as \"the sealed multi-node INITIAL graph\" throughout.\n\nMEASURED CONTEXT (branch moe/work-2026-09-04, by architect-20a6d1eb):\n- e2e lanes exist: `tests/e2e/foundation` and `tests/e2e/control-room`; `package.json:21` `test:e2e` = `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e`, and `:22` `test:e2e:browser` drives playwright.\n- README still asserts the retired rule (\"an initial plan seals one node, so a goal is built one node at a time and growth goes through a successor goal\"). That sentence is now false and this row rewrites it.\n- REPLAN stays as-is for exhausted reviews: `apps/control-room/src/v2/approvals/replan-successor-port.ts` is NOT retired by this work; only the claim that growth REQUIRES a successor goal is.\n- The live lane recipe and its pitfalls are in memories control-room-live-lane-recipe and productize-loop-2026-09-03; the UnAI goal is goal-c9d9850b at `D:/projexts/UnAI/.moe-next/store.sqlite`.",
+  "definitionOfDone": [
+    "OFFLINE e2e over a REAL daemon (no fixtures, real MCP wire, scripted seat double): one goal, ONE approval decision, a sealed 3-node graph with a HARD chain. Assert IN ORDER: node count = 3 on the sealed graph; the two independent nodes are BOTH staffed in one pass while the dependent node is BLOCKED on `depends:`; the dependent node is staffed only after its parent is ACCEPTED; all three deliver, verify and land on the SAME goalRef.",
+    "The coverage read is the closing gate: `POST /documents/coverage/read` reports every approved criterion VERIFIED and the goal reaches ready-to-close ONLY then. Assert a NEGATIVE arm in the same test - at 2 of 3 nodes accepted the goal is NOT ready to close - so the gate is not vacuously green.",
+    "NO SUCCESSOR GOAL was minted for growth: the e2e asserts exactly ONE goal aggregate exists at the end and that no replan/successor path was taken. Assert by counting goal aggregates in the store, not by the absence of a log line.",
+    "LIVE DRIVE on the lane (UnAI at D:/projexts/UnAI, goal-c9d9850b or a fresh goal): a multi-node graph proposed by a real planning seat, approved in the BROWSER, and at least two nodes landed on the same goal. Record in a row comment (each under 4500 chars): the transcript, the store path, and the landing shas. Never restart the wrapper to unstick a seat - claim TTL is 30 min.",
+    "README's \"one node at a time / growth goes through a successor goal\" sentence is rewritten to the measured truth (an initial plan seals the whole DAG; independent nodes build in parallel up to the seat limit; REPLAN remains the path for an exhausted review). `git grep -n \"one node at a time\"` returns 0 hits in docs.",
+    "Adversarial pass over the whole parent's diff, recorded in a step note, answering at minimum: what happens when two wrapper passes race on the same READY node; what happens when a dependency's review is unreadable rather than accepted or rejected; what a cycle in dependsOn does (it must refuse at compile, not deadlock the surface); and what an operator sees when the seat limit is 1.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`. State explicitly that `pnpm test` covers no apps/** (global rail 18), and attribute any foreign red by the merge-base/HEAD delta (global rail 3)."
+  ],
+  "taskRails": [
+    "This row RUNS the proof; it does not re-implement the feature. If an e2e arm fails because a sibling child under-delivered, comment on THAT row and report blocked on it - do not patch the production surface here (global rail 4: a proof that reimplements authority inside the test retires the question unanswered).",
+    "NO FIXTURE-BACKED JOURNEY. The parent rail demands a REAL daemon and a real MCP wire; a mock-backed e2e does not discharge DoD 2. If the seat double cannot drive the real wire, report blocked rather than substituting fixtures.",
+    "FEATURES ONLY (inherited from the parent): the verifier stays the documented trusted-workspace v0.1 limitation. No signing, hermetic verification or freeze manifests.",
+    "Never restart the wrapper to unstick a seat (claim TTL 30 min; memory real-seat-cannot-release-its-claim-2026-09-04). Read the latest WorkClaimed payload's expiresAt from the store and wait."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4423d2a4c3084d579c132b253d36b502",
+  "dependsOn": [
+    "task-f99cec0b7654450ca36d3864a4db5b5a",
+    "task-f79d38b119984ae1ae51eba887a28b7d",
+    "task-1d7b9df2579c491992b55de791c99f4f",
+    "task-92d84d384e4443d7bf78c76024af5688",
+    "task-0b26dc9e8582428ea1af8032d9277550"
+  ],
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T20:24:20.796Z",
+  "updatedAt": "2026-09-04T20:31:06.020Z"
+}

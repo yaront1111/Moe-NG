@@ -1,0 +1,39 @@
+{
+  "id": "task-92d84d384e4443d7bf78c76024af5688",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Parallel seats proven, and the concurrency limit is disclosed on /sessions/read and Seats",
+  "description": "SPIDR child 3 of parent task-4423d2a4c3084d579c132b253d36b502 (architect-20a6d1eb, 2026-09-04). dependsOn child 2 task-1d7b9df2579c491992b55de791c99f4f: the \"a HARD-dependent node is not staffed\" half of this row's proof needs that gate to exist.\n\nThis is the parent's DoD 3. OWNER DECISION 2026-09-04 (asked and answered in the planning REPL): EXPOSE THE EXISTING ENV KNOB. Do not build a durable store-backed per-project setting and do not add an operator command for it - the smallest production-reachable slice (global rail 16, delivery bias). If a durable setting is wanted later it is a separate row.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb - the parent's description overstates this gap:\n- PARALLEL STAFFING ALREADY WORKS. `apps/daemon/src/orchestrator/agent-wrapper.ts:339-371` collects every READY unclaimed step in one pass and spawns each in turn, breaking only at `if (staffing.activeCount() >= config.maxAgents) break` (line 356). There is no one-at-a-time serialization to remove.\n- THE LIMIT ALREADY DEFAULTS TO 2. `apps/daemon/src/orchestrator/wrapper-knobs.ts:30` `const DEFAULT_MAX_AGENTS = 2`; line 72 reads env `MOE_WRAPPER_MAX_AGENTS` with that default and a floor of 1. It reaches the wrapper via `agent-wrapper-main.ts:259` `maxAgents: knobs.maxAgents`.\n- WHAT IS MISSING IS DISCLOSURE AND PROOF. `apps/daemon/src/http/sessions-read.ts` (SESSIONS_READ_PATH \"/sessions/read\", SessionsView at line 37) publishes sessions only - `grep -n maxAgents apps/daemon/src/http/sessions-read.ts` = 0 hits. The browser cannot tell an operator why only two nodes are moving.\n- THE BROWSER PATH IS ALREADY OPEN: `apps/control-room/src/live/live-sessions.ts` posts `/sessions/read` with EXACTLY `{}` and shapes the answer verbatim (it will REJECT an unexpected member - read its decoder before adding one); `/sessions/read` is already in `apps/control-room/src/live/dev-proxy-paths.ts:37`; Seats renders in `apps/control-room/src/v2/ops/activity-screens.tsx` off `live-ops.tsx`.\n- NO NEW COMMAND KIND, so no 8-touchpoint roster backfill: this row extends an existing READ's response shape only.",
+  "definitionOfDone": [
+    "`POST /sessions/read` discloses the effective concurrency limit and the current active-seat count as typed members of SessionsView; a daemon test asserts the limit equals the wrapper's configured maxAgents (default 2) and that it changes when MOE_WRAPPER_MAX_AGENTS is set, so the disclosed number is the REAL knob and not a hard-coded 2.",
+    "Wrapper test over the real staffing loop: a surface offering TWO independent READY unclaimed node.deliver steps produces TWO spawn reports in a SINGLE pass, asserted before either child exits (assert the spawned array length and both work-item ids, not just that spawning happened).",
+    "Wrapper test for the dependency gate's effect: a surface where node b is BLOCKED on `depends:a` yields exactly ONE spawn (a), and on the next pass after a is ACCEPTED, b IS spawned. Assert the work-item id in each pass, and assert the count line - a pass that silently spawns zero must fail this test.",
+    "The limit is honoured under pressure: with maxAgents = 2 and THREE independent READY steps, exactly two spawn in the pass and the third is not spawned. Assert the third's absence by work-item id, not by array length alone.",
+    "apps/control-room reads and renders the limit on Seats (live-sessions.ts decoder accepts the new member without rejecting the response; activity-screens.tsx shows it in operator words). A control-room test asserts the rendered sentence for a limit of 2 with 2 active, and for a limit of 2 with 0 active.",
+    "Mutation drill recorded in a step note: change the wrapper's break to `>` instead of `>=`, confirm the three-READY limit test goes RED, restore, prove the restore with `git diff` on the tracked file (quote the empty diff).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "DO NOT build a durable per-project seat limit, a new command kind, or an operator setting UI. Owner decision 2026-09-04: expose the existing MOE_WRAPPER_MAX_AGENTS knob. A new command kind would drag in the full roster backfill this row is explicitly scoped to avoid.",
+    "`live-sessions.ts` shapes the /sessions/read answer VERBATIM and will refuse an unexpected member. Change the decoder and the daemon response in the same row, and assert the round trip - a daemon-only change silently breaks the Seats screen (memory ui-connect-everything-built-2026-09-02: new daemon read = 8 touchpoints + a .js bridge; this is a shape extension, so at minimum the port, its .js bridge if new, the decoder and the renderer).",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work.",
+    "Never restart the wrapper to unstick a seat while testing live (claim TTL is 30 min; memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4423d2a4c3084d579c132b253d36b502",
+  "dependsOn": [
+    "task-1d7b9df2579c491992b55de791c99f4f"
+  ],
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T20:23:07.326Z",
+  "updatedAt": "2026-09-04T20:23:07.326Z"
+}

@@ -1,8 +1,8 @@
-import type { JsonValue } from "@moe/contracts";
+import type { JsonObject, JsonValue } from "@moe/contracts";
 import {
   reducePlanningRun, rejectRun, snapshotPlanningRunContractState,
 } from "@moe/core";
-import type { PlanningRunReducerResult } from "@moe/core";
+import type { PlanningRunReducerResult, PlanningRunState } from "@moe/core";
 import type { EventDraft, ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 import { createHash } from "node:crypto";
 
@@ -104,14 +104,65 @@ function coreRefusal(result: Extract<PlanningRunReducerResult, { ok: false }>): 
 }
 
 /**
+ * The run's durable RECORD as an object, or undefined when the ledger holds no record shape.
+ *
+ * Narrowed off `unknown` and cast once on acceptance, the way `planning-run-read.ts:182` does it:
+ * `Array.isArray` cannot narrow a READONLY array out of the `JsonValue` union, so the check and
+ * the crossing are kept in one place rather than restated by every caller.
+ */
+function runRecordOf(sources: ApprovalIntentSources): JsonObject | undefined {
+  const record: unknown = sources.runRecord;
+  return record === null || typeof record !== "object" || Array.isArray(record)
+    ? undefined
+    : (record as JsonObject);
+}
+
+/**
  * The run's own durable state, taken through core's published snapshot reader rather than a
  * hand-written shape: the reducer is the authority on what a run state IS, and a locally shaped
  * object would silently diverge from it the first time core adds a field.
  */
-function runStateOf(sources: ApprovalIntentSources) {
-  const record = sources.runRecord;
-  if (record === null || typeof record !== "object" || Array.isArray(record)) return undefined;
+function runStateOf(record: JsonObject) {
   return snapshotPlanningRunContractState((record as { readonly state?: unknown }).state);
+}
+
+/** The four decision facts an operator and every downstream reader read a rejection by. */
+interface RejectionFacts {
+  readonly decisionReason: string;
+  readonly findingsRef: string;
+  readonly runId: string;
+  readonly successorRunId: string;
+}
+
+/**
+ * THE RUN'S NEW RECORD, not merely the decision's five facts.
+ *
+ * An aggregate's durable record IS the last committed decision result that targets it
+ * (`bootstrap-ledger.ts:97-116`, `stateOf` at :149-153) — there is no separate state projection.
+ * The rejection's primary leg targets the RUN, so committing the decision facts ALONE would
+ * REPLACE the sealed run record with a stateless one: `readApprovalIntentSources`,
+ * `verifyApprovedRunBinding`, `readPlanningRun` and `planReviewable` would all see a run with no
+ * state, REJECTED would exist nowhere durable (the `PlanningRunRejected` event payload carries no
+ * lifecycle), and the sealed facts would be unreadable. Measured on this seam, not assumed.
+ *
+ * So the prior record is carried forward key by key and only `state` is replaced — with the state
+ * core's own `rejectRun` reduced, which is where `lifecycle: "REJECTED"` and every sealed field
+ * come from. The decision facts ride alongside it, so one read answers both "what is this run
+ * now" and "what was decided". The APPROVE path needs none of this: its primary leg targets the
+ * GOAL, so it never writes over the run's record.
+ */
+function rejectionRecord(
+  record: JsonObject, state: PlanningRunState, facts: RejectionFacts,
+): JsonValue {
+  return {
+    ...record,
+    decision: "REJECT",
+    decisionReason: facts.decisionReason,
+    findingsRef: facts.findingsRef,
+    runId: facts.runId,
+    state: asPayload(state),
+    successorRunId: facts.successorRunId,
+  };
 }
 
 /**
@@ -130,8 +181,9 @@ export function commitIntentRejection(
   const decisionReason = rejectionReasonOf(request.intent.decisionReason);
   if (decisionReason === null) return refuse(null, APPROVAL_REJECT_REASON_REQUIRED, LAYER);
   const runId = request.intent.runId;
-  const state = runStateOf(request.sources);
-  if (state === undefined) {
+  const record = runRecordOf(request.sources);
+  const state = record === undefined ? undefined : runStateOf(record);
+  if (record === undefined || state === undefined) {
     return refuse(null, "APPROVAL_AUTHORITY_UNSEALED", "APPROVAL_RUN_BINDING");
   }
   const findingsRef = rejectionFindingsRef(decisionReason);
@@ -158,6 +210,8 @@ export function commitIntentRejection(
     eventPayload: asPayload(rejected.events[0]),
     eventType: REJECTED_EVENT_TYPE,
     expectedVersion: request.sourceFences.planningRunVersion,
-    result: { decision: "REJECT", decisionReason, findingsRef, runId, successorRunId },
+    result: rejectionRecord(record, rejected.state, {
+      decisionReason, findingsRef, runId, successorRunId,
+    }),
   }, [successorLeg]);
 }

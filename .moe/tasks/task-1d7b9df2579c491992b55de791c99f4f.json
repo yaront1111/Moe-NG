@@ -1,0 +1,38 @@
+{
+  "id": "task-1d7b9df2579c491992b55de791c99f4f",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A node is READY only when its HARD dependencies are ACCEPTED: the surface blocks on depends:&lt;nodeKey&gt;",
+  "description": "SPIDR child 2 of parent task-4423d2a4c3084d579c132b253d36b502 (architect-20a6d1eb, 2026-09-04). dependsOn child 1 task-f79d38b119984ae1ae51eba887a28b7d: without a sealed multi-node graph there is nothing for this gate to gate.\n\nThis is the parent's DoD 5' from owner ruling comment-fbe64776: \"a node.deliver step is READY only when every dependsOn node is ACCEPTED; otherwise the surface lists it BLOCKED with missing: [\\\"depends:<nodeKey>\\\", ...]\".\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb:\n- THE GAP IS REAL. `apps/daemon/src/http/affordance-read.ts:363-410` loops sealed nodes and derives status from the REVIEW LEDGER ALONE (accepted -> COMMITTED; replanned -> BLOCKED [\"replan\"]; >=3 unsuccessful rounds -> BLOCKED [\"escalation\"]; clean round awaiting the verifier -> BLOCKED [verification tokens]; otherwise READY). The word `dependsOn` does not appear in the file. Every un-accepted node of an approved plan is offered READY at once, so the wrapper would staff a dependent node beside its parent.\n- THE FACT IS ALREADY IN THE SEALED GRAPH - no core or scheduler change is needed. `apps/daemon/src/planning/compile-dispatcher.ts:220` seals per-node `dependsOn`; it lands in `GraphRevisionContent` two ways: `content.snapshot.edges` (GraphEdge[], `packages/scheduler/src/graph-model.ts:41-45`) and `content.nodeAuthority.definitions[].directHardDependencies` (`packages/scheduler/src/node-authority/node-authority-contract.ts:162-168`).\n- THE READ IS ALREADY WRITTEN ONCE, in a sibling module: `apps/daemon/src/http/runs-read.ts:98-104` derives a node's dependencies as `edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)`. REUSE that derivation rather than inventing a second one; a second spelling is how the board and the surface come to disagree about build order.\n- THE CARRIER TO EXTEND: `apps/daemon/src/http/affordance-contract.ts:30-33` `interface NodeSpec { nodeRef; title }`. It is produced at `apps/daemon/src/orchestrator/compiled-node-source.ts:178-179` (`sealed().map(node => ({nodeRef: node.nodeKey, title: node.objective}))`) from the local `SealedNode` (compiled-node-source.ts:111-116), which today drops dependencies. Both need the new member.\n- THE MISSING-TOKEN VOCABULARY IS IN THE BROWSER, NOT THE DAEMON: `apps/control-room/src/v2/goals/work-labels.ts` (198 lines) maps each token to operator words (\"escalation\", \"verification\", \"verifier-policy\", \"replan\"). A `depends:<nodeKey>` token is PREFIXED, unlike every existing exact-match token - read how the map is keyed before adding, and handle the prefix form explicitly.\n- ALREADY DONE, DO NOT REBUILD: the BOARD already renders build order. `apps/control-room/src/v2/board/board-columns.ts:73` prints `after ${node.dependsOn.join(\", \")}` for a QUEUED node and `board-lanes.tsx:77` shows a \"Depends on\" field, both fed by `/runs/read`'s dependsOn through `apps/control-room/src/live/live-runs.ts:62`. This row must not re-derive that.",
+  "definitionOfDone": [
+    "`NodeSpec` (apps/daemon/src/http/affordance-contract.ts) carries the node's HARD dependencies, and `apps/daemon/src/orchestrator/compiled-node-source.ts` populates it from the sealed graph using the SAME derivation runs-read.ts:98-104 uses (edges filtered by consumerNodeKey, or directHardDependencies) - not a second hand-rolled walk. A test seals a 3-node chain and asserts the produced NodeSpec dependency lists match the submitted dependsOn exactly.",
+    "apps/daemon/src/http/affordance-read.ts marks a node.deliver step BLOCKED with `missing` containing `depends:<nodeKey>` for EVERY dependency whose review is not ACCEPTED, and READY only when all are accepted. The test asserts the exact token strings (not just that missing is non-empty) and asserts the dependent node is NOT among nextAllowedCommands' review.submit offers while blocked.",
+    "Precedence is pinned by test: a node that is both dependency-blocked AND awaiting verification/escalation/replan reports a deterministic, asserted `missing` set - the architect does not care which order, but the test names it so the wrapper's behaviour cannot drift silently. A node with zero dependencies behaves exactly as today (regression arm asserting READY).",
+    "The transitive case is covered: in a->b->c chain with only a ACCEPTED, b is READY and c is BLOCKED on `depends:b`. Assert both in one test so a gate that only reads direct parents of the frontier cannot pass.",
+    "apps/control-room/src/v2/goals/work-labels.ts gives `depends:<nodeKey>` operator words naming the blocking node, and its test asserts the rendered sentence for a real token. Bidirectional roster check (global rail 9): every token the daemon can emit has a label AND every label corresponds to an emittable token - assert set-equality, enumerating the daemon side from the emitting seam, not from the label map.",
+    "Mutation drill recorded in a step note: make the gate ignore dependencies (return READY unconditionally) in affordance-read.ts, confirm the `depends:` token test and the transitive test both go RED, restore, prove the restore with `git diff` on the tracked file (quote the empty diff).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "ACCEPTED means the review ledger's accepted record, the same fact affordance-read.ts:366-371 already uses to mark a node COMMITTED. Do not invent a second notion of doneness (landing receipt, verifier receipt) for this gate - a node is a satisfied dependency exactly when the surface would call it COMMITTED.",
+    "SHAPE CHANGE ALERT (global rail 19): adding a member to NodeSpec and a token to `missing` changes returned shapes that tests assert as literals. Before editing, grep for literal `missing: []` expectations, `nodes: () => [{...}]` fixtures (affordance-read.test.ts:191/623/688, affordance-read-planning.test.ts:641/836/854/858/916/921) and any hard-coded step counts; every asserting consumer must be in this row's affectedFiles or the row must be split.",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4423d2a4c3084d579c132b253d36b502",
+  "dependsOn": [
+    "task-f79d38b119984ae1ae51eba887a28b7d"
+  ],
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T20:22:33.322Z",
+  "updatedAt": "2026-09-04T20:22:33.322Z"
+}

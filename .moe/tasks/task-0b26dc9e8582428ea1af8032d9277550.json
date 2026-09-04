@@ -1,0 +1,38 @@
+{
+  "id": "task-0b26dc9e8582428ea1af8032d9277550",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The goal status strip reads a multi-node build: N of M criteria covered, and what is waiting on what",
+  "description": "SPIDR child 4 of parent task-4423d2a4c3084d579c132b253d36b502 (architect-20a6d1eb, 2026-09-04). dependsOn child 2 task-1d7b9df2579c491992b55de791c99f4f: the strip's new sentence names the `depends:` blocking state that child 2 introduces.\n\nThis is the surviving half of the parent's UI paragraph. MOST OF THAT PARAGRAPH IS ALREADY BUILT - re-measured at HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. Do NOT rebuild any of it:\n- THE BOARD ALREADY SHOWS EVERY NODE ACROSS SIX COLUMNS. `apps/control-room/src/v2/board/board-columns.ts:20` `BOARD_COLUMNS = [\"QUEUED\",\"WORKING\",\"REVIEW\",\"REWORK\",\"DONE\",\"BLOCKED\"]`; line 73 already renders a QUEUED node's build order as `after ${node.dependsOn.join(\", \")}`; `board-lanes.tsx:77` already shows a \"Depends on\" field.\n- `/runs/read` ALREADY EMITS dependsOn per node: `apps/daemon/src/http/runs-read.ts:98-104` derives it from `graph.content.snapshot.edges`, and `apps/control-room/src/live/live-runs.ts:62,222,230` already decodes it.\n- READY-TO-CLOSE IS ALREADY GATED ON 100% COVERAGE: `apps/control-room/src/v2/goals/goal-status.ts:139-143` requires `progress.verified === progress.criteria` with a readable contract before it returns READY_TO_CLOSE, and `progress {criteria, verified}` (line 107-108) already comes from the `POST /documents/coverage/read` totals.\n\nWHAT IS ACTUALLY MISSING, measured:\n- The strip does not say the COVERAGE FRACTION in operator words while a goal is mid-build. `deriveGoalStatus` (goal-status.ts:89, 164 lines total) carries `progress` but the BUILDING/executing stage sentence does not spend it, so an operator watching a 3-node goal sees no \"N of M\" until it is finished.\n- No stage words for the new multi-node reality: nothing distinguishes \"3 nodes, 1 accepted, 2 queued behind it\" from \"1 node building\". The `depends:` token child 2 adds has no strip-level sentence.\n- The parent's description also asks for a \"Needs-you: Approve expansion\" entry. THAT IS OUT OF SCOPE by owner ruling comment-fbe64776 (\"The expansion kinds are OUT of this row\"): with the fence lifted the human approves the WHOLE graph in ONE existing plan-approval decision, so no new Needs-you entry is needed. Do not add one.\n\nFILES: `apps/control-room/src/v2/goals/goal-status.ts` (164 ln) and `goal-status-strip.tsx` (108 ln) plus their tests (`goal-status.test.tsx`); touch `board-columns.ts` only if its QUEUED sentence needs the blocking node's title rather than its key.",
+  "definitionOfDone": [
+    "The goal status strip states the coverage fraction in operator words whenever the goal is executing and the coverage read is available - e.g. \"2 of 7 acceptance criteria verified\" - sourced from the existing `progress {criteria, verified}` in goal-status.ts, not recomputed. A test asserts the exact rendered sentence for (verified 2, criteria 7) and for (verified 0, criteria 7).",
+    "The strip distinguishes a multi-node build from a single-node one: when nodes are queued behind an unfinished dependency the sentence names how many are waiting and on what. A test drives a 3-node goal with a->b->c, a accepted, and asserts the rendered sentence names the waiting count and the blocking node.",
+    "READY_TO_CLOSE still fires ONLY at 100%: a regression test asserts (verified 6, criteria 7) does NOT reach READY_TO_CLOSE and (verified 7, criteria 7) does. Assert the stage value, not merely the words.",
+    "The zero-coverage and unreadable-contract paths are unchanged and asserted: coverage absent or contract unreadable renders the existing sentence, with no NaN, no \"undefined\", and no \"0 of 0\" - assert the literal output for a null progress.",
+    "No new Needs-you entry, no new offer kind, no new daemon route: `git diff --stat` for this row touches only apps/control-room paths. (Owner ruling comment-fbe64776 put the expansion kinds out of scope; the whole graph is approved by the one existing plan-approval decision.)",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "BROWSER-ONLY ROW. If a needed fact is missing from the daemon's existing reads, say so in a step note and render what IS available - do not add a daemon route here; that is a different row's 8-touchpoint work.",
+    "The board (PR #23) and /runs/read already carry dependsOn end to end. Reuse those values; a second derivation of build order in the strip is how the board and the strip come to disagree.",
+    "Words are the product here (memory ui-legibility-pass-landed-2026-09-04): write for a human operator, not for a test. Avoid an aria-live region that announces on every poll - PR #26's review caught exactly that; announce once and keep the counter outside the live region.",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4423d2a4c3084d579c132b253d36b502",
+  "dependsOn": [
+    "task-1d7b9df2579c491992b55de791c99f4f"
+  ],
+  "priority": "MEDIUM",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T20:23:41.200Z",
+  "updatedAt": "2026-09-04T20:23:41.200Z"
+}

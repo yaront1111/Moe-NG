@@ -9,13 +9,14 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { humanReviewWitness, readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { humanReviewWitness, readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { HumanReviewWitness } from "../bootstrap/bootstrap-ledger.js";
 import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { deriveBudgetAggregateId } from "../budget/budget-ledger-contracts.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { runApprovalIntentEdge } from "../daemon-command-edges.js";
+import { readPlanningRun } from "../http/planning-run-read.js";
 import { isSessionDigest } from "../identity/session-authority-protocol.js";
 import { buildReplayMarkerDecisionLeg } from "../identity/session-authority-replay-marker.js";
 import { replayAggregateId } from "../identity/session-authority-store.js";
@@ -194,6 +195,30 @@ function runState(store: SqliteEventStore): JsonObject {
   const state = own(sources.runRecord, "state");
   if (state === null || typeof state !== "object") throw new Error("run record carries no state");
   return state as JsonObject;
+}
+
+/**
+ * Commits a doctored RECORD onto the run under an existing command kind, so a branch the shipped
+ * writers cannot produce is reached by durable evidence rather than by a stub. The marker event
+ * is carried only because the store refuses an eventless decision (`store-input-commit.ts:43`);
+ * it names itself a plant so no reader can mistake it for a planning event.
+ */
+function plantRunRecord(store: SqliteEventStore, record: JsonObject, label: string): void {
+  const marker = encoder.encode(JSON.stringify({ kind: "TestRecordPlanted", label }));
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "approval.decide",
+    committedResultBytes: encoder.encode(JSON.stringify(record)),
+    correlationId: `corr-plant-${label}`,
+    decidedAt: "2026-08-08T00:00:00.000Z",
+    events: [{ eventId: `plant-${label}`, eventType: "TestRecordPlanted", payload: marker }],
+    expectedVersion: store.getAggregateVersion(RUN_ID),
+    key: { commandId: `cmd-plant-${label}`, principalId: OPERATOR, projectId: PROJECT_ID },
+    requestBytes: encoder.encode(JSON.stringify({ kind: "plant", label })),
+    targetAggregateId: RUN_ID,
+  });
+  if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
+  }
 }
 
 /** The last event on an aggregate, with its payload decoded through the bounded reader. */
@@ -426,11 +451,31 @@ function edgeRefusalOf(store: SqliteEventStore, principalId: string): Refusal {
   throw new Error("expected the approval intent edge to refuse");
 }
 
-/** The run's own durable record, read through the committed production reader. */
-function runRecord(store: SqliteEventStore): unknown {
-  const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
-  if (run === undefined) throw new Error(`no durable decision for ${RUN_ID}`);
-  return run.result;
+/**
+ * The run's own durable record, read through the committed production reader.
+ *
+ * `stateOf` is the seam every ledger reader folds through — `readApprovalIntentSources`,
+ * `verifyApprovedRunBinding`, `readPlanningRun`, `planReviewable` — and an aggregate's record IS
+ * the last decision's committed result. A decision that commits a result WITHOUT the run's state
+ * therefore erases the run from all of them while its events still look right, which is why the
+ * rejection arms read the record and not only the event.
+ */
+function runRecord(store: SqliteEventStore, runId: string = RUN_ID): JsonObject {
+  const record: unknown = stateOf(readDurableLedger(store, PROJECT_ID), runId);
+  if (record === undefined) throw new Error(`no durable decision for ${runId}`);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) {
+    throw new Error(`run ${runId} carries no durable record`);
+  }
+  return record as JsonObject;
+}
+
+/** The run record's `state`, or a throw: an absent state is the defect these arms exist for. */
+function recordState(store: SqliteEventStore, runId: string = RUN_ID): JsonObject {
+  const state = own(runRecord(store, runId), "state");
+  if (state === null || typeof state !== "object" || Array.isArray(state)) {
+    throw new Error(`run ${runId} record carries no state`);
+  }
+  return state as JsonObject;
 }
 
 /** `criteriaDigest` from its only durable home, selected BY TYPE and never by index. */
@@ -1328,6 +1373,8 @@ describe("one approval intent decision activates, records, and burns atomically"
     const before = readDurableLedger(store, PROJECT_ID).decisionCount;
     const priorVersion = Number(own(runState(store), "version"));
     const goalRef = String(own(runState(store), "goalRef"));
+    const sealedRecord = runRecord(store);
+    const sealedState = recordState(store);
 
     const outcome = reviewedDispatch(store, REJECT_COMMAND_ID, {
       ...INTENT, decision: "REJECT", decisionReason: REJECT_REASON,
@@ -1355,11 +1402,48 @@ describe("one approval intent decision activates, records, and burns atomically"
       },
     });
 
+    // THE RECORD, NOT ONLY THE EVENT. The decision's committed result IS the run aggregate's
+    // record, so it carries the run's REJECTED state and every sealed fact forward; committing
+    // the five decision fields alone would leave the rejected run stateless to `stateOf` and
+    // REJECTED would exist nowhere durable (the event payload carries no lifecycle either).
+    const record = runRecord(store);
+    expect(own(recordState(store), "lifecycle")).toBe("REJECTED");
+    expect(own(recordState(store), "version")).toBe(priorVersion + 1);
+    expect({
+      authorityRef: own(record, "authorityRef"), envelopeDigest: own(record, "envelopeDigest"),
+      goalRef: own(recordState(store), "goalRef"),
+      graphRevisionRef: own(recordState(store), "graphRevisionRef"),
+      sealedHashes: own(recordState(store), "sealedHashes"),
+      submissionHash: own(record, "submissionHash"),
+    }).toEqual({
+      authorityRef: own(sealedRecord, "authorityRef"),
+      envelopeDigest: own(sealedRecord, "envelopeDigest"),
+      goalRef: own(sealedState, "goalRef"),
+      graphRevisionRef: own(sealedState, "graphRevisionRef"),
+      sealedHashes: own(sealedState, "sealedHashes"),
+      submissionHash: own(sealedRecord, "submissionHash"),
+    });
+    // A SECOND PRODUCTION READER over the same bytes: the HTTP run read needs the record's
+    // `submissionHash` AND its state to answer at all, so an erased record serves RUN_UNKNOWN.
+    expect(readPlanningRun(store, PROJECT_ID, RUN_ID)).toMatchObject({
+      lifecycle: "REJECTED", outcome: "RUN", reviewable: false, runId: RUN_ID,
+      submissionHash: own(sealedRecord, "submissionHash"),
+    });
+
     const result = decisionResult(store, REJECT_COMMAND_ID);
+    // The committed result and the run's record are the SAME bytes by construction.
+    expect(result).toEqual(record);
+    // EXACT keys: the four record keys the sealed run already carried, plus the five decision
+    // facts. Nothing else rides the run's record, and none of the sealed four is dropped.
     expect(Object.keys(result as object).sort()).toEqual([
-      "decision", "decisionReason", "findingsRef", "runId", "successorRunId",
+      "authorityRef", "decision", "decisionReason", "envelopeDigest", "findingsRef", "runId",
+      "state", "submissionHash", "successorRunId",
     ]);
-    expect(result).toEqual({
+    expect({
+      decision: own(result, "decision"), decisionReason: own(result, "decisionReason"),
+      findingsRef: own(result, "findingsRef"), runId: own(result, "runId"),
+      successorRunId: own(result, "successorRunId"),
+    }).toEqual({
       decision: "REJECT", decisionReason: REJECT_REASON, findingsRef, runId: RUN_ID,
       successorRunId,
     });
@@ -1407,12 +1491,22 @@ describe("one approval intent decision activates, records, and burns atomically"
     },
   );
 
+  /**
+   * WHICH DISJUNCT ANSWERS. `approval-run-binding.ts:150` is
+   * `state === null || payloadRef(state, "lifecycle") !== "PLAN_REVIEW"`, so an arm that only
+   * asserts the CODE cannot tell a REJECTED run from a run whose record carries no state at all —
+   * and a rejection that erased the record would pass it while proving nothing. The record is
+   * therefore read FIRST: a non-null state carrying lifecycle REJECTED leaves the lifecycle
+   * comparison as the only disjunct that can be what refuses.
+   */
   it("refuses a second REJECT of an already rejected run under the run-binding code", () => {
     const store = reviewableStore();
     expect(reviewedDispatch(store, REJECT_COMMAND_ID, {
       ...INTENT, decision: "REJECT", decisionReason: REJECT_REASON,
     }).ok).toBe(true);
     const decided = readDurableLedger(store, PROJECT_ID).decisionCount;
+    expect(own(runRecord(store), "state")).not.toBeNull();
+    expect(own(recordState(store), "lifecycle")).toBe("REJECTED");
 
     expect(refusalOf(dispatch(store, {
       ...INTENT, decision: "REJECT", decisionReason: "a second opinion",
@@ -1445,6 +1539,32 @@ describe("one approval intent decision activates, records, and burns atomically"
   });
 
   /**
+   * THE REJECTION READS THE RUN THROUGH CORE'S OWN SNAPSHOT, and this arm is what makes that
+   * branch reachable rather than decorative. The planted record passes every check the sources
+   * reader and the run binding make — PLAN_REVIEW lifecycle, matching graph revision, sealed
+   * authority, submission hash, goal ref, quality hash — and fails only
+   * `validPlanningRunState`'s exact-key roster (planning-validation.ts:230-231), so the state
+   * core would refuse is refused HERE, before `rejectRun` is handed a shape it never defined.
+   */
+  it("refuses a REJECT whose durable run state core cannot read as a run state", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-reject-unreadable-state";
+    plantRunRecord(store, {
+      ...runRecord(store), state: { ...recordState(store), spuriousKey: true },
+    }, "unreadable-run-state");
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(refusalOf(reviewedDispatch(store, commandId, {
+      ...INTENT, decision: "REJECT", decisionReason: REJECT_REASON,
+    }))).toEqual({ code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING" });
+    // Nothing committed and no successor minted: the branch refuses ahead of the store.
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(store.readEvents(successorRunIdFor(RUN_ID, commandId))).toHaveLength(0);
+    expect(store.readEvents(RUN_ID).filter((event) =>
+      event.eventType === "PlanningRunRejected")).toHaveLength(0);
+  });
+
+  /**
    * A HOSTILE REASON IS BOUNDED BY THE DECODE EDGE, NOT BY THIS SEAM, and naming which layer
    * answers is the point: `readApprovalIntent` would happily admit a megabyte-long string, so a
    * "the seam refuses it" claim would be false. The ingress bound is
@@ -1468,6 +1588,27 @@ describe("one approval intent decision activates, records, and burns atomically"
       ...INTENT, decision: "REJECT", decisionReason: reason,
     }).ok).toBe(true);
     expect(own(decisionResult(store, REJECT_COMMAND_ID), "decisionReason")).toBe(reason);
+  });
+
+  /**
+   * THE CARRIED RECORD MUST STILL DECODE. The rejection's result is now the run's whole record —
+   * the sealed facts, the reduced state and the reason together — and `readDurableLedger` folds
+   * it back through `decodeBoundedJsonBytes` (`bootstrap-ledger.ts:84`). A reason AT the ingress
+   * bound is therefore the worst case for the read-back: if carrying the record pushed the
+   * result past the decode edge, `stateOf` would answer null and the rejected run would vanish
+   * from every ledger reader while the commit still reported ok.
+   */
+  it("reads a rejection back through the ledger with a reason at the ingress bound", () => {
+    const store = reviewableStore();
+    const reason = "x".repeat(262_144);
+    expect(reviewedDispatch(store, REJECT_COMMAND_ID, {
+      ...INTENT, decision: "REJECT", decisionReason: reason,
+    }).ok).toBe(true);
+
+    expect(own(runRecord(store), "decisionReason")).toBe(reason);
+    expect(own(recordState(store), "lifecycle")).toBe("REJECTED");
+    expect(readPlanningRun(store, PROJECT_ID, RUN_ID))
+      .toMatchObject({ lifecycle: "REJECTED", outcome: "RUN", reviewable: false });
   });
 
   /**
