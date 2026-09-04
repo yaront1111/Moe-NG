@@ -145,7 +145,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:18:26.749Z",
-  "updatedAt": "2026-09-04T23:42:09.629Z",
+  "updatedAt": "2026-09-04T23:43:46.933Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:25:20.604Z",
     "plannedStepCount": 6,
@@ -200,7 +200,84 @@
     "apps/control-room/src/v2/ops/live-ops.tsx",
     "apps/control-room/src/v2/board/board-screen.tsx",
     "apps/control-room/src/v2/board/board-screen.test.tsx",
-    "apps/control-room/src/v2/goals/goal-status-strip.tsx"
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json"
   ],
-  "completionSummary": "Seats and the board now say agents are paused, from the shell's ONE pause fact (3b's context) - no screen polls /health/read for itself.\n\nTHE TWO SENTENCES\n- Seats (cr.sessions.paused, ops/activity-screens.tsx:129): `Agents paused: <provider> limit, resumes <when> - last line from the seat: <lastLine>`. Renders inside the SESSIONS branch ABOVE the count line, so it shows even when no agent seat is live AND when nothing at all is live. An empty/blank lastLine renders `(no output)`.\n- Board + strip (cr.kanban.next / cr.goalstatus.next): label `Waiting for the provider limit to reset at <when>`, detail `The <provider> seat hit its limit on <workItemId>; the wrapper staffs again at <resetAt>.` (label = locale-formatted; detail = the daemon's raw instant).\n\nINPUTS: `paused?: ProviderPause | null | undefined` on SessionsPanelProps, BoardScreenProps and deriveGoalStatus's input. Optional everywhere, so no existing caller broke; null and absent are the same fact.\nHOSTS reading useProviderPause(): board-screen.tsx:209 (LiveBoard), goal-status-strip.tsx:109 (LiveGoalStatus), live-ops.tsx:122 (LiveSessions) - 3 files, import + call each. The pure screens never call the hook.\n\nPRECEDENCE UNCHANGED: only the WORKING branch reads the pause. CONTRACT/PLAN/ESCALATION/REPLANNED/READY_TO_CLOSE/CLOSED/NO_PRD/UNKNOWN answer byte-for-byte as before; four are pinned by an arm, and a drill that makes READY_TO_CLOSE read the pause reds it.\n\nPLANNED DEVIATION (3b's comment on this row is the authority): steps 2/3 prescribed an inline `new Date(resetAt).toLocaleString()`, which prints \"Invalid Date\" on an unparseable resetAt - and 3a's decoder gates resetAt on non-emptiness only, so those arrive. Instead pause-context.tsx (3b's, in keyFiles) gained two additive exports: `pauseResetWords` (the NaN-safe instant, extracted verbatim from pauseWords - its output is byte-identical, 3b's 5 shell files / 46 tests green with no edit) and `pauseSeatWords` (the Seats sentence). Rendered bytes for a par"
+  "completionSummary": "Seats and the board now say agents are paused, from the shell's ONE pause fact (3b's context) - no screen polls /health/read for itself.\n\nTHE TWO SENTENCES\n- Seats (cr.sessions.paused, ops/activity-screens.tsx:129): `Agents paused: <provider> limit, resumes <when> - last line from the seat: <lastLine>`. Renders inside the SESSIONS branch ABOVE the count line, so it shows even when no agent seat is live AND when nothing at all is live. An empty/blank lastLine renders `(no output)`.\n- Board + strip (cr.kanban.next / cr.goalstatus.next): label `Waiting for the provider limit to reset at <when>`, detail `The <provider> seat hit its limit on <workItemId>; the wrapper staffs again at <resetAt>.` (label = locale-formatted; detail = the daemon's raw instant).\n\nINPUTS: `paused?: ProviderPause | null | undefined` on SessionsPanelProps, BoardScreenProps and deriveGoalStatus's input. Optional everywhere, so no existing caller broke; null and absent are the same fact.\nHOSTS reading useProviderPause(): board-screen.tsx:209 (LiveBoard), goal-status-strip.tsx:109 (LiveGoalStatus), live-ops.tsx:122 (LiveSessions) - 3 files, import + call each. The pure screens never call the hook.\n\nPRECEDENCE UNCHANGED: only the WORKING branch reads the pause. CONTRACT/PLAN/ESCALATION/REPLANNED/READY_TO_CLOSE/CLOSED/NO_PRD/UNKNOWN answer byte-for-byte as before; four are pinned by an arm, and a drill that makes READY_TO_CLOSE read the pause reds it.\n\nPLANNED DEVIATION (3b's comment on this row is the authority): steps 2/3 prescribed an inline `new Date(resetAt).toLocaleString()`, which prints \"Invalid Date\" on an unparseable resetAt - and 3a's decoder gates resetAt on non-emptiness only, so those arrive. Instead pause-context.tsx (3b's, in keyFiles) gained two additive exports: `pauseResetWords` (the NaN-safe instant, extracted verbatim from pauseWords - its output is byte-identical, 3b's 5 shell files / 46 tests green with no edit) and `pauseSeatWords` (the Seats sentence). Rendered bytes for a par",
+  "commits": [
+    {
+      "sha": "ae3c0be705c88fd2536b8404834f914764de409f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-12c76c19@2026-09-04T23:23:30Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+        ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+        "apps/control-room/src/v2/board/board-screen.test.tsx",
+        "apps/control-room/src/v2/board/board-screen.tsx",
+        "apps/control-room/src/v2/goals/goal-status.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx",
+        "apps/control-room/src/v2/shell/pause-context.tsx"
+      ],
+      "recordedBy": "worker-12c76c19",
+      "recordedAt": "2026-09-04T23:43:46.933Z",
+      "treeId": "eb24c54c77cf2f844a3ba1352aee8b06daa961c3",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/goals/goal-status.test.tsx",
+          "taskId": "task-0b26dc9e8582428ea1af8032d9277550"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/goal-status.ts",
+          "taskId": "task-0b26dc9e8582428ea1af8032d9277550"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+          "taskId": "task-0b26dc9e8582428ea1af8032d9277550"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+          "taskId": "task-92d84d384e4443d7bf78c76024af5688"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-screens.tsx",
+          "taskId": "task-92d84d384e4443d7bf78c76024af5688"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/live-ops.tsx",
+          "taskId": "task-3506e04abcef4fc3a69299ca238ae1b3"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/shell/pause-context.tsx",
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    "apps/control-room/src/v2/ops/activity-screens.tsx",
+    "apps/control-room/src/v2/goals/goal-status.ts",
+    "apps/control-room/src/v2/board/board-screen.tsx",
+    "apps/control-room/src/v2/goals/goal-status.test.tsx",
+    "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/ops/live-ops.tsx"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-12c76c19@2026-09-04T23:23:30Z",
+    "at": "2026-09-04T23:43:46.933Z"
+  }
 }
