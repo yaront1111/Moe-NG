@@ -50,6 +50,7 @@ export {
   PLANNING_RUN_TRANSITIONS,
   reducePlanningRun,
 } from "./planning/planning-run-reducer.js";
+export { rejectRun } from "./planning/planning-results.js";
 export type {
   GoalCancelPlanningCommand,
   GraphApproveCommand,

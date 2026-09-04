@@ -103,9 +103,11 @@ describe("supersession accepted decision", () => {
     // task-e241a79a as hostile-safe admissions for downstream approval consumers.
     // + the four graph-independent planning-content encode/decode functions, so
     // durable compiler authority can preserve those bodies without graph cycles.
+    // + rejectRun, published by task-3780109 so the daemon's approval seam commits the REJECTED
+    // transition through core rather than reimplementing the lifecycle at the seam.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(255);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(256);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

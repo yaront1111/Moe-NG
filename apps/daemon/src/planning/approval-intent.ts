@@ -12,6 +12,8 @@ import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { assembleActivationInput, commitIntentActivation, replayIntentDecision }
   from "./approval-intent-activation.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
+import { APPROVAL_REJECT_REASON_REQUIRED, commitIntentRejection, rejectionReasonOf }
+  from "./approval-intent-rejection.js";
 import { observeApprovalIntentSourceFences }
   from "./approval-intent-source-fences.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
@@ -193,8 +195,8 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
   });
   const replayed = replayIntentDecision(input.store, command);
   if (replayed !== null) return replayed;
-  if (intent.decision !== "APPROVE") {
-    return refuse(null, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_PREREQUISITE");
+  if (intent.decision === "REJECT" && rejectionReasonOf(intent.decisionReason) === null) {
+    return refuse(null, APPROVAL_REJECT_REASON_REQUIRED, LAYER);
   }
 
   // Capture every mutable source BEFORE the first authority read. The envelope version is the
@@ -234,6 +236,9 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
     return refuse(null, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }
 
+  if (intent.decision === "REJECT") {
+    return commitIntentRejection(input.store, command, { intent, sourceFences, sources });
+  }
   const assembled = assembleActivationInput(input.store, ledger, {
     humanReview: witness, intent, projectId: input.projectId, sourceFences,
   });
