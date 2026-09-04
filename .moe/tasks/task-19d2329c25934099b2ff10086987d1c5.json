@@ -120,7 +120,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:37:25.873Z",
-  "updatedAt": "2026-09-04T17:25:52.681Z",
+  "updatedAt": "2026-09-04T17:27:13.709Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:40:00.036Z",
     "plannedStepCount": 5,
@@ -348,6 +348,27 @@
       "treeId": "6f53299135a65c01f57d42ba4e10729d60332d9e",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "47141db5dd5d964115ae249ec5a61c3fc5181c52",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-6ab7cede@2026-09-04T16:55:07Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+        ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+        "apps/daemon/src/goals/goal-publish-remote.test.ts"
+      ],
+      "recordedBy": "worker-6ab7cede",
+      "recordedAt": "2026-09-04T17:27:13.709Z",
+      "treeId": "af24a7e9d591625c262b009df98c28e6f54127b1",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -357,14 +378,20 @@
     "apps/daemon/src/repository/publish-ledger.ts",
     "apps/daemon/src/repository/publish-services.ts",
     "apps/daemon/src/repository/publish-services.js",
-    "apps/daemon/src/goals/goal-services.ts"
+    "apps/daemon/src/goals/goal-services.ts",
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-d018e522@2026-09-04T15:15:28Z",
-    "at": "2026-09-04T15:15:41.665Z"
+    "kind": "completion",
+    "sessionId": "worker-6ab7cede@2026-09-04T16:55:07Z",
+    "at": "2026-09-04T17:27:13.709Z"
   },
   "priorHandoffs": [
     {
