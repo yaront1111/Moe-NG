@@ -38,8 +38,10 @@ export function refusalWords(refusal: RefusalLike): string {
   const words = CODE_WORDS[refusal.code];
   const provenance = `${refusal.code} at ${refusal.layer}`;
   if (words !== undefined) return `${words} (${provenance})`;
-  const verb = refusal.status === "ERROR" ? "failed" : "refused";
-  return `The daemon ${verb} this (${provenance})`;
+  // A layer of this page's own (CONTROL_ROOM_*) never reached the daemon: say so.
+  if (refusal.layer.startsWith("CONTROL_ROOM")) return `Not available from this page yet (${provenance})`;
+  if (refusal.status === "ERROR") return `This did not complete (${provenance})`;
+  return `The daemon refused this (${provenance})`;
 }
 
 /** The tooltip behind a refusal line: the status when known, and the layer that answered. */

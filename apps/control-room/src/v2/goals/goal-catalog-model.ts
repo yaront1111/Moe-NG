@@ -235,6 +235,8 @@ function withCoverage(
  * counts; without them (fixtures, tests, an unattached page) the coverage overlay stands.
  */
 export interface GoalCatalogLive {
+  /** The Needs-you items, so the strip counts DECISIONS exactly as the nav badge does. */
+  readonly needsYou?: readonly { readonly goalId: string }[] | undefined;
   readonly runs: RunsOutcome | null;
   readonly surface: SurfaceFrame | null;
 }
@@ -269,15 +271,20 @@ function withGlance(
 /** What needs a person now, as strips with counts; none when nothing does. */
 function triageOf(goals: readonly GoalCardModel[], live: GoalCatalogLive): readonly TriageStrip[] {
   const strips: TriageStrip[] = [];
-  const decisions = goals.filter((goal) => goal.needsYou);
-  if (decisions.length > 0) {
-    const one = decisions.length === 1 ? decisions[0] : undefined;
+  // One count for "what needs you": the Needs-you items when the page holds them (a goal can
+  // carry several), else the goals whose stage waits on a person.
+  const items = live.needsYou ?? goals.filter((goal) => goal.needsYou).map((goal) => ({ goalId: goal.goalId }));
+  if (items.length > 0) {
+    const goalIds = [...new Set(items.map((item) => item.goalId))];
+    const one = goalIds.length === 1 ? goals.find((goal) => goal.goalId === goalIds[0]) : undefined;
     strips.push(Object.freeze({
-      count: String(decisions.length),
+      count: String(items.length),
       id: "needs-you",
-      label: one === undefined ? "Decisions waiting on you" : "Decision waiting on you",
+      label: items.length === 1 ? "Decision waiting on you" : "Decisions waiting on you",
       openGoalId: one?.goalId,
-      sub: one === undefined ? "Plans, contracts, exhausted reviews, goals to close" : one.needsYouLabels?.[0] ?? "",
+      sub: one === undefined
+        ? "Plans, contracts, exhausted reviews, goals to close"
+        : items.length === 1 ? one.needsYouLabels?.[0] ?? "" : `${String(items.length)} decisions on ${one.title}`,
       tone: "info",
     }));
   }

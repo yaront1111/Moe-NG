@@ -139,14 +139,15 @@ export function LiveGoalsHome({
 
   const coverage = useGoalCoverage(catalog, readCoverage);
   // The same derivation the Needs-you screen renders, so the badge and the queue agree.
-  const needsYouCount = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, runs, surface }).items.length,
+  const needsYouItems = useMemo(
+    () => deriveNeedsYou({ catalog, coverage, runs, surface }).items,
     [catalog, coverage, runs, surface],
   );
+  const needsYouCount = needsYouItems.length;
   useEffect(() => { onNeedsYouCount?.(needsYouCount); }, [needsYouCount, onNeedsYouCount]);
 
   const data = setup.ok
-    ? deriveGoalCatalog(catalog, coverage, Date.now(), { runs, surface })
+    ? deriveGoalCatalog(catalog, coverage, Date.now(), { needsYou: needsYouItems, runs, surface })
     : notAttached(setup);
 
   // A refused bootstrap closes goal creation on THIS component's own authority,

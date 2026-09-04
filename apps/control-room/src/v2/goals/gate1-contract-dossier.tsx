@@ -6,8 +6,8 @@ import { MIDDOT } from "../glyphs.js";
 /**
  * THE PRODUCT CONTRACT a person approves at Gate 1. Four things lead, because they are the
  * decision: what we will build (objectives), what we will not (negative scope), how we will
- * know it is done (the acceptance criteria), and the product questions still open (material
- * decisions). Everything else the revision carries - user jobs, journeys, the six requirement
+ * know it is done (the acceptance criteria), and the product decisions the contract records
+ * (material decisions). Everything else the revision carries - user jobs, journeys, the six requirement
  * groups, assumptions, budgets, metrics, provenance, retired ids - is the same dossier one
  * click away, so approval is a reading, not a scroll past an eighteen-section dump.
  */
@@ -16,6 +16,10 @@ interface DossierItem {
   readonly details?: readonly string[];
   readonly id: string;
   readonly statement: string;
+}
+
+function plural(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function joined(label: string, values: readonly string[]): string {
@@ -151,7 +155,7 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           statement: row.question,
         }))}
         sectionId="material-decisions"
-        title="PRODUCT DECISIONS STILL OPEN"
+        title="PRODUCT DECISIONS"
       />
     </>
   );
@@ -266,8 +270,9 @@ export function Gate1ContractDossier({
       <Essentials revision={revision} />
       <details className="cr2-goal-fold" data-testid="cr.gate1.contract.full">
         <summary className="cr2-goal-fold-summary">
-          {`The full contract ${MIDDOT} ${String(requirementCount)} requirements, ${String(revision.userJobs.length)} user jobs,`
-            + ` ${String(revision.journeys.length)} journeys, assumptions, budgets, metrics, provenance`}
+          {`The full contract ${MIDDOT} ${plural(requirementCount, "requirement")}, ${plural(revision.userJobs.length, "user job")},`
+            + ` ${plural(revision.journeys.length, "journey")}, assumptions, budgets, metrics, the completion definition,`
+            + " provenance, retired ids"}
         </summary>
         <FullContract revision={revision} />
       </details>
