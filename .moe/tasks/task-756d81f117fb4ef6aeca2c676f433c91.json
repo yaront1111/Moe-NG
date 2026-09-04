@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:46:41.128Z",
-  "updatedAt": "2026-09-04T18:09:00.265Z",
+  "updatedAt": "2026-09-04T18:30:09.000Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:49:13.729Z",
     "plannedStepCount": 6,
@@ -190,5 +190,51 @@
   "contextFetchedBy": [
     "worker-6ab7cede"
   ],
-  "workStartedAt": "2026-09-04T17:34:53.277Z"
+  "workStartedAt": "2026-09-04T17:34:53.277Z",
+  "commits": [
+    {
+      "sha": "9b6d76c1999d30948a2340573e3cd227800834ef",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6ab7cede@2026-09-04T17:34:38Z",
+      "paths": [
+        ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json"
+      ],
+      "recordedBy": "worker-6ab7cede",
+      "recordedAt": "2026-09-04T18:30:09.000Z",
+      "treeId": "8ffee592060a01ab6c71b74101bb918435997f3d",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/seat-reset-instant.js",
+    "apps/daemon/src/orchestrator/seat-output-tail.js",
+    "apps/daemon/src/orchestrator/seat-exit-classifier.js",
+    "apps/daemon/src/orchestrator/seat-output-tail.test.ts",
+    "apps/daemon/src/orchestrator/seat-output-tail.ts",
+    "apps/daemon/src/orchestrator/seat-exit-classifier.test.ts",
+    "apps/daemon/src/orchestrator/provider-pause-contracts.js",
+    "apps/daemon/src/orchestrator/provider-pause-ledger.js",
+    "apps/daemon/src/orchestrator/seat-exit-classifier.ts",
+    "apps/daemon/src/orchestrator/provider-pause-contracts.ts",
+    "apps/daemon/src/orchestrator/seat-reset-instant.ts",
+    "apps/daemon/src/orchestrator/provider-pause-ledger.ts",
+    "apps/daemon/src/orchestrator/provider-pause-ledger.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/orchestrator/zz-placeholder-alpha.test.ts",
+    "apps/daemon/src/orchestrator/zz-placeholder-beta.test.ts",
+    "apps/daemon/src/orchestrator/zz-placeholder-gamma.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-6ab7cede@2026-09-04T17:34:38Z",
+    "at": "2026-09-04T18:30:09.000Z"
+  }
 }
