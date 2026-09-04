@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:37.267Z",
-  "updatedAt": "2026-09-04T18:20:27.523Z",
+  "updatedAt": "2026-09-04T18:20:38.589Z",
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -206,7 +206,64 @@
     "apps/control-room/src/live/dev-proxy-paths.ts",
     "apps/control-room/src/live/live-document-proxy.test.ts",
     "apps/daemon/src/http/activation-read.test.ts",
-    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
   ],
-  "completionSummary": "DAEMON ACTIVATION-RECEIPTS READ ROUTE. Scope was narrowed at plan time to the route only; the port+card half is task-3506e04abcef4fc3a69299ca238ae1b3 (dependsOn this row), so filed DoD clauses 3/4/6 are not graded here. Clause 5 (signingKeyRef) IS delivered.\n\nNEW: apps/daemon/src/http/activation-read.ts (250 lines, at target) + .js bridge + activation-read.test.ts (20 arms) + http-listener-read-dispatch.test.ts (6 arms). EDITED: http-listener-read-dispatch.ts (+19), http-listener.ts (+3), http-listener-guards.ts (+4), control-room dev-proxy-paths.ts (+1) and its literal asserter live-document-proxy.test.ts (+1). affordance-read.ts is byte-IDENTICAL at 422 — `git diff --stat` on it is EMPTY.\n\nEIGHT registration touchpoints, not the four the plan named: import, JSON_ROUTES, non-POST guard, dispatch branch (AWAITED — this is the only async read), a new serveActivation helper, the StartListenerOptions field, the two LISTENER_ACTIVATION_* codes plus their statusFor 400/503 (refuseRequest demands a ListenerRefusalCode), and the dev proxy.\n\nTHE READ NEVER WRITES. Measured: measureBackup does fs.mkdir(<root>/.moe-next/backups) then a real node:sqlite ONLINE backup — a polling card would write a file per poll. readOnlyActivationPorts neuters exactly backup and fs.mkdir (exists/stat/readBytes stay REAL or four members silently degrade), and the backup row is reported as ACTIVATION_READ_BACKUP_DEFERRED under the ROUTE's own layer. Rejected a read-only backup probe: an online sqlite backup checkpoints WAL, so a source digest under the destination's name would be fabrication.\n\nA REAL DEFECT FOUND AND FIXED: the canary arm caught a git stderr tail publishing the credential VALUE verbatim onto the wire. secretValues() re-derives the held values from the production providerCredentials and scrubs them to [redacted] from every reason and ref. Drill D proves the fence is load-bearing. LEFT UPSTREAM for the hardening row: receiptDetail (activation-receipts-ports.ts:20) only truncates, "
+  "completionSummary": "DAEMON ACTIVATION-RECEIPTS READ ROUTE. Scope was narrowed at plan time to the route only; the port+card half is task-3506e04abcef4fc3a69299ca238ae1b3 (dependsOn this row), so filed DoD clauses 3/4/6 are not graded here. Clause 5 (signingKeyRef) IS delivered.\n\nNEW: apps/daemon/src/http/activation-read.ts (250 lines, at target) + .js bridge + activation-read.test.ts (20 arms) + http-listener-read-dispatch.test.ts (6 arms). EDITED: http-listener-read-dispatch.ts (+19), http-listener.ts (+3), http-listener-guards.ts (+4), control-room dev-proxy-paths.ts (+1) and its literal asserter live-document-proxy.test.ts (+1). affordance-read.ts is byte-IDENTICAL at 422 — `git diff --stat` on it is EMPTY.\n\nEIGHT registration touchpoints, not the four the plan named: import, JSON_ROUTES, non-POST guard, dispatch branch (AWAITED — this is the only async read), a new serveActivation helper, the StartListenerOptions field, the two LISTENER_ACTIVATION_* codes plus their statusFor 400/503 (refuseRequest demands a ListenerRefusalCode), and the dev proxy.\n\nTHE READ NEVER WRITES. Measured: measureBackup does fs.mkdir(<root>/.moe-next/backups) then a real node:sqlite ONLINE backup — a polling card would write a file per poll. readOnlyActivationPorts neuters exactly backup and fs.mkdir (exists/stat/readBytes stay REAL or four members silently degrade), and the backup row is reported as ACTIVATION_READ_BACKUP_DEFERRED under the ROUTE's own layer. Rejected a read-only backup probe: an online sqlite backup checkpoints WAL, so a source digest under the destination's name would be fabrication.\n\nA REAL DEFECT FOUND AND FIXED: the canary arm caught a git stderr tail publishing the credential VALUE verbatim onto the wire. secretValues() re-derives the held values from the production providerCredentials and scrubs them to [redacted] from every reason and ref. Drill D proves the fence is load-bearing. LEFT UPSTREAM for the hardening row: receiptDetail (activation-receipts-ports.ts:20) only truncates, ",
+  "commits": [
+    {
+      "sha": "6c0986ea802e220db47059c19109938fb3f6ea56",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-80f8bfe1@2026-09-04T17:28:23Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/daemon/src/http/activation-read.js",
+        "apps/daemon/src/http/activation-read.test.ts",
+        "apps/daemon/src/http/activation-read.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts"
+      ],
+      "recordedBy": "worker-80f8bfe1",
+      "recordedAt": "2026-09-04T18:20:38.589Z",
+      "treeId": "9908dd0c307d6908b527be6e55d07a81cfa414bd",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/http-listener.ts",
+          "taskId": "task-9d55341928f04110ba7b286a985f8fa0"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.ts",
+          "taskId": "task-9d55341928f04110ba7b286a985f8fa0"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.ts",
+    "apps/daemon/src/http/activation-read.js",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/http/activation-read.ts",
+    "apps/daemon/src/http/activation-read.test.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/control-room/src/live/live-document-proxy.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-80f8bfe1@2026-09-04T17:28:23Z",
+    "at": "2026-09-04T18:20:38.589Z"
+  }
 }
