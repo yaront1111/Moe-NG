@@ -17,8 +17,27 @@
     "HUMAN GATES ARE HUMAN-ONLY: the REJECT decision rides the existing operator-only, MCP-excluded approval wire and mints a human-review witness exactly as APPROVE does; a test pins that an MCP caller cannot reject.",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the decision ids in a row comment."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE (manual - an architect seat cannot set this parent's dependsOn: [NOT_ALLOWED] role resolution; governors paged). Read the three SPIDR children on disk (.moe/tasks/<id>.json; SPIDR children may be absent from get_context.epicSiblings) and confirm each is DONE with a landed commit: 1 task-3780109018bb49b2bf3a00b18952d7ff (REJECT commits + REVISION successor + currentPlanningRun + verdict), 2 task-957bccf162b446f3a4db46b56e8e8f3a (offers follow the current run; compiler re-plans the successor with the reason), 3 task-a988ca1c240347178c54348c470d07ed (plan-gate Reject, Needs you PLAN_REJECTED, stage Plan sent back, docs). Verify on disk: `git log main --grep \"Moe-Task: task-<id>\" --oneline` = 1+ line each; `test -f apps/daemon/src/planning/approval-intent-rejection.ts`; `grep -c currentPlanningRun apps/daemon/src/http/affordance-planning-offers.ts` >= 1; `grep -n \"PLAN REJECTED\" apps/daemon/src/orchestrator/agent-mission-text.ts` >= 1; `grep -n \"cr.approve.reject\" apps/control-room/src/v2/goals/approve-plan-gate.tsx` >= 1; README names Reject. If ANY child is not DONE: `moe.report_blocked` with blockedOnTaskIds = the missing children and the exact grep results - this row owns 0 files and never re-implements a child's work. Record the measurements in the step note.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "LIVE DRIVE on UnAI (parent DoD 5; D:/projexts/UnAI, daemon + wrapper via scripts/up.ps1 - never restart the wrapper to unstick a seat, claim TTL 30 min). Find or create a goal whose plan is at the gate (decide_intent offered on its run). In the browser: Reject with a reason (write the exact reason text in the note). Record, with timestamps and ids read from the store (read-only node:sqlite peek): the intent decision (result {decision:\"REJECT\", decisionReason, successorRunId}), the rejected run's lifecycle REJECTED, the successor run at version 1 (REVISION), the affordance read showing decide_intent absent + submit_decomposition offered + planningGoalRefs[successor] = goal, the Seats/Needs-you screens (PLAN_REJECTED card with the reason), the wrapper log SPAWNED line for the compiler seat and the seat's mission excerpt quoting the reason between the operator markers (from wrapper stdout), the successor's PLAN_COMPILED, the gate returning with Approve/Reject bound to the successor, and the Approve commit (activation event id). If the owner's quota refuses the real seat, drive the resubmission with the scripted double from child 2's e2e and say so - quote the refusal line; never fabricate. Transcript in a row comment under 4500 chars (split if needed, one idea per comment).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES + COMPLETE (parent DoD 6). From the repo root quote count lines for `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security` (path-attributed baseline rule for any foreign red: merge-base vs HEAD, verbatim). Adversarial pass over the whole feature: (a) an MCP caller cannot reject (approval.decide_intent stays MCP-excluded - allowlist test count line); (b) reject twice on the same run refuses (lifecycle already REJECTED); (c) reject the successor again -> a second successor, resolver hops 2, offers still correct; (d) the APPROVE path is byte-identical (existing APPROVE arms untouched across the three commits - `git log --oneline -- apps/daemon/src/planning/approval-intent.test.ts` and the diff of the APPROVE arms); (e) a rejection reason with markers or newlines cannot break the mission's `<<<OPERATOR INSTRUCTIONS` fence (child 2's mission test covers escaping - re-check). `moe.complete_task` with verification = the daemon count line and a completionSummary listing the three child ids, the live-drive ids, and the mechanism choice recorded in comment-6013fef3 (core rejectRun + REVISION successor on the same goal; option (i) and a successor goal rejected).",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +47,47 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1002,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-6013fef305f84a0fa3778be2e23175eb",
+      "author": "architect-16a01670",
+      "content": "PLANNING RECORD (architect-16a01670, 2026-09-04, measured at main 68eb1c5d). Mechanism chosen: option (ii) of the description - core's designed path `rejectRun` (packages/core/src/planning/planning-results.ts:132: REJECTED run + successorRunId + a DRAFT successor state) with a REVISION successor run on the SAME goal, plus a `currentPlanningRun` resolver that follows REJECTED -> successor from the goal's immutable `planningRunRef`. Rejected: option (i) (REJECT as a result on a run that stays PLAN_REVIEW) - the compile dispatcher refuses a second submission on a finalized run (compile-dispatcher.ts:299-302 SUBMIT_DECOMPOSITION_ALREADY_FINALIZED) and core has no in-run re-proposal; rejected: a successor GOAL (the REPLAN pattern) - the human asked to send THIS goal's plan back, not to fork the goal.\n\nSPIDR-split into 3 children under this row (it spans the approval wire, core run lifecycle, the offer ladder, compiler lane + dispatcher, wrapper mission, activity, catalog resolution, three control-room surfaces, e2e, docs and a live drive - far over the 12-step/10-file thresholds). This row's own plan is VERIFICATION + LIVE DRIVE (0 files); its dependsOn on the children cannot be set by an architect seat ([NOT_ALLOWED] role resolution; governors already paged) - step 1 is the manual gate.\n1) REJECT commits + REVISION successor + verdict + currentPlanningRun resolver (leaf).\n2) Re-planning follows the current run: offers withhold decide_intent for a REJECTED run and offer planning.submit_decomposition for the goal; the dispatcher compiles the successor (it already handles a run at version 1: compile-dispatcher.ts:298-303 skips create when runVersion === 1); `planningGoalRefs` on the surface binds the successor to the goal; the compiler mission carries the rejection reason between the operator markers (agent-wrapper-main.ts:241 compilerInstructions). dependsOn 1.\n3) Control room: Reject control + required reason on the plan gate (approve-plan-gate.tsx, approve-plan.tsx, plan-approval.ts), the current run resolved through the surface's planningGoalRefs (the goal catalog keeps its exact-key shape), NEEDS_YOU kind PLAN_REJECTED, stage PLAN_REJECTED + STAGE_WORDS \"Plan sent back\", Playwright reject -> new plan -> approve, README/runbook. dependsOn 2. Ids follow in the next comment.\n\nDoD re-anchors: DoD 1's \"event kind or decision result named by the architect\" = core's PlanningRunRejected event on the run aggregate + a PlanningRunCreated(REVISION) on the successor + the intent decision result {decision, decisionReason, findingsRef, runId, successorRunId}. DoD 3's verdict: activity-read.ts:77 VERDICT_KINDS gains the approval kinds (child 1); activity-words.ts:69 already renders both words.",
+      "timestamp": "2026-09-04T10:26:49.578Z"
+    },
+    {
+      "id": "comment-66073008d24b47e9941cb88f13bf5e24",
+      "author": "architect-16a01670",
+      "content": "Child ids (completing comment-6013fef3): 1 task-3780109018bb49b2bf3a00b18952d7ff (leaf) -> 2 task-957bccf162b446f3a4db46b56e8e8f3a (dependsOn 1) -> 3 task-a988ca1c240347178c54348c470d07ed (dependsOn 2). Note: child 2's description opens with a mistyped parent id (\"...da65b64\"); its parentTaskId FIELD is correct (task-6061e05cd17540a1bbe08b965da58b64) - the field is authoritative. This row's plan (3 steps, 0 files) gates on all three, runs the UnAI live drive (reject -> re-plan -> approve) and quotes the gates.",
+      "timestamp": "2026-09-04T10:28:57.266Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:58.848Z",
-  "updatedAt": "2026-09-04T09:42:58.848Z"
+  "updatedAt": "2026-09-04T10:28:57.266Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:23:28.743Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:28:54.275Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Option (i) of the description - REJECT recorded as a result while the run stays PLAN_REVIEW - REJECTED: the compile dispatcher refuses a second submission on a finalized run (compile-dispatcher.ts:299-302 SUBMIT_DECOMPOSITION_ALREADY_FINALIZED) and core has no in-run re-proposal; the rejection would need a bespoke re-open. (2) A successor GOAL (the REPLAN pattern, PR #20) - REJECTED: the human sends THIS goal's plan back; forking the goal changes its id and every card. (3) CHOSEN: core's designed path `rejectRun` (planning-results.ts:132) -> REJECTED run + a REVISION successor run on the same goal (the dispatcher already handles a run at version 1: :298-303), plus a `currentPlanningRun` resolver following REJECTED -> successor from the goal's immutable planningRunRef, and the UI resolving the current run through the surface's planningGoalRefs so the goal catalog keeps its exact-key shape. (4) One row - REJECTED: approval wire + core lifecycle + offer ladder + compiler lane/dispatcher + mission + activity + three control-room surfaces + e2e + docs + live drive exceed the thresholds; three children in build order, parent = 0-file verification + live drive.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: approval-intent.ts:91 DECISIONS [APPROVE, REJECT]; :196-198 refuses non-APPROVE before fences/sources/witness; :200-243 the APPROVE flow (fences, sources, HUMAN_APPROVED witness, operatorReviewAuthority, commitIntentActivation); tests pin the refusal at approval-intent.test.ts:1273-1280 and :1565-1567. Core: rejectRun(state, commandId, findingsRef, successorRunId) -> REJECTED + DRAFT successor (planning-results.ts:118-146); run lifecycles runtime-vocabulary.ts:49-50; planning.create_draft REVISION needs {goalRef, runId, runKind} (planning-command-contract.ts:160-167); non-expansion proposals admit INITIAL|REVISION (:197-200). Offer ladder keys on goal.planningRunRef (affordance-planning-offers.ts:88, :118-147; planReviewable :78-81); compiler lane facts affordance-compiler-lane.ts:70-104; dispatcher versions compile-dispatcher.ts:255-303 (create at 0, ready/claim/propose at 1, else ALREADY_FINALIZED), ids :115, proposalKind :290, one-node fence :192-197. Mission: compilerInstructions agent-wrapper-main.ts:241 -> agent-mission-text.ts:110-115 operator markers. Activity: activity-read.ts:77 VERDICT_KINDS lacks the approval kinds; activity-words.ts:69 already renders both words. UI: approve-plan-gate.tsx:43-65 (one button, reason, refusal slots), approve-plan.tsx:221/:247, plan-approval.ts:24/:46-56; needs-you-model.ts:27 NEEDS_YOU_KINDS (no test pins the roster name); goal-status.ts:10-24 GoalStage, :121 PLAN stage; STAGE_WORDS Record at goal-status-strip.tsx:17.",
+    "risks": "(a) The parent is claimable for WORKING before its children land - step 1 is the manual gate. (b) A run version/fence race: the browser's expectedVersion is the run version (approval-intent.ts:202-207) - the REJECT path keeps that fence. (c) The successor's runKind REVISION must be admitted by every reader that pins runKind INITIAL (child 2 measures the shape consumers: planning-run-read decoders, digest mirrors). (d) Reason text is operator input rendered into a seat mission - child 2 must fence the markers (the mission test covers it). (e) Peer dirt never staged; live drive respects the owner's quota and records refusals verbatim.",
+    "keyFiles": [
+      "apps/daemon/src/planning/approval-intent.ts",
+      "packages/core/src/planning/planning-results.ts",
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/daemon/src/planning/compile-dispatcher.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/http/activity-read.ts",
+      "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+      "apps/control-room/src/v2/goals/plan-approval.ts",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/control-room/src/v2/goals/goal-status.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:28:56.467Z"
 }

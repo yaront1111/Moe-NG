@@ -70,7 +70,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:43:36.605Z",
-  "updatedAt": "2026-09-04T10:07:02.963Z",
+  "updatedAt": "2026-09-04T10:10:09.503Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:55:21.786Z",
     "plannedStepCount": 3,
@@ -108,5 +108,37 @@
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T10:07:02.963Z"
+  "blockedAt": "2026-09-04T10:07:02.963Z",
+  "commits": [
+    {
+      "sha": "790875619b7b0efc80d67395d2ad5b5215d9d30d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T10:05:19Z",
+      "paths": [
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T10:07:45.973Z",
+      "treeId": "ba4f87cf077121560f2b4d063446ae07e40a8188",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-c846071b@2026-09-04T10:05:19Z",
+    "at": "2026-09-04T10:07:45.973Z"
+  },
+  "dependsOn": [
+    "task-38ca5f66c8d146df97ed6a99b35edfbd",
+    "task-f99cec0b7654450ca36d3864a4db5b5a",
+    "task-7945f38da29249a291004f78b4024262"
+  ]
 }

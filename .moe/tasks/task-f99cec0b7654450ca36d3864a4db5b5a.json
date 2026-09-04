@@ -1,0 +1,134 @@
+{
+  "id": "task-f99cec0b7654450ca36d3864a4db5b5a",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Conflict refusals name the observed version on the wire; the seat mission retries once at it",
+  "description": "SPIDR child B of task-5f5d873e72b546d4a30942bea5c80b97 (leaf; no sibling dependency). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: every `EXPECTED_VERSION_CONFLICT` refusal on HTTP `/command` and on the MCP command wire carries the expected AND observed versions, and the seat mission tells the seat what to do with them. Also the mission's seat-facing read facts (graph_get payload roster, no-write-tool line). Nothing else of the parent.\n\nMEASURED (re-measure before planning):\n- The store already computes the observed version: packages/store/src/store-digests.ts:181-193 `expectedVersionConflictResultBytes(expectedVersion, observedVersion)` writes `{code, expectedVersion, observedVersion, version}` into the decision's `resultBytes`.\n- TWO daemon commit paths drop it: apps/daemon/src/bootstrap/bootstrap-ledger.ts:156-168 `decided()` refuses `refuse(request.kind, response.decision.resultCode, \"DURABLE_STORE\")` (a `decodeResult(decision.resultBytes)` helper exists at :102); apps/daemon/src/work/work-claim-services.ts commitAccepted (:111-112) refuses the same way. Both hold the `CommandDecisionRecord` with `resultBytes` at the refusal site - DECODE the store's bytes, never recompute the version.\n- The wire: apps/daemon/src/daemon-command-dispatch.ts:34-46 `DomainRefusal(code, layer, detail, httpStatus)`; :97-103 `decisionOf` throws it with `detail = outcome.error === null ? outcome.code : outcome.error.code`; :117-122 the frame is `{ outcome: \\\"REFUSED\\\", refusal: { code, detail, httpStatus, layer } }` and the MCP command wire (mcp-dispatch-port dispatchCommandBytes) serialises the same object. `detail` is an EXISTING string field, so the versions ride in it with NO shape change: `detail = \\\"EXPECTED_VERSION_CONFLICT expectedVersion=<n> observedVersion=<m>\\\"`. A structured `details` key was rejected at plan time: 11 control-room exact-key REFUSED decoders (apps/control-room/src/live/live-*.ts, v2/goals/gate1-refusal.ts) plus the generated client pin the key roster - that is a separate row if ever wanted. Refusal outcome shapes (WorkClaimRefused, BootstrapRequestRefused: {advisoryOnly, authority, code, error, kind, ok, refusedBy}) are pinned by in-package golden tests - carry the versions through the EXISTING `error: RuntimeError | null` slot (registry row packages/contracts/src/runtime/runtime-error-registry.ts:101 declares NO required detail keys today; either declare `expectedVersion`/`observedVersion` there with its pins, or render the detail string at the refusal site and keep `error` as is - architect decides and states why) rather than adding a key.\n- Mission: apps/daemon/src/orchestrator/agent-mission-text.ts:117-122 tells the seat expectedVersion = claimAggregateVersion from work_get_context; it says nothing about a conflict. `graph_get` accepts EXACTLY `{ projectId }` (apps/daemon/src/planning/graph-query.ts:120 ALLOWED_BODY_KEYS) - the seat guessed shapes and got INPUT_INVALID. `grep -c memory apps/daemon/src/orchestrator/agent-mission-text.ts` = 0: the 'record a durable memory' instruction the seat reported is NOT in moe-next's mission (a seat in a project directory reads that project's own CLAUDE.md) - parent clause (e) closes as measured-absent; this row adds one mission sentence: the seat has no file-write tool, it reports instead of writing memories.\n\nFEATURE: (1) both commit paths turn a store conflict into a refusal whose wire `refusal.detail` is exactly `EXPECTED_VERSION_CONFLICT expectedVersion=<n> observedVersion=<m>` (decoded from resultBytes; if the bytes do not decode, detail stays the bare code - never invented). (2) Mission text: on EXPECTED_VERSION_CONFLICT read observedVersion from the refusal detail and retry ONCE at that version, then stop and report; graph_get payload is exactly {projectId}; no file-write tool line. (3) A scripted seat double over the REAL MCP wire proves it: claim -> planted conflict -> release succeeds on the single retry, and the decision ledger shows exactly one `command.expected-version-rejected` record for the run (the planted one), not seven.",
+  "definitionOfDone": [
+    "HTTP `/command` test on one bootstrap kind and MCP command-wire test on `work.release`: a stale expectedVersion yields `outcome: \"REFUSED\"`, `refusal.code = \"EXPECTED_VERSION_CONFLICT\"`, `refusal.layer = \"DURABLE_STORE\"`, and `refusal.detail` matching /^EXPECTED_VERSION_CONFLICT expectedVersion=\\d+ observedVersion=\\d+$/ with the observed value equal to the aggregate's real version (asserted by reading the store, not the request); undecodable resultBytes leave detail = the bare code (test plants corrupt bytes).",
+    "No wire-shape change: `git diff --stat` at completion touches no file under apps/control-room/src/live/ or packages/control-room-client/, and the REFUSED frame's key roster {code, detail, httpStatus, layer} is asserted unchanged in the dispatch test; in-package refusal-outcome goldens stay green or are updated only for the `error` slot.",
+    "Mission-text test asserts the three new sentences verbatim (retry once at observedVersion then report; graph_get payload is exactly {projectId}; no file-write tool - report instead of writing memories) and that no sentence mentions writing a memory.",
+    "Seat-double e2e over the REAL MCP wire (apps/daemon test with a real store, or tests/e2e/foundation): claim -> planted conflict -> one retry at the observed version -> RELEASED; the decision ledger for the run has exactly one `command.expected-version-rejected` record (the planted one) - asserted by reading the ledger.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (root, if packages/contracts is touched), `pnpm test:security` (if the registry is touched)."
+  ],
+  "taskRails": [
+    "NO WIRE-SHAPE CHANGE: the versions travel in the existing `refusal.detail` string; adding a key to the REFUSED frame is forbidden here (11 exact-key decoders + generated client).",
+    "DECODE, NEVER RECOMPUTE: the observed version comes from the store's resultBytes; a daemon-computed version would authenticate nothing.",
+    "Refusals carry a stable code AND a layer asserted by a test; mutate the production surface to prove each failure arm goes red (global rail 1). <=250 physical lines per production source, hard stop 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "LEDGER TESTS FIRST (red). (a) apps/daemon/src/bootstrap/bootstrap-durability.test.ts: the DURABLE_STORE conflict arm at ~:318-335 (stale expectedVersion on a bootstrap kind after project.register, head at version 1) gains: `expect(outcome.error).not.toBeNull()`, `expect(outcome.error?.code).toBe(\"EXPECTED_VERSION_CONFLICT\")`, `expect(outcome.error?.details).toEqual({ actualVersion: 1, expectedVersion: <the stale number the arm sends> })` - the actual value asserted by reading `readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID)?.currentVersion`, never copied from the request. Add a sibling arm that plants CORRUPT resultBytes on the decision (drive the conflict, then overwrite the stored decision's result bytes through the store's own test seam if one exists, else construct a `CommandDecisionRecord` fixture with `resultBytes = encoder.encode(\"not json\")` and call the exported `decided`-equivalent through `runBootstrapCommand` with a fake store) and asserts `error === null` and `code === \"EXPECTED_VERSION_CONFLICT\"` (bare code, nothing invented). Note the CORE_REDUCER arm at :225-231 is a DIFFERENT layer (core reducer refusal) and stays untouched. (b) apps/daemon/src/work/work-claim-services.test.ts: the three DURABLE_STORE conflict arms at :132, :155, :179 gain the same `error.code` + `error.details` assertions ({actualVersion: <real version read back from the store>, expectedVersion: <stale>}). Run both files from apps/daemon: `pnpm exec vitest run --root . --config package.json src/bootstrap/bootstrap-durability.test.ts src/work/work-claim-services.test.ts` - RED on the new assertions only; quote the failing lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/work/work-claim-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "LEDGERS DECODE THE STORE'S BYTES (green). (a) apps/daemon/src/bootstrap/bootstrap-ledger.ts `decided()` (:156-168): when `response.decision.effectDisposition !== \"EFFECTS_COMMITTED\"` and `resultCode === \"EXPECTED_VERSION_CONFLICT\"`, decode `response.decision.resultBytes` with the existing `decodeResult` (:102 path, decodeBoundedJsonBytes) and, when it is a plain object carrying numeric `expectedVersion` and `observedVersion` (the store's own names, packages/store/src/store-digests.ts:181-193), return `refuse(request.kind, resultCode, \"DURABLE_STORE\", createRuntimeError({ code: \"EXPECTED_VERSION_CONFLICT\", details: { actualVersion: observedVersion, expectedVersion } }))` - `refuse` already takes `error: RuntimeError | null` (:111-126); any other resultCode or undecodable bytes keep today's `refuse(kind, resultCode, \"DURABLE_STORE\")` with error null. (b) apps/daemon/src/work/work-claim-services.ts: give `refuse()` (:57-66) an optional fourth parameter `error: RuntimeError | null = null` (the exact key roster {advisoryOnly, authority, code, error, kind, ok, refusedBy} is unchanged - `error` already exists); if `WorkClaimRefused.error` is typed as literal `null` in work-claim-contracts.ts widen it to `RuntimeError | null` (type-only); `commitAccepted` (:111-112) mirrors (a) using the SAME small helper - extract `conflictError(decision: CommandDecisionRecord): RuntimeError | null` into bootstrap-ledger.ts (exported) and import it in work-claim-services.ts so the decode lives once. The registry row (packages/contracts/src/runtime/runtime-error-registry.ts:101) already requires exactly these two detail keys, so `createRuntimeError` keeps them; do NOT touch packages/contracts. Re-run the two test files: green, count line quoted. Line counts: both production files stay under 400 (`wc -l`).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/work/work-claim-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RENDER THE DETAILS ON THE WIRE + HTTP ARM. apps/daemon/src/daemon-command-dispatch.ts `decisionOf` (:96-103): replace the third DomainRefusal argument with `detailOf(outcome)` where `detailOf` returns `outcome.code` when `outcome.error === null`, else `[outcome.error.code, ...Object.keys(outcome.error.details).sort().map((key) => `${key}=${String(outcome.error.details[key])}`)].join(\" \")` - generic (every registered detail key renders the same way), stable order, no special case; for the conflict it reads exactly `EXPECTED_VERSION_CONFLICT actualVersion=<m> expectedVersion=<n>`. The frame builder `refusal(code, httpStatus, detail, layer)` (:117-122) and `refusalFor` (:131-134) are untouched - the key roster {code, detail, httpStatus, layer} does not change. HTTP arm in apps/daemon/src/daemon-command-registry.test.ts (it already drives EXPECTED_VERSION_CONFLICT arms): through the real `/command` adapter (handleCommandRequest with a stale expectedVersion on a bootstrap kind), assert `outcome === \"REFUSED\"`, `refusal.code === \"EXPECTED_VERSION_CONFLICT\"`, `refusal.layer === \"DURABLE_STORE\"`, `refusal.detail` matches /^EXPECTED_VERSION_CONFLICT actualVersion=\\d+ expectedVersion=\\d+$/ with actualVersion equal to the aggregate's currentVersion read from the store, and `Object.keys(refusal).sort()` equals [\"code\",\"detail\",\"httpStatus\",\"layer\"] (roster pin). Run the registry test file, count line quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-dispatch.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MCP WIRE ARM + SEAT-DOUBLE E2E in a NEW file apps/daemon/src/mcp-dispatch-port-conflict.test.ts (sibling child A task-38ca5f66 is editing mcp-dispatch-port.test.ts concurrently in the shared worktree - do not touch that file). Copy the real-store harness shape from mcp-dispatch-port.test.ts (:27-64: provider.provide(), fallbackCredential, subscriptions, temp directory, afterAll cleanup, `dispatchCommandBytes` envelopes with requestDigest) into the new file. Arm 1 (MCP wire): `work.claim` for a fresh item at expectedVersion 0 (as the existing tests do), then `work.release` at expectedVersion 0 again -> decoded frame `outcome: \"REFUSED\"`, `refusal.code === \"EXPECTED_VERSION_CONFLICT\"`, `refusal.layer === \"DURABLE_STORE\"`, `refusal.detail === \"EXPECTED_VERSION_CONFLICT actualVersion=1 expectedVersion=0\"` (exact string). Arm 2 (SEAT DOUBLE, parent DoD 3): a tiny scripted seat function that does what the mission will say - claim, release at the stale version, on EXPECTED_VERSION_CONFLICT parse `actualVersion=(\\d+)` from `refusal.detail`, release ONCE more at that version -> `outcome !== \"REFUSED\"` and the claim reads RELEASED (`readWorkClaimLedger(store, projectId).claims.get(item).status === \"RELEASED\"`); then enumerate the decision ledger with `store.readCommandDecisionsAfter(cursor, 200)` (paging like bootstrap-ledger.ts:88-108) filtering `resultCode === \"EXPECTED_VERSION_CONFLICT\"` for the item's aggregate: exactly ONE record (the planted one). Arm 3: the seat that ignores the detail and retries blindly at 0..6 (the live failure shape) produces seven records - a negative control proving the count discriminates. Run the new file, count line quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-dispatch-port-conflict.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/mcp-dispatch-port-conflict.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MISSION TEXT. apps/daemon/src/orchestrator/agent-mission-text.ts (146 lines): add a module-level `const RETRY_ON_CONFLICT = \"If a command is refused EXPECTED_VERSION_CONFLICT, its detail names actualVersion=<n>: resend that one command ONCE with expectedVersion = n, then stop and report if it refuses again.\"`, `const READ_FACTS = \"graph_get takes exactly {\\\"projectId\\\": \\\"<your project id>\\\"} and nothing else. You have no file-write tool in this session: report findings in your final message, do not try to write memories or files.\"` and append both to the shared `close` array (:116-122, used by codeMission and compilerMission) AND to the `mission()` lines (:127-146, the coding seat) right after the work_release sentence, so every seat reads them. Do not reflow other sentences (the test at agent-mission-text.test.ts pins substrings such as 'work_release', 'nextOffset', 'exactly ONE node'). apps/daemon/src/orchestrator/agent-mission-text.test.ts: for each of the three missions assert `toContain(\"actualVersion=<n>\")`, `toContain(\"ONCE with expectedVersion = n\")`, `toContain('graph_get takes exactly {\"projectId\"')`, `toContain(\"no file-write tool\")`, and `expect(text).not.toMatch(/write (a |the )?(durable )?memor/i)` (no sentence tells the seat to write a memory). Run the mission test file, count line quoted; `wc -l agent-mission-text.ts` under 250 (or note if between 250 and 400 with the reason).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` + `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo). DoD 2 proof: `git diff --stat` (and `git status --porcelain` for new files) lists NOTHING under apps/control-room/ or packages/ - paste the stat. DRILL (global rail 1), one mutation at a time with a SHA256-proven restore in a separate command (tracked files: `git diff --exit-code -- <file>` after restore is sufficient; the NEW test file is untracked - back it up to %TEMP% first): (1) bootstrap-ledger `decided` stops attaching the error -> bootstrap-durability arm red; (2) work-claim `commitAccepted` stops attaching it -> work-claim-services arms red AND the MCP wire arm red; (3) `detailOf` returns the bare code -> registry HTTP arm + MCP arm red; (4) `detailOf` renders `observedVersion=` instead of `actualVersion=` -> the exact-string arm red (vocabulary pinned); (5) remove RETRY_ON_CONFLICT from `mission()` only -> the coding-mission assertion red while the planning ones stay green (proves each mission is asserted separately). Record the five red lines and restore proofs in the step note (under 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/work/work-claim-services.ts",
+        "apps/daemon/src/daemon-command-dispatch.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a detail value that is not a safe scalar cannot reach the string (createRuntimeError sanitises through RUNTIME_SAFE_DETAIL_KEYS - assert in a unit arm that a planted non-numeric observedVersion in resultBytes yields error null / bare code); `detailOf` on an outcome whose `error.details` is empty renders just the code (today's bytes for every other refusal - the registry HTTP test already covers one non-conflict refusal; add an arm if not); the generic renderer must not throw on a frozen details object; the seat retry is bounded to ONE by the mission wording (no loop). Fix what you find, re-run the focused files (`src/bootstrap/bootstrap-durability.test.ts src/work/work-claim-services.test.ts src/daemon-command-registry.test.ts src/mcp-dispatch-port-conflict.test.ts src/orchestrator/agent-mission-text.test.ts`), then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the exact wire string format, the exported `conflictError` helper, the registry row that made the details free (runtime-error-registry.ts:101), the `git diff --stat` proof of zero control-room/packages changes, and the seat-double result (1 rejected record vs the 7-record negative control). Then `moe.add_comment` on child C task-7945f38da29249a291004f78b4024262 confirming the landed detail format and the helper name. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*, and never touch mcp-dispatch-port.test.ts (child A's file).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-dispatch.ts",
+        "apps/daemon/src/mcp-dispatch-port-conflict.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5f5d873e72b546d4a30942bea5c80b97",
+  "priority": "HIGH",
+  "order": 1003.2,
+  "comments": [
+    {
+      "id": "comment-1dda7eb7f58848cba2db23dec73fef05",
+      "author": "architect-16a01670",
+      "content": "DoD 1 VOCABULARY RE-ANCHOR (architect-16a01670, plan time, measured at main 68eb1c5d): packages/contracts/src/runtime/runtime-error-registry.ts:101 already declares the EXPECTED_VERSION_CONFLICT row with requiredDetailKeys `keys(\"actualVersion\", \"expectedVersion\")` (both are in RUNTIME_SAFE_DETAIL_KEYS), so `createRuntimeError({ code: \"EXPECTED_VERSION_CONFLICT\", details: { actualVersion, expectedVersion } })` keeps both numbers with NO contracts change. The wire `refusal.detail` therefore uses the registry's own key names, rendered generically (code followed by every detail key=value, keys in ascending order): `EXPECTED_VERSION_CONFLICT actualVersion=<m> expectedVersion=<n>`. Read DoD 1's regex as /^EXPECTED_VERSION_CONFLICT actualVersion=\\d+ expectedVersion=\\d+$/ - `actualVersion` IS the observed version (the store bytes call it observedVersion; the registry calls it actualVersion; the wire follows the registry). The mission text names `actualVersion`. Everything else in the DoD stands.",
+      "timestamp": "2026-09-04T10:10:37.046Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:03:16.816Z",
+  "updatedAt": "2026-09-04T10:12:01.813Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:08:54.142Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:11:59.686Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Structured `details` key on the REFUSED wire frame - REJECTED (row rail): 11 exact-key control-room decoders + the generated client pin {code, detail, httpStatus, layer}. (2) Registering new detail keys in packages/contracts - UNNECESSARY: runtime-error-registry.ts:101 already requires `actualVersion` + `expectedVersion` for EXPECTED_VERSION_CONFLICT, so the RuntimeError slot every refusal outcome already carries (`error: RuntimeError | null`) transports both numbers with zero contracts change. (3) Special-casing the conflict string in `decisionOf` - REJECTED for a generic renderer (code + sorted key=value pairs): every registered detail key becomes wire-readable the same way and there is nothing to keep in sync; the conflict renders `EXPECTED_VERSION_CONFLICT actualVersion=<m> expectedVersion=<n>`. The parent DoD's word `observedVersion` is the STORE's name for the same number; the wire follows the registry (recorded in comment on this row and on child C). (4) Putting the MCP-wire arm into mcp-dispatch-port.test.ts - REJECTED: sibling child A (task-38ca5f66, WORKING now) edits that file concurrently in the shared worktree; a new sibling test file avoids the collision. (5) A separate e2e lane for the seat double - REJECTED: the apps/daemon real-store harness already drives `work.claim` over `dispatchCommandBytes`; the double is a 15-line function in the new test file, and the decision-ledger count (1 vs the 7-record blind-retry control) is the discriminator.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: store writes {code, expectedVersion, observedVersion, version} into resultBytes (packages/store/src/store-digests.ts:181-193); bootstrap-ledger.ts `decided` :156-168 refuses with the bare resultCode, `refuse(kind, code, refusedBy, error = null)` at :111-126 already accepts a RuntimeError, `decodeResult` used at :102; work-claim-services.ts `refuse` :57-66 has no error parameter (error: null literal), `commitAccepted` :88-118 refuses at :111-112 with the decision in hand; daemon-command-dispatch.ts `decisionOf` :96-103 builds DomainRefusal(code, refusedBy, error?.code ?? code) and `refusalFor` :131-134 emits {code, detail, httpStatus, layer}; every registry entry incl. work (:371) and bootstrap (:378) goes through decisionOf, and the MCP command wire (mcp-dispatch-port.ts:330-331 handleAsyncCommandRequest) shares it. Registry row :101 keys(\"actualVersion\",\"expectedVersion\"); createRuntimeError (runtime-error-factory.ts:93-104) sanitises details to the row's required keys. Existing conflict goldens: bootstrap-durability.test.ts:318-335 (DURABLE_STORE) and :225-231 (CORE_REDUCER - different layer, untouched); work-claim-services.test.ts:132/155/179. Mission: `close` array :116-122 shared by codeMission/compilerMission, `mission()` :127-146 for coding seats; graph_get ALLOWED_BODY_KEYS = [\"projectId\"] (planning/graph-query.ts:120); `grep -c memory agent-mission-text.ts` = 0 (the memory instruction came from the target project's CLAUDE.md). mcp-dispatch-port.test.ts harness :27-64 uses a real store and `work.claim` envelopes.",
+    "risks": "(a) mcp-dispatch-port.test.ts is owned by child A right now - the new test lives in mcp-dispatch-port-conflict.test.ts; if child A's extraction lands mid-flight, re-run the harness import paths. (b) `WorkClaimRefused.error` may be typed as literal null - widen the TYPE only; the exact-key roster stays. (c) The registry HTTP arm must read actualVersion from the store, not echo the request, or the drill (4) cannot discriminate. (d) Corrupt resultBytes must yield error null, never a synthesized version (fail closed). (e) The mission test pins substrings; do not reflow existing sentences. (f) Peer dirt (scripts/up.ps1, scripts/watch.ps1, .moe/messages/*) is never staged; tracked-file restores after the drill are proven with `git diff --exit-code -- <file>`, the untracked new test with SHA256.",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+      "apps/daemon/src/work/work-claim-services.ts",
+      "apps/daemon/src/daemon-command-dispatch.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/store/src/store-digests.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/mcp-dispatch-port.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:12:01.813Z"
+}

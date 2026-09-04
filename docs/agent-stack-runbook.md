@@ -345,7 +345,12 @@ credential or store path.
 
 One tool per runtime kind (108) plus queries: `work_get_context` returns the
 affordance surface — chain standing, daemon-minted offers, work-claim overlay,
-code-node steps — and `events_read` serves ledger pages. An agent session is
+code-node steps — and `events_read` serves ledger pages. With a payload of
+`{"workItemId": "<the item you hold>"}` it returns only that step (outcome
+`SURFACE_ITEM`, with its claim and `claimAggregateVersion`, and the commands
+offered on that aggregate) — under 8 KB, so a harness that truncates large
+results still reaches the version; an id that names no step refuses
+`WORK_ITEM_UNKNOWN`. An agent session is
 minted with `session.open` (capabilities scoped per kind family; the working
 principal is the session id, never the opener).
 

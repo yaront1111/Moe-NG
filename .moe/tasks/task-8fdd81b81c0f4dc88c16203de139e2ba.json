@@ -1,0 +1,36 @@
+{
+  "id": "task-8fdd81b81c0f4dc88c16203de139e2ba",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Close a real goal from the browser: Needs you closes it, the board reads Closed, docs and the UnAI live drive",
+  "description": "SPIDR child 3 of task-d1c815ebc33346dfb0e837692e2166b5. dependsOn child 2 (task-8145137ca3c144f0878deb83d05bab63: readiness precondition + offer gate), which dependsOn child 1 (task-ae6fd9aca46c42d8af940ff6f336afbb: live node-evidence leg). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the human-visible end of goal closure on the live loop - control-room assertions (no production change expected), docs, and the live drive on UnAI. Nothing daemon-side beyond what children 1-2 landed (verify on disk first: `grep -n LIVE apps/daemon/src/goals/goal-live-evidence.ts`, `grep -n GOAL_CLOSE_CRITERIA_UNVERIFIED apps/daemon/src/goals/goal-close-prerequisite.ts`).\n\nMEASURED (re-measure before planning):\n- Needs you: apps/control-room/src/v2/approvals/needs-you-model.ts:110-135 derives READY_TO_CLOSE from coverage totals (criteria > 0 && verified === criteria && nothing pending) and attaches `close: { affordance }` only when `/affordances/read` offers goal.close for the goal; the detail says \\\"The daemon is not offering to close it yet; open the goal to see why\\\" otherwise. The close card dispatches through goal-close-port.ts (offer-wire pattern). Tests: needs-you.test.tsx, needs-you-model.test.ts, live-needs-you.test.tsx, goal-close-port.test.ts.\n- Board / goal status: apps/control-room/src/v2/goals/goal-status.ts:111 CLOSED (\\\"This goal is closed.\\\"), :143 READY_TO_CLOSE (\\\"All N acceptance criteria are verified.\\\"); board header stage words in v2/board (STAGE_WORDS \\\"Closed\\\", memory board-screen-landed-2026-09-04); the goals list card reads Done for a completed goal. Tests: goal-status.test.tsx, board-screen.test.tsx, cordum-app.test.tsx.\n- Docs: README.md:56-58 \\\"Review loop\\\" bullet (names the review rounds, not closure) and the goal-close mention in docs/agent-stack-runbook.md:359 (wrapper skips human kinds); neither documents what closes a goal on the live loop.\n- Live lane: UnAI (D:/projexts/UnAI, store .moe-next/store.sqlite, daemon+wrapper via scripts/up.ps1); three goals hold accepted nodes (node-uai-core-identities, node-uai-evidence-ledger accepted 2026-09-02; evidence-ledger-durable-ingest accepted 2026-09-04 08:20Z) and never closed. A goal whose approved contract still has unverified criteria will be REFUSED GOAL_CLOSE_CRITERIA_UNVERIFIED (child 2) - that refusal rendered verbatim on the card is a correct live outcome; the drive must find (or finish) one goal whose criteria are all VERIFIED on the coverage read, or record the exact refusal and why.\n\nFEATURE: with children 1-2 landed, the Needs you card for a ready goal offers Close; clicking it commits GoalCompleted; the goals list card reads Done and the board header reads Closed on the next poll; a not-ready goal shows the daemon's own refusal (code verbatim) instead of a dead button. README gains a sentence on what closes a goal (every node accepted + verifier receipt + landing, every criterion verified); the runbook's Wrapper/approval paragraph names the close precondition and the GOAL_CLOSE_* refusal family.",
+  "definitionOfDone": [
+    "needs-you tests: a goal whose coverage is n/n VERIFIED and whose surface offers goal.close renders the READY_TO_CLOSE card WITH the Close action; the same goal without the offer renders the card with the 'not offering to close it yet' detail and NO action (fixture updated to the daemon's real offer shape); goal-close-port test: Close dispatches the offer and a REFUSED reply (GOAL_CLOSE_CRITERIA_UNVERIFIED) renders the code verbatim.",
+    "board/goal-status tests: after a committed close the goals list card reads Done and the board header stage reads Closed (STAGE_WORDS) - asserted through the real decoders on a frame the daemon emits (recorded from the live drive, not hand-written).",
+    "Playwright journey against a REAL daemon (tests/e2e/control-room/): a contract-bearing goal driven to readiness (acceptance fixtures through the real command path) -> Needs you -> Close -> Done; `pnpm test:e2e:browser` count line quoted.",
+    "Live drive on UnAI: one goal closed from the browser (GoalCompleted event id, the coverage read n/n VERIFIED, the affordance read showing the goal.close offer before and its absence after) in a row comment; if no UnAI goal is ready, the exact GOAL_CLOSE_* refusal and the unverified criterion ids are recorded instead - never a fabricated close.",
+    "README 'Review loop' / 'What runs today' clause and docs/agent-stack-runbook.md name what closes a goal on the live loop and the GOAL_CLOSE_* refusal family; gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "NO DAEMON PRODUCTION CHANGE: if a daemon edit is needed, the gap belongs to child 1 or 2 - stop, comment on that child, report_blocked with blockedOnTaskIds.",
+    "PROVE IT LIVE: the UnAI drive is recorded with event ids and read outputs in a row comment (under 4500 chars); a refusal is recorded verbatim, never worked around; never restart the wrapper to unstick a seat (claim TTL 30 min).",
+    "Control-room fixtures are the daemon's REAL frames (exact-key decoders reject anything else); frames are captured from the live drive or a real-daemon test, not hand-written."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d1c815ebc33346dfb0e837692e2166b5",
+  "dependsOn": [
+    "task-8145137ca3c144f0878deb83d05bab63"
+  ],
+  "priority": "HIGH",
+  "order": 1001.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:19:20.564Z",
+  "updatedAt": "2026-09-04T10:19:20.564Z"
+}

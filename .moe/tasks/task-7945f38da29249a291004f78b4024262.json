@@ -1,0 +1,44 @@
+{
+  "id": "task-7945f38da29249a291004f78b4024262",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Dead seats are reclaimed on wrapper start; the operator may release a claim whose holder session is not live",
+  "description": "SPIDR child C of task-5f5d873e72b546d4a30942bea5c80b97. dependsOn child B (task-f99cec0b7654450ca36d3864a4db5b5a) because both edit apps/daemon/src/work/work-claim-services.ts and the reclaim's release retry reads the observed version B puts in `refusal.detail`. Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the 30-minute dead-claim wait after a wrapper restart. Two halves that only work together: a daemon admission rule and a wrapper boot pass. Plus the runbook section.\n\nMEASURED (re-measure before planning):\n- The claim is held by the SEAT's own principal (agent-wrapper.ts:26-27, :272-277 `work.claim` under the agent's secret). `work.release` by anyone else refuses WORK_CLAIM_NOT_CLAIMANT (apps/daemon/src/work/work-claim-services.ts:197-199), and the seat's secret dies with the wrapper process - so today nobody can release until `expiresAt` (30 min, `activeClaim` :155-160).\n- Session liveness is NOT process liveness: apps/daemon/src/http/sessions-read.ts:81-83 derives LIVE from `status === \"OPEN\" && expiresAt > now`, and the seat session TTL is `max(claimTtl, agentTimeout) + grace` (wrapper-knobs.ts:76), so a killed seat's session reads LIVE for as long as its claim. Reclaim therefore has to CLOSE the dead seat's session first. `session.close` (apps/daemon/src/identity/session-services.ts:121-149) admits by `{sessionId}` + expectedVersion with NO ownership check - the OPERATOR credential (MOE_DAEMON_CREDENTIAL) can close it.\n- Session facts for the daemon rule: apps/daemon/src/identity/session-read-model.ts:116 `readSessionLedger(store, projectId)` -> `sessions: Map<sessionId, SessionRecord{principalId, status, expiresAt, version}>`; it imports nothing from work/ (no cycle when work-claim-services imports it). The seat's principal may equal its sessionId or not (sessions-read.ts:87 handles both) - resolve LIVE as: any session whose principalId (or sessionId) equals the claimant AND status OPEN AND expiresAt > decidedAt.\n- Which seats are dead: the durable staffing fence records every spawned CHILD in the store (apps/daemon/src/orchestrator/agent-session-fence.ts:60-76 `AgentLiveChildRecord{childPid, claimAggregateVersion, sessionId, workItemId}`, aggregates `wrapper-staffing/<sha256(workItemId)>`, events AgentStaffingAdmitted/AgentStaffingRetired folded at :120-187) with an injected `isProcessAlive` (production `probeProcessAlive`, process-runner-lifecycle.ts:48; wired at agent-wrapper-main.ts:275). The fence exposes admit/recordLiveChild/retireLiveChild only - no enumeration; the store pages decisions via `store.readCommandDecisionsAfter(cursor, 200)` (session-read-model.ts:122) and the fence folds events - a new reader enumerates ADMITTED-not-RETIRED records. Fence is 276 lines: put the reader + boot pass in a NEW module `apps/daemon/src/orchestrator/agent-wrapper-reclaim.ts` (+ `.js` bridge).\n- Boot: agent-wrapper-main.ts:344-392 runs `wrapper.runOnce()` on an interval; the reclaim pass runs ONCE before the first `runOnce`. The wrapper's `dispatch(credential, kind, payload, target, expectedVersion)` helper (agent-wrapper.ts:163-190) is the command path to reuse; the current claim version is on the surface (`step.claimAggregateVersion`, affordance-read.ts:122-131).\n- UI: the Seats screen (v2/ops/live-ops.tsx via live/live-sessions.ts, exact-key decoder) already renders liveness CLOSED and an empty `holding` - no shape change; that IS the reclaimed rendering. Runbook section: docs/agent-stack-runbook.md '## Wrapper (staffs the board)' (:352).\n\nFEATURE: (1) DAEMON RULE in work-claim-services `decide()` for `work.release`: when `held.claimedBy !== request.principalId`, read the session ledger; if the claimant has NO live session (every session of that principal CLOSED or expired at decidedAt) the release is ADMITTED and commits WorkReleased as today; if any is LIVE keep refusing WORK_CLAIM_NOT_CLAIMANT (rail: never release a live seat). Unreadable session ledger -> refuse WORK_CLAIM_NOT_CLAIMANT (fail closed). (2) WRAPPER BOOT PASS `reclaimDeadSeats`: enumerate ADMITTED-not-RETIRED child records; for each with a known `childPid` that `isProcessAlive` reports dead: `session.close {sessionId}` at the session's current version under the operator credential (SESSION_ALREADY_CLOSED / SESSION_NOT_FOUND are fine - log and continue), then `work.release {workItemId}` at the surface's claimAggregateVersion, retrying ONCE at the observedVersion parsed from `refusal.detail` (child B), then `retireLiveChild(workItemId)`; log `[wrapper] reclaimed <workItemId> from <sessionId>`. A record whose pid is alive, or whose pid is unknown, is left untouched and logged `[wrapper] kept <workItemId>: child alive` / `pid unknown` (fail closed, same posture as the fence). (3) Runbook '### Reclaim after a restart' under Wrapper: what is reclaimed, what is never touched, the log lines.",
+  "definitionOfDone": [
+    "Daemon test (work-claim-services.test.ts): a non-claimant `work.release` is ADMITTED (WorkReleased committed, status RELEASED) when the claimant's only session is CLOSED, and again when it is OPEN but expired at decidedAt; it is REFUSED with code WORK_CLAIM_NOT_CLAIMANT and layer DAEMON_PREREQUISITE when the claimant has a LIVE session; an unreadable session ledger refuses the same code (fail closed). Each arm verified red by mutating the rule.",
+    "Reclaim test (agent-wrapper-reclaim.test.ts, real SqliteEventStore in a temp dir): store holds an ADMITTED child record with childPid, an OPEN unexpired session for that seat, and an OPEN claim; with `isProcessAlive` false the pass closes the session (SessionClosed event), releases the claim (WorkReleased event), retires the record (AgentStaffingRetired) and logs `[wrapper] reclaimed <workItemId> from <sessionId>`; with `isProcessAlive` true nothing is written and `[wrapper] kept <workItemId>: child alive` is logged; a record without childPid writes nothing and logs `pid unknown`. Assert by reading the store, not by spying.",
+    "After the reclaim pass the first `wrapper.runOnce()` staffs the item (a SPAWNED report for it) instead of `nothing to staff`; with the holder LIVE no SpawnReport is produced for it (agent-wrapper test with the fence + fake spawn).",
+    "The pass runs exactly once at boot before the first staffing pass (agent-wrapper-main wiring test or a start-sequence assertion) and never inside the interval loop; `MOE_WRAPPER_ONCE=1` still runs reclaim then one pass.",
+    "docs/agent-stack-runbook.md gains '### Reclaim after a restart' under '## Wrapper (staffs the board)' naming the rule (holder session not live), the two log lines, and that a live seat is never touched; the Seats screen needs no change (CLOSED + empty holding is the rendering - state it).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:security` (the session-read-model consumer edge is a boundary read); the live drive belongs to the parent row and is not repeated here."
+  ],
+  "taskRails": [
+    "NEVER RELEASE A LIVE SEAT'S CLAIM: the daemon admits a foreign release only when the holder has no live session; the wrapper touches only records whose child pid is known AND dead. Both arms pinned by tests.",
+    "FAIL CLOSED like the fence: unreadable ledger, unknown pid, alive pid -> nothing is written; log and continue.",
+    "Refusals carry a stable code AND a layer asserted by a test (global rail 1). <=250 physical lines per production source, hard stop 400 (agent-session-fence.ts is 276 - do not grow it; new module instead)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5f5d873e72b546d4a30942bea5c80b97",
+  "dependsOn": [
+    "task-f99cec0b7654450ca36d3864a4db5b5a"
+  ],
+  "priority": "HIGH",
+  "order": 1003.3,
+  "comments": [
+    {
+      "id": "comment-9641a12ae14c4a3f9949515e7ff3855c",
+      "author": "architect-16a01670",
+      "content": "FORMAT NOTE FROM CHILD B's PLAN (architect-16a01670): the conflict refusal's wire `refusal.detail` will read `EXPECTED_VERSION_CONFLICT actualVersion=<m> expectedVersion=<n>` (registry key names, packages/contracts runtime-error-registry.ts:101). The reclaim's single retry parses `actualVersion=` (not `observedVersion=`) - verify on disk once B lands: `grep -n \"actualVersion\" apps/daemon/src/daemon-command-dispatch.ts`.",
+      "timestamp": "2026-09-04T10:10:40.797Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:04:07.338Z",
+  "updatedAt": "2026-09-04T10:10:40.797Z"
+}

@@ -1,0 +1,36 @@
+{
+  "id": "task-957bccf162b446f3a4db46b56e8e8f3a",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A rejected goal is re-planned: offers follow the current run and the compiler compiles the successor with the rejection reason",
+  "description": "SPIDR child 2 of task-6061e05cd17540a1bbe08b965da65b64. dependsOn child 1 (task-3780109018bb49b2bf3a00b18952d7ff: REJECT commits + REVISION successor + `currentPlanningRun` resolver). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify child 1 on disk first: `grep -n currentPlanningRun apps/daemon/src/planning/current-planning-run.ts`.\n\nWHAT THIS ROW OWNS: everything between the committed rejection and the next compiled plan - daemon offers, the compiler lane/dispatcher, the seat mission, and the surface binding the UI needs. No UI (child 3).\n\nMEASURED (re-measure before planning):\n- Offer ladder: apps/daemon/src/http/affordance-planning-offers.ts `offersForGoal` (:118-147) keys everything on `goal.planningRunRef` (the immutable original, read at :88): `planReviewable(ledger, runId)` (:78-81, lifecycle PLAN_REVIEW) decides approval offers; otherwise the COMPILER ladder offers `product_contract.propose_revision` or `planning.submit_decomposition` for the GOAL (:123-131) from `input.compilerLane.factsFor(goalId)` (apps/daemon/src/http/affordance-compiler-lane.ts:70-104: lane COMPILER + approvedGateRef keyed by PRD contentSha256). After child 1, a REJECTED original run is NOT reviewable, so with `currentPlanningRun` the ladder naturally withholds decide_intent for the rejected run and re-offers submit_decomposition - the change is to resolve the CURRENT run everywhere the goal's run is read here (planReviewable, the approval offers' target runId, versionOf) and in affordance-read.ts (:263-266 composes the input; `planningGoalRefs`/`planningAuthorityByRun` on the surface bind offers per run, affordance-contract.ts:66-73) so the successor run is bound to its goal on the surface.\n- Compiler dispatcher: apps/daemon/src/planning/compile-dispatcher.ts drives the run by version: `runVersion === 0` creates the chain (create_draft INITIAL at :263 -> ready -> claim -> propose), `runVersion === 1` skips create and runs ready -> claim -> propose (:298-303), anything else refuses SUBMIT_DECOMPOSITION_ALREADY_FINALIZED; ids are `compile-<digest12>-<sha8(runId)>` (:115). Child 1 leaves the successor at version 1 with runKind REVISION - the dispatcher must take the run id from `currentPlanningRun` (not the goal's immutable ref) and its `proposalKind` (:290) must be REVISION for a REVISION run (planning-command-contract.ts:197-200 admits INITIAL|REVISION on the non-expansion arm). One-node fence unchanged (:192-197).\n- Mission: apps/daemon/src/orchestrator/agent-wrapper-main.ts:241 `compilerInstructions(goalId)` reads the catalog brief and agent-mission-text.ts:110-115 quotes it between `<<<OPERATOR INSTRUCTIONS` markers (PR #20 replan pattern). Append the latest rejection reason (from the intent decision result child 1 commits on the rejected run) as \"PLAN REJECTED by the operator: <reason>. Submit a DIFFERENT decomposition that addresses it.\"\n- Planning run read (apps/daemon/src/http/planning-run-read.ts) serves a run by id for the UI; whether it exposes lifecycle + successorRunId for a REJECTED run is measured at plan time - if not, extend its shape only through its own exact-key decoder + digest mirrors named in the plan (or leave the UI to read the rejection from /activity/read verdict + reason, child 3 decides with you).\n\nFEATURE: after a REJECT, `/affordances/read` no longer offers `approval.decide_intent` for the rejected run and offers `planning.submit_decomposition` for the goal; `planningGoalRefs` binds the SUCCESSOR run id to the goal; the wrapper staffs a compiler seat whose mission carries the rejection reason verbatim between the operator markers; the seat's `planning.submit_decomposition` compiles the successor (REVISION) to PLAN_REVIEW and the surface offers `approval.decide_intent` for the successor run - which the human approves (existing path) or rejects again (child 1, another successor).",
+  "definitionOfDone": [
+    "Over a REAL store: after child 1's REJECT, `/affordances/read` offers no `approval.decide_intent` targeting the rejected run and offers `planning.submit_decomposition` for the goal; `planningGoalRefs[successorRunId] === goalId`; a test shows the decide_intent offer ABSENT after the reject and PRESENT for the successor after its compilation.",
+    "Compile dispatcher: `planning.submit_decomposition` for a goal whose current run is the REVISION successor at version 1 runs ready -> claim -> propose on the SUCCESSOR (ids keyed on the successor runId, proposalKind REVISION) and reaches PLAN_REVIEW; the one-node INITIAL fence test stays green unchanged; a second submission on the same successor refuses SUBMIT_DECOMPOSITION_ALREADY_FINALIZED (existing code asserted).",
+    "Mission-text test: the compiler mission for a goal whose latest run was rejected contains 'PLAN REJECTED by the operator: <the reason verbatim>' between the operator markers; a goal never rejected carries no such sentence.",
+    "e2e over a REAL daemon with a scripted compiler-seat double on the real MCP wire: compile -> REJECT with reason -> re-staffed seat double reads the reason in its mission -> submits a different decomposition -> the successor is offered for approval -> APPROVE activates it (activation event read back).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e`; every production file touched stays under 250 lines (`wc -l` quoted), hard stop 400; if planning-run-read's shape changes, its exact-key decoder + every digest mirror is named and updated (data-adapter.test.ts, generated-coverage.test.ts, approve-plan.test.tsx)."
+  ],
+  "taskRails": [
+    "RESOLVE, NEVER REWRITE: the goal's `planningRunRef` stays immutable; every consumer resolves the current run through child 1's `currentPlanningRun` (measured per FILE with grep, not per slice).",
+    "ONE-NODE FENCE UNTOUCHED: the INITIAL/REVISION submission keeps SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL; growth is the EXPANSION row's (task-4423d2a4).",
+    "No UI change (child 3); a surface or read SHAPE change names every exact-key decoder and digest mirror in the plan (global rail: grep the SHAPE). Refusals assert code AND layer; mutate to prove red. <=250 lines per production source."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6061e05cd17540a1bbe08b965da58b64",
+  "dependsOn": [
+    "task-3780109018bb49b2bf3a00b18952d7ff"
+  ],
+  "priority": "HIGH",
+  "order": 1002.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:27:30.045Z",
+  "updatedAt": "2026-09-04T10:27:30.045Z"
+}

@@ -6,11 +6,16 @@ import { join } from "node:path";
 import {
   MAX_JSON_STRING_UTF8_BYTES, RUNTIME_COMMAND_ENVELOPE_VERSION,
 } from "@moe/contracts";
+import type { NextAllowedCommand } from "@moe/contracts";
 import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import { workItemIdFor } from "./http/affordance-read.js";
+import type {
+  AffordancePort, AffordanceRefused, AffordanceSurface, AffordanceSurfaceResult, ChainStep,
+} from "./http/affordance-contract.js";
 import { CAPABILITIES } from "./daemon-command-vocabulary.js";
 import {
   ACTIVATION_AGGREGATE, CREDENTIAL as FOUNDATION_CREDENTIAL, DISPATCH_AGGREGATE,
@@ -619,5 +624,209 @@ describe("the MCP transport seam refuses hostile command bytes and commits nothi
       stage: "AUTHENTICATE",
     });
     expect(durableCount(harness.storePath)).toEqual(before);
+  });
+});
+
+/**
+ * work.get_context: a per-item form must not change what a payload-less call answers.
+ *
+ * The surface below is a FIXED fixture, so today's response bytes have a fixed sha256.
+ * That constant is the pre-change measurement anchor: it was captured by running this
+ * arm against the port BEFORE the per-item branch existed, and it must survive the
+ * change byte for byte.
+ */
+const ITEM_RUN = "run-work-context-fixture";
+const ITEM_GOAL = "goal-work-context-fixture";
+
+function fixtureStep(overrides: Partial<ChainStep>): ChainStep {
+  return Object.freeze({
+    aggregateId: null,
+    claim: null,
+    claimAggregateVersion: 0,
+    kind: "kind.placeholder",
+    missing: Object.freeze([]),
+    status: "READY" as const,
+    version: null,
+    ...overrides,
+  });
+}
+
+/** 22 steps: two share ITEM_RUN under different kinds, one of those carries a claim. */
+const FIXTURE_STEPS: readonly ChainStep[] = Object.freeze([
+  fixtureStep({
+    aggregateId: ITEM_RUN,
+    claim: Object.freeze({
+      claimedBy: "worker-fixture", expiresAt: "2026-09-04T12:30:00.000Z", version: 7,
+    }),
+    claimAggregateVersion: 7,
+    kind: "plan.propose",
+    status: "READY" as const,
+    version: 3,
+  }),
+  fixtureStep({
+    aggregateId: ITEM_RUN, claimAggregateVersion: 2, kind: "approval.decide",
+    status: "BLOCKED" as const, missing: Object.freeze(["plan.propose"]),
+  }),
+  fixtureStep({ aggregateId: ITEM_GOAL, claimAggregateVersion: 1, kind: "goal.close" }),
+  ...Array.from({ length: 19 }, (_unused, index) => fixtureStep({
+    aggregateId: `aggregate-${index}`,
+    claimAggregateVersion: index,
+    kind: `kind.filler-${index}`,
+    status: "COMMITTED" as const,
+    version: index,
+  })),
+]);
+
+const FIXTURE_OFFERS: readonly NextAllowedCommand[] = Object.freeze([
+  Object.freeze({
+    commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    commandId: "cmd-fixture-plan",
+    commandKind: "plan.propose" as const,
+    expectedVersion: 3,
+    inputSchemaVersion: "moe-runtime-command/1",
+    targetAggregateId: ITEM_RUN,
+  }),
+  Object.freeze({
+    commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    commandId: "cmd-fixture-goal",
+    commandKind: "goal.close" as const,
+    expectedVersion: 1,
+    inputSchemaVersion: "moe-runtime-command/1",
+    targetAggregateId: ITEM_GOAL,
+  }),
+]);
+
+const FIXTURE_AUTHORITY = Object.freeze({
+  [ITEM_RUN]: Object.freeze({
+    authority: Object.freeze({ kind: "fixture" }),
+    goalRef: ITEM_GOAL,
+    graphContentBytesBase64: "Zml4dHVyZQ==",
+    graphContentHash: "a".repeat(64),
+    graphRevisionRef: `${ITEM_RUN}-graph-revision`,
+    runId: ITEM_RUN,
+    submissionHash: "b".repeat(64),
+  }),
+});
+
+const FIXTURE_SURFACE: AffordanceSurface = Object.freeze({
+  nextAllowedCommands: FIXTURE_OFFERS,
+  outcome: "SURFACE" as const,
+  planningAuthorityByRun: FIXTURE_AUTHORITY,
+  planningGoalRefs: Object.freeze({ [ITEM_RUN]: ITEM_GOAL }),
+  planningGoalRef: ITEM_GOAL,
+  steps: FIXTURE_STEPS,
+});
+
+const FIXTURE_REFUSAL: AffordanceRefused = Object.freeze({
+  code: "AFFORDANCE_PROJECT_MISMATCH",
+  detail: "the authenticated principal is bound to another project",
+  layer: "AFFORDANCE_SURFACE",
+  outcome: "REFUSED" as const,
+});
+
+function affordancePortOf(result: AffordanceSurfaceResult): AffordancePort {
+  return Object.freeze({ boundProjectId: PROJECT, readSurface: () => result });
+}
+
+const surfacePort = createMcpDispatchPort({
+  affordances: affordancePortOf(FIXTURE_SURFACE),
+  deps: provider.provide(),
+  fallbackCredential: CREDENTIAL,
+  subscriptions,
+});
+
+const refusedSurfacePort = createMcpDispatchPort({
+  affordances: affordancePortOf(FIXTURE_REFUSAL),
+  deps: provider.provide(),
+  fallbackCredential: CREDENTIAL,
+  subscriptions,
+});
+
+function contextBytes(
+  target: { dispatchQueryBytes: (bytes: Uint8Array) => Uint8Array },
+  payload?: Record<string, unknown>,
+): Uint8Array {
+  const envelope: Record<string, unknown> = { queryKind: "work.get_context" };
+  if (payload !== undefined) envelope["payload"] = payload;
+  return target.dispatchQueryBytes(encoder.encode(JSON.stringify(envelope)));
+}
+
+function sha256Of(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Captured against the port BEFORE the per-item branch existed. */
+const SURFACE_GOLDEN_SHA256 = "a4c344c3f69d33e308e1be07bb71a0e749091f0f54639e4a23524bcacda8a101";
+const REFUSAL_GOLDEN_SHA256 = "45e961e2ee907e0136380f1d0e87ab35ce4ce501f9368a3185e303137db524d0";
+
+describe("work.get_context", () => {
+  it("answers a payload-less call with today's exact bytes", () => {
+    expect(sha256Of(contextBytes(surfacePort))).toBe(SURFACE_GOLDEN_SHA256);
+    expect(sha256Of(contextBytes(surfacePort, {}))).toBe(SURFACE_GOLDEN_SHA256);
+  });
+
+  it("passes a REFUSED surface through with today's exact bytes", () => {
+    expect(sha256Of(contextBytes(refusedSurfacePort))).toBe(REFUSAL_GOLDEN_SHA256);
+    expect(sha256Of(contextBytes(refusedSurfacePort, {}))).toBe(REFUSAL_GOLDEN_SHA256);
+  });
+
+  it("answers one named item small enough that no harness truncates its claim version", () => {
+    // The live failure this row exists for: a 60 KB surface dump put claimAggregateVersion
+    // past the MCP harness's truncation point, so a real seat could not release its claim.
+    const bytes = contextBytes(surfacePort, {
+      workItemId: workItemIdFor("plan.propose", ITEM_RUN),
+    });
+    const answer = decode(bytes);
+
+    expect(answer).toMatchObject({
+      outcome: "SURFACE_ITEM",
+      step: {
+        aggregateId: ITEM_RUN,
+        claim: { claimedBy: "worker-fixture", version: 7 },
+        claimAggregateVersion: 7,
+        kind: "plan.propose",
+      },
+    });
+    expect(typeof answer["readAt"]).toBe("string");
+    expect(answer["nextAllowedCommands"]).toEqual([{
+      commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      commandId: "cmd-fixture-plan",
+      commandKind: "plan.propose",
+      expectedVersion: 3,
+      inputSchemaVersion: "moe-runtime-command/1",
+      targetAggregateId: ITEM_RUN,
+    }]);
+    expect(bytes.byteLength).toBeLessThan(8192);
+    expect(bytes.byteLength)
+      .toBeLessThan(contextBytes(surfacePort).byteLength);
+  });
+
+  it("distinguishes two steps that share an aggregate by kind", () => {
+    const sibling = decode(contextBytes(surfacePort, {
+      workItemId: workItemIdFor("approval.decide", ITEM_RUN),
+    }));
+
+    expect(sibling).toMatchObject({
+      outcome: "SURFACE_ITEM",
+      step: { claim: null, claimAggregateVersion: 2, kind: "approval.decide", status: "BLOCKED" },
+    });
+  });
+
+  it("refuses WORK_ITEM_UNKNOWN at the affordance layer for an id no step has", () => {
+    const answer = decode(contextBytes(surfacePort, { workItemId: "plan.propose@nope" }));
+
+    expect(answer).toMatchObject({
+      code: "WORK_ITEM_UNKNOWN", layer: "AFFORDANCE_SURFACE", outcome: "REFUSED",
+    });
+    expect(answer["detail"]).toContain("plan.propose@nope");
+  });
+
+  it("refuses INPUT_INVALID for a workItemId that is not a non-empty string", () => {
+    for (const workItemId of ["", 7, null, ["a"]]) {
+      const answer = decode(contextBytes(surfacePort, { workItemId }));
+      expect({ code: (answer["error"] as { code?: string } | undefined)?.code, workItemId })
+        .toEqual({ code: "INPUT_INVALID", workItemId });
+      expect(answer["ok"]).toBe(false);
+    }
   });
 });

@@ -19,6 +19,7 @@ import type {
 import type { GraphQueryPort } from "./planning/graph-query.js";
 import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
+import { answerWorkContextQuery } from "./mcp-work-context-query.js";
 
 /**
  * The production dispatch port behind both MCP servers: the same committed adapter pipeline
@@ -152,10 +153,19 @@ type QueryHandler = (
 ) => Uint8Array;
 
 // The agent's "what should I do": the affordance surface — chain standing,
-// daemon-minted offers, and active claims — exactly what the board renders.
-const answerWorkContext: QueryHandler = (_envelope, _context, config) => {
+// daemon-minted offers, and active claims — exactly what the board renders. A payload naming
+// one `workItemId` narrows the answer to that step; the decision lives in
+// `answerWorkContextQuery` so this handler stays a delegate and the port owns only the clock,
+// the refusal mapping and the bytes.
+const answerWorkContext: QueryHandler = (envelope, _context, config) => {
   if (config.affordances === undefined) return queryRefusal();
-  return bytesOf(config.affordances.readSurface());
+  const answer = answerWorkContextQuery(
+    envelope["payload"], config.affordances.readSurface(), new Date().toISOString(),
+  );
+  // INPUT_INVALID is the ONLY answer without an `outcome`: a product refusal carries
+  // `outcome: "REFUSED"`, so key absence — not the code alone — is what selects the
+  // port's generic envelope.
+  return "outcome" in answer ? bytesOf(answer) : queryRefusal();
 };
 
 // The one query that needs an identity. The shared handler owns the whole

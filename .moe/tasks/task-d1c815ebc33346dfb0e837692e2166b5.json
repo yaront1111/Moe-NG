@@ -17,8 +17,27 @@
     "HUMAN GATES ARE HUMAN-ONLY: goal.close stays operator-only, in HUMAN_ONLY_STEPS and MCP-excluded, with the refusal code pinned by a test.",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the GoalClosed event id in a row comment."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE (manual - an architect seat cannot set this parent's dependsOn: [NOT_ALLOWED] role resolution; governors were paged on the same defect for task-bb844c28 and task-5f5d873e). Read get_context.epicSiblings AND the child rows on disk (SPIDR children may not appear in epicSiblings: `node -e` over .moe/tasks/<id>.json) and confirm the three children under this row are DONE with landed commits: 1 task-ae6fd9aca46c42d8af940ff6f336afbb (live node-evidence leg), 2 task-8145137ca3c144f0878deb83d05bab63 (criteria readiness precondition + offer gate), 3 task-8fdd81b81c0f4dc88c16203de139e2ba (Needs-you/board assertions, docs, UnAI live drive). Verify on disk, not by status alone: `git log main --grep \"Moe-Task: task-<id>\" --oneline` = 1+ line per child; `grep -n \"LIVE\" apps/daemon/src/goals/goal-live-evidence.ts` >= 1; `grep -n \"GOAL_CLOSE_CRITERIA_UNVERIFIED\" apps/daemon/src/goals/goal-close-prerequisite.ts` >= 1; `grep -n \"closeReadiness\\|readiness\" apps/daemon/src/http/affordance-planning-offers.ts` >= 1; README.md contains a sentence naming what closes a goal. If ANY child is not DONE: `moe.report_blocked` with blockedOnTaskIds = the missing children and the exact grep results; this row owns 0 files and must never re-implement a child's work. Record the measurements in the step note.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RE-VERIFY THE LIVE PROOF READ-ONLY (parent DoD 5 was executed by child 3). Read child 3's completion comment (the GoalCompleted event id, the coverage read n/n VERIFIED, the affordance read before/after) and re-measure it against the UnAI store WITHOUT writing: `node --experimental-transform-types -e` (or the read-only `node:sqlite` peek used in memory real-seat-cannot-release-its-claim-2026-09-04) over D:/projexts/UnAI/.moe-next/store.sqlite opened readOnly - confirm the GoalCompleted decision id exists with effectDisposition EFFECTS_COMMITTED and the goal aggregate's lifecycle reads COMPLETED. If child 3 recorded a refusal instead of a close (no UnAI goal was ready), confirm the recorded GOAL_CLOSE_* code is what the daemon answers today for that goal (dispatch nothing; read the affordance surface only) and state plainly that the live close is still outstanding - never fabricate a close. Quote the exact rows in the step note (under 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES + COMPLETE (parent DoD 6). From the repo root quote count lines for `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e` (path-attributed baseline rule for any foreign red: merge-base vs HEAD, reported verbatim). Then the adversarial pass over the whole feature: (a) a goal with a node accepted under a re-plan delta still refuses (GOAL_CLOSE_REVIEW_PACKAGE_STALE); (b) a contract-less seed goal still closes through the Foundation leg byte-identically (goal-qualification.test.ts unchanged across all three commits: `git log --oneline -- apps/daemon/src/goals/goal-qualification.test.ts` shows no child sha); (c) the goal.close offer never appears for a goal with an unverified criterion (child 2's arm), and the human-only / MCP-excluded rosters for goal.close are unchanged; (d) closing twice is refused by core's lifecycle (existing arm). `moe.complete_task` with verification = the daemon count line and a completionSummary listing the three child ids, the live-proof rows re-read in step 2, and the four DoD re-anchorings recorded in comment-b2d62aab (verifier receipt reader path; offer already existed -> narrowed; leg in derived refs + `legs` field; one new code GOAL_CLOSE_CRITERIA_UNVERIFIED in child 2).",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +47,52 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1001,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-b2d62aab863846148c3bbc2921cd8839",
+      "author": "architect-16a01670",
+      "content": "PLANNING RECORD (architect-16a01670, 2026-09-04, measured at main 68eb1c5d). SPIDR-split into 3 children under this row (the row spans closure qualification, a refusal-code roster with 5 pinned consumers, the affordance offer gate with 6 asserting test files + the board-chain e2e, control-room tests, docs and a live drive - over the 12-step/10-file thresholds). This row's own plan is VERIFICATION ONLY (0 files); its dependsOn on the children cannot be set by an architect seat ([NOT_ALLOWED] role resolution, same as task-bb844c28 / task-5f5d873e) - step 1 is the manual gate.\n\nChildren: (1) live node-evidence leg in goal closure - leaf; (2) goal readiness = every approved criterion VERIFIED, as a closure precondition AND as the `/affordances/read` offer gate - dependsOn 1; (3) Needs-you/board assertions, README + runbook, live drive on UnAI - dependsOn 2. Ids follow in the next comment.\n\nFOUR DoD CLAUSES ARE RE-ANCHORED (grade the measured truth, not the wording):\n1) \"apps/daemon/src/orchestrator/verifier-receipt-ledger.ts\" does not exist; the verifier receipt reader is apps/daemon/src/review/verifier-receipt-ledger.ts:85 and goal-qualification.ts ALREADY reads it (reviewClosure :95-137) - the live acceptance + verifier receipt are already checked; only the Foundation RECEIPTED-row demand (:213-216 via indexDurableReceipts) and the Foundation-derived witness refs block a real goal. Child 1 replaces that demand with the live leg + the landing rule.\n2) \"the daemon never offers goal.close for a real goal\" is stale: affordance-planning-offers.ts:143-147 offers `goal.close` on EVERY EXECUTION_ENABLED/CLOSING goal; the human clicks and gets the refusal. DoD 3 is therefore a NARROWING of the offer (child 2), and the contract-less legacy/seed path (tests/e2e/control-room/board-chain.spec.ts:462-472 asserts the close card right after activation) stays offered as today - the gate applies only to goals with an approved Product Contract (criteria > 0).\n3) \"the closure witness names which leg proved each node\": core's closure witness is an exact key roster (packages/core/src/goal/goal-validation.ts:27,:160), so the leg lives in the derived ref preimages and in a daemon-side `legs` field on the qualification result, never as a witness key.\n4) \"an unverified criterion refuses\": closure qualification does not read coverage today; child 2 adds GOAL_CLOSE_CRITERIA_UNVERIFIED (the ONE new code of this row, with its 5-consumer roster backfill) checked in goal-services/goal-qualification against the coverage read's totals, and uses the same readiness for the offer gate. Child 1 adds no code: a landing refused with a code other than NOTHING_TO_COMMIT reuses GOAL_CLOSE_VERIFICATION_NOT_PASSED with a distinguishing message.",
+      "timestamp": "2026-09-04T10:17:56.112Z"
+    },
+    {
+      "id": "comment-740c60ea30a74d8bae75b61d2528a220",
+      "author": "architect-16a01670",
+      "content": "Child ids (completing comment-b2d62aab): 1 task-ae6fd9aca46c42d8af940ff6f336afbb \"Goal closure accepts the live loop's node evidence\" (leaf) -> 2 task-8145137ca3c144f0878deb83d05bab63 \"A goal is ready to close only when every approved criterion is verified: closure precondition and the goal.close offer gate\" (dependsOn 1) -> 3 task-8fdd81b81c0f4dc88c16203de139e2ba \"Close a real goal from the browser: Needs you, board Closed, docs, UnAI live drive\" (dependsOn 2). This row's plan (3 steps, 0 files) gates on all three, re-verifies child 3's live proof read-only against the UnAI store, and quotes the gates.",
+      "timestamp": "2026-09-04T10:20:09.253Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:24.328Z",
-  "updatedAt": "2026-09-04T09:42:24.328Z"
+  "updatedAt": "2026-09-04T10:20:09.253Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:12:52.157Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "dependsOn": [
+    "task-8145137ca3c144f0878deb83d05bab63",
+    "task-8fdd81b81c0f4dc88c16203de139e2ba",
+    "task-ae6fd9aca46c42d8af940ff6f336afbb"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:20:05.503Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) One row, one plan - REJECTED: closure qualification + a 5-consumer refusal-code roster + the affordance offer gate (6 asserting test files + the board-chain e2e) + control-room tests + docs + live drive exceed the 12-step/10-file thresholds. (2) Three SPIDR children in build order (node evidence -> goal readiness -> human-visible end), each dependsOn its predecessor (create_task accepts dependsOn; only the PARENT cannot be gated by an architect seat) - CHOSEN; the parent keeps a 0-file verification plan. (3) Putting the criteria check into child 1 - REJECTED: it needs the one new refusal code (5 pinned consumers) and the coverage port; child 1 stays code-roster-free so the Foundation path is provably untouched. (4) Narrowing the offer for every goal - REJECTED: the contract-less seed/Foundation journey (board-chain e2e, three pinned fixture files) asserts the close card right after activation; the gate applies only to contract-bearing goals (criteria > 0). (5) A `leg` key inside the closure witness - REJECTED: core validates the witness with an exact key roster (goal-validation.ts:27,:160); the leg lives in the derived ref preimages and a daemon-side `legs` field.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: goal-qualification.ts (248 lines) already reads the live acceptance + verifier receipt in reviewClosure (:95-137, readVerifierReceipt at review/verifier-receipt-ledger.ts:85 - the parent's orchestrator/ path does not exist); the Foundation-only demand is indexDurableReceipts (goal-qualification-reads.ts:108-148) refused at :213-216, plus zeroAuthority (:139-166) and compose (:168-197) deriving refs from DurableReceipt fields. VerifierReceiptV1.proof is always PASSED (verifier-receipt-contracts.ts:47, decoder :207). Landing receipts fold per bare node key in readReviewLedgers(...).landings (review-read-model.ts:287; LandingReceiptV1 at landing-receipt-contracts.ts:56-67; NOTHING_TO_COMMIT at node-lander.ts:150). goal.close is ALREADY offered for every EXECUTION_ENABLED/CLOSING goal (affordance-planning-offers.ts:143-147; offersForGoal has no store, affordance-read.ts composes the input with the store at :112/:263/:364). Coverage totals come from createDocumentCoverageReadPort (document-coverage-read.ts:57-70,:148; totals at document-coverage-contract.ts:74-81). Needs-you already keys READY_TO_CLOSE on coverage + the offer (needs-you-model.ts:110-135) - no control-room production change expected. GOAL_PREREQUISITE_REFUSAL_CODES consumers: foundation-surface.ts, index.ts, index-surface.test.ts, runtime-entrypoint.test.ts, goal-services.test.ts. Fixtures: seedReviewAcceptance (goal-closure-test-fixtures.ts:697, real command path), approveNodes (:675), seedVerifiedNode (:593), recordLandingReceipt (landing-ledger.ts:153), driveThrough (bootstrap-test-fixtures.ts:652). goal.close appears in 20 daemon test files, 12 control-room test files and tests/e2e/control-room/board-chain.spec.ts:462-472 - the offer-asserting subset is affordance-planning-offers.test.ts:101-104, affordance-read-planning.test.ts:290/:514-545, affordance-read.test.ts:454/:498.",
+    "risks": "(a) This parent is claimable for WORKING before its children land (dependsOn unsettable by an architect seat) - step 1 is the manual gate. (b) The UnAI goals may have unverified criteria (single-node initial plans cover a subset): child 3 may legitimately record a GOAL_CLOSE_CRITERIA_UNVERIFIED refusal instead of a close - the parent re-verifies honestly and says the live close is outstanding. (c) The store peek in step 2 must open readOnly; never dispatch a command from this row. (d) Peer dirt (scripts/up.ps1, scripts/watch.ps1, .moe/messages/*) is never staged.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-qualification.ts",
+      "apps/daemon/src/goals/goal-qualification-reads.ts",
+      "apps/daemon/src/goals/goal-close-prerequisite.ts",
+      "apps/daemon/src/review/verifier-receipt-ledger.ts",
+      "apps/daemon/src/review/review-read-model.ts",
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/http/document-coverage-read.ts",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:20:07.635Z"
 }

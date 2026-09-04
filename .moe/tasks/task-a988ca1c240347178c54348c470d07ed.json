@@ -1,0 +1,36 @@
+{
+  "id": "task-a988ca1c240347178c54348c470d07ed",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Reject on the plan gate in the browser: reason required, Needs you tracks the sent-back plan, the board says Plan sent back",
+  "description": "SPIDR child 3 of task-6061e05cd17540a1bbe08b965da58b64. dependsOn child 2 (task-957bccf162b446f3a4db46b56e8e8f3a: offers follow the current run + compiler re-plans the successor), which dependsOn child 1 (task-3780109018bb49b2bf3a00b18952d7ff). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify children on disk first (`grep -n currentPlanningRun apps/daemon/src/planning/current-planning-run.ts`; `grep -n \"PLAN REJECTED\" apps/daemon/src/orchestrator/agent-mission-text.ts`).\n\nWHAT THIS ROW OWNS: the human-visible feature in the control room, the Playwright journey, docs. The live drive belongs to the parent row.\n\nMEASURED (re-measure before planning):\n- Plan gate: apps/control-room/src/v2/goals/approve-plan-gate.tsx renders ONE control `cr.approve.button` (:49-56, disabled unless `granted`), the withheld reason under `cr.approve.reason` (:43) and dispatch refusals under `cr.approve.dispatch-refusal` (:65); approve-plan.tsx wires `onApprove` (:221, :247-250); apps/control-room/src/v2/goals/plan-approval.ts builds the `approval.decide_intent` command with `APPROVE_DECISION = \"APPROVE\"` (:56) and payload {decision, decisionReason, dependencyChanges, runId} (:24) under layers CONTROL_ROOM_PLAN_APPROVAL / _COMMAND_BUILD / _TRANSPORT (:46-50). The run the gate binds to is the goal's `planningRunRef` from the catalog - after a reject the CURRENT run is the successor; resolve it from the surface's `planningGoalRefs` (invert runId -> goalId; affordance-contract.ts:66-73) rather than changing the catalog's exact-key shape.\n- Needs you: apps/control-room/src/v2/approvals/needs-you-model.ts:27 `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]` with order at :72 and the PLAN_APPROVAL item at :99 (offer-keyed); no test file pins the roster by name (grep NEEDS_YOU_KINDS in *.test.* = 0) but needs-you-model.test.ts / needs-you.test.tsx / live-needs-you.test.tsx assert item shapes.\n- Board/status: apps/control-room/src/v2/goals/goal-status.ts:10-24 `GoalStage` union (CLOSED, CONTRACT, ESCALATION, NO_PRD, PLAN, READY_TO_CLOSE, REPLANNED, UNKNOWN, WORKING), PLAN stage at :121 keyed on `offered(surface, \"approval.decide_intent\", runId)`; STAGE_WORDS is a `Record<GoalStatus[\"stage\"], string>` at goal-status-strip.tsx:17 (a new stage MUST get a word or typecheck reds); the board feed already renders \"rejected the plan\" for an approval verdict (activity-words.ts:69) once the daemon emits it (child 1).\n- Docs: README.md plan-approval sentence in \"What runs today\" (:19-20 \"a decomposition the daemon compiles and a human approves (the plan gate)\"); docs/agent-stack-runbook.md approval paragraph (grep \"approval.decide\" :359 area).\n\nFEATURE: the plan gate gains Reject (`cr.approve.reject`) with a required reason field (`cr.approve.reason.input`, disabled Reject until non-empty) dispatching the SAME offer with decision REJECT + decisionReason; after a reject the gate follows the goal's current run (the successor) and shows \"Plan sent back - waiting for a new plan\" until the successor is offered for approval; Needs you gains kind PLAN_REJECTED (\"The plan you sent back is being re-planned\" with the reason) listed until the successor's decide_intent offer appears; the board header stage PLAN_REJECTED reads \"Plan sent back\" with next-step \"Waiting for a new plan\"; the decision feed shows \"rejected the plan\" with the reason. README + runbook name the reject path.",
+  "definitionOfDone": [
+    "approve-plan-gate / approve-plan tests: Reject renders beside Approve with a reason input; Reject is disabled while the reason is empty; submitting dispatches `approval.decide_intent` with {decision:\"REJECT\", decisionReason:<text>, runId:<current run>} (payload asserted byte-exact through plan-approval.ts); a REFUSED reply (APPROVAL_REJECT_REASON_REQUIRED) renders the code verbatim under cr.approve.dispatch-refusal.",
+    "After a reject (surface fixture recorded from a real daemon: decide_intent absent for the rejected run, submit_decomposition offered, planningGoalRefs binding the successor): the gate reads 'Plan sent back' and the current run resolves to the successor; when the successor's decide_intent offer appears the gate returns to the approve/reject controls bound to the successor run id.",
+    "needs-you-model/needs-you tests: kind PLAN_REJECTED renders with the reason and disappears once the successor is offered for approval; ordering places it with PLAN_APPROVAL; goal-status test: stage PLAN_REJECTED with STAGE_WORDS 'Plan sent back' and next-step 'Waiting for a new plan'; board feed test: the approval REJECT verdict renders 'rejected the plan' with a bad tone and the reason.",
+    "Playwright journey against a REAL daemon (tests/e2e/control-room/): compile -> Reject with reason -> (scripted seat double resubmits, as in child 2's e2e) -> Approve the successor; `pnpm test:e2e:browser` count line quoted; all control-room fixtures are the daemon's real frames (exact-key decoders), captured from that run.",
+    "README plan-approval sentence and docs/agent-stack-runbook.md approval paragraph name Reject-with-reason and the re-plan; gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`; every production file touched stays under 250 lines (`wc -l` quoted); sources ASCII-only and JSX text apostrophe-free (scheduler package-boundary scan)."
+  ],
+  "taskRails": [
+    "NO DAEMON PRODUCTION CHANGE and NO CATALOG SHAPE CHANGE: the current run is resolved from the surface's planningGoalRefs; a daemon gap belongs to child 1/2 - stop, comment there, report_blocked with blockedOnTaskIds.",
+    "REAL FRAMES ONLY: control-room fixtures are recorded from a real daemon run (exact-key decoders reject anything else); a new stage MUST add its STAGE_WORDS entry (Record type) and its test.",
+    "Test ids follow the existing prefixes (cr.approve.*); no `cr.board.*`/`cr.kanban.*` collisions; sources ASCII-only, JSX text without apostrophes (package-boundary scan). <=250 lines per production source."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6061e05cd17540a1bbe08b965da58b64",
+  "dependsOn": [
+    "task-957bccf162b446f3a4db46b56e8e8f3a"
+  ],
+  "priority": "HIGH",
+  "order": 1002.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:28:11.070Z",
+  "updatedAt": "2026-09-04T10:28:11.070Z"
+}
