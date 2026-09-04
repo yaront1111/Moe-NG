@@ -1126,3 +1126,178 @@ describe("the opened goal's board is scoped to that goal's own run", () => {
     for (const line of raws) expect(line).not.toContain(DURABLE.runRef);
   });
 });
+
+/**
+ * THE ONE SHELL-WIDE PAUSE POLL. The app reads /health/read on its own cadence and
+ * publishes the answer through ProviderPauseProvider, so the strip states the pause
+ * on every screen rather than only on Health. Two rails this exercises: the poll
+ * carries the ATTACHED session's headers, and it never fires while nothing is
+ * attached (the fixtures arm above already asserts fetch is never called).
+ */
+
+/** 3a's own five-key pause, verbatim from live/live-ops.test.ts. */
+const APP_PAUSE = Object.freeze({
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude",
+  resetAt: "2026-09-02T20:30:00.000Z",
+  since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+});
+
+/** The daemon's exact six-key HEALTH frame; the decoder refuses anything else. */
+function healthFrame(agents: unknown): unknown {
+  return {
+    agents,
+    daemon: {
+      commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242,
+      projectId: "project-live", protocolVersion: WIRE,
+      startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite",
+    },
+    ledger: {
+      aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2,
+      lastDecidedAt: "2026-09-02T19:30:00.000Z",
+    },
+    outcome: "HEALTH",
+    readAt: "2026-09-02T20:00:00.000Z",
+    verifier: { calibration: true, policy: false },
+  };
+}
+
+/** Every health read the app made, with the headers it carried. */
+function renderPausedApp(agents: unknown): RequestInit[] {
+  const healthReads: RequestInit[] = [];
+  vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
+    if (input === "/health/read") {
+      healthReads.push(init ?? {});
+      return Promise.resolve(jsonResponse(healthFrame(agents)));
+    }
+    if (input === "/affordances/read") return Promise.resolve(jsonResponse(SURFACE));
+    if (input === "/goals/read") {
+      return Promise.resolve(jsonResponse({ goals: [], outcome: "GOALS" }));
+    }
+    return handshakeResponse(input, init);
+  }));
+  render(<CordumApp liveSetup={attachedSetup()} search="" />);
+  return healthReads;
+}
+
+describe("the shell states a provider pause on every screen", () => {
+  it("polls health with the attached session's own headers and states the pause", async () => {
+    const healthReads = renderPausedApp({ paused: APP_PAUSE });
+
+    const banner = await screen.findByTestId("cr.shell.paused");
+    expect(banner.textContent)
+      .toBe(`Agents paused: claude limit, resumes ${new Date(APP_PAUSE.resetAt).toLocaleString()}`);
+
+    // The poll spends the credential the RUNTIME handshake minted, never a baked one.
+    expect(healthReads.length).toBeGreaterThan(0);
+    const sent = new Headers(healthReads[0]?.headers);
+    expect(sent.get("x-moe-session-credential")).toBe(CLAIMED.sessionCredential);
+    expect(sent.get("x-moe-csrf")).toBe(BOOTSTRAP.csrfToken);
+    expect(sent.get("x-moe-protocol-version")).toBe(WIRE);
+  });
+
+  it("states nothing when the daemon says no seat is paused", async () => {
+    const healthReads = renderPausedApp({ paused: null });
+
+    // Wait for the answer itself, so the absence below is measured AFTER the read
+    // landed rather than before it started - which any assertion would pass.
+    await waitFor(() => { expect(healthReads.length).toBeGreaterThan(0); });
+    await screen.findByTestId("cr.shell.statusstrip");
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
+    });
+    expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+  });
+
+  it("refuses a drifted frame rather than rendering it, and still states no pause", async () => {
+    // 3a's decoder holds an exact key roster: a frame whose `agents` lost its shape
+    // is OPS_RESPONSE_INVALID, which reads as "no pause known" - never as a pause,
+    // and never as a crash.
+    const healthReads = renderPausedApp({ pausedSeat: APP_PAUSE });
+
+    await waitFor(() => { expect(healthReads.length).toBeGreaterThan(0); });
+    await screen.findByTestId("cr.shell.statusstrip");
+    expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+  });
+});
+
+/**
+ * Spelled out here, never imported from the app: a cadence read off the module
+ * under test is a fixed point that a retimed mutant passes.
+ */
+const EXPECTED_PAUSE_POLL_MS = 15_000;
+
+describe("the pause poll's cadence and its detached silence", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("reads health again one interval later, on the app's own 15 s cadence", async () => {
+    vi.useFakeTimers();
+    const healthReads = renderPausedApp({ paused: APP_PAUSE });
+    // The handshake resolves over a chain of microtasks, not timers. Flushing them
+    // at ZERO fake time settles it without moving the interval this arm measures.
+    for (let turn = 0; turn < 40 && screen.queryByTestId("cr.shell.paused") === null; turn += 1) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    }
+    expect(screen.getByTestId("cr.shell.paused")).toBeTruthy();
+    expect(healthReads.length).toBe(1);
+
+    // One tick short of the interval buys nothing: the cadence is 15 s, not "soon",
+    // and in particular not the 5 s a screen's own read uses.
+    await act(async () => { await vi.advanceTimersByTimeAsync(EXPECTED_PAUSE_POLL_MS - 1); });
+    expect(healthReads.length).toBe(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(healthReads.length).toBe(2);
+  });
+
+  it("keeps ONE poll across a storm of re-renders, and the banner across every view", async () => {
+    // The reader is memoised on `attached`. If that identity churned per render,
+    // the effect would re-subscribe and this would be a fetch storm on a surface
+    // the operator navigates constantly - so navigate, hard, and count.
+    const healthReads = renderPausedApp({ paused: APP_PAUSE });
+    await screen.findByTestId("cr.shell.paused");
+    expect(healthReads.length).toBe(1);
+
+    const expected = `Agents paused: claude limit, resumes ${new Date(APP_PAUSE.resetAt).toLocaleString()}`;
+    const visited: string[] = [];
+    // Every view EXCEPT health, which mounts a health reader of its own (below).
+    for (const id of ["approvals", "runs", "policy", "goals"]) {
+      await userEvent.click(screen.getByTestId(`cr.nav.${id}`));
+      visited.push(id);
+      // The pause is shell-wide: it survives every navigation, on the live app.
+      expect(screen.getByTestId("cr.shell.paused").textContent, id).toBe(expected);
+    }
+    expect(visited).toHaveLength(4);
+    // Four navigations, each with several state updates - still exactly one read.
+    expect(healthReads.length).toBe(1);
+
+    // The Health SCREEN keeps its own faster read; that is the one place two
+    // readers of /health/read coexist, and it is by design, not memo churn. The
+    // banner is still the app's single fact, unchanged by the screen's poll.
+    await userEvent.click(screen.getByTestId("cr.nav.health"));
+    await waitFor(() => { expect(healthReads.length).toBeGreaterThan(1); });
+    expect(screen.getByTestId("cr.shell.paused").textContent).toBe(expected);
+  });
+
+  it("never touches the wire while nothing is attached", async () => {
+    // PAIRING: the handshake is still awaiting the operator, so `attached` is null
+    // and the reader is the constant. A poll here would spend a credential the app
+    // does not have. (The fixtures arm above pins the same rail for `?fixtures=1`.)
+    const fetchMock = vi.fn(() => Promise.reject(new Error("must not be called")));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending: Promise<LiveHandshakeResult> = Promise.resolve({
+      claim: async () => ({
+        code: "LIVE_PAIRING_REFUSED" as const, detail: "still pending", ok: false as const,
+      }),
+      confirmationLabel: "abcd-ef01-2345",
+      status: "AWAITING_OPERATOR",
+    });
+
+    render(<CordumApp liveSetup={pending} search="" />);
+    expect(await screen.findByText("abcd-ef01-2345")).toBeTruthy();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+  });
+});

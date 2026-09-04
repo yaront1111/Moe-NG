@@ -20,8 +20,81 @@
     "FEATURES ONLY (inherited): no security-boundary or policy work. The preview runs on the operator's machine and the workspace is trusted, per the documented v0.1 limitation.",
     "Deployment to an environment is OUT of scope (the 'Containerized deployment' row owns it)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "THE DEPENDENCY EDGE FIRST — global rail 7, and nothing else in this row compiles without it. `apps/daemon/package.json` has TWELVE workspace dependencies and ZERO devDependencies; Playwright is only a ROOT devDependency (package.json:49, @playwright/test 1.62.1). Owner decision 2026-09-05: make it a real daemon dependency rather than degrade the capture. Do all three and quote each: (a) add the browser package to apps/daemon/package.json `dependencies`; (b) run the workspace install so pnpm-lock.yaml carries the importer entry for @moe/daemon — quote the importer stanza, not just \"install succeeded\"; (c) write a throwaway probe INSIDE apps/daemon that imports from the package's BARE specifier, run `pnpm typecheck`, confirm exit 0, and DELETE the probe in the same command. A root-barrel grep does NOT satisfy this rail. There is no escape hatch: this repo has no tsconfig \"paths\" and no project references, so a deep relative import fails TS6059. Also confirm task-40e52fa8a85a4921b97bee933b00403f landed so the four refusal codes exist to raise; if not, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "READ THE EXISTING RUNNER BEFORE WRITING ONE (task rail 2). `apps/daemon/src/orchestrator/verifier-process-runner.ts` (395 lines) already spawns a workspace command with everything this row needs: injectable `spawn`, `timeoutMs`, `killGraceMs` and `killProcessGroup` (options at :49-55), a `killStragglersBestEffort` that SIGKILLs the process GROUP via `killProcessGroup(-child.pid, \"SIGKILL\")` (:187-189), and timer cleanup on every exit path (:110-114). In a step note, state explicitly whether the preview reuses it, extracts a shared core from it, or must spawn separately — and if separately, say exactly which behaviour differs (a long-lived server that must OUTLIVE the call, versus a test command that runs to completion, is the likely answer). A second independent process runner in the same daemon is how one of them comes to leak, so this decision is recorded rather than made silently.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/verifier-process-runner.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE RECEIPT CONTRACT, in a new apps/daemon/src/preview/preview-receipt-contracts.ts, mirroring apps/daemon/src/repository/landing-receipt-contracts.ts. Export `PREVIEW_RECEIPT_VERSION = \"moe-preview-receipt/1\"`, its internal command kind, and a deterministic receipt-id function of (projectId, goalId, sha) — the landing receipt derives its id from the verifier receipt precisely so \"a wrapper restart lands nothing twice\" (node-lander.ts:25-26), and the preview needs the same property. Carry the landing contract's discipline verbatim in the type: a preview that did not start is recorded as a REFUSED receipt WITH ITS CODE, never as an absent receipt — \"an absent landing is not a false one\" (landing-receipt-contracts.ts header). Members: goalId, sha, url, pid, screenshots[], and STARTED | REFUSED(code). Ship the `.js` bridge (`export * from \"./preview-receipt-contracts.ts\";`) or the daemon dies at boot with ERR_MODULE_NOT_FOUND.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-receipt-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "COMMAND RESOLUTION AND PORT DETECTION, in a new apps/daemon/src/preview/preview-runner.ts. Resolve the preview command from the approved contract's deployment requirements, falling back to the workspace package.json scripts `preview` -> `dev` -> `start` IN THAT ORDER, refusing PREVIEW_COMMAND_MISSING (code + layer from task-40e52fa8's contract module) when none exists. Take the port from the contract when stated, otherwise detect it from the child's stdout, refusing PREVIEW_START_TIMEOUT when it never appears. Refuse PREVIEW_GOAL_NOT_LANDED when the goal's nodes are not all landed. Keep the timeout INJECTABLE with a 30-minute production default, exactly as verifier-process-runner does — a test that actually waits 30 minutes will be deleted by whoever inherits it.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-runner.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TESTS FOR RESOLUTION AND REFUSALS, in a new apps/daemon/src/preview/preview-runner.test.ts, against a FIXTURE PRODUCT — a tiny http server written as the workspace's `preview` script. (a) FALLBACK ORDER: give a fixture workspace TWO of the three scripts and assert WHICH ran, not merely that something ran — an arm that only checks \"a command was spawned\" passes on any order. Cover all three pairings. (b) PREVIEW_COMMAND_MISSING with code AND layer for a workspace with none of the three. (c) PREVIEW_START_TIMEOUT with code AND layer, using a fixture that starts and never listens, with a short INJECTED timeout. (d) PREVIEW_GOAL_NOT_LANDED with code AND layer, driven against a real store where one node is short — not a hand-built state object. Assert code AND layer on every refusal arm (global rail 1); several layers can refuse, and the wrong one answering keeps a test green while it no longer tests its subject.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-runner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "CAPTURE REAL BYTES, in a new apps/daemon/src/preview/preview-capture.ts plus arms in preview-runner.test.ts. Drive headless Chromium to the contract's journey entry URLs and write one PNG per journey under `<project>/.moe-next/previews/<goalId>/<sha>/`. THE TEST DECODES THE BYTES: assert the PNG magic number (89 50 4E 47 0D 0A 1A 0A) and non-zero dimensions — never merely that a file exists at a path, which passes on a zero-byte file the browser failed to write. Assert the receipt's screenshots[] entries name exactly the files actually written, so a receipt cannot advertise a capture that is not on disk. Confirm the paths stay inside the goal's own directory: the capture writes only under `<project>/.moe-next/previews/<goalId>/<sha>/`, and a goalId or sha that would escape that prefix is refused rather than joined.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-runner.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-capture.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "NO LEAKED PROCESS — the subject of this row (task rail 3), asserted by PID and never by a flag. A flag proves the code BELIEVED it killed something. Arms: the child is gone after APPROVE, after REJECT, and after a forced timeout. Use the same liveness check the J1 e2e uses for reaped pids (tests/e2e/foundation has a `pidReaped` helper — reuse it rather than inventing a second liveness probe). On Windows a detached child's descendants survive a bare `child.kill()`, which is why verifier-process-runner signals the process GROUP; assert the SERVER's port is free after the kill, not only that the direct pid is gone, because a surviving grandchild holding the port is exactly the failure that makes the next preview unable to bind. FOURTH ARM — daemon shutdown: add it if the composition allows a shutdown hook; if it does not, say so EXPLICITLY in the completion record rather than silently shipping three of four (the parent's roll-up step 2 checks for this admission).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-runner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "RECEIPT READ-BACK, DRILLS, GATES. (a) Read the durable receipt back from a real store and assert EVERY member, including that a REFUSED receipt carries its code and NO url — a refusal that still advertises a url is a preview the operator would click into nothing. Assert the receipt id is stable across a repeated run for the same (projectId, goalId, sha), proving the restart-idempotence the id function exists for. (b) MUTATION DRILLS recorded in a step note (global rail 1): make the cleanup path a no-op and confirm the three PID arms go RED; make the capture write a zero-byte file and confirm the PNG-decode arm goes RED (that is the drill that matters — a file-exists assertion would have passed). The new modules under apps/daemon/src/preview/ are UNTRACKED until committed, so `git diff` is blind to them: prove each restore by SHA256 against an out-of-tree backup in %TEMP% suffixed by worker id, in a call SEPARATE from the restore (global rail 13). (c) GATES, standalone and foreground, each `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`. `pnpm test` covers no apps/** (global rail 18); say so rather than quoting it. Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-runner.test.ts",
+        "apps/daemon/src/preview/preview-runner.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -37,5 +110,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:59:32.724Z",
-  "updatedAt": "2026-09-04T22:59:32.724Z"
+  "updatedAt": "2026-09-04T23:11:00.477Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:09:42.913Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:10:58.287Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED (owner decision 2026-09-05), capturing outside the daemon or shipping a browser-free receipt: DoD 4 requires PNG bytes that decode, so Playwright becomes a real apps/daemon dependency and the edge proof is step 1. The alternatives offered were playwright-core against the e2e lane's installed browser (silently degrades on a machine that never ran that lane) and a separate capture step (narrows the DoD); the owner chose the full dependency. REJECTED, writing a second process spawner without reading verifier-process-runner.ts: it already has injectable spawn/timeout/killGrace/killProcessGroup and a process-GROUP SIGKILL, and two independent runners in one daemon is how one of them leaks — step 2 forces the reuse-or-not decision to be recorded. REJECTED, asserting cleanup by an internal flag: a flag proves the code believed it killed something; the arms assert PID liveness and a freed port. REJECTED, a file-exists assertion for the screenshot: it passes on a zero-byte file, which is precisely what a failed capture writes — hence the PNG magic-number decode, and the drill in step 8 that forces a zero-byte write.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. GAP IS REAL: `grep -rn 'moe-preview-receipt' --include=*.ts apps/ packages/` = ZERO hits. THE RUNNER TO REUSE: verifier-process-runner.ts (395 lines) — options at :49-55 expose `killGraceMs`, `killProcessGroup`, `spawn`, `timeoutMs`; `killStragglersBestEffort` at :187-189 SIGKILLs the process GROUP via `killProcessGroup(-child.pid, \"SIGKILL\")` with a comment noting a stale observed pid kills nothing; timers are cleared on every exit path (:110-114). THE RECEIPT DISCIPLINE TO COPY: repository/landing-receipt-contracts.ts — `LANDING_RECEIPT_VERSION = \"moe-landing-receipt/1\"` (:20), an internal command kind, and a header stating \"A landing that did not happen is recorded as a REFUSED receipt with its code — an absent landing is not a false one\"; node-lander.ts:25-26 records that the receipt id is a function of the verifier receipt so \"a wrapper restart lands nothing twice\". Both properties transfer directly. THE DEPENDENCY EDGE: apps/daemon/package.json lists twelve `workspace:*` dependencies and NO devDependencies; @playwright/test 1.62.1 is a ROOT devDependency (package.json:49) serving `test:e2e:browser` only. LIVENESS HELPER: tests/e2e/foundation already has a `pidReaped` check used by j1-loop-real-process.e2e.test.ts — reuse it rather than writing a second probe.",
+    "risks": "BIGGEST RISK — a leaked child holding the port. It makes the NEXT preview fail to bind, and the failure surfaces far from its cause. On Windows a detached child's descendants survive a bare kill, which is why the existing runner signals the process group; step 7 requires asserting the PORT is free, not only that the direct pid is gone. SECOND — a screenshot arm that passes on a zero-byte file: file-exists is not bytes, and a failed headless capture writes exactly that. The PNG magic-number decode plus the step-8 drill are the guard. THIRD — the dependency edge. Without the lockfile importer entry the daemon breaks at RUNTIME rather than at typecheck, and a root-barrel grep would not have caught it (global rail 7). FOURTH — drill restore proof on UNTRACKED files: every module this row creates is untracked until committed and `git diff` is blind to them, so restores go through an out-of-tree SHA256 comparison (global rail 13). FIFTH — three of the four refusal codes are DEFINED by task-40e52fa8 and RAISED here; if that row has not landed, step 1 blocks rather than redefining them locally, which would leave two rosters free to disagree. SIXTH — the fourth cleanup arm (daemon shutdown) may not be reachable from the composition; the plan permits reporting that honestly but not omitting it silently, and the parent's roll-up checks for the admission. SEVENTH — the preview executes an arbitrary workspace script; parent rail 2 keeps security work out of scope, so the path-containment check in step 6 is a correctness guard on the capture's own writes, not a sandbox.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/daemon/src/orchestrator/node-lander.ts",
+      "apps/daemon/package.json",
+      "apps/daemon/src/preview/preview-contracts.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:11:00.477Z"
 }

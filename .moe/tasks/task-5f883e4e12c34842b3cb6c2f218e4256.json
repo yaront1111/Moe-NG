@@ -17,8 +17,61 @@
     "THIS ROW ADDS NO HANDLER AND NO RUNNER. The contract and its daemon wiring are task-40e52fa8's; the preview process, receipt and screenshots are task-f5a74c23's.",
     "FEATURES ONLY (inherited): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY AND RE-MEASURE, NO EDITS. READ comment-5fd835e0159644a09211a4e5a41fc203 ON THIS ROW FIRST: it corrects this row's own description, which claims HUMAN_ONLY_STEPS is defined twice. It is not. (a) Confirm that yourself: `grep -rn 'HUMAN_ONLY_STEPS: ReadonlySet|HUMAN_ONLY_STEPS =' --include=*.ts apps/daemon/src` returns exactly ONE line, agent-spawn-contract.ts:195. agent-wrapper.ts:24 is a deliberate re-export (its comment at :23 explains why the offer surface's test imports it from the wrapper). So this row edits ONE roster, not two, and the one-sided-edit drill the DoD describes is impossible — the amended DoD 4 in that comment replaces it. (b) Confirm task-40e52fa8a85a4921b97bee933b00403f landed: `preview.decide` exists in the daemon's own vocabulary and registry. This row publishes a kind that must already be defined and served; without it, report_blocked with blockedOnTaskIds naming it. (c) Record the pre-change `GENERATED_CONTRACT_DIGEST` value from packages/control-room-client/src/generated/generated-client.ts:905, so step 4 can show it changed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "MCP-EXCLUDE IT. apps/daemon/src/mcp-tool-allowlist.ts: `preview.decide` joins the roster of kinds the daemon WIRES BUT REFUSES TO ADVERTISE OVER MCP, beside `approval.decide` and `graph.approve`. READ THE FILE'S HEADER FIRST — it explains that the MCP port authenticates with the operator bootstrap credential (mcp-main.ts:112-127), so an MCP caller holding that credential authenticates AS the operator and would receive a real witness. Exclusion is the fence; a capability gate would not be one, because the caller already holds the operator's capability. That reasoning is why this row exists at all, and a worker who treats the exclusion as bookkeeping will be tempted to skip the behavioural arm in the next step.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PROVE THE EXCLUSION BEHAVES, not just that a list contains a string. The allowlist's own test already asserts EXACT SET EQUALITY IN BOTH DIRECTIONS between this roster and the port's table — run it and confirm it is green, and confirm by deleting the new entry that it goes red, so you know the parity test actually covers your addition. Then the behavioural half the file's header demands: a `preview.decide` dispatch over the MCP port hits the port's generic refusal, asserted BY CODE; and an operator-authenticated dispatch through the daemon's own command seam reaches the handler. Both arms, because set membership alone would stay green if the port stopped consulting the roster.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PUBLISH ON THE SHARED CONTRACT AND REGENERATE THE CLIENT. (a) packages/contracts/src/runtime/runtime-vocabulary.ts: add `preview.decide` to the runtime command roster (the sorted list at :90-100 — keep it sorted; the roster is read as an ordered set elsewhere). (b) DO NOT HAND-EDIT packages/control-room-client/src/generated/generated-client.ts. It is GENERATED: packages/control-room-client/package.json:18 defines `generate` = `node --experimental-strip-types generator/generate.ts`, and the generator emits `GENERATED_CONTRACT_DIGEST` (:905) and the pins object (:909); contract-pins.ts re-exports it and client-compat.ts:169 compares it against a manifest's `contractSchemaHash`. Run `pnpm --filter @moe/control-room-client generate`, commit its output, and quote the OLD digest (from step 1) and the NEW one. A step note that cannot show a CHANGED digest means the generator did not run and the entry was typed by hand — which passes every grep and fails the compat check at runtime.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "FENCE IT FROM THE WRAPPER, AND PIN THAT BY BEHAVIOUR. (a) Add `preview.decide` to the single HUMAN_ONLY_STEPS Set at apps/daemon/src/orchestrator/agent-spawn-contract.ts:195. (b) Extend the EXISTING bidirectional guard rather than writing a new one: apps/daemon/src/http/affordance-planning-offers.test.ts:209 asserts every kind that must be human-only IS in the set, and :263 asserts every kind that must NOT be is absent. Name `preview.decide` in the first list. That test is the guard the deleted row was going to duplicate. (c) The behavioural arm, which is the roster's actual purpose: a wrapper staffing test asserts `preview.decide` is NOT staffed when it appears READY and unclaimed on the surface — assert by work-item id that no seat was spawned for it, not merely that the pass produced some spawn count. The roster exists because a wrapper that staffs an operator gate mints junk forever; agent-wrapper.ts:117-123 records 8 junk goals in minutes when that happened live.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DRILLS AND GATES. (a) MUTATION DRILLS recorded in a step note (global rail 1): remove `preview.decide` from the HUMAN_ONLY_STEPS Set and confirm BOTH the affordance-planning-offers guard AND the wrapper staffing arm go red — if only the first reddens, the behavioural arm is not really exercising the roster and must be fixed; remove it from the MCP exclusion roster and confirm the allowlist parity test goes red. Restore after each and prove with `git diff` on the tracked file showing empty (all files here are tracked, so an empty diff is sound proof). (b) GATES, standalone and foreground, each `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test` — the root lane IS real evidence for this row, unlike most, because packages/contracts and packages/control-room-client are both touched (global rail 18 concerns apps/**). Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -27,13 +80,40 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
   "dependsOn": [
-    "task-40e52fa8a85a4921b97bee933b00403f",
-    "task-8834ebe68c1a4f81b3be8e7581156755"
+    "task-40e52fa8a85a4921b97bee933b00403f"
   ],
   "priority": "HIGH",
   "order": 31.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-5fd835e0159644a09211a4e5a41fc203",
+      "author": "architect-20a6d1eb",
+      "content": "CORRECTION (architect-20a6d1eb, 2026-09-05): this row's description claims `HUMAN_ONLY_STEPS` is \"DEFINED TWICE, byte-for-byte\" in agent-spawn-contract.ts:194 and agent-wrapper.ts:116. THAT IS FALSE at HEAD. I filed a guard row (task-8834ebe68c1a4f81b3be8e7581156755) against that premise and have DELETED it, and cleared it from this row's dependsOn.\n\nMEASURED, `grep -rn HUMAN_ONLY_STEPS --include=*.ts apps/daemon/src` in full:\n  agent-spawn-contract.ts:195  export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([   <- the ONLY definition\n  agent-wrapper.ts:17          import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from \"./agent-spawn-contract.js\";\n  agent-wrapper.ts:24          export { HUMAN_ONLY_STEPS } from \"./agent-spawn-contract.js\";   <- a RE-EXPORT, not a copy\n  agent-wrapper.ts:351         if (HUMAN_ONLY_STEPS.has(step.kind)) continue;\n  http/affordance-planning-offers.test.ts:23,209,263\n\n`grep -rn 'HUMAN_ONLY_STEPS: ReadonlySet|HUMAN_ONLY_STEPS =' --include=*.ts apps/daemon/src` returns ONE line. There is a single Set. The wrapper re-exports it deliberately, and the comment at agent-wrapper.ts:23 says why: \"the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.\"\n\nA BIDIRECTIONAL GUARD ALSO ALREADY EXISTS: apps/daemon/src/http/affordance-planning-offers.test.ts:209 asserts every kind that must be human-only IS in the set, and :263 asserts every kind that must NOT be is absent. Both directions, already green.\n\nWHY I GOT IT WRONG: an earlier grep in this session reported a second `export const HUMAN_ONLY_STEPS ... new Set([` at agent-wrapper.ts:116. Re-reading that file at :110-120 shows a `spawnAgent` doc comment there instead. The checkout is shared and peers are active on this branch, so either a peer collapsed the duplicate between my two measurements or the earlier line number was stale. I did not chase which - what matters is the state NOW, which I verified twice with two different greps.\n\nCONSEQUENCE FOR THIS ROW: DoD item 4 says to add `preview.decide` to \"BOTH HUMAN_ONLY_STEPS rosters\" and to prove a guard by making a one-sided edit. There is only ONE roster, so that sequence is impossible. AMENDED: add `preview.decide` to the single Set at agent-spawn-contract.ts:195, and instead of the one-sided-edit drill, extend the EXISTING bidirectional assertion in affordance-planning-offers.test.ts so `preview.decide` is named among the kinds that must be human-only - that test is the guard, and it already exists. This also drops agent-wrapper.ts from the row's file roster, leaving four files.\n\nQA: grade DoD 4 as amended. A row that \"adds it to both rosters\" cannot be satisfied when there is one.",
+      "timestamp": "2026-09-04T23:08:42.277Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-04T23:06:27.098Z"
+  "updatedAt": "2026-09-04T23:12:02.298Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:11:06.674Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:12:00.040Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, this row's own DoD 4 as written (\"add it to BOTH HUMAN_ONLY_STEPS rosters\" and prove a guard by a one-sided edit): there is only ONE roster, so the sequence is impossible. Corrected in comment-5fd835e0 and in step 5, which extends the EXISTING bidirectional guard at affordance-planning-offers.test.ts:209/263 instead. REJECTED, filing a separate row to collapse or guard the \"duplicated\" roster: I filed exactly that (task-8834ebe6) and deleted it — the duplication does not exist. REJECTED, hand-editing the generated client: it carries a pinned digest checked at runtime by client-compat.ts:169, so a typed-in entry is grep-clean and runtime-broken. REJECTED, treating the MCP exclusion as a list edit: the port authenticates with the operator credential, so the exclusion is the only fence — step 3 requires the behavioural arm as well as the parity test. REJECTED, folding this into task-40e52fa8: that plan measured 12 distinct files against the 10-file hard cap and was refused; this is the interface-axis half of the split.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb, and one measurement CORRECTS this row's own description. HUMAN_ONLY_STEPS IS NOT DUPLICATED: `grep -rn 'HUMAN_ONLY_STEPS: ReadonlySet|HUMAN_ONLY_STEPS =' --include=*.ts apps/daemon/src` returns ONE line, agent-spawn-contract.ts:195. agent-wrapper.ts:17 imports it, :24 re-exports it with a comment at :23 explaining that the offer surface's test imports it from the wrapper it guards, and :351 is the sole consumer. A BIDIRECTIONAL GUARD ALREADY EXISTS at apps/daemon/src/http/affordance-planning-offers.test.ts:209 (every must-be-human-only kind IS present) and :263 (every must-not-be kind is absent) — extend it, do not write a second. THE MCP EXCLUSION IS A REAL FENCE: the allowlist header records that the port authenticates with the operator bootstrap credential (mcp-main.ts:112-127) and that daemon-command-registry.ts:185 mints the humanReview witness on operator principal identity alone, so an MCP caller holding that credential is indistinguishable from the operator; the allowlist test already proves exact set equality in both directions against the port's table. THE CLIENT IS GENERATED: package.json:18 `generate` runs generator/generate.ts, which emits GENERATED_CONTRACT_DIGEST at generated-client.ts:905 and the pins object at :909; contract-pins.ts re-exports it; client-compat.ts:169 compares it to a manifest's contractSchemaHash. The shared roster lives at packages/contracts/src/runtime/runtime-vocabulary.ts:90-100 and is sorted.",
+    "risks": "BIGGEST RISK — a hand-edited generated client. The digest is pinned and checked at runtime, so typing the entry in produces a file that greps clean, typechecks, and fails compat against a real manifest. Step 1 records the old digest and step 4 requires showing it changed; a note that cannot show a change is proof the generator did not run. SECOND — this row's OWN DESCRIPTION is wrong about HUMAN_ONLY_STEPS being duplicated; a worker following it would look for a second roster, not find one, and either invent it or block. Step 1 sends them to the correcting comment first. THIRD — set membership without behaviour. Both the MCP exclusion and the human-only roster are lists that a test can assert trivially while the code that consults them has drifted; steps 3 and 5 each pair the roster assertion with a behavioural arm, and step 6's drills check that BOTH reddens rather than only the list test. FOURTH — the runtime vocabulary roster is sorted and read as an ordered set elsewhere; inserting out of order can shift a digest or a downstream index in ways that surface far from here. FIFTH — this row publishes a kind whose HANDLER belongs to task-40e52fa8 and whose RUNNER belongs to task-f5a74c23; publishing before the handler exists would advertise an unserved kind and break the daemon's own bidirectional roster equality, which is why step 1 blocks rather than proceeding.",
+    "keyFiles": [
+      "apps/daemon/src/mcp-tool-allowlist.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+      "apps/daemon/src/http/affordance-planning-offers.test.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/control-room-client/generator/generate.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:12:02.298Z"
 }

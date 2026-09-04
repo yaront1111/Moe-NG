@@ -12,6 +12,7 @@ import { NavRail } from "./nav-rail.js";
 import type { NavBadge } from "./nav-rail.js";
 import type { CordumRoute, NavDestination } from "./shell-routes.js";
 import { ProofInspector } from "./proof-inspector.js";
+import { useProviderPause } from "./pause-context.js";
 import { ProofProvider } from "./proof-context.js";
 import type { ProofController, ProofPayload } from "./proof-context.js";
 import { ConnectionBanner, StatusStrip } from "./status-strip.js";
@@ -115,6 +116,8 @@ export function CordumShell({
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
+  // Read, never passed in: ONE polled fact, hosted by the frame every screen is in.
+  const paused = useProviderPause();
   const [simulatedConnection, setSimulatedConnection] =
     useState<ConnectionState | null>(initialConnection);
   const [proof, setProof] = useState<ProofPayload | null>(null);
@@ -187,6 +190,7 @@ export function CordumShell({
             clockPresent={clockPresent}
             descriptor={descriptor}
             onSimulate={handleSimulate}
+            paused={paused}
             simulatable={simulatable}
           />
         </div>

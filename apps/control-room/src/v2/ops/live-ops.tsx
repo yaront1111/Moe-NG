@@ -25,7 +25,7 @@ const POLL_MS = 5_000;
 
 type Connection = "CONNECTED" | "DISCONNECTED";
 
-function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
+export function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
   read: () => Promise<T>, failure: T, pollMs: number, onConnection: ((connection: Connection) => void) | undefined,
 ): { readonly nowMs: number; readonly outcome: T | null; readonly refresh: () => void } {
   const [outcome, setOutcome] = useState<T | null>(null);
@@ -60,7 +60,7 @@ function useOpsRead<T extends { readonly status: string; readonly code?: string 
 }
 
 const POLICY_FAILURE: PolicyOutcome = Object.freeze({ code: "POLICY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
-const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+export const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const ACTIVITY_FAILURE: ActivityOutcome = Object.freeze({ code: "ACTIVITY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const SESSIONS_FAILURE: SessionsOutcome = Object.freeze({ code: "SESSIONS_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 

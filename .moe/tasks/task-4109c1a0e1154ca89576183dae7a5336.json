@@ -205,7 +205,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:47:26.148Z",
-  "updatedAt": "2026-09-04T23:06:24.482Z",
+  "updatedAt": "2026-09-04T23:06:39.157Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T13:59:24.857Z",
     "plannedStepCount": 10,
@@ -277,7 +277,8 @@
     "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
     ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
     ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
-    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json"
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
   ],
   "completionSummary": "A provider limit now pauses staffing instead of wedging the wrapper.\n\nSPAWNER TEE. `AgentSpawnerOptions.output?: {stderr, stdout}` (production defaults to process.stdout/stderr). stdio is all \"pipe\"; a tee attached in the spawn tick forwards the RAW Buffer to the sink AND to child 1's createOutputTail(). `finish` resolves `SeatExitReport {exitCode, signal, tail}`; `AgentProcessFailureError` gained a 4th ctor arg `tail = []` (message format unchanged). Byte equality asserted on both sinks, incl. a UTF-8 char split across chunks.\n\nGATE. New `createProviderPauseGate({clock, defaultPauseMs?, log, projectId, provider, store})` -> `{exitObserver(sessionId, workItemId, refund), paused(nowMs)}`. Records EVERY exit; on PROVIDER_LIMIT records the pause, refunds, logs. `DEFAULT_PROVIDER_PAUSE_MS`=30min, `PROVIDER_PAUSED_OUTCOME`=\"PROVIDER_PAUSED\". A live pause's resetAt is REUSED (extends nothing, shortens nothing). Never throws.\n\nSTAFFING/WRAPPER. `AgentWrapperStaffingStart.onExit?` returning `SeatExitReading`; PROVIDER_LIMIT drops the process failure so settle() resolves. Refund = `attempts.set(item, max(0, tried-1))`. `runPass` returns `RunOnceReport.paused` + PROVIDER_PAUSED before readSurface. Existing claim-release + session-close cleanup unchanged (asserted RELEASED/CLOSED). FAILED stays byte-identical.\n\nLOG LINES: `[wrapper] provider limit: <provider> paused until <resetAt>[ (DEFAULT_PROVIDER_PAUSE_MS)] (<lastLine|no output>)`; `[wrapper] provider paused: <provider> until <resetAt> (active N)`; `[wrapper] seat exit not recorded: <code>`; `[wrapper] provider pause not recorded: <code>`; `[wrapper] seat exit observer failed: <msg>`.\nPROVIDER KEY: `providerFor(MOE_AGENT_COMMAND ?? \"claude\")?.leaf ?? \"claude\"` — unknown command reads as \"claude\".\nHUMAN_ONLY_STEPS + COMPILER_STEPS + GATE_REFUSALS moved to agent-spawn-contract.ts (wrapper was 401; re-exports HUMAN_ONLY_STEPS).\n\nSIZES: spawner 438 (was 417, +21<=25), wrapper 392 (<400), staffing 186, gate 186 (<=250), contrac",
   "commits": [
@@ -318,6 +319,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "ac753c9c457e909ea34d55a8ae1e864fda5902f3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T22:53:43Z",
+      "paths": [
+        ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T23:06:39.157Z",
+      "treeId": "54a3511f1aee1a9425e2d929267190518d4e53c4",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -337,9 +354,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-04T21:43:05Z",
-    "at": "2026-09-04T22:38:58.980Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T22:53:43Z",
+    "at": "2026-09-04T23:06:39.157Z"
   },
   "completedAt": "2026-09-04T23:06:24.482Z",
   "reviewCompletedAt": "2026-09-04T23:06:24.482Z",

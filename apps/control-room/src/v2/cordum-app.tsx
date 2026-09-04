@@ -36,7 +36,10 @@ import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
-import { LiveHealth, LivePolicy } from "./ops/live-ops.js";
+import { HEALTH_FAILURE, LiveHealth, LivePolicy, useOpsRead } from "./ops/live-ops.js";
+import { readHealth } from "../live/live-ops.js";
+import type { HealthOutcome } from "../live/live-ops.js";
+import { ProviderPauseProvider } from "./shell/pause-context.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -82,6 +85,14 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
 
 /** Re-exported so `main.tsx` keeps importing it from the entry it composes. */
 export type { LiveAttempts } from "./cordum-handshake.js";
+
+/** The ONE shell-wide pause poll: slower than a screen's own 5 s read, because a
+ * provider limit lifts on the daemon's clock. Published through the context, so no
+ * two screens can disagree about it. */
+const PAUSE_POLL_MS = 15_000;
+
+/** Unattached (fixtures, pairing, refused): answer without touching the wire at all. */
+const DETACHED_HEALTH = (): Promise<HealthOutcome> => Promise.resolve(HEALTH_FAILURE);
 
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
@@ -152,6 +163,15 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // null until the session attaches, and the chrome says PAIRING rather than
   // naming a project this tab is not yet bound to.
   const projectId = attached?.projectId ?? null;
+  const healthReader = useMemo(() => (attached === null
+    ? DETACHED_HEALTH
+    : (): Promise<HealthOutcome> => readHealth(attached.headers)), [attached]);
+  const health = useOpsRead(healthReader, HEALTH_FAILURE, PAUSE_POLL_MS, undefined);
+  // A refused or errored answer reads as NO PAUSE KNOWN. Keeping the last pause
+  // alive past the read that failed to confirm it would be state this app invented.
+  const paused = health.outcome !== null && health.outcome.status === "HEALTH"
+    ? health.outcome.agents.paused
+    : null;
   const eyebrow = open === null
     ? `PROJECT ${MIDDOT} ${projectId ?? "PAIRING"}`
     : `${MIDDOT} ${open.goalId}`;
@@ -367,25 +387,27 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       : live.setup.ok ? connection : "DISCONNECTED";
 
   return (
-    <CordumShell
-      activeNav={view}
-      answeredAtMs={answeredAtMs}
-      backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
-        : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals"}
-      connection={shellConnection}
-      eyebrow={eyebrow}
-      initialConnection={fixtures ? "CONNECTED" : null}
-      navBadges={fixtures
-        ? FIXTURE_BADGES
-        : needsYouCount === null || needsYouCount === 0
-          ? undefined
-          : { approvals: { count: String(needsYouCount), tone: "info" } }}
-      onBack={open === null ? undefined : back}
-      onNavigate={navigate}
-      simulatable={fixtures}
-      title={title}
-    >
-      {content}
-    </CordumShell>
+    <ProviderPauseProvider value={paused}>
+      <CordumShell
+        activeNav={view}
+        answeredAtMs={answeredAtMs}
+        backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
+          : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals"}
+        connection={shellConnection}
+        eyebrow={eyebrow}
+        initialConnection={fixtures ? "CONNECTED" : null}
+        navBadges={fixtures
+          ? FIXTURE_BADGES
+          : needsYouCount === null || needsYouCount === 0
+            ? undefined
+            : { approvals: { count: String(needsYouCount), tone: "info" } }}
+        onBack={open === null ? undefined : back}
+        onNavigate={navigate}
+        simulatable={fixtures}
+        title={title}
+      >
+        {content}
+      </CordumShell>
+    </ProviderPauseProvider>
   );
 }

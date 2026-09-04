@@ -1,0 +1,128 @@
+{
+  "id": "task-40e52fa8a85a4921b97bee933b00403f",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Publish preview.decide as a human-only kind with its refusal codes",
+  "description": "SPIDR child 1 of task-f3edb8fb39ad42ce8980dae7d62b604c (architect-20a6d1eb, 2026-09-05). Dependency-free LEAF; children 2 and 3 build on it.\n\nWHAT THIS ROW OWNS: the vocabulary half only - `preview.decide` published as an operator-only command kind with its full roster backfill and its four stable refusal codes. It runs no process, captures no screenshot and renders nothing. Those are children 2 and 3.\n\nMEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb - the gap is REAL in both directions:\n- `grep -rn 'preview.decide|preview.start|PREVIEW_COMMAND_MISSING|moe-preview-receipt' --include=*.ts apps/ packages/` = ZERO hits. Nothing to duplicate.\n- The existing `apps/daemon/src/graph-preview-request.ts` and `apps/control-room/src/preview/` are PLAN/document previews, not the product preview. Do not extend them.\n\nTHE ROSTER, enumerated by tracing an existing human-only decide kind (`escalation.decide`) across the tree - these are the DAEMON-side files it touches, and the ones this row owns:\n  apps/daemon/src/daemon-command-vocabulary.ts (kinds, capability, family table, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS)\n  apps/daemon/src/daemon-command-registry.ts and daemon-command-families.ts\n  apps/daemon/src/daemon-v2-command-registry.ts\n  apps/daemon/src/mcp-tool-allowlist.ts (EXCLUDED - operator only)\n  packages/contracts/src/runtime/runtime-vocabulary.ts\n  packages/control-room-client/src/generated/generated-client.ts and every digest mirror (memory generated-contract-digest-has-four-mirrors)\n\nTWO HAZARDS MEASURED AT PLAN TIME, both of which have bitten this board before:\n1. `HUMAN_ONLY_STEPS` IS DEFINED TWICE, byte-for-byte: apps/daemon/src/orchestrator/agent-spawn-contract.ts:194 AND apps/daemon/src/orchestrator/agent-wrapper.ts:116. Nothing found asserts the two agree. A new human-only kind added to only one of them leaves the wrapper free to staff an operator gate - exactly the class of defect that minted 8 junk goals live (see the comment at agent-wrapper.ts:117-123). Both must be updated and the row must add the assertion that they are equal.\n2. Roster tests must be BIDIRECTIONAL set-equality (global rail 9): enumerate the SERVED set from the dispatch seam, not from the roster constant, or deleting an entry shrinks the iteration and stays green.",
+  "definitionOfDone": [
+    "`preview.decide` is published across the full roster - vocabulary (kind, capability, family, PAYLOAD_KEYS, operator-principal), registry, families, v2 registry, contracts runtime vocabulary, generated client and every digest mirror. A bidirectional set-equality test enumerates the SERVED kinds from the dispatch seam and asserts they equal the advertised roster in BOTH directions (global rail 9); deleting the entry from either side must turn it red.",
+    "It is OPERATOR-ONLY and MCP-EXCLUDED: `preview.decide` appears in the MCP allowlist's exclusion set, and a test asserts an agent-authenticated dispatch is refused while an operator-authenticated one reaches the handler - asserting the refusal code and layer, not merely that it failed.",
+    "It is in BOTH HUMAN_ONLY_STEPS rosters (agent-spawn-contract.ts:194 and agent-wrapper.ts:116), AND a new test asserts the two sets are EQUAL to each other. That equality test is this row's most valuable artifact: the duplication exists today with nothing guarding it. Verify by deleting the entry from one roster only and confirming the test goes red.",
+    "The four refusal codes are defined with a closed code->layer map so a call site cannot mint a code and layer that disagree: PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED, PREVIEW_DECISION_INVALID. A test asserts each code's layer. Codes whose CONDITIONS belong to the runner (child 2) are defined here but may be exercised there - say so in the completion record rather than writing a fake condition to reach them.",
+    "The payload contract is exact-arity and refuses an unknown key rather than ignoring it: APPROVE carries no findings; REJECT carries findings naming the nodes to rework. A test asserts PREVIEW_DECISION_INVALID + layer for a malformed decision, for an unknown extra key, and for REJECT with empty findings.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts is touched, so the root lane is real evidence here)."
+  ],
+  "taskRails": [
+    "VOCABULARY ONLY. This row starts no process, captures no image, writes no receipt and renders no UI. If a step needs a running preview to be meaningful, it belongs to child 2 - say so and move on rather than stubbing a runner here.",
+    "HUMAN GATES ARE HUMAN-ONLY (inherited): operator-only, MCP-excluded, in BOTH HUMAN_ONLY_STEPS rosters, every refusal carrying a stable code asserted with its layer.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work.",
+    "A new daemon command follows the 8-touchpoint + .js bridge pattern; a missing `.js` bridge kills the daemon at boot with ERR_MODULE_NOT_FOUND (memory ui-connect-everything-built-2026-09-02). Never commit a generated index.js."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY AND RE-MEASURE, NO EDITS. NARROWED SCOPE: this row now DEFINES the contract and wires it into the daemon's OWN roster only. Publishing it on the shared surface (MCP exclusion, packages/contracts, the regenerated client) and adding it to the HUMAN_ONLY_STEPS rosters moved to task-5f883e4e12c34842b3cb6c2f218e4256 when this plan measured 12 files against the 10-file cap. Do not do that work here. (a) Confirm the guard row task-8834ebe68c1a4f81b3be8e7581156755 landed. (b) Confirm the gap: `grep -rn 'preview\\.decide|PREVIEW_COMMAND_MISSING' --include=*.ts apps/ packages/` returns ZERO. (c) TRACE THE ROSTER BEFORE EDITING, recording the exact line of each touchpoint, using `escalation.decide` as the worked example: daemon-command-vocabulary.ts capability (:81 area) and PAYLOAD_KEYS (:288 area); daemon-command-families.ts per-kind flag block (:83-94); daemon-command-registry.ts `entryOf` (:205-212, which resolves asyncEntries first and then destructures family flags). If the trace names a file outside this plan's seven, STOP and report — there is no headroom.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "VERIFY AND RE-MEASURE, NO EDITS. NARROWED SCOPE: this row now DEFINES the contract and wires it into the daemon's OWN roster only. Publishing it on the shared surface (MCP exclusion, packages/contracts, the regenerated client) and adding it to HUMAN_ONLY_STEPS moved to task-5f883e4e12c34842b3cb6c2f218e4256 when this plan measured 12 files against the 10-file cap. Do not do that work here. (a) [AMENDED 2026-09-05] This row has NO dependsOn and nothing to wait for. The earlier text named a HUMAN_ONLY_STEPS guard row as a prerequisite; that row was filed on a false premise and has been DELETED. Measured truth, verify it yourself with `grep -rn 'HUMAN_ONLY_STEPS: ReadonlySet|HUMAN_ONLY_STEPS =' --include=*.ts apps/daemon/src`: there is exactly ONE definition, at agent-spawn-contract.ts:195. agent-wrapper.ts:24 is a deliberate RE-EXPORT (its comment at :23 says why), not a second copy. A bidirectional guard also already exists at http/affordance-planning-offers.test.ts:209 and :263. Do not add a roster, do not add an equality test, and do not block. (b) Confirm the gap: `grep -rn 'preview\\.decide|PREVIEW_COMMAND_MISSING' --include=*.ts apps/ packages/` returns ZERO. (c) TRACE THE ROSTER BEFORE EDITING, recording the exact line of each touchpoint, using `escalation.decide` as the worked example: daemon-command-vocabulary.ts capability (:81 area) and PAYLOAD_KEYS (:288 area); daemon-command-families.ts per-kind flag block (:83-94); daemon-command-registry.ts `entryOf` (:205-212, which resolves asyncEntries first and then destructures family flags). If the trace names a file outside this plan's seven, STOP and report — there is no headroom.",
+          "reason": "Step 1(a) told the worker to verify a guard row (task-8834ebe68c1a4f81b3be8e7581156755) and report_blocked if it had not landed. I filed that row on a false premise and have since DELETED it: HUMAN_ONLY_STEPS is NOT duplicated. There is exactly ONE definition (agent-spawn-contract.ts:195) and agent-wrapper.ts:24 is a deliberate re-export. A worker following the base text would block forever on a row that no longer exists. Clause (a) is replaced with the measured truth; nothing else in the step changes.",
+          "amendedBy": "architect-20a6d1eb",
+          "amendedAt": "2026-09-04T23:09:02.029Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DEFINE THE CONTRACT IN ONE NEW MODULE, apps/daemon/src/preview/preview-contracts.ts, before touching any roster. Mirror apps/daemon/src/planning/expansion-request-contracts.ts — this repo's worked example of a command contract with a closed code->layer map. Export: the kind constant `preview.decide`; the EXACT payload key roster; and a frozen code->layer map covering PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED and PREVIEW_DECISION_INVALID, with the code roster DERIVED from that map's keys so the two can never disagree. The refusal factory takes NO layer argument: the map is the single source, so a call site cannot mint a code and layer that contradict each other. Ship the `.js` bridge alongside it (`export * from \"./preview-contracts.ts\";`) — a missing bridge kills the daemon at boot with ERR_MODULE_NOT_FOUND, and a generated index.js is never committed.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE PAYLOAD CONTRACT AND ITS REFUSALS, in a new apps/daemon/src/preview/preview-contracts.test.ts. Assert each code maps to its declared layer and that the derived code roster equals the map's keys exactly. Then the decoder: APPROVE carries no findings; REJECT carries findings naming the nodes to rework. Assert PREVIEW_DECISION_INVALID WITH ITS LAYER for a malformed decision value, an unknown extra key, REJECT with empty findings, and REJECT whose findings name no node. Assert code AND layer on every arm, never merely that it refused (global rail 1) — several layers can refuse a malformed payload, and the wrong one answering first would keep these green while testing nothing. The decoder REFUSES an unknown key rather than ignoring it: silently dropping a member would let an operator believe they supplied something load-bearing. STATE HONESTLY in the step note which codes this row can reach — PREVIEW_DECISION_INVALID is reachable here; PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT and PREVIEW_GOAL_NOT_LANDED are raised by the runner in task-f5a74c23f8754665ab9d36cba386e1d0. Define them, name where they are exercised, and do NOT invent a fake condition to reach them: a manufactured arm proves the constant exists, not that the refusal works.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-contracts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE IT INTO THE DAEMON'S OWN ROSTER. apps/daemon/src/daemon-command-vocabulary.ts: add `preview.decide` to the kind union, give it its capability alongside the other human decisions, add its PAYLOAD_KEYS entry from the contract module's roster (import it rather than restating the keys — a second copy drifts), and put it in OPERATOR_PRINCIPAL_KINDS so only an operator-authenticated dispatch mints its witness. apps/daemon/src/daemon-command-families.ts: add the per-kind family flag in the block at :83-94. apps/daemon/src/daemon-command-registry.ts: wire the entry so `entryOf` resolves it, for now to a handler that decodes the payload and refuses what the runner would own. THE KIND MUST BE SERVED, NOT ONLY ADVERTISED — an advertised-but-unserved kind breaks the bidirectional roster equality step 5 asserts, which is exactly why publishing and wiring are not split apart here even though the shared-surface publication is a separate row.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "UPDATE BOTH PAYLOAD-KEY TABLES AND PROVE SET-EQUALITY BOTH WAYS. TWO test tables enumerate every kind with its `payloadKeys` and BOTH must gain a row — apps/daemon/src/daemon-command-vocabulary.test.ts (the table at :170-182) and apps/daemon/src/daemon-command-registry.test.ts (the table at :197-203, plus the flat kind roster at :283-300). These are named here because a sibling row on this board shipped a plan and a governor triage that both missed exactly these two tables; they are invisible to a grep for the command-kind literal in production source. Then the bidirectional assertion global rail 9 requires: enumerate the SERVED set from the dispatch seam — the registry's own handled kinds — and assert it EQUALS the advertised roster in BOTH directions. A test that iterates only the roster constant sees one direction: deleting an entry shrinks its own iteration and stays green while a served capability vanishes from the advertised surface. Verify by deleting the new entry from each side in turn and confirming both go red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DRILLS AND GATES. (a) MUTATION DRILLS recorded in a step note (global rail 1): break the code->layer map so one code reports a neighbouring layer and confirm the step-3 layer arm goes RED (this is the drill that matters — a code roster and a layer map that disagree is the defect the closed-map shape exists to prevent); then remove the kind from the advertised roster and confirm step 5's set-equality goes red in the served->advertised direction. Restore after each and prove with `git diff` on the tracked files showing empty; the two new files under apps/daemon/src/preview/ are UNTRACKED until committed, so if you drill inside them prove the restore by SHA256 against an out-of-tree backup rather than by `git diff`, which is blind to untracked paths (global rail 13). (b) GATES, standalone and foreground, each `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`. `pnpm test` covers NO apps/** and this row touches no packages/**, so it is not evidence here (global rail 18) — say so explicitly rather than quoting it as a pass. Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "priority": "HIGH",
+  "order": 31,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T22:58:55.770Z",
+  "updatedAt": "2026-09-04T23:09:02.029Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:03:05.404Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 7
+  },
+  "dependsOn": [],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:07:19.685Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, the first submitted shape of this plan: it carried the MCP exclusion, packages/contracts, the regenerated client and both HUMAN_ONLY_STEPS rosters as well, and measured 12 distinct files against the 10-file hard cap — the daemon refused it. Split along the INTERFACE axis instead: this row defines the contract and wires it into the daemon's own roster (7 files); task-5f883e4e12c34842b3cb6c2f218e4256 publishes it on the shared surface and fences it to the operator (5 files). REJECTED, advertising the kind without serving it: an advertised-but-unserved kind breaks the bidirectional roster equality global rail 9 demands, so the vocabulary entry and a minimal refusing handler land together here. REJECTED, restating the payload keys in the vocabulary rather than importing them from the contract module: a second copy of a key roster is how the decoder and the advertisement come to disagree. REJECTED, manufacturing arms for the three runner-owned codes: a fake condition proves the constant exists, not that the refusal fires — step 3 requires naming where child task-f5a74c23 exercises them instead. REJECTED, defining codes and layers as parallel constants: expansion-request-contracts.ts already shows the closed-map shape with a derived code roster, and it is the drill target in step 6.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -rn 'preview.decide|preview.start|PREVIEW_COMMAND_MISSING|moe-preview-receipt' --include=*.ts apps/ packages/` = ZERO hits. The existing apps/daemon/src/graph-preview-request.ts and apps/control-room/src/preview/ are PLAN/document previews, not the product preview — do not extend them. THE DAEMON-SIDE ROSTER, traced from escalation.decide: daemon-command-vocabulary.ts :81 (capability) and :288 (PAYLOAD_KEYS); daemon-command-families.ts :83-94 (the per-kind flag block); daemon-command-registry.ts :205-212 (`entryOf` resolves `asyncEntries[kind]` first, then destructures family flags — so a NEW handler needs both a family flag and a registry branch; the peer finding that project.activate needed ZERO registry edit does not transfer, because that kind already had a handler). TWO PAYLOAD-KEY TABLES must both gain a row: daemon-command-vocabulary.test.ts:170-182 and daemon-command-registry.test.ts:197-203 plus the flat roster at :283-300. I measured these the hard way on task-4b9c394d, where neither the original plan nor a governor's triage named them — they are invisible to a grep for the kind literal in production source, because they live in test tables. THE CONTRACT SHAPE TO MIRROR: apps/daemon/src/planning/expansion-request-contracts.ts, whose header explains why the layer is DERIVED from the code (\"a call site cannot mint a refusal whose code and layer disagree, and the code roster cannot drift from the layer map\").",
+    "risks": "BIGGEST RISK — an unnamed roster touchpoint. This plan was REFUSED once at 12 files, and the two payload-key TEST tables are the kind of touchpoint a symbol grep cannot see; step 1 re-traces the whole roster before any edit and treats an eighth file as a stop-and-report rather than something to absorb. SECOND — decorative refusal codes: three of the four are raised by child task-f5a74c23's runner, so this row must define them and say plainly where they are exercised instead of manufacturing conditions. THIRD — a one-directional roster test. Iterating the roster constant alone hides a served capability vanishing from the advertised surface; step 5 requires enumerating the served set from the dispatch seam and verifying BOTH deletions go red. FOURTH — drill restore proof on UNTRACKED files: the two new modules under apps/daemon/src/preview/ are untracked until committed, and `git diff` is blind to untracked paths, so a mutation there must be restored against an out-of-tree SHA256 backup (global rail 13). FIFTH — a missing `.js` bridge on the new contracts module kills the daemon at boot with ERR_MODULE_NOT_FOUND. SIXTH — this row deliberately leaves the kind unpublished on the shared contract and unfenced in HUMAN_ONLY_STEPS; that is task-5f883e4e's, and until it lands the kind is daemon-internal, which is the correct intermediate state rather than a gap.",
+    "keyFiles": [
+      "apps/daemon/src/planning/expansion-request-contracts.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-families.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:07:21.794Z"
+}

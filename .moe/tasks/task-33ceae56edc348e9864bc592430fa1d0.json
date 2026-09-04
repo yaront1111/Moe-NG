@@ -19,8 +19,75 @@
     "FEATURES ONLY (inherited): no security-boundary or policy work.",
     "Check any new testid namespace is free before using it (`cr.board.*` was already taken once, memory board-screen-landed-2026-09-04), and keep JSX ASCII-only - an apostrophe in JSX reds the scheduler boundary scan."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE PREREQUISITES ON DISK, NO EDITS. This row certifies what two siblings shipped, so prove they are there rather than trusting the board (global rail 4 clause 2). (a) task-40e52fa8a85a4921b97bee933b00403f and task-5f883e4e12c34842b3cb6c2f218e4256 — `preview.decide` is in the daemon vocabulary, MCP-excluded, and in the regenerated client. (b) task-f5a74c23f8754665ab9d36cba386e1d0 — `grep -rn 'moe-preview-receipt' --include=*.ts apps/daemon/src` returns hits and a receipt carries {goalId, sha, url, pid, screenshots[], STARTED|REFUSED(code)}. Read its completion record for the one thing it was permitted to leave uncovered: whether the daemon-SHUTDOWN cleanup arm was reachable. If any prerequisite is absent, report_blocked with blockedOnTaskIds naming it — do NOT add a daemon field here (task rail 1). (c) Confirm the offer actually reaches the browser: the daemon must OFFER `preview.decide` on the affordance surface for a goal with a STARTED receipt, or no card can ever render. If the offer is missing, that is a gap in task-f5a74c23, not something to work around with a synthetic card.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE DECISION PORT, in a new apps/control-room/src/v2/approvals/preview-port.ts, mirroring apps/control-room/src/v2/approvals/escalation-port.ts — 43 lines, and the closest working example of a human decision reaching the daemon. Same shape: a `PREVIEW_COMMAND_KIND` constant, a decision union (APPROVE | REJECT), and a port whose single method calls `spendOffer(wire, KIND, affordance, payload, \"<ui-source>\", LAYER)` from offer-wire.js. Do NOT invent a second decision wire (task rail 2): `spendOffer` is how every existing human decision is spent, and a parallel path would drift on offer accounting. Add preview-port.test.ts asserting the payload shape for APPROVE (no findings) and for REJECT (findings naming the nodes), and that a refusal from the wire is surfaced with its code rather than swallowed.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/v2/approvals/preview-port.ts",
+        "apps/control-room/src/v2/approvals/preview-port.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE NEEDS-YOU ITEM, in apps/control-room/src/v2/approvals/needs-you-model.ts (197 lines). Add the preview decision as an item kind so it joins the queue in the order an operator should act. The model is PURE (needs-you.tsx:17: \"no fetch, no dispatch, no clock\") — keep it that way: it folds the daemon's offers and the preview receipt into an item, and decides nothing. Assert in its test that the item appears ONLY for a goal whose receipt is STARTED, and is ABSENT when there is no receipt, when the receipt is REFUSED, and when the daemon offers no `preview.decide` — a card offering a decision the daemon will refuse is worse than no card.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CARD, in apps/control-room/src/v2/approvals/needs-you.tsx (207 lines). Render the loopback URL as a link that opens in a NEW TAB (the operator is about to leave the page to look at their product; losing the queue would be hostile), the captured screenshots inline, and both Approve and Reject-with-findings controls. ASK GATE 2's ACTUAL QUESTION — \"Is this product good enough and visually correct?\" — rather than titling the card with a receipt name; words are the product here (task rail 3). Reject requires findings naming the nodes to rework, and the control must not submit an empty rejection. Follow the file's existing card conventions: `data-testid={`cr.needsyou.item.${slug}`}` (:108) and the `decisionResults` prop for per-item outcomes (:20-23). CHECK ANY NEW TESTID NAMESPACE IS FREE before using it (`cr.board.*` was already taken once), and keep the JSX ASCII-only — an apostrophe in JSX reds the scheduler boundary scan, so write \"is this product good enough\" without a typographic apostrophe.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE TWO OUTCOMES, asserted where they actually land. (a) APPROVE commits a durable decision that is READ BACK from `/activity/read` carrying its verdict — assert the verdict from the activity read, NOT from component state, so a click that never reached the daemon cannot pass (DoD 2). (b) REJECT with findings moves the named node to REWORK on the board with the findings text visible: assert the node's column is REWORK, reusing the EXISTING column (board-columns.ts:20 already lists REWORK and :47 already routes a READY node with prior review rounds there — do not add a column), and assert the findings text renders, because a rejection whose reason the operator cannot read is the defect this clause exists to prevent. (c) The four refusal codes render as operator words verbatim from the daemon — assert the rendered sentence for at least PREVIEW_COMMAND_MISSING and PREVIEW_START_TIMEOUT, and assert an UNKNOWN code still renders verbatim rather than blank, which is the existing convention for unmirrored tokens.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/ops/activity-words.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE PREVIEW STAGE ON THE STATUS STRIP. apps/control-room/src/v2/goals/goal-status.ts: add a PREVIEW stage to the `GoalStage` union and its branch in `deriveGoalStatus`, placed so it cannot mask the gates above it — read the branch ORDER first (CLOSED, then CONTRACT at Gate 1, then PLAN, then REPLANNED, then ESCALATION, then READY_TO_CLOSE, then WORKING). A preview is running AFTER the nodes are landed and BEFORE the goal closes, so it belongs after ESCALATION and before READY_TO_CLOSE; state your placement and why in the step note. Adding to the union means STAGE_WORDS in goal-status-strip.tsx:17 must gain the entry too or the strip renders an undefined label — the union is exhaustively keyed, so the typechecker will name it; do not silence that with a cast. Assert the stage and its words for a goal with a STARTED receipt, and assert READY_TO_CLOSE still wins once the preview is approved and coverage is complete.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE BROWSER JOURNEY over a REAL daemon, in a new spec under tests/e2e/control-room/ (existing specs there — daemon-board.spec.ts, prd-to-approval.spec.ts — already drive a real daemon; follow their harness rather than standing up a new one). Cover start -> card -> approve: the preview starts, the Needs-you card appears with its link and at least one screenshot, the operator approves, and the decision is durable. NO FIXTURE-BACKED SUBSTITUTE (parent rail 4): if the lane cannot start a real preview because the fixture product needs a workspace this harness does not provide, report blocked rather than stubbing the receipt. Run `pnpm test:e2e:browser` and quote its count line (DoD 5).",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/e2e/control-room/preview-gate.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "LIVE DRIVE, DOCS, GATES, ADVERSARIAL PASS — this row owns them for the whole Gate 2 feature (global rail 21). (a) LIVE DRIVE: start a preview for UnAI (D:/projexts/UnAI) or a fresh scaffold app; record the real screenshot PATH and its SHA256 plus the committed decision in a row comment under ~4500 chars. NEVER restart the wrapper to unstick a seat — claim TTL is 30 minutes. If the drive did not happen, say so plainly; do NOT let the README edit imply a capability nobody drove. (b) DOCS: rewrite README's \"no working preview\" clause to the measured truth; `git grep -n 'no working preview'` returns 0 hits. That clause sits in a \"What this is not\" section whose purpose is honesty — do not overclaim while editing it. (c) GATES, each standalone and foreground with its `Test Files N passed` count line quoted (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. Note that `pnpm test` covers no apps/** (global rail 18). (d) ADVERSARIAL PASS in a step note: what the card shows when the receipt names a pid long gone or a screenshot file since deleted; what two operators approving concurrently do to the offer; and whether the loopback link can ever point somewhere other than the daemon's own preview.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -37,5 +104,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-04T23:00:06.234Z"
+  "updatedAt": "2026-09-04T23:13:30.442Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:12:12.571Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:13:28.242Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, a second decision wire: `spendOffer` (offer-wire.ts) is how every existing human decision is spent and escalation-port.ts is a 43-line worked example; a parallel path would drift on offer accounting. REJECTED, a new board column for rejected-into-rework: board-columns.ts:20 already lists REWORK and :47 already routes a re-opened node there — adding one would be a design regression, not a feature. REJECTED, rendering the card from a synthetic receipt when the daemon offers no `preview.decide`: a card that offers a decision the daemon will refuse is worse than no card, so step 1 treats a missing offer as a gap in task-f5a74c23 rather than something to work around. REJECTED, folding the live drive and README into a sibling: global rail 21 puts the e2e, docs sweep and adversarial pass in ONE row for the feature, and this is it. REJECTED, putting the PREVIEW stage last in the branch order: it would be masked by WORKING; the plan requires the worker to state the placement and defend it.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. EVERY PATTERN THIS ROW NEEDS EXISTS — it composes rather than invents. `apps/control-room/src/v2/approvals/escalation-port.ts` is 43 lines and is the template: a KIND constant, a decision union, and one method calling `spendOffer(wire, KIND, affordance, payload, \"ui-escalate\", LAYER)` from offer-wire.ts (84 lines). `needs-you.tsx` (207) documents its own contract at :12-17 — one card per decision, cards carry a daemon offer, and the component is \"otherwise pure: no fetch, no dispatch, no clock\"; cards are keyed `cr.needsyou.item.${slug}` (:108) and per-item outcomes arrive via `decisionResults` (:20-23). `needs-you-model.ts` (197) is the pure fold. THE BOARD ALREADY HAS REWORK: board-columns.ts:20 `BOARD_COLUMNS = [\"QUEUED\",\"WORKING\",\"REVIEW\",\"REWORK\",\"DONE\",\"BLOCKED\"]`, and :47 routes a READY node with prior review rounds to REWORK. THE STAGE UNION IS EXHAUSTIVELY KEYED: `GoalStage` (goal-status.ts:13-22) is mirrored by `STAGE_WORDS` (goal-status-strip.tsx:17) as a full Record, so adding a member forces the words entry at typecheck — which is the desired behaviour, not something to cast away. BRANCH ORDER in deriveGoalStatus: CLOSED, CONTRACT, PLAN, REPLANNED, ESCALATION, READY_TO_CLOSE (gated on verified === criteria at :139-143), WORKING. THE E2E LANE: `pnpm test:e2e:browser` = `tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts`; daemon-board.spec.ts and prd-to-approval.spec.ts already drive a real daemon.",
+    "risks": "BIGGEST RISK — asserting APPROVE from component state. A click that never reached the daemon would pass; DoD 2 and step 5(a) require reading the verdict back from /activity/read. SECOND — this row is the last line of defence for the whole Gate 2 feature, so a failing arm is evidence a sibling under-delivered; task rail 1 forbids patching the daemon here, and step 1 blocks instead. THIRD — the live drive is the clause most likely to be skipped while the README clause is deleted anyway, leaving the docs claiming a capability nobody drove; step 8(a) permits saying it did not happen but not implying it did. FOURTH — stage placement: a PREVIEW branch after WORKING never fires, and one before READY_TO_CLOSE could mask completion; the plan makes the worker state and defend the position and assert that READY_TO_CLOSE still wins after approval. FIFTH — adding to GoalStage without STAGE_WORDS renders an undefined label; the Record is exhaustive so the typechecker names it, and a cast would hide exactly the thing that protects the strip. SIXTH — ASCII-only JSX: an apostrophe in JSX reds the scheduler boundary scan, and Gate 2's question is naturally written with one. SEVENTH — stale receipts: a pid long dead or a deleted screenshot file must not blank the card, which step 8(d) makes the worker answer.",
+    "keyFiles": [
+      "apps/control-room/src/v2/approvals/escalation-port.ts",
+      "apps/control-room/src/v2/approvals/offer-wire.ts",
+      "apps/control-room/src/v2/approvals/needs-you.tsx",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "apps/control-room/src/v2/board/board-columns.ts",
+      "tests/e2e/control-room/daemon-board.spec.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:13:30.442Z"
 }

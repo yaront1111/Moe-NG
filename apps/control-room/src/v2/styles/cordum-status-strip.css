@@ -15,3 +15,14 @@
 .cr2-statusstrip .cr2-relay-label {
   cursor: help;
 }
+
+/* The fleet-wide provider pause. It reads in the same mono voice as its stale and
+ * freshness neighbours, but in the LAGGING tone rather than the soft ink: the link
+ * is healthy while the seats wait, so this is the one line on the strip that is
+ * about work stopping, and it must not read as ordinary chrome. */
+.cr2-statusstrip .cr2-paused {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.04em;
+  color: var(--cr-conn-lagging);
+}

@@ -2,6 +2,8 @@ import type { CSSProperties, JSX } from "react";
 
 import { StatusChip } from "../components/primitives.js";
 import { freshnessWords } from "../ops/activity-words.js";
+import { pauseWords } from "./pause-context.js";
+import type { ProviderPause } from "./pause-context.js";
 import { CONNECTION_STATES, describeConnection } from "./shell-model.js";
 import type { ConnectionDescriptor, ConnectionState } from "./shell-model.js";
 import "../styles/cordum-status-strip.css";
@@ -59,6 +61,8 @@ export interface StatusStripProps {
   readonly onSimulate?: ((state: ConnectionState) => void) | undefined;
   /** Last successful daemon answer, frozen until the next poll — not a ticking live region. */
   readonly answeredAtMs?: number | null | undefined;
+  /** The shell-wide pause the app last read; `null`/absent means none is known. */
+  readonly paused?: ProviderPause | null | undefined;
 }
 
 export function StatusStrip({
@@ -67,6 +71,7 @@ export function StatusStrip({
   simulatable = false,
   onSimulate,
   answeredAtMs = null,
+  paused = null,
 }: StatusStripProps): JSX.Element {
   const live = descriptor.live && clockPresent;
   const title = `${sourceTitle(descriptor.key, simulatable)} ${NO_STREAM_TITLE}`;
@@ -103,6 +108,11 @@ export function StatusStrip({
         ))}
       </span>
       <StatusChip label={descriptor.label} testId="cr.shell.connection" toneVar={descriptor.toneVar} />
+      {paused === null || paused === undefined ? null : (
+        <span className="cr2-paused" data-testid="cr.shell.paused"
+          title={`Last line from the ${paused.provider} seat: ${paused.lastLine}`}
+        >{pauseWords(paused)}</span>
+      )}
       {descriptor.staleLabel === "" ? null : (
         <span className="cr2-stale" data-testid="cr.shell.stale">{descriptor.staleLabel}</span>
       )}
