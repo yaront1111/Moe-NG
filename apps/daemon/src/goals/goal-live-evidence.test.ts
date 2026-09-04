@@ -237,6 +237,29 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
     expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID).ok).toBe(true);
   });
 
+  /**
+   * A fault reading the LANDING evidence must be answered by the landing leg, not by
+   * `qualifyGoalClosure`'s outer catch: that catch names the acceptance, so the fault would be
+   * reported as the wrong prerequisite. A closed store is the cheapest real fault there is, and
+   * it proves the leg fails CLOSED — an unreadable landing is never read as an absent one.
+   */
+  it("refuses NOT_PASSED, without throwing, when the durable landing evidence is unreadable", () => {
+    const store = openStore();
+    approvedWorld(store, ["node-1"]);
+    seedLandingReceipt(store, "node-1", "COMMITTED");
+    const accepted = acceptanceOf(store, "node-1");
+    store.close();
+
+    const outcome = readLiveNodeEvidence(store, PROJECT_ID, "node-1", accepted);
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_CLOSE_VERIFICATION_NOT_PASSED",
+      layer: "DAEMON_PREREQUISITE",
+      message: "the durable landing evidence could not be read",
+      ok: false,
+    });
+  });
+
   it.runIf(WINDOWS_ONLY)("closes a MIXED goal, naming the Foundation and live legs apart", async () => {
     const store = openStore();
     await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY, [ACTIVATION_WORLD_NODE_KEY, "node-2"]);

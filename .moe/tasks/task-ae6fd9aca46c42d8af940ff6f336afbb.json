@@ -96,16 +96,26 @@
     {
       "stepId": "step-5",
       "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill and read the diff as an attacker: a landing receipt whose `verifierReceiptId` names a DIFFERENT verifier receipt than the acceptance's (a stale landing from a previous round) - decide and test: the live leg must require `landing.verifierReceiptId === accepted.verifierReceiptId` when a landing exists, else refuse GOAL_CLOSE_REVIEW_PACKAGE_STALE with message 'the landing receipt attests a different verifier receipt' (add the arm to goal-live-evidence.test.ts); two landing receipts for one node (the map holds the latest by fold order - state which wins and pin it); a goal with zero approved nodes (existing behaviour, unchanged); `readReviewLedgers` throwing -> refusal, not a throw (qualifyGoalClosure's outer catch is the last line of defence - do not rely on it, wrap in the module). Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names: the exported ClosureLeg union and readLiveNodeEvidence/composeClosure, the single re-aimed arm (quote the hunk header), the declared-but-unreachable GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT (per comment on this row), and the `legs` seam child 2 (task-8145137c) reads. Then `moe.add_comment` on child 2 with that seam and the fixture helper name. Report every touched path in complete_step.modifiedFiles.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-live-evidence.ts",
         "apps/daemon/src/goals/goal-live-evidence.test.ts"
       ],
-      "startedAt": "2026-09-04T14:56:33.506Z"
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-live-evidence.test.ts",
+        "apps/daemon/src/goals/goal-live-evidence.ts",
+        "apps/daemon/src/goals/goal-live-evidence.js",
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/goals/goal-qualification.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW + GATE. RESUMED session (worker-80f8bfe1): steps 1-4 were landed by prior sessions in wip commits e74ccaa7 + 0eb2c3fe; I re-verified from git (both new modules TRACKED and CLEAN before drilling, `git status --porcelain -- apps/daemon/src/goals/` showed only peer dirt) rather than trusting in-flight claims.\n\nFOUND AND FIXED (one new arm, no production change). The catch in `readLiveNodeEvidence` — \"the durable landing evidence could not be read\" — had NO test. A whole refusal message with no arm is one refactor away from becoming a silent throw that `qualifyGoalClosure`'s outer catch reports as the ACCEPTANCE code (wrong prerequisite named). New arm, real fault, no stub: seed the world, take the acceptance, `store.close()`, then call `readLiveNodeEvidence` -> code GOAL_CLOSE_VERIFICATION_NOT_PASSED + layer DAEMON_PREREQUISITE + that exact message. It also settles the fail-open question empirically: a closed store THROWS out of `readReviewLedgers` (it has no internal catch), so an unreadable landing can never be mistaken for an absent one.\n\nDRILLS (targets tracked+clean, so `git diff --exit-code` is a valid restore proof; restore run in a SEPARATE call from the mutation, proof in a THIRD):\n- drill-7, delete the try/catch and let the read throw: RED, \"× refuses NOT_PASSED, without throwing, when the durable landing evidence is unreadable\", `Tests 1 failed | 12 passed (13)`. Restored; `git diff --exit-code -- apps/daemon/src/goals/goal-live-evidence.ts` empty, exit 0.\n- drill-8, disable the stale-landing guard (`if (false && landing.verifierReceiptId !== ...)`): RED, \"× refuses PACKAGE_STALE when the landing attests a different verifier receipt\", diff line `- \"message\": \"the landing receipt attests a different verifier receipt\"`, `Tests 1 failed | 12 passed (13)`. Restored; empty diff, exit 0. The multi-landing arm stayed green under this mutation, which is correct: it pins fold ORDER (latest wins), not the staleness rule.\n\nSTEP-5 QUESTIONS, ANSWERED. Stale landing (different verifierReceiptId) -> refuses PACKAGE_STALE, arm + drill above. Two landings for one node -> the ledger fold keeps the LAST decision; pinned by an arm that seeds a GIT_COMMIT_FAILED landing under a foreign verifier id FIRST and a COMMITTED one second, so a first-wins fold reds it either way. Zero approved nodes -> untouched (`readApprovedNodeScope` is not in the diff). Store throw -> caught in the module, not left to the outer catch.\n\nNOT A DEFECT, RECORDED. `landing.refusal?.code ?? \"\"` is unreachable: the decoder enforces `(outcome === \"REFUSED\") !== (refusal !== null)` (landing-receipt-contracts.ts:176), so a REFUSED receipt always carries a code. FOLLOW-UP FOR THE EPIC-FINAL ROW (not fixed here, foreign module, out of this leaf's scope): `readReviewLedgers` DROPS a landing receipt whose bytes fail to decode (`if (decoded.ok && ...)`, review-read-model.ts), so a corrupt landing reads as landing NONE and is admitted. Distinguishing \"absent\" from \"undecodable\" needs a change in the shared read model, which several consumers share.\n\nGATES, repo root, foreground, fresh: `pnpm --filter @moe/daemon test` -> `Test Files 403 passed (403)` / `Tests 8025 passed (8025)`, exit 0. `pnpm typecheck` -> `apps/daemon typecheck$ tsc --project tsconfig.json` / `Done`, exit 0. Focused: `pnpm exec vitest run --root . --config package.json src/goals/goal-live-evidence.test.ts src/goals/goal-qualification.test.ts src/goals/goal-services.test.ts` -> `Test Files 3 passed (3)` / `Tests 50 passed (50)`, exit 0. `wc -l`: goal-qualification.ts 212, goal-live-evidence.ts 234 (both <= 250). DoD 4: goal-close-prerequisite.ts absent from both of my commits and `git diff origin/main` on it is 0 lines; index-surface.test.ts and runtime-entrypoint.test.ts untouched.\n\nDoD 3 DEVIATION, DISCLOSED NOT HIDDEN: goal-qualification.test.ts changed in THREE arms, not one. (1) the sanctioned re-aim at :378; (2) the result-KEY-ROSTER arm at :352 — the roster is exact, so the new sibling `legs` field forces it; (3) a SECOND arm (:416-457, the decoy/scan arm) that also pinned GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT — re-aimed WITHOUT losing its subject: it now asserts the decoy receipt is not admitted as FOUNDATION (`legs` = {node-1:\"LIVE\"}). Both extra edits are forced consumers of the changed returned shape / the now-unreachable code, not convenience edits. Peer dirt left alone: apps/daemon/src/goals/goal-services.test.ts, scripts/up.ps1, scripts/watch.ps1, .moe/*.",
+      "startedAt": "2026-09-04T14:56:33.506Z",
+      "completedAt": "2026-09-04T17:08:51.361Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-71a60ba7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,12 +140,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:17:45.379Z",
-  "updatedAt": "2026-09-04T15:13:57.087Z",
+  "updatedAt": "2026-09-04T17:09:27.948Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:20:34.302Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -144,7 +154,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T10:22:53.859Z",
@@ -168,7 +179,8 @@
   "planApprovedAt": "2026-09-04T10:22:56.066Z",
   "contextFetchedBy": [
     "worker-c846071b",
-    "worker-71a60ba7"
+    "worker-71a60ba7",
+    "worker-80f8bfe1"
   ],
   "workStartedAt": "2026-09-04T10:30:42.856Z",
   "commits": [
@@ -277,24 +289,30 @@
       "treeId": "483be017202f503f4049acc94b4332801c1e231b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "e0a0858da61d97bd7d07bbfad58cb11dbdbd7209",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-71a60ba7@2026-09-04T15:14:28Z",
+      "paths": [
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json"
+      ],
+      "recordedBy": "worker-71a60ba7",
+      "recordedAt": "2026-09-04T15:14:42.656Z",
+      "treeId": "fc0aa3b870595020a7b0525d6b58f4b0d0ad8b7f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
-    ".moe/tasks/task-38ca5f66c8d146df97ed6a99b35edfbd.json",
-    ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
-    ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
-    ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
-    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
-    ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
-    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
-    "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
-    "apps/daemon/src/goals/goal-live-evidence.js",
     "apps/daemon/src/goals/goal-live-evidence.test.ts",
+    "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
     "apps/daemon/src/goals/goal-live-evidence.ts",
-    "apps/daemon/src/goals/goal-qualification.test.ts",
+    "apps/daemon/src/goals/goal-live-evidence.js",
     "apps/daemon/src/goals/goal-qualification.ts",
-    "apps/daemon/src/goals/j1-command-path.test.ts"
+    "apps/daemon/src/goals/goal-qualification.test.ts"
   ],
   "touchedFiles": [
     ".wire-step3.py",
@@ -312,10 +330,18 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-71a60ba7@2026-09-04T15:13:49Z",
-    "at": "2026-09-04T15:13:57.087Z"
+    "sessionId": "worker-71a60ba7@2026-09-04T15:14:28Z",
+    "at": "2026-09-04T15:14:42.656Z"
   },
   "declaredFiles": [
     "apps/daemon/src/goals/j1-command-path.test.ts"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-04T17:09:27.948Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  403 passed (403)\n      Tests  8025 passed (8025)\n   Start at  20:01:52\n   Duration  379.49s (transform 43.80s, setup 264.35s, tests 1174.08s)\nEXIT=0",
+    "reportedAt": "2026-09-04T17:09:27.948Z"
+  },
+  "completionSummary": "GOAL CLOSURE NOW ACCEPTS THE LIVE LOOP'S NODE EVIDENCE. New module apps/daemon/src/goals/goal-live-evidence.ts (234 lines) + .js bridge exports the `ClosureLeg` union ({leg:\"FOUNDATION\",receipt,accepted,nodeRef} | {leg:\"LIVE\",accepted,verifierReceiptSha256,landing:\"COMMITTED\"|\"NOTHING_TO_COMMIT\"|\"NONE\",landingReceiptId}), `readLiveNodeEvidence(store,projectId,nodeRef,accepted)`, `composeClosure` (moved out of goal-qualification.ts with the leg tag framed into every derived-ref preimage) and `refuseClosure`. `qualify` takes the live leg when no Foundation receipt names an approved node; `reviewClosure` still runs for BOTH legs, so acceptance + verifier receipt PASSED + not stale is never relaxed. goal-qualification.ts 212 lines, goal-live-evidence.ts 234 (cap 250).\n\nNO NEW REFUSAL CODE, NO NEW LAYER: `git diff origin/main -- goal-close-prerequisite.ts` is 0 lines; index-surface.test.ts and runtime-entrypoint.test.ts untouched. A refused landing answers GOAL_CLOSE_VERIFICATION_NOT_PASSED with the landing code in the message.\n\nDECLARED-BUT-UNREACHABLE: GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT stays in GOAL_PREREQUISITE_REFUSAL_CODES and is no longer raised by `qualify` (per architect comment on this row). Child 2 (task-8145137c) must list it explicitly in its bidirectional roster arm, never delete it — commented on that row, along with the `legs: Readonly<Record<nodeRef,\"FOUNDATION\"|\"LIVE\">>` seam (a SIBLING of the witnesses; core's rosters are exact, so goal-services.ts forwards only the two witnesses) and the `seedLandingReceipt` fixture helper.\n\nDoD 3 DEVIATION, DISCLOSED: goal-qualification.test.ts changed in THREE arms, not the one the DoD names. @@ -378 +382,9 @@ is the sanctioned re-aim (RECEIPT_ABSENT arm -> LIVE close, legs {node-1:\"LIVE\",node-2:\"LIVE\"}). The other two are forced, not convenience: @@ -353 +356 @@ the EXACT result-key roster, which the new `legs` sibling breaks; and @@ -439,2 +457,4 @@ a SECOND arm (the decoy/scan world) that also pinned the now-"
 }

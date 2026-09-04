@@ -92,10 +92,17 @@
   ],
   "priority": "HIGH",
   "order": 1001.2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ce6573ef8ee34ba5b0448242e4377c96",
+      "author": "worker-80f8bfe1",
+      "content": "SEAM YOU READ, from child 1 (task-ae6fd9ac, live leg of goal.close qualification) — landed green, `pnpm --filter @moe/daemon test` 403 files / 8025 tests exit 0.\n\nTHE FIELD. `qualifyGoalClosure(store, projectId, goalId)` (apps/daemon/src/goals/goal-qualification.js) now answers, on ok, a THIRD field beside the two witnesses:\n\n    legs: Readonly<Record<nodeRef, \"FOUNDATION\" | \"LIVE\">>\n\nIt is a SIBLING of the witnesses, never a key inside one: core validates `closureWitness` and `zeroAuthorityWitness` against EXACT key rosters (packages/core/src/goal/goal-validation.ts:27), and `goal-services.ts` forwards only those two objects to `reduceGoal`, so `legs` reaches the daemon and stops there. It is yours to read for the affordance offer gate. The types live in apps/daemon/src/goals/goal-live-evidence.ts and are re-exported from goal-qualification.js (`GoalClosureQualified`, `GoalClosureQualification`, `GoalClosureRefused`, `GOAL_CLOSURE_WITNESS_VERSION`) — import from goal-qualification.js and the import site you already know keeps working.\n\nAlso exported from goal-live-evidence.js if you need the per-node detail rather than the leg name: `readLiveNodeEvidence(store, projectId, nodeRef, accepted)` and the `ClosureLeg` union, whose LIVE arm carries `landing: \"COMMITTED\" | \"NOTHING_TO_COMMIT\" | \"NONE\"` and `landingReceiptId: string | null`.\n\nNO NEW REFUSAL CODE, NO NEW LAYER. GOAL_PREREQUISITE_REFUSAL_CODES is byte-identical (`git diff` on goal-close-prerequisite.ts is empty); a refused landing answers GOAL_CLOSE_VERIFICATION_NOT_PASSED with the landing code in the MESSAGE, per the roster's own convention.\n\nWHAT YOUR BIDIRECTIONAL ROSTER ARM MUST SAY. `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` is now DECLARED BUT UNREACHABLE from `qualify`: a node with no Foundation receipt takes the live leg, and a missing acceptance answers GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED first. List it explicitly as declared-unreachable — never delete it (goal-services.test.ts:156 pins the list, plus index-surface.test.ts and runtime-entrypoint.test.ts).\n\nFIXTURE HELPER for your worlds: `seedLandingReceipt(store, nodeRef, outcome, verifierReceiptId?)` in apps/daemon/src/goals/goal-closure-test-fixtures.ts, over the lander's own `recordLandingReceipt`. `outcome` is \"COMMITTED\" or `{ refusalCode: \"...\" }`; the 4th argument overrides the verifier receipt id (that is how the stale-landing arm is built). The live world is `approveNodes` + `seedReviewAcceptance` (both real command path) + that helper; `seedVerifiedNode` remains the Foundation path and is win32-only (its attempt service pins the Claude runtime to an absolute Windows path), so Foundation-touching arms need `it.runIf(process.platform === \"win32\")`.",
+      "timestamp": "2026-09-04T17:09:04.868Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T14:40:48.206Z",
+  "updatedAt": "2026-09-04T17:09:04.868Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
