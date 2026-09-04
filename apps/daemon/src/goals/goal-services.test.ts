@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -54,6 +56,18 @@ import { GOAL_HANDLERS } from "./goal-services.js";
  * `packages/core/src/goal/goal-reducer.test.ts`; the live leg's own refusal arms and its close
  * through the authenticated operator wire live in `goal-live-evidence.test.ts`.
  */
+
+/**
+ * Every module that can REFUSE a `goal.close` under the shared vocabulary — the seam the
+ * bidirectional roster arm reads its served set from. Node evidence is qualified by the first
+ * three; the fourth contributes the goal-level Product Contract gate.
+ */
+const EMITTING_CLOSURE_MODULES = Object.freeze([
+  "./goal-qualification.ts",
+  "./goal-qualification-reads.ts",
+  "./goal-live-evidence.ts",
+  "./goal-services.ts",
+] as const);
 
 interface GoalRow {
   readonly activeGraphRevisionRef?: string | null;
@@ -167,13 +181,35 @@ describe("goal service surface", () => {
       "GOAL_CLOSE_RESULT_DIGEST_MISMATCH",
       "GOAL_CLOSE_REVIEW_PACKAGE_STALE",
       "GOAL_CLOSE_AUTHORITY_REMAINS",
+      "GOAL_CLOSE_CRITERIA_UNVERIFIED",
     ]);
     expect(new Set(GOAL_PREREQUISITE_REFUSAL_CODES).size)
       .toBe(GOAL_PREREQUISITE_REFUSAL_CODES.length);
     expect(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED)
       .toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED");
-    // All eight refuse at ONE layer, which is why every arm below pins the layer too.
+    // All nine refuse at ONE layer, which is why every arm below pins the layer too.
     expect(GOAL_PREREQUISITE_LAYER).toBe("DAEMON_PREREQUISITE");
+  });
+
+  it("serves exactly the roster: every emitted close code is declared, and every declared code is emitted", () => {
+    // BIDIRECTIONAL, and the second direction is the one that needs the source scan. Iterating
+    // the roster alone can only ever prove "declared", so deleting a member would shrink the
+    // iteration and stay green while a module went on refusing under a code the vocabulary no
+    // longer admits. The SERVED set is therefore read from the emitting modules themselves.
+    //
+    // `goal-close-prerequisite.ts` is deliberately NOT scanned: it is where the roster is
+    // declared, so including it would make the arm compare the roster with itself.
+    const served = new Set(EMITTING_CLOSURE_MODULES.flatMap((module) =>
+      readFileSync(new URL(module, import.meta.url), "utf8").match(/GOAL_CLOSE_[A-Z_]+/gu) ?? []));
+
+    // Every code an emitter can name is declared...
+    expect([...served].sort()).toEqual([...GOAL_PREREQUISITE_REFUSAL_CODES].sort());
+    // ...and the scan actually found something, so a bad glob cannot pass this vacuously.
+    expect(served.size).toBe(GOAL_PREREQUISITE_REFUSAL_CODES.length);
+    // The goal-level code is emitted by the SERVICE, not by node qualification: it is the only
+    // member whose subject is the goal's Product Contract rather than one node's evidence.
+    expect(readFileSync(new URL("./goal-services.ts", import.meta.url), "utf8"))
+      .toContain("GOAL_CLOSE_CRITERIA_UNVERIFIED");
   });
 });
 

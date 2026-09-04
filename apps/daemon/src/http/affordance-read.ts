@@ -9,6 +9,8 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
+import { goalCloseReadinessFor } from "../goals/goal-close-readiness.js";
+import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
@@ -262,6 +264,10 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const nodes = config.nodes?.() ?? [];
     const ledger = readDurableLedger(config.store, config.projectId);
     const planning = resolvePlanningOffers({
+      // Derived per call, never cached: an acceptance that lands between two polls shows up on
+      // the next one. The ladder invokes this only for a goal it could offer a close.
+      closeReadiness: (goalId): GoalCloseReadiness["kind"] =>
+        goalCloseReadinessFor(config.store, config.projectId, goalId).kind,
       compilerLane: createCompilerLanePort({
         ledger, projectId: config.projectId, store: config.store,
       }),

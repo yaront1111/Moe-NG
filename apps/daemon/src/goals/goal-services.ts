@@ -14,7 +14,10 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { admitDocumentSource } from "../documents/document-source-leg.js";
-import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import {
+  GOAL_CLOSE_CRITERIA_UNVERIFIED, GOAL_PREREQUISITE_LAYER,
+} from "./goal-close-prerequisite.js";
+import { goalCloseReadinessFor } from "./goal-close-readiness.js";
 import { createGoalWithSource } from "./goal-create-with-source.js";
 import {
   briefBearingFacts,
@@ -146,6 +149,22 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
   if (goalId === null || declaredClosure === null || declaredZeroAuthority === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+
+  // THE GOAL-LEVEL GATE, and it runs BEFORE qualification for two reasons: it is the cheaper
+  // read, and a goal whose product is not built must never mint closure witnesses on the way to
+  // being refused. FAIL CLOSED BY DEFAULT — only a goal with no approved Product Contract, or
+  // one whose every approved criterion the coverage read calls VERIFIED, proceeds. NOT_READY
+  // and an UNREADABLE coverage both refuse here, and a kind added to the union later refuses
+  // until someone decides it should not. The counts behind the refusal are not restated on the
+  // wire: `ServiceRefused` carries only code, layer and a RuntimeError whose code must be one
+  // the `@moe/contracts` registry knows, so an unregistered one would surface as UNKNOWN_ERROR
+  // with its details stripped — strictly worse than the code itself. The numbers live on
+  // `goalCloseReadinessFor`, which is what the coverage screen and the offer ladder read.
+  const readiness = goalCloseReadinessFor(store, request.projectId, goalId);
+  if (readiness.kind !== "NO_CONTRACT" && readiness.kind !== "READY") {
+    return refuse(request.kind, GOAL_CLOSE_CRITERIA_UNVERIFIED, GOAL_PREREQUISITE_LAYER);
+  }
+
   const qualified = qualifyGoalClosure(store, request.projectId, goalId);
   if (!qualified.ok) {
     return refuse(request.kind, qualified.code, GOAL_PREREQUISITE_LAYER);

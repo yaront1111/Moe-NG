@@ -6,6 +6,7 @@ import { stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION }
   from "../product-contract/product-contract-command-contracts.js";
+import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import type { CompilerLanePort } from "./affordance-compiler-lane.js";
 
 const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
@@ -34,6 +35,13 @@ export interface PlanningOfferResolution {
 }
 
 export interface PlanningOfferInput {
+  /**
+   * Whether this goal's approved Product Contract has any criterion the coverage read does not
+   * call VERIFIED. A FACT rather than a store handle, and LAZY: the ladder stays pure, the
+   * coverage walk happens only for a goal that could actually be offered a close, and a later
+   * gate (landing, say) adds its own fact here rather than reaching for the store.
+   */
+  readonly closeReadiness: (goalId: string) => GoalCloseReadiness["kind"];
   readonly compilerLane: CompilerLanePort;
   readonly ledger: DurableLedger;
   readonly mintId: (kind: string) => string;
@@ -143,7 +151,16 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
   // fence never moves the goal's.
   const publish = offer(input, "repository.publish", `publish:${goal.goalId}`);
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
-    return [offer(input, "goal.close", goal.goalId), publish];
+    // A goal is offered to close only when its product is DONE: every approved criterion of its
+    // Product Contract is verified. A goal with no contract — the seed/Foundation journey — is
+    // offered exactly as it always was, because this gate has nothing to say about it. An
+    // unreadable coverage WITHHOLDS (fail closed): it is not evidence the work is finished, and
+    // the surface must never offer a close the command would refuse. Read here rather than
+    // above so the coverage walk is skipped for every goal that could not be offered one.
+    const readiness = input.closeReadiness(goal.goalId);
+    return readiness === "NO_CONTRACT" || readiness === "READY"
+      ? [offer(input, "goal.close", goal.goalId), publish]
+      : [publish];
   }
   if (lifecycle === "COMPLETED") return [publish];
   return [];

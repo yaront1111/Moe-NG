@@ -19,6 +19,17 @@ export const GOAL_CLOSE_REVIEW_PACKAGE_STALE =
   "GOAL_CLOSE_REVIEW_PACKAGE_STALE" as const;
 export const GOAL_CLOSE_AUTHORITY_REMAINS =
   "GOAL_CLOSE_AUTHORITY_REMAINS" as const;
+/**
+ * The GOAL-LEVEL prerequisite, and the only one here that is not about a node's evidence: the
+ * goal's approved Product Contract still has a criterion the coverage read does not call
+ * VERIFIED. Also covers a coverage read that could not be completed — an unreadable answer is
+ * not evidence the product is built, so it refuses rather than closing.
+ *
+ * A goal with NO approved contract is out of this code's scope entirely and never meets it;
+ * see `goal-close-readiness.ts` for why that is a distinct state rather than a falsy default.
+ */
+export const GOAL_CLOSE_CRITERIA_UNVERIFIED =
+  "GOAL_CLOSE_CRITERIA_UNVERIFIED" as const;
 
 /**
  * Appended, never reordered: `goal-services.test.ts` restates this list by hand, so a code
@@ -40,6 +51,7 @@ export const GOAL_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   GOAL_CLOSE_RESULT_DIGEST_MISMATCH,
   GOAL_CLOSE_REVIEW_PACKAGE_STALE,
   GOAL_CLOSE_AUTHORITY_REMAINS,
+  GOAL_CLOSE_CRITERIA_UNVERIFIED,
 ] as const);
 
 /** The one layer every code above refuses at, named once so no call site can drift. */

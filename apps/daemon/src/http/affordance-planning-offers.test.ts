@@ -19,6 +19,7 @@ import type { CompilerLaneFacts, CompilerLanePort } from "./affordance-compiler-
 import { resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type { PlanningOfferResolution } from "./affordance-planning-offers.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger-vocabulary.js";
+import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { HUMAN_ONLY_STEPS } from "../orchestrator/agent-wrapper.js";
 
 const PROJECT = "project-offers";
@@ -55,11 +56,19 @@ function ledgerWith(runLifecycle: string, goalLifecycle: string): DurableLedger 
   };
 }
 
+/**
+ * A goal with NO Product Contract is the default here, so every arm written before the closure
+ * gate existed keeps asserting exactly today's ladder.
+ */
+const NO_CONTRACT = (): GoalCloseReadiness["kind"] => "NO_CONTRACT";
+
 function resolutionFor(
   runLifecycle: string, goalLifecycle: string, lane: CompilerLanePort = LEGACY_LANE,
+  closeReadiness: (goalId: string) => GoalCloseReadiness["kind"] = NO_CONTRACT,
 ): PlanningOfferResolution {
   let minted = 0;
   return resolvePlanningOffers({
+    closeReadiness,
     compilerLane: lane,
     ledger: ledgerWith(runLifecycle, goalLifecycle),
     mintId: () => `cmd-${(minted += 1)}`,
@@ -69,8 +78,17 @@ function resolutionFor(
 
 function offersFor(
   runLifecycle: string, goalLifecycle: string, lane: CompilerLanePort = LEGACY_LANE,
+  closeReadiness: (goalId: string) => GoalCloseReadiness["kind"] = NO_CONTRACT,
 ): readonly NextAllowedCommand[] {
-  return resolutionFor(runLifecycle, goalLifecycle, lane).offers;
+  return resolutionFor(runLifecycle, goalLifecycle, lane, closeReadiness).offers;
+}
+
+/** The readiness fact plus a record of every goal it was asked about. */
+function readinessSpy(kind: GoalCloseReadiness["kind"]): {
+  readonly asked: string[]; readonly fact: (goalId: string) => GoalCloseReadiness["kind"];
+} {
+  const asked: string[] = [];
+  return { asked, fact: (goalId): GoalCloseReadiness["kind"] => { asked.push(goalId); return kind; } };
 }
 
 describe("per-goal planning offers", () => {
@@ -110,6 +128,72 @@ describe("per-goal planning offers", () => {
 
   it("offers nothing for a lifecycle outside the ladder", () => {
     expect(offersFor("PLAN_REVIEW", "SOMETHING_ELSE")).toEqual([]);
+  });
+
+  it("WITHHOLDS goal.close while the goal's Product Contract has an unverified criterion", () => {
+    // Set-equality, never subset: the point of the arm is that goal.close is GONE, and a
+    // `toContain("repository.publish")` would pass just as happily with it still there.
+    for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
+      expect(offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "NOT_READY")
+        .map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+    }
+  });
+
+  it("WITHHOLDS goal.close when the coverage read cannot be completed", () => {
+    // Fail closed. An unreadable coverage is not evidence the product is built, and offering a
+    // close the command would refuse is the exact disagreement this gate exists to prevent.
+    for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
+      expect(offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "UNREADABLE")
+        .map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+    }
+  });
+
+  it("offers goal.close once every approved criterion is verified", () => {
+    for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
+      const offers = offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "READY");
+      expect(offers.map((entry) => entry.commandKind)).toEqual(["goal.close", "repository.publish"]);
+      expect(offers[0]?.targetAggregateId).toBe(GOAL_ID);
+      expect(offers[1]?.targetAggregateId).toBe(`publish:${GOAL_ID}`);
+    }
+  });
+
+  it("keeps publishing offered on a COMPLETED goal whatever readiness says", () => {
+    // The close is over; publishing what was landed is not gated on criteria.
+    for (const kind of ["NO_CONTRACT", "NOT_READY", "READY", "UNREADABLE"] as const) {
+      expect(offersFor("PLAN_REVIEW", "COMPLETED", LEGACY_LANE, () => kind)
+        .map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+    }
+  });
+
+  it("consults readiness ONLY for the goal it could offer to close", () => {
+    // The coverage read walks the ledger, so asking for a goal that could not be offered a
+    // close is pure cost on every surface poll.
+    for (const [runLifecycle, goalLifecycle] of [
+      ["DRAFTING", "DRAFT"], ["PLAN_REVIEW", "DRAFT"], ["PLAN_REVIEW", "COMPLETED"],
+      ["PLAN_REVIEW", "SOMETHING_ELSE"],
+    ]) {
+      const spy = readinessSpy("READY");
+      offersFor(runLifecycle as string, goalLifecycle as string, LEGACY_LANE, spy.fact);
+      expect(spy.asked, `${runLifecycle}/${goalLifecycle}`).toEqual([]);
+    }
+    // ...and exactly once, naming the GOAL aggregate, for one that could.
+    const spy = readinessSpy("READY");
+    offersFor("PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, spy.fact);
+    expect(spy.asked).toEqual([GOAL_ID]);
+  });
+
+  it("never consults readiness on the compiler ladder, which has no goal to close yet", () => {
+    const laneOf = (facts: CompilerLaneFacts): CompilerLanePort =>
+      Object.freeze({ factsFor: () => facts });
+    for (const lane of [
+      laneOf({ approvedGateRef: null, lane: "COMPILER" }),
+      laneOf({ approvedGateRef: GATE_REF, lane: "COMPILER" }),
+      laneOf({ lane: "WITHHELD" }),
+    ]) {
+      const spy = readinessSpy("READY");
+      offersFor("DRAFTING", "DRAFT", lane, spy.fact);
+      expect(spy.asked).toEqual([]);
+    }
   });
 
   it("every offered approval kind is one the wrapper refuses to staff", () => {
