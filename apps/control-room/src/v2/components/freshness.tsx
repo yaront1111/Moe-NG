@@ -29,6 +29,11 @@ export function freshnessWords(lastAnswerMs: number | null, nowMs: number): { re
   return { quiet: false, words: `updated ${since} ago` };
 }
 
+/** The one sentence a screen reader hears, once, when the daemon goes quiet; empty while it answers. */
+export function quietAnnouncement(quiet: boolean): string {
+  return quiet ? "No answer from the daemon." : "";
+}
+
 export interface FreshnessProps {
   /** The instant the daemon last answered this screen; null before the first answer. */
   readonly lastAnswerMs: number | null;
@@ -36,17 +41,19 @@ export interface FreshnessProps {
   readonly testId?: string | undefined;
 }
 
+/**
+ * The ticking words are plain text: readable on demand, never announced, because a live
+ * region that changes every second would be read aloud every second. The announcement is
+ * a separate, visually hidden status region that exists before it fills (a region inserted
+ * together with its text is not announced) and holds one stable sentence, so a quiet daemon
+ * is said once, not forty times in its first minute.
+ */
 export function Freshness({ lastAnswerMs, nowMs, testId }: FreshnessProps): JSX.Element {
   const { quiet, words } = freshnessWords(lastAnswerMs, nowMs);
   return (
-    <span
-      aria-live={quiet ? "polite" : "off"}
-      className="cr2-freshness"
-      data-quiet={quiet ? "true" : undefined}
-      data-testid={testId ?? "cr.freshness"}
-      role="status"
-    >
-      {words}
+    <span className="cr2-freshness" data-quiet={quiet ? "true" : undefined} data-testid={testId ?? "cr.freshness"}>
+      <span className="cr2-freshness-words">{words}</span>
+      <span aria-live="polite" className="cr2-freshness-announce" role="status">{quietAnnouncement(quiet)}</span>
     </span>
   );
 }
