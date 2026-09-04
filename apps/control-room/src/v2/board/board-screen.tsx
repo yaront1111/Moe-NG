@@ -72,9 +72,12 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
   const fold = goal === null || goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs);
   const statements = criterionStatements(coverage);
   const objectives = new Map<string, string>((goal?.nodes ?? []).map((node) => [node.nodeKey, node.objective]));
-  const offered = publishOffer(surface, goalId) !== null;
-  // The publish card is the pipeline's LAST step: it appears only once the daemon offers it or
-  // a publish was already decided, never above work that has not landed.
+  // The publish card is the pipeline's LAST step. The daemon offers repository.publish as soon
+  // as the goal is enabled, before anything has landed, so the offer alone is not the cue: the
+  // card (and the header's link) appear once a node is COMMITTED in git, or a publish decision
+  // already exists.
+  const landed = (goal?.nodes ?? []).some((node) => node.landing?.outcome === "COMMITTED");
+  const offered = publishOffer(surface, goalId) !== null && landed;
   const showPublish = publishing !== undefined && (offered || (goal?.publish ?? null) !== null);
   return (
     <section className="cr2-kanban" data-testid="cr.kanban.root" id={GOAL_SECTION_IDS.board}>

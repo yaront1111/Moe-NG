@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
 import type { ActivityEntryView, ActivityOutcome } from "../../live/live-activity.js";
-import { ARROW_RIGHT, MIDDOT } from "../glyphs.js";
+import { ARROW_RIGHT, ELLIPSIS, MIDDOT } from "../glyphs.js";
 import { GOAL_SECTION_IDS } from "../goals/goal-status-strip.js";
 import { agoWords, decisionWords, isSeatRecord, principalWords } from "../ops/activity-words.js";
 
@@ -39,11 +39,21 @@ export function toneOf(entry: ActivityEntryView): "bad" | "good" | "none" {
   return BAD_KINDS.has(entry.commandKind) ? "bad" : "none";
 }
 
+const BRIEF_LIMIT = 90;
+
+/** A node's objective is a mission brief; the feed names the node by its first sentence. */
+export function briefOf(objective: string): string {
+  const firstSentence = /^(.+?[.!?])(\s|$)/u.exec(objective.trim())?.[1] ?? objective.trim();
+  if (firstSentence.length <= BRIEF_LIMIT) return firstSentence;
+  const cut = firstSentence.slice(0, BRIEF_LIMIT);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 40))}${ELLIPSIS}`;
+}
+
 function targetWords(entry: ActivityEntryView, props: BoardFeedProps): string {
   if (entry.targetAggregateId === props.goalId) return "this goal";
   if (entry.targetAggregateId === props.runId) return "the plan";
   const objective = props.objectiveOf(entry.targetAggregateId);
-  return objective === null ? entry.targetAggregateId : objective;
+  return objective === null ? entry.targetAggregateId : briefOf(objective);
 }
 
 export function BoardFeed(props: BoardFeedProps): JSX.Element {

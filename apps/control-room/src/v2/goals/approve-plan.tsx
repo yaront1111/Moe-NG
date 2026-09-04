@@ -63,6 +63,10 @@ type LoadState =
 
 /** The step kinds a sealed plan carries, in a person's words; an unknown kind stays as spelled. */
 const STEP_KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  IMPLEMENTATION: "an agent builds it and the verifier checks it",
+  INTEGRATION: "the daemon accepts the verified work",
+  REVIEW: "a review round on the delivered work",
+  VERIFICATION: "the verifier runs the project's checks",
   "node.deliver": "an agent builds it and the verifier checks it",
 });
 
