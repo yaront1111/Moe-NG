@@ -129,7 +129,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T21:44:59.057Z",
-  "updatedAt": "2026-09-04T22:52:12.832Z",
+  "updatedAt": "2026-09-04T22:53:11.691Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:46:40.996Z",
     "plannedStepCount": 5,
@@ -184,7 +184,8 @@
     "apps/daemon/src/provider-profile/provider-profile-resolver.test.ts",
     ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
     ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
-    ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json"
+    ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json",
+    ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json"
   ],
   "completionSummary": "PURE REFACTOR DELIVERED. `activatePayload(overrides?)` added to apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:283 (bare/explicit-undefined -> the frozen ACTIVATION_WITNESS itself; otherwise `{...base, ...overrides}` MERGED). All ELEVEN witness-bearing sites route through it: bootstrap-test-fixtures.ts:653; bootstrap-durability.test.ts :83 :229 :261 :297; admission-gate-resolver.test.ts:185; node-mission-test-fixtures.ts:262; provider-profile-resolver.test.ts :170 :484-486; foundation-launch-completion-wiring.test.ts:183; launch-template-producer.test.ts:207. Durability line numbers shifted -2 below :229 (the multi-line expectedVersion-99 site collapsed to one line) - child B's plan must read :261/:297, not :263/:299.\n\nDoD 4 (the row's central claim) MET: `git diff -U0` over all 7 tracked files, filtered to added/removed lines, greps EMPTY for `expect(`. Same pipeline greps EMPTY for `\\b(it|test|describe)\\s*\\(`, which proves structurally - no baseline, no re-run - that those files' test counts are unchanged. Every added/removed line is an import entry, a call-site payload argument, or the new helper plus its header. `git diff --stat` = 7 files / +43 / -22, all inside task rail 1's roster.\n\nDoD 3 MET: bootstrap-durability.test.ts:99's `{}` ingress-refusal arm proven untouched three ways - SHA256 equality of the it-block (lines 95-112) at HEAD vs worktree (91d9e5f7aa9e...), `git diff -U0` hunk headers (9, 13, 83, 229, 263, 299) none intersecting 94-112, and the body still sending `{}` and asserting BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS.\n\nDoD 1 MET: new bootstrap-test-fixtures.test.ts, 5 arms. The merge arm's discriminator is Object.keys SET-EQUALITY against the 9-key base - a helper mutated from merge to REPLACE reds, where the obvious `truthClass === \"OBSERVED\"` check alone stays green. No mutation drill run: deliberate (step 5d), the row adds no production behaviour, and that key-set assertion is the drill that matters. Adding this test sibling was checke",
   "commits": [
@@ -226,6 +227,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "513f3a5a7bc48b24c92f13a3ae49917aad3f3cdf",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T22:42:33Z",
+      "paths": [
+        ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T22:53:11.691Z",
+      "treeId": "4e7c11a009e23cf8853056a84ff7263906fe3853",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -241,9 +259,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-04T22:10:55Z",
-    "at": "2026-09-04T22:37:28.051Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T22:42:33Z",
+    "at": "2026-09-04T22:53:11.691Z"
   },
   "completedAt": "2026-09-04T22:52:12.831Z",
   "reviewCompletedAt": "2026-09-04T22:52:12.831Z",
