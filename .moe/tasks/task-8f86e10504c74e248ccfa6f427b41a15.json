@@ -1,0 +1,35 @@
+{
+  "id": "task-8f86e10504c74e248ccfa6f427b41a15",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Database migrations: schema changes verified on a disposable PostgreSQL and applied on deploy with a backup",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose Stage 1 + Stage 2 scope).\n\nVISION Stage 2 'database migrations' and the profile 'database schema and migrations'. Re-measured 2026-09-04: the verifier runs the node's `test` recipe in the workspace (apps/daemon/src/orchestrator/node-verifier.ts + verifier-process-runner.ts) with no database; no migration tooling in the scaffold profile; no migration receipt.\n\nFEATURE: (a) the scaffold profile adopts one migration tool (architect picks drizzle-kit or node-pg-migrate; pinned) with `pnpm db:migrate` / `pnpm db:migrate:down` scripts and a `migrations/` directory; node missions that change schema must add a migration (the compiler emits the requirement; the mission text says so). (b) The verifier gains a DATABASE leg: when the workspace declares `db:migrate`, start a disposable PostgreSQL container (docker; random port), export DATABASE_URL to the recipe, run the migrations, then the tests, then tear the container down on every exit path. (c) Deploy applies pending migrations against the environment's database after a `pg_dump` backup (`<project>/.moe-next/backups/<env>/<ts>.sql`, sha256 in the receipt) and records `moe-migration-receipt/1` {environment, sha, applied[], backupRef, APPLIED|REFUSED(code)}; `deployment.migrate_down` (human-only) reverts the last batch or restores the backup. (d) UI: the Deployments card shows migration state per environment (pending/applied, last backup); Runs shows migration receipts; a node card shows 'adds migration 0007'. Refusals: MIGRATION_TOOL_MISSING, MIGRATION_DB_UNAVAILABLE, MIGRATION_FAILED (with the failing file), MIGRATION_BACKUP_FAILED. Docker absent -> the DATABASE leg refuses MIGRATION_DB_UNAVAILABLE; the verifier never silently skips.",
+  "definitionOfDone": [
+    "Verifier DATABASE leg: with a workspace declaring `db:migrate`, the test proves DATABASE_URL reached the recipe, migrations ran before the tests, and the container is gone after ACCEPT, after REJECT and after a forced kill; docker absent -> MIGRATION_DB_UNAVAILABLE asserted with code + layer (a skip with reason, never a silent pass).",
+    "Deploy migration: offline test through the docker/pg ports asserts backup-before-migrate ordering and the receipt (applied set, backupRef sha256); `deployment.migrate_down` reverts and its receipt records the restore.",
+    "Scaffold profile golden updated (migration tool, scripts, `migrations/` with an initial migration); the generated app's `pnpm db:migrate` runs green against the disposable PostgreSQL in a test (count line quoted).",
+    "`deployment.migrate_down` (and any migrate kind) published human-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; MIGRATION_TOOL_MISSING, MIGRATION_DB_UNAVAILABLE, MIGRATION_FAILED, MIGRATION_BACKUP_FAILED asserted with code + layer.",
+    "Deployments card + node card render migration facts (Playwright against a REAL daemon); live drive: a real migration verified on a disposable PostgreSQL and applied to the PREVIEW environment - receipt + the `\\dt` listing in a row comment.",
+    "Runbook + README; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 110,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:13:42.656Z",
+  "updatedAt": "2026-09-04T09:13:42.656Z"
+}

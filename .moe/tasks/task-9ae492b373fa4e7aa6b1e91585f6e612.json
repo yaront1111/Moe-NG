@@ -1,0 +1,34 @@
+{
+  "id": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Secrets and environment management: per-environment variables set in the browser, delivered to runs, never logged",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose Stage 1 + Stage 2 scope).\n\nVISION Stage 2 'secrets and environment management'. Re-measured 2026-09-04: seats and the verifier receive an allowlisted env built by the wrapper (apps/daemon/src/orchestrator/agent-spawn-environment.ts, verifier-process-runner.ts); there is no per-project / per-environment variable store and no UI; the scaffold profile needs DATABASE_URL, session secrets and third-party keys per environment.\n\nFEATURE: an ENVIRONMENTS model per project: environments (verify, preview, production) x variables. The approved contract's deployment requirements enumerate the REQUIRED variable names (the compiler emits them; a goal shows which are unset). `environment.set_variable {environment, name, value}` and `environment.unset_variable` are operator-only and MCP-excluded; values are stored encrypted at rest in the project store (key derived from the daemon credential, or Windows DPAPI - architect decides; a copied store without the key must be useless) and NEVER appear in events, receipts, logs, reads or refusals - reads return {name, isSet, sha256 fingerprint, updatedAt}. Delivery: the verifier, preview and deploy process spawns receive the environment's variables merged under the wrapper allowlist; a `.env.example` listing names only is generated into the repository through the lander.\n\nUI: Environments screen (per environment: required vs set, set/unset dialogs, fingerprint, last update); the goal shows 'N required variables unset for preview' with a link. Refusals: ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN, ENV_STORE_KEY_UNAVAILABLE.\n\nThis is a feature row (Stage 2 capability); it adds no trust boundary and changes none.",
+  "definitionOfDone": [
+    "`environment.set_variable` and `environment.unset_variable` published operator-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN, ENV_STORE_KEY_UNAVAILABLE asserted with code + layer.",
+    "Canary test: set a value `MOE_CANARY_<random>`; grep the store file bytes, the event stream, every read response, the wrapper log and every receipt - 0 occurrences of the plaintext while the fingerprint is present; the variable reaches a spawned verifier process (the test asserts the child saw it).",
+    "Encrypted at rest proven: a copied store opened without the key answers ENV_STORE_KEY_UNAVAILABLE and yields no plaintext (asserted on bytes).",
+    "Environments screen against a REAL daemon (Playwright): required-vs-set table, set/unset round trip, fingerprint changes on update; the goal card shows the unset count; count line quoted.",
+    "`.env.example` (names only) generated and landed; runbook documents the model; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 100,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:13:24.602Z",
+  "updatedAt": "2026-09-04T09:13:24.602Z"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Working preview (Gate 2): run the product, capture it, approve it in the browser",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04).\n\nPRODUCT GAP (README + VISION journey step 9 / Gate 2 'Approve Working Preview', re-measured 2026-09-04): 'there is no working preview'. `apps/daemon/src/graph-preview-request.ts` and `apps/control-room/src/preview/` are plan/document previews, not the product. The human-only decision pattern exists (`approval.decide`, `escalation.decide` in daemon-command-vocabulary.ts; HUMAN_ONLY_STEPS in daemon-command-families.ts; offers in http/affordance-read.ts; Needs-you cards in apps/control-room/src/v2/approvals/needs-you.tsx + offer-wire.ts). Process spawning with durable receipts exists (orchestrator/verifier-process-runner.ts, node-verifier.ts, node-lander.ts `moe-landing-receipt/1`). Playwright is installed (tests/e2e/control-room/playwright.config.ts).\n\nFEATURE: a goal whose nodes are all landed (or the human's 'Start preview' click) gets a PREVIEW step. The daemon starts the product's preview command in the project workspace - from the approved contract's deployment requirements, default = the workspace package.json `preview` -> `dev` -> `start` script; port from the contract or detected from stdout - waits for the port, drives headless Chromium to the contract's journey entry URLs and captures one screenshot per journey (PNG under `<project>/.moe-next/previews/<goalId>/<sha>/`), records `moe-preview-receipt/1` {goalId, sha, url, pid, screenshots[], STARTED|REFUSED(code)}, then offers `preview.decide` (human-only, Gate 2: 'Is this product good enough and visually correct?') with APPROVE | REJECT{findings}. REJECT reopens the named nodes for rework carrying the findings (the review loop's REWORK column). The preview process is stopped on decision, on a 30-min timeout, and on daemon shutdown - no leaked process.\n\nUI: Needs-you card 'Approve working preview' with the loopback URL (new tab), the screenshots inline, Approve / Reject-with-findings; goal status strip stage PREVIEW; Runs shows the preview receipt per goal. Refusals verbatim: PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED, PREVIEW_DECISION_INVALID.\n\nNOT in scope: deployment to an environment (row 'Containerized deployment'); the preview runs on the operator's machine.",
+  "definitionOfDone": [
+    "`preview.decide` (and `preview.start` if the architect keeps a separate trigger) published human-only, MCP-excluded, in HUMAN_ONLY_STEPS, with the full roster backfill and bidirectional roster tests; PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED, PREVIEW_DECISION_INVALID each asserted with code + layer.",
+    "Preview runner test with a fixture product (a tiny http server as the `preview` script): the receipt has url + sha + at least one screenshot PNG whose bytes decode; the child pid is gone after APPROVE, after REJECT and after a forced timeout (assert process exit, not a flag).",
+    "Needs-you renders the card with link + screenshots + both buttons; APPROVE commits a durable decision read back from /activity/read (verdict); REJECT with findings moves the named node to REWORK on the board with the findings text visible.",
+    "Playwright journey under tests/e2e/control-room/ against a REAL daemon covers start -> card -> approve; `pnpm test:e2e:browser` count line quoted.",
+    "Live drive: a preview started for UnAI (or a fresh scaffold app) with a real screenshot (path + sha256) and the committed decision in a row comment; README 'no working preview' clause rewritten.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Spun-out rows are filed in PLANNING (BACKLOG is human-gated and invisible to claim_next_task); created without the status field by mistake.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 30,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:11:05.246Z",
+  "updatedAt": "2026-09-04T09:14:20.579Z"
+}

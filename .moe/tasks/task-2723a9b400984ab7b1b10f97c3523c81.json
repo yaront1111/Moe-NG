@@ -1,0 +1,35 @@
+{
+  "id": "task-2723a9b400984ab7b1b10f97c3523c81",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Provider limits pause the drive instead of failing it: a seat that exits on a usage or session limit parks the item until the reset and says so in the browser",
+  "description": "Filed by session moe-next-67 for the owner (2026-09-04), sibling of the epic-8ebe6417 rows.\n\nPRODUCT GAP, measured on the live drives (memory productize-loop-2026-09-03 21:04 local; 2026-09-04 morning): a seat that hits the provider's limit exits non-zero with a line such as \"You've hit your session limit - resets 12:10am Asia/Jerusalem\" (claude) or the codex quota refusal (\"exhausted until 2026-09-08\"), and the wrapper treats that exit like any failed attempt: `agent-wrapper.ts` counts it against the per-item attempt counter (attempts map, ~line 340-346 \"Leaving READY re-arms the counter\"), re-staffs the same item on the next pass, burns the remaining attempts within minutes, and then leaves the item READY with nothing telling the human why nothing moves. The 09-03 drive lost three hours to this before a person read wrapper.log; the only recovery was a hand-written sleep-until-reset script in a scratchpad. Nothing on `/sessions/read`, the Seats screen, the board, or Needs you distinguishes \"the provider refused for N hours\" from \"the seat crashed\".\n\nFEATURE: (a) the spawner classifies a seat exit by its last stderr/stdout lines against a small per-provider roster of LIMIT patterns (claude: session limit / usage limit / rate limit with an optional reset instant; codex: quota exhausted with its reset date) into a durable `moe-seat-exit/1` receipt {sessionId, workItemId, kind: COMPLETED|FAILED|PROVIDER_LIMIT, resetAt: iso|null, lastLine}; an unclassified exit stays FAILED (never guessed). (b) On PROVIDER_LIMIT the wrapper does NOT consume an attempt; it records a durable project-level PAUSE {provider, resetAt|null, since} and staffs nothing for that provider until `resetAt` (or, with no instant, until a human clears it), polling normally; the item's claim is released with the observed version so no lease is wasted; log line `[wrapper] provider limit: <provider> paused until <resetAt>`. (c) `/sessions/read` (or `/health/read`) carries the pause; the Seats screen and the shell status strip show \"Agents paused: <provider> limit, resumes <time>\"; the board header's next-step slot says \"Waiting for the provider limit to reset at <time>\" instead of \"Watch the board\"; Needs you shows one card with a Resume-now control (operator-only `wrapper.resume` or a durable setting the wrapper reads) for the no-instant case. (d) Runbook section \"Provider limits\" documents the roster and the pause.\n\nOut of scope: choosing a different provider automatically (Codex row task-96957529 owns provider choice); billing.",
+  "definitionOfDone": [
+    "Spawner test: three claude limit lines and one codex quota line from real transcripts (quoted verbatim in fixtures) classify as PROVIDER_LIMIT with the parsed `resetAt` (or null); an ordinary stack trace classifies FAILED; the receipt shape is exact-key pinned.",
+    "Wrapper test: on a PROVIDER_LIMIT exit the item's attempt counter is unchanged, its claim is released (observed version), a durable PAUSE with resetAt is recorded, and no seat is spawned for that provider on the next N passes before resetAt; the first pass after resetAt (clock injected) staffs it again; a FAILED exit keeps today's attempt behaviour byte-for-byte (existing tests unchanged, count line quoted).",
+    "`/sessions/read` (or `/health/read`) carries the pause with exact keys; the Seats screen and the shell strip render \"Agents paused ... resumes <time>\"; the board header next-step names the reset; Needs you renders a Resume card only when resetAt is null, and Resume clears the pause (operator-only, MCP-excluded, roster backfill + bidirectional test).",
+    "e2e over a REAL daemon with a scripted seat double that exits with the claude limit line: the pause appears on the read within one poll and no second seat spawns; after the injected reset the item is staffed.",
+    "Live evidence: the next real limit hit on the lane (or a forced one by pointing the seat at an exhausted credential) shows the pause line in wrapper stdout and the banner in the browser - timestamps + screenshot path in a row comment; runbook section added.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships wrapper + daemon read + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row; the verifier stays the documented trusted-workspace verifier.",
+    "NEVER GUESS A LIMIT: an exit that matches no roster pattern is FAILED; the roster is pinned by fixtures quoting real provider lines, never regexes over 'limit' alone.",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records live evidence on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) in a row comment."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1004,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:44:09.114Z",
+  "updatedAt": "2026-09-04T09:44:09.114Z"
+}

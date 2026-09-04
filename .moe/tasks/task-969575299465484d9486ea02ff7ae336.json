@@ -1,0 +1,34 @@
+{
+  "id": "task-969575299465484d9486ea02ff7ae336",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A Codex seat delivers a node end to end; agent provider chosen in the browser",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose to file it now although the Codex quota was exhausted until 2026-09-08).\n\nPRODUCT GAP (README, re-measured 2026-09-04): 'a Codex seat is wired but was last proven only to reach the API'. Wiring exists: apps/daemon/src/orchestrator/agent-spawner.ts:64-83,116-150 (`codex exec` with the mission on stdin, MCP bearer through `bearer_token_env_var`, `--ignore-user-config`, codex-only env allowlist), moe-up-credentials.ts + moe-up-env.ts (CODEX_HOME / CODEX_ACCESS_TOKEN / OPENAI_API_KEY / CODEX_API_KEY roster), docs/agent-stack-runbook.md 'Codex seats'. The provider is chosen only by the launcher's `MOE_AGENT_COMMAND` env; nothing in the browser shows or chooses it.\n\nFEATURE: (a) agent provider per project chosen in the browser: a durable project setting `agentProvider: claude|codex` (plus a per-goal override), written by an operator-only command, read by the wrapper at spawn (the env `MOE_AGENT_COMMAND` still wins and is disclosed on Seats). (b) Seats screen shows provider, credential SOURCE (sign-in file vs env var NAME, never a value) and CLI version per seat; when the chosen provider has no credential the launcher's MOE_UP_ENV_MISSING roster renders verbatim. (c) Codex mission parity: mission text, MCP result-size handling (the codex analogue of MAX_MCP_OUTPUT_TOKENS; paged reads), tool roster, and the work_get_context / work_release path. (d) Proof: a codex planning seat reads the contract and submits a decomposition, and a codex coding seat delivers a node the verifier accepts and the lander commits.",
+  "definitionOfDone": [
+    "Durable project setting `agentProvider` with an operator-only command and a UI toggle; the wrapper spawns `codex` when set (test asserts argv[0] and the codex-only env allowlist) and the env override is disclosed on /sessions/read.",
+    "Offline: a scripted `codex` double over the REAL MCP wire completes the planning reads + `planning.submit_decomposition` and a node.deliver -> verifier ACCEPTED -> lander COMMITTED (e2e over a real daemon; count line quoted).",
+    "Seats screen shows provider + credential source + CLI version per seat; the missing-credential refusal (MOE_UP_ENV_MISSING roster for the chosen provider) renders verbatim (Playwright against a REAL daemon).",
+    "Live: a real `codex exec` seat delivers a node on UnAI or a fresh project - transcript + landing sha in a row comment. If the quota still refuses, moe.report_blocked with the reset date and the exact refusal line - never a fabricated pass.",
+    "Runbook 'Codex seats' + README Codex clause updated; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 70,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:12:31.237Z",
+  "updatedAt": "2026-09-04T09:12:31.237Z"
+}

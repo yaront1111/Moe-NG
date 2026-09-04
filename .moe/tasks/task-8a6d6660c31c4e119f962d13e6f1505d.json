@@ -1,0 +1,35 @@
+{
+  "id": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Design step: UX and architecture proposed after Gate 1, before the plan",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose to include this step).\n\nVISION journey step 4 'UX and architecture' and the next-milestone sentence 'creates the architecture and UX' - re-measured 2026-09-04: nothing exists between the Gate 1 approval and the decomposition run; the compiler seat plans straight from the approved contract (orchestrator/agent-mission-text.ts, planning/compile-dispatcher.ts, planning/node-mission-producer.ts; seat reads `product_contract.read` and paged `documents_source_read`, PR #19).\n\nFEATURE: a DESIGN planning step between Gate 1 and the plan. The wrapper staffs a design seat whose mission reads the approved contract and the PRD and submits a versioned DESIGN through a new MCP command `design.submit {goalRef, revision}`: screens/journey map (journey -> screens -> states), data model (entities, fields, relations), API surface (routes, payloads), component list, non-functional decisions (auth, accessibility, performance budgets), open decisions for the human. Durable aggregate `design:<goalId>` with versions; `design.read {goalRef}` for seats and the operator read `/design/read`. The human sees the Design on the goal and may request changes (comment-driven resubmit -> version bump) or accepts it implicitly by approving the plan - the plan-approval card names the design version the plan was compiled against. The compiler mission carries the design ref and its sections; node missions cite the screens/entities they implement. The step is skippable per goal ('plan without a design' toggle) so the loop never blocks on it.\n\nProfile: TypeScript web app (React, Node, PostgreSQL) per VISION 'one controlled product profile first'.",
+  "definitionOfDone": [
+    "`design.submit` (seat) and `design.read` (seat + operator) published with the full roster backfill; `design.submit` refuses DESIGN_CONTRACT_NOT_APPROVED, DESIGN_SHAPE_INVALID (exact-key roster), DESIGN_REVISION_CONFLICT - each asserted with code + layer; roster tests are bidirectional.",
+    "The wrapper staffs the design step after Gate 1 and before decomposition; e2e over a REAL daemon with a scripted seat double submits a design, and the compiler mission bytes then contain the design ref plus the five section headings (assert on the produced mission text).",
+    "The opened goal shows a Design tab with the five sections and the version; a resubmit bumps the version and the plan-approval card names the version the plan compiled against.",
+    "The per-goal 'plan without a design' toggle skips the step: test shows the decomposition run opens with no design and the mission states it.",
+    "Live drive on UnAI or a fresh project: a real seat submits a design - transcript + design ref in a row comment; VISION/README journey step 4 marked as running.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Spun-out rows are filed in PLANNING (BACKLOG is human-gated and invisible to claim_next_task); created without the status field by mistake.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 60,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:12:00.823Z",
+  "updatedAt": "2026-09-04T09:14:26.060Z"
+}

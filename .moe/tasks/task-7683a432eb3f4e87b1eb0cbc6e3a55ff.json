@@ -1,0 +1,35 @@
+{
+  "id": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Monitoring, backup and rollback: health probes, scheduled backups, one-click rollback with an incident card",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose Stage 1 + Stage 2 scope).\n\nVISION Stage 2 'monitoring, backup, and rollback' and the Operations verifier row ('deployment, telemetry, backup, rollback, incident handling - blocks at Gate 3'). Re-measured 2026-09-04: `/health/read` reports the daemon's own health only; there is no probe of a deployed product, no backup schedule, no rollback kind.\n\nFEATURE: (a) MONITORING: for every environment with a deploy receipt, the daemon probes the health URL on a durable schedule (default 60 s, per-environment setting), records `moe-health-probe/1` {environment, sha, status, latencyMs, at} in a bounded ring (last 1440) and derives UP / DEGRADED / DOWN; three consecutive failures raise ONE Needs-you INCIDENT card 'production unhealthy since <t>: roll back to <prev sha>?' with the last error line. (b) BACKUP: scheduled backups of the project store and, per environment with a database, `pg_dump` (`<project>/.moe-next/backups/...`, sha256, retention N); every backup receipt is proven restorable by a restore-to-temp check whose sha256 is recorded. (c) ROLLBACK: `deployment.rollback {environment, toReceiptRef}` (human-only) redeploys the previous image/sha (atomic replace, same health probe) and optionally restores the database backup taken at that deploy; receipt `moe-rollback-receipt/1`. (d) UI: the Deployments card shows UP / DEGRADED / DOWN with the last probe + a latency sparkline (last hour), the backups list with restore-proof state, Rollback arm/confirm; Needs-you incident card with Roll back / Dismiss; the Health screen gains an 'Environments' section. Refusals: ROLLBACK_RECEIPT_UNKNOWN, ROLLBACK_IMAGE_MISSING, BACKUP_FAILED, PROBE_URL_MISSING.",
+  "definitionOfDone": [
+    "Probe loop test with a fake target: UP -> DOWN after 3 failures raises exactly one incident card (no duplicate on continued failure) and recovery closes it; the ring is bounded at 1440; probes survive a daemon restart from durable records (no probe lost, no double schedule).",
+    "Backup test: store + pg_dump backups written on schedule; restore-to-temp sha256 equality recorded per receipt; retention prunes to N with the pruned refs listed in the receipt.",
+    "`deployment.rollback` published human-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; the offline test asserts the previous image tag is redeployed and the DB restore is applied only when requested; ROLLBACK_RECEIPT_UNKNOWN, ROLLBACK_IMAGE_MISSING, BACKUP_FAILED, PROBE_URL_MISSING asserted with code + layer.",
+    "Deployments card + incident card + Health 'Environments' section against a REAL daemon (Playwright; count line quoted).",
+    "Live drive: a deployed PREVIEW environment probed for at least 10 minutes, a forced failure raises the incident card, rollback restores the previous sha - probe ring excerpt + receipts in a row comment.",
+    "Runbook + README; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 120,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:13:59.198Z",
+  "updatedAt": "2026-09-04T09:13:59.198Z"
+}

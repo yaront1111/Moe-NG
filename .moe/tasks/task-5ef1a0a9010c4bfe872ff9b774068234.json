@@ -1,0 +1,34 @@
+{
+  "id": "task-5ef1a0a9010c4bfe872ff9b774068234",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Repository bootstrapping: a new product's repository created from the PRD in the browser",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose Stage 1 + Stage 2 scope).\n\nVISION Stage 2 'repository bootstrapping' and the product profile 'support exceptionally well: new repository creation'. Re-measured 2026-09-04: a project must already be an initialized directory (`moe init <dir>` / manager Create writes moe.config.json) and `project.bind_repository` binds an EXISTING git repository; there is no scaffold generator and no GitHub repository creation path (`grep -rc \"repo create\" apps/ tools/` = 0).\n\nFEATURE: 'New product from PRD' in the browser: directory (new or empty), PRD file, product name, optional GitHub owner/visibility. The daemon runs `repository.bootstrap` (operator-only): `git init`; writes the CONTROLLED-PROFILE scaffold (TypeScript; React + Vite web; Node API; PostgreSQL via docker-compose; vitest; Playwright; pnpm workspace; GitHub Actions CI running `pnpm typecheck && pnpm test`; `.env.example`; README with the product name); first commit 'chore: scaffold by Moe'; optional `gh repo create <owner>/<name> --<visibility> --source . --push`; then binds it as the project repository (`project.bind_repository`) and registers it in the manager catalog; receipt `moe-bootstrap-receipt/1` {dir, sha, remoteUrl|null, BOOTSTRAPPED|REFUSED(code)}. The scaffold generator is deterministic and pinned by a profile version constant (golden tree) so every product starts identical. The goal is then created with the PRD (`goal.create_with_source`) and the existing lane continues.\n\nRefusals: BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE (GitHub is optional - a local-only bootstrap still succeeds and says so), BOOTSTRAP_PROFILE_VERSION_UNKNOWN.",
+  "definitionOfDone": [
+    "`repository.bootstrap` published operator-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE, BOOTSTRAP_PROFILE_VERSION_UNKNOWN asserted with code + layer.",
+    "Scaffold generator golden test pins the exact file tree plus the package.json, compose and CI workflow bytes under a profile version constant; the generated app passes `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build` in a test that actually runs it (the child run's count lines quoted).",
+    "Browser: 'New product from PRD' form -> directory created, first commit exists (`git log --oneline` = 1 line), repository bound, project in the manager catalog, PRD goal created - Playwright journey against a REAL daemon; count line quoted.",
+    "GitHub creation tested offline through a port asserting the `gh` argv; the live drive creates a throwaway repository under the owner's account (URL + receipt in a row comment) and refuses cleanly with `gh` absent (BOOTSTRAP_GH_UNAVAILABLE while the local bootstrap still succeeds).",
+    "Runbook + README updated ('new repository creation' listed as running); gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 80,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:12:49.471Z",
+  "updatedAt": "2026-09-04T09:12:49.471Z"
+}

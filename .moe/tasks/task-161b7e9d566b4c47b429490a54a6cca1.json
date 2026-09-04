@@ -1,0 +1,48 @@
+{
+  "id": "task-161b7e9d566b4c47b429490a54a6cca1",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Live proof: a small real PRD from repository to release, surviving a forced crash mid-write",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04). EPIC-FINAL integration-and-hardening row (get_context.isEpicFinal); the ONLY row of this epic that carries dependsOn - the owner chose this explicitly on 2026-09-04 as the single exception to 'tasks should be full and not depended on other tasks', so the runtime withholds it until every feature row is DONE.\n\nVISION 'Next major milestone': 'Give Moe a small but real PRD. Moe asks the necessary questions, creates the architecture and UX, builds the complete application, launches a working preview, proves every requirement, survives a forced crash, and prepares a production-ready release.' Stage 1 bar (proposed, 2026-08-22): the crash lands MID-WRITE and recovery is provable from durable records alone, never from agent memory.\n\nDELIVERABLE: run the whole loop on a FRESH product from the browser only, with real seats, and record it: New product from PRD (bootstrapped repository) -> Activate project -> Gate 1 with at least one real clarification -> Design -> plan -> nodes built in parallel to 100% criteria coverage -> working preview approved (Gate 2) -> release PR opened with the dossier (Gate 3) -> PREVIEW environment deployed with migrations and environment variables -> health probes UP. During one node's landing, kill the daemon process mid-write (a fault-injection knob the daemon already carries or this row adds under a DEVELOPMENT_ONLY flag), restart it, and prove recovery from the store alone: the landing is either COMMITTED exactly once or REFUSED with a code - never duplicated, never lost. Every criterion in the dossier is VERIFIED at the released sha.\n\nALSO OWNS (rails: the verification budget concentrates in the epic-final row): the whole-epic regression across every lane including the per-package apps/** runs; the docs sweep (README 'What runs today' and 'What this is not' rewritten to the measured state with its date, VISION roadmap status lines, runbook covering every new kind); the adversarial pass over the epic's new human-only kinds (each MCP-excluded, each refusal code reachable); and the follow-up items the feature rows recorded in their comments.\n\nTHE PRD: small but real - e.g. a 3-screen TypeScript web app with sign-in, one PostgreSQL table and one API; the human supplies or approves it at claim time (comment on this row). Dogfood note: Moe shipping its own pull request on moe-next remains the harder dogfood (VISION); this row's proof is the fresh product, not moe-next itself.",
+  "definitionOfDone": [
+    "Transcript of the full browser-only run on a fresh product recorded as a row comment series (each under 4500 chars): bootstrap receipt, activation witness, Gate 1 decision id + the clarification, design ref, plan run id, node landing shas (at least 2 nodes, at least 2 staffed concurrently), preview receipt + decision, release receipt + PR URL, deploy receipt + health URL, migration receipt, environment fingerprints.",
+    "Forced crash mid-write: the daemon is killed during a landing write (knob name + timestamp recorded); after restart the ledger shows exactly one outcome for that landing (COMMITTED once or REFUSED with its code) and the goal resumes; the recovery evidence is a store query quoted with its result, not a log line.",
+    "The release dossier at the released sha shows every approved criterion VERIFIED (n/n) and is attached to the opened PR (URL in the comment).",
+    "Whole-epic regression green with count lines quoted: `pnpm test`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, `pnpm test:integration` (from PowerShell), `pnpm test:security`, `pnpm test:property`.",
+    "README 'What runs today' + 'What this is not' rewritten to the measured 'as of <date>' state; VISION Stage 1 / Stage 2 status lines updated; the runbook covers every kind this epic added.",
+    "Adversarial pass comment: a table of every human-only kind added by this epic -> its MCP refusal code -> the test file:line that pins it; every follow-up item recorded in the feature rows' comments is either closed here or listed with a reason."
+  ],
+  "taskRails": [
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "EVIDENCE, NEVER FABRICATION (epic rail 4 + global rails): every claim in the transcript names its measurement anchor (store path, sha, receipt id); a gate that prints no count line did not run; a live step that refuses is recorded verbatim and the row goes BLOCKED with blockedOnTaskIds or a comment - never a narrowed DoD.",
+    "PROVE IT LIVE: the run is a fresh product directory (not UnAI's existing store) driven from the browser only; the seeds/scripts under scratchpad are not used for any step the product claims to do itself. Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-bb844c288fb346c0856778c738b9f073",
+    "task-4423d2a4c3084d579c132b253d36b502",
+    "task-f3edb8fb39ad42ce8980dae7d62b604c",
+    "task-2a345b2e97d94599b4688af1923056e5",
+    "task-e7a20a498ed0436380e5aca23cb81607",
+    "task-8a6d6660c31c4e119f962d13e6f1505d",
+    "task-969575299465484d9486ea02ff7ae336",
+    "task-5ef1a0a9010c4bfe872ff9b774068234",
+    "task-5d30948435524c6fa2789e1c033aafe7",
+    "task-9ae492b373fa4e7aa6b1e91585f6e612",
+    "task-8f86e10504c74e248ccfa6f427b41a15",
+    "task-7683a432eb3f4e87b1eb0cbc6e3a55ff"
+  ],
+  "priority": "HIGH",
+  "order": 999,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:14:49.532Z",
+  "updatedAt": "2026-09-04T09:14:49.532Z"
+}

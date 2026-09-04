@@ -1,0 +1,81 @@
+{
+  "id": "task-e7a3d643bde34da7b27495dbda745739",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Create tasks to bring moe-next to whats its docs say",
+  "description": "create all features we are missing to start using it in real senrio PRD - to PRoduct",
+  "definitionOfDone": [
+    "task should be about features not security or poicy",
+    "tasks should be full and not depended on other tasks",
+    "we should have our product also ui"
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE DELIVERABLE ON DISK. The deliverable of this row is the 13 feature/proof rows the architect already filed in this epic on 2026-09-04 (human-directed: 'its a planning task so you will do it all the way including creating the tasks'). Do NOT create rows - check get_context.epicSiblings first; if a row is missing or ARCHIVED, stop and report via moe.add_comment naming the id, never recreate. Run the exact verification command from the repo root (cross-platform, node only):\n\nnode -e \"const fs=require('fs');const d='.moe/tasks';const rows=fs.readdirSync(d).map(f=>JSON.parse(fs.readFileSync(d+'/'+f,'utf8'))).filter(t=>t.epicId==='epic-8ebe64173d934f72a339c32bc2eaaf7d'&&t.id!=='task-e7a3d643bde34da7b27495dbda745739');const feats=rows.filter(t=>!(t.dependsOn||[]).length);const proof=rows.filter(t=>(t.dependsOn||[]).length);console.log('rows',rows.length,'features',feats.length,'proof',proof.length,'proofDeps',proof[0]&&proof[0].dependsOn.length,'dodMin',Math.min(...rows.map(t=>t.definitionOfDone.length)),'featuresOnlyRail',rows.filter(t=>(t.taskRails||[]).some(r=>r.startsWith('FEATURES ONLY'))).length,'uiMention',rows.filter(t=>/UI|screen|card|browser/i.test(t.description)).length);process.exit(rows.length===13&&feats.length===12&&proof.length===1&&proof[0].dependsOn.length===12?0:1)\"\n\nExpected at filing time (architect's own run, 2026-09-04 09:15Z): `rows 13 features 12 proof 1 proofDeps 12 dodMin 5 featuresOnlyRail 13 uiMention 13` and exit 0. The 13 ids: task-bb844c288fb346c0856778c738b9f073 (activate fresh project from the browser), task-4423d2a4c3084d579c132b253d36b502 (goal to completion: expansion + parallel seats), task-f3edb8fb39ad42ce8980dae7d62b604c (working preview, Gate 2), task-2a345b2e97d94599b4688af1923056e5 (release dossier + PR, Gate 3), task-e7a20a498ed0436380e5aca23cb81607 (control room completeness), task-8a6d6660c31c4e119f962d13e6f1505d (design step), task-969575299465484d9486ea02ff7ae336 (Codex seat end to end), task-5ef1a0a9010c4bfe872ff9b774068234 (repository bootstrapping), task-5d30948435524c6fa2789e1c033aafe7 (containerized deployment), task-9ae492b373fa4e7aa6b1e91585f6e612 (secrets + environments), task-8f86e10504c74e248ccfa6f427b41a15 (database migrations), task-7683a432eb3f4e87b1eb0cbc6e3a55ff (monitoring, backup, rollback), task-161b7e9d566b4c47b429490a54a6cca1 (epic-final live proof; the ONLY row with dependsOn = the 12 above, owner's explicit exception). Paste the command's full stdout + exit code into the step note.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "VERIFY THE BOARD STATE THROUGH THE DAEMON (the on-disk JSON can lag the daemon, memory task-json-on-disk-lags-the-daemon-assignment). Call moe.list_tasks {epicId:'epic-8ebe64173d934f72a339c32bc2eaaf7d'} and confirm: 14 rows total (13 + this one); the 12 feature rows carry NO dependsOn (dependsOnUnmet absent or 0 and no dependsOn array); the proof row task-161b7e9d566b4c47b429490a54a6cca1 lists exactly the 12 feature ids; every one of the 13 is in PLANNING or beyond (never BACKLOG - BACKLOG is human-gated and invisible to claim_next_task). Map the three DoD items of THIS row to the evidence: (1) 'features not security or policy' = every description's PRODUCT GAP/FEATURE paragraph names a VISION or README feature gap and the 'FEATURES ONLY' rail is present on all 13 (the security/policy words appear only as exclusions - quote one exclusion sentence); (2) 'full and not depended on other tasks' = 12/12 feature rows without dependsOn, each with the 'FULL VERTICAL SLICE' rail; (3) 'product also ui' = each description has a UI paragraph (regex hit 13/13 in step 1). Record the list_tasks counts object verbatim in the step note.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Run the adversarial-self-review skill against the roster, not code: (a) could a row be claimed and 'completed' while shipping nothing usable? - every row's DoD names a live drive AND an offline e2e over a real daemon, and a per-package gate with count lines; (b) could two rows collide in the shared worktree? - the deploy/migrations/monitoring trio and the preview/release pair touch the same screens (Deployments card, Needs-you, Runs); note in the completion summary that their planning architects must check epicSiblings for landed consumers before editing needs-you-model.ts / runs-screen.tsx and prefer additive sections; (c) is anything the docs promise still unfiled? - compare README 'What this is not' (2026-09-03) and VISION Stage 1 + Stage 2 lists against the 13 titles; the deliberate exclusions are: hermetic/adversarial verifier, signing, freeze manifest + FREEZE_READY, node:sqlite ratification, benchmark spec hash, npm publish/auto-update (all security/policy/release per DoD item 1), the unratified Gate 1.5 contract amendment, and Stage 3/4. State them as exclusions, never as gaps. Then moe.complete_task with: verification = the step-1 command and its fresh output (exit 0), summary = the 13 ids grouped Stage 1 / Stage 2 / proof plus the exclusion list. No files are modified by this row; report modifiedFiles: [] on every complete_step.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-c846071b",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1,
+  "comments": [
+    {
+      "id": "comment-9773aea0d62a4b37a41ec1e183f2548e",
+      "author": "architect-16a01670",
+      "content": "2026-09-04 09:44Z, session moe-next-67 on the owner's instruction (\"lift the fence and file all 5\"): FIVE feature rows ADDED to this epic as siblings of the 13 you filed, each a full vertical slice with no dependsOn, features only, UI included - task-a8317bb4 (publish is a project decision: one bound remote per project), task-d1c815eb (goals close on the live loop: goal.close accepts the verifier + landing receipts), task-6061e05c (a human can reject a compiled plan), task-5f5d873e (seats release their claims + wrapper boot reclaim, split out of task-4423d2a4 DoD 4), task-2723a9b4 (provider limits pause the drive). The live-proof row task-161b7e9d now also depends on these five. Your step-1 verification command will count 18 feature rows + 1 proof row (was 13 + 1): that is the intended state, not a duplication - do not archive them. Also recorded on task-4423d2a4 (comment-fbe64776): the OWNER RULING to LIFT the one-node fence (its DoD 1/5 superseded there).",
+      "timestamp": "2026-09-04T09:44:32.370Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T08:49:42.457Z",
+  "updatedAt": "2026-09-04T09:44:32.370Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T08:49:53.375Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "contextFetchedBy": [
+    "architect-16a01670",
+    "worker-c846071b"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T09:16:41.218Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Leaf-then-consumer rows (producer packages, then UI consumers) - REJECTED: contradicts DoD item 2 ('full and not depended on other tasks'); the owner wants each row to be a usable vertical slice. (2) One giant 'productize' row - REJECTED: unplannable under the 12-step/10-file thresholds and un-reviewable. (3) One row per measured gap, each a full vertical slice (daemon + control-room UI + tests + docs), no dependsOn, size enforced at PLAN time by SPIDR children under the row (parentTaskId) - CHOSEN. (4) The epic-final proof/hardening row: filed WITH dependsOn on all 12 feature rows as the owner's explicit single exception (AskUserQuestion 2026-09-04: 'File it WITH dependsOn'), because a proof claimed against a half-built epic would retire the milestone question unanswered. Scope decisions from the owner in the same exchange: Stage 1 + Stage 2 (deploy) included; the UX+architecture design step included; the Codex row filed now although the quota was exhausted until 2026-09-08. EXCLUDED as security/policy/release (DoD item 1): hermetic/adversarial verifier, signing, Phase 0 freeze manifest + FREEZE_READY, node:sqlite ratification, benchmark spec hash, npm publish / auto-update / self-host canary; EXCLUDED as unratified: Gate 1.5 contract amendment; EXCLUDED as later stages: VISION Stage 3/4. The moe-epic-breakdown skill named in the role prompt is not installed in this session (not in the skill list); moe-planning was loaded and its phase template applied to this row's own 3-step plan.",
+    "codebaseInsights": "Every gap was RE-MEASURED on disk 2026-09-04 (main d90ef6b5 at claim; peer landed PR #23 the board -> 68eb1c5d mid-session) before filing, per the stale-by-default rail: activation - `grep -rn 'cannot drive the pre-activation chain' apps/control-room/src/v2/goals/live-goal-create.ts` = lines 91-93; the seed's activationWitness fakes every member at apps/daemon/src/orchestrator/demo-seed-payloads.ts:127-137 (hex64('cafe'), DEMO_VERIFIED); production activate writers = bootstrap/bootstrap-sequence.ts, bootstrap-services.ts, bootstrap-contracts.ts. One-node: apps/daemon/src/planning/compile-dispatcher.ts:192-197 SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL; core PlanningRunKind INITIAL|REVISION|EXPANSION at packages/core/src/planning/planning-command-contract.ts:11 with EXPANSION holds at :138-202; `grep -c request_expansion apps/daemon/src/daemon-command-vocabulary.ts` = 0 (32 kinds published, no expansion, no preview, no release, no deploy kind). Publisher: `grep -c pull apps/daemon/src/orchestrator/node-publisher.ts` = 0 (push only). Codex: agent-spawner.ts:64-83,116-150 codex exec + MCP bearer wired. Coverage read keyed on PRD contentSha256 (http/document-coverage-read.ts:113-136), not git sha. Resources nav SOON: v2/shell/shell-model.ts:111, nav-rail.tsx:120. Playwright lane: `pnpm test:e2e:browser` = tsc -p tests/e2e/control-room + playwright test. Board search for duplicates (moe.search_tasks preview/release/codex/activation/deploy): only DONE rows from older epics (graph.preview = plan preview; Codex runtime adapter DONE 08-1x; expansion prerequisites task-671cdd10 + task-e62e3828 DONE) - no open row owns any of the 13 capabilities. Newest live facts folded in: memory real-seat-cannot-release-its-claim-2026-09-04 (work_get_context ignores workItemId; EXPECTED_VERSION_CONFLICT lacks observedVersion) is assigned to the goal-to-completion row; board-screen-landed-2026-09-04 pitfalls (apostrophe in JSX reds the scheduler boundary scan, cr.board.* taken, ASCII-only sources) cited in the control-room row. Verification of the deliverable at filing: the step-1 node command printed `rows 13 features 12 proof 1 proofDeps 12 dodMin 5 featuresOnlyRail 13 planning 13 uiMention 13`, exit 0.",
+    "risks": "(a) The 12 feature rows are large by design; their planning architects MUST split into SPIDR children under the row when a plan exceeds 12 steps / 10 files - never into sibling rows with dependsOn (the FULL VERTICAL SLICE rail says so). (b) Every new daemon kind needs the 7-file roster backfill (registry ROWS + REGISTRATION_ORDER + size pins, vocabulary counts, MCP exclusions, v2 registry, daemon-store-dependencies snapshot, generated client + digest mirrors incl. apps/control-room/src/data/data-adapter.test.ts and v2/goals/approve-plan.test.tsx) - memory prs19-22-landed-2026-09-03. (c) Rows 9-12 (deploy, env, migrations, monitoring) share the Deployments card / Needs-you / Runs surfaces; whichever lands second must extend additively and re-measure epicSiblings. (d) Codex live proof depends on the owner's quota (reset 2026-09-08) - the row's DoD says report_blocked, never fake. (e) Docker-dependent tests must fail loudly when docker is absent, never skip silently (rail: a gate must prove it executed). (f) create_task defaulted the first six rows to BACKLOG (invisible to claim_next_task); they were moved to PLANNING with set_task_status - future filings must pass status:'PLANNING'. (g) create_task's 'meta/hardening row detected' and 'title contains and' warnings fired on keyword heuristics (release/design/migrations) - advisory, evaluated and kept. (h) createdBy resolved to WORKER for this architect id (team-role resolution) - cosmetic. (i) This row itself modifies no source; its worker must not commit foreign dirt (scripts/up.ps1, scripts/watch.ps1, .moe/messages/*.jsonl are peer paths).",
+    "keyFiles": [
+      "README.md",
+      "docs/VISION.md",
+      "docs/agent-stack-runbook.md",
+      ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/planning/compile-dispatcher.ts",
+      "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+      "apps/control-room/src/v2/goals/live-goal-create.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T09:16:43.362Z"
+}

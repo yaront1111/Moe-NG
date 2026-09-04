@@ -1,0 +1,35 @@
+{
+  "id": "task-5d30948435524c6fa2789e1c033aafe7",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Containerized deployment: preview and production environments deployed from the goal",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04; owner chose Stage 1 + Stage 2 scope).\n\nVISION Stage 2 'infrastructure generation; preview and production deployment' with the profile 'containerized deployment'. Re-measured 2026-09-04: no deployment kind exists (`grep -c deploy apps/daemon/src/daemon-command-vocabulary.ts` = 0); the closest pattern is `repository.publish` (the human names a remote on the goal; wrapper effect + receipt; PUBLISH card in v2/goals/goal-publish.tsx + publish-port.ts; orchestrator/node-publisher.ts).\n\nFEATURE: environments PREVIEW and PRODUCTION per goal. The daemon generates the infrastructure files from the approved contract's deployment requirements when the repository lacks them (multi-stage Dockerfile for the profile, docker-compose with app + postgres, healthcheck), landed through the lander. The human names a deploy TARGET per environment on the goal (local docker, or an SSH host `user@host` with docker installed; same card pattern as the publish remote) via `deployment.set_target`. `deployment.deploy {goalRef, environment}` (human-only): build the image at the landed HEAD sha (tag = sha), ship it (local: docker run; ssh: `docker save | ssh docker load`), replace the running container atomically, probe the health URL until 200 (timeout -> refuse), record `moe-deploy-receipt/1` {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)}; the previous receipt is kept for rollback (this row stores it; the row 'Monitoring, backup and rollback' consumes it). A PRODUCTION deploy cites the release decision when one exists on the goal, else states 'no release decision' honestly.\n\nUI: Deployments card on the opened goal - per environment: target, last deploy sha / time / url / status, Deploy arm/confirm; Runs shows deploy receipts; Needs-you lists a goal ready to deploy after preview/release. Refusals verbatim: DEPLOY_TARGET_MISSING, DEPLOY_BUILD_FAILED (with the last stderr line), DEPLOY_HEALTH_TIMEOUT, DEPLOY_DOCKER_UNAVAILABLE.",
+  "definitionOfDone": [
+    "`deployment.deploy` and `deployment.set_target` published human-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; DEPLOY_TARGET_MISSING, DEPLOY_BUILD_FAILED, DEPLOY_HEALTH_TIMEOUT, DEPLOY_DOCKER_UNAVAILABLE asserted with code + layer.",
+    "Infrastructure generator golden test (Dockerfile, compose, healthcheck); the generated image builds and answers its health URL in a test that runs docker when present and otherwise fails with an explicit DEPLOY_DOCKER_UNAVAILABLE line quoted in the step note (never a silent pass); the CI host that has docker shows the test in its count line.",
+    "The deploy effect is tested offline through a docker/ssh port asserting the argv (build tag = sha, save|load for ssh, atomic replace) and the receipt shape golden, including the kept previous receipt.",
+    "Deployments card renders targets + last deploy per environment + arm/confirm; Playwright journey against a REAL daemon (fake docker port behind the daemon); count line quoted.",
+    "Live drive: the PREVIEW environment deployed locally with docker for UnAI or the scaffold app - receipt + a curl of the health URL in a row comment.",
+    "Runbook 'Deploy' section + README Stage 2 status; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 90,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:13:08.082Z",
+  "updatedAt": "2026-09-04T09:13:08.082Z"
+}

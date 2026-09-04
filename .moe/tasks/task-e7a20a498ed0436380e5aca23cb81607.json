@@ -1,0 +1,34 @@
+{
+  "id": "task-e7a20a498ed0436380e5aca23cb81607",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Control room completeness: Resources live, Product Contract dossier on the goal, every daemon read has a screen",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04).\n\nUI GAP (human DoD 'we should have our product also ui'; memory ui-connect-everything-built-2026-09-02; re-measured 2026-09-04 at main 68eb1c5d after PR #23 the board): the Resources nav is FROZEN with a SOON chip (`apps/control-room/src/v2/shell/shell-model.ts:111`, nav-rail.tsx:120, context-bar.tsx:11-20); `/product-contract/gate-1/read` and `/documents/dossier/read` have no screen; planning.write, graph.supersede, cutover.*, work.* are unconnected by design (keep them forensic). The opened goal now opens on the six-column board (PR #23: v2/board/board-screen.tsx, board-columns.ts, board-feed.tsx).\n\nFEATURE: (a) Resources screen live - the project's measured resources from existing reads: repository (root, branch, HEAD), provider (CLI, credential source - never a value), store (path, size, last backup), policy revision, seat limit; one fact per row, refusals verbatim, no SOON chip. (b) Product Contract dossier on the opened goal: the approved revision's personas/journeys, requirements, criteria (with coverage state), assumptions and unresolved decisions, versions - consumed from `/product-contract/gate-1/read` through the 8-touchpoint pattern. (c) Document dossier on the PRD panel from `/documents/dossier/read`. (d) An 'Advanced' forensic view behind a toggle listing the remaining raw reads (events, work items) so nothing served is unreachable. (e) A design pass with the apple-design-skill and frontend-design skills (owner's ask 2026-09-02: 'we need it for humans not bots') recorded in a row comment with the fixes applied; sources stay ASCII-only (glyphs.ts) and JSX text stays apostrophe-free (scheduler package-boundary scan, memory board-screen-landed-2026-09-04).\n\nRULE: bidirectional roster - every daemon read route (enumerated from the listener dispatch, not a constant) is consumed by at least one screen, and every screen's read exists.",
+  "definitionOfDone": [
+    "Resources screen renders measured rows against a REAL daemon; the resources nav entry carries no SOON chip (test on shell-model/nav-rail updated, `grep -c SOON` on the resources entry = 0); nav roster tests updated.",
+    "The opened goal shows the Product Contract dossier from `/product-contract/gate-1/read` (approved revision id, requirements count, criteria with coverage state); exact-key decoder and every digest mirror updated (packages generated-coverage.test.ts, apps/control-room/src/data/data-adapter.test.ts, v2/goals/approve-plan.test.tsx).",
+    "Bidirectional roster test: the served read routes (enumerated from apps/daemon/src/http/http-listener-read-dispatch.ts) equal the routes the control-room client consumes, asserted as set-equality (not subset).",
+    "Design review pass recorded in a row comment: skills used, findings, fixes applied, before/after screenshots from the live lane.",
+    "Playwright journeys for Resources and the contract dossier against a REAL daemon; gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Spun-out rows are filed in PLANNING (BACKLOG is human-gated and invisible to claim_next_task); created without the status field by mistake.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 50,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:11:43.469Z",
+  "updatedAt": "2026-09-04T09:14:24.155Z"
+}
