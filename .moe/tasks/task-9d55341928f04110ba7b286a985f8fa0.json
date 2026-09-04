@@ -18,8 +18,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY CHILD 1 LANDED, THEN RE-MEASURE (no edits). (a) Child 1 = task-19d2329c25934099b2ff10086987d1c5: `git log main --grep \"Moe-Task: task-19d2329c25934099b2ff10086987d1c5\" --oneline` (or get_context.epicSiblings landing.merged); `grep -n \"export function readProjectRemote\\|export interface ProjectRemote\\|ProjectRemote =\" apps/daemon/src/repository/publish-ledger.ts apps/daemon/src/repository/project-remote-ledger.ts 2>/dev/null` - child 1's plan puts `readProjectRemote(store, projectId): ProjectRemote | null` with `ProjectRemote = { remoteUrl: string; boundAt: string; boundBy: string }` in publish-ledger.ts OR a new repository/project-remote-ledger.ts (+ .js) if it did not fit; RECORD the file and the exact field names in the step note and read child 1's completionSummary + the comment it left on this row. Absent -> moe.report_blocked with blockedOnTaskIds [task-19d2329c25934099b2ff10086987d1c5]; never reimplement the fold. (b) Re-measure the 8-touchpoint template (2026-09-04 at main 9e9b7b04): apps/daemon/src/http/sessions-read.ts (135 lines; SESSIONS_READ_PATH :19, `const LAYER = \"SESSIONS_READ\" as const;` :20 - a bare `LAYER` name, NOT `*_LAYER`, so the layer-visibility census (tests/security/layer-visibility-cases.ts, keyed on the `_LAYER` suffix) never counts it: copy THAT declaration shape verbatim; codes roster :22-24; port :46-49; emptyBody :112-117; handler :119-135); composition apps/daemon/src/daemon-store-foundation-composition.ts:45-46 (import) + :351 (factory) + :464 (return key); apps/daemon/src/daemon-store-dependencies.ts:97-101 (provider key); apps/daemon/src/daemon-entry-port-resolution.ts:54 (provider method type), :103 (resolved type), :134 (the RESOLVED key list), :281-289 (the sessions resolution block - copy it); apps/daemon/src/daemon-entry.ts:284 (spread); apps/daemon/src/http/http-listener.ts:16 (type import) + :146-147 (StartListenerOptions.sessions); apps/daemon/src/http/http-listener-read-dispatch.ts (502 lines, PRE-EXISTING OVER THE 400 CAP - touch minimally, record the size): :32 import, :86 JSON_ROUTES entry, :317-325 serveSessions, :431-434 method refusal, :481-482 dispatch branch; the providerKeys pin apps/daemon/src/daemon-store-dependencies.test.ts:711-720 (exact sorted set). `ls apps/daemon/src/http/sessions-read.js` (bridge exists: `export * from \"./sessions-read.ts\";`). (c) Baseline: `pnpm --filter @moe/daemon test` at the merge-base, count line + failing files quoted (peer WIP under apps/daemon/src/bootstrap and goals on this checkout - never touch).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-04T18:21:26.979Z"
     },
     {
       "stepId": "step-2",
@@ -86,7 +87,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-80f8bfe1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,7 +109,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:42:11.826Z",
-  "updatedAt": "2026-09-04T17:26:07.780Z",
+  "updatedAt": "2026-09-04T18:21:26.979Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:30:18.460Z",
     "plannedStepCount": 7,
@@ -137,5 +138,9 @@
       "apps/daemon/src/repository/publish-ledger.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T14:33:05.612Z"
+  "planApprovedAt": "2026-09-04T14:33:05.612Z",
+  "contextFetchedBy": [
+    "worker-80f8bfe1"
+  ],
+  "workStartedAt": "2026-09-04T18:21:26.979Z"
 }
