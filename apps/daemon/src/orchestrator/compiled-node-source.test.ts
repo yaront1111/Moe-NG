@@ -33,6 +33,12 @@ const CONTRACT_ID = "contract-source-1";
 const REVISION_ID = "rev-source-1";
 const STATEMENT = "identities.ts exports a stable BeliefKey identity codec.";
 const encoder = new TextEncoder();
+/** The submitted build order, asserted back verbatim off the sealed graph. */
+const CHAIN = Object.freeze([
+  Object.freeze({ dependsOn: Object.freeze([] as readonly string[]), nodeKey: "node-a" }),
+  Object.freeze({ dependsOn: Object.freeze(["node-a"]), nodeKey: "node-b" }),
+  Object.freeze({ dependsOn: Object.freeze(["node-b"]), nodeKey: "node-c" }),
+]);
 
 afterEach(closeStores);
 
@@ -59,6 +65,35 @@ function activeGraphFor(goalRef: string): ActiveCompiledGraph {
   if (!compiled.ok) throw new Error(`fixture compile refused: ${compiled.code}`);
   const decoded = decodeGraphContent(Buffer.from(compiled.graphContentBytesBase64, "base64"));
   if (!decoded.ok) throw new Error("fixture graph did not decode");
+  return Object.freeze({ content: decoded.value.content, goalRef });
+}
+
+/** The a -> b -> c chain, sealed through the same production compile. The
+ *  completion node must be the chain's TAIL: a node depending on the
+ *  completion node is refused by structure admission. */
+function chainGraphFor(goalRef: string): ActiveCompiledGraph {
+  const compiled = compiledPlanAuthority({
+    authorRef: "principal-compiler",
+    completionNodeKey: "node-c",
+    criteria: [{ criterionId: "crit-1", statement: STATEMENT }],
+    graphRevisionRef: "graph-revision-compiled-chain",
+    idPrefix: "compiled-source-chain",
+    knownCapabilities: null,
+    nodes: CHAIN.map((node) => ({
+      capability: "capability-implement",
+      criterionIds: ["crit-1"],
+      dependsOn: node.dependsOn,
+      nodeKey: node.nodeKey,
+      objective: `Build ${node.nodeKey}.`,
+      readScopes: ["src"],
+      resources: ["resource-a"],
+      verificationRecipeRefs: ["recipe-a"],
+      writeScopes: [`src/${node.nodeKey}`],
+    })),
+  });
+  if (!compiled.ok) throw new Error(`chain fixture compile refused: ${compiled.code}`);
+  const decoded = decodeGraphContent(Buffer.from(compiled.graphContentBytesBase64, "base64"));
+  if (!decoded.ok) throw new Error("chain fixture graph did not decode");
   return Object.freeze({ content: decoded.value.content, goalRef });
 }
 
@@ -120,8 +155,21 @@ describe("createCompiledNodeSource", () => {
   it("lists every execution-bearing sealed node, titled by its objective", () => {
     const store = openStore();
     expect(sourceFor(store, [activeGraphFor(GOAL_ID)]).nodes()).toEqual([
-      { nodeRef: "node-kernel", title: "Implement the belief-key identity kernel." },
+      { dependsOn: [], nodeRef: "node-kernel", title: "Implement the belief-key identity kernel." },
     ]);
+  });
+
+  it("carries each sealed node's hard dependencies through, exactly as submitted", () => {
+    const store = openStore();
+    const nodes = sourceFor(store, [chainGraphFor(GOAL_ID)]).nodes();
+    // The whole chain seals, so the arm cannot pass by producing fewer nodes.
+    expect(nodes.map((node) => node.nodeRef)).toEqual(["node-a", "node-b", "node-c"]);
+    // EQUALITY per node against the submitted build order — not merely that the
+    // member is present. An always-empty producer fails here, which is the one
+    // failure mode that would leave the readiness gate green and useless.
+    expect(nodes.map((node) => [...node.dependsOn]))
+      .toEqual(CHAIN.map((node) => [...node.dependsOn]));
+    expect(nodes.map((node) => [...node.dependsOn])).toEqual([[], ["node-a"], ["node-b"]]);
   });
 
   it("lists nothing while no graph is active, and for an unknown nodeRef briefs nothing", () => {

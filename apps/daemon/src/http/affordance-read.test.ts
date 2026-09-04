@@ -28,11 +28,14 @@ import {
   reviewerCalibrationSlice, verifierPolicySlice,
 } from "../orchestrator/demo-seed-policy.js";
 import { runReviewCommand } from "../review/review-services.js";
-import { finding, packageItems } from "../review/review-test-fixtures.js";
+import {
+  REVIEWER, finding, packageItems, seedVerifierReceipt,
+} from "../review/review-test-fixtures.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
+import type { NodeSpec } from "./affordance-contract.js";
 import {
   DEFAULT_SESSION_SUBJECT, DEFAULT_SUBJECTS, createAffordancePort,
 } from "./affordance-read.js";
@@ -188,7 +191,7 @@ describe("createAffordancePort", () => {
 describe("code node steps", () => {
   const nodePort = createAffordancePort({
     mintId: () => `afford-node-${String(minted += 1)}`,
-    nodes: () => [{ nodeRef: "node-code-1", title: "Implement add()" }],
+    nodes: () => [{ dependsOn: [], nodeRef: "node-code-1", title: "Implement add()" }],
     projectId: PROJECT,
     store,
   });
@@ -620,7 +623,7 @@ describe("a node whose review is exhausted waits on a human escalation", () => {
   let escalationMinted = 0;
   const escalationPort = createAffordancePort({
     mintId: () => `afford-escalation-${String(escalationMinted += 1)}`,
-    nodes: () => [{ nodeRef: "node-code-1", title: "Implement add()" }],
+    nodes: () => [{ dependsOn: [], nodeRef: "node-code-1", title: "Implement add()" }],
     projectId: PROJECT,
     store,
   });
@@ -685,7 +688,7 @@ describe("a REPLAN decision retires the node", () => {
   let replanMinted = 0;
   const replanPort = createAffordancePort({
     mintId: () => `afford-replan-${String(replanMinted += 1)}`,
-    nodes: () => [{ nodeRef: "node-code-2", title: "Implement multiply()" }],
+    nodes: () => [{ dependsOn: [], nodeRef: "node-code-2", title: "Implement multiply()" }],
     projectId: PROJECT,
     store,
   });
@@ -734,5 +737,187 @@ describe("a REPLAN decision retires the node", () => {
     const node = surfaceOf().steps.find((entry) => entry.aggregateId === "node-code-2");
     expect(node).toMatchObject({ kind: "node.deliver", missing: ["replan"], status: "BLOCKED" });
     expect(surfaceOf().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-2")).toEqual([]);
+  });
+});
+
+/**
+ * A node.deliver step is READY only when every node it depends on is ACCEPTED.
+ *
+ * ACCEPTED is the review ledger's acceptance record — the SAME fact the loop
+ * already uses to mark a node COMMITTED. There is deliberately no second notion
+ * of doneness here (no landing receipt, no verifier receipt): a node is a
+ * satisfied dependency exactly when the surface would call it COMMITTED, so the
+ * board and the gate can never disagree about what "done" means.
+ *
+ * These arms share the suite store, which the arms above already drove to a
+ * durably approved plan; the node keys are unique to this block so their review
+ * ledgers are independent of the escalation and replan worlds.
+ */
+describe("a node waits on its hard dependencies", () => {
+  const A = "node-dep-a";
+  const B = "node-dep-b";
+  const C = "node-dep-c";
+  let dependsMinted = 0;
+
+  /** One port per roster: the gate reads dependencies off the NodeSpec the
+   *  compiled source produces, so each arm states the build order it is about. */
+  function surfaceFor(nodes: readonly NodeSpec[]) {
+    const result = createAffordancePort({
+      mintId: () => `afford-depends-${String(dependsMinted += 1)}`,
+      nodes: () => nodes,
+      projectId: PROJECT,
+      store,
+    }).readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result;
+  }
+
+  function stepFor(nodes: readonly NodeSpec[], nodeRef: string) {
+    return surfaceFor(nodes).steps.find((entry) => entry.aggregateId === nodeRef);
+  }
+
+  function offeredKindsFor(nodes: readonly NodeSpec[], nodeRef: string): readonly string[] {
+    return surfaceFor(nodes).nextAllowedCommands
+      .filter((entry) => entry.targetAggregateId === nodeRef)
+      .map((entry) => entry.commandKind);
+  }
+
+  /** A clean round with no findings: the daemon has not consumed its receipt, so
+   *  the node is awaiting verification — the pre-existing BLOCKED reason. */
+  function cleanRound(nodeRef: string): void {
+    const ledger = readReviewLedger(store, PROJECT, nodeRef);
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: `cmd-depends-clean-${nodeRef}`,
+      correlationId: "corr-affordance-depends",
+      decidedAt: "2026-09-04T12:00:00.000Z",
+      expectedVersion: ledger.version,
+      kind: "review.submit",
+      payload: {
+        findings: [], packageItems: packageItems(),
+        round: ledger.lineage.highestRound + 1, subjectRef: nodeRef,
+      },
+      principalId: "sess-agent-affordance",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    if (!outcome.ok) throw new Error(`clean round for ${nodeRef} refused: ${outcome.code}`);
+  }
+
+  /** Drives the node to ACCEPTED through the shipped acceptance path — a real
+   *  verifier receipt then `integration.accept_output` — never by writing the
+   *  acceptance record the production reader is supposed to derive. */
+  function accept(nodeRef: string): void {
+    const receipt = seedVerifierReceipt(store, nodeRef, PROJECT);
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: `cmd-depends-accept-${nodeRef}`,
+      correlationId: "corr-affordance-depends",
+      decidedAt: "2026-09-04T12:05:00.000Z",
+      expectedVersion: receipt.currentVersion,
+      kind: "integration.accept_output",
+      payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
+      principalId: REVIEWER,
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    if (!outcome.ok) throw new Error(`acceptance for ${nodeRef} refused: ${outcome.code}`);
+    // The gate's whole premise: acceptance is what the surface calls COMMITTED.
+    expect(readReviewLedger(store, PROJECT, nodeRef).accepted).toBeDefined();
+  }
+
+  const PAIR: readonly NodeSpec[] = Object.freeze([
+    Object.freeze({ dependsOn: Object.freeze([]), nodeRef: A, title: "Build a" }),
+    Object.freeze({ dependsOn: Object.freeze([A]), nodeRef: B, title: "Build b" }),
+  ]);
+  const CHAIN: readonly NodeSpec[] = Object.freeze([
+    ...PAIR,
+    Object.freeze({ dependsOn: Object.freeze([B]), nodeRef: C, title: "Build c" }),
+  ]);
+
+  it("blocks a dependent node on depends:<nodeKey> and offers it nothing to submit", () => {
+    // THE CONTROL: the free node is READY and IS offered review.submit, so the
+    // arm below measures the dependency gate and not a dead surface.
+    expect(stepFor(PAIR, A)).toMatchObject({ missing: [], status: "READY" });
+    expect(offeredKindsFor(PAIR, A)).toEqual(["review.submit"]);
+
+    // The EXACT token, not merely a non-empty list: the browser reads this
+    // string, so a rename that kept the list non-empty would still break it.
+    expect(stepFor(PAIR, B)).toMatchObject({
+      kind: "node.deliver", missing: [`depends:${A}`], status: "BLOCKED",
+    });
+    // A blocked node must not be staffable: the wrapper claims work from the
+    // offers, so leaving review.submit here would staff b beside its parent.
+    expect(offeredKindsFor(PAIR, B)).toEqual([]);
+  });
+
+  it("releases the dependent node the moment its dependency is ACCEPTED", () => {
+    accept(A);
+    expect(stepFor(PAIR, A)).toMatchObject({ status: "COMMITTED" });
+    expect(stepFor(PAIR, B)).toMatchObject({ missing: [], status: "READY" });
+    expect(offeredKindsFor(PAIR, B)).toEqual(["review.submit"]);
+  });
+
+  it("gates the WHOLE chain, not just the frontier's direct parents", () => {
+    // a is accepted (previous arm), b and c are not. A gate that only resolved
+    // the frontier's direct parents would call c READY here, because its own
+    // parent b is listed — the transitive fact is that b is not ACCEPTED.
+    expect(stepFor(CHAIN, A)).toMatchObject({ status: "COMMITTED" });
+    expect(stepFor(CHAIN, B)).toMatchObject({ missing: [], status: "READY" });
+    expect(stepFor(CHAIN, C)).toMatchObject({ missing: [`depends:${B}`], status: "BLOCKED" });
+    expect(offeredKindsFor(CHAIN, B)).toEqual(["review.submit"]);
+    expect(offeredKindsFor(CHAIN, C)).toEqual([]);
+  });
+
+  it("names EVERY unaccepted dependency, in the order the node lists them", () => {
+    const fan: readonly NodeSpec[] = Object.freeze([
+      ...CHAIN,
+      Object.freeze({ dependsOn: Object.freeze([B, C]), nodeRef: "node-dep-fan", title: "Fan" }),
+    ]);
+    // b and c are both unaccepted, so BOTH are named. A gate that stopped at the
+    // first unmet dependency would report one token and read as almost-right.
+    expect(stepFor(fan, "node-dep-fan"))
+      .toMatchObject({ missing: [`depends:${B}`, `depends:${C}`], status: "BLOCKED" });
+  });
+
+  it("leaves a node with no dependencies exactly as it was", () => {
+    const solo: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({ dependsOn: Object.freeze([]), nodeRef: "node-dep-solo", title: "Solo" }),
+    ]);
+    expect(stepFor(solo, "node-dep-solo")).toMatchObject({ missing: [], status: "READY" });
+    expect(offeredKindsFor(solo, "node-dep-solo")).toEqual(["review.submit"]);
+  });
+
+  it("does not treat a dependency outside the sealed roster as satisfied", () => {
+    // Fail CLOSED. An unresolvable producer key is the one case where guessing
+    // "satisfied" silently un-gates a node, so it stays blocked and says which
+    // key it could not satisfy.
+    const dangling: readonly NodeSpec[] = Object.freeze([
+      Object.freeze({
+        dependsOn: Object.freeze(["node-dep-never-sealed"]),
+        nodeRef: "node-dep-orphan", title: "Orphan",
+      }),
+    ]);
+    expect(stepFor(dangling, "node-dep-orphan")).toMatchObject({
+      missing: ["depends:node-dep-never-sealed"], status: "BLOCKED",
+    });
+    expect(offeredKindsFor(dangling, "node-dep-orphan")).toEqual([]);
+  });
+
+  it("PRECEDENCE: reports dependencies AND verification together, dependencies first", () => {
+    // This arm exists to pin an order the DoD leaves to the implementer, so the
+    // wrapper's reading of `missing` cannot drift silently later. The node has a
+    // clean round in (awaiting the daemon's verifier) AND an unaccepted parent.
+    const gated: readonly NodeSpec[] = Object.freeze([
+      ...CHAIN,
+      Object.freeze({ dependsOn: Object.freeze([C]), nodeRef: "node-dep-both", title: "Both" }),
+    ]);
+    cleanRound("node-dep-both");
+    // Both standing verifier slices were installed by the arms above, so the
+    // verification side contributes exactly one token here.
+    expect(stepFor(gated, "node-dep-both")).toMatchObject({
+      missing: [`depends:${C}`, "verification"], status: "BLOCKED",
+    });
+    // The dependency block is the stronger one: a node that cannot start is not
+    // offered a submission, even though a verification-only block still is.
+    expect(offeredKindsFor(gated, "node-dep-both")).toEqual([]);
   });
 });

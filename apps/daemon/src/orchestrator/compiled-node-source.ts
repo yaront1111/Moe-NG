@@ -110,6 +110,7 @@ export function activeCompiledGraphs(
 
 interface SealedNode {
   readonly criterionIds: readonly string[];
+  readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
   readonly objective: string;
@@ -119,13 +120,19 @@ function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedN
   const nodes: SealedNode[] = [];
   const listed = new Set<string>();
   for (const graph of graphs) {
-    const bearing = new Set(graph.content.snapshot.nodes
+    const { edges, nodes: snapshotNodes } = graph.content.snapshot;
+    const bearing = new Set(snapshotNodes
       .filter((node) => node.executionBearing).map((node) => node.nodeKey));
     for (const definition of graph.content.nodeAuthority.definitions) {
       if (!bearing.has(definition.nodeKey) || listed.has(definition.nodeKey)) continue;
       listed.add(definition.nodeKey);
       nodes.push(Object.freeze({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
+        // The SAME derivation the runs projection uses (runs-read.ts), read off
+        // the graph that won the dedupe: two spellings of build order are how
+        // the board and the affordance surface come to disagree about it.
+        dependsOn: edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)
+          .map((edge) => edge.producerNodeKey),
         goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
         objective: definition.objective,
@@ -175,8 +182,9 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
       return [];
     }
   };
-  const nodes = (): readonly NodeSpec[] => sealed().map((node) =>
-    Object.freeze({ nodeRef: node.nodeKey, title: node.objective }));
+  const nodes = (): readonly NodeSpec[] => sealed().map((node) => Object.freeze({
+    dependsOn: Object.freeze([...node.dependsOn]), nodeRef: node.nodeKey, title: node.objective,
+  }));
   const mission = (nodeRef: string): CompiledNodeMission | null => {
     if (options.workspace === null || options.testCommand === null) return null;
     const node = sealed().find((candidate) => candidate.nodeKey === nodeRef);

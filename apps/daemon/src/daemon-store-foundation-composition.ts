@@ -32,6 +32,7 @@ import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
+import type { NodeSpec } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
 import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
 import { createRunsReadPort } from "./http/runs-read.js";
@@ -100,7 +101,7 @@ export interface StoreDependencyConfig {
   readonly workspaceCatalogPath?: string | undefined;
 }
 
-function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; title: string }[] {
+function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
   return () => {
     let entries: string[];
     try {
@@ -108,7 +109,7 @@ function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; ti
     } catch {
       return [];
     }
-    const specs: { nodeRef: string; title: string }[] = [];
+    const specs: NodeSpec[] = [];
     for (const name of entries.sort()) {
       try {
         const parsed = JSON.parse(readFileSync(join(directory, name), "utf8")) as {
@@ -116,7 +117,10 @@ function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; ti
         };
         if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
           && typeof parsed.title === "string") {
-          specs.push({ nodeRef: parsed.nodeRef, title: parsed.title });
+          // A file-authored spec carries no sealed build order — this format has
+          // no dependency field to read — so it declares none rather than
+          // inventing one. Only compiled-graph nodes can gate on dependencies.
+          specs.push({ dependsOn: [], nodeRef: parsed.nodeRef, title: parsed.title });
         }
       } catch { /* skipped, never invented */ }
     }
@@ -278,9 +282,9 @@ export function createStoreDependencies(
     workspace: null,
   });
   const specNodes = config.nodeSpecsDir === undefined
-    ? (): readonly { nodeRef: string; title: string }[] => []
+    ? (): readonly NodeSpec[] => []
     : nodeSpecLoader(config.nodeSpecsDir);
-  const mergedNodes = (): readonly { nodeRef: string; title: string }[] => {
+  const mergedNodes = (): readonly NodeSpec[] => {
     const specs = specNodes();
     const listed = new Set(specs.map((spec) => spec.nodeRef));
     return [

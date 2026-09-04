@@ -26,8 +26,17 @@ export const AFFORDANCE_PROJECT_MISMATCH = "AFFORDANCE_PROJECT_MISMATCH" as cons
  */
 export const NODE_DELIVER_KIND = "node.deliver" as const;
 
-/** An operator-authored code node behind an approved goal. */
+/**
+ * An operator-authored code node behind an approved goal.
+ *
+ * `dependsOn` carries the node's HARD dependencies as sealed in the compiled
+ * graph — the same producer keys the board renders build order from. It is
+ * REQUIRED, not optional: a member that defaulted to `[]` would let a producer
+ * that forgot to populate it report "no dependencies" for every node, and the
+ * readiness gate would pass while gating nothing.
+ */
 export interface NodeSpec {
+  readonly dependsOn: readonly string[];
   readonly nodeRef: string;
   readonly title: string;
 }

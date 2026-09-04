@@ -597,8 +597,8 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
   const OWNER_DECOY = "project-owner-decoy";
   /** A THIRD identity: whoever issued the durable commands. Not an author either. */
   const COMMAND_ISSUER = "operator-local";
-  const NODE = { nodeRef: "node-authority-1", title: "The single merged node" };
-  const SECOND_NODE = { nodeRef: "node-authority-2", title: "A second merged node" };
+  const NODE = { dependsOn: [], nodeRef: "node-authority-1", title: "The single merged node" };
+  const SECOND_NODE = { dependsOn: [], nodeRef: "node-authority-2", title: "A second merged node" };
   const ALPHA_COMMAND = "authority-alpha";
   const BETA_COMMAND = "authority-beta";
   const ALPHA_GOAL = `goal-${ALPHA_COMMAND}`;

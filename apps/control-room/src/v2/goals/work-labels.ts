@@ -86,6 +86,9 @@ export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
   // affordance-read.ts - three review rounds failed; the kernel refuses more until a human
   // records escalation.decide, which the Needs-you screen offers as "Allow more attempts".
   escalation: "a human's decision to allow more review attempts (Needs you)",
+  // affordance-read.ts - a human answered the exhausted review with REPLAN, so the
+  // node takes no further round and its work continues under the successor plan.
+  replan: "a human's REPLAN decision, which retires this node into the successor plan",
   // affordance-read.ts - a delivered node awaiting the daemon's verifier.
   verification: "the daemon's verification",
   // affordance-read.ts - the verifier's standing slices this project never installed; the
@@ -115,8 +118,22 @@ export function labelForKind(kind: string): KindReading {
   });
 }
 
+/**
+ * The one PREFIXED token the daemon emits. Every other token is an exact key, but
+ * `depends:<nodeKey>` carries the blocking node's own key, so it cannot live in
+ * MISSING_TOKENS and is read here instead. The node key is echoed exactly as the
+ * daemon spelled it - the board never renames a node.
+ */
+export const DEPENDS_TOKEN_PREFIX = "depends:";
+
 /** One missing[] token in words; anything unmirrored stays exactly as it arrived. */
 export function labelForMissing(token: string): string {
+  if (token.startsWith(DEPENDS_TOKEN_PREFIX)) {
+    const nodeKey = token.slice(DEPENDS_TOKEN_PREFIX.length);
+    // A prefix with nothing after it names no node, so it is reported raw rather
+    // than dressed up as a sentence about a node that was never identified.
+    if (nodeKey.length > 0) return `the node ${nodeKey} to be accepted first`;
+  }
   const phrase = MISSING_TOKENS[token];
   if (phrase !== undefined) return phrase;
   const entry = WORK_KIND_LABELS[token];
