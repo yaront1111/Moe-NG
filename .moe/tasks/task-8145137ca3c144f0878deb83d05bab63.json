@@ -115,16 +115,29 @@
     {
       "stepId": "step-6",
       "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a goal with TWO contracts (one approved, one pending) - coverage totals count the approved one's criteria per :288's rule; confirm the readiness reads totals, never a single contract; a criterion carried by a node another activated plan also carries reads `unattributable` (:266-286) - NOT verified -> NOT_READY (correct, add an arm if the recipe allows); the offer surface now performs one coverage read per enabled/closing goal per poll (the coverage read walks the ledger) - measure a 3-goal surface read time before/after and record it; the precondition runs BEFORE qualification so a NOT_READY goal never mints witnesses (assert no decision row); a READY goal whose nodes are accepted but whose landing is NOTHING_TO_COMMIT still closes under child 1's rule (out of scope here - note it). Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the new code + layer + detail format, `readGoalCloseReadiness` / `goalCloseReadinessFor` and the four kinds, the `closeReadiness` fact on PlanningOfferInput, the contract-less invariant, every pinned consumer left green, and every file size. Then `moe.add_comment` on child 3 (task-8fdd81b81c0f4dc88c16203de139e2ba) with the code, the detail string and the offer rule its Needs-you and board assertions rely on, and on the publish child (task-f6f33a3925bf4856b42cf84a37bb0f9e) that the ladder now reads facts through PlanningOfferInput (its landing fact goes beside `closeReadiness`). Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-close-readiness.ts",
         "apps/daemon/src/goals/goal-close-readiness.test.ts"
       ],
-      "startedAt": "2026-09-04T18:15:49.365Z"
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-close-readiness.ts",
+        "apps/daemon/src/goals/goal-close-readiness.js",
+        "apps/daemon/src/goals/goal-close-readiness.test.ts",
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-services.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "note": "STEP 6 — adversarial self-review, perf measurement, fresh gates. No production change was needed; two of the review items were already covered by arms landed in steps 2-4, one is measured and recorded below, two are disclosed.\n\nTWO CONTRACTS (approved + pending). Confirmed the readiness reads TOTALS, never a single contract: `readinessOf` destructures `answer.totals.{criteria,verified}` and only uses `contracts.length` as a zero-check. Arms already pin it end to end — goal-close-readiness.test.ts:346 (\"stays NOT_READY while a SECOND contract's criteria are still unverified\", real store, 3 verified of 5), :437 (close refuses again after a new contract lands) and :511 (the offer is taken away again). This is also the ONLY reachable strict 0 < verified < criteria state: the compiled-plan producer refuses a graph leaving any criterion unbound, so a single contract goes 0 -> all.\n\nUNATTRIBUTABLE. Arm present at :289 (\"never counts an UNATTRIBUTABLE criterion as verified\"): totals {criteria 3, unattributable 1, verified 2} reads NOT_READY {3,2}. A criterion whose node key is carried by a second activated plan is its own total and is not folded into `verified` (document-coverage-read.ts:227), so ambiguous attribution never closes a goal.\n\nNO WITNESS BEFORE THE GATE. Arm :398 asserts decisionCount unmoved, `store.readEvents(GOAL_ID)` length unmoved, zero GoalCompleted events and lifecycle still EXECUTION_ENABLED on the refusal — the gate runs before `qualifyGoalClosure`, so a NOT_READY goal mints nothing on its way to being refused. Drill 3 (step 5) already proved that ordering independently.\n\nNOTHING_TO_COMMIT. A READY goal whose nodes are accepted but whose landing receipt is NOTHING_TO_COMMIT closes under child 1's rule; this gate is upstream of it and says nothing about landing. Out of scope here, unchanged by this row.\n\nCOST, MEASURED (temporary probe, then removed). Probe: a `it()` appended inside the surface describe timing 20 iterations each of `goalOffers(store)` and `goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID)`, one warm-up call discarded, results written to a scratch file (vitest swallows console.log). Two runs on this (noisy) machine:\n  run 1: surface=54.46ms coverage=27.05ms threeGoals=81.14ms\n  run 2: surface=65.04ms coverage=59.32ms threeGoals=177.96ms seedSurface=35.68ms seedCoverage=9.14ms\nSo a contract-bearing goal adds 27-59 ms to a surface read of 54-65 ms; a contract-LESS (seed) goal adds 9.1 ms of a 35.7 ms read, because GOAL_UNBOUND refuses early. Linear per offered goal: three contract-bearing goals ~ +81-178 ms per poll. Root cause of the duplication, recorded as a hardening follow-up rather than a new row (delivery-bias rail): `createDocumentCoverageReadPort` re-reads the durable ledger inside every `readCoverage`, while affordance-read.ts has already read it once per surface read; the coverage options accept readActive/readReviews overrides but no prebuilt ledger, and that file is not in this row's paths.\nPROBE RESTORE PROVEN: goal-close-readiness.test.ts is TRACKED (committed in a peer checkpoint, see below), so `git diff --stat -- <path>` is empty AND `git hash-object <path>` = `git rev-parse HEAD:<path>` = 00d9d806216b6c806741ba5e453cf6755bd65797, with `grep -c \"PERFPROBE\\|writeFileSync\"` = 0. NOTE for anyone repeating this: a raw sha256 of the working file does NOT match a pre-edit sha256 here, because `git checkout -- <path>` re-materialised the file as CRLF while the pre-probe on-disk copy was LF (core.autocrlf=true). Content is byte-identical at the blob; the hash difference is line-ending materialisation only, which is why the blob-identity proof is the right one for a tracked path on Windows. The scratch output file was deleted.\n\nOTHER CHECKLIST ITEMS (theoretical, recorded not fixed): (a) readiness is a read-then-act like every sibling prerequisite — a contract proposed between the readiness read and the commit would not be seen, but daemon commands are serialised through one dispatch and the goal aggregate carries expectedVersion; (b) the `catch` in `readGoalCloseReadiness` swallows the throw's identity and answers a fixed UNREADABLE code — deliberate (fail closed), but no diagnostic is emitted; (c) no handles are opened, so no error-path cleanup exists to leak.\n\nFRESH GATES, foreground, from the repo root:\n- `pnpm --filter @moe/daemon test` -> EXIT 0, `Test Files 413 passed (413)` / `Tests 8219 passed (8219)` (step-5 run was 409/8121; the delta is peer files landing).\n- `pnpm typecheck` -> EXIT 1, FOREIGN RED, disclosed verbatim: `apps/daemon typecheck: src/bootstrap/bootstrap-durability.test.ts(662,13): error TS6133: 'cwd' is declared but its value is never read.` / `src/bootstrap/bootstrap-test-fixtures.ts(221,78): error TS2554: Expected 2-4 arguments, but got 5.` / `src/bootstrap/bootstrap-test-fixtures.ts(246,5): error TS2554: Expected 2-4 arguments, but got 5.` ATTRIBUTION, measured: both files are UNCOMMITTED peer WIP (`git status --porcelain` shows ` M` on both; t",
+      "startedAt": "2026-09-04T18:15:49.365Z",
+      "completedAt": "2026-09-04T23:19:32.857Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-12c76c19",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -146,12 +159,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T23:05:25.292Z",
+  "updatedAt": "2026-09-04T23:20:01.781Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -161,7 +174,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T14:40:46.028Z",
@@ -302,18 +316,45 @@
       "treeId": "1819c6ced1cc5f11da5aaa593b2861f18a1827f0",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "09fa59ef4cefdd4d3e8a8ff907026b6dfe1b2cc1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-12c76c19@2026-09-04T23:05:26Z",
+      "paths": [
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        ".moe/tasks/task-8834ebe68c1a4f81b3be8e7581156755.json",
+        ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "recordedBy": "worker-12c76c19",
+      "recordedAt": "2026-09-04T23:05:44.223Z",
+      "treeId": "1d925ad385ace82c96c5abb00abd22095abd4064",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-read.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
-    "apps/daemon/src/goals/goal-close-prerequisite.ts",
+    "apps/daemon/src/goals/goal-close-readiness.ts",
     "apps/daemon/src/goals/goal-close-readiness.js",
     "apps/daemon/src/goals/goal-close-readiness.test.ts",
-    "apps/daemon/src/goals/goal-close-readiness.ts",
-    "apps/daemon/src/goals/goal-services.test.ts",
+    "apps/daemon/src/goals/goal-close-prerequisite.ts",
     "apps/daemon/src/goals/goal-services.ts",
-    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/goals/goal-services.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
     "apps/daemon/src/http/affordance-read.ts"
   ],
   "touchedFiles": [
@@ -329,16 +370,12 @@
     "apps/daemon/src/goals/goal-close-prerequisite.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/orchestrator/zz-placeholder-alpha.test.ts",
-    "apps/daemon/src/orchestrator/zz-placeholder-beta.test.ts",
-    "apps/daemon/src/orchestrator/zz-placeholder-gamma.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-fd0e9639@2026-09-04T18:32:49Z",
-    "at": "2026-09-04T18:32:58.831Z"
+    "sessionId": "worker-12c76c19@2026-09-04T23:05:26Z",
+    "at": "2026-09-04T23:05:44.223Z"
   },
   "priorHandoffs": [
     {
@@ -350,5 +387,13 @@
       "releasedBy": "governor-675cbcf7",
       "reason": "Human-approved release. worker-8c3e4f55 silent 155 min (9275s, isAlive false) holding this row at step 6 IN_PROGRESS. Distinguished from a false-positive stale signal: architect-20a6d1eb also read stale at 65 min but was demonstrably alive (it created task-40e52fa8 at 22:58:55 with createdBy ARCHITECT, parentTaskId task-f3edb8fb) — create_task does not refresh lastActivityAt, so the clock alone is not evidence. This seat produced NO side effects in the whole window: no commits, no comments, no rows, no step transitions. Absence of activity AND absence of artifacts, not idle time. Every other seat on the board is alive and moving. Row is released in place (stays WORKING, keeps all 6 checkpoint commits and 5 completed steps); worker-12c76c19 is IDLE and can resume it immediately."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-09-04T23:20:01.781Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  413 passed (413)\n      Tests  8219 passed (8219)\n   Start at  02:11:59\n   Duration  332.21s (transform 45.85s, setup 0ms, import 287.67s, tests 959.15s, environment 24ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-04T23:20:01.781Z"
+  },
+  "completionSummary": "GOAL READINESS IS ONE READ FACT, ENFORCED TWICE. New pure module apps/daemon/src/goals/goal-close-readiness.ts (97 lines, +.js bridge): `readGoalCloseReadiness(port, goalId)` over an INJECTED DocumentCoverageReadPort and `goalCloseReadinessFor(store, projectId, goalId)` = the production composition both consumers call. Four kinds: NO_CONTRACT (coverage refuses DOCUMENT_COVERAGE_READ_GOAL_UNBOUND, or the view carries zero contracts / zero criteria) | READY {criteria} | NOT_READY {criteria, verified} | UNREADABLE {code, layer} (any other refusal, and a thrown port). Derived per request, never stored or cached.\n\n(a) PRECONDITION: goal-services.ts `closeGoal` (204 lines) reads readiness BEFORE `qualifyGoalClosure` — cheaper read first, and an unready goal must never mint closure witnesses. Written as ONE fail-closed allowlist (`kind !== \"NO_CONTRACT\" && kind !== \"READY\"` refuses), so NOT_READY, UNREADABLE and any kind added later refuse. Refusal = GOAL_CLOSE_CRITERIA_UNVERIFIED at layer DAEMON_PREREQUISITE.\nNO WIRE DETAIL STRING, and I did not fake one (flagged in the step-3 note; the plan permitted stating the choice there). `ServiceRefused` has no message field, only `error: RuntimeError | null`, and RuntimeError.code must be a REGISTERED code — an unregistered one surfaces as UNKNOWN_ERROR with details STRIPPED, strictly worse than the code. So the refusal travels as code+layer exactly like its 8 siblings, and the counts live on the readiness value the coverage screen and the offer ladder read.\n\n(b) OFFER GATE: PlanningOfferInput gains `closeReadiness: (goalId) => GoalCloseReadiness[\"kind\"]` (affordance-planning-offers.ts, 199 lines); an EXECUTION_ENABLED/CLOSING goal is offered [goal.close, publish] only for NO_CONTRACT|READY, and [publish] alone for NOT_READY|UNREADABLE. affordance-read.ts composes the fact lazily from the store (+6 lines by me).\n\nCONTRACT-LESS GOALS ARE UNCHANGED — GOAL_UNBOUND maps to NO_CONTRACT, and drill 2 (GOAL_UNBOUND -> NOT_READY) reddened "
 }
