@@ -108,7 +108,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:37:25.873Z",
-  "updatedAt": "2026-09-04T15:03:33.317Z",
+  "updatedAt": "2026-09-04T15:12:12.381Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:40:00.036Z",
     "plannedStepCount": 5,
@@ -230,17 +230,52 @@
       "treeId": "599379a984693e8a59a3660757d0c1d53955167a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "5c3687495710df091addb1e38baaf1d83ebe8be0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d018e522@2026-09-04T14:54:21Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        "apps/daemon/src/goals/goal-publish-remote.test.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/repository/publish-ledger.test.ts",
+        "apps/daemon/src/repository/publish-ledger.ts",
+        "apps/daemon/src/repository/publish-receipt-contracts.ts",
+        "apps/daemon/src/repository/publish-services.js",
+        "apps/daemon/src/repository/publish-services.ts"
+      ],
+      "recordedBy": "worker-d018e522",
+      "recordedAt": "2026-09-04T15:12:12.381Z",
+      "treeId": "2713c148e9f20f157c85ac25118edc4f63baf6c8",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/goals/goal-services.ts",
+          "taskId": "task-8145137ca3c144f0878deb83d05bab63"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json"
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+    "apps/daemon/src/goals/goal-publish-remote.test.ts",
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/repository/publish-ledger.test.ts",
+    "apps/daemon/src/repository/publish-ledger.ts",
+    "apps/daemon/src/repository/publish-receipt-contracts.ts",
+    "apps/daemon/src/repository/publish-services.js",
+    "apps/daemon/src/repository/publish-services.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-c846071b@2026-09-04T10:57:24Z",
-    "at": "2026-09-04T10:57:31.724Z"
+    "sessionId": "worker-d018e522@2026-09-04T14:54:21Z",
+    "at": "2026-09-04T15:12:12.381Z"
   },
   "priorHandoffs": [
     {
@@ -253,5 +288,14 @@
       "reason": "Confirmed crash, human-approved release. worker-c846071b: 5 consecutive cli-exit=1 (commits f55305be, 2d4ac55a, b17f9859, a8f534b2), wrapper paused auto-resume, seat self-escalated to @governors requesting release, then silent 2h42m (isAlive false, 9734s). Not idle time. ROOT CAUSE FOUND: pnpm typecheck fails on a FOREIGN red - apps/daemon/src/goals/goal-live-evidence.test.ts(325,18) TS2339 'refusal' does not exist on type HttpPortRefused | HttpRefused. That file belongs to task-ae6fd9ac, not this row, but the daemon typecheck is repo-wide so it reds this row's verification gate every session. Bytes are safe: every crash checkpointed and pushed."
     }
   ],
-  "workStartedAt": "2026-09-04T14:54:51.121Z"
+  "workStartedAt": "2026-09-04T14:54:51.121Z",
+  "touchedFiles": [
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/repository/publish-receipt-contracts.ts",
+    "apps/daemon/src/repository/publish-ledger.test.ts",
+    "apps/daemon/src/repository/publish-services.js",
+    "apps/daemon/src/goals/goal-publish-remote.test.ts",
+    "apps/daemon/src/repository/publish-ledger.ts",
+    "apps/daemon/src/repository/publish-services.ts"
+  ]
 }
