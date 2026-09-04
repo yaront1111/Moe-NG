@@ -151,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:26:39.551Z",
-  "updatedAt": "2026-09-04T21:02:27.013Z",
+  "updatedAt": "2026-09-04T21:02:32.966Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:29:30.115Z",
     "plannedStepCount": 6,
@@ -340,6 +340,30 @@
       "treeId": "da216cd7c035cb9d8e00919cf18de1fdde95c7eb",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "0965b1e177088242185b6738f5894a108e392e74",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T21:02:27Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+        "apps/daemon/src/planning/approval-intent.test.ts",
+        "apps/daemon/src/planning/approval-intent-rejection.ts"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T21:02:32.965Z",
+      "treeId": "f784d81c2a02765126e3ebc9701af7e054f2a7e9",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -348,7 +372,15 @@
     "apps/daemon/src/planning/approval-intent.test.ts",
     "apps/daemon/src/planning/approval-intent-rejection.ts",
     "apps/daemon/src/planning/current-planning-run.ts",
-    "apps/daemon/src/planning/current-planning-run.js"
+    "apps/daemon/src/planning/current-planning-run.js",
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json"
   ],
   "touchedFiles": [
     ".tmp-drill4.py",
@@ -371,12 +403,38 @@
     ".tmp-adv.py",
     "packages/core/src/supersession/supersession-engine.test.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-columns.ts",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/goals/goal-catalog-model.test.ts",
+    "apps/control-room/src/v2/goals/goal-catalog-model.ts",
+    "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.tsx",
+    "apps/control-room/src/v2/runs/run-words.ts",
+    "apps/control-room/src/v2/shell/shell-model.ts",
+    "apps/control-room/src/v2/styles/cordum-board.css",
+    "apps/control-room/src/v2/styles/cordum-goals.css",
+    "apps/control-room/src/v2/styles/cordum-shell.css",
+    "apps/control-room/src/v2/styles/cordum-tokens.css"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-65786a7d@2026-09-04T17:45:15Z",
-    "at": "2026-09-04T18:09:12.760Z"
+    "sessionId": "qa-3fd61a21@2026-09-04T21:02:27Z",
+    "at": "2026-09-04T21:02:32.965Z"
   },
   "reviewStartedAt": "2026-09-04T21:02:08.200Z",
   "verification": {
