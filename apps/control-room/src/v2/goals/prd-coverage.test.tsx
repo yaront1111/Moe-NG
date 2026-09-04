@@ -70,10 +70,10 @@ describe("coverageComplete", () => {
   });
 
   it("spells the banner from the totals, never from a local verdict", () => {
-    expect(coverageBanner(coverage())).toContain("1 of 3 acceptance criteria VERIFIED");
+    expect(coverageBanner(coverage())).toContain("1 of 3 acceptance criteria verified");
     expect(coverageBanner(coverage())).toContain("1 planned");
     expect(coverageBanner(coverage())).toContain("1 unplanned");
-    expect(coverageBanner(complete())).toContain("All 2 acceptance criteria VERIFIED");
+    expect(coverageBanner(complete())).toContain("All 2 acceptance criteria verified");
     expect(coverageBanner(complete())).toContain("Closing the goal is your call");
     expect(coverageBanner(coverage({
       contracts: [], totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, unattributable: 0, verified: 0 },
@@ -113,7 +113,7 @@ describe("the PRD coverage card", () => {
       code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
     })} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent)
-      .toBe("REFUSED · DOCUMENT_COVERAGE_READ_GOAL_UNBOUND · DOCUMENT_COVERAGE_READ");
+      .toContain("The coverage could not be read right now.");
     cleanup();
     render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent).toContain("COVERAGE_READ_FAILED");

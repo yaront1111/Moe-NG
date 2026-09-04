@@ -1,7 +1,8 @@
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
-import { MIDDOT } from "../glyphs.js";
+import { writeFailedSaid } from "../outcome-words.js";
 import type {
   ApprovalAuthorization, ApprovalGrant, PlanApprovalOutcome,
 } from "./plan-approval.js";
@@ -40,9 +41,12 @@ function WithheldReason({ authorization }: {
   readonly authorization: Extract<ApprovalAuthorization, { status: "WITHHELD" }>;
 }): JSX.Element {
   return (
-    <p className="cr2-approve-note" data-testid="cr.approve.reason">
-      {`Approval is not offered for this run ${MIDDOT} ${authorization.code} ${MIDDOT} ${authorization.layer}`}
-    </p>
+    <OutcomeNote
+      code={authorization.code}
+      layer={authorization.layer}
+      said="Approval is not offered for this run yet."
+      testId="cr.approve.reason"
+    />
   );
 }
 
@@ -62,9 +66,12 @@ export function ApproveGate({ authorization, busy, onApprove, refusal }: Approve
         ? <WithheldReason authorization={authorization} />
         : null}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.approve.dispatch-refusal">
-          {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
-        </p>
+        <OutcomeNote
+          code={refusal.code}
+          layer={refusal.layer}
+          said={writeFailedSaid()}
+          testId="cr.approve.dispatch-refusal"
+        />
       )}
     </div>
   );

@@ -1,8 +1,10 @@
 import type { JSX } from "react";
 
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid } from "../outcome-words.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -42,13 +44,13 @@ function upFor(startedAt: string, nowMs: number): string {
   return `${String(Math.floor(hours / 24))} d ${String(hours % 24)} h`;
 }
 
-function Refusal({ outcome, testId }: {
-  readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>; readonly testId: string;
+function Refusal({ outcome, testId, what }: {
+  readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>;
+  readonly testId: string;
+  readonly what: string;
 }): JSX.Element {
   return (
-    <p className="cr2-approve-refusal" data-testid={testId}>
-      {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
-    </p>
+    <OutcomeNote code={outcome.code} layer={outcome.layer} said={readFailedSaid(what)} testId={testId} />
   );
 }
 
@@ -86,7 +88,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
     return <section className="cr2-ops" data-testid="cr.policy.root"><p className="cr2-slot-kicker" data-testid="cr.policy.loading">Reading the policy...</p></section>;
   }
   if (outcome.status !== "POLICY") {
-    return <section className="cr2-ops" data-testid="cr.policy.root"><Refusal outcome={outcome} testId="cr.policy.refusal" /></section>;
+    return <section className="cr2-ops" data-testid="cr.policy.root"><Refusal outcome={outcome} testId="cr.policy.refusal" what="policy" /></section>;
   }
   return (
     <section className="cr2-ops" data-testid="cr.policy.root">
@@ -101,7 +103,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
         const missing = outcome.standard.filter((row) => !row.installed);
         return (
           <div className="cr2-ops-card cr2-policy-standard" data-testid="cr.policy.standard">
-            <p className="cr2-slot-kicker">{`STANDARD POLICY ${MIDDOT} ${String(missing.length)} OF ${String(outcome.standard.length)} SLICES MISSING`}</p>
+            <p className="cr2-slot-kicker">{`Standard policy ${MIDDOT} ${String(missing.length)} of ${String(outcome.standard.length)} slices missing`}</p>
             <ul className="cr2-approve-obligations" data-testid="cr.policy.standard.list">
               {outcome.standard.map((row) => (
                 <li className="cr2-coverage-section" data-installed={row.installed ? "true" : "false"} data-testid={`cr.policy.standard.${row.kind}`} key={row.sliceRef}>
@@ -135,7 +137,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
         </ol>
       )}
       <span className="cr2-goals-count" data-testid="cr.policy.count">
-        {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATION${outcome.evaluations.length === 1 ? "" : "S"} ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
+        {`${String(outcome.slices.length)} installed ${MIDDOT} ${String(outcome.evaluations.length)} evaluation${outcome.evaluations.length === 1 ? "" : "s"} ${MIDDOT} version ${String(outcome.aggregateVersion)}`}
       </span>
       {outcome.slices.length === 0 ? (
         <div className="cr2-goals-empty" data-testid="cr.policy.empty">
@@ -182,7 +184,7 @@ export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; reado
     return <section className="cr2-ops" data-testid="cr.health.root"><p className="cr2-slot-kicker" data-testid="cr.health.loading">Reading the daemon...</p></section>;
   }
   if (outcome.status !== "HEALTH") {
-    return <section className="cr2-ops" data-testid="cr.health.root"><Refusal outcome={outcome} testId="cr.health.refusal" /></section>;
+    return <section className="cr2-ops" data-testid="cr.health.root"><Refusal outcome={outcome} testId="cr.health.refusal" what="health" /></section>;
   }
   const { daemon, ledger } = outcome;
   return (

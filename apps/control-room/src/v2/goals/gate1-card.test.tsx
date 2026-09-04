@@ -156,7 +156,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
   it("uses a named busy region, ordered headings, and live status semantics", async () => {
     const read = deferred<Gate1ReadOutcome>();
     render(<Gate1Card goalId="goal-live-1" port={portWith()} read={() => read.promise} />);
-    const region = screen.getByRole("region", { name: /PRODUCT CONTRACT.*GATE 1.*goal-live-1/ });
+    const region = screen.getByRole("region", { name: /Product contract/ });
     expect(region.getAttribute("aria-busy")).toBe("true");
     expect(screen.getByRole("status").textContent).toContain("Reading the contract");
 
@@ -164,7 +164,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
     await act(async () => { read.resolve(outcome); await read.promise; });
     expect(region.getAttribute("aria-busy")).toBe("false");
     expect(screen.getByRole("heading", {
-      level: 2, name: /PRODUCT CONTRACT.*GATE 1.*goal-live-1/,
+      level: 2, name: /Product contract/,
     })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 3, name: /OBJECTIVES/ })).toBeTruthy();
   });
@@ -247,7 +247,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
     );
     await user.click(await screen.findByTestId("cr.gate1.approve"));
     expect((await screen.findByRole("alert")).textContent)
-      .toContain(`${refused.code} · ${refused.layer}`);
+      .toContain(`${refused.code} @ ${refused.layer}`);
 
     rerender(<Gate1Card
       goalId="goal-live-2"
@@ -255,7 +255,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
       read={async () => ({ code: "READ_REFUSED", layer: "DAEMON_READ", status: "REFUSED" })}
     />);
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("REFUSED · READ_REFUSED · DAEMON_READ");
+      .toContain("The contract could not be read right now.");
   });
 
   it("turns a synchronous read failure into an accessible local error", async () => {
@@ -265,7 +265,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
       read={() => { throw new Error("offline"); }}
     />);
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("ERROR · GATE1_READ_FAILED · CONTROL_ROOM_GATE1");
+      .toContain("The contract could not be read right now.");
   });
 
   it("ignores an old goal dispatch and resets busy/refusal state for the new goal", async () => {

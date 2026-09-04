@@ -17,7 +17,7 @@ const SOURCE: GoalSourceOutcome = {
 describe("PrdPanel", () => {
   it("folds the stored text behind its path, size and digest, as stored", () => {
     render(<PrdPanel outcome={SOURCE} />);
-    expect(screen.getByTestId("cr.prd.summary").textContent).toBe("THE PRD · docs/PRD.md · 42 bytes · text/markdown");
+    expect(screen.getByTestId("cr.prd.summary").textContent).toBe("PRD · docs/PRD.md · 42 bytes");
     expect(screen.getByTestId("cr.prd.digest").textContent).toBe(`sha256 ${"a".repeat(64)}`);
     expect(screen.getByTestId("cr.prd.text").textContent).toBe(SOURCE.text);
     expect(screen.getByTestId("cr.prd.root").hasAttribute("open")).toBe(false);
@@ -28,7 +28,7 @@ describe("PrdPanel", () => {
     expect(screen.getByTestId("cr.prd.unbound").textContent).toBe("This goal was created without a PRD.");
     cleanup();
     render(<PrdPanel outcome={{ code: "GOAL_SOURCE_INVALID", layer: "DAEMON_READ_MODEL", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.prd.refusal").textContent).toBe("REFUSED · GOAL_SOURCE_INVALID · DAEMON_READ_MODEL");
+    expect(screen.getByTestId("cr.prd.refusal").textContent).toContain("The PRD could not be read right now.");
     cleanup();
     render(<PrdPanel outcome={null} />);
     expect(screen.getByTestId("cr.prd.loading")).toBeTruthy();

@@ -2,6 +2,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
+import { ROUTE_WORDS } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
 
 /**
@@ -93,8 +94,7 @@ function itemsFor(
     items.push(Object.freeze({
       ...base,
       actionLabel: "Review the plan",
-      detail: `The daemon offers approval for planning run ${entry.planningRunRef}.`
-        + " Read the plan and its acceptance criteria before approving.",
+      detail: "Read the plan and its acceptance criteria before approving.",
       headline: "A plan is waiting for your approval",
       kind: "PLAN_APPROVAL",
     }));
@@ -106,9 +106,9 @@ function itemsFor(
       items.push(Object.freeze({
         ...base,
         actionLabel: "Review the contract",
-        detail: `${contract.contractId} ${MIDDOT} ${String(contract.requirements.length)} requirements`
-          + ` ${MIDDOT} ${String(criteria)} acceptance criteria. Approving it lets the daemon compile the plan.`,
-        headline: "A Product Contract is waiting at Gate 1",
+        detail: `${String(contract.requirements.length)} requirements`
+          + ` ${MIDDOT} ${String(criteria)} acceptance criteria. Approving it lets agents start.`,
+        headline: "A Product Contract is waiting for your approval",
         kind: "GATE_1",
       }));
     }
@@ -151,10 +151,9 @@ function escalationItems(
     const route = node?.review.latestRoute ?? null;
     items.push(Object.freeze({
       actionLabel: "Open the goal",
-      detail: `${nodeKey} failed review ${rounds === null ? "three or more" : String(rounds)} times`
-        + (route === null ? "" : ` (last: ${route})`)
-        + ". The daemon refuses further rounds until you decide: allow more attempts, or replan the work"
-        + " into a successor goal that carries these findings.",
+      detail: `${node?.objective === undefined || node.objective === "" ? "This work" : node.objective} failed review ${rounds === null ? "three or more" : String(rounds)} times`
+        + (route === null ? "" : ` (last: ${ROUTE_WORDS[route] ?? route})`)
+        + ". Allow more attempts, or replan the work into a successor goal that carries these findings.",
       escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
       goalId: goal?.goalId ?? "",
       headline: "A node's review is exhausted",
@@ -170,13 +169,13 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
   const { catalog, coverage, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
-      countLabel: "WAITING FOR THE GOAL CATALOG", items: Object.freeze([]),
+      countLabel: "Waiting for goals", items: Object.freeze([]),
       note: "Nothing is listed until the daemon's durable goal catalog answers.",
     });
   }
   if (catalog.outcome !== "GOALS") {
     return Object.freeze({
-      countLabel: `${catalog.outcome} ${MIDDOT} ${catalog.detail}`, items: Object.freeze([]),
+      countLabel: "The goals could not be read", items: Object.freeze([]),
       note: `The goal catalog answered ${catalog.outcome}: ${catalog.detail}.`,
     });
   }
@@ -187,7 +186,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));
   const count = items.length;
   return Object.freeze({
-    countLabel: `${String(count)} DECISION${count === 1 ? "" : "S"} ${MIDDOT} NEEDS YOU`,
+    countLabel: `${String(count)} decision${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} you`,
     items: Object.freeze(items),
     note: surface === null
       ? "The daemon's offers have not arrived yet; plan approvals appear once they do."

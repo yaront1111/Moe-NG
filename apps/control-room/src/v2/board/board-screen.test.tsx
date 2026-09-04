@@ -82,12 +82,18 @@ const ACTIVITY: ActivityOutcome = {
 describe("BoardScreen", () => {
   it("folds the goal's nodes into six columns with counts, one line per card, and a finding only where it is the next question", () => {
     render(<BoardScreen activity={ACTIVITY} brief="Make evidence survive." coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="Evidence ledger" />);
-    for (const column of BOARD_COLUMNS) expect(screen.getByTestId(`cr.kanban.count.${column}`).textContent).toBe("1");
-    expect(screen.getByTestId("cr.kanban.line.n-queue").textContent).toBe("after n-work");
+    expect(screen.getByTestId("cr.kanban.count.PLANNED").textContent).toBe("2");
+    expect(screen.getByTestId("cr.kanban.count.WORKING").textContent).toBe("1");
+    expect(screen.getByTestId("cr.kanban.count.REVIEW").textContent).toBe("2");
+    expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe("1");
+    expect(screen.getByTestId("cr.kanban.count.VERIFIED").textContent).toBe("0");
+    expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe("0");
+    expect(BOARD_COLUMNS).toHaveLength(6);
+    expect(screen.getByTestId("cr.kanban.line.n-queue").textContent).toBe("waiting on other work");
     expect(screen.getByTestId("cr.kanban.line.n-work").textContent).toBe("an agent seat · lease ends in 12 min");
     expect(screen.getByTestId("cr.kanban.line.n-review").textContent).toBe("delivered 2 min ago · waiting on the verifier");
     expect(screen.getByTestId("cr.kanban.line.n-rework").textContent).toBe("sent back ×2 · rejected: implementation");
-    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("verified · committed 4f2a91cd");
+    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("landed on the workspace branch");
     expect(screen.getByTestId("cr.kanban.line.n-stuck").textContent).toBe("every review attempt used; needs your decision");
     expect(screen.getByTestId("cr.kanban.finding.n-rework").textContent).toBe(FINDING.detail);
     expect(screen.getByTestId("cr.kanban.finding.n-stuck").textContent).toBe(FINDING.detail);
@@ -104,7 +110,7 @@ describe("BoardScreen", () => {
     expect(screen.getByTestId("cr.kanban.brief").textContent).toBe("Make evidence survive.");
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
     expect(screen.getByTestId("cr.kanban.progress").textContent).toContain("1 of 2 acceptance criteria verified");
-    expect(screen.getByTestId("cr.kanban.nodes").textContent).toBe("6 nodes · 1 done · 2 working · 2 stuck");
+    expect(screen.getByTestId("cr.kanban.nodes").textContent).toBe("6 nodes · 1 landed · 1 working · 2 stuck");
     expect(screen.getByTestId("cr.kanban.stage").textContent).toBe("Agents working");
     expect(screen.getByTestId("cr.kanban.next").getAttribute("href")).toBe("#cr-goal-board");
     expect(screen.queryByTestId("cr.kanban.publish")).toBeNull();
@@ -160,7 +166,7 @@ describe("LiveBoard", () => {
     const readCatalog = vi.fn(async () => catalog);
     render(<LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} readActivity={readActivity} readCatalog={readCatalog} readCoverage={readCoverage} readRuns={readRuns} runId={RUN} surface={SURFACE} title="t" />);
     expect((await screen.findByTestId("cr.kanban.brief")).textContent).toBe("Keep every anchor.");
-    expect((await screen.findByTestId("cr.kanban.count.DONE")).textContent).toBe("1");
+    expect((await screen.findByTestId("cr.kanban.count.LANDED")).textContent).toBe("1");
     expect(await screen.findByTestId("cr.kanban.feed.list")).toBeTruthy();
     expect(readRuns).toHaveBeenCalledWith(GOAL);
     expect(readCoverage).toHaveBeenCalledWith(GOAL);

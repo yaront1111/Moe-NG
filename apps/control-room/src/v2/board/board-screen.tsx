@@ -69,7 +69,8 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
   const { activity, brief, coverage, goalId, nowMs, onNeedsYou, publishing, runId, runs, surface, title } = props;
   const status = deriveGoalStatus({ coverage, goalId, runId, surface });
   const goal = goalOf(runs, goalId);
-  const fold = goal === null || goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs);
+  const fold = goal === null || goal.nodes.length === 0
+    ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED");
   const statements = criterionStatements(coverage);
   const objectives = new Map<string, string>((goal?.nodes ?? []).map((node) => [node.nodeKey, node.objective]));
   const offered = publishOffer(surface, goalId) !== null;

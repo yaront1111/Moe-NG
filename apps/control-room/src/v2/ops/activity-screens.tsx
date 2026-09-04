@@ -2,7 +2,9 @@ import type { JSX } from "react";
 
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid } from "../outcome-words.js";
 import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 
 /**
@@ -12,13 +14,18 @@ import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./
  * codes and ids stay in mono beside the words.
  */
 
-function Refusal({ outcome, testId }: {
-  readonly outcome: { readonly code: string; readonly layer: string; readonly status: string }; readonly testId: string;
+function Refusal({ outcome, testId, what }: {
+  readonly outcome: { readonly code: string; readonly layer: string; readonly status: string };
+  readonly testId: string;
+  readonly what: string;
 }): JSX.Element {
   return (
-    <p className="cr2-approve-refusal" data-testid={testId} role="status">
-      {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
-    </p>
+    <OutcomeNote
+      code={outcome.code}
+      layer={outcome.layer}
+      said={readFailedSaid(what)}
+      testId={testId}
+    />
   );
 }
 
@@ -38,11 +45,11 @@ export interface ActivityPanelProps {
 export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.activity.root">
-      <h3 className="cr2-approve-heading">{`ACTIVITY ${MIDDOT} ${scopeLabel}`}</h3>
+      <h3 className="cr2-approve-heading">{`Activity ${MIDDOT} ${scopeLabel}`}</h3>
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.activity.loading">Reading the ledger...</p>
       ) : outcome.status !== "ACTIVITY" ? (
-        <Refusal outcome={outcome} testId="cr.activity.refusal" />
+        <Refusal outcome={outcome} testId="cr.activity.refusal" what="ledger" />
       ) : outcome.entries.length === 0 ? (
         <p className="cr2-needs-note" data-testid="cr.activity.empty">Nothing has been decided here yet.</p>
       ) : (
@@ -105,11 +112,11 @@ export interface SessionsPanelProps {
 export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.sessions.root">
-      <h3 className="cr2-approve-heading">{`SEATS ${MIDDOT} WHO IS WORKING`}</h3>
+      <h3 className="cr2-approve-heading">Seats</h3>
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.sessions.loading">Reading the seats...</p>
       ) : outcome.status !== "SESSIONS" ? (
-        <Refusal outcome={outcome} testId="cr.sessions.refusal" />
+        <Refusal outcome={outcome} testId="cr.sessions.refusal" what="seats" />
       ) : (
         <>
           <p className="cr2-needs-note" data-testid="cr.sessions.count">

@@ -67,7 +67,7 @@ describe("LiveNeedsYou", () => {
       expect(screen.getByTestId("cr.needsyou.item.plan-approval.goal-plan")).toBeTruthy();
       expect(screen.getByTestId("cr.needsyou.item.gate-1.goal-gate")).toBeTruthy();
     });
-    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 DECISIONS · NEEDS YOU");
+    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 decisions need you");
     // The badge count is a passive effect of the 2-item render: it lands after the DOM does.
     await waitFor(() => { expect(onCount).toHaveBeenLastCalledWith(2); });
     expect(readCoverage).toHaveBeenCalledWith("goal-plan");
@@ -163,6 +163,6 @@ describe("LiveNeedsYou", () => {
     render(<LiveNeedsYou onOpenBoard={vi.fn()} setup={SETUP} />);
     await screen.findByTestId("cr.needsyou.item.plan-approval.goal-plan");
     expect(screen.queryByTestId("cr.needsyou.item.gate-1.goal-gate")).toBeNull();
-    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("1 DECISION · NEEDS YOU");
+    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("1 decision needs you");
   });
 });

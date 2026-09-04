@@ -106,6 +106,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "runs">("goals");
   const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
+  const [answeredAtMs, setAnsweredAtMs] = useState<number | null>(null);
   // The board's own affordance frame, held here because the approval gate and the
   // board read the SAME daemon answer. A second poll for the same bytes would be a
   // second source of truth for what this session is offered.
@@ -122,6 +123,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
   const reportConnection = useCallback((next: SurfaceFrame["connection"]) => {
     setConnection(next);
+    if (next === "CONNECTED") setAnsweredAtMs(Date.now());
   }, []);
   const reportFrame = useCallback((next: SurfaceFrame) => {
     setBoardFrame(next);
@@ -139,7 +141,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
 
   const title = open !== null ? open.title
-    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs & leases"
+    : view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
       : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals";
 
   // Only an attached operator session carries the authenticated header set the
@@ -367,8 +369,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   return (
     <CordumShell
       activeNav={view}
-      backLabel={view === "approvals" ? "NEEDS YOU" : view === "runs" ? "RUNS"
-        : view === "policy" ? "POLICY" : view === "health" ? "HEALTH" : "GOALS"}
+      answeredAtMs={answeredAtMs}
+      backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
+        : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals"}
       connection={shellConnection}
       eyebrow={eyebrow}
       initialConnection={fixtures ? "CONNECTED" : null}

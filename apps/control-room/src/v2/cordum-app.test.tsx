@@ -269,7 +269,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     // now derives itself. The button carries the code in a `title` attribute too,
     // which getAllByText does not see.
     expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(3);
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Disconnected");
     expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
 
     // The live path went through the runtime handshake: /bootstrap was fetched.
@@ -350,12 +350,12 @@ describe("CordumApp live path uses the runtime handshake", () => {
     render(<CordumApp liveSetup={prepareLiveSetup()} search="" />);
 
     expect(await screen.findByText("abcd-ef01-2345")).toBeTruthy();
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Coming online");
     await userEvent.setup().click(screen.getByRole("button", { name: "I entered this label" }));
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/open")).toHaveLength(1);
     });
-    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Coming online");
     expect(surfaceReads).toBe(0);
     expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim")).toHaveLength(1);
     const openBody = posted(fetchMock.mock.calls.find(([input]) => input === "/session/pair/open")?.[1]);
@@ -366,10 +366,10 @@ describe("CordumApp live path uses the runtime handshake", () => {
 
     deliverSurface?.(jsonResponse({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }));
     await waitFor(() => {
-      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("CONNECTED");
+      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
     });
     await waitFor(() => {
-      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Disconnected");
     }, { timeout: 3_500 });
     expect(surfaceReads).toBe(2);
   });

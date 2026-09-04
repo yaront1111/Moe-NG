@@ -116,7 +116,7 @@ export function NewGoalForm({
         onDrop={onDrop}
       >
         <div className="cr2-prd-lead">
-          <span className="cr2-field-label">DROP prd.md OR PASTE TEXT</span>
+          <span className="cr2-field-label">Drop a PRD</span>
           <button
             className="cr2-prd-browse"
             onClick={() => inputRef.current?.click()}
@@ -156,7 +156,7 @@ export function NewGoalForm({
       </div>
 
       <div className="cr2-newgoal-col">
-        <label className="cr2-field-label" htmlFor="cr2-title">TITLE</label>
+        <label className="cr2-field-label" htmlFor="cr2-title">Title</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.title"
@@ -166,7 +166,7 @@ export function NewGoalForm({
           placeholder="Ship the stdio entry point"
           value={title}
         />
-        <label className="cr2-field-label" htmlFor="cr2-outcome">{`OUTCOME ${EMDASH} ONE SENTENCE IS ENOUGH`}</label>
+        <label className="cr2-field-label" htmlFor="cr2-outcome">{`Outcome ${EMDASH} one sentence is enough`}</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
@@ -177,7 +177,7 @@ export function NewGoalForm({
           value={outcome}
         />
         <label className="cr2-field-label" htmlFor="cr2-criteria">
-          {`ACCEPTANCE CRITERIA ${EMDASH} OPTIONAL, ONE PER LINE`}
+          {`Acceptance criteria ${EMDASH} optional, one per line`}
         </label>
         <textarea
           className="cr2-field-area"
@@ -192,33 +192,40 @@ export function NewGoalForm({
       </div>
 
       <div className="cr2-newgoal-col">
-        <label className="cr2-field-label" htmlFor="cr2-budget">BUDGET ENVELOPE</label>
-        <input
-          className="cr2-field-input"
-          data-testid="cr.goals.newgoal.budget"
-          id="cr2-budget"
-          maxLength={256}
-          onChange={(event) => setBudget(event.target.value)}
-          placeholder="Optional, for example 120 min agent time"
-          value={budget}
-        />
-        <label className="cr2-field-label" htmlFor="cr2-risk">RISK CLASS</label>
-        <select
-          className="cr2-field-select"
-          data-testid="cr.goals.newgoal.risk"
-          id="cr2-risk"
-          onChange={(event) => {
-            const value = event.target.value;
-            setRisk(value === "" ? undefined : value as AdvisoryRiskClass);
-          }}
-          value={risk ?? ""}
-        >
-          <option value="">Not supplied</option>
-          {RISK_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-        <p className="cr2-newgoal-caption" data-testid="cr.goals.newgoal.authority-note">
-          Budget and risk are optional advisory requests. Blank means not supplied; daemon policy remains authority.
-        </p>
+        <details className="cr2-newgoal-more" data-testid="cr.goals.newgoal.more">
+          <summary>More</summary>
+          <label className="cr2-field-label" htmlFor="cr2-budget">Budget</label>
+          <input
+            className="cr2-field-input"
+            data-testid="cr.goals.newgoal.budget"
+            id="cr2-budget"
+            maxLength={256}
+            onChange={(event) => setBudget(event.target.value)}
+            placeholder="Optional, for example 120 min agent time"
+            value={budget}
+          />
+          <label className="cr2-field-label" htmlFor="cr2-risk">Risk</label>
+          <select
+            className="cr2-field-select"
+            data-testid="cr.goals.newgoal.risk"
+            id="cr2-risk"
+            onChange={(event) => {
+              const value = event.target.value;
+              setRisk(value === "" ? undefined : value as AdvisoryRiskClass);
+            }}
+            value={risk ?? ""}
+          >
+            <option value="">Not supplied</option>
+            {RISK_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option.charAt(0) + option.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </select>
+          <p className="cr2-newgoal-caption" data-testid="cr.goals.newgoal.authority-note">
+            Budget and risk are optional. Blank means not supplied.
+          </p>
+        </details>
         <div className="cr2-newgoal-actions">
           <ActionButton
             disabled={busy || read === "READING" || outcome.trim() === "" || title.trim() === ""}

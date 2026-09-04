@@ -1,6 +1,7 @@
 import type { CSSProperties, JSX } from "react";
 
 import { StatusChip } from "../components/primitives.js";
+import { freshnessWords } from "../ops/activity-words.js";
 import { CONNECTION_STATES, describeConnection } from "./shell-model.js";
 import type { ConnectionDescriptor, ConnectionState } from "./shell-model.js";
 import "../styles/cordum-status-strip.css";
@@ -56,6 +57,8 @@ export interface StatusStripProps {
   readonly clockPresent: boolean;
   readonly simulatable?: boolean;
   readonly onSimulate?: ((state: ConnectionState) => void) | undefined;
+  /** Last successful daemon answer, frozen until the next poll — not a ticking live region. */
+  readonly answeredAtMs?: number | null | undefined;
 }
 
 export function StatusStrip({
@@ -63,10 +66,14 @@ export function StatusStrip({
   clockPresent,
   simulatable = false,
   onSimulate,
+  answeredAtMs = null,
 }: StatusStripProps): JSX.Element {
   const live = descriptor.live && clockPresent;
   const title = `${sourceTitle(descriptor.key, simulatable)} ${NO_STREAM_TITLE}`;
   const style = { "--relay-tone": `var(${descriptor.toneVar})` } as CSSProperties;
+  const freshness = answeredAtMs === null || descriptor.key === "OFFLINE"
+    ? null
+    : `Daemon answered ${freshnessWords(answeredAtMs, Date.now())}`;
   return (
     <footer
       className="cr2-statusstrip"
@@ -80,7 +87,7 @@ export function StatusStrip({
         data-testid="cr.shell.link.label"
         title={title}
       >
-        DAEMON LINK
+        Daemon link
       </span>
       <span
         aria-hidden="true"
@@ -98,6 +105,9 @@ export function StatusStrip({
       <StatusChip label={descriptor.label} testId="cr.shell.connection" toneVar={descriptor.toneVar} />
       {descriptor.staleLabel === "" ? null : (
         <span className="cr2-stale" data-testid="cr.shell.stale">{descriptor.staleLabel}</span>
+      )}
+      {freshness === null ? null : (
+        <span className="cr2-freshness" data-testid="cr.shell.freshness">{freshness}</span>
       )}
 
       {simulatable ? (

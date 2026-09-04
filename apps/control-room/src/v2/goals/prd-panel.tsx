@@ -3,7 +3,9 @@ import type { JSX } from "react";
 
 import { readGoalSource } from "../../live/live-goal-source.js";
 import type { GoalSourceOutcome } from "../../live/live-goal-source.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid } from "../outcome-words.js";
 
 /**
  * THE PRD, on the goal that binds it. The daemon planned this goal from one stored text;
@@ -25,15 +27,18 @@ export function PrdPanel({ outcome }: PrdPanelProps): JSX.Element {
     return outcome.status === "REFUSED" && outcome.code === "GOAL_SOURCE_UNBOUND"
       ? <p className="cr2-needs-note" data-testid="cr.prd.unbound">This goal was created without a PRD.</p>
       : (
-        <p className="cr2-approve-refusal" data-testid="cr.prd.refusal" role="status">
-          {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
-        </p>
+        <OutcomeNote
+          code={outcome.code}
+          layer={outcome.layer}
+          said={readFailedSaid("PRD")}
+          testId="cr.prd.refusal"
+        />
       );
   }
   return (
     <details className="cr2-approve-inspect cr2-prd" data-testid="cr.prd.root">
       <summary className="cr2-approve-inspect-summary" data-testid="cr.prd.summary">
-        {`THE PRD ${MIDDOT} ${outcome.displayPath} ${MIDDOT} ${String(outcome.byteLength)} bytes ${MIDDOT} ${outcome.mediaType}`}
+        {`PRD ${MIDDOT} ${outcome.displayPath} ${MIDDOT} ${String(outcome.byteLength)} bytes`}
       </summary>
       <p className="cr2-approve-mono" data-testid="cr.prd.digest">{`sha256 ${outcome.contentSha256}`}</p>
       <pre className="cr2-prd-text" data-testid="cr.prd.text">{outcome.text}</pre>

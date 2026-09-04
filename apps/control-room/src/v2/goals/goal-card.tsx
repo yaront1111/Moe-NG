@@ -5,7 +5,14 @@ import { ActionButton, FactRow } from "../components/primitives.js";
 import { TruthChip } from "../components/truth-chip.js";
 import { ARROW_RIGHT } from "../glyphs.js";
 import type { ProofPayload } from "../shell/proof-context.js";
-import type { GoalCardModel, GoalFact, HeadlineTone } from "./goal-model.js";
+import type { GoalCardModel, GoalFact, GoalStateLabel, HeadlineTone } from "./goal-model.js";
+
+const STATE_WORDS: Readonly<Record<GoalStateLabel, string>> = Object.freeze({
+  ACTIVE: "Active",
+  BLOCKED: "Blocked",
+  DONE: "Done",
+  DRAFT: "Draft",
+});
 
 /**
  * One goal card (UI-3): the plain headline, a state label, a one-line human
@@ -97,7 +104,7 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
             >
               {goal.title}
             </button>
-            <span className="cr2-goal-state" data-state={goal.state}>{goal.state}</span>
+            <span className="cr2-goal-state" data-state={goal.state}>{STATE_WORDS[goal.state]}</span>
           </div>
           <div className="cr2-goal-headline">
             <span aria-hidden="true" className="cr2-goal-dot" style={dotStyle} />

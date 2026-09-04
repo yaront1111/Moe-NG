@@ -18,12 +18,12 @@ function catalog(
 describe("deriveGoalCatalog", () => {
   it("renders no synthetic goal while the durable catalog is pending or empty", () => {
     expect(deriveGoalCatalog(null)).toMatchObject({
-      goalCountLabel: "GOAL CATALOG COMING ONLINE",
+      goalCountLabel: "Waiting for goals",
       goals: [],
     });
     expect(deriveGoalCatalog(catalog([]))).toMatchObject({
       comingOnlineNote: "This project has no durable goals yet.",
-      goalCountLabel: "0 GOALS \u00b7 DURABLE CATALOG",
+      goalCountLabel: "0 goals",
       goals: [],
     });
   });
@@ -40,7 +40,7 @@ describe("deriveGoalCatalog", () => {
       },
     ]));
 
-    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
+    expect(data.goalCountLabel).toBe("2 goals");
     expect(data.goals.map((goal) => ({
       goalId: goal.goalId,
       headline: goal.headline,
@@ -48,12 +48,12 @@ describe("deriveGoalCatalog", () => {
     }))).toStrictEqual([
       {
         goalId: "goal-alpha",
-        headline: "Durable GoalCreated record \u00b7 planning run run-alpha",
+        headline: "Recorded in this project",
         title: "goal-alpha",
       },
       {
         goalId: "goal-beta",
-        headline: "Durable GoalCreated record \u00b7 planning run run-beta",
+        headline: "Recorded in this project",
         title: "goal-beta",
       },
     ]);
@@ -223,11 +223,11 @@ describe("deriveGoalCatalog", () => {
 
   it.each([
     [{ connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", goals: [], outcome: "UNDELIVERED" },
-      "DISCONNECTED \u00b7 TRANSPORT_REQUEST_FAILED"],
+      "Could not reach the daemon"],
     [{ connection: "CONNECTED", detail: "GOAL_CATALOG_READ_PROJECT_MISMATCH", goals: [], outcome: "REFUSED" },
-      "REFUSED \u00b7 GOAL_CATALOG_READ_PROJECT_MISMATCH"],
+      "The goals could not be read"],
     [{ connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", goals: [], outcome: "UNREADABLE" },
-      "UNREADABLE \u00b7 LIVE_GOAL_CATALOG_UNREADABLE"],
+      "The goals could not be read"],
   ] satisfies readonly (readonly [GoalCatalogFrame, string])[])(
     "renders catalog failure %s verbatim and without a goal",
     (frame, label) => {

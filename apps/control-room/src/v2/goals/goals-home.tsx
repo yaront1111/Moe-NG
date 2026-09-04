@@ -42,6 +42,14 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
     || goal.headline.toLowerCase().includes(needle);
 }
 
+function glanceRank(goal: GoalCardModel): number {
+  if (goal.needsYou) return 0;
+  if (goal.state === "BLOCKED" || goal.headlineTone === "danger") return 1;
+  if (goal.state === "ACTIVE") return 2;
+  if (goal.state === "DONE") return 4;
+  return 3;
+}
+
 export interface GoalsHomeProps {
   readonly data: GoalsData;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
@@ -75,7 +83,11 @@ export function GoalsHome({
   const [resetToken, setResetToken] = useState(0);
 
   const visible = useMemo(
-    () => data.goals.filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search)),
+    () => data.goals
+      .filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search))
+      .slice()
+      .sort((left, right) => glanceRank(left) - glanceRank(right)
+        || left.title.localeCompare(right.title)),
     [data.goals, filter, search],
   );
 
@@ -175,6 +187,7 @@ export function GoalsHome({
           data-testid="cr.goals.search"
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search goals"
+          type="search"
           value={search}
         />
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid, writeFailedSaid } from "../outcome-words.js";
 import type {
   Gate1ApprovalOutcomeV1, Gate1ApprovalPortV1, Gate1ClarificationViewV1, Gate1PendingViewV1,
   Gate1ReadOutcomeV1,
@@ -144,7 +146,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
 
   return (
     <section className="cr2-approve" data-testid="cr.gate1.card">
-      <p className="cr2-slot-kicker">{`PRODUCT CONTRACT ${MIDDOT} GATE 1 ${MIDDOT} ${goalId}`}</p>
+      <p className="cr2-slot-kicker">Product contract</p>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading">Reading the contract...</p>
       ) : state.outcome.status === "PENDING" ? (
@@ -198,14 +200,20 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
           {`Contract approved ${MIDDOT} the daemon now compiles the plan from it.`}
         </p>
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal">
-          {`${state.outcome.status} ${MIDDOT} ${state.outcome.code} ${MIDDOT} ${state.outcome.layer}`}
-        </p>
+        <OutcomeNote
+          code={state.outcome.code}
+          layer={state.outcome.layer}
+          said={readFailedSaid("contract")}
+          testId="cr.gate1.refusal"
+        />
       )}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal">
-          {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
-        </p>
+        <OutcomeNote
+          code={refusal.code}
+          layer={refusal.layer}
+          said={writeFailedSaid()}
+          testId="cr.gate1.dispatchrefusal"
+        />
       )}
     </section>
   );

@@ -52,6 +52,7 @@ export interface CordumShellProps {
   /** Fixtures mode: show the SIMULATE relay control. */
   readonly simulatable?: boolean;
   readonly initialProofOpen?: boolean;
+  readonly answeredAtMs?: number | null | undefined;
 }
 
 const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
@@ -110,6 +111,7 @@ export function CordumShell({
   initialConnection = null,
   simulatable = false,
   initialProofOpen = false,
+  answeredAtMs = null,
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
@@ -181,6 +183,7 @@ export function CordumShell({
             <ProofInspector onClose={keyboard.collapseInspector} open={proofOpen} payload={proof} />
           </div>
           <StatusStrip
+            answeredAtMs={answeredAtMs}
             clockPresent={clockPresent}
             descriptor={descriptor}
             onSimulate={handleSimulate}

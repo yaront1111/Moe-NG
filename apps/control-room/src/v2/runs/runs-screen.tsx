@@ -1,7 +1,14 @@
 import type { JSX } from "react";
 
-import type { RunGoalView, RunNodeStatus, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import type { RunGoalView, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import { BoardLanes } from "../board/board-lanes.js";
+import { ROUTE_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
+import { seatWords } from "../ops/activity-words.js";
+import { GOAL_WORDS, RUN_WORDS } from "./run-words.js";
+
+export { STATUS_WORDS } from "./run-words.js";
+export { ROUTE_WORDS } from "../board/board-columns.js";
 
 /**
  * RUNS & LEASES: every goal's plan as a ladder of nodes, each node with the one word the
@@ -15,37 +22,6 @@ export interface RunsScreenProps {
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   readonly outcome: RunsOutcome | null;
 }
-
-export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.freeze({
-  ACCEPTED: "Accepted",
-  BLOCKED: "Ledger unreadable",
-  DELIVERED: "Delivered, awaiting the verifier",
-  ESCALATED: "Escalated",
-  ESCALATION_REQUIRED: "Needs escalation",
-  IN_PROGRESS: "In progress",
-  READY: "Ready for an agent",
-  REPLANNED: "Replanned into a successor goal",
-  UNATTRIBUTABLE: "Shared key, not attributable",
-});
-
-/** Lifecycle tokens the daemon folds, in a person's words; an unknown token stays as it is. */
-const GOAL_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  CANCELLED: "Cancelled", CLOSING: "Closing", COMPLETED: "Done", DRAFT: "Draft",
-  EXECUTION_ENABLED: "Active", PLANNING: "Planning", PLAN_REVIEW: "Plan in review",
-});
-const RUN_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  ACTIVATED: "activated", APPROVED: "approved", CANCELLED: "cancelled", DRAFT: "draft",
-  PLANNING: "planning", PLAN_REVIEW: "plan in review", READY: "ready", REJECTED: "rejected",
-  SUBMISSION_DRAINING: "submitting",
-});
-
-export const ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  ACCEPT: "review passed",
-  ESCALATE: "review escalated",
-  REJECT_IMPLEMENTATION: "rejected: implementation",
-  REJECT_PLAN: "rejected: same finding again",
-  UNKNOWN_EVIDENCE: "rejected: evidence unknown",
-});
 
 function ago(iso: string | null, nowMs: number): string | null {
   if (iso === null) return null;
@@ -62,18 +38,16 @@ function ago(iso: string | null, nowMs: number): string | null {
 export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[] {
   const lines: string[] = [];
   if (node.sharedKey) {
-    lines.push("another activated plan carries this node key, so its review ledger cannot be attributed to this goal");
+    lines.push("another activated plan carries this work, so its review cannot be attributed to this goal");
   }
-  if (node.accepted !== null) lines.push(`accepted by the daemon ${MIDDOT} receipt ${node.accepted.verifierReceiptId}`);
+  if (node.accepted !== null) lines.push("accepted by the daemon");
   if (node.receipt !== null) {
-    lines.push(`verifier ran ${node.receipt.test} in ${node.receipt.workspace}, exit ${String(node.receipt.exitCode)},`
-      + ` output ${node.receipt.outputSha256.slice(0, 12)} (${String(node.receipt.byteCount)} bytes)`);
+    lines.push(`verifier ran ${node.receipt.test}, exit ${String(node.receipt.exitCode)}`);
   }
   if (node.landing !== null) {
     lines.push(node.landing.outcome === "COMMITTED"
-      ? `landed as commit ${(node.landing.sha ?? "").slice(0, 10)} on ${node.landing.branch ?? "?"}`
-        + ` ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
-      : `not landed in git: ${node.landing.code ?? "REFUSED"}`);
+      ? `landed on ${node.landing.branch ?? "the workspace branch"} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
+      : "not landed yet");
   }
   if (node.review.rounds > 0) {
     const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;
@@ -81,74 +55,45 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
   }
   if (node.review.unsuccessfulRounds > 0) {
     lines.push(`${String(node.review.unsuccessfulRounds)} unsuccessful`
-      + (node.status === "ESCALATION_REQUIRED" ? `: the daemon refuses more rounds until a human escalates` : ""));
+      + (node.status === "ESCALATION_REQUIRED" ? ": needs your decision before more rounds" : ""));
   }
   if (node.claim !== null) {
-    lines.push(node.claim.active
-      ? `held by ${node.claim.claimedBy} until ${node.claim.expiresAt}`
-      : `last held by ${node.claim.claimedBy} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
+    const who = seatWords(node.claim.claimedBy);
+    if (node.claim.active) {
+      const left = untilWords(node.claim.expiresAt, nowMs);
+      lines.push(left === null ? `${who} ${MIDDOT} lease expired` : `${who} ${MIDDOT} lease ends ${left}`);
+    } else {
+      lines.push(`${who} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
+    }
   }
-  if (node.dependsOn.length > 0) lines.push(`after ${node.dependsOn.join(", ")}`);
+  if (node.dependsOn.length > 0) lines.push("waiting on other work");
   const when = ago(node.lastActivityAt, nowMs);
   if (when !== null) lines.push(`last activity ${when}`);
   return lines;
 }
 
-function NodeRow({ node, nowMs }: { readonly node: RunNodeView; readonly nowMs: number }): JSX.Element {
-  return (
-    <li className="cr2-run-node" data-status={node.status} data-testid={`cr.runs.node.${node.nodeKey}`}>
-      <span className="cr2-run-status" data-testid={`cr.runs.node.${node.nodeKey}.status`}>
-        {STATUS_WORDS[node.status]}
-      </span>
-      <div className="cr2-run-node-main">
-        <p className="cr2-run-node-title">
-          <span className="cr2-approve-mono">{node.nodeKey}</span>
-        </p>
-        <details className="cr2-run-node-objective">
-          <summary className="cr2-run-node-objective-summary">{node.objective}</summary>
-          <p className="cr2-run-node-objective-full">{node.objective}</p>
-        </details>
-        <p className="cr2-run-node-evidence" data-testid={`cr.runs.node.${node.nodeKey}.evidence`}>
-          {nodeEvidence(node, nowMs).join(` ${MIDDOT} `)}
-        </p>
-        {node.review.findings.length === 0 ? null : (
-          <ul className="cr2-run-node-findings" data-testid={`cr.runs.node.${node.nodeKey}.findings`}>
-            {node.review.findings.map((finding, index) => (
-              <li className="cr2-run-node-finding" data-severity={finding.severity} key={`${finding.ruleId}:${String(index)}`}>
-                <span className="cr2-approve-mono">{`${finding.severity} ${MIDDOT} ${finding.ruleId}`}</span>
-                <span className="cr2-approve-step-body">{finding.detail}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {node.criterionIds.length === 0 ? null : (
-          <p className="cr2-run-node-criteria">{`criteria ${node.criterionIds.join(", ")}`}</p>
-        )}
-      </div>
-    </li>
-  );
-}
-
 function runLine(goal: RunGoalView): string {
   if (goal.run === null) return "No plan has been run for this goal yet.";
-  const approval = goal.run.approval === "BOUND" ? "approval bound"
+  const approval = goal.run.approval === "BOUND" ? "approved"
     : goal.run.approval === "ABSENT" ? "awaiting approval" : "approval unreadable";
-  return `Run ${goal.run.runId} ${MIDDOT} ${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
+  return `${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
 }
 
-/** One goal's run and node ladder. `embedded` (the opened goal's own page) drops the title link and kicker. */
+/** One goal as a board. `embedded` (the opened goal's own page) drops the title link and kicker. */
 export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
   readonly embedded?: boolean; readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
 }): JSX.Element {
   const title = goal.title ?? goal.goalId;
   const runRef = goal.run?.runId ?? "";
+  const fold = goal.nodes.length === 0
+    ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED");
   return (
     <section className="cr2-run-goal" data-embedded={embedded ? "true" : undefined} data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
         <div>
           {embedded ? null : (
             <p className="cr2-slot-kicker">
-              {`GOAL ${MIDDOT} ${goal.lifecycle === null ? "lifecycle unknown" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}`}
+              {goal.lifecycle === null ? "Goal" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}
             </p>
           )}
           {embedded ? null : (
@@ -167,26 +112,20 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
           <p className="cr2-run-goal-run" data-testid={`cr.runs.goal.${goal.goalId}.run`}>{runLine(goal)}</p>
         </div>
       </div>
-      {goal.nodes.length === 0 ? (
+      {fold === null ? (
         <p className="cr2-needs-note" data-testid={`cr.runs.goal.${goal.goalId}.empty`}>
-          No nodes yet: they appear once an approved plan is activated.
+          No work yet: it appears once an approved plan is activated.
         </p>
       ) : (
-        <ol className="cr2-run-ladder">
-          {goal.nodes.map((node) => <NodeRow key={node.nodeKey} node={node} nowMs={nowMs} />)}
-        </ol>
+        <BoardLanes criterionStatement={(): null => null} fold={fold} nowMs={nowMs} />
       )}
     </section>
   );
 }
 
-function totalsLine(outcome: Extract<RunsOutcome, { status: "RUNS" }>): string {
-  const { totals } = outcome;
-  const parts = [`${String(totals.nodes)} node${totals.nodes === 1 ? "" : "s"}`];
-  for (const status of ["ACCEPTED", "DELIVERED", "IN_PROGRESS", "READY", "ESCALATION_REQUIRED", "ESCALATED", "BLOCKED", "REPLANNED", "UNATTRIBUTABLE"] as const) {
-    if (totals[status] > 0) parts.push(`${String(totals[status])} ${STATUS_WORDS[status].toLowerCase()}`);
-  }
-  return `${String(totals.goals)} goal${totals.goals === 1 ? "" : "s"} ${MIDDOT} ${parts.join(` ${MIDDOT} `)}`;
+function totalsLine(outcome: Extract<RunsOutcome, { status: "RUNS" }>, nowMs: number): string {
+  const fold = foldBoard(outcome.goals.flatMap((goal) => goal.nodes), nowMs);
+  return `${String(outcome.totals.goals)} goal${outcome.totals.goals === 1 ? "" : "s"} ${MIDDOT} ${nodesLine(fold)}`;
 }
 
 export function RunsScreen({ nowMs, onOpenBoard, outcome }: RunsScreenProps): JSX.Element {
@@ -196,11 +135,11 @@ export function RunsScreen({ nowMs, onOpenBoard, outcome }: RunsScreenProps): JS
         <p className="cr2-slot-kicker" data-testid="cr.runs.loading">Reading the runs...</p>
       ) : outcome.status !== "RUNS" ? (
         <p className="cr2-approve-refusal" data-testid="cr.runs.refusal">
-          {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
+          The runs could not be read right now.
         </p>
       ) : (
         <>
-          <span className="cr2-goals-count" data-testid="cr.runs.totals">{totalsLine(outcome)}</span>
+          <span className="cr2-goals-count" data-testid="cr.runs.totals">{totalsLine(outcome, nowMs)}</span>
           {outcome.goals.length === 0 ? (
             <div className="cr2-goals-empty" data-testid="cr.runs.empty">
               <p className="cr2-goals-empty-title">No goals to run yet.</p>

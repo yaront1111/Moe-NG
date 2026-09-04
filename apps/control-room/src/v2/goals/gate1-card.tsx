@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid, writeFailedSaid } from "../outcome-words.js";
 import type {
   Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1ClarificationView, Gate1PendingView,
   Gate1ReadOutcome,
@@ -158,7 +160,8 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       data-testid="cr.gate1.card"
     >
       <h2 className="cr2-slot-kicker" id={headingId}>
-        {`PRODUCT CONTRACT ${MIDDOT} GATE 1 ${MIDDOT} ${goalId}`}
+        Product contract
+        <span className="cr2-visually-hidden">{` for ${goalId}`}</span>
       </h2>
       {shownState.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading" role="status">
@@ -183,7 +186,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               data-testid={`cr.gate1.question.${row.clarificationId}`}
               key={row.clarificationId}
             >
-              <h3 className="cr2-approve-heading">{`QUESTION ${MIDDOT} ${row.question}`}</h3>
+              <h3 className="cr2-approve-heading">{row.question}</h3>
               {row.options.map((option) => (
                 <ActionButton
                   disabled={busy}
@@ -220,7 +223,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
           </p>
           <Gate1ContractDossier revision={shownState.outcome.revision} />
           <section className="cr2-approve-block" data-testid="cr.gate1.current-slot">
-            <h3 className="cr2-approve-heading">CURRENT SLOT PROVENANCE</h3>
+            <h3 className="cr2-approve-heading">Provenance</h3>
             <dl className="cr2-approve-hashes">
               <dt>project</dt>
               <dd className="cr2-approve-mono">{shownState.outcome.slot.projectId}</dd>
@@ -251,14 +254,22 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
           {`Contract approval accepted ${MIDDOT} no current contract projection was returned.`}
         </p>
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal" role="alert">
-          {`${shownState.outcome.status} ${MIDDOT} ${shownState.outcome.code} ${MIDDOT} ${shownState.outcome.layer}`}
-        </p>
+        <OutcomeNote
+          code={shownState.outcome.code}
+          layer={shownState.outcome.layer}
+          role="alert"
+          said={readFailedSaid("contract")}
+          testId="cr.gate1.refusal"
+        />
       )}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal" role="alert">
-          {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
-        </p>
+        <OutcomeNote
+          code={refusal.code}
+          layer={refusal.layer}
+          role="alert"
+          said={writeFailedSaid()}
+          testId="cr.gate1.dispatchrefusal"
+        />
       )}
     </section>
   );

@@ -31,27 +31,27 @@ export interface ConnectionDescriptor {
   readonly banner: string;
 }
 
-const STALE = "SHOWING STALE DATA";
+const STALE = "Showing stale data";
 
 const CONNECTION: Readonly<Record<ConnectionState, ConnectionDescriptor>> = Object.freeze({
   CONNECTED: {
-    key: "CONNECTED", label: "CONNECTED", toneVar: "--cr-conn-connected",
+    key: "CONNECTED", label: "Connected", toneVar: "--cr-conn-connected",
     live: true, actionsEnabled: true, staleLabel: "", banner: "",
   },
   LAGGING: {
-    key: "LAGGING", label: "LAGGING", toneVar: "--cr-conn-lagging",
+    key: "LAGGING", label: "Lagging", toneVar: "--cr-conn-lagging",
     live: true, actionsEnabled: true, staleLabel: "",
-    banner: "Showing data as of the last relay update; commands remain available.",
+    banner: "Showing data as of the last update; commands remain available.",
   },
   DISCONNECTED: {
-    key: "DISCONNECTED", label: "DISCONNECTED", toneVar: "--cr-conn-disconnected",
+    key: "DISCONNECTED", label: "Disconnected", toneVar: "--cr-conn-disconnected",
     live: false, actionsEnabled: false, staleLabel: STALE,
     banner: "Disconnected from the daemon. Actions stay visible and disabled.",
   },
   HISTORICAL: {
-    key: "HISTORICAL", label: "HISTORICAL", toneVar: "--cr-conn-historical",
+    key: "HISTORICAL", label: "Historical", toneVar: "--cr-conn-historical",
     live: true, actionsEnabled: false, staleLabel: STALE,
-    banner: "Replayed view. Refresh affordances before acting.",
+    banner: "Replayed view. Refresh before acting.",
   },
 });
 
@@ -62,13 +62,12 @@ const CONNECTION: Readonly<Record<ConnectionState, ConnectionDescriptor>> = Obje
  */
 const OFFLINE: ConnectionDescriptor = Object.freeze({
   key: "OFFLINE",
-  label: "COMING ONLINE",
+  label: "Coming online",
   toneVar: "--cr-conn-offline",
   live: false,
   actionsEnabled: false,
   staleLabel: "",
-  banner: "The event relay attaches when the daemon feed lands. Nothing on this "
-    + "surface is shown as a number until the daemon states it.",
+  banner: "Connecting to the daemon. Nothing on this surface is shown as a number until it answers.",
 });
 
 export function describeConnection(state: ConnectionState | null): ConnectionDescriptor {
@@ -105,7 +104,7 @@ export const CORDUM_NAV_ITEMS: readonly NavItem[] = Object.freeze([
     icon: "M5.5 12.5 9.5 16.5 18.5 7.5 M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17Z",
   },
   {
-    id: "runs", label: "Runs & leases",
+    id: "runs", label: "Runs",
     icon: "M7 7h7.5a5.5 5.5 0 0 1 0 11H11 M7 7l3-3 M7 7l3 3 M17 17l-3-3 M17 17l-3 3",
   },
   { id: "resources", label: "Resources", icon: "M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z M12 8v8 M8 12h8" },

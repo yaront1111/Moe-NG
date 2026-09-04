@@ -335,7 +335,7 @@ describe("goal intake validation", () => {
     await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Start a Windows project");
     expect(create.disabled).toBe(false);
     expect(screen.getByTestId("cr.goals.newgoal.authority-note").textContent)
-      .toContain("advisory requests");
+      .toContain("Budget and risk are optional");
     await user.click(create);
     const draft = onCreate.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(draft["budgetEnvelope"]).toBe("");

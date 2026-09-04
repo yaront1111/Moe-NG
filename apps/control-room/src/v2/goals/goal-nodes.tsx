@@ -3,7 +3,8 @@ import type { JSX } from "react";
 
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
-import { MIDDOT } from "../glyphs.js";
+import { OutcomeNote } from "../components/outcome-note.js";
+import { readFailedSaid } from "../outcome-words.js";
 import { GoalSection } from "../runs/runs-screen.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { GoalPublish } from "./goal-publish.js";
@@ -39,13 +40,16 @@ export function GoalNodesPanel({ goalId, nowMs, outcome, publishing }: {
       {publishing === undefined ? null : (
         <GoalPublish frame={publishing.frame} goal={goal ?? null} goalId={goalId} port={publishing.port} />
       )}
-      <h3 className="cr2-approve-heading">{`THE WORK ${MIDDOT} WHAT THE AGENTS DELIVER`}</h3>
+      <h3 className="cr2-approve-heading">The work</h3>
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.goalnodes.loading">Reading the nodes...</p>
       ) : outcome.status !== "RUNS" ? (
-        <p className="cr2-approve-refusal" data-testid="cr.goalnodes.refusal" role="status">
-          {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
-        </p>
+        <OutcomeNote
+          code={outcome.code}
+          layer={outcome.layer}
+          said={readFailedSaid("work")}
+          testId="cr.goalnodes.refusal"
+        />
       ) : goal === undefined ? (
         <p className="cr2-needs-note" data-testid="cr.goalnodes.empty">
           No run is recorded for this goal yet. Nodes appear once a plan is approved and activated.

@@ -80,7 +80,6 @@
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
   letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
   color: var(--cr-accent-text, var(--cr-accent));
 }
 
@@ -103,8 +102,7 @@
 .cr2-kanban-next-kicker {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -156,8 +154,7 @@
   margin: 0 0 8px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -167,9 +164,9 @@
   color: var(--cr-ink);
 }
 
-.cr2-kanban-lane[data-column="DONE"] .cr2-kanban-lane-count { color: var(--cr-accent); }
-.cr2-kanban-lane[data-column="REWORK"][data-count]:not([data-count="0"]) .cr2-kanban-lane-count,
-.cr2-kanban-lane[data-column="BLOCKED"][data-count]:not([data-count="0"]) .cr2-kanban-lane-count { color: var(--cr-danger); }
+.cr2-kanban-lane[data-column="VERIFIED"] .cr2-kanban-lane-count,
+.cr2-kanban-lane[data-column="LANDED"] .cr2-kanban-lane-count,
+.cr2-kanban-lane[data-column="PUBLISHED"] .cr2-kanban-lane-count { color: var(--cr-accent); }
 
 .cr2-kanban-cards {
   list-style: none;
@@ -189,9 +186,10 @@
 
 .cr2-kanban-card[data-column="WORKING"],
 .cr2-kanban-card[data-column="REVIEW"] { border-left-color: var(--cr-ink); }
-.cr2-kanban-card[data-column="DONE"] { border-left-color: var(--cr-accent); }
-.cr2-kanban-card[data-column="REWORK"],
-.cr2-kanban-card[data-column="BLOCKED"] { border-left-color: var(--cr-danger); }
+.cr2-kanban-card[data-column="VERIFIED"],
+.cr2-kanban-card[data-column="LANDED"],
+.cr2-kanban-card[data-column="PUBLISHED"] { border-left-color: var(--cr-accent); }
+.cr2-kanban-card[data-stuck="true"] { border-left-color: var(--cr-danger); }
 
 .cr2-kanban-card-face {
   display: flex;
@@ -247,8 +245,7 @@
   margin: 0;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-micro);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -313,8 +310,7 @@
   margin: 0 0 8px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 

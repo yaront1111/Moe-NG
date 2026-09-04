@@ -52,7 +52,7 @@ function catalog(): GoalCatalogFrame {
 describe("coming-online fields never render a fabricated number", () => {
   it("shows a budget placeholder chip, not a spend number, on a live goal", () => {
     const data = deriveGoalCatalog(catalog());
-    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
+    expect(data.goalCountLabel).toBe("2 goals");
     expect(data.goals.map(({ goalId }) => goalId)).toEqual([
       "goal-durable-alpha", "goal-durable-beta",
     ]);

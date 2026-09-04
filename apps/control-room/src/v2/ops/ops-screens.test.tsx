@@ -44,7 +44,7 @@ describe("verifierWords", () => {
 describe("PolicyScreen", () => {
   it("lists each slice by kind with its digest check and counts, the evaluations, and the waiver note", () => {
     render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
-    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 INSTALLED · 1 EVALUATION · VERSION 3");
+    expect(screen.getByTestId("cr.policy.count").textContent).toBe("2 installed · 1 evaluation · version 3");
     const evaluation = screen.getByTestId(`cr.policy.slice.${"f".repeat(64)}`);
     expect(evaluation.textContent).toContain("Evaluation policy · installed 2 h ago · bytes match the ref");
     expect(evaluation.textContent).toContain("0 rules · 0 auto-approval opt-ins · 7 risk classifications");
@@ -56,7 +56,7 @@ describe("PolicyScreen", () => {
 
   it("names the missing standard slices and offers one install when a wire is attached", () => {
     render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
-    expect(screen.getByTestId("cr.policy.standard").textContent).toContain("1 OF 3 SLICES MISSING");
+    expect(screen.getByTestId("cr.policy.standard").textContent).toContain("1 of 3 slices missing");
     expect(screen.getByTestId("cr.policy.standard.REVIEWER_CALIBRATION").getAttribute("data-installed")).toBe("false");
     expect(screen.getByTestId("cr.policy.install.nowire")).toBeTruthy();
     expect(screen.queryByTestId("cr.policy.install")).toBeNull();
@@ -88,7 +88,7 @@ describe("PolicyScreen", () => {
     expect(screen.getByTestId("cr.policy.loading")).toBeTruthy();
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ code: "LISTENER_POLICY_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.policy.refusal").textContent).toBe("REFUSED · LISTENER_POLICY_UNAVAILABLE · CONTROL_ROOM_LISTENER");
+    expect(screen.getByTestId("cr.policy.refusal").textContent).toContain("The policy could not be read right now.");
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ ...POLICY, evaluations: [], slices: [] }} />);
     expect(screen.getByTestId("cr.policy.empty").textContent).toContain("No policy installed.");

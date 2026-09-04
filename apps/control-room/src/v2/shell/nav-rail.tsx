@@ -148,7 +148,7 @@ export function NavRail({
           type="button"
         >
           <span aria-hidden="true">{legendOpen ? ENDASH : "+"}</span>
-          <span>HOW TO READ CHIPS</span>
+          <span>What these marks mean</span>
         </button>
         {legendOpen ? (
           <div className="cr2-legend-body">

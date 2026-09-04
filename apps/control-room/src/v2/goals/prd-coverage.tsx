@@ -4,7 +4,9 @@ import type { JSX } from "react";
 import type {
   CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid } from "../outcome-words.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -50,12 +52,12 @@ export function coverageBanner(coverage: Coverage): string {
       : "The contract carries no acceptance criteria yet.";
   }
   if (coverageComplete(coverage)) {
-    return `All ${criteria} acceptance criteria VERIFIED by the daemon's verifier`
+    return `All ${criteria} acceptance criteria verified by the daemon's verifier`
       + ` ${MIDDOT} ${contracts} contract${contracts === 1 ? "" : "s"} approved.`
       + " The PRD is built as far as its contract states it. Closing the goal is your call.";
   }
   const unplanned = criteria - verified - planned;
-  return `${verified} of ${criteria} acceptance criteria VERIFIED ${MIDDOT} ${planned} planned`
+  return `${verified} of ${criteria} acceptance criteria verified ${MIDDOT} ${planned} planned`
     + ` ${MIDDOT} ${unplanned} unplanned`
     + (coverage.contracts.some((contract) => contract.gate1 === "PENDING")
       ? ` ${MIDDOT} a contract still awaits Gate 1` : "");
@@ -205,15 +207,18 @@ export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Ele
 
   return (
     <section className="cr2-approve" data-testid="cr.coverage.card">
-      <p className="cr2-slot-kicker">{`PRD COVERAGE ${MIDDOT} ${goalId}`}</p>
+      <p className="cr2-slot-kicker">PRD coverage</p>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.coverage.loading">Reading coverage...</p>
       ) : state.outcome.status === "COVERAGE" ? (
         <CoverageBody coverage={state.outcome} />
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.coverage.refusal">
-          {`${state.outcome.status} ${MIDDOT} ${state.outcome.code} ${MIDDOT} ${state.outcome.layer}`}
-        </p>
+        <OutcomeNote
+          code={state.outcome.code}
+          layer={state.outcome.layer}
+          said={readFailedSaid("coverage")}
+          testId="cr.coverage.refusal"
+        />
       )}
     </section>
   );

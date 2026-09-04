@@ -3,8 +3,10 @@ import type { JSX } from "react";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { RunGoalPublishView, RunGoalView } from "../../live/live-runs.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { writeFailedSaid } from "../outcome-words.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
 import type { PublishPort } from "./publish-port.js";
 
@@ -122,12 +124,17 @@ export function GoalPublish({ frame, goal, goalId, port }: GoalPublishProps): JS
           ) : null}
         </div>
       )}
-      {answer === null ? null : (
+      {answer === null ? null : answer.ok ? (
         <p aria-live="polite" className="cr2-needs-note" data-testid="cr.publish.answer" role="status">
-          {answer.ok
-            ? "Recorded. The wrapper pushes on its next pass; this card says when it did."
-            : `REFUSED ${MIDDOT} ${answer.code} ${MIDDOT} ${answer.layer}`}
+          Recorded. The wrapper pushes on its next pass; this card says when it did.
         </p>
+      ) : (
+        <OutcomeNote
+          code={answer.code}
+          layer={answer.layer}
+          said={writeFailedSaid()}
+          testId="cr.publish.answer"
+        />
       )}
     </section>
   );

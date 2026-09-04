@@ -58,7 +58,7 @@ function coverage(
 describe("deriveNeedsYou", () => {
   it("waits for the catalog and carries a catalog refusal as the note", () => {
     expect(deriveNeedsYou({ catalog: null, coverage: new Map(), surface: null })).toMatchObject({
-      countLabel: "WAITING FOR THE GOAL CATALOG", items: [],
+      countLabel: "Waiting for goals", items: [],
     });
     const refused = deriveNeedsYou({
       catalog: { connection: "CONNECTED", detail: "GOAL_CATALOG_READ_CAPABILITY_DENIED", goals: [], outcome: "REFUSED" },
@@ -77,7 +77,7 @@ describe("deriveNeedsYou", () => {
     expect(data.items.map((item) => [item.kind, item.goalId, item.actionLabel])).toEqual([
       ["PLAN_APPROVAL", "goal-b", "Review the plan"],
     ]);
-    expect(data.countLabel).toBe("1 DECISION · NEEDS YOU");
+    expect(data.countLabel).toBe("1 decision needs you");
     expect(data.note).toBeNull();
     expect(deriveNeedsYou({
       catalog: catalog([entry("goal-b", "Beta")]), coverage: new Map(),
@@ -98,12 +98,12 @@ describe("deriveNeedsYou", () => {
     expect(data.items.map((item) => [item.kind, item.goalId])).toEqual([
       ["GATE_1", "goal-p"], ["READY_TO_CLOSE", "goal-d"],
     ]);
-    expect(data.items[0]?.detail).toContain("contract-goal-p");
+    expect(data.items[0]?.detail).not.toContain("contract-goal-p");
     expect(data.items[0]?.detail).toContain("4 acceptance criteria");
     expect(data.items[1]?.detail).toContain("All 3 acceptance criteria verified");
     expect(data.items[1]?.detail).toContain("not offering to close it yet");
     expect(data.items[1]?.close).toBeUndefined();
-    expect(data.countLabel).toBe("2 DECISIONS · NEEDS YOU");
+    expect(data.countLabel).toBe("2 decisions need you");
   });
 
   it("carries the close decision only when the daemon offers goal.close for that goal", () => {
@@ -155,7 +155,7 @@ describe("deriveNeedsYou", () => {
       escalation: { affordance: offer, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
       goalId: "goal-a", kind: "ESCALATION", planningRunRef: "run-goal-a", title: "Alpha",
     });
-    expect(data.items[0]?.detail).toBe("node-x failed review 3 times (last: REJECT_PLAN). The daemon refuses further rounds until you decide: allow more attempts, or replan the work into a successor goal that carries these findings.");
+    expect(data.items[0]?.detail).toBe("o failed review 3 times (last: rejected: same finding again). Allow more attempts, or replan the work into a successor goal that carries these findings.");
     // Without the runs read the node is still listed, named by itself, with no goal to open.
     const bare = deriveNeedsYou({ catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(), surface: surface([offer]) });
     expect(bare.items[0]).toMatchObject({ goalId: "", planningRunRef: "", title: "node node-x" });

@@ -33,7 +33,7 @@ describe("the Needs-you queue", () => {
     render(<NeedsYou data={DATA} onOpenBoard={onOpenBoard} />);
     expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 DECISIONS · NEEDS YOU");
     const plan = screen.getByTestId("cr.needsyou.item.plan-approval.goal-1");
-    expect(plan.textContent).toContain("PLAN · Alpha");
+    expect(plan.textContent).toContain("Plan · Alpha");
     expect(plan.textContent).toContain("A plan is waiting for your approval");
     expect(screen.getByTestId("cr.needsyou.item.gate-1.goal-2").textContent).toContain("contract-2");
     expect(screen.queryByTestId("cr.needsyou.note")).toBeNull();
@@ -52,7 +52,7 @@ describe("the Needs-you queue", () => {
     };
     const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
     const { rerender } = render(<NeedsYou data={data} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
-    expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("REVIEW EXHAUSTED · Alpha");
+    expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("Review exhausted · Alpha");
     await userEvent.click(screen.getByTestId("cr.needsyou.escalate.node-x"));
     expect(onEscalate).toHaveBeenCalledWith(item);
     // The second answer: replan the work instead of retrying it.
@@ -65,7 +65,8 @@ describe("the Needs-you queue", () => {
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
     rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
-    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toBe("REFUSED · REVIEW_ESCALATION_NOT_REACHED · DAEMON_PREREQUISITE");
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("That didn't go through.");
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("REVIEW_ESCALATION_NOT_REACHED @ DAEMON_PREREQUISITE");
   });
 
   it("asks twice before closing a goal, then shows the daemon's answer", async () => {

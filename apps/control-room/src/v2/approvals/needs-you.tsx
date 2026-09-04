@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { writeFailedSaid } from "../outcome-words.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import type { OfferOutcome } from "./offer-wire.js";
 
@@ -37,10 +39,10 @@ export interface NeedsYouProps {
 }
 
 const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
-  ESCALATION: "REVIEW EXHAUSTED",
-  GATE_1: "PRODUCT CONTRACT",
-  PLAN_APPROVAL: "PLAN",
-  READY_TO_CLOSE: "READY TO CLOSE",
+  ESCALATION: "Review exhausted",
+  GATE_1: "Product contract",
+  PLAN_APPROVAL: "Plan",
+  READY_TO_CLOSE: "Ready to close",
 });
 
 interface InlineDecision {
@@ -85,9 +87,8 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   if (result === undefined) return null;
   if (result.busy) return "Recording your decision...";
   if (result.outcome === null) return null;
-  return result.outcome.ok
-    ? (result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine)
-    : `REFUSED ${MIDDOT} ${result.outcome.code} ${MIDDOT} ${result.outcome.layer}`;
+  if (!result.outcome.ok) return null;
+  return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
 function DecisionCard({ item, onDecide, onOpenBoard, result }: {
@@ -158,6 +159,14 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
         {line === null ? null : (
           <p aria-live="polite" className="cr2-needs-note" data-testid={`cr.needsyou.result.${key}`} role="status">{line}</p>
         )}
+        {result?.outcome !== undefined && result.outcome !== null && !result.outcome.ok ? (
+          <OutcomeNote
+            code={result.outcome.code}
+            layer={result.outcome.layer}
+            said={writeFailedSaid()}
+            testId={`cr.needsyou.result.${key}`}
+          />
+        ) : null}
       </div>
     </li>
   );

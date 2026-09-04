@@ -102,8 +102,15 @@ export function principalWords(principalId: string): string {
 export function agoWords(iso: string, nowMs: number): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return iso;
-  const minutes = Math.max(0, Math.round((nowMs - at) / 60_000));
-  if (minutes < 1) return "just now";
+  return freshnessWords(at, nowMs);
+}
+
+/** "3 s ago" / "just now" from two millisecond instants. Never a live region. */
+export function freshnessWords(readAtMs: number, nowMs: number): string {
+  const seconds = Math.max(0, Math.round((nowMs - readAtMs) / 1000));
+  if (seconds < 2) return "just now";
+  if (seconds < 60) return `${String(seconds)} s ago`;
+  const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${String(minutes)} min ago`;
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`;

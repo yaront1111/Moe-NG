@@ -28,14 +28,14 @@ const RUNS: RunsOutcome = {
 describe("GoalNodesPanel", () => {
   it("renders this goal's node ladder without the Runs screen's title link, and the empty and refusal states", () => {
     render(<GoalNodesPanel goalId="goal-1" nowMs={NOW} outcome={RUNS} />);
-    expect(screen.getByTestId("cr.runs.node.node-a.status").textContent).toBe("Accepted");
+    expect(screen.getByTestId("cr.kanban.card.node-a").textContent).toContain("Build the ledger");
     expect(screen.queryByTestId("cr.runs.goal.goal-1.open")).toBeNull();
     cleanup();
     render(<GoalNodesPanel goalId="goal-other" nowMs={NOW} outcome={RUNS} />);
     expect(screen.getByTestId("cr.goalnodes.empty").textContent).toContain("No run is recorded");
     cleanup();
     render(<GoalNodesPanel goalId="goal-1" nowMs={NOW} outcome={{ code: "RUNS_READ_UNREADABLE", layer: "RUNS_READ", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.goalnodes.refusal").textContent).toBe("REFUSED · RUNS_READ_UNREADABLE · RUNS_READ");
+    expect(screen.getByTestId("cr.goalnodes.refusal").textContent).toContain("The work could not be read right now.");
   });
 });
 
@@ -43,7 +43,7 @@ describe("LiveGoalNodes", () => {
   it("reads the runs scoped to the goal through the injected reader", async () => {
     const read = vi.fn(async (_goalId: string) => RUNS);
     render(<LiveGoalNodes goalId="goal-1" headers={{}} pollMs={60_000} read={read} />);
-    expect((await screen.findByTestId("cr.runs.node.node-a.status")).textContent).toBe("Accepted");
+    expect((await screen.findByTestId("cr.kanban.card.node-a")).textContent).toContain("Build the ledger");
     expect(read).toHaveBeenCalledWith("goal-1");
   });
 });
