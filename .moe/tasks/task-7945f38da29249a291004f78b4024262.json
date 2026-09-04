@@ -192,7 +192,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:04:07.338Z",
-  "updatedAt": "2026-09-04T21:58:27.055Z",
+  "updatedAt": "2026-09-04T21:58:38.295Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:33:53.166Z",
     "plannedStepCount": 8,
@@ -261,7 +261,14 @@
     "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts",
     "docs/agent-stack-runbook.md",
     ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
-    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json"
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+    ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json"
   ],
   "completionSummary": "Dead seats are reclaimed on wrapper start. Two halves that only work together, plus the runbook.\n\nDAEMON RULE (work-claim-services.ts 228->245, code and layer UNCHANGED, semantics widened for RELEASE ONLY): the non-claimant branch in `decide` now consults `holderHasLiveSession` for `work.release`. A holder with NO live session (every session naming that principal CLOSED, expired, or absent at `decidedAt`) falls through to the unchanged release commit, which still records `claimedBy: held.claimedBy`. LIVE (`true`) and UNREADABLE (`null`) both refuse `WORK_CLAIM_NOT_CLAIMANT` / `DAEMON_PREREQUISITE` — the fail-closed shape is `if (live !== false)`. `work.renew` hard-codes `true` and never reads the session ledger.\nNEW: apps/daemon/src/work/work-claim-holder-liveness.ts (52) + .js bridge — `holderHasLiveSession(store, projectId, claimant, decidedAt): boolean|null`; matches `sessionId === claimant || principalId === claimant` (a seat's working principal IS its session id, session-authenticator.ts:137), status OPEN, exclusive expiry by lexicographic ISO compare. Split out so the services file stays <=250. `identity/session-read-model.ts` imports nothing from `work/`: no cycle.\n\nWRAPPER BOOT PASS, three new modules + bridges under apps/daemon/src/orchestrator/:\n- agent-wrapper-reclaim.ts (235): `RECLAIM_OUTCOMES` = RECLAIMED, KEPT_ALIVE, KEPT_PID_UNKNOWN, KEPT_LIVENESS_UNKNOWN, CLOSE_REFUSED, RELEASE_REFUSED, RETIRE_FAILED; `ReclaimReport {code, outcome, sessionId, workItemId}` (the refusing code is its OWN field, not a `RELEASE_REFUSED:<code>` substring); `enumerateLiveChildren(store, log?)` over `enumerateAggregateIdsByPrefix(\"wrapper-staffing/\")` + `readEvents`; `runReclaimPass(config)`.\n- agent-wrapper-reclaim-records.ts (79): `liveChildOf(events)` — last transition wins, ADMITTED=live, RETIRED=idle, unknown type/undecodable payload = UNREADABLE (skipped with a log line, never a throw).\n- agent-wrapper-reclaim-dispatch.ts (83): `createReclaimDispatch` + `actualVersion",
   "commits": [
@@ -308,6 +315,36 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "0534b3681a89308f40a5fc844499cdbae83b2601",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T21:44:12Z",
+      "paths": [
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T21:58:38.295Z",
+      "treeId": "1ab5ba4221b22ee9312591d365ec7f9f8d84755c",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -326,49 +363,12 @@
     "apps/daemon/src/work/work-claim-holder-liveness.ts",
     "apps/daemon/src/orchestrator/agent-wrapper-reclaim-records.ts"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/a11y/keyboard-map.ts",
-    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
-    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
-    "apps/control-room/src/v2/approvals/needs-you.tsx",
-    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
-    "apps/control-room/src/v2/approvals/needs-you-model.ts",
-    "apps/control-room/src/v2/board/board-columns.test.ts",
-    "apps/control-room/src/v2/board/board-columns.ts",
-    "apps/control-room/src/v2/board/board-lanes.tsx",
-    "apps/control-room/src/v2/components/outcome-note.tsx",
-    "apps/control-room/src/v2/goals/approve-plan.tsx",
-    "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
-    "apps/control-room/src/v2/goals/gate1-card.tsx",
-    "apps/control-room/src/v2/goals/gate1-v1-card.tsx",
-    "apps/control-room/src/v2/goals/goal-card.tsx",
-    "apps/control-room/src/v2/goals/goal-catalog-model.test.ts",
-    "apps/control-room/src/v2/goals/goal-catalog-model.ts",
-    "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
-    "apps/control-room/src/v2/goals/goal-publish.tsx",
-    "apps/control-room/src/v2/goals/goals-home.test.tsx",
-    "apps/control-room/src/v2/goals/goals-home.tsx",
-    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
-    "apps/control-room/src/v2/goals/new-goal-form.tsx",
-    "apps/control-room/src/v2/ops/activity-words.ts",
-    "apps/control-room/src/v2/outcome-words.test.ts",
-    "apps/control-room/src/v2/outcome-words.ts",
-    "apps/control-room/src/v2/runs/live-runs.test.tsx",
-    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
-    "apps/control-room/src/v2/runs/runs-screen.tsx",
-    "apps/control-room/src/v2/runs/run-words.ts",
-    "apps/control-room/src/v2/shell/nav-rail.tsx",
-    "apps/control-room/src/v2/shell/shell-model.ts",
-    "apps/control-room/src/v2/styles/cordum-board.css",
-    "apps/control-room/src/v2/styles/cordum-goals.css",
-    "apps/control-room/src/v2/styles/cordum-shell.css",
-    "apps/control-room/src/v2/styles/cordum-tokens.css"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-04T20:19:57Z",
-    "at": "2026-09-04T21:40:28.895Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T21:44:12Z",
+    "at": "2026-09-04T21:58:38.295Z"
   },
   "completedAt": "2026-09-04T21:58:27.055Z",
   "reviewCompletedAt": "2026-09-04T21:58:27.055Z",

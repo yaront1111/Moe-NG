@@ -60,7 +60,24 @@ function boundWorld(): SqliteEventStore {
   return store;
 }
 
-function committedRevision(store: SqliteEventStore): ProductContractRevisionRef {
+/** The third criterion exists so a THREE-node graph can bind every criterion exactly once;
+ *  it is opt-in so every single-slice arm keeps its two-criterion revision byte-identical. */
+const THIRD_CRITERION = Object.freeze({
+  criterion: Object.freeze({
+    criterionId: "crit-worker", requirementId: "req-worker",
+    statement: "The worker refreshes the record the page renders.",
+    supersedesCriterionId: null,
+  }),
+  requirement: Object.freeze({
+    requirementId: "req-worker",
+    statement: "Operators see the record stay fresh without asking.",
+    supersedesRequirementId: null,
+  }),
+});
+
+function committedRevision(
+  store: SqliteEventStore, thirdCriterion = false,
+): ProductContractRevisionRef {
   const committed = runProductContractProposeRevision(store, {
     correlationId: "corr-dispatch-writer",
     decidedAt: "2026-08-30T12:00:00.000Z",
@@ -79,6 +96,7 @@ function committedRevision(store: SqliteEventStore): ProductContractRevisionRef 
             statement: "The page renders the record the API answered.",
             supersedesCriterionId: null,
           },
+          ...(thirdCriterion ? [THIRD_CRITERION.criterion] : []),
         ],
         lineage: null,
         requirements: [
@@ -92,6 +110,7 @@ function committedRevision(store: SqliteEventStore): ProductContractRevisionRef 
             statement: "Operators can see the record in the page.",
             supersedesRequirementId: null,
           },
+          ...(thirdCriterion ? [THIRD_CRITERION.requirement] : []),
         ],
         retiredCriterionIds: [],
         retiredRequirementIds: [],
@@ -157,17 +176,39 @@ const NODE_SCOPES = Object.freeze({
   writeScopes: ["services/api/src/node"],
 });
 
-function structureOf(): Record<string, unknown> {
-  // ONE node: an INITIAL run seals exactly one execution-bearing node by core
-  // design (multi-node arrives through EXPANSION runs). The single slice covers
-  // every criterion of the approved revision.
+function nodeOf(
+  nodeKey: string,
+  criterionIds: readonly string[],
+  dependsOn: readonly string[] = [],
+  objective = `Land the ${nodeKey} slice.`,
+): Record<string, unknown> {
   return {
-    completionNodeKey: "node-slice",
-    nodes: [
-      { ...NODE_SCOPES, criterionIds: ["crit-api", "crit-ui"], dependsOn: [],
-        nodeKey: "node-slice", objective: "Land the record read and its page." },
-    ],
+    ...NODE_SCOPES, criterionIds: [...criterionIds], dependsOn: [...dependsOn], nodeKey, objective,
   };
+}
+
+/** The SINGLE-SLICE default, unchanged: N=1 is one shape the compiler admits, not the only one. */
+function structureOf(
+  nodes: readonly Record<string, unknown>[] = [
+    nodeOf("node-slice", ["crit-api", "crit-ui"], [], "Land the record read and its page."),
+  ],
+  completionNodeKey = "node-slice",
+): Record<string, unknown> {
+  return { completionNodeKey, nodes: nodes.map((node) => ({ ...node })) };
+}
+
+/** c -> b -> a: a REAL hard chain, each criterion bound by exactly one node. Nothing depends
+ *  on node-c, so it is the completion node (a dependency ON the completion node is refused). */
+const CHAIN_NODES: readonly Record<string, unknown>[] = Object.freeze([
+  nodeOf("node-a", ["crit-api"]),
+  nodeOf("node-b", ["crit-ui"], ["node-a"]),
+  nodeOf("node-c", ["crit-worker"], ["node-b"]),
+]);
+
+function chainStructure(
+  nodes: readonly Record<string, unknown>[] = CHAIN_NODES,
+): Record<string, unknown> {
+  return structureOf(nodes, "node-c");
 }
 
 function submit(
@@ -191,7 +232,111 @@ function submit(
   });
 }
 
+/** The layer the DAG-coherence refusals carry. The dispatcher forwards the producer's own code
+ *  AND layer (`refused(compiled.code, compiled.layer)`), so the arms below pin BOTH: more than
+ *  one layer can refuse a malformed structure, and a bare "it refused" assertion would stay
+ *  green if the wrong one answered first — which is exactly what the node-count fence did. */
+const PRODUCER = "COMPILED_PLAN_PRODUCER";
+
+function refusalOf(
+  store: SqliteEventStore, ref: ProductContractRevisionRef, structure: Record<string, unknown>,
+): string {
+  const result = submit(store, ref, { structure });
+  return result.ok ? "ACCEPTED" : `${result.code} @ ${result.layer}`;
+}
+
 describe("runSubmitDecomposition", () => {
+  it("SEALS a three-node INITIAL graph with a hard c->b->a chain: node count is not a fence", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+
+    const sealed = submit(store, ref, { structure: chainStructure() });
+    if (!sealed.ok) throw new Error(`three-node dispatch refused: ${sealed.code} @ ${sealed.layer}`);
+    // NOT merely "it did not refuse": a refusal arm that stopped returning a code would pass
+    // that. The graph is only sealed if BOTH hashes came back and the run actually decided.
+    expect(sealed.disposition).toBe("DECIDED");
+    expect(typeof sealed.graphContentHash).toBe("string");
+    expect(sealed.graphContentHash.length).toBeGreaterThan(0);
+    expect(typeof sealed.submissionHash).toBe("string");
+    expect(sealed.submissionHash.length).toBeGreaterThan(0);
+    expect(sealed.runId).toBe(RUN_ID);
+    // Proposed (one fold decision) + finalized (a second): sealed exactly like a single slice.
+    expect(store.getAggregateVersion(RUN_ID)).toBe(2);
+  });
+
+  it("still seals N=1: lifting the count fence did not trade one node limit for another", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+
+    const sealed = submit(store, ref);
+    if (!sealed.ok) throw new Error(`single-node dispatch refused: ${sealed.code}`);
+    expect(sealed.disposition).toBe("DECIDED");
+    expect(sealed.graphContentHash.length).toBeGreaterThan(0);
+    expect(sealed.submissionHash.length).toBeGreaterThan(0);
+  });
+
+  it("refuses an incoherent DAG at the compiled-plan producer, with the count fence irrelevant", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const bothCriteria = ["crit-api", "crit-ui"];
+    // SINGLE-node forms, so no node-count arm can answer instead: these prove the coherence
+    // fence stands on its own. It is what REPLACES the retired count fence.
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", bothCriteria, ["node-ghost"]),
+    ]))).toBe(`COMPILED_PLAN_MALFORMED @ ${PRODUCER}`);
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", bothCriteria, ["node-slice"]),
+    ]))).toBe(`COMPILED_PLAN_MALFORMED @ ${PRODUCER}`);
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", ["crit-api"]),
+    ]))).toBe(`COMPILED_PLAN_CRITERION_UNBOUND @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
+  it("keeps refusing an incoherent DAG once N>1 is admitted: the coherence fence is the fence", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    const malformed = `COMPILED_PLAN_MALFORMED @ ${PRODUCER}`;
+    // An unknown dependsOn target anywhere in the chain.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, dependsOn: ["node-ghost"] },
+    ]))).toBe(malformed);
+    // A self-edge in the middle of the chain.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, { ...nodeB!, dependsOn: ["node-b"] }, nodeC!,
+    ]))).toBe(malformed);
+    // A dependency ON the completion node — the chain read backwards, which cannot execute.
+    expect(refusalOf(store, ref, chainStructure([
+      { ...nodeA!, dependsOn: ["node-c"] }, nodeB!, nodeC!,
+    ]))).toBe(malformed);
+    // A criterion bound by no node: the coverage duty is per GRAPH, not per node.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, criterionIds: [] },
+    ]))).toBe(`COMPILED_PLAN_CRITERION_UNBOUND @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
+  it("refuses a dependsOn CYCLE, which only a multi-node graph can express", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    // a <-> b: every target is a known node, no self-edge, nothing depends on the completion
+    // node, every criterion bound once — so it clears every arm in `shapeRefusal` and is caught
+    // deeper, by the graph codec's own admission. Pinned because a cycle that SEALED would
+    // deadlock the dependency gate rather than refuse at the surface: no node is ever READY.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeOf("node-a", ["crit-api"], ["node-b"]),
+      nodeOf("node-b", ["crit-ui"], ["node-a"]),
+      nodeOf("node-c", ["crit-worker"], ["node-b"]),
+    ]))).toBe(`COMPILED_PLAN_ADMISSION_REFUSED @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
   it("drives the approved contract to a REVIEWABLE single-slice plan, and resumes idempotently", () => {
     const store = boundWorld();
     const ref = committedRevision(store);

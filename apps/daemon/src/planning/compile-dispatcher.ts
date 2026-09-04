@@ -48,7 +48,6 @@ export const SUBMIT_DECOMPOSITION_CODES = Object.freeze([
   "SUBMIT_DECOMPOSITION_MALFORMED",
   "SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH",
   "SUBMIT_DECOMPOSITION_ALREADY_FINALIZED",
-  "SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL",
 ] as const);
 
 export interface SubmitDecompositionInput {
@@ -188,14 +187,11 @@ export function runSubmitDecomposition(
   if (!stringField(completionNodeKey) || !Array.isArray(nodes)) {
     return refused("SUBMIT_DECOMPOSITION_MALFORMED");
   }
-  // CORE DESIGN, discovered at the finalize reducer (planning-run-submission.ts):
-  // an INITIAL run seals exactly ONE execution-bearing node — "plan the smallest
-  // complete slice" is a fence, not advice. Growth is the EXPANSION machinery's
-  // (graph.request_expansion), whose runs are inherently multi-node. Refusing
-  // here, with the path named, beats sealing a plan finalize must reject.
-  if (nodes.length > 1) {
-    return refused("SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL");
-  }
+  // NODE COUNT IS UNCONSTRAINED HERE: an INITIAL run seals the WHOLE graph. What a plan must
+  // satisfy is DAG COHERENCE, enforced by `compiledPlanAuthority` below — an unknown or
+  // self-referential `dependsOn` target and a dependency on the completion node refuse
+  // COMPILED_PLAN_MALFORMED, a criterion bound by no node refuses
+  // COMPILED_PLAN_CRITERION_UNBOUND, and COMPILED_PLAN_NODE_BUDGET caps the roster.
   // THE RISK FACTS ARE THE DAEMON'S, never the agent's. The agent's structure
   // carries the PLAN — nodeKey, objective, criterion bindings, build order —
   // and the dispatcher states capability/scopes/resources/recipes from the

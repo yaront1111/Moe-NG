@@ -15,13 +15,16 @@
  * receipt. Nothing is planted.
  *
  * THE COMPILER FENCES THE REACHABLE STATES, and they are not the ones a naive plan assumes:
- * `runSubmitDecomposition` refuses `nodes.length > 1` (SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL —
- * an INITIAL run seals exactly one node) and refuses a node that leaves any contract criterion
- * unbound (COMPILED_PLAN_CRITERION_UNBOUND). So a single contract can never sit at "some
- * criteria verified": its one node carries all of them and one acceptance verifies all of them.
- * A strict 0 < verified < criteria is reachable — and is asserted below — only with a SECOND
- * contract citing the same document whose criterion ids are DISTINCT, which is exactly the
- * "another Product Contract is still pending Gate 1" state a real product sits in.
+ * `runSubmitDecomposition` admits N nodes — an INITIAL run seals the WHOLE graph — but the
+ * compiled-plan producer still refuses a graph that leaves any contract criterion bound by no
+ * node (COMPILED_PLAN_CRITERION_UNBOUND). COVERAGE, not node count, is the fence, so a contract
+ * can never be PLANNED into partial coverage: whatever its node count, every one of its approved
+ * criteria is bound somewhere in the sealed graph. The strict 0 < verified < criteria asserted
+ * below is reached the way a real product reaches it — with a SECOND contract citing the same
+ * document whose criterion ids are DISTINCT, which is exactly the "another Product Contract is
+ * still pending Gate 1" state. (A multi-node graph can of course sit part-verified mid-build,
+ * as its nodes are accepted one at a time; that is a different state from the one these arms
+ * pin, and no arm here depends on it being unreachable.)
  */
 import type { JsonObject } from "@moe/contracts";
 import { SqliteEventStore } from "@moe/store";
@@ -104,7 +107,9 @@ function stubPort(answer: DocumentCoverageReadResult | (() => never)): StubPort 
 }
 
 /** A COVERAGE view carrying the given totals; every other field is the read's own empty shape. */
-function view(totals: { contracts: number; criteria: number; verified: number }): DocumentCoverageReadResult {
+function view(totals: {
+  contracts: number; criteria: number; unattributable?: number; verified: number;
+}): DocumentCoverageReadResult {
   return {
     contracts: Array.from({ length: totals.contracts }, (_unused, index) => ({
       contractId: `contract-${index}`, gate1: "APPROVED" as const, plane: "V1" as const,
@@ -114,7 +119,7 @@ function view(totals: { contracts: number; criteria: number; verified: number })
     goals: [], outcome: "COVERAGE", sections: null,
     totals: {
       contracts: totals.contracts, criteria: totals.criteria, goals: 1, planned: 0,
-      requirements: 0, unattributable: 0, verified: totals.verified,
+      requirements: 0, unattributable: totals.unattributable ?? 0, verified: totals.verified,
     },
   };
 }
@@ -279,6 +284,17 @@ describe("readGoalCloseReadiness", () => {
     // One short. This is the arm a `>=  criteria - 1` mutation reddens.
     expect(readGoalCloseReadiness(stubPort(view({ contracts: 1, criteria: 3, verified: 2 })), GOAL_ID))
       .toEqual({ criteria: 3, kind: "NOT_READY", verified: 2 });
+  });
+
+  it("never counts an UNATTRIBUTABLE criterion as verified", () => {
+    // A criterion whose node key is carried by a SECOND activated plan reads UNATTRIBUTABLE
+    // (document-coverage-read.ts:227): the coverage read cannot say which plan verified it, so
+    // it is its own total and is NOT folded into `verified`. Readiness compares verified with
+    // criteria and therefore stays NOT_READY — ambiguous attribution never closes a goal. The
+    // arm pins that arithmetic at the seam instead of trusting the two totals to stay disjoint.
+    expect(readGoalCloseReadiness(
+      stubPort(view({ contracts: 1, criteria: 3, unattributable: 1, verified: 2 })), GOAL_ID,
+    )).toEqual({ criteria: 3, kind: "NOT_READY", verified: 2 });
   });
 
   it("reads READY only when every criterion is verified", () => {

@@ -27,15 +27,25 @@ describe("compilerMission", () => {
     expect(text).not.toContain("Suggested development payload");
   });
 
-  it("briefs the decomposition step: structure only, one slice, policy park stops", () => {
+  it("briefs the decomposition step: structure only, the COMPLETE graph, policy park stops", () => {
     const text = compilerMission(
       "planning.submit_decomposition@run-1",
       "planning.submit_decomposition", EXPIRES, "run-1",
     );
     expect(text).toContain("gateRef");
     expect(text).toContain("product_contract_read");
-    expect(text).toContain("SMALLEST COMPLETE SLICE");
-    expect(text).toContain("exactly ONE node");
+    expect(text).toContain(
+      "Plan the COMPLETE GRAPH as a dependency DAG: each criterion of the approved revision"
+      + " bound by a single node, none left unbound and none bound twice, and dependsOn naming"
+      + " the hard build order",
+    );
+    expect(text).toContain(
+      "No self-edge, no unknown target, and nothing may depend on the completionNodeKey.",
+    );
+    // The seat is no longer told to plan one node — the daemon stopped refusing more, so the
+    // retired instruction must not creep back in and starve the graph the compiler now seals.
+    expect(text).not.toContain("exactly ONE node");
+    expect(text).not.toContain("SMALLEST COMPLETE SLICE");
     expect(text).toContain("never authority bytes");
     expect(text).toContain("RUN_POLICY_UNCLASSIFIABLE");
     expect(text).not.toContain("Suggested development payload");
