@@ -150,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:26:39.551Z",
-  "updatedAt": "2026-09-04T17:32:00.874Z",
+  "updatedAt": "2026-09-04T17:32:11.762Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:29:30.115Z",
     "plannedStepCount": 6,
@@ -292,6 +292,23 @@
       "treeId": "c58d9448fc84e14b68b1720846cad101b878f692",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "bb1afdf6eb1292be542a2249f188f05cb80d5015",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-fd0e9639@2026-09-04T16:55:10Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "recordedBy": "worker-fd0e9639",
+      "recordedAt": "2026-09-04T17:32:11.762Z",
+      "treeId": "a5ff8de699afd88fa900c2f4dcdea480ff150893",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -306,7 +323,9 @@
     "apps/daemon/src/planning/current-planning-run.js",
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts",
-    "packages/core/src/supersession/supersession-engine.test.ts"
+    "packages/core/src/supersession/supersession-engine.test.ts",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json"
   ],
   "touchedFiles": [
     ".tmp-drill4.py",
@@ -332,9 +351,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-98a2c60b@2026-09-04T15:15:11Z",
-    "at": "2026-09-04T15:15:24.978Z"
+    "kind": "completion",
+    "sessionId": "worker-fd0e9639@2026-09-04T16:55:10Z",
+    "at": "2026-09-04T17:32:11.762Z"
   },
   "reviewStartedAt": "2026-09-04T17:32:00.873Z",
   "verification": {
