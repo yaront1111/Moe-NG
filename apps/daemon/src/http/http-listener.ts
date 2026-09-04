@@ -15,6 +15,7 @@ import type { ActivationReadPort } from "./activation-read.js";
 import type { HealthReadPort } from "./health-read.js";
 import type { ActivityReadPort } from "./activity-read.js";
 import type { SessionsReadPort } from "./sessions-read.js";
+import type { RepositoryRemoteReadPort } from "./repository-remote-read.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type {
   ProductContractV2CurrentReadPort,
@@ -148,6 +149,8 @@ export interface StartListenerOptions {
   readonly activity?: ActivityReadPort;
   /** Absent means the sessions read refuses as unavailable. */
   readonly sessions?: SessionsReadPort;
+  /** Absent means the repository-remote read refuses as unavailable. */
+  readonly repositoryRemote?: RepositoryRemoteReadPort;
   /** Absent means the goal-source (PRD text) read refuses as unavailable. */
   readonly goalSource?: GoalSourceReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
