@@ -115,15 +115,25 @@ function zeroAuthority(
     return refuse(GOAL_CLOSE_AUTHORITY_REMAINS, "the durable activation stream is unreadable");
   }
   // ONLY a Foundation leg ever took a lease and an effect, so only a Foundation leg can account
-  // for one. A live node has no activation to name; an activation that names one is unaccounted
-  // and refuses below, exactly as an activation naming an out-of-scope node always did.
+  // for one. The filter is what makes `entry.receipt` well typed; the LIVE set below is what
+  // makes the rule bite.
   const byNode = new Map(bound
     .filter((entry) => entry.leg === "FOUNDATION")
     .map((entry) => [entry.nodeRef, entry.receipt]));
+  const liveNodes = new Set(bound
+    .filter((entry) => entry.leg === "LIVE").map((entry) => entry.nodeRef));
   for (const account of accounts) {
     if (account.nodeKey === null) {
       return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
         "a durable activation has no readable attempt record");
+    }
+    // A live node holds NO receipt to name a lease and an effect, so a durable activation that
+    // names one is authority this closure cannot account for. Skipping it — which is what a
+    // plain `byNode` miss does — would let the live leg close over exactly the authority design
+    // 278 asks it to prove gone, so the live leg refuses instead of continuing.
+    if (liveNodes.has(account.nodeKey)) {
+      return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
+        "a durable activation names a node proved on the live leg");
     }
     const receipt = byNode.get(account.nodeKey);
     if (receipt === undefined) continue;

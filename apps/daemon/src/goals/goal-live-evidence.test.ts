@@ -14,6 +14,7 @@ import {
   cleanupGoalClosureFixtures,
   closeGoalThroughCommandPath,
   seedLandingReceipt,
+  seedProvenAttempt,
   seedReviewAcceptance,
   seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
@@ -255,6 +256,39 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
   }, GOAL_WORLD_BOUND_MS);
 
   /**
+   * THE HOLE THE LIVE LEG WOULD OTHERWISE OPEN. Design 278 asks the closure to prove no
+   * execution authority outlives the goal, and the only durable instrument for that is the
+   * activation ledger: every activation must be the one its node's PASSED receipt names. A LIVE
+   * node has no receipt, so before this arm a durable activation naming one hit a plain
+   * `byNode` miss and was SKIPPED — the goal closed over an unaccounted lease and effect.
+   * Foundation could not reach this state, because a receipt-less node refused
+   * RECEIPT_ABSENT long before `zeroAuthority` ran; the live leg is what makes it reachable,
+   * so the live leg is what must refuse.
+   *
+   * The world is built by the PRODUCTION dispatch path: `seedProvenAttempt` is the first half
+   * of `seedVerifiedNode` and writes the activation, so stopping there leaves an activation
+   * whose node carries acceptance but no verification receipt.
+   */
+  it.runIf(WINDOWS_ONLY)("refuses AUTHORITY_REMAINS when an activation names a live node", async () => {
+    const store = openStore();
+    await seedProvenAttempt(store, ACTIVATION_WORLD_NODE_KEY, [ACTIVATION_WORLD_NODE_KEY]);
+    seedReviewAcceptance(store, ACTIVATION_WORLD_NODE_KEY);
+    seedLandingReceipt(store, ACTIVATION_WORLD_NODE_KEY, "COMMITTED");
+    const before = snapshot(store);
+
+    const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    // The node IS otherwise closable — acceptance, verifier receipt and a COMMITTED landing all
+    // hold — so the refusal below is the activation rule and nothing else.
+    expect(readLiveNodeEvidence(store, PROJECT_ID, ACTIVATION_WORLD_NODE_KEY,
+      acceptanceOf(store, ACTIVATION_WORLD_NODE_KEY)))
+      .toMatchObject({ landing: "COMMITTED", leg: "LIVE" });
+    expectRefusedExactly(outcome, "GOAL_CLOSE_AUTHORITY_REMAINS",
+      "a durable activation names a node proved on the live leg");
+    expectUnmoved(store, before);
+  }, GOAL_WORLD_BOUND_MS);
+
+  /**
    * A Foundation proof and a live proof OF THE SAME NODE must never derive the same refs — the
    * leg tag is in every preimage precisely so one cannot be replayed as the other.
    */
@@ -318,11 +352,15 @@ describe("the live leg through the shipped operator command path", () => {
       { lifecycle?: string } | undefined)?.lifecycle).toBe("COMPLETED");
 
     // The SECOND close is refused by the CORE, not by this daemon leg: the evidence is still
-    // there, and it is the goal's own lifecycle that says no.
+    // there, and it is the goal's own lifecycle that says no. Pinned POSITIVELY — code, layer
+    // and the state the reducer names — because `not.toBe("DAEMON_PREREQUISITE")` would stay
+    // green if the daemon leg started refusing under any other layer and the core never ran.
     const again = closeGoalThroughCommandPath(store, 4, "cmd-j1-goal-close-2");
     expect(again.ok).toBe(false);
-    if (again.ok) return;
-    expect(again.refusal.layer).not.toBe("DAEMON_PREREQUISITE");
+    if (again.outcome !== "PORT_REFUSED") throw new Error(`expected a port refusal: ${again.outcome}`);
+    expect(again.refusal.code).toBe("ILLEGAL_TRANSITION");
+    expect(again.refusal.layer).toBe("CORE_REDUCER");
+    expect(again.refusal.detail).toContain("sourceState=COMPLETED");
     expect(store.readEvents(GOAL_ID)
       .filter((event) => event.eventType === "GoalCompleted")).toHaveLength(1);
   });

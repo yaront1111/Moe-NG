@@ -22,12 +22,14 @@ import { scanGlobalEvents, seedReviewAcceptance } from "./goal-closure-test-fixt
  * (see `mem:pattern-prove-a-published-package-root-with-plain-node`). The fixtures supply
  * request DATA only; the pipeline, the handler tables and the vocabulary are all root exports.
  *
- * THE THIRD HUMAN ACTION IS ATTEMPTED AND REFUSED, and that is what production does today rather
- * than a weakening of the claim. `goal.close` needs a durable Foundation verification receipt,
- * which needs a committed activation no test world can produce. Governor ruling
- * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 forbids manufacturing one, so the journey
- * still ISSUES the third action, pins the exact refusal, and proves the goal is not left parked
- * mid-closure and that the published vocabulary holds no fourth human action to rescue it with.
+ * THE THIRD HUMAN ACTION NOW COMPLETES (task-ae6fd9ac). It used to be attempted and refused:
+ * `goal.close` demanded a durable Foundation verification receipt, which needs a committed
+ * activation no test world can produce, and governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 forbids manufacturing one. Qualification now
+ * also accepts the LIVE loop's evidence — the review acceptance, the verifier receipt it names,
+ * and the landing rule — all of which the shipped writers produce here. No activation is
+ * manufactured (`expectUnactivatedWorld` still measures zero, store-wide); the journey simply
+ * reaches its accepted terminal state, which is what design 1095 says J1 is.
  */
 
 const encoder = new TextEncoder();
@@ -67,15 +69,6 @@ const HANDLERS: daemon.HandlerTable = Object.freeze({
 function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcome {
   return daemon.runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), HANDLERS);
 }
-
-/** The frozen tuple the third human action answers with, restated by hand in full. */
-const NO_RECEIPT_REFUSAL = Object.freeze({
-  advisoryOnly: true,
-  authority: "NONE",
-  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-  ok: false,
-  refusedBy: "DAEMON_PREREQUISITE",
-});
 
 /** No committed activation ANYWHERE in the store, with the journey's own events as the positive
  *  control: a store-wide walk, not one guessed aggregate. */
@@ -168,7 +161,7 @@ describe("J1 command vocabulary", () => {
 });
 
 describe("J1 is exactly three human actions (design 1095)", () => {
-  it("issues the third human action and is refused, leaving no half-closed goal", () => {
+  it("issues the third human action and the goal reaches its accepted terminal state", () => {
     const store = openStore();
     const sequence = bootstrapSequence();
     const humanKinds: string[] = [];
@@ -182,8 +175,8 @@ describe("J1 is exactly three human actions (design 1095)", () => {
         seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
       }
       if (request.kind === "goal.close") {
-        // The REVIEWED half is real and production-driven, so the refusal below is the receipt
-        // fence rather than the review one.
+        // The REVIEWED half is real and production-driven: it is the live leg's own evidence,
+        // and it is what the close below is derived from.
         seedReviewAcceptance(store);
         expectUnactivatedWorld(store);
         closeAnswer = drive(store, request);
@@ -200,10 +193,11 @@ describe("J1 is exactly three human actions (design 1095)", () => {
     expect(sequence.length).toBeGreaterThan(0);
     expect(humanKinds).toEqual([...HUMAN_ACTIONS]);
     expect(humanKinds).toHaveLength(3);
-    expect(closeAnswer).toMatchObject(NO_RECEIPT_REFUSAL);
-    // NOT CLOSING: a goal parked mid-closure would need a fourth human action to escape, and the
-    // published vocabulary holds none — the three restated above are all of them.
-    expect(goalLifecycle(store)).toBe("EXECUTION_ENABLED");
+    expect(closeAnswer?.ok, closeAnswer?.ok === false ? closeAnswer.code : "").toBe(true);
+    // NOT PARKED: the goal reaches COMPLETED in the one action, never CLOSING. A goal parked
+    // mid-closure would need a fourth human action to escape, and the published vocabulary
+    // holds none — the three restated above are all of them.
+    expect(goalLifecycle(store)).toBe("COMPLETED");
     expect(OWNED_KINDS.filter((kind) => isHumanAction(kind))).toHaveLength(3);
   }, 90_000);
 
@@ -253,17 +247,12 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     if (request.kind === "approval.decide") {
       seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
     }
+    // `goal.close` needs the live leg's evidence seeded before it can decide anything; once it
+    // can, it composes a durable decision like every other kind and takes the SAME replay path
+    // below rather than a special case of its own.
     if (request.kind === "goal.close") {
       seedReviewAcceptance(store);
       expectUnactivatedWorld(store);
-      // A refusal composes no decision, so "replay" here means RE-DERIVED: the identical answer
-      // twice, and still no durable row on either call.
-      expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
-      expect(rowsFor(store, request.commandId)).toBe(0);
-      expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
-      expect(rowsFor(store, request.commandId)).toBe(0);
-      expect(kind).toBe(request.kind);
-      return;
     }
 
     const first = drive(store, request);
@@ -287,9 +276,10 @@ describe("each command is idempotent on replay (DoD 5)", () => {
 
 /**
  * DoD 4's other half: the closure is not allowed to disturb the evidence it consumed. The
- * composer reads the acceptance decision and the verifier receipt row on the way through — and
- * it reads them on the REFUSING path too, which is the path this world can reach — so "it only
- * reads" is proven against the BYTES on both sides of the one command that could rewrite them.
+ * composer reads the acceptance decision and the verifier receipt row on the way through, and
+ * since task-ae6fd9ac this world reaches the SUCCEEDING path — the strictly harder side, because
+ * a command that commits has a write to get wrong — so "it only reads" is proven against the
+ * BYTES on both sides of the one command that could rewrite them.
  */
 describe("closure leaves earlier review and evidence records untouched (DoD 4)", () => {
   it("keeps the acceptance decision and the receipt row byte-identical across goal.close", () => {
@@ -311,13 +301,14 @@ describe("closure leaves earlier review and evidence records untouched (DoD 4)",
         // literal above would be caught here rather than passing as "nothing changed".
         expect(before.acceptances.length).toBeGreaterThan(0);
         expect(before.receipts.length).toBeGreaterThan(0);
-        expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        const closed = drive(store, request);
+        expect(closed.ok, closed.ok ? "" : closed.code).toBe(true);
         continue;
       }
       expect(drive(store, request).ok, request.kind).toBe(true);
     }
 
-    expect(goalLifecycle(store)).toBe("EXECUTION_ENABLED");
+    expect(goalLifecycle(store)).toBe("COMPLETED");
     expect(before).toBeDefined();
     expect(evidenceBytes(store)).toEqual(before);
   }, 90_000);
