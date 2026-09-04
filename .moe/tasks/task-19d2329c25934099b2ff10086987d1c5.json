@@ -126,7 +126,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:37:25.873Z",
-  "updatedAt": "2026-09-04T17:44:35.315Z",
+  "updatedAt": "2026-09-04T17:44:44.181Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:40:00.036Z",
     "plannedStepCount": 5,
@@ -378,6 +378,22 @@
       "treeId": "af24a7e9d591625c262b009df98c28e6f54127b1",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "74c55505122a390ee35ef2b54144ce7b919306e8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-65786a7d@2026-09-04T17:31:59Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
+      ],
+      "recordedBy": "qa-65786a7d",
+      "recordedAt": "2026-09-04T17:44:44.181Z",
+      "treeId": "5aabb0a19269cc85b7d9ec84bf076089fbd74b3f",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -393,14 +409,18 @@
     ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
     ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
     ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
-    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/orchestrator/seat-reset-instant.js",
+    "apps/daemon/src/orchestrator/seat-reset-instant.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-6ab7cede@2026-09-04T16:55:07Z",
-    "at": "2026-09-04T17:27:13.709Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-65786a7d@2026-09-04T17:31:59Z",
+    "at": "2026-09-04T17:44:44.181Z"
   },
   "priorHandoffs": [
     {
