@@ -146,7 +146,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T18:15:49.365Z",
+  "updatedAt": "2026-09-04T18:29:41.606Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
@@ -185,5 +185,81 @@
   "contextFetchedBy": [
     "worker-fd0e9639"
   ],
-  "workStartedAt": "2026-09-04T17:32:58.126Z"
+  "workStartedAt": "2026-09-04T17:32:58.126Z",
+  "commits": [
+    {
+      "sha": "b61cbc7828bd6ed555d16a60f7465e0b43e02adf",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fd0e9639@2026-09-04T17:32:43Z",
+      "paths": [
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-close-readiness.js",
+        "apps/daemon/src/goals/goal-close-readiness.test.ts",
+        "apps/daemon/src/goals/goal-close-readiness.ts",
+        "apps/daemon/src/goals/goal-services.test.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "recordedBy": "worker-fd0e9639",
+      "recordedAt": "2026-09-04T18:29:41.606Z",
+      "treeId": "d8eb73763b778b529c53d8f4088204152c68614b",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.test.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    "apps/daemon/src/goals/goal-close-prerequisite.ts",
+    "apps/daemon/src/goals/goal-close-readiness.js",
+    "apps/daemon/src/goals/goal-close-readiness.test.ts",
+    "apps/daemon/src/goals/goal-close-readiness.ts",
+    "apps/daemon/src/goals/goal-services.test.ts",
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts",
+    "apps/daemon/src/http/affordance-read.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/goals/goal-close-readiness.ts",
+    "apps/daemon/src/goals/goal-close-readiness.js",
+    "apps/daemon/src/goals/goal-close-readiness.test.ts",
+    "apps/daemon/src/http/zz-probe-readiness.test.ts",
+    "apps/daemon/src/goals/zz-perf-probe.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/goals/goal-services.test.ts",
+    "apps/daemon/src/goals/goal-close-prerequisite.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/orchestrator/zz-placeholder-alpha.test.ts",
+    "apps/daemon/src/orchestrator/zz-placeholder-beta.test.ts",
+    "apps/daemon/src/orchestrator/zz-placeholder-gamma.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-fd0e9639@2026-09-04T17:32:43Z",
+    "at": "2026-09-04T18:29:41.606Z"
+  }
 }
