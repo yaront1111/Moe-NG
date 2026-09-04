@@ -806,8 +806,8 @@ describe("scanner matches the annotated declaration form", () => {
  * 62 module-private declarations against those 62 plus the 168 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 233;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 279;
+const EXPECTED_INVISIBLE_DENOMINATOR = 234;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 282;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

@@ -154,7 +154,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 65;
+const EXPECTED_PRIVATE_COUNT = 66;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -164,6 +164,7 @@ const EXPECTED_PRIVATE_COUNT = 65;
  * to make the population a number that cannot move without an arm going red.
  */
 const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
+  { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
   { constant: "AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority-contracts.ts" },
   { constant: "BINDING_LAYER", file: "apps/daemon/src/activation/activation-budget-binding.ts" },

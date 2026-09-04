@@ -286,6 +286,8 @@ type ExportKind = "function" | "number" | "object" | "string";
 
 /** Hand-transcribed from the reviewed command-driving modules. */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
+  ["ACTIVATION_RECEIPT_CODES", "object"],
+  ["ACTIVATION_RECEIPT_MEMBERS", "object"],
   ["BOOTSTRAP_COMMAND_KINDS", "object"],
   ["BOOTSTRAP_HANDLERS", "object"],
   ["BOOTSTRAP_REFUSAL_CODES", "object"],
@@ -379,6 +381,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
   ["acknowledgeEventPage", "function"],
+  ["activationWitnessOf", "function"],
   ["admitCutoverActivateApproval", "function"],
   ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
@@ -403,6 +406,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["evaluateGraphPreviewRequestBytes", "function"],
   ["handleCommandRequest", "function"],
   ["isDependencyProvider", "function"],
+  ["measureActivationReceipts", "function"],
+  ["nodeActivationReceiptPorts", "function"],
   ["parseWorkRequest", "function"],
   ["qualifyGoalClosure", "function"],
   ["readAnchoredIncarnation", "function"],
@@ -423,6 +428,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["recoveryCompletionDigest", "function"],
   ["recoveryCoverageProofDigest", "function"],
   ["refuseEntry", "function"],
+  ["repositoryObservationOf", "function"],
   ["resolveCurrentProviderProfile", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
@@ -500,7 +506,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(146);
+    expect(EXPECTED_EXPORTS.length).toBe(152);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {

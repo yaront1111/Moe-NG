@@ -7,6 +7,16 @@
  * reviewed surface for each area lives in that area's own module.
  */
 export {
+  ACTIVATION_RECEIPT_CODES, ACTIVATION_RECEIPT_MEMBERS, activationWitnessOf,
+  repositoryObservationOf,
+  type ActivationReceiptMember, type ActivationReceipts, type ActivationReceiptsLayer,
+  type MeasuredReceipt, type UnmeasuredReceipt,
+} from "./bootstrap/activation-receipts.js";
+export {
+  measureActivationReceipts, nodeActivationReceiptPorts,
+  type ActivationReceiptInput, type ActivationReceiptPorts,
+} from "./bootstrap/activation-receipts-measure.js";
+export {
   BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS,
   BOOTSTRAP_SCHEMA_VERSION, decodeBootstrapRequestBytes,
   type BootstrapCommandKind, type BootstrapDecodeRefusal, type BootstrapDecodeResult,
