@@ -66,7 +66,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-c846071b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,7 +85,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:37:25.873Z",
-  "updatedAt": "2026-09-04T10:43:12.566Z",
+  "updatedAt": "2026-09-04T10:54:09.851Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:40:00.036Z",
     "plannedStepCount": 5,
@@ -107,5 +107,8 @@
       "apps/daemon/src/orchestrator/node-publisher.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T10:43:12.566Z"
+  "planApprovedAt": "2026-09-04T10:43:12.566Z",
+  "contextFetchedBy": [
+    "worker-c846071b"
+  ]
 }
