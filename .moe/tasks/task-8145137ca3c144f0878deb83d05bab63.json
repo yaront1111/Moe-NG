@@ -165,7 +165,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T23:45:45.985Z",
+  "updatedAt": "2026-09-04T23:46:47.257Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
@@ -371,6 +371,23 @@
       "treeId": "f4068c7690f4cd0e348db9c4b8f96e4e5e0a041f",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "37ce8bf9b79374a0763cba6f82950e6dad865abe",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T23:24:00Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T23:46:47.257Z",
+      "treeId": "efe37acedb6b0b93054a35eadbddc8affe157a8a",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -386,7 +403,9 @@
     ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
     ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
     ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
-    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-53160801515546259fecc8aa2616acce.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/http/affordance-read.ts",
@@ -401,15 +420,12 @@
     "apps/daemon/src/goals/goal-close-prerequisite.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts"
   ],
-  "unattributedPaths": [
-    ".moe-tmp-step4.py",
-    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-12c76c19@2026-09-04T23:05:26Z",
-    "at": "2026-09-04T23:20:54.926Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T23:24:00Z",
+    "at": "2026-09-04T23:46:47.257Z"
   },
   "priorHandoffs": [
     {

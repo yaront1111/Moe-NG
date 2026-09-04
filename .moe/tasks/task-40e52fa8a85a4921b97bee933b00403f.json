@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-04T23:46:20.839Z",
+  "updatedAt": "2026-09-04T23:47:50.776Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -160,5 +160,10 @@
   "blockedReason": "STEP 1 CLAUSE (c) STOP-AND-REPORT FIRED. Amended text (activeAmendmentId=amend-1, global rail 10): \"If the trace names a file outside this plan's seven, STOP and report - there is no headroom.\" It names TWO. Verbatim evidence: comment-6093ee6b869d4383bf6dec53c9334b02.\n\n1. apps/daemon/src/daemon-store-dependencies.test.ts - unnamed, hard red. :670 `registryKinds: [...deps.registry.keys()].sort()` vs a hand-written 46-kind roster at :745 (\"A new command writes its own kind here\"). registry.ts:392 DERIVES the served set from Object.keys(PAYLOAD_KEYS), so step 4's entry alone reds it. Invisible to a kind-literal grep in production source.\n\n2. packages/contracts/src/runtime/runtime-vocabulary.ts - moved OUT by amend-1, needed twice.\n(i) TYPECHECK: RUNTIME_COMMAND_KINDS lacks \"preview.decide\"; registry.test.ts types Row.kind (:75), REGISTRATION_ORDER (:280), OPERATOR_ONLY (:306) as RuntimeCommandKind, with set-equality sweeps at :814/:820-821 forbidding omission. Probe: `TS2322: Type '\"preview.decide\"' is not assignable to type '\"approval.decide\" | ... 95 more ... | \"work.resume\"'`.\n(ii) REACHABILITY, decisive: http-command-ingress.ts:152 -> runtime-envelope.ts:142 `if (!isCommandKind(...)) return commandFailure(invalidInput())`. preview.decide is refused INPUT_INVALID at the envelope BEFORE the registry and the operator fence, so step 4's \"MUST BE SERVED, NOT ONLY ADVERTISED\" and DoD-2's \"reaches the handler\" are unreachable here.\n\nNot taking the file: task-5f883e4e12c34842b3cb6c2f218e4256 is WORKING and its DoD-2 owns that line plus the four digest mirrors. It dependsOn THIS row, so blockedOnTaskIds would close a cycle - omitted deliberately.\n\nDELIVERED GREEN (DoD 4, 5): apps/daemon/src/preview/preview-contracts.ts (249 lines) + .js bridge + test. Tests 30 passed (30), exit 0. Three mutation drills RED, SHA256-restored.\n\nFIX: give this row one RUNTIME_COMMAND_KINDS line + daemon-store-dependencies.test.ts; strike DoD-2 from task-5f883e4e.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T23:46:20.839Z"
+  "blockedAt": "2026-09-04T23:46:20.839Z",
+  "declaredFiles": [
+    "apps/daemon/src/preview/preview-contracts.ts",
+    "apps/daemon/src/preview/preview-contracts.js",
+    "apps/daemon/src/preview/preview-contracts.test.ts"
+  ]
 }

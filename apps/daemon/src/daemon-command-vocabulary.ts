@@ -311,6 +311,13 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "integration.accept_output": ["receiptId", "subjectRef"],
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],
+    // RECOGNISED IN ORDER TO BE REFUSED, not accepted (task-4b9c394d). The daemon MINTS the
+    // activation witness, so a well-behaved caller sends `{}`. `"witness"` stays listed because
+    // this roster is the HTTP ingress ALLOW-LIST (http-command-ingress.ts:118-126): an UNLISTED
+    // key is refused with a generic INPUT_INVALID at PAYLOAD_SHAPE before any handler runs,
+    // which would make the specific, actionable ACTIVATION_WITNESS_CALLER_SUPPLIED @
+    // DAEMON_INGRESS unreachable from the browser -- the one caller that most needs to be told
+    // what it did wrong.
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
     "project.register": ["owner"], "provider.probe": ["observation"],
     "repository.publish": ["goalId", "remoteUrl"],

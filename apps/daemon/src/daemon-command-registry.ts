@@ -37,6 +37,9 @@ import {
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
+import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
+import type { AsyncCommandHandler } from "./http/http-async-contract.js";
+import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
   runAnswerClarificationEdge, runAskClarificationEdge,
@@ -189,8 +192,43 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
-  const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> =
-    createAsyncCommandEntries({
+  /**
+   * `project.activate` IS SERVED ONLY ON THE ASYNCHRONOUS ENTRY (task-4b9c394d).
+   *
+   * The daemon now MINTS the activation witness from receipts it measures for itself, and that
+   * measurement reads a git HEAD and takes a store backup — both asynchronous, and neither
+   * expressible from a synchronous `CommandHandler`. Measuring once at startup instead was
+   * rejected: a set captured at boot would certify a tree the operator has since changed.
+   *
+   * NOT A TRANSPORT CHANGE. `/command` already routes every request through
+   * `handleAsyncCommandRequest` (http-listener-command-stream-routes.ts:108), which serves BOTH
+   * entry shapes, so the browser, the seed and every HTTP caller reach this unchanged. Only the
+   * SYNCHRONOUS `handleCommandRequest` now refuses the kind, under the same
+   * ASYNC_ENTRY_REQUIRED code the two Foundation kinds have always used.
+   */
+  const measureActivation = createActivationReceiptMeasurer({ projectId, store });
+  const activateFacts = commandFamilyFacts("project.activate");
+  const activateAsyncHandler: AsyncCommandHandler = async ({ envelope, principal }) =>
+    decisionOf(runBootstrapCommand(
+      store,
+      requestOf("project.activate", activateFacts.schemaVersion, envelope, principal.principalId),
+      bootstrapTable,
+      // No human-review witness: activation authority is MEASURED, never reviewed, so passing
+      // one here would imply an approval seam this command does not have.
+      undefined,
+      await measureActivation(),
+    ));
+  const activateEntry: CommandRegistryEntry = Object.freeze({
+    asyncHandler: activateAsyncHandler,
+    handler: foundationSyncHandler,
+    kind: "project.activate",
+    payloadKeys: PAYLOAD_KEYS["project.activate"],
+    requiredCapability: activateFacts.requiredCapability,
+  });
+
+  const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> = {
+    "project.activate": activateEntry,
+    ...createAsyncCommandEntries({
       projectId, store,
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
@@ -200,7 +238,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { foundationLifecycle: options.foundationLifecycle }),
       ...(options.verificationCatalogSource === undefined
         ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
-    });
+    }),
+  };
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each
