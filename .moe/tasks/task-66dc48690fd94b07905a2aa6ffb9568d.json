@@ -170,7 +170,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:17:59.168Z",
-  "updatedAt": "2026-09-04T23:13:42.418Z",
+  "updatedAt": "2026-09-04T23:13:56.988Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:22:31.260Z",
     "plannedStepCount": 7,
@@ -227,7 +227,78 @@
     "apps/control-room/src/v2/cordum-shell.test.tsx",
     "apps/control-room/src/v2/ops/live-ops.tsx",
     "apps/control-room/src/v2/cordum-app.tsx",
-    "apps/control-room/src/v2/cordum-app.test.tsx"
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
+    ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+    ".moe/tasks/task-8834ebe68c1a4f81b3be8e7581156755.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
   ],
-  "completionSummary": "The shell says agents are paused: one app-level poll, a pause context, the status-strip banner. All 7 steps done; consumes 3a (task-278faf81c1, landed 9dc78777).\n\nNEW MODULE apps/control-room/src/v2/shell/pause-context.tsx (52 lines), 4 exports: `type ProviderPause` (a type-only alias of 3a's `ProviderPauseView` from ../../live/live-ops.js - the CONTROL-ROOM twin; the daemon's same-named interface is TS6059 from here), `ProviderPauseProvider({value, children})`, `useProviderPause(): ProviderPause | null` (null = \"no pause KNOWN\", never \"not paused\"; a screen with no provider above it reads null and renders nothing rather than crashing), and `pauseWords(paused)` -> `Agents paused: <provider> limit, resumes <when>`.\n\nPLAN DEVIATION, deliberate: `pauseWords` lives in pause-context.tsx, not inline in the strip as step 3's JSX literal had it. Two reasons - the step's `<=175` cap was projected from a stale 152 (HEAD measured 162) and the inline form landed the file at 188; and step 7 requires handing child 3c the sentence format, which an importable function guarantees where a comment cannot. Second deviation: `when` is `Number.isNaN(Date.parse(resetAt)) ? resetAt : new Date(at).toLocaleString()`, copying 3a's own idiom at ops-screens.tsx:59, because 3a's decoder gates resetAt on non-emptiness alone so unparseable instants really arrive; the step's bare `new Date(x).toLocaleString()` would print \"Invalid Date\". Byte-identical for valid instants, so the DoD sentence is unaffected.\n\nWIRING. cordum-app.tsx (391 -> 413, cap 413) wraps `<CordumShell>` in `<ProviderPauseProvider value={paused}>` at :394, so EVERY screen under the shell can read the fact. `PAUSE_POLL_MS = 15_000`; the poll is `useOpsRead(healthReader, HEALTH_FAILURE, PAUSE_POLL_MS, undefined)` - `onConnection` undefined on purpose so it cannot fight the board feed for the connection chip. `healthReader` is `useMemo` on `[attached]`, swapping a module-level `DETACHED_HEALTH` constant (no wire touched) for `() => "
+  "completionSummary": "The shell says agents are paused: one app-level poll, a pause context, the status-strip banner. All 7 steps done; consumes 3a (task-278faf81c1, landed 9dc78777).\n\nNEW MODULE apps/control-room/src/v2/shell/pause-context.tsx (52 lines), 4 exports: `type ProviderPause` (a type-only alias of 3a's `ProviderPauseView` from ../../live/live-ops.js - the CONTROL-ROOM twin; the daemon's same-named interface is TS6059 from here), `ProviderPauseProvider({value, children})`, `useProviderPause(): ProviderPause | null` (null = \"no pause KNOWN\", never \"not paused\"; a screen with no provider above it reads null and renders nothing rather than crashing), and `pauseWords(paused)` -> `Agents paused: <provider> limit, resumes <when>`.\n\nPLAN DEVIATION, deliberate: `pauseWords` lives in pause-context.tsx, not inline in the strip as step 3's JSX literal had it. Two reasons - the step's `<=175` cap was projected from a stale 152 (HEAD measured 162) and the inline form landed the file at 188; and step 7 requires handing child 3c the sentence format, which an importable function guarantees where a comment cannot. Second deviation: `when` is `Number.isNaN(Date.parse(resetAt)) ? resetAt : new Date(at).toLocaleString()`, copying 3a's own idiom at ops-screens.tsx:59, because 3a's decoder gates resetAt on non-emptiness alone so unparseable instants really arrive; the step's bare `new Date(x).toLocaleString()` would print \"Invalid Date\". Byte-identical for valid instants, so the DoD sentence is unaffected.\n\nWIRING. cordum-app.tsx (391 -> 413, cap 413) wraps `<CordumShell>` in `<ProviderPauseProvider value={paused}>` at :394, so EVERY screen under the shell can read the fact. `PAUSE_POLL_MS = 15_000`; the poll is `useOpsRead(healthReader, HEALTH_FAILURE, PAUSE_POLL_MS, undefined)` - `onConnection` undefined on purpose so it cannot fight the board feed for the connection chip. `healthReader` is `useMemo` on `[attached]`, swapping a module-level `DETACHED_HEALTH` constant (no wire touched) for `() => ",
+  "commits": [
+    {
+      "sha": "5395db1428287367854c6aea0c54b66c6ad63c0c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-04T22:41:34Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
+        ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+        ".moe/tasks/task-8834ebe68c1a4f81b3be8e7581156755.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/cordum-shell.test.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx",
+        "apps/control-room/src/v2/shell/cordum-shell.tsx",
+        "apps/control-room/src/v2/shell/pause-context.test.tsx",
+        "apps/control-room/src/v2/shell/pause-context.tsx",
+        "apps/control-room/src/v2/shell/status-strip.test.tsx",
+        "apps/control-room/src/v2/shell/status-strip.tsx",
+        "apps/control-room/src/v2/styles/cordum-status-strip.css"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-04T23:13:56.988Z",
+      "treeId": "24c2a72a5ac5a2aba18813c59c9b235aecc1bc7b",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/cordum-app.tsx",
+          "taskId": "task-3506e04abcef4fc3a69299ca238ae1b3"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/live-ops.tsx",
+          "taskId": "task-3506e04abcef4fc3a69299ca238ae1b3"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/shell/pause-context.tsx",
+    "apps/control-room/src/v2/shell/cordum-shell.tsx",
+    "apps/control-room/src/v2/styles/cordum-status-strip.css",
+    "apps/control-room/src/v2/shell/pause-context.test.tsx",
+    "apps/control-room/src/v2/shell/status-strip.tsx",
+    "apps/control-room/src/v2/cordum-shell.test.tsx",
+    "apps/control-room/src/v2/shell/status-strip.test.tsx",
+    "apps/control-room/src/v2/ops/live-ops.tsx"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-04T22:41:34Z",
+    "at": "2026-09-04T23:13:56.988Z"
+  }
 }

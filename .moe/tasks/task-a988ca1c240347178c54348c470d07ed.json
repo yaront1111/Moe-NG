@@ -15,8 +15,73 @@
     "REAL FRAMES ONLY: control-room fixtures are recorded from a real daemon run (exact-key decoders reject anything else); a new stage MUST add its STAGE_WORDS entry (Record type) and its test.",
     "Test ids follow the existing prefixes (cr.approve.*); no `cr.board.*`/`cr.kanban.*` collisions; sources ASCII-only, JSX text without apostrophes (package-boundary scan). <=250 lines per production source."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE CHILDREN AND RE-MEASURE, NO EDITS. (a) Confirm child 2 (task-957bccf162b446f3a4db46b56e8e8f3a) and through it child 1 (task-3780109018bb49b2bf3a00b18952d7ff) landed: `grep -n currentPlanningRun apps/daemon/src/planning/current-planning-run.ts` and `grep -n 'PLAN REJECTED' apps/daemon/src/orchestrator/agent-mission-text.ts`. This row renders a REJECT the daemon must already accept and a successor it must already compile; if either is absent, report_blocked with blockedOnTaskIds naming it (task rail 1 — a daemon gap is child 1/2's, never this row's). (b) Re-measure the gate's testids: approve-plan-gate.tsx is 78 lines with `cr.approve.reason` (:48), `cr.approve.button` (:60) and `cr.approve.dispatch-refusal` (:73) — note these line numbers differ from the row description's (:43/:49-56/:65), so the file has already moved once; trust your grep, not the description. (c) Record pre-change `Test Files N passed` for `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/approve-plan-gate.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "SPLIT approve-plan.tsx BEFORE ADDING TO IT — a plan-time finding, not a discovery for step 5. MEASURED: `wc -l apps/control-room/src/v2/goals/approve-plan.tsx` = 263 lines TODAY, already over this row's own DoD 5 ceiling of 250, and this row adds a Reject control, a reason input and successor-run resolution to it. Adding first and splitting later would make the DoD unsatisfiable at every intermediate commit. Extract a cohesive piece — the gate's dispatch/refusal plumbing, or the reason-input control — into its own module under apps/control-room/src/v2/goals/, leaving approve-plan.tsx comfortably under 250 with headroom for step 3. Change NO behaviour in this step: `git diff -U0` must contain no added or removed `expect(` line, and the control-room count line must equal step 1's baseline. Quote `wc -l` for both files afterwards.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/approve-plan.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/approve-plan-dispatch.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "REJECT ON THE GATE, tests first. apps/control-room/src/v2/goals/approve-plan-gate.tsx gains `cr.approve.reject` beside `cr.approve.button`, and a reason input `cr.approve.reason.input` — note `cr.approve.reason` (:48) is ALREADY TAKEN by the withheld-reason display, so the input needs the distinct id the DoD names; do not reuse it. Reject is DISABLED while the reason is empty or whitespace. Submitting dispatches the SAME offer through plan-approval.ts with `{decision:\"REJECT\", decisionReason:<text>, runId:<current run>}` — assert the payload BYTE-EXACT as plan-approval.ts builds it (its APPROVE path uses APPROVE_DECISION at :56 and the four-key payload at :24; mirror that shape, do not invent a fifth key). A REFUSED reply renders its code VERBATIM under `cr.approve.dispatch-refusal` — assert the literal APPROVAL_REJECT_REASON_REQUIRED string, since rendering a paraphrase is how an operator loses the daemon's actual reason.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+        "apps/control-room/src/v2/goals/approve-plan.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE GATE FOLLOWS THE SUCCESSOR RUN. After a reject the CURRENT run is the successor, so the gate must stop binding to the rejected run. Resolve it from the surface's `planningGoalRefs` by inverting runId -> goalId (affordance-contract.ts:66-73) — NOT by changing the catalog's exact-key shape, which task rail 1 forbids and which would break every exact-key decoder downstream. Drive the test from a surface fixture RECORDED FROM A REAL DAEMON (task rail 2) in the post-reject state: `approval.decide_intent` absent for the rejected run, `planning.submit_decomposition` offered, planningGoalRefs binding the successor. Assert the gate reads 'Plan sent back - waiting for a new plan' in that state, and that when the successor's decide_intent offer appears the approve/reject controls return, bound to the SUCCESSOR run id — assert the run id in the dispatched payload, because a gate that re-renders while still pointing at the dead run is the failure this step exists to catch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/approve-plan.tsx",
+        "apps/control-room/src/v2/goals/plan-approval.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "NEEDS YOU AND THE STATUS STRIP. (a) apps/control-room/src/v2/approvals/needs-you-model.ts:28 `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]` gains PLAN_REJECTED, ordered beside PLAN_APPROVAL (the order list is at :72, the PLAN_APPROVAL item at :99). The row's filer measured that no test pins that roster BY NAME (`grep NEEDS_YOU_KINDS` in tests = 0) — re-run that grep; if a pin has since appeared, it is in your roster. The item shows the reason and DISAPPEARS once the successor's decide_intent offer exists — assert both the appearance and the disappearance, since an item that never clears is a queue that grows forever. (b) goal-status.ts gains stage PLAN_REJECTED with STAGE_WORDS 'Plan sent back' and next-step 'Waiting for a new plan'. HEADS UP, measured at plan time: THREE other rows also edit goal-status.ts right now — task-0b26dc9e (a waiting-on-dependency count), task-33ceae56 (a PREVIEW stage) and task-5316080 (a paused-agents banner). Two of them also ADD to the same exhaustive `GoalStage` union and its `STAGE_WORDS` Record (goal-status-strip.tsx:17). Expect a rebase; the Record is exhaustive so the typechecker will name any missing word — do NOT silence it with a cast, and do not delete another row's stage to make yours compile.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE BROWSER JOURNEY over a REAL daemon, in tests/e2e/control-room/ (follow the harness in daemon-board.spec.ts / prd-to-approval.spec.ts rather than standing up a new one): compile -> Reject with a reason -> a scripted seat double resubmits, as in child 2's e2e -> Approve the successor. Capture the control-room fixtures used elsewhere in this row FROM THAT RUN (task rail 2: the exact-key decoders reject anything that is not a real daemon frame, so a hand-written fixture fails at the decoder rather than at the assertion, which reads as a test bug and wastes an hour). Quote the `pnpm test:e2e:browser` count line. If the lane cannot drive a real reject because a child under-delivered, comment on that child and report_blocked — do not stub the daemon's reply.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/e2e/control-room/plan-reject.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DOCS, SIZE PROOF, GATES. (a) README.md's plan-approval sentence in \"What runs today\" (:19-20, \"a decomposition the daemon compiles and a human approves (the plan gate)\") and the approval paragraph in docs/agent-stack-runbook.md both name Reject-with-reason and the re-plan. (b) SIZE PROOF (DoD 5): quote `wc -l` for EVERY production file this row touched and show each is <=250 — this is why step 2 split approve-plan.tsx first; if any file is over, split it now rather than reporting a violation. (c) ASCII AND APOSTROPHE CHECK: sources ASCII-only and JSX text apostrophe-free, or the scheduler package-boundary scan reds — write \"Plan sent back - waiting for a new plan\" with a hyphen, never a typographic dash or apostrophe. (d) GATES, standalone and foreground, each `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`. Named verification command for completion: `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md",
+        "docs/agent-stack-runbook.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,5 +97,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:28:11.070Z",
-  "updatedAt": "2026-09-04T10:28:11.070Z"
+  "updatedAt": "2026-09-04T23:15:35.457Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:14:31.266Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:15:33.289Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, adding Reject to approve-plan.tsx without splitting it first: the file measures 263 lines TODAY against this row's own DoD 5 ceiling of 250, so every intermediate commit would violate the DoD and the worker would discover it at the final gate. Step 2 splits first, with a no-behaviour-change proof. REJECTED, changing the catalog's exact-key shape to expose the successor run: task rail 1 forbids it and every exact-key decoder downstream would break; the successor is resolved by inverting planningGoalRefs (affordance-contract.ts:66-73). REJECTED, reusing `cr.approve.reason` for the input: that id is already taken by the withheld-reason DISPLAY at approve-plan-gate.tsx:48, and reusing it would make one testid mean two things. REJECTED, hand-written control-room fixtures: the decoders are exact-key and reject anything that is not a real daemon frame, so a synthetic fixture fails at the decoder and reads as a test bug — task rail 2 requires frames recorded from the real run, and step 6 captures them there. REJECTED, adding a daemon field when the successor is hard to resolve: that is child 1/2's scope and a report_blocked, per task rail 1.",
+    "codebaseInsights": "RE-MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb; the row's filer measured at main 68eb1c5d and TWO of their numbers have already moved, which is why step 1 re-greps rather than trusting them. approve-plan-gate.tsx is 78 lines with `cr.approve.reason` at :48 (the withheld-reason DISPLAY, not an input), `cr.approve.button` at :60 and `cr.approve.dispatch-refusal` at :73 — the description says :43/:49-56/:65. approve-plan.tsx is 263 lines and plan-approval.ts 196. NEEDS_YOU_KINDS is at needs-you-model.ts:28 (description says :27) with four members. FOUR-WAY COLLISION ON goal-status.ts, measured from the board's own plans: task-0b26dc9e (waiting-on-dependency count), task-33ceae56 (PREVIEW stage), task-5316080 (paused-agents banner, already WORKING) and this row all edit it, and two of them ADD to the exhaustive `GoalStage` union mirrored by `STAGE_WORDS` (goal-status-strip.tsx:17). The exhaustive Record makes a missing word a typecheck error rather than a blank label, which is the desired behaviour — the hazard is a worker casting it away or deleting a peer's stage to compile. THE APPROVE PATH TO MIRROR: plan-approval.ts builds `approval.decide_intent` with APPROVE_DECISION at :56 and a four-key payload {decision, decisionReason, dependencyChanges, runId} at :24, under layers CONTROL_ROOM_PLAN_APPROVAL / _COMMAND_BUILD / _TRANSPORT (:46-50) — REJECT reuses the same offer and payload shape with a different decision value.",
+    "risks": "BIGGEST RISK — the 250-line ceiling. approve-plan.tsx is ALREADY 263 lines and this row adds to it; without step 2's split the DoD is unsatisfiable and the worker finds out at the last gate. SECOND — a gate that re-renders while still bound to the REJECTED run: it would send the operator's approval to a dead run, and the failure looks like a daemon refusal rather than a UI bug. Step 4 asserts the run id in the dispatched payload, not merely that controls reappeared. THIRD — the four-way collision on goal-status.ts and its exhaustive STAGE_WORDS Record; expect a rebase, never cast the exhaustiveness away, never delete a peer's stage to compile. FOURTH — hand-written fixtures fail at the exact-key decoder, which reads as a test bug rather than a fixture bug; the frames must come from the real run in step 6. FIFTH — a Needs-you item that never clears grows the queue forever; step 5 asserts the disappearance as well as the appearance. SIXTH — ASCII-only sources and apostrophe-free JSX text, or the scheduler package-boundary scan reds; the natural phrasings here ('Plan sent back - waiting for a new plan') are exactly where a typographic dash or apostrophe creeps in. SEVENTH — the row's own description carries stale line numbers from a different HEAD; step 1 re-greps before any edit.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+      "apps/control-room/src/v2/goals/approve-plan.tsx",
+      "apps/control-room/src/v2/goals/plan-approval.ts",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "apps/control-room/src/v2/goals/goal-status-strip.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:15:35.457Z"
 }
