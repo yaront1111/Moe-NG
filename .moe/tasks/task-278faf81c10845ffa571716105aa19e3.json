@@ -125,7 +125,7 @@
       "completedAt": "2026-09-04T22:22:00.300Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -138,19 +138,29 @@
   ],
   "priority": "MEDIUM",
   "order": 1004.21,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-fb8cb6b7ba5b402497978cd8e78a1bce",
+      "author": "qa-3fd61a21",
+      "content": "QA EVIDENCE (qa-3fd61a21, 2026-09-05) - full detail; the reviewSummary is the 2000-char digest of this.\n\nDELIVERY ANCHOR. Completion commit 9dc78777 (`Moe-Kind: completion`) carries all 7 owned source paths plus 2 board records. `git status --porcelain` over the 7 owned paths is EMPTY, so worktree == HEAD and the diff I read IS the delivered bytes. The commit's `Moe-Contested: apps/daemon/src/daemon-store-foundation-composition.ts (task-92d84d384e4443d7bf78c76024af5688)` trailer is honest but harmless: that file's hunk is exactly this row's 3 added lines (the `clock,` option + its 2 comment lines). No foreign bytes swept.\n\nGATES I RE-RAN AT HEAD (not trusted from the record; ${PIPESTATUS[0]} captured, no ;-chain):\n- `pnpm --filter @moe/daemon test` -> `Test Files 413 passed (413)` / `Tests 8211 passed (8211)` EXIT 0.\n- `pnpm --filter @moe/control-room test` -> `Test Files 135 passed (135)` / `Tests 1659 passed (1659)` EXIT 0.\n- `pnpm typecheck` -> per-package `$ tsc --project tsconfig.json` echoes, `apps/daemon typecheck: Done`, EXIT 0.\nThe foreign red the worker disclosed (`src/work/foundation-attempt-windows.test.ts > observes a real exited provider process...`) PASSED in my run. It was a flake and was correctly NOT attributed to this row. Count is 413/8211 vs the worker's 412/8198 because peer WIP added an untracked test file to the shared checkout between the two runs - not this row.\n\nDoD 1 (daemon read) GREEN. 7 arms over a REAL store via openStore/recordProviderPause: no record -> `{paused:null}`; live claude pause -> toEqual the exact 5-key object AND `Object.keys(paused).sort()` pinned as the roster; BOTH SIDES of the reset edge asserted (`20:29:59.999Z` -> \"claude\", `20:30:00.000Z` -> null), which is stronger than the DoD's \"at/after\"; codex found when claude is clear AND claude wins when both are live; a cause with `lastLine: null` -> `\"\"` rather than a refusal; a store closed before the read -> HEALTH_READ_UNREADABLE asserted by CODE, not merely \"threw\" (global rail 1 satisfied).\n\nDoD 2 (control room) GREEN. live-ops.ts:215 roster is now `[\"agents\",\"daemon\",\"ledger\",\"outcome\",\"readAt\",\"verifier\"]`; `HealthOutcome` and `mapHealthAnswer` carry `agents`; the toStrictEqual mapping arm updated plus a second one that maps a full pause verbatim. SEVEN drift arms, all `toStrictEqual(invalid)` i.e. OPS_RESPONSE_INVALID at CONTROL_ROOM_LIVE_OPS: `agents` key absent; `agents: undefined`; `agents: {paused:null, extra:1}`; `paused` with an extra key; `paused.resetAt: 5`; `paused` missing workItemId. Plus an ACCEPTANCE arm pinning `lastLine: \"\"` as a real pause. ops-screens.test.tsx HEALTH fixture updated; `cr.health.agents` asserted for both sentences, with the resume time computed by the test using the same `toLocaleString()` call the screen uses (locale-independent), plus a third arm proving an unparseable `resetAt` renders RAW rather than \"Invalid Date\" or a refusal.\n\nDoD 3 (composition) GREEN. `createHealthReadPort({ clock, ... })` receives the composition's own `:136` clock binding - the same instant authority decisions read. The port-key roster pinned at daemon-store-dependencies.test.ts:724 (`\"graph\", \"health\", ...`) is unchanged and green inside the full daemon run.\n\nDoD 4 (caps / ASCII) GREEN. `wc -l`: health-read.ts 194 (<=250), ops-screens.tsx 228 (<=250), live-ops.ts 298 = the stated 278+20 bound EXACTLY (pre-existing over the 250 target, recorded not introduced), composition 478 (pre-existing, +3). `git show 9dc78777 -- <paths> | grep '^+' | grep -P \"[^\\x00-\\x7F]\"` -> ZERO hits: every ADDED line is ASCII. The non-ASCII the file-level grep reports (em-dashes in composition comments at :230/:231/:270/:433, MIDDOT in ops-screens.test.tsx at :54-:108) is all pre-existing and not this row's.\n\nMY OWN 5 MUTATION DRILLS - I did not take the worker's 7 on trust. Each red on a NAMED arm:\n1. `pausedOf` returning `null` instead of `false` for a malformed `agents` record -> live-ops.test.ts:65 RED (`agents: undefined`). This is the load-bearing one: a refused frame would have rendered as a calm fleet. Note :64 (`agents` key absent) stays GREEN under this mutation because the top-level roster catches it first - so :65 is the arm that actually tests `pausedOf`, and it is not vacuous.\n2. Same collapse on the 5-key shape miss -> live-ops.test.ts:67 RED: `expected { agents: { paused: null }, ...(5) } to strictly equal { code: 'OPS_RESPONSE_INVALID', ...(2) }`. Reason code pinned by name.\n3. `KNOWN_PROVIDERS` reversed to `[\"codex\",\"claude\"]` -> health-read.test.ts:141 RED: `expected 'codex' to be 'claude'`.\n4. `agentsWords` returning \"not paused\" unconditionally -> ops-screens.test.tsx:121 AND :126 RED.\n5. `pausedAgent` fed `options.startedAt` instead of `clock()` (the clock-plumbing bypass) -> health-read.test.ts:131 RED: `expected {...(5)} to be null`. This is the arm that makes DoD 3's `clock` pass-through load-bearing rather than decorative.\n\nDRILL RESTORE PROOF (global rail: DRILL RESTORE PROOF). All 3 mutated files are TRACKED and were proved `git status --porcelain` EMPTY BEFORE drilling. Backups taken to %TEMP% suffixed with my worker id; after restore, SHA256 equality proved in a call SEPARATE from the restore: health-read.ts e0e86cdce6e3e54e6f0aa10fb6672d54c6210024df5f3dde78d2eb2ab39d75a9, live-ops.ts 85656670c0c9e16c859588ab3cf0f8fcab3a5ba0f381931aafd6e251ef74b350, ops-screens.tsx 9c48d41fb4409ccdd9a13d37897ba4ad42cabe633f541d287dacf99751e7dcc2 - each equal to its backup, and the owned-path `git status` EMPTY afterwards. Backups deleted.\n\nONE PROCESS NOTE FOR THE NEXT AGENT: a `cd apps/control-room` inside a Bash-tool call PERSISTED into my next call and the restore `cp` failed with \"No such file or directory\" while a mutation was still live. Caught immediately by reading the error, re-run with absolute paths. Use absolute paths for every restore leg.\n\nSCOPE. No drift: no wrapper, shell banner, Seats panel, board next-step, e2e or runbook change (children 3b-3d keep their work). The comment to child 3b naming `ProviderPauseView` and `outcome.agents.paused` landed in the same commit.\n\nDISCLOSED FOLLOW-UP, NOT A DEFECT (not a rejection reason; delivery-bias rail): `readProviderPause` folds the whole decision ledger from cursor 0, so `/health/read` now performs TWO extra full ledger walks per poll. Child 1's QA already weighed the cheaper `readEvents(pauseAggregateId)` seam and rejected it. Belongs in the epic-final hardening row if the poll cost is ever measured as a problem.",
+      "timestamp": "2026-09-04T22:39:17.028Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:17:27.768Z",
-  "updatedAt": "2026-09-04T22:23:43.439Z",
+  "updatedAt": "2026-09-04T22:41:05.482Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:19:57.747Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-04T22:41:05.482Z",
+    "wallClockMs": 30067735
   },
   "contextFetchedBy": [
     "architect-16a01670",
-    "worker-cceb207f"
+    "worker-cceb207f",
+    "qa-3fd61a21"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -248,5 +258,8 @@
     "kind": "completion",
     "sessionId": "worker-cceb207f@2026-09-04T21:43:18Z",
     "at": "2026-09-04T22:23:43.439Z"
-  }
+  },
+  "completedAt": "2026-09-04T22:41:05.482Z",
+  "reviewCompletedAt": "2026-09-04T22:41:05.482Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-fb8cb6b7 on this row.\n\nDELIVERY: completion commit 9dc78777 carries all 7 owned source paths; git status --porcelain over them EMPTY, so worktree==HEAD and the diff I read is the delivered bytes. Its Moe-Contested trailer on the composition file is harmless - that hunk is only this row's 3 added lines.\n\nGATES I RE-RAN AT HEAD: daemon test -> Test Files 413 passed (413) / Tests 8211 passed (8211) EXIT 0; control-room test -> 135 (135) / 1659 (1659) EXIT 0; typecheck -> \"apps/daemon typecheck: Done\" EXIT 0. The disclosed foreign red (foundation-attempt-windows.test.ts) PASSED for me - a flake, correctly not attributed here.\n\nDoD 1 GREEN: 7 real-store arms - no record -> {paused:null}; live pause toEqual the exact 5-key object + keys roster; BOTH sides of the reset edge; codex-when-claude-clear AND claude-wins-tie; lastLine null -> \"\" not a refusal; closed store -> HEALTH_READ_UNREADABLE pinned by CODE, not \"threw\". DoD 2 GREEN: roster :215 gains \"agents\"; 7 drift arms all OPS_RESPONSE_INVALID, plus acceptance arms for lastLine \"\" and an unparseable resetAt rendering raw. DoD 3 GREEN: composition passes the :136 clock; roster pin :724 green. DoD 4 GREEN: 194 / 228 / 298 lines (live-ops at its 278+20 bound); every ADDED line ASCII.\n\nMY OWN 5 DRILLS, each red on a NAMED arm: (1) pausedOf false->null on malformed agents -> live-ops.test.ts:65 (a refused frame would render as a calm fleet; :64 stays green via the top roster, so :65 is the non-vacuous arm); (2) same on the shape miss -> :67 \"expected {paused:null} to strictly equal {code:'OPS_RESPONSE_INVALID'}\"; (3) KNOWN_PROVIDERS reversed -> health-read.test.ts:141 \"expected 'codex' to be 'claude'\"; (4) agentsWords always calm -> ops-screens.test.tsx:121 and :126; (5) pausedAgent fed options.startedAt not clock() -> :131, making the clock pass-through load-bearing. All 3 mutants restored, SHA256 equality proved in a separate call, owned status EMPTY after."
 }
