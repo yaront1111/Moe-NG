@@ -1,0 +1,35 @@
+{
+  "id": "task-f6f33a3925bf4856b42cf84a37bb0f9e",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Publish is offered only for a goal with a landed commit",
+  "description": "SPIDR child 2 of task-a8317bb46e36476e8399c611b41d9612. dependsOn child 1 (task-19d2329c25934099b2ff10086987d1c5). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the `repository.publish` offer gate on `/affordances/read`. Nothing else.\n\nMEASURED (re-measure before planning):\n- apps/daemon/src/http/affordance-planning-offers.ts:141-147 mints `offer(input, \"repository.publish\", publish:<goalId>)` for EVERY goal whose lifecycle is EXECUTION_ENABLED, CLOSING or COMPLETED - even with zero landed commits (seen live on UnAI 2026-09-04: a PUBLISH card over \"No node of this goal is landed as a commit yet\"). `offersForGoal` works from `PlanningOfferInput` facts and has no store; affordance-read.ts (:112 config.store, :263-266 composes the input) is where a landing fact is read.\n- Landing facts: `readReviewLedgers(store, projectId, subjectRefs).landings` (apps/daemon/src/review/review-read-model.ts:287, :274-279) yields `LandingReceiptV1` per bare node key with `outcome: COMMITTED | REFUSED` (repository/landing-receipt-contracts.ts:56-67); the goal's node keys come from its activated graph (the same walk the coverage read uses: document-coverage-read.ts readActive).\n- SHARED FILES: goal-close child task-8145137ca3c144f0878deb83d05bab63 adds a readiness fact to the SAME two files (affordance-planning-offers.ts + affordance-read.ts). If that row is WORKING or REVIEW when this row is claimed, `moe.report_blocked` with blockedOnTaskIds = [task-8145137ca3c144f0878deb83d05bab63] and wait - never edit those files concurrently; when it has landed, ADD a second fact beside its readiness fact (same shape, one line in the ladder).\n- Pinned consumers of the publish offer: affordance-planning-offers.test.ts:101-104 (expects [\"goal.close\",\"repository.publish\"] once execution is enabled), affordance-read-planning.test.ts (goal.close/publish targets), affordance-read.test.ts:454/:498 offer roster, the board header's publish link (keys on the offer - memory board-screen-landed-2026-09-04), control-room goal-publish.tsx (renders on the offer), tests/e2e/control-room/board-chain.spec.ts (contract-less chain) - re-measure each and name every one the plan touches.\n\nFEATURE: `repository.publish` is offered for a goal only when at least one node of that goal carries a landing receipt with outcome COMMITTED; a goal with landings all REFUSED, or none, gets no publish offer (the card then renders nothing - child 3). Contract-less/seed goals follow the same rule (a landing is a landing); the pinned fixtures that expect the offer right after activation are updated to land a commit first, each named.",
+  "definitionOfDone": [
+    "Over a REAL store: `/affordances/read` carries no `repository.publish` offer for an enabled goal with no landing receipt; after one node's landing receipt COMMITTED is recorded (recordLandingReceipt, repository/landing-ledger.ts:153) the offer appears targeting `publish:<goalId>`; a goal whose only landing is REFUSED (NOTHING_TO_COMMIT) stays unoffered; assert absent -> present -> absent transitions by reading the surface.",
+    "Every pinned consumer updated and named: affordance-planning-offers.test.ts:101-104, affordance-read.test.ts:454/:498, affordance-read-planning.test.ts arms that list publish, and tests/e2e/control-room/board-chain.spec.ts if it asserts the publish card before a landing (`pnpm test:e2e:browser` count line quoted); the offer roster arms stay set-equality (never subset).",
+    "The landing fact is added beside child task-8145137c's readiness fact in affordance-read.ts / affordance-planning-offers.ts only after that row has landed (`git log main --grep \"Moe-Task: task-8145137ca3c144f0878deb83d05bab63\"` = 1+ line quoted in the step note); if it has not landed at claim time the row is BLOCKED on it, never edited concurrently.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`; both production files stay under 400 lines (affordance-read.ts is 422 today - if the fact pushes it further, extract the fact readers into a sibling module rather than growing it; `wc -l` quoted)."
+  ],
+  "taskRails": [
+    "SHARED-WORKTREE ORDERING: affordance-planning-offers.ts and affordance-read.ts are also owned by task-8145137c (goal-close readiness); report_blocked with blockedOnTaskIds while it is in flight; extend additively after it lands.",
+    "OFFER ROSTER TESTS ARE BIDIRECTIONAL: served offers == expected set, never a subset (global rail 9); every fixture that loses or gains the publish offer is named in the plan.",
+    "Refusals/offers assert exact sets; mutate to prove red (global rail 1). <=250 lines per production source, hard stop 400 (affordance-read.ts already at 422: extract, do not grow)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a8317bb46e36476e8399c611b41d9612",
+  "dependsOn": [
+    "task-19d2329c25934099b2ff10086987d1c5"
+  ],
+  "priority": "HIGH",
+  "order": 1000.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:38:07.858Z",
+  "updatedAt": "2026-09-04T10:38:07.858Z"
+}

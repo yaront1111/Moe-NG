@@ -1,0 +1,111 @@
+{
+  "id": "task-19d2329c25934099b2ff10086987d1c5",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The project remote is bound by the first publish and reused: repository.publish accepts null, refuses unbound, serves the remote read",
+  "description": "SPIDR child 1 of task-a8317bb46e36476e8399c611b41d9612 (leaf; no sibling dependency). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the daemon side of a PROJECT-level remote without a new command kind. No offer-gate change (child 2), no UI/docs/live drive (child 3).\n\nMEASURED (re-measure before planning):\n- `repository.publish` payload roster is `[\"goalId\", \"remoteUrl\"]` (apps/daemon/src/daemon-command-vocabulary.ts:316), enforced per registry entry (daemon-command-registry.ts:388 `payloadKeys: PAYLOAD_KEYS[kind]`). Handler `publishRepository` (apps/daemon/src/goals/goal-services.ts:187-215; file is 223 lines): `admitRemoteUrl(request.payload[\"remoteUrl\"])` (repository/publish-receipt-contracts.ts:61; https:// or ssh, no embedded credential) -> null refuses BOOTSTRAP_PAYLOAD_INVALID; goal lifecycle check; aggregate `publish:<goalId>` (:204, bootstrap-sequence.ts:114-118); commits {goalId, remoteUrl, requestedAt} as event RepositoryPublishRequested and result. The wrapper's publisher pushes `request.remoteUrl` from the publish ledger (orchestrator/node-publisher.ts:41-47; repository/publish-ledger.ts:20-27 PublishRequest, :76+ readPublishLedger decodes the decision result) and the runs read carries `remoteUrl` (http/runs-read-contract.ts:97) - keeping the RESULT shape means publisher, receipt and runs read stay untouched.\n- A new command kind costs the PR #21 roster backfill (vocabulary + families + registry + v2 registry + MCP exclusion + bootstrap-sequence + 7 pinned tests + contracts runtime-vocabulary + generated client + 4 digest mirrors, memory prs19-22-landed-2026-09-03) - about 20 files; REJECTED at plan time. `project.admin` is only a capability name (daemon-command-vocabulary.ts:66) and the project configuration manifest is the provider profile (packages/contracts/src/configuration/project-configuration-contract.ts:164-169) - neither is a settings writer.\n- Read routes: registered in apps/daemon/src/http/http-listener-read-dispatch.ts (pattern: sessions-read.ts + SESSIONS_READ_PATH at :32/:86/:431/:481) with the control-room pins apps/control-room/src/live/dev-proxy-paths.ts:36 and live/live-document-proxy.test.ts:34; a new read = the 8-touchpoint + `.js` bridge pattern (memory ui-connect-everything-built-2026-09-02).\n\nFEATURE: (1) `repository.publish {goalId, remoteUrl}` keeps its exact key roster; `remoteUrl` is a string OR null. A string: admitted as today (invalid -> the existing BOOTSTRAP_PAYLOAD_INVALID, or a distinct REMOTE_URL_INVALID only if BOOTSTRAP_REFUSAL_CODES' pins are <= 2 files - architect measures and states), then ONE multi-leg decision (`commitAcceptedLegs`, bootstrap-ledger.ts:222-240): the publish request on `publish:<goalId>` exactly as today AND `RepositoryRemoteBound {remoteUrl, boundAt, boundBy}` on the project aggregate `remote:<projectId>` (replacing any prior binding; version-fenced). Null: read the bound remote; none -> PUBLISH_REMOTE_UNBOUND (DAEMON_PREREQUISITE); else commit the publish request with the RESOLVED remoteUrl in the result (publisher/receipt/runs unchanged). (2) `readProjectRemote(store, projectId)` in repository/publish-ledger.ts (or a sibling module if the file would pass 250) folding the latest RepositoryRemoteBound. (3) Read route `POST /repository/remote/read {}` -> `{ outcome: \"REMOTE\", remoteUrl: string|null, boundAt: string|null, boundBy: string|null }` under the GOAL capability (same as /goals/source/read), with the 8 touchpoints: route module (+ .js bridge), dispatch registration, read contract, control-room live decoder (exact keys) + dev-proxy-paths pin + live-document-proxy.test pin, daemon-store-dependencies snapshot if it enumerates read ports.",
+  "definitionOfDone": [
+    "Over a REAL store: `repository.publish` with a valid URL commits the publish request (result {goalId, remoteUrl, requestedAt} byte-identical to today's shape) AND `remote:<projectId>` reads {remoteUrl, boundAt, boundBy}; a second publish with `remoteUrl: null` resolves the bound URL into its result; a publish with a DIFFERENT URL rebinds (the read returns the new one) - all asserted by reading the store.",
+    "Refusals with code + layer: `remoteUrl: null` with nothing bound -> PUBLISH_REMOTE_UNBOUND / DAEMON_PREREQUISITE; an invalid URL (embedded credential, non-https/ssh) -> the code the plan names (existing BOOTSTRAP_PAYLOAD_INVALID or REMOTE_URL_INVALID with its pins updated); a missing `remoteUrl` KEY still refuses at the payload roster (exact keys unchanged - assert the code); each arm verified red by mutation.",
+    "The wrapper publisher and runs read are untouched: `git diff --stat` shows no change under apps/daemon/src/orchestrator/ or apps/daemon/src/http/runs-read*.ts; node-publisher.test.ts and runs-read tests green unchanged (count lines quoted).",
+    "`POST /repository/remote/read {}` answers {outcome:\"REMOTE\", remoteUrl, boundAt, boundBy} (nulls when unbound) with its exact-key control-room decoder and the two proxy-path pins updated; the served-read roster test (if one enumerates routes) updated; MCP allowlist unchanged (the read is operator HTTP only) - count line quoted.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` (decoder + proxy pins), `pnpm typecheck`; goal-services.ts stays <= 250 lines (`wc -l` quoted) - extract the publish handler into repository/publish-services.ts if it would not."
+  ],
+  "taskRails": [
+    "NO NEW COMMAND KIND and NO PAYLOAD-KEY ROSTER CHANGE: the remote binds through repository.publish's existing exact roster (null = bound); a new kind is the 20-file backfill this split exists to avoid.",
+    "RESULT SHAPE FROZEN: the publish decision result keeps {goalId, remoteUrl, requestedAt} so the publisher, receipt and runs read stay byte-identical; a read SHAPE is additive only (new route), named with every exact-key decoder + proxy pin.",
+    "Human gate unchanged: repository.publish stays operator-only, HUMAN_ONLY, MCP-excluded (rosters untouched, pins quoted). Refusals assert code AND layer; mutate to prove red. <=250 lines per production source, hard stop 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TESTS FIRST (red). (a) apps/daemon/src/goals/goal-services.test.ts - find the existing repository.publish arms (grep `repository.publish` / `remoteUrl`; the surface pin at :149-156 lists the kinds and stays) and add a `describe(\"repository.publish binds the project remote\")` block using the file's own `send(store, envelope(kind, version, payload))` + driveThrough harness (:258-304 pattern): (1) publish with `remoteUrl: \"https://github.com/o/r.git\"` -> ok; `store.readEvents(\"remote:\" + PROJECT_ID)` holds exactly one RepositoryRemoteBound {remoteUrl, boundAt: <decidedAt>, boundBy: <principalId>}; the publish decision result decodes to exactly {goalId, remoteUrl, requestedAt} (sorted keys) - today's shape; (2) a second publish (new commandId, next expectedVersion) with `remoteUrl: null` -> ok and its result.remoteUrl equals the bound URL; the remote aggregate still holds ONE event; (3) publish with a DIFFERENT valid URL -> ok, remote aggregate holds two events and `readProjectRemote` returns the new one; (4) `remoteUrl: null` on a fresh store (nothing bound) -> REFUSED code PUBLISH_REMOTE_UNBOUND, refusedBy DAEMON_PREREQUISITE, no event written on either aggregate (decisionCount unmoved except the store's own audit row - assert the remote aggregate has 0 events); (5) `remoteUrl: \"https://user:pw@github.com/o/r.git\"` and `\"file:///tmp/x\"` -> PUBLISH_REMOTE_URL_INVALID / DAEMON_INGRESS, nothing bound; (6) `remoteUrl: 7` -> BOOTSTRAP_PAYLOAD_INVALID / DAEMON_INGRESS (neither string nor null); (7) a missing `remoteUrl` KEY -> the payload-roster refusal the registry answers (dispatch through the registry harness if goal-services.test does not exercise the roster; else assert through daemon-command-registry.test.ts's existing payload-roster arm - name which). (b) apps/daemon/src/repository/publish-ledger.test.ts (create beside the ledger if absent): `readProjectRemote(store, projectId)` -> null on an empty store; the latest binding after two RepositoryRemoteBound events (write them through the store's commit API in the test); an undecodable payload -> null with no throw. Run from apps/daemon: `pnpm exec vitest run --root . --config package.json src/goals/goal-services.test.ts src/repository/publish-ledger.test.ts` - RED on the new arms; quote them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.test.ts",
+        "apps/daemon/src/repository/publish-ledger.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/publish-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONTRACTS + LEDGER (green for the ledger arms). apps/daemon/src/repository/publish-receipt-contracts.ts: export `REMOTE_BOUND_EVENT_TYPE = \"RepositoryRemoteBound\" as const`, `PUBLISH_REMOTE_UNBOUND = \"PUBLISH_REMOTE_UNBOUND\" as const`, `PUBLISH_REMOTE_URL_INVALID = \"PUBLISH_REMOTE_URL_INVALID\" as const`, `remoteAggregateId(projectId) = \"remote:\" + projectId` beside `publishAggregateId` (:109). apps/daemon/src/repository/publish-ledger.ts (191 lines): export `readProjectRemote(store, projectId): ProjectRemote | null` with `ProjectRemote = Readonly<{ remoteUrl: string; boundAt: string; boundBy: string }>` - fold `store.readEvents(remoteAggregateId(projectId))` in aggregateSequence order, decode each payload with decodeBoundedJsonBytes, keep the LAST event whose eventType is REMOTE_BOUND_EVENT_TYPE and whose payload has exactly the three string keys (admitRemoteUrl re-checked on read - a stored URL that no longer admits reads as null with no throw), frozen result; wrap the read so a throwing store yields null. Keep the file under 250 lines (`wc -l` quoted) - if it would not fit, place `readProjectRemote` in a new repository/project-remote-ledger.ts (+ .js) and say so.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publish-receipt-contracts.ts",
+        "apps/daemon/src/repository/publish-ledger.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "HANDLER (green for the publish arms). apps/daemon/src/goals/goal-services.ts `publishRepository` (:187-215; file is 223 lines - target stays under 250, hard cap 400; if the branch does not fit, move the whole handler to repository/publish-services.ts + .js and register it in BOOTSTRAP_HANDLERS under the same name - state which): parse `const raw = request.payload[\"remoteUrl\"]`; `goalId === null` -> BOOTSTRAP_PAYLOAD_INVALID as today; `raw === null` -> `const bound = readProjectRemote(store, request.projectId); if (bound === null) return refuse(kind, PUBLISH_REMOTE_UNBOUND, \"DAEMON_PREREQUISITE\"); remoteUrl = bound.remoteUrl; bind = false`; `typeof raw === \"string\"` -> `remoteUrl = admitRemoteUrl(raw); null -> refuse(kind, PUBLISH_REMOTE_URL_INVALID, \"DAEMON_INGRESS\"); bind = true`; anything else -> BOOTSTRAP_PAYLOAD_INVALID. Keep the goal/lifecycle/version checks (:194-207) byte-identical. Commit: result = { goalId, remoteUrl, requestedAt: request.decidedAt } (unchanged shape); `bind` false -> `commitAccepted` exactly as today; `bind` true -> `commitAcceptedLegs(store, request, { aggregateId, eventPayload: result, eventType: \"RepositoryPublishRequested\", expectedVersion: versionOf(ledger, aggregateId), result }, [{ aggregateId: remoteAggregateId(request.projectId), eventPayload: { boundAt: request.decidedAt, boundBy: request.principalId, remoteUrl }, eventType: REMOTE_BOUND_EVENT_TYPE, expectedVersion: versionOf(ledger, remoteAggregateId(request.projectId)) }])` - read `ExpectedVersionDecisionLeg`'s exact field names at bootstrap-ledger.ts:222-240 and match them (a leg field named differently is a silent no-op). Re-run the two test files: green, count line quoted; `wc -l apps/daemon/src/goals/goal-services.ts` quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` + `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo). DoD 3 proof: `git diff --stat` shows NO change under apps/daemon/src/orchestrator/ or apps/daemon/src/http/ (publisher, receipt, runs read untouched) - paste it; node-publisher.test.ts and the runs-read tests appear green in the package run. Roster proof: `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts` from apps/daemon - unchanged pins, count line quoted (no kind, no payload key, no HUMAN_ONLY change). DRILL (global rail 1), tracked files restore-proven with `git diff --exit-code -- <file>`; the new test file backed up to %TEMP% with SHA256 first: (1) treat `raw === null` with nothing bound as bind-to-empty -> arm 4 red; (2) skip admitRemoteUrl on the string path -> arm 5 red; (3) commit the publish WITHOUT the remote leg -> arms 1 and 3 red; (4) readProjectRemote returns the FIRST event -> arm 3 red and the ledger 'latest' arm red; (5) accept `remoteUrl: 7` as null -> arm 6 red. Record the five red lines + restore proofs in the step note (under 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/repository/publish-ledger.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: two publishes with URLs racing on `remote:<projectId>` - the leg's expectedVersion fences the second (EXPECTED_VERSION_CONFLICT on the whole decision, nothing half-written; assert once); a URL of 2048 chars at the boundary (admitRemoteUrl's limit) accepted, 2049 refused; `remoteUrl: \"\"` -> PUBLISH_REMOTE_URL_INVALID (empty string is not null); a bound URL that stops admitting (future rule change) reads as null and a null publish then refuses UNBOUND rather than pushing a bad remote; principalId in boundBy is the operator's id, never a credential. Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the two new codes + their layers, `remoteAggregateId`, `readProjectRemote`'s signature and file, the unchanged result shape, and the scope re-anchor (read route = child 1b). Then `moe.add_comment` on child 1b (the sibling filed under the same parent, title 'The bound project remote is readable') and on child 2 (task-f6f33a3925bf4856b42cf84a37bb0f9e) confirming the landed symbols. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/repository/publish-receipt-contracts.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a8317bb46e36476e8399c611b41d9612",
+  "priority": "HIGH",
+  "order": 1000.1,
+  "comments": [
+    {
+      "id": "comment-cf6f8fa4a6fa492aacfc8c31b366c953",
+      "author": "architect-16a01670",
+      "content": "SCOPE RE-ANCHOR AT PLAN TIME (architect-16a01670, measured at main 68eb1c5d): the read route in FEATURE (3) / DoD 4 moves to a NEW sibling child 1b (filed in this batch, dependsOn this row) - wiring a daemon read is 8 touchpoints (route module + .js, daemon-store-foundation-composition.ts:351 factory, daemon-store-dependencies.ts:97 provider key, daemon-entry.ts:284 resolution, listener options + http-listener-read-dispatch.ts serve/registration, the providerKeys pin at daemon-store-dependencies.test.ts:710-719) and together with the publish binding the row would exceed the 10-file cap. THIS row = the publish binding only: DoD 1, 2, 3, 5 stand; DoD 4 is void here (child 1b owns it, child 3 owns the control-room decoder + proxy pins). Codes chosen (free strings, no roster - BOOTSTRAP_REFUSAL_CODES at bootstrap-contracts.ts:59-63 holds only the three ingress codes and handler codes are plain strings): PUBLISH_REMOTE_URL_INVALID at DAEMON_INGRESS for a string admitRemoteUrl refuses (distinct from BOOTSTRAP_PAYLOAD_INVALID, which stays for a missing goalId or a remoteUrl that is neither string nor null), PUBLISH_REMOTE_UNBOUND at DAEMON_PREREQUISITE for null with nothing bound. The binding is read from the EVENTS of aggregate `remote:<projectId>` (last RepositoryRemoteBound), never from decisions.",
+      "timestamp": "2026-09-04T10:41:41.819Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:37:25.873Z",
+  "updatedAt": "2026-09-04T10:43:12.566Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:40:00.036Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 5
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:43:10.441Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A new `repository.bind_remote` kind - REJECTED (parent record): ~20-file roster backfill. (2) Binding as a separate decision before the publish - REJECTED: a crash between the two leaves a publish without its binding; `commitAcceptedLegs` fences both aggregates in one decision. (3) Reading the binding from decisions - REJECTED: the binding is a second LEG of a publish decision whose primary target is publish:<goalId>; folding the `remote:<projectId>` aggregate's EVENTS is the direct, replay-safe read. (4) Reusing BOOTSTRAP_PAYLOAD_INVALID for a bad URL - REJECTED in favour of PUBLISH_REMOTE_URL_INVALID: handler codes are plain strings (BOOTSTRAP_REFUSAL_CODES holds only the three ingress codes), so a distinct code costs no roster and the browser can say why. (5) Including the read route here - REJECTED (10-file cap): child 1b owns the 8-touchpoint wiring.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: payload roster daemon-command-vocabulary.ts:316 [goalId, remoteUrl] enforced per registry entry (daemon-command-registry.ts:388) - the key stays, the value may be null; handler goal-services.ts:187-215 (admitRemoteUrl :190, goal + lifecycle + version checks :194-207, result {goalId, remoteUrl, requestedAt} :208, commitAccepted :209-214); admitRemoteUrl publish-receipt-contracts.ts:61-70 (https host regex forbids userinfo; ssh form; 2048 cap; non-https/ssh schemes refused); publishAggregateId :109; publish-ledger.ts readPublishLedger :76+ requires a non-empty remoteUrl in the decision result (decodeRequest :60-70) - keeping the resolved URL in the result keeps node-publisher.ts:35-50 and runs-read-contract.ts:97 untouched; commitAcceptedLegs bootstrap-ledger.ts:222-240; bootstrap-sequence.ts:25 prerequisite and :114-117 aggregate id untouched (the remote leg is not a chain step); goal-services.test.ts harness :258-304 (driveThrough + send + envelope); BOOTSTRAP_REFUSAL_CODES bootstrap-contracts.ts:59-63 (ingress only; pinned by index-surface.test.ts).",
+    "risks": "(a) The leg field names of ExpectedVersionDecisionLeg must be copied from bootstrap-ledger.ts:222-240 - a mistyped field is a silent no-op. (b) goal-services.ts is at 223 lines; the branch must stay under 250 or the handler moves to repository/publish-services.ts (say which in the step note). (c) A stored URL that later fails admitRemoteUrl must read as null (fail closed) - never push to it. (d) Never log or echo a URL that carries userinfo; admitRemoteUrl refuses it before any durable write. (e) Peer dirt never staged; new test file untracked until the completion commit.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/repository/publish-receipt-contracts.ts",
+      "apps/daemon/src/repository/publish-ledger.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+      "apps/daemon/src/goals/goal-services.test.ts",
+      "apps/daemon/src/orchestrator/node-publisher.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:43:12.566Z"
+}

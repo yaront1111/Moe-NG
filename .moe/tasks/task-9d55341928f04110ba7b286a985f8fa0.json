@@ -1,0 +1,35 @@
+{
+  "id": "task-9d55341928f04110ba7b286a985f8fa0",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The bound project remote is readable: POST /repository/remote/read",
+  "description": "SPIDR child 1b of task-a8317bb46e36476e8399c611b41d9612. dependsOn child 1 (task-19d2329c25934099b2ff10086987d1c5: `readProjectRemote` + `remote:<projectId>`). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify child 1 first: `grep -n readProjectRemote apps/daemon/src/repository/publish-ledger.ts`.\n\nWHAT THIS ROW OWNS: one daemon read route and its wiring. No control-room change (child 3 lands the decoder + proxy pins), no offer change.\n\nMEASURED (the 8-touchpoint pattern, memory ui-connect-everything-built-2026-09-02, re-measure before planning): template = the sessions read: apps/daemon/src/http/sessions-read.ts (SESSIONS_READ_PATH :19, module-private LAYER :20, SESSIONS_READ_CODES roster :22-24 {CAPABILITY_DENIED, PROJECT_MISMATCH, UNREADABLE}, `createSessionsReadPort({projectId, store})` :22+, authenticateHttpRequest + CAPABILITIES gate); factory apps/daemon/src/daemon-store-foundation-composition.ts:351 `const sessions = (): SessionsReadPort => createSessionsReadPort(...)`; provider key apps/daemon/src/daemon-store-dependencies.ts:97 `sessions: () => ...`; daemon entry apps/daemon/src/daemon-entry.ts:284 `...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions })`; listener dispatch apps/daemon/src/http/http-listener-read-dispatch.ts (502 lines - ALREADY over the 400 hard cap, pre-existing: add only the import, the method refusal at :431-434 pattern and the serve branch at :481-482 pattern, and put `serveRepositoryRemote` itself in the new route module; record the pre-existing size in the completion, do not reformat); the `providerKeys` pin at apps/daemon/src/daemon-store-dependencies.test.ts:710-719 (sorted list including \"sessions\") gains the new key; the listener's StartListenerOptions type gains the port (find it where `sessions` is declared; grep `readonly sessions` under apps/daemon/src/http).\n\nFEATURE: `POST /repository/remote/read` with body exactly `{}` under the GOAL capability (same gate as /goals/source/read) answers `{ outcome: \"REMOTE\", remoteUrl: string|null, boundAt: string|null, boundBy: string|null, readAt }` from child 1's `readProjectRemote`; refusals REPOSITORY_REMOTE_READ_CAPABILITY_DENIED / _PROJECT_MISMATCH / _UNREADABLE (module-private layer \"REPOSITORY_REMOTE_READ\" - a private column-0 `*_LAYER` const is a layer-visibility allowlist entry: tests/security/layer-visibility-cases.ts UNSCANNED_PRIVATE_LAYERS + EXPECTED_PRIVATE_COUNT, memory task-task-741dad13e23d441a8385d0f14df5b5c1-handoff - OR reuse the pattern sessions-read uses for its LAYER const exactly as it is declared there; measure which shape the scan counts and follow it); a non-POST refuses LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID like the sessions route.",
+  "definitionOfDone": [
+    "Over a REAL daemon listener (the sessions-read test harness pattern): `POST /repository/remote/read {}` answers {outcome:\"REMOTE\", remoteUrl, boundAt, boundBy, readAt} with nulls before any publish and the bound values after child 1's binding; exact keys asserted; a body other than `{}` and a non-POST are refused with the named codes (code + layer asserted).",
+    "Capability gate: an agent (non-GOAL) credential refuses REPOSITORY_REMOTE_READ_CAPABILITY_DENIED; a credential bound to another project refuses _PROJECT_MISMATCH; the route is NOT on the MCP allowlist (mcp-tool-allowlist test count line quoted).",
+    "All wiring touchpoints named and landed: route module + .js bridge, composition factory, store-dependencies provider key, daemon-entry resolution, listener options + dispatch registration, `providerKeys` pin updated (run it red first, quote the diff); any new column-0 `*_LAYER` const is added to the layer-visibility allowlist with its count bump (or the existing declared shape is reused - state which).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:security` (layer census); http-listener-read-dispatch.ts grows by no more than the import + 4 lines (pre-existing 502 lines recorded, not fixed here)."
+  ],
+  "taskRails": [
+    "PURE DAEMON LEAF: no control-room file (child 3 owns the decoder and proxy pins), no offer change, no command change.",
+    "EXACT-KEY READ: the response roster is fixed and asserted; every wiring touchpoint is named in the plan (8-touchpoint pattern) - a missing `.js` bridge kills the daemon at boot.",
+    "Refusals assert code AND layer; mutate to prove red (global rail 1). <=250 lines per new production source; the dispatch file is pre-existing debt - touch it minimally and record its size."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-a8317bb46e36476e8399c611b41d9612",
+  "dependsOn": [
+    "task-19d2329c25934099b2ff10086987d1c5"
+  ],
+  "priority": "HIGH",
+  "order": 1000.15,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:42:11.826Z",
+  "updatedAt": "2026-09-04T10:42:11.826Z"
+}

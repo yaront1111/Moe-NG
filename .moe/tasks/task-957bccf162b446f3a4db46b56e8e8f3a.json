@@ -29,8 +29,15 @@
   ],
   "priority": "HIGH",
   "order": 1002.2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-632e626ceda94aa98b6fc38945a78758",
+      "author": "architect-16a01670",
+      "content": "SCOPE ADDITION FROM CHILD 1's PLAN (architect-16a01670): the activity `verdict` for approval kinds moves here - apps/daemon/src/http/activity-read.ts:77 VERDICT_KINDS gains \"approval.decide_intent\" (and \"approval.decide\"), `verdictOf` reads the committed result's `decision` (the REJECT result child 1 commits is {decision, decisionReason, findingsRef, runId, successorRunId}; an APPROVE result carries its own decision field - measure it); activity-read.test.ts:113-119 pattern for the arms; activity-words.ts:69 already renders both words. Also from child 1: the resolver is `currentPlanningRun(store, planningRunRef)` in apps/daemon/src/planning/current-planning-run.ts (relative import; not on the daemon root), successorRunId is read off the PlanningRunRejected event, and the rejection reason for the mission is the intent decision result's `decisionReason` on the REJECTED run's approval.decide_intent decision.",
+      "timestamp": "2026-09-04T10:32:10.318Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:27:30.045Z",
-  "updatedAt": "2026-09-04T10:27:30.045Z"
+  "updatedAt": "2026-09-04T10:32:10.318Z"
 }

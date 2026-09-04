@@ -1,0 +1,43 @@
+{
+  "id": "task-e6000b57fd374f78ba074b9f0f0f2c67",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "One Publish control in the browser: the bound remote on Health, no URL typing per goal, docs and the UnAI live push",
+  "description": "SPIDR child 3 of task-a8317bb46e36476e8399c611b41d9612. dependsOn child 2 (task-f6f33a3925bf4856b42cf84a37bb0f9e), which dependsOn child 1 (task-19d2329c25934099b2ff10086987d1c5). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d. Verify children on disk first: `grep -n \"remote/read\" apps/daemon/src/http/http-listener-read-dispatch.ts`; `grep -n \"PUBLISH_REMOTE_UNBOUND\" apps/daemon/src -r`.\n\nWHAT THIS ROW OWNS: the human-visible end - control room, Playwright, docs, and the live push on UnAI. No daemon production change.\n\nMEASURED (re-measure before planning):\n- apps/control-room/src/v2/goals/goal-publish.tsx (134 lines): `REMOTE_STORAGE_KEY = \"moe.publish.remoteUrl\"` (:18) read/written through localStorage (:29, :35-37), `remoteUrl` state (:66), `canPublish` requires a typed URL (:73), `port.submit(offer, goalId, remoteUrl)` (:78), testids cr.publish.root/landed/state/link (:88-97); publish-port.ts:14-20 `submit(affordance, goalId, remoteUrl)` spends the offer with payload {goalId, remoteUrl}. After child 1 the payload's remoteUrl may be null (bound remote) and the bound remote is served by `POST /repository/remote/read` (its live decoder lands with child 1).\n- Health screen: apps/control-room/src/v2/ops/ops-screens.tsx:180-206 `HealthScreen` (cr.health.root/banner/facts/verifier) - the project-level home for a \"Repository\" card; live-ops.tsx wires the ops reads.\n- Board header publish link keys on the offer (memory board-screen-landed-2026-09-04); after child 2 the offer exists only with a landed commit, so a goal with nothing landed renders no publish card at all.\n- Docs: docs/agent-stack-runbook.md '### Publishing (your decision, your remote)' (:402-420: \"type the git remote ... and confirm\"); README.md publish clause (:54-55 \"the publisher pushes only when a human names a remote on the goal\").\n- Live lane: UnAI (D:/projexts/UnAI), scripts/up.ps1; the owner's remote for UnAI is named by the owner at drive time (never invented).\n\nFEATURE: the publish card becomes ONE control: when a remote is bound it shows \"Publish to <remote>\" with the landed commits it will push (from /runs/read landing) and a Publish arm/confirm sending {goalId, remoteUrl: null}; when no remote is bound it shows the URL input once (first binding) and sends {goalId, remoteUrl: <typed>}; a Change link on the card and on Health reveals the input again (the next publish rebinds); `moe.publish.remoteUrl` localStorage is gone; with nothing landed the card renders nothing. Health gains a \"Repository\" card: the bound remote (or \"no remote bound - bind it from a goal's Publish card\"), boundAt/boundBy, Change. README + runbook rewritten to the project shape.",
+  "definitionOfDone": [
+    "goal-publish tests: bound remote -> no URL input, the card names the remote and the landed commits, Publish dispatches {goalId, remoteUrl: null} (payload asserted byte-exact through publish-port.ts); unbound -> the input renders once and Publish dispatches {goalId, remoteUrl: <typed>}; Change reveals the input while bound; nothing landed (no offer) -> the card renders nothing; `grep -rn \"moe.publish.remoteUrl\" apps/control-room/src` = 0 and no localStorage read/write remains in goal-publish.tsx.",
+    "Health screen test: the Repository card renders the bound remote + boundAt/boundBy from the real `/repository/remote/read` frame (recorded from a real daemon), the unbound wording when null, and the Change control; the ops read roster/poller test updated (live-ops.tsx).",
+    "Playwright journey against a REAL daemon (tests/e2e/control-room/): land a commit -> Publish card appears -> first publish types the URL (a local bare repository as the remote) -> the receipt link renders -> second goal publishes with no typing; `pnpm test:e2e:browser` count line quoted.",
+    "Live drive on UnAI: the owner's remote bound by the first publish from the browser, the `moe-publish-receipt/1` PUSHED line with the remote branch link, then a second publish with no URL typed - receipt ids + links in a row comment (a refused push recorded verbatim, never worked around).",
+    "docs/agent-stack-runbook.md Publishing section and README publish clause rewritten to the project shape in the same commit; gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`; every production file touched stays under 250 lines (`wc -l` quoted); sources ASCII-only, JSX text apostrophe-free."
+  ],
+  "taskRails": [
+    "NO DAEMON PRODUCTION CHANGE: a daemon gap belongs to child 1 or 2 - stop, comment there, report_blocked with blockedOnTaskIds.",
+    "REAL FRAMES ONLY: control-room fixtures are recorded from a real daemon (exact-key decoders); the remote URL in the live drive is the owner's, never invented, and never carries a credential.",
+    "Test ids keep the cr.publish.* / cr.health.* prefixes; sources ASCII-only, JSX text without apostrophes (package-boundary scan). <=250 lines per production source."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a8317bb46e36476e8399c611b41d9612",
+  "dependsOn": [
+    "task-f6f33a3925bf4856b42cf84a37bb0f9e"
+  ],
+  "priority": "HIGH",
+  "order": 1000.3,
+  "comments": [
+    {
+      "id": "comment-4c857d6941324223b05e1e03a131a944",
+      "author": "architect-16a01670",
+      "content": "RE-ANCHOR (architect-16a01670): the `/repository/remote/read` route is child 1b (filed 2026-09-04 under the same parent, dependsOn child 1); its CONTROL-ROOM decoder (apps/control-room/src/live/live-repository-remote.ts, exact keys {outcome, remoteUrl, boundAt, boundBy, readAt}) and the two proxy pins (live/dev-proxy-paths.ts sorted list + live/live-document-proxy.test.ts:34 list) belong to THIS row, not child 1. This row's dependsOn chain (2 -> 1) does not include 1b: at claim time verify `grep -n \"repository/remote/read\" apps/daemon/src/http/http-listener-read-dispatch.ts` >= 1 and, if absent, `moe.report_blocked` with blockedOnTaskIds = [child 1b's id from the parent's comments].",
+      "timestamp": "2026-09-04T10:42:14.820Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:38:40.884Z",
+  "updatedAt": "2026-09-04T10:42:14.820Z"
+}

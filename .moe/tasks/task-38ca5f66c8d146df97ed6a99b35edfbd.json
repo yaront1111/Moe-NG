@@ -120,7 +120,7 @@
       "completedAt": "2026-09-04T10:28:54.471Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -130,15 +130,24 @@
   "parentTaskId": "task-5f5d873e72b546d4a30942bea5c80b97",
   "priority": "HIGH",
   "order": 1003.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-694c64c66b334280a91ed9ebdb070dde",
+      "author": "qa-9aeff9d2",
+      "content": "QA VERIFICATION RECORD (qa-9aeff9d2), anchor = completion commit a1356ed0 on moe/work-2026-09-04. `git branch --contains a1356ed0` -> moe/work-2026-09-04. `git status --porcelain` on all six owned paths -> EMPTY, so the delivered bytes and the worktree agree.\n\nGATES, RE-RUN BY ME (not taken from the record):\n1. `pnpm --filter @moe/daemon test` -> `Test Files 400 passed (400)` / `Tests 7949 passed (7949)`, duration 263.69s.\n   FIRST run of that same command reded: `Test Files 1 failed | 399 passed (400)` / `Tests 2 failed | 7947 passed (7949)`, both arms in apps/daemon/src/bootstrap/activation-receipts-measure.test.ts, exact line: `425| expect(receipts.measuredAt).toBe(CLOCK);`.\n   ATTRIBUTION (path-attributed baseline, disclosed verbatim, never hidden): `git status --porcelain apps/daemon/src/bootstrap/` shows EIGHT `??` untracked paths (activation-receipts{,-measure,-ports}.{ts,js} + two .test.ts). `git show --stat --name-only a1356ed0 | grep -c bootstrap` -> 0. Intersection of the failing path set with this row's owned paths = EMPTY. Re-run of that file alone: `Test Files 1 passed (1)` / `Tests 25 passed (25)`. Diagnosis: a peer session writing an untracked file while my suite ran. Not this row's diff.\n2. `pnpm typecheck` -> per-package `$ tsc --project tsconfig.json` echoes present, `apps/daemon typecheck: Done`, every package Done.\n3. Focused, from apps/daemon: `pnpm exec vitest run --root . --config package.json src/mcp-work-context-query.test.ts src/mcp-dispatch-port.test.ts src/mcp-tool-allowlist.test.ts` -> `Test Files 3 passed (3)` / `Tests 55 passed (55)`.\n\nDoD 3 (byte identity) SETTLED INDEPENDENTLY, not on the worker's word. Pre-change `answerWorkContext` was `bytesOf(config.affordances.readSurface())`, and `bytesOf(v) = encoder.encode(JSON.stringify(v))` (mcp-dispatch-port.ts:88-93). I reconstructed FIXTURE_SURFACE and FIXTURE_REFUSAL as literals in a standalone node script (same key insertion order; overrides spread over an existing key does not move it) and hashed the encoded bytes:\n  surface -> a4c344c3f69d33e308e1be07bb71a0e749091f0f54639e4a23524bcacda8a101\n  refusal -> 45e961e2ee907e0136380f1d0e87ab35ce4ce501f9368a3185e303137db524d0\nBoth EXACT matches to SURFACE_GOLDEN_SHA256 / REFUSAL_GOLDEN_SHA256 pinned in the test. Encoded surface length 4251 bytes. The DoD's literal wording (\"commit shows the fixture added first\") is unsatisfiable under one-completion-commit-per-session; the architect's substitute anchor (pre-change hash) is equivalent in force and it holds.\n\nNON-VACUITY, MY OWN MUTANT — deliberately one the worker did NOT drill (their five were aggregateId-only match, first-step-for-unknown, accept empty id, new object for `{}`, stop filtering offers). I mutated `layer: AFFORDANCE_SURFACE_LAYER` -> `\"QA_DRILL_LAYER\" as typeof AFFORDANCE_SURFACE_LAYER` in workItemUnknown(). BOTH files went red:\n  mcp-work-context-query.test.ts: `AssertionError: expected 'QA_DRILL_LAYER' to be 'AFFORDANCE_SURFACE'`\n  mcp-dispatch-port.test.ts: `expected { code: 'WORK_ITEM_UNKNOWN', ...(3) } to match object { code: 'WORK_ITEM_UNKNOWN', ...(2) }`\nSo the layer half of the code+layer rail is load-bearing at BOTH the pure surface and through the real port. RESTORE PROOF (file is tracked as of a1356ed0, so git diff is admissible here): `git checkout -- apps/daemon/src/mcp-work-context-query.ts`, then `git diff --stat` EMPTY, `git status --porcelain` EMPTY, `grep -c QA_DRILL_LAYER` -> 0.\n\nDoD 1: 22-step fixture (>= 20). `plan.propose@run-work-context-fixture` decodes to `{outcome:\"SURFACE_ITEM\", readAt:<string>, step:{claimAggregateVersion:7, claim:{claimedBy:\"worker-fixture\",version:7}}}`; bytes < 8192 AND < the whole-surface answer. Selection by `workItemIdFor(kind, aggregateId)`: the fixture holds two steps sharing ITEM_RUN under `plan.propose` and `approval.decide` and each resolves to its own step (claimAggregateVersion 7 vs 2) — aggregateId alone cannot separate them.\nDoD 2: WORK_ITEM_UNKNOWN asserts code AND layer (\"AFFORDANCE_SURFACE\") AND outcome (\"REFUSED\") AND that detail names the id, at both layers. INPUT_INVALID asserted through the port's `ok:false` + `error.code` envelope for \"\", 7, null, [\"a\"] — so which layer refused is distinguishable from the product refusal by envelope shape, not by code alone.\nDoD 4: mcp-tool-allowlist.test.ts is NOT in the commit's file list (unchanged) and its served/unserved arms are green in the focused run — the payload-less `PAYLOAD_FOR[kind] ?? {}` call still yields the surface, because `{}` has no own `workItemId`. `wc -l`: mcp-work-context-query.ts 152 (cap 250), mcp-dispatch-port.ts 376 (cap 400, was 366) — the extraction the row rail demanded was performed, `.js` bridge present and one line.\n\nRAILS: no new query kind (QUERY_HANDLERS untouched; the whole port diff is +1 import, +16/-6 in one handler), no wrapper/mission-text/control-room edit, no new `*_LAYER` constant (reuses the exported AFFORDANCE_SURFACE_LAYER, so no roster backfill). Prototype-key ids (\"constructor\", \"__proto__\", \"toString\", \"plan.propose@__proto__\") refuse WORK_ITEM_UNKNOWN rather than throwing or handing back an inherited member — guarded by Object.hasOwn on both wire-shaped maps, with an arm. Key order puts `step` first so a truncating harness cannot cut `claimAggregateVersion` — the exact live failure this row exists to fix — and an arm pins that order rather than leaving it to style. ECHOED_ID_MAX=200 bounds the caller-chosen id echoed into the refusal detail (the query path does a plain JSON.parse with no bounded decode); in scope, from the adversarial pass, and tested.\n\nNOTED, NOT A DEFECT: the commit carries `Moe-Contested: docs/agent-stack-runbook.md (task-ac9d5e2d43334525bd990b1362652ce4)`. The edit is 7 additive prose lines in the `## MCP surfaces` section that plan step 4 named explicitly; it does not delete or reword anything the sibling row may own. `readAt` is a THIRD parameter to answerWorkContextQuery rather than a surface field — AffordanceSurface has no timestamp, DoD 1 requires readAt, and passing it in keeps the function pure. Correct call.",
+      "timestamp": "2026-09-04T10:42:51.985Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:02:46.375Z",
-  "updatedAt": "2026-09-04T10:29:51.803Z",
+  "updatedAt": "2026-09-04T10:43:28.395Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:05:33.312Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-04T10:43:28.395Z",
+    "wallClockMs": 2275083
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -168,7 +177,8 @@
   },
   "planApprovedAt": "2026-09-04T10:08:16.230Z",
   "contextFetchedBy": [
-    "worker-c846071b"
+    "worker-c846071b",
+    "qa-9aeff9d2"
   ],
   "workStartedAt": "2026-09-04T10:09:16.306Z",
   "reviewStartedAt": "2026-09-04T10:29:51.803Z",
@@ -184,7 +194,83 @@
     "apps/daemon/src/mcp-work-context-query.js",
     "apps/daemon/src/mcp-work-context-query.test.ts",
     "apps/daemon/src/mcp-dispatch-port.ts",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+    ".moe/tasks/task-38ca5f66c8d146df97ed6a99b35edfbd.json",
+    ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+    ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
   ],
-  "completionSummary": "`work.get_context` gained a per-item form. NEW apps/daemon/src/mcp-work-context-query.ts (152 lines) + .js bridge + .test.ts (12 arms); mcp-dispatch-port.ts 366->376 lines, answerWorkContext is now a delegate; runbook sentence at the '## MCP surfaces' prose. QUERY_HANDLERS unchanged - no new query kind - and mcp-tool-allowlist.test.ts was never edited (absent from git status), its served/unserved arms green.\n\nEXPORTED CONSTANTS: SURFACE_ITEM = \"SURFACE_ITEM\", WORK_ITEM_UNKNOWN = \"WORK_ITEM_UNKNOWN\".\nSurfaceItem KEYS, in emitted order: step, outcome, readAt, nextAllowedCommands, planningGoalRef, planningAuthority.\n\nLAYER REUSED: the not-found refusal is the AffordanceRefused shape {code, detail, layer, outcome:\"REFUSED\"} under the EXISTING AFFORDANCE_SURFACE_LAYER (affordance-contract.ts:18). No new *_LAYER. DoD-2 READING (architect's, confirmed on disk): WORK_ITEM_UNKNOWN is a PRODUCT refusal, not a runtime-error-registry code - registering it in packages/contracts runtime-error-registry.ts would touch 5 pinned consumers including two generated digest mirrors, for one leaf refusal decided entirely inside the surface just read. Code AND layer are asserted at both levels.\n\nPRE-CHANGE GOLDEN sha256, captured against the UNCHANGED port in step 1 and still green after: surface a4c344c3f69d33e308e1be07bb71a0e749091f0f54639e4a23524bcacda8a101; REFUSED pass-through 45e961e2ee907e0136380f1d0e87ab35ce4ce501f9368a3185e303137db524d0. Both asserted for payload-absent AND payload:{}. The payload-less path returns the surface BY REFERENCE, which is what makes byte identity hold.\n\nDELIBERATE DEVIATION: DoD 1 names readAt but AffordanceSurface has no timestamp field, so answerWorkContextQuery takes it as a third parameter and stays pure; the port supplies new Date().toISOString().\n\nADVERSARIAL PASS FIXED TWO REAL DEFECTS, both drilled red: (1) the refusal echoed an UNBOUNDED caller id into detail - dispatchQueryBytes does a plain JSON.parse with no bounded decode - now capped at ECH"
+  "completionSummary": "`work.get_context` gained a per-item form. NEW apps/daemon/src/mcp-work-context-query.ts (152 lines) + .js bridge + .test.ts (12 arms); mcp-dispatch-port.ts 366->376 lines, answerWorkContext is now a delegate; runbook sentence at the '## MCP surfaces' prose. QUERY_HANDLERS unchanged - no new query kind - and mcp-tool-allowlist.test.ts was never edited (absent from git status), its served/unserved arms green.\n\nEXPORTED CONSTANTS: SURFACE_ITEM = \"SURFACE_ITEM\", WORK_ITEM_UNKNOWN = \"WORK_ITEM_UNKNOWN\".\nSurfaceItem KEYS, in emitted order: step, outcome, readAt, nextAllowedCommands, planningGoalRef, planningAuthority.\n\nLAYER REUSED: the not-found refusal is the AffordanceRefused shape {code, detail, layer, outcome:\"REFUSED\"} under the EXISTING AFFORDANCE_SURFACE_LAYER (affordance-contract.ts:18). No new *_LAYER. DoD-2 READING (architect's, confirmed on disk): WORK_ITEM_UNKNOWN is a PRODUCT refusal, not a runtime-error-registry code - registering it in packages/contracts runtime-error-registry.ts would touch 5 pinned consumers including two generated digest mirrors, for one leaf refusal decided entirely inside the surface just read. Code AND layer are asserted at both levels.\n\nPRE-CHANGE GOLDEN sha256, captured against the UNCHANGED port in step 1 and still green after: surface a4c344c3f69d33e308e1be07bb71a0e749091f0f54639e4a23524bcacda8a101; REFUSED pass-through 45e961e2ee907e0136380f1d0e87ab35ce4ce501f9368a3185e303137db524d0. Both asserted for payload-absent AND payload:{}. The payload-less path returns the surface BY REFERENCE, which is what makes byte identity hold.\n\nDELIBERATE DEVIATION: DoD 1 names readAt but AffordanceSurface has no timestamp field, so answerWorkContextQuery takes it as a third parameter and stays pure; the port supplies new Date().toISOString().\n\nADVERSARIAL PASS FIXED TWO REAL DEFECTS, both drilled red: (1) the refusal echoed an UNBOUNDED caller id into detail - dispatchQueryBytes does a plain JSON.parse with no bounded decode - now capped at ECH",
+  "commits": [
+    {
+      "sha": "a1356ed0e38fa45bdc50ac0326965a672b7ab88e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T10:08:17Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+        ".moe/tasks/task-38ca5f66c8d146df97ed6a99b35edfbd.json",
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
+        ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+        "apps/daemon/src/mcp-dispatch-port.test.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/mcp-work-context-query.js",
+        "apps/daemon/src/mcp-work-context-query.test.ts",
+        "apps/daemon/src/mcp-work-context-query.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T10:30:00.957Z",
+      "treeId": "153b7613166e3d93f44b234032478ae0438fb8eb",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/mcp-dispatch-port.test.ts",
+    "apps/daemon/src/mcp-work-context-query.test.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/mcp-work-context-query.js",
+    "docs/agent-stack-runbook.md",
+    "apps/daemon/src/mcp-work-context-query.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-c846071b@2026-09-04T10:08:17Z",
+    "at": "2026-09-04T10:30:00.957Z"
+  },
+  "completedAt": "2026-09-04T10:43:28.395Z",
+  "reviewCompletedAt": "2026-09-04T10:43:28.395Z",
+  "reviewSummary": "APPROVED at commit a1356ed0 (moe/work-2026-09-04; six owned paths clean vs HEAD). Full record: comment-694c64c6.\n\nGATES RE-RUN BY ME: pnpm --filter @moe/daemon test -> Test Files 400 passed (400) / Tests 7949 passed (7949). Its FIRST run reded 2 arms at apps/daemon/src/bootstrap/activation-receipts-measure.test.ts:425 - FOREIGN, disclosed: those 8 bootstrap/activation-receipts* paths are UNTRACKED peer work, 0 in a1356ed0, zero owned-path intersection; that file alone passes (25 passed) and the full re-run is green. pnpm typecheck -> \"apps/daemon typecheck$ tsc --project tsconfig.json\" / Done. Focused from apps/daemon, 3 files incl. mcp-tool-allowlist.test.ts -> 3 passed / 55 tests passed.\n\nDoD 3 SETTLED INDEPENDENTLY: pre-change handler was bytesOf(readSurface()), bytesOf = encode(JSON.stringify). I rebuilt both fixtures as literals in a node script and hashed: a4c344c3... / 45e961e2... EXACT match to the pinned goldens. (\"Fixture committed first\" is unsatisfiable under one-commit-per-session; the pre-change hash anchor is equivalent and holds.)\n\nMY OWN MUTANT, not one of the worker's five: layer AFFORDANCE_SURFACE_LAYER -> \"QA_DRILL_LAYER\" reds BOTH files (expected 'QA_DRILL_LAYER' to be 'AFFORDANCE_SURFACE', plus the port toMatchObject). Restored; git diff and git status --porcelain empty, grep -c 0.\n\nDoD 1/2/4: 22-step fixture; two steps share ITEM_RUN under plan.propose vs approval.decide, each resolves by workItemIdFor (claimAggregateVersion 7 vs 2); bytes < 8192 and < whole surface. WORK_ITEM_UNKNOWN asserts code AND layer AND outcome; INPUT_INVALID via the port's ok:false/error.code envelope for \"\", 7, null, [\"a\"]. wc -l 152 (cap 250) / 376 (cap 400); .js bridge present; allowlist test unchanged, green.\n\nRAILS: no new query kind, no wrapper/mission/control-room edit, no new *_LAYER. Prototype-key ids refuse, not throw. step serialised first so truncation cannot cut the version - pinned by an arm."
 }

@@ -17,8 +17,27 @@
     "HUMAN GATES ARE HUMAN-ONLY: every decide/bind kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded, with the refusal code pinned by a test.",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the receipt and the remote branch link in a row comment."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE (manual - an architect seat cannot set this parent's dependsOn: [NOT_ALLOWED] role resolution; governors paged). Read the three SPIDR children on disk (.moe/tasks/<id>.json) and confirm each is DONE with a landed commit: 1 task-19d2329c25934099b2ff10086987d1c5 (bind-on-publish + remote:<projectId> + /repository/remote/read), 2 task-f6f33a3925bf4856b42cf84a37bb0f9e (publish offered only with a landed commit), 3 task-e6000b57fd374f78ba074b9f0f0f2c67 (one Publish control, Health Repository card, docs, live push). Verify on disk: `git log main --grep \"Moe-Task: task-<id>\" --oneline` = 1+ line each; `grep -rn PUBLISH_REMOTE_UNBOUND apps/daemon/src --include=*.ts | grep -v test` >= 1; `grep -n \"remote/read\" apps/daemon/src/http/http-listener-read-dispatch.ts` >= 1; `grep -rn \"moe.publish.remoteUrl\" apps/control-room/src` = 0; README no longer says a human names a remote 'on the goal'. If ANY child is not DONE: `moe.report_blocked` with blockedOnTaskIds = the missing children and the exact grep results; this row owns 0 files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RE-VERIFY THE LIVE PUSH READ-ONLY (parent DoD 4/live rail; executed by child 3). Read child 3's completion comment (receipt ids, the remote branch link, the second publish without typing) and re-measure against the UnAI store WITHOUT writing: a read-only node:sqlite peek over D:/projexts/UnAI/.moe-next/store.sqlite - the `remote:<projectId>` aggregate's latest RepositoryRemoteBound {remoteUrl (host only, never a credential), boundAt}, the two publish decisions (first with a URL, second with null resolved to the same URL in its result), and both `moe-publish-receipt/1` PUSHED receipts; `git ls-remote <bound remote> refs/heads/<branch>` from the UnAI workspace confirms the pushed sha (read-only). A refused push recorded by child 3 is restated verbatim - never fabricated green. Quote the rows in the step note (under 4500 chars).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES + COMPLETE (parent DoD 6). From the repo root quote count lines for `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security` (path-attributed baseline rule for any foreign red). Adversarial pass over the whole feature: (a) a publish with a credential-bearing URL is refused with the code child 1 chose and binds nothing (assert the remote aggregate unchanged); (b) two goals publishing concurrently with null both resolve the same bound remote; (c) a rebind mid-flight (goal A publishes with URL X, goal B with URL Y) - the later binding wins and each publish result names the URL it resolved at decision time (receipts disagree honestly); (d) repository.publish stays MCP-excluded and HUMAN_ONLY (allowlist test count line). `moe.complete_task` with verification = the daemon count line and a completionSummary listing the three child ids, the live rows re-read in step 2, and the four DoD re-anchorings recorded in comment-0b65818d (no new kind - bind through publish; key stays, value may be null; receipt keeps remoteUrl; Change = reveal the input, rebind on the next publish).",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +47,60 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1000,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0b65818d4a00438a89df523e22ca025c",
+      "author": "architect-16a01670",
+      "content": "PLANNING RECORD (architect-16a01670, 2026-09-04, measured at main 68eb1c5d). MECHANISM: NO new command kind. `repository.bind_remote` would cost the PR #21 backfill (vocabulary + families + registry + v2 registry + MCP exclusion + bootstrap-sequence + 7 pinned roster tests + contracts runtime-vocabulary + generated client + 4 digest mirrors - about 20 files); `project.admin` is only a capability name and the configuration manifest is the provider profile, so no settings writer exists. Instead `repository.publish` keeps its EXACT payload roster [\"goalId\",\"remoteUrl\"] (vocabulary.ts:316; enforced per registry entry :388) and `remoteUrl` becomes string|null: a URL binds (or rebinds) the project remote on `remote:<projectId>` in the same multi-leg decision as the publish request; null means the bound remote; nothing bound refuses PUBLISH_REMOTE_UNBOUND. The decision RESULT keeps {goalId, remoteUrl(resolved), requestedAt} so the wrapper publisher (node-publisher.ts:41-47), the receipt and the runs read are byte-identical.\n\nDoD RE-ANCHORS (grade the measured truth): DoD 1 \"repository.bind_remote published ...\" -> the bind is a leg of repository.publish; the roster tests it would have touched stay unchanged; REMOTE_URL_INVALID only if its code-roster pins are <= 2 files, else the existing BOOTSTRAP_PAYLOAD_INVALID (child 1 states which). DoD 2 \"no longer takes remoteUrl\" -> the KEY stays (exact roster), the VALUE may be null; the offer gate on a COMMITTED landing is child 2. DoD 3 \"remoteUrl gone from the decision payload and the receipt shape\" -> the receipt keeps `remoteUrl` (it names the remote it pushed to, as the same clause demands); only the browser stops typing it. DoD 4 \"ONE remote setting with a change control\" -> the Health screen shows the bound remote (new read /repository/remote/read) and its Change control reveals the URL input on the publish card (a rebind happens with the next publish - documented); `moe.publish.remoteUrl` localStorage removed.\n\nSPIDR-split into 3 children (parent = 0-file verification + live drive; dependsOn unsettable by an architect seat - step 1 manual gate): 1 daemon bind-on-publish + remote aggregate + remote read (leaf); 2 offer gate: repository.publish offered only with >= 1 COMMITTED landing (shares affordance-planning-offers.ts / affordance-read.ts with goal-close child task-8145137c - report_blocked with blockedOnTaskIds while that row is WORKING); 3 control room (publish card without input when bound, Health \"Repository\" card, localStorage removal), Playwright, README/runbook. Ids follow.",
+      "timestamp": "2026-09-04T10:37:35.823Z"
+    },
+    {
+      "id": "comment-da6a767e4a334b7e9b2cb5cb3a2ddfd4",
+      "author": "architect-16a01670",
+      "content": "Child ids (completing comment-0b65818d): 1 task-19d2329c25934099b2ff10086987d1c5 \"The project remote is bound by the first publish and reused\" (leaf) -> 2 task-f6f33a3925bf4856b42cf84a37bb0f9e \"Publish is offered only for a goal with a landed commit\" (dependsOn 1; blocks on goal-close child task-8145137c while that row is in flight - shared affordance files) -> 3 task-e6000b57fd374f78ba074b9f0f0f2c67 \"One Publish control in the browser ...\" (dependsOn 2). This row's plan (3 steps, 0 files) gates on all three, re-verifies the UnAI live push read-only and quotes the gates.",
+      "timestamp": "2026-09-04T10:39:22.706Z"
+    },
+    {
+      "id": "comment-08917027476d43dbb8867c87b457baf1",
+      "author": "architect-16a01670",
+      "content": "Child 1b added (completing comment-da6a767e): task-9d55341928f04110ba7b286a985f8fa0 \"The bound project remote is readable: POST /repository/remote/read\" (dependsOn child 1 task-19d2329c). Child 1 was re-scoped to the publish binding only (comment-cf6f8fa4). Child 3 (task-e6000b57) is not field-gated on 1b - it blocks on 1b with blockedOnTaskIds at claim time if the route is absent (comment-4c857d69). Build order: 1 -> {1b, 2} -> 3.",
+      "timestamp": "2026-09-04T10:43:36.442Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:41:53.294Z",
-  "updatedAt": "2026-09-04T09:41:53.294Z"
+  "updatedAt": "2026-09-04T10:43:41.887Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:33:53.477Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 0
+  },
+  "dependsOn": [
+    "task-19d2329c25934099b2ff10086987d1c5",
+    "task-9d55341928f04110ba7b286a985f8fa0",
+    "task-f6f33a3925bf4856b42cf84a37bb0f9e",
+    "task-e6000b57fd374f78ba074b9f0f0f2c67"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T10:39:19.704Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A new operator kind `repository.bind_remote` (as the row describes) - REJECTED: one kind costs the PR #21 backfill (vocabulary + families + registry + v2 registry + MCP exclusion + bootstrap-sequence + 7 pinned roster tests + contracts runtime-vocabulary + generated client + 4 digest mirrors, ~20 files) and cannot fit any child under the 10-file cap without a handler-less intermediate. (2) Storing the remote in the project configuration manifest - REJECTED: that manifest is the provider profile (packages/contracts/src/configuration/project-configuration-contract.ts:164-169) and `project.admin` is a capability name, not a writer. (3) CHOSEN: `repository.publish` keeps its exact payload roster; `remoteUrl` string binds/rebinds the project remote in the same multi-leg decision as the publish request, null resolves the bound one, unbound refuses PUBLISH_REMOTE_UNBOUND; the decision RESULT keeps {goalId, remoteUrl, requestedAt} so the wrapper publisher, the receipt and the runs read are byte-identical; a small additive read route serves the bound remote to the UI. (4) The offer gate on a COMMITTED landing shares two files with goal-close child task-8145137c - sequenced by blockedOnTaskIds, not by a cross-row dependsOn (the FULL VERTICAL SLICE rail forbids sibling dependsOn). (5) Change control - a dedicated command was rejected with (1); Change reveals the URL input and the next publish rebinds.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: payload roster daemon-command-vocabulary.ts:316 [goalId, remoteUrl], enforced per entry at daemon-command-registry.ts:388; handler goal-services.ts:187-215 (admitRemoteUrl from repository/publish-receipt-contracts.ts:61; aggregate publish:<goalId>; result {goalId, remoteUrl, requestedAt}); publisher node-publisher.ts:35-50 pushes request.remoteUrl from readPublishLedger (publish-ledger.ts:20-27, :76+); runs read carries remoteUrl (runs-read-contract.ts:97); offer minted for every enabled/closing/completed goal at affordance-planning-offers.ts:141-147; landing facts via readReviewLedgers(...).landings (review-read-model.ts:287); read-route pattern sessions-read.ts + http-listener-read-dispatch.ts:32/:86/:431/:481 with control-room pins dev-proxy-paths.ts:36 and live-document-proxy.test.ts:34; goal-publish.tsx localStorage key :18/:29/:35-37, canPublish :73, submit :78; publish-port.ts:14-20; HealthScreen ops-screens.tsx:180-206; runbook Publishing :402-420; README :54-55. File sizes: goal-services.ts 223, publish-ledger.ts 191, affordance-planning-offers.ts 182, affordance-read.ts 422 (already over the 400 hard cap - extract, never grow), goal-publish.tsx 134, ops-screens.tsx 209.",
+    "risks": "(a) affordance-read.ts is at 422 lines - any child touching it must extract, not grow. (b) Shared files with goal-close child 2 (task-8145137c): child 2 here blocks on it while in flight. (c) The remote URL is operator input rendered in cards and pushed to by git: admitRemoteUrl's credential check stays the fence; never log a URL with userinfo. (d) The parent is claimable for WORKING before the children land - step 1 is the manual gate. (e) Live push needs the owner's remote and credentials on the UnAI host - refusals recorded verbatim. (f) Peer dirt never staged.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/repository/publish-ledger.ts",
+      "apps/daemon/src/repository/publish-receipt-contracts.ts",
+      "apps/daemon/src/orchestrator/node-publisher.ts",
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/http/http-listener-read-dispatch.ts",
+      "apps/control-room/src/v2/goals/goal-publish.tsx",
+      "apps/control-room/src/v2/goals/publish-port.ts",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:39:21.826Z"
 }

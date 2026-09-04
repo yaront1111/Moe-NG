@@ -63,7 +63,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:58.848Z",
-  "updatedAt": "2026-09-04T10:28:57.266Z",
+  "updatedAt": "2026-09-04T10:31:25.321Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:23:28.743Z",
     "plannedStepCount": 3,
@@ -89,5 +89,10 @@
       "apps/control-room/src/v2/goals/goal-status.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T10:28:56.467Z"
+  "planApprovedAt": "2026-09-04T10:28:56.467Z",
+  "dependsOn": [
+    "task-3780109018bb49b2bf3a00b18952d7ff",
+    "task-957bccf162b446f3a4db46b56e8e8f3a",
+    "task-a988ca1c240347178c54348c470d07ed"
+  ]
 }
