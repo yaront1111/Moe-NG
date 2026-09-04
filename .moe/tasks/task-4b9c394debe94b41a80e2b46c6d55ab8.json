@@ -118,7 +118,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:03.414Z",
-  "updatedAt": "2026-09-04T17:33:49.881Z",
+  "updatedAt": "2026-09-04T17:34:06.523Z",
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -156,5 +156,34 @@
   "blockedReason": "PLAN SCOPE INSUFFICIENT — 6 unnamed consumers. Step 1 COMPLETE (all 4 checks passed; registry needs NO edit, as hoped). No code written, tree clean. FULL per-file triage in comment-6b2a932eb60f4bbca50427b7a2ba425b.\n\nStep 6 names TWO witness senders; it grepped SYMBOLS, not the SHAPE. `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` = 12 hits / 8 files. Six sit outside the owned roster, all via the shared `send` helper (bootstrap-test-fixtures.ts:202), which passes no receipts:\n  bootstrap/bootstrap-durability.test.ts (:83 :99 :229 :263 :299)\n  activation/admission-gate-resolver.test.ts:185\n  planning/node-mission-test-fixtures.ts:262\n  provider-profile/provider-profile-resolver.test.ts (:169 :483)\n  work/foundation-launch-completion-wiring.test.ts:183\n  work/launch-template-producer.test.ts:207\nFixing bootstrapSequence() + teaching `send` receipts rescues the ~63 driveThrough consumers, NOT these six — each writes its own witness-bearing envelope literal.\n\nSTOP, NOT ABSORB: two need SEMANTIC rewrites. durability:94 (\"refuses activation carrying no witness, at the ingress layer\") has its subject INVERTED — the empty payload becomes the correct one. durability:229 STALE_VERSION reaches the handler, so the new refusal answers before CORE_REDUCER. Rewriting another row's contract tests unscoped is what rail 19 forbids. Owned 9 (planningNotes: \"no headroom left\") + 6 = 15 vs the 10 threshold; you pre-authorized a stop-and-report at ONE path over. No smaller working slice exists: any correct implementation stops honoring a payload witness, so these go red on ANY delivery of this DoD.\n\nRECOMMENDED: spin a child row carrying those 6 paths, dependsOn this row. Alternative: amend affectedFiles to 15.\n\nALSO (non-blocking): step 2 says `ActivationReceiptSet`; real export is `ActivationReceipts`. Steps 3/4 must WIRE child A's two default-absent ports — committedProbeRef and installedPolicySliceRefs — or the handler can NEVER mint.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T17:33:49.881Z"
+  "blockedAt": "2026-09-04T17:33:49.881Z",
+  "commits": [
+    {
+      "sha": "cc00049fd3b3269c59edd5dd91be8be9781a5084",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-6ab7cede@2026-09-04T17:27:45Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
+      ],
+      "recordedBy": "worker-6ab7cede",
+      "recordedAt": "2026-09-04T17:34:06.523Z",
+      "treeId": "aebaa130cdb14dc1e1f61f9812224657847af567",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-6ab7cede@2026-09-04T17:27:45Z",
+    "at": "2026-09-04T17:34:06.523Z"
+  }
 }
