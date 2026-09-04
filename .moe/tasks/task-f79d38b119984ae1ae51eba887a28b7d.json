@@ -120,8 +120,8 @@
       "completedAt": "2026-09-04T22:07:33.873Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-3fd61a21",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -136,16 +136,24 @@
       "author": "worker-75411639",
       "content": "ADVERSARIAL READ FINDING (step 7c) — A DOWNSTREAM SINGLE-NODE ASSUMPTION THE LIFT NOW EXPOSES. Recorded here, not filed as a row (global rails 16 and 20: it belongs to a consumer row, not to this leaf, and this row's own bytes are working and green).\n\nWHAT I FOUND. `apps/daemon/src/activation/activation-budget-derivation.ts` refuses EVERY activation against a multi-node ACTIVE graph:\n  :178-181  const bearingKeys = graph.snapshot.nodes.filter((node) => node.executionBearing).map(...)\n            const resolved = resolveNodeKey(bearingKeys, nodeKey);\n  :125      if (bearingKeys.length > 1) return refuse(\"ACTIVATION_BUDGET_NODE_AMBIGUOUS\");\n`bearingKeys` is read off the CURRENT ACTIVE GRAPH, and compile-dispatcher.ts:319-321 stamps `executionBearing: true` on EVERY sealed node. So the moment a 2+-node graph this row now seals reaches activation, both of `runEffectActivateCommand`'s doors (foundation.dispatch at foundation-attempt-service.ts:218, and the registered `effect.activate` at daemon-command-registry.ts:202) refuse ACTIVATION_BUDGET_NODE_AMBIGUOUS. Its own docblock (:24-27) calls this \"THE BEARING RULE IS UNCONDITIONAL\" and deliberately declines core's EXPANSION exemption, so it will not fall away on its own.\n\nWHY THIS ROW DID NOT FIX IT. Out of scope by the plan's five owned paths and by task rail 1's spirit; a second row already owns the staffing side of a multi-node graph (task-1d7b9df2, the dependency gate, which declares dependsOn on this row). Fixing it here would mean editing activation + budget authority with no test surface in this plan — the \"one row quietly grows into three\" failure. This row's deliverable (the compiler admits N nodes, the DAG fence holds, the mission asks for the graph) is complete and green either way: a single-node plan activates exactly as before, so nothing regressed.\n\nWHO NEEDS IT. Whoever owns the first task that ACTIVATES a multi-node graph — most likely task-1d7b9df2 or a sibling of it. The fix is not a one-liner: `resolveNodeKey` returns THE node key and the whole budget derivation is written around a single node, so admitting N means deciding WHICH node an activation spends for (almost certainly the one the caller's `stated` argument names, promoting DOOR 1's cross-check into the selector, with DOOR 2 needing its own answer). That is a design decision, not a mechanical edit — hence a comment for the architect rather than a patch from me.\n\nTWO MORE ANSWERS FROM THE SAME READ, both good news:\n- A dependsOn CYCLE CANNOT SEAL. Measured, not reasoned: a 3-node graph with a<->b (every target known, no self-edge, nothing depending on the completion node, every criterion bound once — so it clears every arm in `shapeRefusal`) is refused COMPILED_PLAN_ADMISSION_REFUSED @ COMPILED_PLAN_PRODUCER, deeper in the graph codec. This is now a committed arm in compile-dispatcher.test.ts, so task-1d7b9df2's dependency gate CANNOT deadlock on a sealed cycle — no node would ever be READY, and that state is unreachable. (Note `v2-compiler/topology-cycle.ts` exists but is NOT on this path — it is imported only by v2-compiler/topology.ts.)\n- MISSION CONTEXT BUDGET is fine: the replaced sentence went 201 -> 326 chars (31 -> 56 words), +125 chars on a ~2500-char brief, about +5%.",
       "timestamp": "2026-09-04T22:06:14.940Z"
+    },
+    {
+      "id": "comment-f8f86c8580ad4101816a875800e93ccf",
+      "author": "qa-3fd61a21",
+      "content": "QA EVIDENCE (qa-3fd61a21, 2026-09-05) — full detail behind the approval; summary is capped at 2000.\n\nANCHOR: delivered tree = commit a879421d17c38b16dd31a8ee528094770ec6087c, and all 5 owned paths measured `git status --porcelain` EMPTY, so worktree == HEAD == delivered bytes.\n\nGATES I RAN MYSELF (not read off the record):\n  1. `pnpm --filter @moe/daemon test`  EXIT 0  -> Test Files 412 passed (412) / Tests 8205 passed (8205)   [named verification command]\n  2. `pnpm --filter @moe/core test`    EXIT 0  -> Test Files  65 passed (65)  / Tests 1628 passed (1628)   [matches worker's figures exactly]\n  3. `pnpm typecheck`                  EXIT 0  -> `apps/daemon typecheck$ tsc --project tsconfig.json` then `apps/daemon typecheck: Done` (the `$ tsc` echo is the execution evidence)\n  4. SCOPED POSITIVE CONTROL on this row's 3 test files -> Test Files 3 passed (3) / Tests 42 passed (42), EXIT 0. Recipe: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 <paths>` (the package script's trailing `src` positional means `test -- <path>` does NOT scope).\n  `pnpm test` not re-run: global rail 18 — it covers ZERO apps/**, so it cannot certify a byte of this row. Leg 1 is what covers it.\n\nFOREIGN RED, RAISED THEN CLEARED. My FIRST daemon run was EXIT 1: `Test Files 1 failed | 411 passed (412)` / `Tests 2 failed | 8203 passed (8205)`, both in `src/orchestrator/agent-provider-pause.test.ts`:\n    AssertionError: expected { kind: 'policy.install', ...(4) } to match object { outcome: 'SPAWNED' }\n    - \"outcome\": \"SPAWNED\"  +  \"outcome\": \"STAFFING_ATTEMPTS_EXHAUSTED\"\nATTRIBUTED FOUR WAYS, none of which is \"it passed in isolation\" (mem:gotcha-spawn-flake-needs-a-merge-base-full-run-not-an-isolated-rerun says that control settles nothing):\n  (a) PATH — `git status` says `??` on agent-provider-pause.{ts,test.ts,js}: untracked peer WIP, absent from merge-base AND from HEAD. Not an owned path, so the rail-3 (HEAD-minus-merge-base) intersection with owned paths is EMPTY by construction.\n  (b) CLOCK — mtimes 22:15:08 / 22:15:38 UTC, plus agent-wrapper.ts 22:13:38 and agent-wrapper-staffing.ts 22:13:15. The worker's verification is stamped 22:08:02. Every one of those edits POST-DATES the verified run; the shared checkout moved under the row.\n  (c) NO CAUSAL PATH — that test hard-codes `mission: \"dispatch it\"` (:343); it never calls `compilerMission` and never imports compile-dispatcher. The only edge to this row was transitive (agent-wrapper.ts -> agent-mission-text.ts) and it is not exercised.\n  (d) RE-RUN FRESH -> 412 passed (412) / 8205 passed (8205) EXIT 0. Machine is at mtkbtsvc = 4,793,997 handles, above the 4.48M already recorded as making shell-out legs inadmissible.\n8205 vs the worker's 8198 = the 7 tests the peer added after 22:08.\n\nDRILLS RE-RUN BY ME. Pre-drill SHA256s matched the worker's recorded hashes EXACTLY — compile-dispatcher.ts FE229B9B1AA50A7BCC008A281F166621682C35E9A671628A085E142C686F8DA4, agent-mission-text.ts 7A4C7D2F8A5FC01BA5214F1ECE9B564A7BCA6C31E8AEE6BD07CC4197D0543F57 — which independently proves their restore actually moved bytes.\n  DRILL 1: re-inserted `if (nodes.length > 1) return refused(\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\")` -> Tests 3 failed | 8 passed (11). The sealing arm threw `three-node dispatch refused: SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL @ COMPILE_DISPATCHER`, and BOTH layer-pinning arms failed showing the wrong layer answered where `@ COMPILED_PLAN_PRODUCER` was expected. That is global rail 1 doing exactly its job — a bare \"it refused\" arm would have stayed green.\n  DRILL 2: appended \"Prefer exactly ONE node when unsure.\" to the mission block, POSITIVE PINS LEFT INTACT -> Tests 1 failed | 13 passed (14), only `not.toContain('exactly ONE node')` fired. The negative pin is independently load-bearing, not masked by the positive pins.\n  RESTORE PROOF for both: SHA256 re-measured in a call SEPARATE from the copy and equal to pre-drill, plus empty `git diff`, empty `git status --porcelain` across all 5 owned paths, and grep count 0 for both mutant strings. No mutant rode into the tree (mem:gotcha-peer-drill-mutant-rides-a-pathspec-commit-into-history).\n\nDoD 1 GREP, WIDER THAN THE DoD ASKED: `grep -rn SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.moe --exclude-dir=dist` = 5 hits, ALL of them `.serena/memories/*.md` agent notes plus one serena cache blob. ZERO in source, tests, tools, scripts or docs.\nROSTER: `SUBMIT_DECOMPOSITION_CODES` has exactly ONE hit tree-wide, its own declaration — no external scanner, no `.length` pin, so retiring an entry breaks no counter (global rail 9 has nothing to bite on here).\nTASK RAIL 1 HONOURED: `git show --stat a879421d -- packages/` is EMPTY. Core's `MULTI_NODE_EXECUTION_UNSUPPORTED` survives at planning-event-contract.ts:171 and planning-invariants.test.ts:32 still asserts it is not driven.\n\nSIZE, NOT A VIOLATION: compile-dispatcher.ts is 337 lines (it only lost code). compile-dispatcher.test.ts at 437 is NOT a breach — AGENTS.md:73 caps \"production source\", and 160 daemon test files already exceed 400 (largest 3545). The worker's self-disclosure was over-cautious; no split required, and epic rail 2 forbids task-level LOC as a reject reason.\n\nCOMMIT SHAPE: a879421d is `Moe-Kind: checkpoint`, not a completion commit, so a NO-COMPLETION-COMMIT warning is expected. Investigated per global rail 5 rather than auto-rejected: it carries all 5 owned paths with Moe-Task trailers, sits on moe/work-2026-09-04, and HEAD == worktree for every owned path. The peer's `unattributable` hunks in goal-close-readiness.test.ts rode along and are disclosed by the wrapper's own `Moe-Contested:` trailers — that is the attribution mechanism working, not worker misconduct. The worker edited only the comment lines it owned.\n\nCARRIED FORWARD, NOT A DoD GAP — see comment-96b34ba3: `activation/activation-budget-derivation.ts:125` refuses `ACTIVATION_BUDGET_NODE_AMBIGUOUS` when `bearingKeys.length > 1`, and compile-dispatcher stamps `executionBearing: true` on every sealed node. So as of this row a multi-node graph SEALS but cannot ACTIVATE. Fail-closed with a stable code, no data loss, and out of this row's scope (the mission now asks seats for complete graphs, so whichever row first ACTIVATES one must close this). Owner: task-1d7b9df2.",
+      "timestamp": "2026-09-04T22:25:47.126Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:21:53.659Z",
-  "updatedAt": "2026-09-04T22:08:30.042Z",
+  "updatedAt": "2026-09-04T22:27:23.668Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T20:32:01.441Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-04T22:27:23.668Z",
+    "wallClockMs": 6922227
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -236,13 +244,38 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "2cd15426b822a472ce08e52888dd7c92d5c3428a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-04T21:03:34Z",
+      "paths": [
+        ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-04T22:10:10.193Z",
+      "treeId": "f492c62e8eaea3a27e502cfba11a0ba5c9e746b7",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-3fd61a21@2026-09-04T22:08:25Z",
-    "at": "2026-09-04T22:08:30.042Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-04T21:03:34Z",
+    "at": "2026-09-04T22:10:10.193Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/planning/compile-dispatcher.test.ts",
+    "apps/daemon/src/planning/compile-dispatcher.ts",
+    "apps/daemon/src/goals/goal-close-readiness.test.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.ts"
+  ],
+  "completedAt": "2026-09-04T22:27:23.668Z",
+  "reviewCompletedAt": "2026-09-04T22:27:23.668Z",
+  "reviewSummary": "APPROVED. 6/6 DoD verified at the delivered tree (a879421d; all 5 owned paths `git status` EMPTY = worktree == HEAD). Evidence: comment-f8f86c85.\n\nGATES I RAN: `pnpm --filter @moe/daemon test` EXIT 0 -> Test Files 412 passed (412) / Tests 8205 passed (8205). `pnpm --filter @moe/core test` EXIT 0 -> 65 (65) / 1628 (1628). `pnpm typecheck` EXIT 0 -> `apps/daemon typecheck: Done`. Scoped control on this row's 3 files -> 3 (3) / 42 (42). `pnpm test` skipped: rail 18, zero apps/** coverage.\n\nFOREIGN RED CLEARED: first daemon run EXIT 1, 2 failures in `agent-provider-pause.test.ts` — UNTRACKED peer WIP (`??`), mtime 22:15 UTC vs worker's 22:08 verification, no causal path (hard-codes `mission: \"dispatch it\"`, never imports compile-dispatcher). Unowned, so rail-3 intersection empty. Fresh re-run 412/412, 8205/8205 EXIT 0.\n\nDRILLS RE-RUN, NOT TRUSTED: pre-drill SHA256s matched the worker's recorded hashes exactly, proving their restore moved bytes. Re-inserting `nodes.length > 1` reddened 3 arms — incl. both layer pins, reporting `@ COMPILE_DISPATCHER` where `@ COMPILED_PLAN_PRODUCER` was expected (rail 1 working; a bare \"it refused\" arm would stay green). Appending \"exactly ONE node\" with positive pins intact fired ONLY `not.toContain`, 13 green. Restores proven by SHA256 in a call SEPARATE from the copy + empty `git diff` + grep 0.\n\nDoD 1 whole-tree grep = 5 hits, ALL `.serena/memories/*.md`; zero in source/tests/tools. Roster: one hit, its own declaration. Rail 1 honoured, core untouched.\n\nSIZE OK: compile-dispatcher.ts 337. Test file 437 not a breach — AGENTS.md:73 caps production source; 160 daemon test files already exceed 400.\n\nCOMMIT kind=checkpoint, so NO-COMPLETION-COMMIT expected; investigated per rail 5 — all 5 owned paths present with Moe-Task trailers.\n\nCARRIED FORWARD (comment-96b34ba3): activation-budget-derivation.ts:125 refuses ACTIVATION_BUDGET_NODE_AMBIGUOUS on `bearingKeys.length > 1` — multi-node graphs SEAL but cannot ACTIVATE. Owner task-1d7b9df2."
 }
