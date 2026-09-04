@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:17:45.379Z",
-  "updatedAt": "2026-09-04T17:09:27.948Z",
+  "updatedAt": "2026-09-04T17:14:52.534Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:20:34.302Z",
     "plannedStepCount": 5,
@@ -304,6 +304,24 @@
       "treeId": "fc0aa3b870595020a7b0525d6b58f4b0d0ad8b7f",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "3b8000bbfec844fbdd7afade8101363b05a143b9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-80f8bfe1@2026-09-04T16:55:08Z",
+      "paths": [
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+        ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+        "apps/daemon/src/goals/goal-live-evidence.test.ts"
+      ],
+      "recordedBy": "worker-80f8bfe1",
+      "recordedAt": "2026-09-04T17:10:11.200Z",
+      "treeId": "21874f988d664bfee22e184313eed530c3c77ca2",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -312,7 +330,10 @@
     "apps/daemon/src/goals/goal-live-evidence.ts",
     "apps/daemon/src/goals/goal-live-evidence.js",
     "apps/daemon/src/goals/goal-qualification.ts",
-    "apps/daemon/src/goals/goal-qualification.test.ts"
+    "apps/daemon/src/goals/goal-qualification.test.ts",
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
   ],
   "touchedFiles": [
     ".wire-step3.py",
@@ -329,12 +350,13 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-71a60ba7@2026-09-04T15:14:28Z",
-    "at": "2026-09-04T15:14:42.656Z"
+    "kind": "completion",
+    "sessionId": "worker-80f8bfe1@2026-09-04T16:55:08Z",
+    "at": "2026-09-04T17:10:11.200Z"
   },
   "declaredFiles": [
-    "apps/daemon/src/goals/j1-command-path.test.ts"
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    "apps/daemon/src/goals/goal-services.test.ts"
   ],
   "reviewStartedAt": "2026-09-04T17:09:27.948Z",
   "verification": {
