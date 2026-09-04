@@ -1,0 +1,35 @@
+{
+  "id": "task-741dad13e23d441a8385d0f14df5b5c1",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Activation receipts: measure the real project, refuse per member",
+  "description": "SPIDR child A of task-bb844c288fb346c0856778c738b9f073 (leaf; nothing depends on a sibling feature row). Filed by architect-d1711c47 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: a PURE daemon module that measures the six activation receipts of a real project through INJECTED PORTS, and returns per member either a measured value or a stable refusal code. It writes no event, touches no handler, serves no route. Children B/C/D consume it.\n\nMEASURED AT 68eb1c5d (re-measure before planning; these are the anchors, not guesses):\n- packages/core/src/project/project-validation.ts:21-24 ACTIVATION_KEYS is an EXACT 9-key roster (artifactPathRef, backupPathRef, credentialRef, distributionManifestHash, policyRevisionHash, providerMinimumProfileRef, signingKeyRef, storeDriverRef, truthClass). No key may be added or omitted - `exact()` refuses both.\n- :132 validProjectRef = any NON-EMPTY string. :136 validHash = /^[0-9a-f]{64}$/ - so distributionManifestHash and policyRevisionHash MUST be real 64-hex digests; the other six are refs.\n- :140 strongTruth accepts ONLY \"DAEMON_VERIFIED\" | \"HUMAN_APPROVED\". CORRECTION TO THE PARENT DESCRIPTION: there is no \"VERIFIED\" truth class and no distinct \"DEMO_VERIFIED\" - apps/daemon/src/orchestrator/demo-seed-payloads.ts:24 defines `DEMO_VERIFIED = \"DAEMON_VERIFIED\"`. The defect the parent row names is INVENTED REFS (`${projectId}-artifact`, hex64(\"cafe\")), NOT the truth class. Do not plan a truth-class refusal; plan a measurement refusal.\n- Reusable measurement seam: apps/daemon/src/repository/git-landing-port.ts:127 already runs `rev-parse --show-toplevel` and :195 `rev-parse HEAD` through an async `run`. Read it before writing a second git runner.\n- Credential PRESENCE seam: apps/daemon/src/orchestrator/moe-up-credentials.ts exports `present`, `providerCredentials`, `providerFor`, `loginCredentialPath`. Presence only - a credential VALUE must never enter a ref.\n- Store path seam: apps/daemon/src/cli/moe-init.ts:154 `storePath = join(targetDir, STORE_FILENAME)`.\n\nHUMAN DECISION (owner, 2026-09-04): signingKeyRef is REQUIRED by the exact key roster but signing is out of scope for this epic (row rail 2). It is therefore NOT a measured receipt: mint the fixed self-describing ref `signing/unsigned-source-checkout` and carry \"not a trust boundary in v0.1\" as its reason string. It must never be presented as measured.\n\nNAMING: put these modules under apps/daemon/src/bootstrap/, NOT apps/daemon/src/activation/ - that directory is the scheduler's run-activation domain (activation-slot-occupancy.ts, activation-ledger-*.ts) and a same-named module there will be misread by every later reader.\n\nNOT IN SCOPE: the project.activate handler (child B), any HTTP route (child C), any UI (child C), e2e/docs (child D).",
+  "definitionOfDone": [
+    "apps/daemon/src/bootstrap/activation-receipts.ts exports the receipt-member roster and one stable refusal code per member (ACTIVATION_REPOSITORY_UNMEASURED, ACTIVATION_PROVIDER_UNMEASURED, ACTIVATION_STORE_UNMEASURED, ACTIVATION_BACKUP_FAILED, ACTIVATION_DISTRIBUTION_UNMEASURED, ACTIVATION_POLICY_UNMEASURED) plus one layer constant; a roster test asserts BIDIRECTIONAL set-equality between the member roster and the codes actually reachable from the measurement surface (global rail 9 - enumerate the served set from the implementation seam, not only from the roster constant).",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts measures all six through INJECTED ports (git runner, fs, env, clock) and returns, per member, either the measured ref/hash or {code, layer}. distributionManifestHash and policyRevisionHash are real 64-hex digests satisfying /^[0-9a-f]{64}$/; credentialRef carries PRESENCE only and a test asserts no credential VALUE appears in any returned string.",
+    "Backup is a REAL copy of the store to <project>/.moe-next/backups/<ts>.sqlite with its sha256 returned as the ref; a test drives it against a temp file and asserts the copy exists with matching sha256, and a second test makes the destination unwritable and asserts ACTIVATION_BACKUP_FAILED at the receipts layer (not merely that it threw).",
+    "Each of the six members has a test that makes ONLY that member unmeasurable and asserts its exact code AND layer, with the other five still measured - proving the code is per member and not a blanket failure. Verified by mutating the production surface so each arm goes red (global rail 1).",
+    "signingKeyRef is minted as the fixed `signing/unsigned-source-checkout` with its reason string, and a test asserts it is reported NOT-MEASURED in the receipt list while still being a valid non-empty ref for the witness.",
+    "Cross-platform: paths built with node:path (no hard-coded separators); a test asserts the backup path shape on the host and the git runner is spawned with shell:false and an argv array.",
+    "New modules carry their .js bridge sibling and are exported from apps/daemon/src/index.ts; `pnpm --filter @moe/daemon test` and `pnpm typecheck` quoted with their count lines (an exit-0 leg with NO `Test Files N passed` line is a vacuous run, not a pass - global rail 8)."
+  ],
+  "taskRails": [
+    "PURE LEAF: no HTTP route, no command handler, no UI, no docs. If a step needs one of those, it belongs to child B/C/D - stop and say so rather than widening.",
+    "<=250 physical lines per production source (split before 400). Two production modules are planned deliberately so neither grows past the cap; splitting further is allowed, merging them is not.",
+    "Refusals carry a stable code AND a layer constant; a test that asserts only 'refused' is vacuous. Reuse an existing layer name if one fits rather than minting a new *_LAYER (a new one is a roster backfill)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:35:27.718Z",
+  "updatedAt": "2026-09-04T09:35:27.718Z"
+}

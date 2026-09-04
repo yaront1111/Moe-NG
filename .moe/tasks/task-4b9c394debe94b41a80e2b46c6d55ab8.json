@@ -1,0 +1,38 @@
+{
+  "id": "task-4b9c394debe94b41a80e2b46c6d55ab8",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "project.activate mints its own measured witness and refuses a caller-supplied one",
+  "description": "SPIDR child B of task-bb844c288fb346c0856778c738b9f073. dependsOn child A (task-741dad13e23d441a8385d0f14df5b5c1) for the receipts module. Filed by architect-d1711c47 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the daemon stops trusting the caller for the activation witness and mints it from child A's measured receipts. This is the row that closes the actual product gap - today ANY caller can hand over invented refs and the daemon commits them.\n\nMEASURED AT 68eb1c5d:\n- apps/daemon/src/bootstrap/bootstrap-services.ts:108-120 `activateProject` reads `payload.witness`, refuses BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS when absent, and otherwise passes the CALLER'S OBJECT STRAIGHT INTO the core reducer. Nothing measures anything.\n- TWO fakers exist today, not one. (1) apps/daemon/src/orchestrator/demo-seed-payloads.ts:127-137 (the seed). (2) apps/control-room/src/live/live-dispatch-payloads.ts:111-119 `DEV_PAYLOADS`, whose witness is artifact-1/backup-1/hex64(\"cafe\") and which tests/e2e/control-room/board-chain.spec.ts clicks end-to-end from an EMPTY store. So \"the browser cannot drive the chain\" is only true of the v2 UI; the legacy dev board drives it with fake refs.\n- apps/daemon/src/daemon-command-vocabulary.ts:314 declares `\"project.activate\": [\"witness\"]` as the payload key roster - changing what the payload may carry is a roster edit here, and the roster has asserting tests.\n- apps/daemon/src/bootstrap/bootstrap-sequence.ts:31 and :107 hold project.activate's prerequisite chain (register + bind_repository + provider.probe).\n- packages/core/src/project/project-validation.ts:158 validActivation demands the EXACT 9 keys, real 64-hex for the two hashes, and truthClass in {DAEMON_VERIFIED, HUMAN_APPROVED}.\n\nDESIGN (settled at plan time, do not re-derive): the browser sends `project.activate` and the DAEMON measures. A witness that crosses the wire could be altered by a hostile caller, so a caller-supplied `witness` is REFUSED with its own stable code rather than ignored - silently dropping it would let an operator believe they supplied authority they did not. When every member measures, the handler mints the 9-key witness with truthClass DAEMON_VERIFIED and commits. When ANY member is unmeasurable, the WHOLE activation refuses with that member's code from child A - fail closed, no partial witness, nothing committed.\n\nKEEP WORKING (parent DoD 4): `pnpm seed` must still pass. The seed sends its own witness, so this change WILL break it unless the seed is updated in the same commit - update demo-seed-payloads.ts/demo-seed-plan.ts to stop sending one, and keep the chain ORDER in demo-seed-plan.ts:190-196 unchanged. The same applies to DEV_PAYLOADS in live-dispatch-payloads.ts and to board-chain.spec.ts's expectations.\n\nNOT IN SCOPE: the receipts read route and the UI card (child C); the e2e journey, copy and docs (child D).",
+  "definitionOfDone": [
+    "`activateProject` in apps/daemon/src/bootstrap/bootstrap-services.ts mints the witness from child A's measured receipts; a test asserts the committed event payload carries the MEASURED repo toplevel + HEAD sha, provider CLI version, store path/driver and backup sha256 - asserting the actual values, not merely that 9 keys are present.",
+    "A caller-supplied `witness` is refused with a stable code AND layer (e.g. ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS); a test asserts that exact code and layer, and asserts NOTHING was committed to the store on that path.",
+    "When any single member is unmeasurable the WHOLE activation refuses with that member's code from child A; one test per member asserts code + layer + no commit, and confirms no partial witness is written. Each arm verified red by mutating the production surface (global rail 1).",
+    "The minted witness passes packages/core validActivation unchanged - core is NOT edited by this row; a test drives the real reducer with the minted witness and asserts it is accepted.",
+    "daemon-command-vocabulary.ts payload-key roster and any asserting roster test are updated together, with bidirectional set-equality (global rail 9); `grep -n '\"project.activate\"' apps/daemon/src/daemon-command-vocabulary.ts` reflects the new payload contract.",
+    "`pnpm seed` keeps working: apps/daemon/src/orchestrator/demo-seed-*.test.ts green with the count line quoted, and the seed chain ORDER at demo-seed-plan.ts:190-196 (project.register -> project.bind_repository -> provider.probe -> project.activate -> 3x policy.install) is unchanged - proven by grep, not by reading.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (root lane). An exit-0 leg with no `Test Files N passed` line is a vacuous run (global rail 8)."
+  ],
+  "taskRails": [
+    "FAIL CLOSED: no partial witness, no defaulted member, no 'measure what we can'. One unmeasurable member refuses the whole activation with that member's code.",
+    "DO NOT EDIT packages/core. The minted witness must satisfy the EXISTING validActivation; if it cannot, stop and report rather than widening core's roster.",
+    "Both fakers move together or the tree goes red: the seed (demo-seed-payloads.ts) and DEV_PAYLOADS (apps/control-room/src/live/live-dispatch-payloads.ts, asserted by tests/e2e/control-room/board-chain.spec.ts). Name all of them in affectedFiles at plan time - discovering one at step 5 is the plan-time grep this rail exists to force."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "dependsOn": [
+    "task-741dad13e23d441a8385d0f14df5b5c1"
+  ],
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:36:03.414Z",
+  "updatedAt": "2026-09-04T09:36:03.414Z"
+}

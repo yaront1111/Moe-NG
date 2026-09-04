@@ -1,0 +1,38 @@
+{
+  "id": "task-ac9d5e2d43334525bd990b1362652ce4",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Prove the browser-only fresh start: journey, copy, docs",
+  "description": "SPIDR child D of task-bb844c288fb346c0856778c738b9f073 - the hardening child. dependsOn child C (task-0a5d7212a7f644d5891df4e0e1545787). Filed by architect-d1711c47 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the proof that the capability children A-C shipped actually works from a browser against a real daemon, plus every sentence in the repo that currently says it does not.\n\nMEASURED AT 68eb1c5d - the exact doc anchors (the parent DoD's wording does not match the tree; use THESE):\n- apps/control-room/src/v2/goals/live-goal-create.ts:91-93 - the sentence to delete is split across lines and ends `+ \" seed); the browser cannot drive the pre-activation chain.\";`. The parent DoD's grep (`grep -n \"cannot drive the pre-activation chain\" <file>` = 0 matches) is satisfiable as written.\n- README.md:88-91 - the 'What this is not' sentence reads \"a fresh project cannot be started from the browser alone (goal creation waits on the project activation chain, which the seed script or the wrapper drives)\". Also re-date the \"Measured on 2026-09-03\" stamp on line 88.\n- docs/agent-stack-runbook.md:47-52 - the paragraph is `**New Goal** remains disabled until the project ledger contains legitimate durable repository, provider, distribution, backup, credential, and store receipts. The current fresh-project browser flow has no production writer for that complete receipt set...`. NOTE: the parent DoD calls this the \"New Goal remains disabled\" paragraph, but the literal string in the file is bolded markdown - `grep -n \"New Goal\" docs/agent-stack-runbook.md` finds it at :47. Do not chase the unbolded string; it does not exist.\n- The e2e lane is REAL and already drives a daemon: tests/e2e/control-room/ with playwright.config.ts, `pnpm test:e2e:browser` = `tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c ...` (package.json:22). daemon-ports.ts exports `withDaemonBackedControlRoom` and lane options `seed: \"NONE\"` / `approval: \"HUMAN\"` - board-chain.spec.ts:1-33 documents the idiom and is the model to copy.\n- IMPORTANT: board-chain.spec.ts drives the LEGACY dev board (`cr.liveboard.*` testids, DEV_PAYLOADS). The new journey must drive the V2 surface - the Activate card child C shipped - or it proves the old path, not the product.\n- tests/e2e/control-room/tsconfig.json CANNOT reach into apps/ (TS6059), so expected strings are HAND-TRANSCRIBED from the modules that produce them; deriving them from those modules would make the assertions self-referential. Follow board-chain.spec.ts:35-43's stated reasoning.\n\nNOT IN SCOPE: changing production behaviour. If the journey finds a defect, that is a finding to report against child A/B/C - not a fix to smuggle in here.",
+  "definitionOfDone": [
+    "A Playwright journey under tests/e2e/control-room/ drives, against a REAL daemon with `seed: \"NONE\"` (no fixtures, empty store): browser-only register -> Activate project -> New Goal enabled -> goal.create_with_source ACCEPTED. `pnpm test:e2e:browser` quoted with its count line. The journey drives the V2 Activate card, NOT the legacy `cr.liveboard.*` dev board.",
+    "`grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` returns 0 matches at the delivered tree, and the replacement copy names the Activate card; live-goal-create's own test is updated so the new copy is asserted, not merely absent.",
+    "README.md:88-91 'What this is not' fresh-project sentence rewritten to the measured truth (and the 'Measured on' date stamp updated), and docs/agent-stack-runbook.md:47-52 'New Goal remains disabled' paragraph rewritten - both in the SAME commit as the journey.",
+    "A live drive on the lane is recorded as a row comment: store path, HEAD sha, transcript and screenshots, per row rail 4. Keep each comment under 4500 chars (fields truncate silently at 5000).",
+    "`pnpm seed` still green with its count line quoted, and the wrapper's bootstrap path untouched - `git diff --stat` over the wrapper path shows no change.",
+    "Whole-parent regression, gates all quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane), `pnpm test:e2e:browser`. Repo-wide legs are evaluated as a path-attributed baseline (global rail 3): record merge-base failures, HEAD failures, and disclose any foreign red verbatim.",
+    "Adversarial pass over the whole parent feature: what happens on a second concurrent Activate click, on a non-git project directory, on a project whose store is read-only, and when the daemon restarts mid-chain. Findings recorded in the completion summary."
+  ],
+  "taskRails": [
+    "PROVE IT LIVE: an offline e2e over a REAL daemon is necessary but NOT sufficient - the completion must also record a live drive (transcript, store path, sha) in a row comment. Never restart the wrapper to unstick a seat (claim TTL 30 min).",
+    "NO PRODUCTION BEHAVIOUR CHANGES. A defect found by the journey is reported against child A/B/C, not patched here - a hardening row that edits the thing it certifies proves nothing.",
+    "The journey drives the V2 Activate card. A journey that clicks the legacy `cr.liveboard.*` dev board re-proves the pre-existing fake-witness path and does NOT satisfy this row."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "dependsOn": [
+    "task-0a5d7212a7f644d5891df4e0e1545787"
+  ],
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:37:11.087Z",
+  "updatedAt": "2026-09-04T09:37:11.087Z"
+}

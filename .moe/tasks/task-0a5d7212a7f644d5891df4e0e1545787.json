@@ -1,0 +1,38 @@
+{
+  "id": "task-0a5d7212a7f644d5891df4e0e1545787",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Activate project card: receipts read plus one button that drives the chain",
+  "description": "SPIDR child C of task-bb844c288fb346c0856778c738b9f073. dependsOn child B (task-4b9c394debe94b41a80e2b46c6d55ab8). Filed by architect-d1711c47 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: (1) a daemon read that STATES each receipt as measured/missing with its reason, so the card can render before anything is clicked; (2) the v2 'Activate project' card that lists those receipts and drives register -> bind_repository -> provider.probe -> project.activate from one button.\n\nMEASURED AT 68eb1c5d:\n- COPY THIS PATTERN: apps/control-room/src/v2/ops/policy-install-port.ts (83 lines) already does exactly this shape for policy - `readSurfaceOnce` POSTs /affordances/read, `installStandardPolicy` loops the slices, RE-READS the surface between steps because each commit moves the aggregate version, finds the offer by commandKind, spends it via `spendOffer`, and STOPS AT THE FIRST REFUSAL keeping the daemon's own code+layer. Its consumer is apps/control-room/src/v2/ops/live-ops.tsx:95. Mirror it; do not invent a second dispatch idiom.\n- The offer/refusal wire is apps/control-room/src/v2/approvals/offer-wire.ts (`spendOffer`, OfferOutcome) and apps/control-room/src/live/live-board-feed.ts (`frameOfSurface`, SurfaceFrame with .offers/.steps/.outcome/.connection).\n- apps/daemon/src/http/affordance-read.ts is ALREADY 422 lines - over the 400 hard cap. DO NOT ADD TO IT. Add a separate route module alongside apps/daemon/src/http/policy-read.ts and runs-read.ts, which is the shipped idiom for a dedicated read.\n- apps/daemon/src/http/http-listener.ts registers routes; a new read route is the 8-touchpoint + .js bridge pattern and needs its roster/roster-test backfill (bidirectional set-equality, global rail 9).\n- The chain's four kinds and their prerequisite order are at apps/daemon/src/bootstrap/bootstrap-sequence.ts:31/:107; apps/control-room/src/v2/goals/work-labels.ts:46 already maps \"project.activate\" -> \"Activate the project\", so the card's labels come from there, not from new strings.\n\nDESIGN (settled, do not re-derive): the card NEVER spells a witness - child B made the daemon mint it, so the card sends `project.activate` and shows the answer. Receipts render measured/missing with the DAEMON'S reason text verbatim, never a paraphrase, and never a credential value. The button drives the four commands SEQUENTIALLY, re-reading the surface between each (versions move), stopping at the first refusal with the daemon's code @ layer shown.\n\nNOT IN SCOPE: the live-goal-create.ts copy replacement, the Playwright journey, README/runbook (all child D). Do not touch tests/e2e.",
+  "definitionOfDone": [
+    "A dedicated daemon read module under apps/daemon/src/http/ (NOT affordance-read.ts, which is already 422 lines) answers with each of the six receipts as measured/missing plus its reason, sourced from child A's measurement surface; a test asserts a missing member is reported with its stable code and that no credential VALUE and no secret appears anywhere in the response body.",
+    "The route is registered in http-listener.ts and carries its .js bridge; the read-route roster and its asserting test are updated with BIDIRECTIONAL set-equality - enumerate the served set from the dispatch/route seam, not only from the roster constant (global rail 9), so deleting a route cannot stay green.",
+    "apps/control-room/src/v2/ops/ gains an activation port mirroring policy-install-port.ts: it re-reads the surface between steps, finds each offer by commandKind, stops at the FIRST refusal, and keeps the daemon's own {code, layer}. Tests cover: all four commands accepted; a mid-chain refusal stopping the chain with the exact code; and an absent offer reported as its own code (not a guessed version).",
+    "The 'Activate project' card renders in the v2 project setup board, lists each receipt as measured/missing with its reason, and exposes one button driving register -> bind_repository -> provider.probe -> project.activate. Its testids are pinned in a control-room test (parent DoD 3).",
+    "signingKeyRef is displayed as NOT a trust boundary in v0.1 with its reason - never rendered as a measured receipt (human decision 2026-09-04).",
+    "The card shows refusals VERBATIM as the daemon's `code @ layer`; a test asserts a refusal is rendered unparaphrased.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. A bare `pnpm test` is NOT evidence for an apps/** claim - the root vitest include has no apps/** (global rail 18)."
+  ],
+  "taskRails": [
+    "MIRROR policy-install-port.ts; do not invent a second dispatch idiom. Re-read the surface between steps - each commit moves the aggregate version and a cached offer is a stale version.",
+    "DO NOT ADD LINES TO apps/daemon/src/http/affordance-read.ts (422 lines, over the 400 cap). A new read gets its own module beside policy-read.ts / runs-read.ts.",
+    "The card spells NO witness, NO version and NO payload the daemon can state itself. Refusals are shown as the daemon's own code @ layer, never rewritten, and no credential value may reach the DOM."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "dependsOn": [
+    "task-4b9c394debe94b41a80e2b46c6d55ab8"
+  ],
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:36:37.267Z",
+  "updatedAt": "2026-09-04T09:36:37.267Z"
+}
