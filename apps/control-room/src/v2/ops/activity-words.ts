@@ -16,6 +16,8 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "goal.create_with_source": "created a goal from a PRD",
   "integration.accept_output": "accepted the delivered work",
   "internal.integration.verifier_receipt": "recorded the verifier's receipt",
+  "internal.repository.landing_receipt": "landed the accepted work as a commit",
+  "internal.repository.publish_receipt": "recorded the publish",
   "plan.propose": "proposed a plan",
   "planning.submit_decomposition": "submitted a compiled plan",
   "policy.install": "installed a policy slice",
@@ -28,6 +30,7 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "project.register": "registered the project",
   "provider.probe": "probed the provider",
   "qualification.replan": "requested a re-plan",
+  "repository.publish": "asked to publish the landed commits",
   "review.submit": "submitted a review round",
   "session.close": "closed a seat",
   "session.open": "opened a seat",
@@ -39,6 +42,33 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
 
 export function kindWords(commandKind: string): string {
   return KIND_WORDS[commandKind] ?? commandKind;
+}
+
+/** The review routes in a person's words, as the runs screen says them. */
+const VERDICT_ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  ACCEPT: "passed the review",
+  ESCALATE: "escalated the review",
+  REJECT_IMPLEMENTATION: "sent the work back: implementation",
+  REJECT_PLAN: "sent the work back: same finding again",
+  UNKNOWN_EVIDENCE: "sent the work back: evidence unknown",
+});
+
+/**
+ * What a decision DID, using its verdict where the record carries one: a review round names
+ * its route, an escalation names its answer. Without a verdict the kind's own words stand.
+ */
+export function decisionWords(commandKind: string, verdict: string | null): string {
+  if (verdict === null) return kindWords(commandKind);
+  if (commandKind === "review.submit") return VERDICT_ROUTE_WORDS[verdict] ?? `reviewed: ${verdict}`;
+  if (commandKind === "escalation.decide") {
+    if (verdict === "REPLAN") return "sent the node to be replanned";
+    if (verdict === "ALLOW_MORE_ATTEMPTS") return "allowed more review attempts";
+    return `decided the exhausted review: ${verdict}`;
+  }
+  if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {
+    return verdict === "APPROVE" ? "approved the plan" : verdict === "REJECT" ? "rejected the plan" : kindWords(commandKind);
+  }
+  return `${kindWords(commandKind)} (${verdict})`;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;

@@ -39,7 +39,7 @@ const RUN_WORDS: Readonly<Record<string, string>> = Object.freeze({
   SUBMISSION_DRAINING: "submitting",
 });
 
-const ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+export const ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
   ACCEPT: "review passed",
   ESCALATE: "review escalated",
   REJECT_IMPLEMENTATION: "rejected: implementation",

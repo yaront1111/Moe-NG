@@ -15,9 +15,9 @@ afterEach(cleanup);
 const NOW = Date.parse("2026-09-03T10:00:00.000Z");
 const ACTIVITY: ActivityOutcome = {
   entries: [
-    { commandKind: "integration.accept_output", decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: "node-a", version: 4 },
-    { commandKind: "work.claim", decidedAt: "2026-09-03T08:00:00.000Z", disposition: "VERSION_CONFLICT", principalId: "sess-wrap-abc", targetAggregateId: "work/node.deliver@node-a", version: null },
-    { commandKind: "OPEN_SESSION", decidedAt: "2026-09-03T07:00:00.000Z", disposition: "COMMITTED", principalId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", targetAggregateId: "moe.session-authority.v1/session/session-1", version: 1 },
+    { commandKind: "integration.accept_output", decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: "node-a", verdict: null, version: 4 },
+    { commandKind: "work.claim", decidedAt: "2026-09-03T08:00:00.000Z", disposition: "VERSION_CONFLICT", principalId: "sess-wrap-abc", targetAggregateId: "work/node.deliver@node-a", verdict: null, version: null },
+    { commandKind: "OPEN_SESSION", decidedAt: "2026-09-03T07:00:00.000Z", disposition: "COMMITTED", principalId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", targetAggregateId: "moe.session-authority.v1/session/session-1", verdict: null, version: 1 },
   ],
   refusalsRecorded: false, scope: { goalId: "goal-1", targets: 3 }, status: "ACTIVITY", totalDecisions: 12,
 };

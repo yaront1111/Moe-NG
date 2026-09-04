@@ -24,8 +24,8 @@ import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { PrdCoverage } from "./goals/prd-coverage.js";
 import { LivePrd } from "./goals/prd-panel.js";
-import { GOAL_SECTION_IDS, LiveGoalStatus } from "./goals/goal-status-strip.js";
-import { LiveGoalNodes } from "./goals/goal-nodes.js";
+import { GOAL_SECTION_IDS } from "./goals/goal-status-strip.js";
+import { LiveBoard } from "./board/board-screen.js";
 import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
@@ -36,7 +36,7 @@ import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
-import { LiveActivity, LiveHealth, LivePolicy } from "./ops/live-ops.js";
+import { LiveHealth, LivePolicy } from "./ops/live-ops.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -228,19 +228,20 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     body = readRun === null || attached === null
       ? <BoardStub goalId={open.goalId} onBack={back} title={open.title} />
       : (
-        // The opened goal shows the plan to APPROVE (UI-6) stacked over the live
-        // WORK BOARD (UI-5) so the operator sees the plan and the current work
-        // steps in one body. Both are read-only over the same attached session.
+        // THE BOARD first: where the goal stands, its nodes in six columns, the decisions down
+        // the right. The Gate 1 card and the plan fold follow only while they need a decision;
+        // everything else the page used to stack is one collapsed fold at the end.
         <>
-          {readCoverage === null ? null : (
-            <LiveGoalStatus
-              goalId={open.goalId}
-              onNeedsYou={(): void => { navigate({ kind: "approvals" }); }}
-              read={readCoverage}
-              runId={open.planningRunRef}
-              surface={boardFrame}
-            />
-          )}
+          <LiveBoard
+            goalId={open.goalId}
+            headers={attached.headers}
+            onNeedsYou={(): void => { navigate({ kind: "approvals" }); }}
+            publishing={{ frame: boardFrame, port: createPublishPort(attached) }}
+            readCoverage={readCoverage ?? undefined}
+            runId={open.planningRunRef}
+            surface={boardFrame}
+            title={open.title}
+          />
           <div id={GOAL_SECTION_IDS.contract}>
             {gate1Read !== null && gate1Port !== null ? (
               <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
@@ -249,7 +250,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             ) : null}
           </div>
           {/* The plan stays in the open while it waits for a decision; once decided (or not
-              yet proposed) it folds, so the board and the evidence come first. */}
+              yet proposed) it folds, so the board and the decisions come first. */}
           <details
             className="cr2-goal-fold"
             data-testid="cr.goal.planfold"
@@ -270,14 +271,12 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
               title={open.title}
             />
           </details>
-          <div id={GOAL_SECTION_IDS.board}>
-            <LiveGoalNodes
-              goalId={open.goalId}
-              headers={attached.headers}
-              publishing={{ frame: boardFrame, port: createPublishPort(attached) }}
-            />
-            {/* The raw affordance surface is project-wide and mostly session commands; it stays
-                readable for anyone who needs the daemon's exact offers, folded by default. */}
+          {/* Reference material, folded: the raw daemon offers (which also feed the one
+              affordance frame of the page), PRD coverage, the PRD itself, and the project boundary
+              of this tab. The decisions are the feed on the board; the ledger with its seat
+              records stays on Health. */}
+          <details className="cr2-goal-fold" data-testid="cr.goal.detailsfold">
+            <summary className="cr2-goal-fold-summary">Everything else: the raw daemon offers, PRD coverage, the PRD, this project</summary>
             <details className="cr2-goal-fold" data-testid="cr.goal.surfacefold">
               <summary className="cr2-goal-fold-summary">Everything the daemon offers this session, as it states it</summary>
               <LiveWorkBoard
@@ -288,14 +287,12 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
                 runId={open.planningRunRef}
               />
             </details>
-          </div>
-          {readCoverage === null ? null : (
-            <PrdCoverage goalId={open.goalId} read={readCoverage} />
-          )}
-          <LivePrd goalRef={open.goalId} headers={attached.headers} />
-          <div id={GOAL_SECTION_IDS.activity}>
-            <LiveActivity goalRef={open.goalId} headers={attached.headers} scopeLabel={open.title} />
-          </div>
+            {readCoverage === null ? null : (
+              <PrdCoverage goalId={open.goalId} read={readCoverage} />
+            )}
+            <LivePrd goalRef={open.goalId} headers={attached.headers} />
+            <ProjectBoundary projectId={projectId} />
+          </details>
         </>
       );
   } else if (fixtures) {
@@ -354,7 +351,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
 
   // Every live body names its hard project boundary. Fixtures mode is exempt:
   // nothing is attached there, so there is no boundary to state honestly.
-  const content = fixtures ? body : (
+  const content = fixtures || open !== null ? body : (
     <>
       <ProjectBoundary projectId={projectId} />
       {body}

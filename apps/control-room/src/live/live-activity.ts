@@ -15,6 +15,11 @@ export interface ActivityEntryView {
   readonly disposition: "COMMITTED" | "VERSION_CONFLICT";
   readonly principalId: string;
   readonly targetAggregateId: string;
+  /**
+   * WHAT was decided, when the decision carries a word for it: the review route a
+   * `review.submit` round took, the `escalation.decide` answer. Null for every other kind.
+   */
+  readonly verdict: string | null;
   readonly version: number | null;
 }
 
@@ -83,14 +88,16 @@ const nonEmptyString = (value: unknown): value is string => typeof value === "st
 const count = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
 
 function entryOf(value: unknown): ActivityEntryView | null {
-  const record = exactDataRecord(value, ["commandKind", "decidedAt", "disposition", "principalId", "targetAggregateId", "version"]);
+  const record = exactDataRecord(value, ["commandKind", "decidedAt", "disposition", "principalId", "targetAggregateId", "verdict", "version"]);
   if (record === null || !nonEmptyString(record.commandKind) || !nonEmptyString(record.decidedAt)
     || (record.disposition !== "COMMITTED" && record.disposition !== "VERSION_CONFLICT")
     || !nonEmptyString(record.principalId) || !nonEmptyString(record.targetAggregateId)
+    || !(record.verdict === null || nonEmptyString(record.verdict))
     || !(record.version === null || count(record.version))) return null;
   return Object.freeze({
     commandKind: record.commandKind, decidedAt: record.decidedAt, disposition: record.disposition,
-    principalId: record.principalId, targetAggregateId: record.targetAggregateId, version: record.version as number | null,
+    principalId: record.principalId, targetAggregateId: record.targetAggregateId,
+    verdict: record.verdict as string | null, version: record.version as number | null,
   });
 }
 

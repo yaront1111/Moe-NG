@@ -57,8 +57,10 @@ entry points, environment, and knobs.
   who either allows more attempts or replans the work into a successor goal
   that carries the findings.
 - **Control room** (`apps/control-room`): the operating surface. Goals with
-  progress from coverage; an opened goal that says where it stands and what
-  to do next; Needs you (Gate 1, plan approval, exhausted reviews, goals ready
+  progress from coverage; an opened goal that opens on a board: where it
+  stands and what to do next, its nodes in six columns (queued, working, in
+  review, rework, done, blocked) with one fact per card, and the decisions
+  taken down the right; Needs you (Gate 1, plan approval, exhausted reviews, goals ready
   to close); Runs with per-node review rounds, verifier receipts and landings;
   Policy (the standard verifier slices install from the browser); Health,
   Activity and Seats. Packaged Windows runs serve it from the manager or the

@@ -47,6 +47,12 @@ export interface ActivityEntry {
   readonly disposition: ActivityDisposition;
   readonly principalId: string;
   readonly targetAggregateId: string;
+  /**
+   * WHAT the decision decided, when its committed result carries a word for it: the route a
+   * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`).
+   * Null for every other kind and for a conflict; the browser puts the words on.
+   */
+  readonly verdict: string | null;
   /** The aggregate version after the decision; null for a conflict, which moved nothing. */
   readonly version: number | null;
 }
@@ -67,6 +73,23 @@ export interface ActivityReadPort {
 }
 
 const refused = (code: string): ActivityRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
+
+const VERDICT_KINDS: ReadonlySet<string> = new Set(["escalation.decide", "review.submit"]);
+
+/** The one word a committed result carries for what was decided, or null. Never throws. */
+export function verdictOf(commandKind: string, resultBytes: Uint8Array): string | null {
+  if (!VERDICT_KINDS.has(commandKind)) return null;
+  const decoded = decodeBoundedJsonBytes(resultBytes);
+  if (!decoded.ok) return null;
+  const result: unknown = decoded.value;
+  if (typeof result !== "object" || result === null || Array.isArray(result)) return null;
+  const record = result as Record<string, unknown>;
+  const word = commandKind === "escalation.decide"
+    ? record["decision"]
+    : typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
+      ? (record["routing"] as Record<string, unknown>)["route"] : undefined;
+  return typeof word === "string" && word.length > 0 ? word : null;
+}
 
 export interface ActivityReadOptions {
   readonly projectId: string;
@@ -116,6 +139,7 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
             disposition: committed ? "COMMITTED" as const : "VERSION_CONFLICT" as const,
             principalId: decision.key.principalId,
             targetAggregateId: decision.targetAggregateId,
+            verdict: committed ? verdictOf(decision.commandKind, decision.resultBytes) : null,
             version: committed ? decision.currentVersion : null,
           }));
           if (entries.length > limit) entries.shift();

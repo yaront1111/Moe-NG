@@ -9,7 +9,7 @@ import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord } from "./activity-read.js";
+import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord, verdictOf } from "./activity-read.js";
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
@@ -39,6 +39,9 @@ describe("createActivityReadPort", () => {
       expect(entry).toMatchObject({ disposition: "COMMITTED", principalId: expect.any(String) });
       expect(entry.decidedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
       expect(entry.version).toBeTypeOf("number");
+      // No bootstrap kind carries a verdict word; the key is present and null, never absent.
+      expect(Object.hasOwn(entry, "verdict")).toBe(true);
+      expect(entry.verdict).toBeNull();
     }
     // Instants never go up the list: latest first is a property, not the seed's luck.
     for (let index = 1; index < view.entries.length; index += 1) {
@@ -104,5 +107,29 @@ describe("isSeatRecord", () => {
     expect(isSeatRecord("session.renew", "session/x")).toBe(true);
     expect(isSeatRecord("work.claim", "work/x")).toBe(false);
     expect(isSeatRecord("integration.accept_output", "node-a")).toBe(false);
+  });
+});
+
+describe("verdictOf", () => {
+  const bytes = (value: unknown): Uint8Array => encoder.encode(JSON.stringify(value));
+
+  it("reads the escalation answer and the review route, and nothing from any other kind", () => {
+    expect(verdictOf("escalation.decide", bytes({ decision: "REPLAN", escalationRef: "esc-1" }))).toBe("REPLAN");
+    expect(verdictOf("escalation.decide", bytes({ decision: "ALLOW_MORE_ATTEMPTS" }))).toBe("ALLOW_MORE_ATTEMPTS");
+    expect(verdictOf("review.submit", bytes({ lineage: {}, routing: { layer: "REVIEW", route: "REJECT_IMPLEMENTATION" } }))).toBe("REJECT_IMPLEMENTATION");
+    expect(verdictOf("review.submit", bytes({ routing: { route: "ACCEPT" } }))).toBe("ACCEPT");
+    // approval.decide_intent commits a GoalState, not a decision word: it is APPROVE by construction.
+    expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBeNull();
+    expect(verdictOf("integration.accept_output", bytes({ decision: "REPLAN" }))).toBeNull();
+  });
+
+  it("answers null, never throws, for a result that carries no word or does not decode", () => {
+    expect(verdictOf("escalation.decide", bytes({}))).toBeNull();
+    expect(verdictOf("escalation.decide", bytes({ decision: "" }))).toBeNull();
+    expect(verdictOf("escalation.decide", bytes({ decision: 7 }))).toBeNull();
+    expect(verdictOf("review.submit", bytes({ routing: "ACCEPT" }))).toBeNull();
+    expect(verdictOf("review.submit", bytes([1, 2]))).toBeNull();
+    expect(verdictOf("review.submit", encoder.encode("{not json"))).toBeNull();
+    expect(verdictOf("escalation.decide", new Uint8Array())).toBeNull();
   });
 });

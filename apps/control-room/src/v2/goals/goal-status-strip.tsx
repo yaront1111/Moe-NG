@@ -14,7 +14,7 @@ import type { GoalStatus } from "./goal-status.js";
  * the page already reads; it links to the section that carries the step, it never acts.
  */
 
-const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object.freeze({
+export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object.freeze({
   CLOSED: "Closed",
   CONTRACT: "Contract at Gate 1",
   ESCALATION: "Review exhausted",
@@ -29,6 +29,7 @@ const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object.freeze
 /** The page anchors the opened goal's sections carry; the strip links, the page owns the ids. */
 export const GOAL_SECTION_IDS = Object.freeze({
   activity: "cr-goal-activity", board: "cr-goal-board", contract: "cr-goal-contract", plan: "cr-goal-plan",
+  publish: "cr-goal-publish",
 });
 
 export interface GoalStatusStripProps {
