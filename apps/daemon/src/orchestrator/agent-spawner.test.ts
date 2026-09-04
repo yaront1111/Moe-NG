@@ -19,7 +19,9 @@ import type { SpawnRequest } from "./agent-wrapper.js";
  */
 type AgentSpawnStartResult =
   | { readonly ok: false; readonly code: string; readonly layer: string }
-  | { readonly ok: true; readonly exit: Promise<void> };
+  // `exit` now resolves the seat's exit REPORT (or void on the legacy paths); this
+  // mirror stays deliberately loose so a shape change is caught by an arm, not by tsc.
+  | { readonly ok: true; readonly exit: Promise<unknown> };
 type AgentSpawnStart = (request: SpawnRequest) => Promise<AgentSpawnStartResult>;
 
 function claudeSpawnStarter(origin: string, options: AgentSpawnerOptions): AgentSpawnStart {
@@ -54,7 +56,9 @@ interface FakeChild {
   readonly kill: ReturnType<typeof vi.fn>;
   readonly options: { readonly cwd?: unknown; readonly env?: NodeJS.ProcessEnv | undefined;
     readonly detached?: unknown; readonly shell?: unknown };
+  readonly stderr: PassThrough;
   readonly stdin: PassThrough;
+  readonly stdout: PassThrough;
   readonly unref: ReturnType<typeof vi.fn>;
 }
 
@@ -66,10 +70,12 @@ function fakeSpawn(pid?: number): {
   const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
     const emitter = new EventEmitter();
     const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
     const kill = vi.fn();
     const unref = vi.fn();
-    calls.push({ args, emitter, file, kill, options, stdin, unref });
-    return Object.assign(emitter, { kill, pid, stdin, unref }) as unknown as ReturnType<
+    calls.push({ args, emitter, file, kill, options, stderr, stdin, stdout, unref });
+    return Object.assign(emitter, { kill, pid, stderr, stdin, stdout, unref }) as unknown as ReturnType<
       NonNullable<AgentSpawnerOptions["spawn"]>
     >;
   };
@@ -968,5 +974,117 @@ describe("claudeSpawnStarter", () => {
     await expect(started.exit).rejects.toMatchObject({ code: "AGENT_PROCESS_FAILED" });
     expect(started.ok).toBe(true);
     expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
+  });
+});
+
+/**
+ * The seat output TEE.
+ *
+ * The wrapper's console is the operator's only view of a running seat, so teeing
+ * must be additive: the same bytes still reach the console, and a bounded copy is
+ * retained so the exit can be READ (a provider announces a limit in its output,
+ * never in its exit code).
+ *
+ * LIMIT_LINE is copied verbatim from child 1's committed fixture
+ * (seat-exit-classifier.test.ts, CLAUDE_SESSION_LIMIT) — never retyped from memory.
+ * `·` is the MIDDLE DOT the claude CLI composes with.
+ */
+const LIMIT_LINE = "You've hit your session limit · resets 12:10am Asia/Jerusalem";
+
+/** A sink that keeps every Buffer it was handed, so byte identity can be proven. */
+function collectingSink(): { chunks: Buffer[]; sink: PassThrough } {
+  const chunks: Buffer[] = [];
+  const sink = new PassThrough();
+  sink.on("data", (chunk: Buffer) => { chunks.push(Buffer.from(chunk)); });
+  return { chunks, sink };
+}
+
+describe("seat output tee", () => {
+  const teedStart = (): {
+    calls: FakeChild[];
+    errChunks: Buffer[];
+    outChunks: Buffer[];
+    start: AgentSpawnStart;
+  } => {
+    const { calls, spawn } = fakeSpawn(7311);
+    const { chunks: outChunks, sink: stdout } = collectingSink();
+    const { chunks: errChunks, sink: stderr } = collectingSink();
+    const { made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude",
+      log: () => undefined,
+      output: { stderr, stdout },
+      platform: "linux",
+      spawn,
+    });
+    return { calls, errChunks, outChunks, start };
+  };
+
+  const admit = async (start: AgentSpawnStart, calls: FakeChild[]): Promise<{
+    child: FakeChild;
+    exit: Promise<unknown>;
+  }> => {
+    const pending = start(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    child.emitter.emit("spawn");
+    const started = await pending;
+    if (!started.ok) throw new Error(`expected an accepted start, got ${started.code}`);
+    return { child, exit: started.exit };
+  };
+
+  it("forwards the seat's bytes unchanged and carries the tail on a nonzero exit", async () => {
+    const { calls, errChunks, outChunks, start } = teedStart();
+    const { child, exit } = await admit(start, calls);
+    // The lifetime rejects; nothing may observe it as an unhandled rejection.
+    const settled = exit.then(() => null, (error: unknown) => error);
+
+    child.stdout.write(Buffer.from("hello\n"));
+    child.stderr.write(Buffer.from(`${LIMIT_LINE}\n`));
+    await drainMicrotasks();
+    child.emitter.emit("close", 1, null);
+
+    const error = await settled;
+    expect(error).toMatchObject({
+      code: "AGENT_PROCESS_FAILED",
+      exitCode: 1,
+      message: "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
+      reason: "EXIT_NONZERO",
+      tail: ["hello", LIMIT_LINE],
+    });
+    // BYTE equality, not string equality: the operator's console is unchanged.
+    expect(Buffer.concat(outChunks).equals(Buffer.from("hello\n"))).toBe(true);
+    expect(Buffer.concat(errChunks).equals(Buffer.from(`${LIMIT_LINE}\n`))).toBe(true);
+  });
+
+  it("resolves a clean exit with the seat report and the same tail", async () => {
+    const { calls, errChunks, outChunks, start } = teedStart();
+    const { child, exit } = await admit(start, calls);
+
+    child.stdout.write(Buffer.from("hello\n"));
+    child.stderr.write(Buffer.from(`${LIMIT_LINE}\n`));
+    await drainMicrotasks();
+    child.emitter.emit("close", 0, null);
+
+    expect(await exit).toEqual({ exitCode: 0, signal: null, tail: ["hello", LIMIT_LINE] });
+    expect(Buffer.concat(outChunks).equals(Buffer.from("hello\n"))).toBe(true);
+    expect(Buffer.concat(errChunks).equals(Buffer.from(`${LIMIT_LINE}\n`))).toBe(true);
+  });
+
+  it("forwards the RAW buffer, so a character split across two chunks survives", async () => {
+    const { calls, outChunks, start } = teedStart();
+    const { child, exit } = await admit(start, calls);
+    // U+20AC EURO SIGN is 3 UTF-8 bytes; a per-chunk toString() would decode each
+    // half separately and emit U+FFFD twice, corrupting the console AND the tail.
+    const head = Buffer.from([0xE2, 0x82]);
+    const rest = Buffer.from([0xAC, 0x0A]);
+
+    child.stdout.write(head);
+    child.stdout.write(rest);
+    await drainMicrotasks();
+    child.emitter.emit("close", 0, null);
+
+    const report = await exit as { readonly tail: readonly string[] };
+    expect(Buffer.concat(outChunks).equals(Buffer.concat([head, rest]))).toBe(true);
+    expect(report.tail).toEqual(["€"]);
   });
 });

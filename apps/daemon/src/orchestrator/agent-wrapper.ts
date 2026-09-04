@@ -11,11 +11,17 @@ import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
-import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
+import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
+import type { ProviderPauseGate } from "./agent-provider-pause.js";
+import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
 import type { AgentSpawnStart, RunOnceReport,
   SpawnReport } from "./agent-spawn-contract.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
+
+// The kind rosters live in the contract file (data, not behaviour); re-exported here so
+// the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.
+export { HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -73,6 +79,11 @@ export interface AgentWrapperConfig {
   readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
   readonly operatorCredential: string;
   /**
+   * Provider-limit pause: reads every seat exit, refunds a limit exit's attempt and
+   * parks staffing until the reset; absent = today's behaviour.
+   */
+  readonly providerPause?: ProviderPauseGate | undefined;
+  /**
    * Optional development payload suggestion embedded in the mission, so a real
    * model does not have to guess witness hashes. Advisory text only — the
    * daemon's decoder remains the sole payload authority.
@@ -108,37 +119,6 @@ export interface AgentWrapperConfig {
 }
 
 const encoder = new TextEncoder();
-/**
- * Kinds the wrapper must NEVER staff, exported so the offer surface's test can
- * hold every offered `approval.*` kind against it — an approval kind offered but
- * absent here would let the wrapper mint an agent session to take a human act.
- */
-export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
-  // GOAL CREATION IS A PRODUCT INTENT, not a chain chore: since the affordance
-  // surface began offering goal.create on EVERY read of an active project
-  // (task-9d2d44aa), a wrapper that staffs it mints a fresh junk goal each pass
-  // forever — each successful creation clears the attempts counter, so the loop
-  // never exhausts. Measured live on the first real project: 8 junk goals in
-  // minutes. Goals come from the operator's browser (or the PRD lane), never
-  // from a self-staffed agent.
-  "approval.decide", "approval.decide_intent",
-  "goal.close", "goal.create", "goal.create_with_source",
-  // Pushing the operator's repository to a remote is the operator's decision; the wrapper
-  // performs it as an effect of that decision, never as staffed work.
-  "repository.publish",
-]);
-/** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
-const COMPILER_STEPS: ReadonlySet<string> = new Set([
-  "planning.submit_decomposition", "product_contract.propose_revision",
-]);
-/**
- * Outcomes the durable staffing gate answers BEFORE any identity is minted.
- * They are not attempts: nothing was spent, and the condition they report
- * (a live predecessor, a held claim, a record the fence cannot read) clears
- * on its own time, not the wrapper's.
- */
-const GATE_REFUSALS: ReadonlySet<string> = new Set(AGENT_STAFFING_REFUSAL_CODES);
-
 function setupError(action: string): Error {
   return new Error(`AGENT_SETUP_FAILED:${action}:UNEXPECTED_ERROR`);
 }
@@ -319,6 +299,12 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       claimAggregateVersion: step.claimAggregateVersion,
       cleanupAuthority,
       kind: step.kind,
+      // The attempt is charged when the seat spawns. A PROVIDER_LIMIT exit hands it
+      // back, so the item's count on the next pass equals its pre-spawn count: the
+      // provider refused, the item never got its turn.
+      onExit: config.providerPause?.exitObserver(sessionId, workItemId, () => {
+        attempts.set(workItemId, Math.max(0, (attempts.get(workItemId) ?? 0) - 1));
+      }),
       request,
       sessionId,
       spawnAgent: config.spawnAgent,
@@ -331,6 +317,16 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     const priorFailure = staffing.failureOutcome();
     if (priorFailure !== null) {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: priorFailure };
+    }
+    // One MOE_AGENT_COMMAND per wrapper process, so one provider: while its pause is
+    // live this pass staffs nothing and keeps polling. The pass at or after the reset
+    // reads null and staffs normally.
+    const paused = config.providerPause?.paused(config.clock()) ?? null;
+    if (paused !== null) {
+      return {
+        active: staffing.activeCount(), paused, spawned: [],
+        surfaceOutcome: PROVIDER_PAUSED_OUTCOME,
+      };
     }
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {

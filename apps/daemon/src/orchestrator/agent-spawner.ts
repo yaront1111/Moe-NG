@@ -9,8 +9,10 @@ import { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS, agentEnvironment,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
 import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
-  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SpawnAttempt } from "./agent-spawn-contract.js";
+  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
+  SpawnAttempt } from "./agent-spawn-contract.js";
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
+import { createOutputTail } from "./seat-output-tail.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 export { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
@@ -55,7 +57,7 @@ function spawnRuntime(
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   const active = new Set<{
-    readonly done: Promise<void>;
+    readonly done: Promise<SeatExitReport | void>;
     readonly terminate: () => void;
   }>();
   const containmentFailures: AgentProcessContainmentError[] = [];
@@ -126,7 +128,8 @@ function spawnRuntime(
         },
       }), "utf8");
     }
-    let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
+    let owned: { readonly done: Promise<SeatExitReport | void>; readonly terminate: () => void }
+      | undefined;
     let terminateOwned: () => void = () => undefined;
     let completedBeforeRegistration = false;
     // Captured out of the `done` executor's scope so an accepted start can report
@@ -141,7 +144,7 @@ function spawnRuntime(
       admit = resolve;
       denyStart = reject;
     });
-    const done = new Promise<void>((resolve, reject) => {
+    const done = new Promise<SeatExitReport | void>((resolve, reject) => {
       let child: ChildProcess;
       try {
         child = spawn(invocation.file, [...invocation.args], {
@@ -154,7 +157,9 @@ function spawnRuntime(
             }
             : agentEnvironment(options.environment ?? process.env),
           shell: invocation.shell,
-          stdio: ["pipe", "inherit", "inherit"],
+          // All three PIPED: the seat's output is teed below, byte for byte, to the
+          // wrapper's own console AND to a bounded tail the exit is read from.
+          stdio: ["pipe", "pipe", "pipe"],
         });
       } catch (error) {
         rmSync(mcpConfigPath, { force: true });
@@ -163,11 +168,24 @@ function spawnRuntime(
         return;
       }
       childPid = child.pid;
+      // Attached in the SAME TICK as the spawn: a chunk emitted before a listener
+      // exists is lost, and an unread pipe eventually blocks the child.
+      const tail = createOutputTail();
+      const sinks = options.output ?? { stderr: process.stderr, stdout: process.stdout };
+      const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
+        sink.write(chunk);
+        tail.push(chunk);
+      };
+      child.stdout?.on("data", tee(sinks.stdout));
+      child.stderr?.on("data", tee(sinks.stderr));
       // The config file carries the agent's credential; it must not outlive the
       // owned process. Every settlement path removes it; a missing file is fine.
       let settled = false;
       let terminating = false;
       let childClosed = false;
+      /** The close facts, captured before settling so every arm reports the same exit. */
+      let lastClose: { code: number | null; signal: NodeJS.Signals | null }
+        = { code: null, signal: null };
       let treeKillConfirmed = false;
       let killHelper: ChildProcess | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -191,7 +209,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        resolve();
+        resolve({ exitCode: lastClose.code, signal: lastClose.signal, tail: tail.lines() });
       };
       const failProcess = (
         reason: AgentProcessFailureReason,
@@ -201,7 +219,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new AgentProcessFailureError(reason, exitCode, signal));
+        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines()));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -313,6 +331,7 @@ function spawnRuntime(
       child.on("close", (code, signal) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         childClosed = true;
+        lastClose = { code, signal };
         if (terminating) maybeFinishTermination();
         else if (code === 0) finish();
         else failProcess(code === null ? "EXIT_SIGNAL" : "EXIT_NONZERO", code, signal);
@@ -369,7 +388,9 @@ function spawnRuntime(
     // settles exactly as this caller has always observed.
     if (!("admitted" in attempt)) throw new SpawnInvocationRefusal(attempt.code);
     void attempt.admitted.catch(() => undefined);
-    return await attempt.done;
+    // The legacy contract answers VOID; the seat report the lifetime now carries is
+    // handed to `startAgent`'s caller, not to this one.
+    await attempt.done;
   };
 
   const own = <Callable extends object>(callable: Callable): Callable => {

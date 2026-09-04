@@ -166,6 +166,31 @@ describe("wrapper binary staffing wiring", () => {
       .toThrow();
   });
 
+  it("passes a providerPause built from the real store in the production call", () => {
+    // Pins WHAT is injected, not merely that the key is present: a `providerPause: undefined`
+    // leaves the binary exactly as unable to survive a provider limit as before this row.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("providerPause: createProviderPauseGate({");
+    const start = call.indexOf("providerPause: createProviderPauseGate({");
+    const block = call.slice(start, call.indexOf("      }),", start));
+    expect(block).toContain("store: verifierStore");
+    expect(block).toContain("providerFor(process.env[\"MOE_AGENT_COMMAND\"]");
+    expect(call).not.toContain("providerPause: undefined");
+  });
+
+  it("scans a providerPause slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace(/providerPause: createProviderPauseGate\(\{/, "");
+    expect(() =>
+      expect(wrapperCall(unwired)).toContain("providerPause: createProviderPauseGate({"))
+      .toThrow();
+  });
+
+  it("tells the operator which provider is paused and until when", () => {
+    // The wrapper log is the operator's only view of a paused fleet; a paused pass that
+    // printed the ordinary idle line would read as "nothing to do", not "parked".
+    expect(SOURCE).toContain("[wrapper] provider paused:");
+  });
+
   it("announces incomplete standing verifier authority at startup, from the real store", () => {
     // The per-node VERIFICATION_AUTHORITY_UNAVAILABLE verdict only prints after a delivery;
     // the first real project sat silent for days. The preflight must read the store, not a

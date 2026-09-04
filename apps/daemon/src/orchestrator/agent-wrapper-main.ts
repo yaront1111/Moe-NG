@@ -19,6 +19,7 @@ import { createProductContractReadPort } from "../product-contract/product-contr
 import {
   createVerifierAuthorityProvider, readVerifierStandingAuthority,
 } from "../review/verifier-authority-provider.js";
+import { createProviderPauseGate } from "./agent-provider-pause.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
@@ -40,6 +41,7 @@ import {
   VerifierProcessCancelledError,
 } from "./verifier-process-runner.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
+import { providerFor } from "./moe-up-credentials.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
 
 export {
@@ -273,6 +275,17 @@ async function main(): Promise<void> {
         }
         return secureSpawn(request);
       },
+      // The seat command resolves exactly as the spawner resolves it
+      // (agent-spawner.ts: `options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude"`).
+      // An unknown command reads as "claude": a scripted seat double printing the claude
+      // limit line must park the provider it is imitating.
+      providerPause: createProviderPauseGate({
+        clock: () => Date.now(),
+        log: (line) => { process.stdout.write(`${line}\n`); },
+        projectId: config.projectId,
+        provider: providerFor(process.env["MOE_AGENT_COMMAND"] ?? "claude")?.leaf ?? "claude",
+        store: verifierStore,
+      }),
       staffingFence: createAgentSessionFence({
         isProcessAlive: probeProcessAlive,
         projectId: config.projectId,
@@ -397,7 +410,11 @@ async function main(): Promise<void> {
         // Say so: a silent pass reads as a hung wrapper to an operator watching it.
         // Once per distinct idle state, not once per interval — the continuous
         // loop would otherwise print the same line every few seconds.
-        const idle = `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`;
+        // A parked fleet is not an idle one: say which provider and until when.
+        const idle = report.paused === undefined
+          ? `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`
+          : `[wrapper] provider paused: ${report.paused.provider} until ${report.paused.resetAt}`
+            + ` (active ${String(report.active)})\n`;
         if (idle !== lastIdle) process.stdout.write(idle);
         lastIdle = idle;
       } else {

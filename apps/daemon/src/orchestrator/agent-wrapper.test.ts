@@ -945,7 +945,7 @@ describe("agent spawn admission truth", () => {
       platform: "win32",
       spawn: admittingSpawn(),
     });
-    let held: Promise<void> | null = null;
+    let held: Promise<unknown> | null = null;
     try {
       let suffix = 0;
       const admitted = createAgentWrapper({
