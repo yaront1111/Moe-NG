@@ -140,7 +140,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:35:27.718Z",
-  "updatedAt": "2026-09-04T10:34:08.957Z",
+  "updatedAt": "2026-09-04T10:54:42.814Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:45:15.979Z",
     "plannedStepCount": 6,
@@ -180,5 +180,74 @@
   "contextFetchedBy": [
     "worker-f2c0503a"
   ],
-  "workStartedAt": "2026-09-04T09:56:02.373Z"
+  "workStartedAt": "2026-09-04T09:56:02.373Z",
+  "commits": [
+    {
+      "sha": "844f3a03917a71efc459d2535c891f952fc1f20d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-f2c0503a@2026-09-04T09:54:46Z",
+      "paths": [
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json",
+        "apps/daemon/src/bootstrap/activation-receipts.js",
+        "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.js",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-ports.js",
+        "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/layer-visibility-cases.ts"
+      ],
+      "recordedBy": "worker-f2c0503a",
+      "recordedAt": "2026-09-04T10:54:10.434Z",
+      "treeId": "bae5417126d1f38f2fda2181cc3ffe96af855388",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json",
+    "apps/daemon/src/bootstrap/activation-receipts.js",
+    "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.js",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.js",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/layer-visibility-cases.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/bootstrap/activation-receipts-measure.js",
+    "apps/daemon/src/bootstrap/activation-receipts.js",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.js",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+    "tests/security/boundary-roster.security.ts",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+    "tests/security/layer-visibility-cases.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/goals/j1-command-path.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-f2c0503a@2026-09-04T09:54:46Z",
+    "at": "2026-09-04T10:54:10.434Z"
+  }
 }
