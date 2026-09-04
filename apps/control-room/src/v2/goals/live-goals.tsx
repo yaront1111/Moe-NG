@@ -6,6 +6,8 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { createGoalCatalogFeed } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
+import { readRuns } from "../../live/live-runs.js";
+import type { RunsOutcome } from "../../live/live-runs.js";
 import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { createGoalDispatcher } from "./live-goal-create.js";
@@ -31,6 +33,8 @@ import type { CoverageReader } from "./use-goal-coverage.js";
  */
 
 const POLL_INTERVAL_MS = 2_000;
+/** The runs read answers "how are the nodes doing" for every goal at once; slower than the offers. */
+const RUNS_POLL_MS = 5_000;
 
 /**
  * The refusal already in hand, said in one sentence.
@@ -69,6 +73,8 @@ export interface LiveGoalsHomeProps {
   readonly readCoverage?: CoverageReader | undefined;
   /** The number of decisions waiting on a human, for the shell's Needs-you badge. */
   readonly onNeedsYouCount?: ((count: number) => void) | undefined;
+  /** The project-wide runs read; injectable for tests, absent means no node facts on the cards. */
+  readonly readRuns?: (() => Promise<RunsOutcome>) | undefined;
 }
 
 export function LiveGoalsHome({
@@ -78,8 +84,10 @@ export function LiveGoalsHome({
   onOpenBoard,
   readCoverage,
   onNeedsYouCount,
+  readRuns: readRunsProp,
 }: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
+  const [runs, setRuns] = useState<RunsOutcome | null>(null);
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
@@ -110,15 +118,36 @@ export function LiveGoalsHome({
     return (): void => { feed?.stop(); catalogFeed?.stop(); };
   }, [catalogFeed, feed]);
 
+  // One project-wide runs poll: the cards' node counts and the Needs-you escalations.
+  const runsReader = useMemo<(() => Promise<RunsOutcome>) | null>(() => {
+    if (readRunsProp !== undefined) return readRunsProp;
+    return setup.ok ? (): Promise<RunsOutcome> => readRuns(setup.headers) : null;
+  }, [readRunsProp, setup]);
+  useEffect(() => {
+    if (runsReader === null) return undefined;
+    let live = true;
+    let inFlight = false;
+    const tick = (): void => {
+      if (inFlight) return;
+      inFlight = true;
+      void runsReader().then((next) => { inFlight = false; if (live) setRuns(next); }, () => { inFlight = false; });
+    };
+    tick();
+    const timer = setInterval(tick, RUNS_POLL_MS);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [runsReader]);
+
   const coverage = useGoalCoverage(catalog, readCoverage);
   // The same derivation the Needs-you screen renders, so the badge and the queue agree.
   const needsYouCount = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, surface }).items.length,
-    [catalog, coverage, surface],
+    () => deriveNeedsYou({ catalog, coverage, runs, surface }).items.length,
+    [catalog, coverage, runs, surface],
   );
   useEffect(() => { onNeedsYouCount?.(needsYouCount); }, [needsYouCount, onNeedsYouCount]);
 
-  const data = setup.ok ? deriveGoalCatalog(catalog, coverage) : notAttached(setup);
+  const data = setup.ok
+    ? deriveGoalCatalog(catalog, coverage, Date.now(), { runs, surface })
+    : notAttached(setup);
 
   // A refused bootstrap closes goal creation on THIS component's own authority,
   // never on its caller's memory to pass a reason. On refusal the derived

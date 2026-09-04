@@ -52,3 +52,35 @@
 .cr2-triage > .cr2-triage-card {
   max-width: 480px;
 }
+
+/* ---- The glance face (2026-09-04): what needs you, and how the nodes are doing. ---- */
+
+.cr2-goal .cr2-goal-needsyou {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--cr-radius-pill);
+  background: var(--cr-truth-human-deep);
+  color: var(--cr-chip-ink);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cr2-goal .cr2-goal-nodes {
+  margin: 4px 0 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-goal[data-state="BLOCKED"] .cr2-goal-nodes { color: var(--cr-danger); }
+
+/* The identity pills moved under the expander: the face carries words, the details carry ids. */
+.cr2-goal .cr2-goal-facts .cr2-goal-chips {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+}

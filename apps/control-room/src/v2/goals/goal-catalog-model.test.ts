@@ -23,7 +23,7 @@ describe("deriveGoalCatalog", () => {
     });
     expect(deriveGoalCatalog(catalog([]))).toMatchObject({
       comingOnlineNote: "This project has no durable goals yet.",
-      goalCountLabel: "0 GOALS \u00b7 DURABLE CATALOG",
+      goalCountLabel: "0 GOALS",
       goals: [],
     });
   });
@@ -40,7 +40,7 @@ describe("deriveGoalCatalog", () => {
       },
     ]));
 
-    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
+    expect(data.goalCountLabel).toBe("2 GOALS");
     expect(data.goals.map((goal) => ({
       goalId: goal.goalId,
       headline: goal.headline,

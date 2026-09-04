@@ -22,7 +22,7 @@ import type {
  * paths never blur here.
  */
 
-const FILTERS = Object.freeze(["All", "Needs you", "Active", "Blocked"] as const);
+const FILTERS = Object.freeze(["All", "Needs you", "Active", "Blocked", "Done"] as const);
 type Filter = (typeof FILTERS)[number];
 
 function matchesFilter(goal: GoalCardModel, filter: Filter): boolean {
@@ -30,6 +30,7 @@ function matchesFilter(goal: GoalCardModel, filter: Filter): boolean {
     case "Needs you": return goal.needsYou;
     case "Active": return goal.state === "ACTIVE";
     case "Blocked": return goal.state === "BLOCKED";
+    case "Done": return goal.state === "DONE";
     default: return true;
   }
 }
@@ -74,8 +75,14 @@ export function GoalsHome({
   // so no refusal path can discard what the operator typed.
   const [resetToken, setResetToken] = useState(0);
 
+  // What needs a person first, then stuck work, then work in flight, then the rest, done last;
+  // a model without a rank (fixtures) keeps the order it came in.
   const visible = useMemo(
-    () => data.goals.filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search)),
+    () => data.goals
+      .map((goal, index) => ({ goal, index }))
+      .filter(({ goal }) => matchesFilter(goal, filter) && matchesSearch(goal, search))
+      .sort((left, right) => (left.goal.rank ?? 0) - (right.goal.rank ?? 0) || left.index - right.index)
+      .map(({ goal }) => goal),
     [data.goals, filter, search],
   );
 

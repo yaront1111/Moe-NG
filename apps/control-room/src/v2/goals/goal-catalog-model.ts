@@ -1,9 +1,12 @@
+import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type {
   GoalCatalogFrame, LiveGoalCatalogEntry,
 } from "../../live/live-goal-catalog.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
+import { deriveGoalGlance } from "./goal-glance.js";
 import type {
-  ComingOnlineFact, GoalCardModel, GoalFact, GoalsData,
+  ComingOnlineFact, GoalCardModel, GoalFact, GoalsData, TriageStrip,
 } from "./goal-model.js";
 
 /**
@@ -226,10 +229,89 @@ function withCoverage(
   });
 }
 
+/**
+ * The runs read and the daemon's offers, when the live page holds them. With both, every
+ * card says where its goal stands in the board's own words and the triage strips carry real
+ * counts; without them (fixtures, tests, an unattached page) the coverage overlay stands.
+ */
+export interface GoalCatalogLive {
+  readonly runs: RunsOutcome | null;
+  readonly surface: SurfaceFrame | null;
+}
+
+function runOf(runs: RunsOutcome | null, goalId: string): RunGoalView | undefined {
+  if (runs === null || runs.status !== "RUNS") return undefined;
+  return runs.goals.find((goal) => goal.goalId === goalId);
+}
+
+/** The glance overlay: the board's headline, state and node counts on the list card. */
+function withGlance(
+  card: GoalCardModel, entry: LiveGoalCatalogEntry, coverage: DocumentCoverageOutcome | undefined,
+  live: GoalCatalogLive, nowMs: number,
+): GoalCardModel {
+  const glance = deriveGoalGlance({ coverage, entry, nowMs, run: runOf(live.runs, entry.goalId), surface: live.surface });
+  // Before the daemon says anything about the goal the coverage overlay's words stand.
+  if (glance.stage === "UNKNOWN") {
+    return Object.freeze({ ...card, rank: glance.rank });
+  }
+  return Object.freeze({
+    ...card,
+    headline: glance.headline,
+    headlineTone: glance.tone,
+    needsYou: glance.needsYou,
+    needsYouLabels: glance.needsYouLabels,
+    nodesLine: glance.nodesLine ?? undefined,
+    rank: glance.rank,
+    state: glance.state,
+  });
+}
+
+/** What needs a person now, as strips with counts; none when nothing does. */
+function triageOf(goals: readonly GoalCardModel[], live: GoalCatalogLive): readonly TriageStrip[] {
+  const strips: TriageStrip[] = [];
+  const decisions = goals.filter((goal) => goal.needsYou);
+  if (decisions.length > 0) {
+    const one = decisions.length === 1 ? decisions[0] : undefined;
+    strips.push(Object.freeze({
+      count: String(decisions.length),
+      id: "needs-you",
+      label: one === undefined ? "Decisions waiting on you" : "Decision waiting on you",
+      openGoalId: one?.goalId,
+      sub: one === undefined ? "Plans, contracts, exhausted reviews, goals to close" : one.needsYouLabels?.[0] ?? "",
+      tone: "info",
+    }));
+  }
+  const stuck = goals.filter((goal) => goal.state === "BLOCKED" || (goal.nodesLine ?? "").includes("stuck"));
+  if (stuck.length > 0) {
+    const one = stuck.length === 1 ? stuck[0] : undefined;
+    strips.push(Object.freeze({
+      count: String(stuck.length),
+      id: "stuck",
+      label: one === undefined ? "Goals with stuck work" : "Goal with stuck work",
+      openGoalId: one?.goalId,
+      sub: "A node sent back or blocked on a decision",
+      tone: "danger",
+    }));
+  }
+  const working = live.runs !== null && live.runs.status === "RUNS"
+    ? live.runs.totals.IN_PROGRESS + live.runs.totals.DELIVERED : 0;
+  if (working > 0) {
+    strips.push(Object.freeze({
+      count: String(working),
+      id: "working",
+      label: working === 1 ? "Node in progress" : "Nodes in progress",
+      sub: "Agents working or awaiting the verifier",
+      tone: "accent",
+    }));
+  }
+  return Object.freeze(strips);
+}
+
 export function deriveGoalCatalog(
   frame: GoalCatalogFrame | null,
   coverage?: ReadonlyMap<string, DocumentCoverageOutcome>,
   nowMs: number = Date.now(),
+  live?: GoalCatalogLive,
 ): GoalsData {
   if (frame === null) {
     return empty(
@@ -250,14 +332,15 @@ export function deriveGoalCatalog(
     );
   }
 
-  const goals = Object.freeze(frame.goals.map(
-    (entry) => withCoverage(goalCard(entry), coverage?.get(entry.goalId), nowMs),
-  ));
+  const goals = Object.freeze(frame.goals.map((entry) => {
+    const card = withCoverage(goalCard(entry), coverage?.get(entry.goalId), nowMs);
+    return live === undefined ? card : withGlance(card, entry, coverage?.get(entry.goalId), live, nowMs);
+  }));
   return Object.freeze({
     comingOnlineNote: goals.length === 0 ? "This project has no durable goals yet." : undefined,
-    goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"} \u00b7 DURABLE CATALOG`,
+    goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"}`,
     goals,
     source: "live",
-    triage: Object.freeze([]),
+    triage: live === undefined ? Object.freeze([]) : triageOf(goals, live),
   });
 }

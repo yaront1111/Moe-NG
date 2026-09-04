@@ -66,6 +66,12 @@ export interface GoalCardModel {
   readonly headlineFacts: readonly GoalFact[];
   readonly facts: readonly GoalFact[];
   readonly comingOnlineFacts: readonly ComingOnlineFact[];
+  /** The decisions waiting on a human, in a person's words; empty when nothing does. */
+  readonly needsYouLabels?: readonly string[] | undefined;
+  /** "5 nodes, 3 done, 1 stuck" from the runs read; undefined before any node exists. */
+  readonly nodesLine?: string | undefined;
+  /** List order: lower first. Undefined (fixtures) keeps catalog order. */
+  readonly rank?: number | undefined;
 }
 
 export interface TriageStrip {

@@ -52,7 +52,7 @@ function catalog(): GoalCatalogFrame {
 describe("coming-online fields never render a fabricated number", () => {
   it("shows a budget placeholder chip, not a spend number, on a live goal", () => {
     const data = deriveGoalCatalog(catalog());
-    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
+    expect(data.goalCountLabel).toBe("2 GOALS");
     expect(data.goals.map(({ goalId }) => goalId)).toEqual([
       "goal-durable-alpha", "goal-durable-beta",
     ]);
@@ -345,6 +345,8 @@ describe("a truth chip on a goal fact opens the proof drawer", () => {
         <GoalsHome data={deriveGoalCatalog(catalog())} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />
       </CordumShell>,
     );
+    // The identity pills live under the card's details now; the face carries words only.
+    await user.click(screen.getByTestId("cr.goals.card.goal-durable-alpha.expand"));
     const pill = screen.getByTestId("cr.goals.pill.goal-durable-alpha.goal");
     await user.click(within(pill).getByTestId("cr.chip.daemon_verified"));
     const claim = screen.getByTestId("cr.shell.inspector.claim");
