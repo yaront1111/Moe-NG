@@ -16,7 +16,7 @@ import type { GoalStatus } from "./goal-status.js";
 
 export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object.freeze({
   CLOSED: "Closed",
-  CONTRACT: "Contract at Gate 1",
+  CONTRACT: "Contract to approve",
   ESCALATION: "Review exhausted",
   NO_PRD: "No PRD",
   PLAN: "Plan review",

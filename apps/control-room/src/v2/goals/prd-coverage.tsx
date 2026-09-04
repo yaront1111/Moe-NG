@@ -84,7 +84,7 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
     <section className="cr2-approve-block" data-testid={`cr.coverage.contract.${contract.contractId}`}>
       <h3 className="cr2-approve-heading">
         {`CONTRACT ${MIDDOT} ${contract.contractId} ${MIDDOT} ${contract.revisionId}`
-          + ` ${MIDDOT} GATE 1 ${contract.gate1}`}
+          + ` ${MIDDOT} ${contract.gate1 === "APPROVED" ? "contract approved" : "contract awaiting your approval"}`}
       </h3>
       <details className="cr2-approve-inspect" data-testid={`cr.coverage.contract.${contract.contractId}.requirements`}>
         <summary className="cr2-approve-inspect-summary">

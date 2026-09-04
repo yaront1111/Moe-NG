@@ -108,7 +108,7 @@ function itemsFor(
         actionLabel: "Review the contract",
         detail: `${contract.contractId} ${MIDDOT} ${String(contract.requirements.length)} requirements`
           + ` ${MIDDOT} ${String(criteria)} acceptance criteria. Approving it lets the daemon compile the plan.`,
-        headline: "A Product Contract is waiting at Gate 1",
+        headline: "A Product Contract is waiting for your approval (Gate 1)",
         kind: "GATE_1",
       }));
     }

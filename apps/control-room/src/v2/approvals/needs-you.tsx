@@ -177,7 +177,7 @@ export function NeedsYou({ data, decisionResults, onDecide, onOpenBoard }: Needs
         <div className="cr2-goals-empty" data-testid="cr.needsyou.empty">
           <p className="cr2-goals-empty-title">Nothing needs you right now.</p>
           <p className="cr2-goals-empty-body">
-            Agents keep working on their own. A plan to approve, a Product Contract at Gate 1,
+            Agents keep working on their own. A plan to approve, a Product Contract to approve,
             or a goal whose contract is fully verified will appear here.
           </p>
         </div>

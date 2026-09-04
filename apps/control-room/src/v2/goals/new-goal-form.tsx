@@ -156,17 +156,17 @@ export function NewGoalForm({
       </div>
 
       <div className="cr2-newgoal-col">
-        <label className="cr2-field-label" htmlFor="cr2-title">TITLE</label>
+        <label className="cr2-field-label" htmlFor="cr2-title">Title</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.title"
           id="cr2-title"
           maxLength={TITLE_INPUT_MAX_LENGTH}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Ship the stdio entry point"
+          placeholder="Ship the login flow"
           value={title}
         />
-        <label className="cr2-field-label" htmlFor="cr2-outcome">{`OUTCOME ${EMDASH} ONE SENTENCE IS ENOUGH`}</label>
+        <label className="cr2-field-label" htmlFor="cr2-outcome">{`What should be true when this is done ${EMDASH} one sentence is enough`}</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
@@ -177,7 +177,7 @@ export function NewGoalForm({
           value={outcome}
         />
         <label className="cr2-field-label" htmlFor="cr2-criteria">
-          {`ACCEPTANCE CRITERIA ${EMDASH} OPTIONAL, ONE PER LINE`}
+          {`How we will know ${EMDASH} optional, one check per line`}
         </label>
         <textarea
           className="cr2-field-area"
@@ -185,14 +185,16 @@ export function NewGoalForm({
           id="cr2-criteria"
           maxLength={8_192}
           onChange={(event) => setCriteria(event.target.value)}
-          placeholder="pnpm test:security exits 0"
+          placeholder="A signed-out user who submits the form sees the error"
           rows={3}
           value={criteria}
         />
       </div>
 
       <div className="cr2-newgoal-col">
-        <label className="cr2-field-label" htmlFor="cr2-budget">BUDGET ENVELOPE</label>
+        <details className="cr2-goal-fold" data-testid="cr.goals.newgoal.more">
+        <summary className="cr2-goal-fold-summary">More, optional: a budget and a risk class for the agents</summary>
+        <label className="cr2-field-label" htmlFor="cr2-budget">Budget</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.budget"
@@ -202,7 +204,7 @@ export function NewGoalForm({
           placeholder="Optional, for example 120 min agent time"
           value={budget}
         />
-        <label className="cr2-field-label" htmlFor="cr2-risk">RISK CLASS</label>
+        <label className="cr2-field-label" htmlFor="cr2-risk">Risk class</label>
         <select
           className="cr2-field-select"
           data-testid="cr.goals.newgoal.risk"
@@ -217,8 +219,9 @@ export function NewGoalForm({
           {RISK_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
         <p className="cr2-newgoal-caption" data-testid="cr.goals.newgoal.authority-note">
-          Budget and risk are optional advisory requests. Blank means not supplied; daemon policy remains authority.
+          Both are advisory requests. Blank means not supplied; the project policy stays in charge.
         </p>
+        </details>
         <div className="cr2-newgoal-actions">
           <ActionButton
             disabled={busy || read === "READING" || outcome.trim() === "" || title.trim() === ""}

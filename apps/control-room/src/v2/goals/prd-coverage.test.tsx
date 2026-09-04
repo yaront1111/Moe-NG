@@ -92,7 +92,7 @@ describe("the PRD coverage card", () => {
     expect(screen.getByTestId("cr.coverage.bar").getAttribute("aria-valuemax")).toBe("3");
     expect(screen.getByTestId("cr.coverage.document").textContent).toContain("PRD.md");
     expect(screen.getByTestId("cr.coverage.document").textContent).toContain("1 of 2 PRD sections cited");
-    expect(screen.getByTestId("cr.coverage.contract.contract-1").textContent).toContain("GATE 1 APPROVED");
+    expect(screen.getByTestId("cr.coverage.contract.contract-1").textContent).toContain("contract approved");
     expect(screen.getByTestId("cr.coverage.criterion.crit-1").getAttribute("data-status")).toBe("VERIFIED");
     expect(screen.getByTestId("cr.coverage.criterion.crit-1").textContent).toContain("node-a");
     expect(screen.getByTestId("cr.coverage.criterion.crit-2").getAttribute("data-status")).toBe("PLANNED");

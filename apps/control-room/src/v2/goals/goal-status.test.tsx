@@ -93,7 +93,7 @@ describe("LiveGoalStatus", () => {
   it("reads the opened goal's coverage through the page's reader and derives from the shared surface", async () => {
     const read = vi.fn(async (_goalId: string) => coverage({ gate1: "PENDING" }));
     render(<LiveGoalStatus goalId={GOAL} pollMs={60_000} read={read} runId={RUN} surface={null} />);
-    expect((await screen.findByTestId("cr.goalstatus.stage")).textContent).toBe("Contract at Gate 1");
+    expect((await screen.findByTestId("cr.goalstatus.stage")).textContent).toBe("Contract to approve");
     expect(read).toHaveBeenCalledWith(GOAL);
   });
 });

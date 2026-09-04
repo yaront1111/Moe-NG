@@ -159,7 +159,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       data-testid="cr.gate1.card"
     >
       <h2 className="cr2-slot-kicker" id={headingId}>
-        {`PRODUCT CONTRACT ${MIDDOT} GATE 1 ${MIDDOT} ${goalId}`}
+        {`PRODUCT CONTRACT ${MIDDOT} YOUR APPROVAL, GATE 1 ${MIDDOT} ${goalId}`}
       </h2>
       {shownState.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading" role="status">

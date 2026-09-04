@@ -113,7 +113,7 @@ export function deriveGoalStatus(input: {
     }, { agents, progress });
   }
   if (covered !== null && covered.contracts.some((contract) => contract.gate1 === "PENDING")) {
-    return status("CONTRACT", "The Product Contract is waiting at Gate 1.", {
+    return status("CONTRACT", "The Product Contract is waiting for your approval (Gate 1).", {
       anchor: "contract",
       detail: "Answer any open question and approve the contract; the daemon compiles the plan from it.",
       label: "Review the contract",
