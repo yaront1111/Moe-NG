@@ -146,7 +146,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:17:45.379Z",
-  "updatedAt": "2026-09-04T17:30:35.412Z",
+  "updatedAt": "2026-09-04T17:31:28.522Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:20:34.302Z",
     "plannedStepCount": 5,
@@ -331,6 +331,30 @@
       "treeId": "21874f988d664bfee22e184313eed530c3c77ca2",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "5a5830d89cf45130871e1e1f45b569ed0a8a5a80",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-65786a7d@2026-09-04T17:16:31Z",
+      "paths": [
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+        ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "recordedBy": "qa-65786a7d",
+      "recordedAt": "2026-09-04T17:31:28.522Z",
+      "treeId": "e0845541ed6610b89e8fc90bf73cd4de19c7607b",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/src/goals/goal-services.test.ts",
+          "taskId": "task-19d2329c25934099b2ff10086987d1c5"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -342,7 +366,9 @@
     "apps/daemon/src/goals/goal-qualification.test.ts",
     ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
     ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
-    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json"
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    "apps/daemon/src/goals/goal-services.test.ts"
   ],
   "touchedFiles": [
     ".wire-step3.py",
@@ -359,9 +385,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-80f8bfe1@2026-09-04T16:55:08Z",
-    "at": "2026-09-04T17:10:11.200Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-65786a7d@2026-09-04T17:16:31Z",
+    "at": "2026-09-04T17:31:28.522Z"
   },
   "declaredFiles": [
     "apps/daemon/src/goals/j1-command-path.test.ts",

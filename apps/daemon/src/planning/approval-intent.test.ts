@@ -1382,17 +1382,30 @@ describe("one approval intent decision activates, records, and burns atomically"
     expect(successorRunIdFor(RUN_ID, "cmd-other")).not.toBe(GOLDEN_SUCCESSOR_RUN_ID);
   });
 
-  it("refuses a REJECT carrying no reason before any durable read", () => {
-    const store = openStore();
-    const commandId = "cmd-intent-reject-before-run";
-    expect(refusalOf(reviewedDispatch(store, commandId, {
-      ...INTENT, decision: "REJECT", decisionReason: null,
-    }))).toEqual({
-      code: APPROVAL_REJECT_REASON_REQUIRED, layer: "DAEMON_APPROVAL_INTENT",
-    });
-    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(0);
-    expect(store.readEvents(replayAggregateId(replayRef(commandId)))).toHaveLength(0);
-  });
+  /**
+   * WHICH FENCE ANSWERS, not merely that something did. `commitIntentRejection` re-derives the
+   * same reason rule under the same code, so an arm driven over a REVIEWABLE run cannot tell the
+   * seam's fence from the module's and would stay green if the seam's were deleted. The store
+   * here holds NO run at all: only a check that runs BEFORE the durable sources read can answer
+   * REASON_REQUIRED, because the sources read has nothing to find. Both shapes the seam owns are
+   * driven, so dropping the trim from its predicate reds this arm on the whitespace row.
+   */
+  it.each([["absent", null], ["whitespace", " \t \n "]])(
+    "refuses a REJECT carrying a %s reason before any durable read",
+    (shape: string, decisionReason: string | null) => {
+      const store = openStore();
+      const commandId = `cmd-intent-reject-before-run-${shape}`;
+      expect(refusalOf(reviewedDispatch(store, commandId, {
+        ...INTENT, decision: "REJECT", decisionReason,
+      }))).toEqual({
+        code: APPROVAL_REJECT_REASON_REQUIRED, layer: "DAEMON_APPROVAL_INTENT",
+      });
+      expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(0);
+      expect(store.readEvents(replayAggregateId(replayRef(commandId)))).toHaveLength(0);
+      // No successor aggregate may exist for a rejection that never happened.
+      expect(store.readEvents(successorRunIdFor(RUN_ID, commandId))).toHaveLength(0);
+    },
+  );
 
   it("refuses a second REJECT of an already rejected run under the run-binding code", () => {
     const store = reviewableStore();
