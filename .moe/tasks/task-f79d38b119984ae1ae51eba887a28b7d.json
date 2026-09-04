@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:21:53.659Z",
-  "updatedAt": "2026-09-04T22:08:24.636Z",
+  "updatedAt": "2026-09-04T22:08:30.042Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T20:32:01.441Z",
     "plannedStepCount": 7,
@@ -194,7 +194,55 @@
     "packages/core/src/planning/planning-run-submission.ts",
     "apps/daemon/src/planning/compile-dispatcher.test.ts",
     "apps/daemon/src/orchestrator/agent-mission-text.ts",
-    "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+    ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
+    ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json"
   ],
-  "completionSummary": "THE COMPILER SEALS THE WHOLE DAG. The one-node fence is gone; N>=1 execution-bearing nodes now seal, and the coherence fence that replaces it is pinned by code AND layer.\n\nDoD 1 — `nodes.length > 1` arm DELETED from compile-dispatcher.ts along with the 5-line comment above it that asserted the retired core rule as live fact; `\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\"` REMOVED from SUBMIT_DECOMPOSITION_CODES. `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- 'apps/**/*.ts' 'packages/**/*.ts' 'adapters/**/*.ts'` = ZERO hits, and an untracked-inclusive `grep -rn` = ZERO files. The goal-close-readiness.test.ts prose comment was REWRITTEN, not left stating the retired rule. File shrank 341 -> 337; core untouched (task rail 1).\n\nDoD 2 — a THREE-node structure with a real hard chain (node-c dependsOn node-b dependsOn node-a, completionNodeKey node-c because nothing may depend on the completion node) SEALS: asserts disposition DECIDED, graphContentHash AND submissionHash both non-empty strings, runId, and aggregate version 2 — not merely \"did not refuse\". Second arm: N=1 still seals.\n\nDoD 3 — the replacement fence pinned, each arm asserting the SPECIFIC code AND the layer via a `${code} @ ${layer}` comparison (a bare \"it refused\" would stay green if another layer answered — which is precisely what the count fence was doing). Unknown dependsOn target and self-edge -> COMPILED_PLAN_MALFORMED @ COMPILED_PLAN_PRODUCER; criterion bound by no node -> COMPILED_PLAN_CRITERION_UNBOUND @ COMPILED_PLAN_PRODUCER. Written BOTH single-node (green before my edit, proving the fence stands alone) and across the 3-node chain (red before, green after — direct evidence multi-node incoherence is now graded by the producer instead of hidden behind the count fence), plus dependency-on-completion-node. BONUS ARM: a dependsOn CYCLE (a<->b) clears every `shapeRefusal` arm and is still refused COMPILED_PLAN_ADMISSION_REFUSED @ COMPILED_PLAN_PRODUCER — so task-1d7b9df2's dependency gate cannot d"
+  "completionSummary": "THE COMPILER SEALS THE WHOLE DAG. The one-node fence is gone; N>=1 execution-bearing nodes now seal, and the coherence fence that replaces it is pinned by code AND layer.\n\nDoD 1 — `nodes.length > 1` arm DELETED from compile-dispatcher.ts along with the 5-line comment above it that asserted the retired core rule as live fact; `\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\"` REMOVED from SUBMIT_DECOMPOSITION_CODES. `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- 'apps/**/*.ts' 'packages/**/*.ts' 'adapters/**/*.ts'` = ZERO hits, and an untracked-inclusive `grep -rn` = ZERO files. The goal-close-readiness.test.ts prose comment was REWRITTEN, not left stating the retired rule. File shrank 341 -> 337; core untouched (task rail 1).\n\nDoD 2 — a THREE-node structure with a real hard chain (node-c dependsOn node-b dependsOn node-a, completionNodeKey node-c because nothing may depend on the completion node) SEALS: asserts disposition DECIDED, graphContentHash AND submissionHash both non-empty strings, runId, and aggregate version 2 — not merely \"did not refuse\". Second arm: N=1 still seals.\n\nDoD 3 — the replacement fence pinned, each arm asserting the SPECIFIC code AND the layer via a `${code} @ ${layer}` comparison (a bare \"it refused\" would stay green if another layer answered — which is precisely what the count fence was doing). Unknown dependsOn target and self-edge -> COMPILED_PLAN_MALFORMED @ COMPILED_PLAN_PRODUCER; criterion bound by no node -> COMPILED_PLAN_CRITERION_UNBOUND @ COMPILED_PLAN_PRODUCER. Written BOTH single-node (green before my edit, proving the fence stands alone) and across the 3-node chain (red before, green after — direct evidence multi-node incoherence is now graded by the producer instead of hidden behind the count fence), plus dependency-on-completion-node. BONUS ARM: a dependsOn CYCLE (a<->b) clears every `shapeRefusal` arm and is still refused COMPILED_PLAN_ADMISSION_REFUSED @ COMPILED_PLAN_PRODUCER — so task-1d7b9df2's dependency gate cannot d",
+  "commits": [
+    {
+      "sha": "a879421d17c38b16dd31a8ee528094770ec6087c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T22:08:25Z",
+      "paths": [
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
+        ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json",
+        "apps/daemon/src/goals/goal-close-readiness.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/planning/compile-dispatcher.test.ts",
+        "apps/daemon/src/planning/compile-dispatcher.ts"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T22:08:30.042Z",
+      "treeId": "bbe41c741efdb2df077d281848568ea42a7c1514",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/goals/goal-close-readiness.test.ts",
+          "taskId": "task-8145137ca3c144f0878deb83d05bab63"
+        },
+        {
+          "path": "apps/daemon/src/planning/compile-dispatcher.test.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        },
+        {
+          "path": "apps/daemon/src/planning/compile-dispatcher.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T22:08:25Z",
+    "at": "2026-09-04T22:08:30.042Z"
+  }
 }
