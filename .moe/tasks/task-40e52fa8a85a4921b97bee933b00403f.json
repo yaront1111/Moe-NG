@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-04T23:47:50.776Z",
+  "updatedAt": "2026-09-04T23:48:10.123Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -165,5 +165,59 @@
     "apps/daemon/src/preview/preview-contracts.ts",
     "apps/daemon/src/preview/preview-contracts.js",
     "apps/daemon/src/preview/preview-contracts.test.ts"
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "9d02d33da5a51025e7edd2d442dea002b7c2da33",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-04T23:14:29Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/preview/preview-contracts.js",
+        "apps/daemon/src/preview/preview-contracts.test.ts",
+        "apps/daemon/src/preview/preview-contracts.ts"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-04T23:48:10.123Z",
+      "treeId": "40403a0ce678ab1f95aa80668917a9d59cd6f36c",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-4b9c394debe94b41a80e2b46c6d55ab8"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-4b9c394debe94b41a80e2b46c6d55ab8"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/preview/preview-contracts.js",
+    "apps/daemon/src/preview/preview-contracts.test.ts",
+    "apps/daemon/src/preview/preview-contracts.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/preview/preview-contracts.js",
+    "apps/daemon/src/preview/preview-contracts.ts",
+    "apps/daemon/src/preview/preview-contracts.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-56ac23da@2026-09-04T23:14:29Z",
+    "at": "2026-09-04T23:48:10.123Z"
+  }
 }
