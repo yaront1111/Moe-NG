@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:03:16.816Z",
-  "updatedAt": "2026-09-04T17:27:01.129Z",
+  "updatedAt": "2026-09-04T17:27:51.086Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:08:54.142Z",
     "plannedStepCount": 7,
@@ -318,6 +318,21 @@
       "treeId": "4ac8413f4f2c6c2614ab6de5f9567e20365d0d72",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "20b957b049cb57bbdef9784ac1cf6173dc242177",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-80f8bfe1@2026-09-04T17:10:43Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json"
+      ],
+      "recordedBy": "worker-80f8bfe1",
+      "recordedAt": "2026-09-04T17:27:51.086Z",
+      "treeId": "b41c1606282cadcac6440d6b46f33fa04a88b25d",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -331,7 +346,8 @@
     "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
     "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
     "apps/daemon/src/orchestrator/agent-mission-text.ts",
-    "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
@@ -349,9 +365,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-00bf35cc@2026-09-04T15:10:37Z",
-    "at": "2026-09-04T15:10:48.031Z"
+    "kind": "completion",
+    "sessionId": "worker-80f8bfe1@2026-09-04T17:10:43Z",
+    "at": "2026-09-04T17:27:51.086Z"
   },
   "reviewStartedAt": "2026-09-04T17:27:01.129Z",
   "verification": {

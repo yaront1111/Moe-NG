@@ -41,16 +41,18 @@ import { GOAL_HANDLERS } from "./goal-services.js";
  * available here. Every refusal arm below therefore reads the goal back out of the store — a
  * handler that mutated and then refused would sail through a return-value-only assertion.
  *
- * NO ARM HERE CLOSES A GOAL, and that is a statement about production rather than about this
- * file. Closing needs a durable Foundation verification receipt, which needs a proven attempt,
- * which needs a committed activation no test world can produce — `runEffectActivateCommand`
- * refuses. Governor ruling comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 forbids rebuilding
- * that world below the admission path, so the seven arms that required it are RETIRED rather
- * than faked. Core's own `EXECUTION_ENABLED -> CLOSING -> COMPLETED` transition, its
- * ILLEGAL_TRANSITION on a second close and its EXPECTED_VERSION_CONFLICT still have an owner in
- * `packages/core/src/goal/goal-reducer.test.ts`; the DAEMON-side composition of a SUCCESSFUL
- * close has NO owner until production can mint an activation. Stated plainly so the absence
- * below reads as a disclosed gap and not as coverage.
+ * ONE ARM HERE CLOSES A GOAL, and that is new (task-ae6fd9ac). Closing used to need a durable
+ * Foundation verification receipt, which needs a proven attempt, which needs a committed
+ * activation no test world can produce — so the DAEMON-side composition of a SUCCESSFUL close
+ * had no owner and the arms that required it were retired. `qualifyGoalClosure` now also accepts
+ * the LIVE loop's evidence (review acceptance + verifier receipt + the landing rule), which a
+ * test world CAN produce through the shipped writers, so DIRECTION ONE of the payload-inertness
+ * claim below is reachable again and is asserted rather than disclosed as a gap.
+ *
+ * Core's own `EXECUTION_ENABLED -> CLOSING -> COMPLETED` transition, its ILLEGAL_TRANSITION on a
+ * second close and its EXPECTED_VERSION_CONFLICT keep their owner in
+ * `packages/core/src/goal/goal-reducer.test.ts`; the live leg's own refusal arms and its close
+ * through the authenticated operator wire live in `goal-live-evidence.test.ts`.
  */
 
 interface GoalRow {
@@ -66,13 +68,13 @@ function goalRow(store: SqliteEventStore): GoalRow | undefined {
     GoalRow | undefined;
 }
 
-/** The frozen tuple `goal.close` answers while no durable Foundation verification receipt names
- *  an approved node. Restated by hand, in full, so a code, a refusing layer or an authority
- *  quietly changing reddens here instead of passing as "still refused". */
-const NO_RECEIPT_REFUSAL = Object.freeze({
+/** The frozen tuple `goal.close` answers while no durable review acceptance names an approved
+ *  node. Restated by hand, in full, so a code, a refusing layer or an authority quietly changing
+ *  reddens here instead of passing as "still refused". */
+const NO_ACCEPTANCE_REFUSAL = Object.freeze({
   advisoryOnly: true,
   authority: "NONE",
-  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
+  code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
   ok: false,
   refusedBy: "DAEMON_PREREQUISITE",
 });
@@ -256,18 +258,32 @@ describe("goal create", () => {
 });
 
 describe("goal close accepts the verified result", () => {
-  it("refuses before core when no durable verification receipt names the approved node", () => {
+  /**
+   * DIRECTION ONE of the payload-inertness claim (`goal-services.ts`), unreachable until the live
+   * leg landed and asserted here now that it is: the request's own witnesses are the fixture
+   * literals, whose `truthClass` is `HUMAN_APPROVED` — a value `validClosure` REJECTS. The close
+   * nevertheless succeeds, which is only possible because the handler threw those witnesses away
+   * and handed the core the ones `qualifyGoalClosure` derived from durable bytes.
+   */
+  it("closes on durable records while the request's own witnesses would refuse at core", () => {
     const store = openStore();
     driveThrough(store, "goal.close");
-    // The REVIEWED half is present, so the review guard cannot be what answers below.
     seedReviewAcceptance(store, "node-1");
     expectUnactivatedWorld(store);
+    // The precondition that makes this arm about DERIVATION and not about a lenient core:
+    // `validClosure` demands a STRONG truth class (`goal-validation.ts` strongTruth), and the
+    // request carries `HUMAN_APPROVED`. Its refs are the inert fixture literals besides. The arm
+    // below proves the same literals refuse a world with no durable records, so a core that had
+    // simply accepted them would redden there.
+    expect(closureWitness()["truthClass"]).toBe("HUMAN_APPROVED");
+    expect(closureWitness()["acceptanceClosureRef"]).toBe("acceptance-1");
     const before = closeSnapshot(store);
 
     const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
 
-    expect(outcome).toMatchObject(NO_RECEIPT_REFUSAL);
-    expectNoCloseMutation(store, before);
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(goalRow(store)?.lifecycle).toBe("COMPLETED");
+    expect(decisionCount(store)).toBe(before.decisionCount + 1);
   });
 
   it.each([
@@ -319,8 +335,11 @@ describe("goal close accepts the verified result", () => {
    */
   it("refuses perfectly-shaped payload witnesses when no durable record backs them", () => {
     const store = openStore();
+    // NO review acceptance is seeded, and that is the whole world: the node is approved and
+    // nothing durable says its output was ever accepted, so no leg — Foundation or live — has
+    // anything to derive from. A payload witness that `validClosure` would accept must not
+    // substitute for the record that is missing.
     approveNodes(store, ["node-1"]);
-    seedReviewAcceptance(store, "node-1");
     expectUnactivatedWorld(store);
     const before = closeSnapshot(store);
 
@@ -329,7 +348,7 @@ describe("goal close accepts the verified result", () => {
       zeroAuthorityWitness: zeroAuthorityWitness(),
     })));
 
-    expect(outcome).toMatchObject(NO_RECEIPT_REFUSAL);
+    expect(outcome).toMatchObject(NO_ACCEPTANCE_REFUSAL);
     expectNoCloseMutation(store, before);
   });
 
