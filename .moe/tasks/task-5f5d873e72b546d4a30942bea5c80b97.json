@@ -1,0 +1,35 @@
+{
+  "id": "task-5f5d873e72b546d4a30942bea5c80b97",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Seats release their claims: per-item work_get_context, observed version on conflict, and a restarted wrapper reclaims its own dead seats",
+  "description": "Filed by session moe-next-67 for the owner (2026-09-04), sibling of the epic-8ebe6417 rows. Splits the seat-facing half out of task-4423d2a4 DoD 4 so the live loop stops losing 30 minutes per seat NOW, independent of multi-node work.\n\nPRODUCT GAP, measured live on UnAI 2026-09-04 08:07-08:10Z (main d90ef6b5; memory real-seat-cannot-release-its-claim-2026-09-04): the first fully successful real planning seat compiled its plan in 47 s and then could not release its claim. Its own report: `work_get_context` IGNORES `workItemId` - a nonexistent id returns the same 60.1 KB global dump led by `nextAllowedCommands`, so a harness that truncates large MCP results never reaches `claimAggregateVersion`; `work_release` refuses at DURABLE_STORE with `EXPECTED_VERSION_CONFLICT` for expectedVersion 0..6 and the refusal carries no observed version in `details` (the store already computes it: packages/store/src/store-digests.ts:181-193 `expectedVersionConflictResultBytes({... observedVersion ...})` - the daemon's refusal path drops it: apps/daemon/src/work/work-claim-services.ts, apps/daemon/src/bootstrap/bootstrap-ledger.ts); `work_renew` refuses earlier at ingress `WORK_CLAIM_PAYLOAD_INVALID`; `events_read` on the seat's own claim aggregate refuses `EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED`; `graph_get` rejects every payload shape with `INPUT_INVALID`. The store shows 7 `command.expected-version-rejected` records for that one attempt. Consequence: the claim lapses only at its 30-min TTL (`expiresAt`), the item is unstaffable until then, and EVERY wrapper restart (the owner started twice, 10:37 and 10:41 local) waits a full lease: \"nothing to staff (surface SURFACE, active 0)\" for 30 minutes is the symptom. The delivery seat at 08:19Z hit the same conflict once and only recovered by guessing version 1.\n\nFEATURE: (a) `work_get_context {workItemId}` returns THAT item's step and claim only (claim.version / claimAggregateVersion present; response under 8 KB for one item); the payload-less call keeps today's shape byte-for-byte (new byte-identity fixture in mcp-dispatch-port.test.ts). (b) `EXPECTED_VERSION_CONFLICT` refusals carry `details.observedVersion` (and `expectedVersion`) decoded from the store's own result bytes, on every command, HTTP and MCP alike; the mission text (agent-mission-text.ts) tells the seat to retry ONCE at the observed version. (c) Seat-readable step facts: `events_read` on the seat's OWN claim aggregate (`work/<kind>@<id>` it holds) is admitted for the holding session, or the claim version is returned in the `work_claim` receipt - architect picks one and states why; `graph_get`'s accepted payload is documented in the mission and refuses with the key roster it expects. (d) Wrapper boot reclaim: on start the wrapper reads `/sessions/read`, and for every OPEN claim whose holder session is CLOSED or EXPIRED (a seat that died with the previous wrapper), releases it with the observed version before its first staffing pass, logging `[wrapper] reclaimed <workItemId> from <sessionId>`; a claim whose holder session is LIVE is never touched. (e) The mission's \"record a durable memory\" instruction is removed or made conditional on a write tool being present (the seat reported it cannot). UI: the Seats screen (ops/activity-screens.tsx SessionsPanel) shows a reclaimed claim as such on the next poll; the board's WORKING card already shows the lease end.\n\nOut of scope: multi-node planning and dependency gating (task-4423d2a4); expansion runs.",
+  "definitionOfDone": [
+    "`work_get_context {workItemId}` over the REAL MCP wire returns only that item with its claim version, under 8 KB; a nonexistent id refuses `WORK_ITEM_UNKNOWN` (code + layer); the payload-less call's bytes equal a new pinned fixture (mcp-dispatch-port.test.ts); mcp-tool-allowlist.test.ts pins unchanged.",
+    "Every `EXPECTED_VERSION_CONFLICT` refusal on HTTP `/command` and on the MCP wire carries `details.observedVersion` and `details.expectedVersion` (tests on work.release and one bootstrap kind); the seat mission says to retry once at the observed version (mission-text test).",
+    "A scripted seat double on the real wire claims, submits, and RELEASES on the first try; the store shows zero `command.expected-version-rejected` records for the run (assert by reading the decision ledger).",
+    "Wrapper test: with an OPEN claim held by a CLOSED session in the store, a fresh wrapper start releases it before staffing (`[wrapper] reclaimed ...` line asserted) and staffs the item on its first pass; with the holder LIVE nothing is released and no SpawnReport is produced for it.",
+    "Live drive on UnAI: kill the wrapper mid-seat (Stop-Process), restart with scripts/up.ps1, and the item is re-staffed within one poll instead of 30 minutes - timestamps of the kill, the reclaim line and the SPAWNED line in a row comment; runbook 'Agent credentials'/'seat' section gains the reclaim behaviour and the seat-facing reads.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + wrapper + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row; the verifier stays the documented trusted-workspace verifier. Admitting a seat to read its OWN claim aggregate is a product read, scoped to the holding session and pinned by a test that another session is still refused.",
+    "NEVER RELEASE A LIVE SEAT'S CLAIM: reclaim only when the holder session is CLOSED or EXPIRED on /sessions/read; a test pins the LIVE arm.",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the timestamps in a row comment."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1003,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:43:36.605Z",
+  "updatedAt": "2026-09-04T09:43:36.605Z"
+}

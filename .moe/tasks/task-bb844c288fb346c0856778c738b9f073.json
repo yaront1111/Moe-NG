@@ -21,8 +21,9 @@
     {
       "stepId": "step-1",
       "description": "GATE — do not start until the four SPIDR children are DONE. This row was SPIDR-split (row rail 1: over the 12-step/10-file thresholds at ~15 files). Children in build order: A task-741dad13e23d441a8385d0f14df5b5c1 (receipts measurement, leaf) -> B task-4b9c394debe94b41a80e2b46c6d55ab8 (project.activate mints + refuses caller witness) -> C task-0a5d7212a7f644d5891df4e0e1545787 (receipts read route + v2 Activate card) -> D task-ac9d5e2d43334525bd990b1362652ce4 (journey, copy, docs). Each declares dependsOn on its predecessor. THIS PARENT'S OWN dependsOn COULD NOT BE SET: moe.set_task_dependencies answered [NOT_ALLOWED] 'architect or governor role required (worker architect-d1711c47 is on neither team)', so this step is the gate instead of a field — a governor should set the field. Verify each child via moe.get_context epicSiblings (landing.merged true) or `git log main --grep 'Moe-Task: <childId>'`. If any is not DONE, moe.report_blocked with blockedOnTaskIds naming the outstanding children and free the seat — do NOT re-implement a child's work here. THIS ROW MODIFIES NO FILES: it verifies the delivered tree, so affectedFiles is empty by design and every path below is a read target. Record HEAD with `git rev-parse --short HEAD`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-04T09:41:24.952Z"
     },
     {
       "stepId": "step-2",
@@ -61,8 +62,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-c846071b",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -77,11 +78,17 @@
       "author": "architect-d1711c47",
       "content": "PLANNING RECORD (architect-d1711c47, 2026-09-04, measured at main 68eb1c5d)\n\nSPIDR-SPLIT into 4 children under this row (row rail 1; ~15 files, over the 12-step/10-file thresholds). Build order, each dependsOn its predecessor:\n- A task-741dad13e23d441a8385d0f14df5b5c1 — receipts measurement (pure leaf)\n- B task-4b9c394debe94b41a80e2b46c6d55ab8 — project.activate mints the witness, refuses a caller-supplied one\n- C task-0a5d7212a7f644d5891df4e0e1545787 — receipts read route + v2 Activate card\n- D task-ac9d5e2d43334525bd990b1362652ce4 — Playwright journey, copy, docs, gates, live drive\nThis row's plan is VERIFICATION ONLY (7 steps, 0 files modified).\n\nTWO DoD CLAUSES ARE MIS-ANCHORED AGAINST THE TREE. Both are recorded here so QA grades the measured truth, not the wording:\n\n1) DoD 2 — \"truthClass VERIFIED\" and \"no production path can write a DEMO_VERIFIED witness\" are UNSATISFIABLE AS WRITTEN. `grep -rn \"DEMO_VERIFIED\"` finds apps/daemon/src/orchestrator/demo-seed-payloads.ts:24 `export const DEMO_VERIFIED = \"DAEMON_VERIFIED\" as const` — an ALIAS, not a distinct truth class. packages/core/src/project/project-validation.ts:140 `strongTruth` accepts ONLY \"DAEMON_VERIFIED\" | \"HUMAN_APPROVED\"; there is no \"VERIFIED\". The real defect this row closes is INVENTED REFS (`${projectId}-artifact`, hex64(\"cafe\")), not the truth class. Child B therefore grades \"a CALLER-SUPPLIED witness is refused with a stable code\", which is the enforceable form of the same intent.\n\n2) DoD 5 — the runbook anchor does not exist. `grep -rn \"New Goal remains disabled\" --include=*.md .` returns 0 matches. The real line is docs/agent-stack-runbook.md:47, bolded markdown: `**New Goal** remains disabled until the project ledger contains ...`. README's sentence is at :88-91 and carries a \"Measured on 2026-09-03\" stamp that also needs re-dating.\n\nTHIRD FINDING, not in the description: THERE ARE TWO FAKERS. Besides the seed, apps/control-room/src/live/live-dispatch-payloads.ts:111-119 `DEV_PAYLOADS` carries artifact-1/backup-1/hex64(\"cafe\"), and tests/e2e/control-room/board-chain.spec.ts clicks the ENTIRE chain from an empty store against it. So \"the browser cannot drive the pre-activation chain\" is true only of the V2 UI — the legacy dev board drives it today with fake refs. Consequences: child B must move the seed, DEV_PAYLOADS and board-chain.spec.ts together or the tree goes red; child D's journey must drive the V2 Activate card, because a journey clicking `cr.liveboard.*` re-proves the pre-existing fake-witness path and certifies nothing.\n\nHUMAN DECISION (owner, AskUserQuestion 2026-09-04): `signingKeyRef` is required by core's exact 9-key roster but signing is out of scope (row rail 2). Resolution: mint the fixed honest ref `signing/unsigned-source-checkout`, displayed on the card as NOT a trust boundary in v0.1 with that reason. Rejected: refusing activation without a signing key (ships the feature unusable), and the daemon artifact digest (reads as provenance the repo does not have).\n\nACTION NEEDED FROM A GOVERNOR: this row's own `dependsOn` could NOT be set — moe.set_task_dependencies answered `[NOT_ALLOWED] architect or governor role required (worker architect-d1711c47 is on neither team)`. The four children carry their A→B→C→D chain correctly, but this parent is not field-gated on them and is claimable for WORKING before they land. Step 1 of the plan is the manual gate (verify children DONE, else report_blocked with blockedOnTaskIds). Please set dependsOn = [A, B, C, D] on this row.",
       "timestamp": "2026-09-04T09:40:36.141Z"
+    },
+    {
+      "id": "comment-f403ea63fa33489baa8079eb8d5e1f3b",
+      "author": "worker-c846071b",
+      "content": "STEP-1 GATE MEASUREMENT (worker-c846071b, 2026-09-04, HEAD ddc5fa05 on moe/work-2026-09-04). Gate NOT satisfied: 0 of 4 SPIDR children are DONE. This row modifies no files and is a pure verification plan, so there is nothing to deliver until the children land. No production file was touched this session.\n\nCOMMANDS AND RESULTS\n\n1. Child status, read from disk (.moe/tasks/task-<id>.json via node -e):\n   - A task-741dad13e23d441a8385d0f14df5b5c1 \"Activation receipts: measure the real project, refuse per member\" -> status=PLANNING, assignee=null, commits=0, implementationPlan=0 steps, dependsOn=[]\n   - B task-4b9c394debe94b41a80e2b46c6d55ab8 \"project.activate mints its own measured witness and refuses a caller-supplied one\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-741dad13e23d441a8385d0f14df5b5c1\"]\n   - C task-0a5d7212a7f644d5891df4e0e1545787 \"Activate project card: receipts read plus one button that drives the chain\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-4b9c394debe94b41a80e2b46c6d55ab8\"]\n   - D task-ac9d5e2d43334525bd990b1362652ce4 \"Prove the browser-only fresh start: journey, copy, docs\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-0a5d7212a7f644d5891df4e0e1545787\"]\n   All four carry parentTaskId=task-bb844c288fb346c0856778c738b9f073. The A->B->C->D chain is correctly field-declared; none is planned yet.\n\n2. `git log main --grep \"Moe-Task: task-<id>\"` and the same against HEAD, per child -> 0 matches on both refs for all four. Nothing landed; nothing is in flight in a peer checkout that reached the branch.\n\n3. Delivered-tree spot checks confirming the feature gap is still fully OPEN (i.e. no child silently landed under a different trailer):\n   - `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` -> 1 match at :93 (`+ \" seed); the browser cannot drive the pre-activation chain.\";`). DoD 3 requires 0.\n   - `grep -rn \"ACTIVATION_REPOSITORY_UNMEASURED\\|ACTIVATION_PROVIDER_UNMEASURED\\|ACTIVATION_BACKUP_FAILED\" --include=*.ts .` -> 0 matches. Child A's refusal codes do not exist.\n   - `ls apps/daemon/src/bootstrap/` -> no activation-receipts module; the directory is unchanged from the architect's measurement (bootstrap-services.ts, bootstrap-sequence.ts, bootstrap-contracts.ts, policy-* only).\n\nWHY THIS ROW WAS CLAIMABLE AT ALL (the defect step 1 named, now confirmed on disk)\n`node -e` over this row's JSON prints `deps= [] parent= -`. The parent's own dependsOn is EMPTY, so the runtime offered it for a WORKING claim while every child sits unplanned. The planning architect recorded that moe.set_task_dependencies answered [NOT_ALLOWED] \"architect or governor role required (worker architect-d1711c47 is on neither team)\". ASK FOR A GOVERNOR: call moe.set_task_dependencies on task-bb844c288fb346c0856778c738b9f073 with the four child ids, so the manual step-1 gate becomes a field and this row stops being handed to a worker seat ahead of its children. The report_blocked I am filing now carries the same four ids, which gets the auto-unblock behaviour for this cycle, but the field fix is what prevents a repeat if the block is ever cleared by hand.\n\nNEXT WORK ON THIS FEATURE is child A (task-741dad13e23d441a8385d0f14df5b5c1): it is the only one of the four with dependsOn=[], it is in PLANNING with no plan, and it is the leaf the other three wait on. It needs an architect to plan it. I did not touch it — re-implementing a child's work inside this parent is what step 1 forbids.\n\nDirty peer paths noted and left alone (not a stop condition): .moe/messages/chan-*.jsonl (3 modified), .moe/tasks/task-c4321b6f*.json and task-e60b874b*.json (deleted by a peer), 14 untracked .moe/ rows + .moe/epics/epic-8ebe6417.json, scripts/up.ps1, scripts/watch.ps1.",
+      "timestamp": "2026-09-04T09:42:39.007Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:10:20.830Z",
-  "updatedAt": "2026-09-04T09:41:04.905Z",
+  "updatedAt": "2026-09-04T09:43:06.309Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:19:28.202Z",
     "plannedStepCount": 7,
@@ -111,5 +118,51 @@
       "README.md"
     ]
   },
-  "planApprovedAt": "2026-09-04T09:40:10.190Z"
+  "planApprovedAt": "2026-09-04T09:40:10.190Z",
+  "commits": [
+    {
+      "sha": "ddc5fa051fa79528a4a970452956821c07a0014a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T09:41:05Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T09:41:09.237Z",
+      "treeId": "78b4e67f02c5852db803e58549f8bdc55c9a319a",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-c846071b@2026-09-04T09:41:05Z",
+    "at": "2026-09-04T09:41:09.237Z"
+  },
+  "workStartedAt": "2026-09-04T09:41:24.952Z",
+  "blockedReason": "Step-1 gate NOT satisfied: 0 of 4 SPIDR children are DONE, so this verification row has nothing to verify. Measured at HEAD ddc5fa05 (moe/work-2026-09-04); full transcript in comment-f403ea63.\n\nAll four children are PLANNING, unassigned, 0 commits, 0 plan steps: A task-741dad13e23d441a8385d0f14df5b5c1 (receipts leaf, dependsOn=[]) -> B task-4b9c394debe94b41a80e2b46c6d55ab8 -> C task-0a5d7212a7f644d5891df4e0e1545787 -> D task-ac9d5e2d43334525bd990b1362652ce4. `git log main --grep \"Moe-Task: task-<id>\"` = 0 matches per child, same against HEAD.\n\nThe gap is still open at the delivered tree, so no child landed under another trailer: `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` = 1 match at :93 (DoD 3 requires 0); `grep -rn \"ACTIVATION_REPOSITORY_UNMEASURED\\|ACTIVATION_PROVIDER_UNMEASURED\\|ACTIVATION_BACKUP_FAILED\" --include=*.ts .` = 0 matches; apps/daemon/src/bootstrap/ has no activation-receipts module.\n\nThis row modifies no files by design (verification-only plan, every affectedFiles empty). I delivered nothing, touched no production path, and did not re-implement a child's work — step 1 forbids that.\n\nNEEDED FROM A GOVERNOR:\n1. Set this row's dependsOn to the four child ids via moe.set_task_dependencies. It is EMPTY on disk (`deps= []`), which is why the runtime offered this row for a WORKING claim while every child is unplanned. The planning architect could not set it: the tool answered [NOT_ALLOWED] \"architect or governor role required (worker architect-d1711c47 is on neither team)\". blockedOnTaskIds here gives auto-unblock this cycle; the field prevents a repeat.\n2. Route child A (task-741dad13e23d441a8385d0f14df5b5c1) to an architect. It is the only child with no dependencies and it gates the other three.\n\nSeat freed; claiming other work.",
+  "blockedOnTaskIds": [
+    "task-741dad13e23d441a8385d0f14df5b5c1",
+    "task-4b9c394debe94b41a80e2b46c6d55ab8",
+    "task-0a5d7212a7f644d5891df4e0e1545787",
+    "task-ac9d5e2d43334525bd990b1362652ce4"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-04T09:43:06.309Z"
 }

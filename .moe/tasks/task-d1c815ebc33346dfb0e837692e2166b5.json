@@ -1,0 +1,35 @@
+{
+  "id": "task-d1c815ebc33346dfb0e837692e2166b5",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Goals close on the live loop: goal.close accepts the verifier receipt and the landing receipt as the verification leg",
+  "description": "Filed by session moe-next-67 for the owner (2026-09-04), sibling of the epic-8ebe6417 rows.\n\nPRODUCT GAP, measured at main 68eb1c5d and on the live UnAI store: every goal stays EXECUTION_ENABLED forever. Three UnAI goals have accepted nodes (node-uai-core-identities and node-uai-evidence-ledger accepted 2026-09-02 with `ReviewOutputAccepted` + `VerifierReceiptRecorded`; evidence-ledger-durable-ingest accepted 2026-09-04 08:20Z) and none can close: `goal.close` (payload `[\"closureWitness\", \"goalId\", \"zeroAuthorityWitness\"]`, daemon-command-vocabulary.ts) is served through `apps/daemon/src/goals/goal-close-prerequisite.ts` and `apps/daemon/src/goals/goal-qualification.ts:139-164` (`zeroAuthority`), whose verification leg compares FOUNDATION receipt fields (`receipt.*`) that only the seeded Foundation journey produces. A real seat's node carries `moe-verifier-receipt` + `integration.accept_output` + `moe-landing-receipt/1`, never a Foundation RECEIPTED row, so `NodeClosure.receipt` is absent and closure refuses. The control room's status strip already computes READY_TO_CLOSE (\"All N acceptance criteria are verified\", goal-status.ts:130-142) and Needs you offers the close when the daemon does - the daemon never does for a real goal.\n\nFEATURE: closure over the live loop's own evidence. For each node in the goal's activated graph, the verification leg accepts EITHER the Foundation receipt (seed journey, unchanged) OR the pair {verifier receipt with proof PASSED (apps/daemon/src/orchestrator/verifier-receipt-ledger.ts), acceptance `ReviewOutputAccepted`} plus, when landing is on, a `moe-landing-receipt/1` (COMMITTED, or REFUSED with NOTHING_TO_COMMIT which is a legitimate outcome when the workspace already held the work). `NodeClosure.receipt` becomes optional; `compose`, `zeroAuthority` and `verifiedResultHolds` skip the Foundation leg when no RECEIPTED row names the node and take the live leg instead; the closure witness names which leg proved each node. The daemon OFFERS `goal.close` on `/affordances/read` once every node of the goal is accepted and every approved criterion reads VERIFIED on the coverage read (document-coverage-read.ts). UI: Needs you's existing close card (needs-you-model.ts CLOSE kind) works unchanged; the board header's stage moves READY_TO_CLOSE -> CLOSED (STAGE_WORDS \"Closed\") and the goals list card reads Done.\n\nOut of scope: expansion runs; multi-node ordering (sibling row task-4423d2a4); the Foundation seed path stays byte-for-byte.",
+  "definitionOfDone": [
+    "`goal.close` on a goal whose nodes carry verifier receipt (PASSED) + `ReviewOutputAccepted` + landing receipt (COMMITTED or REFUSED NOTHING_TO_COMMIT) and NO Foundation receipt commits `GoalClosed`; the closure witness names `leg: \"LIVE\"` per node; asserted over a REAL store driven by the production sequence (bootstrap-test-fixtures), not a fixture record.",
+    "Refusal arms asserted with code + layer: a node accepted but with no verifier receipt refuses; a node with a receipt whose proof is not PASSED refuses; an unverified criterion refuses; the existing Foundation-receipt arm and its codes are byte-identical (its test file unchanged, count line quoted).",
+    "`/affordances/read` offers `goal.close` for a real goal exactly when every node is ACCEPTED and coverage totals.verified == totals.criteria; a test shows the offer absent one acceptance earlier and present after; the offer is HUMAN-only as today (MCP-excluded roster test unchanged).",
+    "Control room: Needs you renders the close card for such a goal (needs-you.test.tsx), clicking Close commits and the goals list card reads Done and the board header stage reads Closed on the next poll (board-screen.test.tsx or goal-status.test.tsx).",
+    "Live drive: one of the UnAI goals with an accepted node is closed from the browser; the `GoalClosed` event id and the coverage read (n/n VERIFIED) quoted in a row comment; README 'Review loop' / close clause updated if it names the Foundation receipt.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row; the verifier stays the documented trusted-workspace verifier.",
+    "HUMAN GATES ARE HUMAN-ONLY: goal.close stays operator-only, in HUMAN_ONLY_STEPS and MCP-excluded, with the refusal code pinned by a test.",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the GoalClosed event id in a row comment."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1001,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:42:24.328Z",
+  "updatedAt": "2026-09-04T09:42:24.328Z"
+}

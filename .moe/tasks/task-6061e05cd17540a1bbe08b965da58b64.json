@@ -1,0 +1,35 @@
+{
+  "id": "task-6061e05cd17540a1bbe08b965da58b64",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A human can reject a compiled plan: REJECT on the plan gate sends the goal back to planning with the reason",
+  "description": "Filed by session moe-next-67 for the owner (2026-09-04), sibling of the epic-8ebe6417 rows.\n\nPRODUCT GAP, measured at main 68eb1c5d: the only answer to a compiled plan is approving it. `approval.decide_intent` accepts `decision` in `[\"APPROVE\", \"REJECT\"]` at ingress (apps/daemon/src/planning/approval-intent.ts:91 DECISIONS) but refuses every non-APPROVE before any effect (approval-intent.ts:196-198 `if (intent.decision !== \"APPROVE\") return refuse(null, \"BOOTSTRAP_PAYLOAD_INVALID\", \"DAEMON_PREREQUISITE\")`), so a committed approval is APPROVE by construction and no REJECT ever reaches the ledger. The plan-review screen renders one control (apps/control-room/src/v2/goals/approve-plan-gate.tsx `ApproveGate`: `cr.approve.button`), Needs you's PLAN_APPROVAL item carries only an open-board action (needs-you-model.ts), and the goal status stage PLAN says \"approve to start the agents\" (goal-status.ts:117-121). Core's only REJECTED transition for a planning run is `rejectRun(state, commandId, findingsRef, successorRunId)` (packages/core/src/planning/planning-run-*.ts), which expects a successor run; nothing on the daemon mints one. A human who reads a bad decomposition today can only abandon the goal or approve work they do not want.\n\nFEATURE: REJECT as a first-class decision on the same wire. `approval.decide_intent {decision: \"REJECT\", decisionReason, runId}` commits a durable rejection (architect chooses the mechanism and states why: (i) the intent decision's own result carries `decision: REJECT` + reason and the run stays PLAN_REVIEW with `planState: REJECTED` derived in the offer ladder and the goal catalog, or (ii) core `rejectRun` with a successor planning run minted by the daemon so the compiler seat is re-staffed on the same goal with the reason in its mission between the `<<<OPERATOR INSTRUCTIONS` markers, the way PR #20 carries replan findings). Either way: the surface withdraws `approval.decide_intent` for the rejected run and re-offers `planning.submit_decomposition` for the goal; the compiler mission quotes the rejection reason; the next submission is a fresh plan (new run version or successor run) that the human approves or rejects again. UI: the plan gate gains a Reject control with a required reason (`cr.approve.reject`, `cr.approve.reason.input`); Needs you gains a NEEDS_YOU kind for a rejected plan awaiting re-planning (roster `NEEDS_YOU_KINDS` updated, needs-you-model.ts:27); the board header stage gains `PLAN_REJECTED` with STAGE_WORDS \"Plan sent back\" and next-step \"Waiting for a new plan\"; the decision feed says \"the operator rejected the plan\" (activity `verdict` REJECT already wired for approval kinds in activity-words.ts decisionWords - the server must now emit it: activity-read.ts verdictOf gains the approval kinds reading the committed result's `decision`).\n\nOut of scope: rejecting the Product Contract (Gate 1 has its own clarification path); multi-node ordering (task-4423d2a4).",
+  "definitionOfDone": [
+    "`approval.decide_intent` with `decision: \"REJECT\"` and a non-empty `decisionReason` COMMITS a durable record (event kind or decision result named by the architect) and never mints an activation; with an empty reason it refuses `APPROVAL_REJECT_REASON_REQUIRED` (code + layer asserted); the APPROVE arm is byte-identical (its existing tests unchanged, count line quoted).",
+    "After a REJECT: `/affordances/read` no longer offers `approval.decide_intent` for that run and offers `planning.submit_decomposition` for the goal again; the compiler mission text for the re-staffed seat contains the rejection reason verbatim between the operator-instruction markers (mission-text test); the next accepted submission produces a plan the human can approve (e2e over a REAL daemon with a scripted seat double: submit -> reject -> resubmit -> approve -> node offered).",
+    "`/activity/read` entries for `approval.decide_intent` carry `verdict` APPROVE or REJECT read from the committed result (activity-read.test.ts), and the board feed renders \"rejected the plan\" with a bad tone (board-screen.test.tsx).",
+    "Control room: the plan gate renders Reject with a required reason and dispatches the same offer with REJECT; Needs you lists the rejected plan under its new kind until a new plan is submitted; the board header reads \"Plan sent back\"; Playwright journey against a REAL daemon covers reject -> new plan -> approve (`pnpm test:e2e:browser` count line quoted).",
+    "Live drive on UnAI: a compiled plan rejected from the browser with a reason, the re-staffed seat's new plan submitted and approved; decision ids + the seat transcript excerpt quoting the reason in a row comment; README plan-approval clause and the runbook's approval paragraph updated.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row; the verifier stays the documented trusted-workspace verifier.",
+    "HUMAN GATES ARE HUMAN-ONLY: the REJECT decision rides the existing operator-only, MCP-excluded approval wire and mints a human-review witness exactly as APPROVE does; a test pins that an MCP caller cannot reject.",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the decision ids in a row comment."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1002,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:42:58.848Z",
+  "updatedAt": "2026-09-04T09:42:58.848Z"
+}

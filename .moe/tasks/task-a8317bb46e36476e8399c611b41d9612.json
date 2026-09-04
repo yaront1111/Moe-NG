@@ -1,0 +1,35 @@
+{
+  "id": "task-a8317bb46e36476e8399c611b41d9612",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Publish is a project decision: one bound remote per project, one Publish control, goals only report what landed",
+  "description": "Filed by session moe-next-67 for the owner (2026-09-04, human-directed: \"Publish to git should be project based and not goal based\"), sibling of the epic-8ebe6417 rows.\n\nPRODUCT GAP, measured at main 68eb1c5d: `repository.publish` (PR #21, acf88616) is GOAL-scoped. Its payload is `[\"goalId\", \"remoteUrl\"]` (apps/daemon/src/daemon-command-vocabulary.ts:316), its aggregate is `publish:<goalId>` (apps/daemon/src/bootstrap/bootstrap-sequence.ts:114-118), the offer is minted per goal (apps/daemon/src/http/affordance-planning-offers.ts:144), and the card on every opened goal asks the human to TYPE a git remote URL each time (apps/control-room/src/v2/goals/goal-publish.tsx: `cr.publish.remote` input, remembered only in localStorage). Yet the push itself is inherently project-level: the publisher pushes the WORKSPACE's current branch `HEAD:refs/heads/<branch>` (apps/daemon/src/orchestrator/node-publisher.ts), and the remote is a fact of the repository, which the daemon already binds with `project.bind_repository` (payload `[\"observation\"]`). Seen live on UnAI 2026-09-04: the opened goal showed \"PUBLISH - YOUR DECISION / No node of this goal is landed as a commit yet / Git remote (URL) https://github.com/you/your-repo.git\" - a per-goal form for a per-project fact, rendered even with zero landed commits because the daemon offers the command regardless.\n\nFEATURE: (a) a durable PROJECT remote: `repository.bind_remote {remoteUrl}` (operator-only, MCP-excluded, in HUMAN_ONLY_STEPS) records the remote on a project aggregate (`remote:<projectId>`), validated the way goal-publish.tsx validates today (https:// or ssh, no embedded credentials); read back on `/resources/read` (or the resources read the control-room-completeness row adds) and on `/runs/read` as `project.remote`. (b) `repository.publish` drops `remoteUrl` from its payload (`[\"goalId\"]` stays so the receipt names what was pushed; or becomes project-scoped `[]` - architect decides and states why), refuses `PUBLISH_REMOTE_UNBOUND` when no remote is bound, and is OFFERED only when at least one node of the goal carries a COMMITTED landing receipt (affordance-planning-offers.ts:144 gains that gate). (c) UI: ONE \"Remote\" setting on the project (Resources screen or the project boundary card), and the goal's publish card becomes a single Publish button that names the bound remote and the landed commits it will push; with no bound remote it links to the project setting; with nothing landed it renders nothing (the board header's publish link already keys on the offer). (d) The runbook \"Publishing (your decision, your remote)\" section and README publish clause rewritten to the project shape.\n\nRoster backfill this touches (learned landing PR #21, memory prs19-22-landed-2026-09-03): daemon-command-vocabulary PAYLOAD_KEYS + BOOTSTRAP_FAMILY + OPERATOR_PRINCIPAL_KINDS, mcp-tool-allowlist MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS, bootstrap-sequence prerequisites + aggregate ids, the seven hand-pinned roster tests (daemon-command-registry.test.ts ROWS/REGISTRATION_ORDER/size pins, daemon-command-vocabulary.test.ts, daemon-v2-command-registry.test.ts, mcp-main.test.ts, mcp-http-host.test.ts, daemon-command-registry-human-approver.test.ts, daemon-store-dependencies.test.ts snapshot), packages/contracts runtime-vocabulary + generated client regeneration + the four digest mirrors, tests/security layer census if a new *_LAYER constant is declared.",
+  "definitionOfDone": [
+    "`repository.bind_remote` published operator-only, MCP-excluded, in HUMAN_ONLY_STEPS, with the full roster backfill; a bidirectional roster test pins it; `REMOTE_URL_INVALID` (embedded credential, non-https/ssh) asserted with code + layer.",
+    "`repository.publish` no longer takes `remoteUrl`; with no bound remote it refuses `PUBLISH_REMOTE_UNBOUND` (code + layer asserted); the offer appears on `/affordances/read` only for a goal with >=1 COMMITTED landing receipt - a test shows the offer absent before the first landing and present after.",
+    "Publisher test: the push goes to the BOUND remote (argv asserted), and `moe-publish-receipt/1` names the remote it pushed to; the old per-goal `remoteUrl` field is gone from the decision payload and the receipt shape (exact-key roster updated).",
+    "UI: the project shows ONE remote setting with its bound value and a change control; the goal's publish card has no URL input (`cr.publish.remote` removed), names the bound remote and the landed commits, and renders nothing when nothing is landed; `localStorage` key `moe.publish.remoteUrl` no longer read or written (grep = 0). Playwright journey against a REAL daemon: bind remote -> land a node -> Publish -> receipt PUSHED.",
+    "docs/agent-stack-runbook.md Publishing section and the README publish clause rewritten to the project shape in the same commit.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:security`."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row; the verifier stays the documented trusted-workspace verifier.",
+    "HUMAN GATES ARE HUMAN-ONLY: every decide/bind kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded, with the refusal code pinned by a test.",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI, launched by scripts/up.ps1) with the receipt and the remote branch link in a row comment."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1000,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:41:53.294Z",
+  "updatedAt": "2026-09-04T09:41:53.294Z"
+}
