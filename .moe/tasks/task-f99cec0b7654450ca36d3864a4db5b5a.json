@@ -150,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:03:16.816Z",
-  "updatedAt": "2026-09-04T15:01:52.338Z",
+  "updatedAt": "2026-09-04T15:06:55.661Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:08:54.142Z",
     "plannedStepCount": 7,
@@ -201,5 +201,79 @@
     "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
     "apps/daemon/src/orchestrator/agent-mission-text.ts",
     "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "1031a7e86b6af9a7c82d6a41511295e99d22fe24",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-00bf35cc@2026-09-04T13:57:07Z",
+      "paths": [
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+        "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
+        "apps/daemon/src/bootstrap/bootstrap-conflict-error.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/daemon-command-dispatch.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/work/work-claim-services.test.ts",
+        "apps/daemon/src/work/work-claim-services.ts"
+      ],
+      "recordedBy": "worker-00bf35cc",
+      "recordedAt": "2026-09-04T15:06:55.661Z",
+      "treeId": "29a190ad5e1d4d16f649b365820f3e884225772b",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/work/work-claim-services.test.ts",
+          "taskId": "task-7945f38da29249a291004f78b4024262"
+        },
+        {
+          "path": "apps/daemon/src/work/work-claim-services.ts",
+          "taskId": "task-7945f38da29249a291004f78b4024262"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+    "apps/daemon/src/daemon-command-dispatch.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.ts",
+    "apps/daemon/src/work/work-claim-services.test.ts",
+    "apps/daemon/src/work/work-claim-services.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/mcp-dispatch-port-conflict.test.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.js",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/daemon-command-dispatch.ts",
+    "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-conflict-error.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/work/work-claim-services.ts",
+    "apps/daemon/src/work/work-claim-services.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-00bf35cc@2026-09-04T13:57:07Z",
+    "at": "2026-09-04T15:06:55.661Z"
+  }
 }
