@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { compilerMission, mission } from "./agent-mission-text.js";
+import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
 
 const EXPIRES = "2026-08-30T13:00:00.000Z";
 
@@ -74,4 +74,53 @@ describe("compilerMission", () => {
     expect(generic).toContain("Suggested development payload");
     expect(generic).not.toContain("documents_source_read");
   });
+});
+
+/**
+ * The two facts a live seat could not deduce and burned a whole claim on. Asserted PER MISSION
+ * rather than over a joined string: every seat spawns from one of these three builders, and a
+ * sentence added to only one of them would leave the other two seats exactly as stuck.
+ */
+describe("every mission carries the seat-facing recovery and read facts", () => {
+  const MISSIONS: readonly (readonly [string, string])[] = [
+    ["codeMission", codeMission("review.submit@node-1", "node-1", EXPIRES, {
+      instructions: "do the thing", test: "pnpm test", title: "T", workspace: "/w",
+    }, { accept: null, submit: null })],
+    ["compilerMission", compilerMission(
+      "planning.submit_decomposition@goal-1", "planning.submit_decomposition", EXPIRES, "goal-1",
+    )],
+    ["mission", mission("plan.propose@run-1", "plan.propose", EXPIRES, null)],
+  ];
+
+  for (const [name, text] of MISSIONS) {
+    it(`${name} names the observed version and bounds the retry to one`, () => {
+      expect(text).toContain("actualVersion=<n>");
+      expect(text).toContain("ONCE with expectedVersion = n");
+      expect(text).toContain("then stop and report if it refuses again");
+    });
+
+    it(`${name} states the graph_get payload and that the seat cannot write files`, () => {
+      expect(text).toContain('graph_get takes exactly {"projectId"');
+      expect(text).toContain("and nothing else");
+      expect(text).toContain("no file-write tool");
+      expect(text).toContain("report findings in your final message");
+    });
+
+    /**
+     * The seat reported being told to "record a durable memory" — an instruction that is NOT in
+     * moe-next's briefs (it came from the target project's own CLAUDE.md) and that this seat
+     * cannot obey. The assertion is on the instruction's POLARITY, not on the word: the brief
+     * must MENTION memories, because forbidding them is the whole point, so a flat
+     * `not.toMatch(/write.*memor/)` would be unsatisfiable against the sentence the same plan
+     * requires. Every clause containing "memor" must be the prohibition.
+     */
+    it(`${name} only ever mentions memories to forbid writing them`, () => {
+      const clauses = text.split(/(?<=[.:;])\s+/).filter((clause) => /memor/i.test(clause));
+      expect(clauses.length).toBeGreaterThan(0);
+      for (const clause of clauses) {
+        expect(clause).toContain("do not try to write memories or files");
+      }
+      expect(text).not.toMatch(/(record|store|save|persist) (a |the |your )?(durable )?memor/i);
+    });
+  }
 });

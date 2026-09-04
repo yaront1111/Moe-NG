@@ -4,7 +4,7 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, createRuntimeError } from "@moe/contracts";
 import type { RuntimeCommandEnvelope, RuntimeCommandKind } from "@moe/contracts";
 import { admitProductContractRevisionRef, productContractGate1Authority } from "@moe/core";
 import type { HttpDispatchPort } from "@moe/mcp";
@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
+import { decisionOf } from "./daemon-command-dispatch.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
@@ -30,6 +31,7 @@ import {
   MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES,
 } from "./documents/document-source-contract.js";
 import { readDocumentSourceView } from "./documents/document-source-read.js";
+import { aggregateIdFor as workAggregateIdFor } from "./work/work-claim-services.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
@@ -1050,6 +1052,83 @@ describe("server-injected request fields", () => {
       refusal: { code: "EXPECTED_VERSION_CONFLICT", layer: "CORE_REDUCER" },
       stage: "DISPATCH",
     });
+  });
+
+  /**
+   * The renderer is generic, so the CORE reducer's conflict gained the same affordance: a
+   * caller fenced before the store now also learns which version to resend at. Pinned rather
+   * than left implicit, because it is a wire-visible change to an existing refusal.
+   */
+  it("names the versions on a CORE_REDUCER conflict too, since the renderer is generic", () => {
+    const answered = send("cmd-register-stale-core", "project.register",
+      { owner: "operator-local" }, CREDENTIAL, 5);
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(answered.refusal.layer).toBe("CORE_REDUCER");
+    expect(answered.refusal.detail).toBe("EXPECTED_VERSION_CONFLICT actualVersion=1 expectedVersion=5");
+  });
+
+  /**
+   * The generic renderer must NOT append anything when a refusal carries an error with no
+   * registered detail keys — most codes have none, and every one of their wire details would
+   * change shape if the join were unconditional. Driven straight at the exported production
+   * seam because no registered command refuses that way today; a frozen null-prototype details
+   * object (what the registry hands out) must not make `Object.keys` throw either.
+   */
+  it("renders just the code when a refusal's error carries no detail keys", () => {
+    const error = createRuntimeError({ code: "CAPABILITY_DENIED" });
+    expect(Object.keys(error.details)).toHaveLength(0);
+    expect(() => decisionOf(Object.freeze({
+      advisoryOnly: true as const, authority: "NONE" as const, code: "CAPABILITY_DENIED",
+      error, kind: "work.claim" as const, ok: false as const,
+      refusedBy: "DAEMON_INGRESS" as const,
+    }))).toThrow(expect.objectContaining({
+      code: "CAPABILITY_DENIED", detail: "CAPABILITY_DENIED", layer: "DAEMON_INGRESS",
+    }));
+  });
+
+  /**
+   * A caller told only "EXPECTED_VERSION_CONFLICT" has nothing to retry AT, so the wire detail
+   * must name the version the store observed. `work.release` is the kind driven here because
+   * every BOOTSTRAP reducer fences `expectedVersion` itself and answers under `CORE_REDUCER`
+   * before the store is reached (bootstrap-ledger.ts:258-260) — a bootstrap kind cannot produce
+   * a DURABLE_STORE conflict through this adapter without a store double, and this arm is about
+   * the real adapter over the real store.
+   */
+  it("names the observed version on a durable-store conflict over the real /command adapter", () => {
+    const item = "node.deliver@registry-http-conflict";
+    expect(send("cmd-http-conflict-claim", "work.claim", {
+      expiresAt: "2026-08-09T13:00:00.000Z", workItemId: item,
+    })).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+
+    // The claim moved the head to 1; releasing at the version the caller still believed (0) is
+    // accepted by every daemon gate — the claimant matches — and fenced by the STORE.
+    const answered = send("cmd-http-conflict-release", "work.release", { workItemId: item });
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    const refusal = answered.refusal;
+
+    // The observed version is read back off the store, never echoed from the request: a daemon
+    // that reported its own `expectedVersion` as the actual would fail here.
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    const head = reader.getAggregateVersion(workAggregateIdFor(item));
+    reader.close();
+    expect(head).toBe(1);
+
+    expect(refusal.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(refusal.layer).toBe("DURABLE_STORE");
+    expect(refusal.detail).toMatch(/^EXPECTED_VERSION_CONFLICT actualVersion=\d+ expectedVersion=\d+$/);
+    expect(refusal.detail).toBe(`EXPECTED_VERSION_CONFLICT actualVersion=${String(head)} expectedVersion=0`);
+    // The REFUSED frame's key roster is UNCHANGED: the versions ride in the existing `detail`
+    // string, because eleven control-room decoders and the generated client pin these four keys.
+    expect(Object.keys(refusal).sort()).toEqual(["code", "detail", "httpStatus", "layer"]);
+  });
+
+  /** A refusal with no error still renders the bare code — the renderer is generic, not a
+   *  conflict special case, and must not start appending anything to every other refusal. */
+  it("leaves a refusal that carries no runtime error at its bare code", () => {
+    const answered = send("cmd-http-bare-detail", "work.claim", { workItemId: "no-expiry" });
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(answered.refusal.code).toBe("WORK_CLAIM_PAYLOAD_INVALID");
+    expect(answered.refusal.detail).toBe("WORK_CLAIM_PAYLOAD_INVALID");
   });
 
   it("replays the identical command and replays again on a fresh store handle", () => {

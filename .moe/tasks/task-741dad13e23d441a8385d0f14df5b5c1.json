@@ -146,7 +146,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:35:27.718Z",
-  "updatedAt": "2026-09-04T14:53:04.292Z",
+  "updatedAt": "2026-09-04T14:53:49.666Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:45:15.979Z",
     "plannedStepCount": 6,
@@ -307,6 +307,51 @@
       "treeId": "c066c225b697f3d6e223b899de26e9aade0e2057",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "47ba19aad16e257640c8f85452750b7caa44e8b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d018e522@2026-09-04T14:02:20Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
+        ".moe/tasks/task-2c016c04dedc4eb88982a1d8d5108ddf.json",
+        ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+        ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
+        ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+        ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+        "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "recordedBy": "worker-d018e522",
+      "recordedAt": "2026-09-04T14:53:49.666Z",
+      "treeId": "04d9a4f8545a56a22939efdbee714db2441084c4",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/index.ts",
+          "taskId": "task-3780109018bb49b2bf3a00b18952d7ff"
+        },
+        {
+          "path": "apps/daemon/src/index-surface.test.ts",
+          "taskId": "task-3780109018bb49b2bf3a00b18952d7ff"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -321,7 +366,24 @@
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts",
     "tests/security/layer-visibility-cases.ts",
-    "tests/security/boundary-roster.security.ts"
+    "tests/security/boundary-roster.security.ts",
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+    ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
+    ".moe/tasks/task-2c016c04dedc4eb88982a1d8d5108ddf.json",
+    ".moe/tasks/task-4109c1a0e1154ca89576183dae7a5336.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+    ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
+    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
+    ".moe/tasks/task-7945f38da29249a291004f78b4024262.json",
+    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/bootstrap/activation-receipts-measure.js",
@@ -337,14 +399,12 @@
     "apps/daemon/src/bootstrap/activation-receipts.test.ts",
     "tests/security/layer-visibility-cases.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/goals/j1-command-path.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-f2c0503a@2026-09-04T10:57:59Z",
-    "at": "2026-09-04T10:58:07.313Z"
+    "kind": "completion",
+    "sessionId": "worker-d018e522@2026-09-04T14:02:20Z",
+    "at": "2026-09-04T14:53:49.666Z"
   },
   "priorHandoffs": [
     {

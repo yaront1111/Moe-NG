@@ -50,12 +50,20 @@ import { scanGlobalEvents } from "../goals/goal-closure-test-fixtures.js";
 
 afterEach(closeStores);
 
-/** The frozen tuple `goal.close` answers on this journey, restated by hand so a code, a layer or
- *  an authority quietly changing is a red rather than a shrug. */
-const NO_RECEIPT_REFUSAL = Object.freeze({
+/**
+ * The frozen tuple `goal.close` answers on this journey, restated by hand so a code, a layer or
+ * an authority quietly changing is a red rather than a shrug.
+ *
+ * THE CODE MOVED UP ONE FENCE (task-ae6fd9ac). Qualification no longer demands a Foundation
+ * verification receipt — the live leg closes on the running loop's own evidence — so the guard
+ * this journey reaches first is the REVIEW one: it drives the bootstrap sequence and never
+ * accepts a node's output, so no durable acceptance names the approved node. Same layer, same
+ * authority, one fence earlier.
+ */
+const NO_ACCEPTANCE_REFUSAL = Object.freeze({
   advisoryOnly: true,
   authority: "NONE",
-  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
+  code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
   ok: false,
   refusedBy: "DAEMON_PREREQUISITE",
 });
@@ -174,11 +182,11 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
         expect(scan.exhausted).toBe(true);
         expect(scan.activationRows).toBe(0);
 
-        expect(send(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        expect(send(store, request)).toMatchObject(NO_ACCEPTANCE_REFUSAL);
         expect(decisionCount(store)).toBe(before);
         // A refusal is not a decision, so the SECOND call re-derives it rather than replaying a
         // row: identical answer, still nothing durable.
-        expect(send(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        expect(send(store, request)).toMatchObject(NO_ACCEPTANCE_REFUSAL);
         expect(decisionCount(store)).toBe(before);
         return;
       }
@@ -330,8 +338,145 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     // The store's audit row is durable, so the count moves; the aggregate head must not.
     expect(decisionCount(store)).toBe(before + 1);
     // Only project.register has run at this point, so the head sits at version 1.
-    expect(readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID)?.currentVersion)
-      .toBe(1);
+    const head = readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID)?.currentVersion;
+    expect(head).toBe(1);
+    // The refusal names the version the store OBSERVED, decoded from the store's own result
+    // bytes. `actualVersion` is read back off the ledger, never copied from the request, so a
+    // daemon that echoed its own `expectedVersion` here would fail this arm.
+    expect(outcome.error).not.toBeNull();
+    expect(outcome.error?.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect({ ...outcome.error?.details }).toEqual({ actualVersion: head, expectedVersion: 99 });
+  });
+
+  it("keeps the bare code when the store's conflict result bytes do not decode", () => {
+    // Undecodable bytes must not become an invented version: the refusal falls back to the bare
+    // code with no error. Driven through the production seam with a store double, because a real
+    // store never emits corrupt bytes — this arm pins the fail-closed branch, not the store.
+    const decoded = decodeBootstrapRequestBytes(
+      new TextEncoder().encode(JSON.stringify(
+        envelope("project.bind_repository", 1, { observation: OBSERVATION }, "cmd-corrupt"),
+      )),
+    );
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected an accepted envelope");
+
+    const corruptStore = {
+      commitExpectedVersionDecision: () => ({
+        decision: {
+          currentVersion: null,
+          effectDisposition: "NO_BUSINESS_EFFECT",
+          resultBytes: new TextEncoder().encode("not json"),
+          resultCode: "EXPECTED_VERSION_CONFLICT",
+        },
+        disposition: "DECIDED",
+      }),
+    } as unknown as SqliteEventStore;
+
+    const outcome = commitAccepted(corruptStore, decoded.request, {
+      aggregateId: PROJECT_ID,
+      eventPayload: { raced: true },
+      eventType: "RepositoryBound",
+      expectedVersion: 7,
+      result: { raced: true },
+    });
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(outcome.refusedBy).toBe("DURABLE_STORE");
+    expect(outcome.error).toBeNull();
+  });
+
+  /**
+   * Bytes that DECODE but carry something that is not a version. A daemon that coerced these
+   * would put an invented number on the wire and a seat would retry at it, so each planted
+   * shape must fail closed to the bare code exactly as undecodable bytes do.
+   */
+  it("keeps the bare code when the conflict bytes carry versions that are not versions", () => {
+    const decoded = decodeBootstrapRequestBytes(
+      new TextEncoder().encode(JSON.stringify(
+        envelope("project.bind_repository", 1, { observation: OBSERVATION }, "cmd-nonnumeric"),
+      )),
+    );
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected an accepted envelope");
+
+    const planted = [
+      { expectedVersion: 0, observedVersion: "1" },
+      { expectedVersion: 0, observedVersion: { value: 1 } },
+      { expectedVersion: 0, observedVersion: 1.5 },
+      { expectedVersion: 0, observedVersion: -1 },
+      { expectedVersion: "zero", observedVersion: 1 },
+      { expectedVersion: 0 },
+      { observedVersion: 1 },
+    ];
+    expect(planted).toHaveLength(7);
+
+    for (const result of planted) {
+      const store = {
+        commitExpectedVersionDecision: () => ({
+          decision: {
+            currentVersion: null,
+            effectDisposition: "NO_BUSINESS_EFFECT",
+            resultBytes: new TextEncoder().encode(JSON.stringify({
+              code: "EXPECTED_VERSION_CONFLICT", ...result, version: 1,
+            })),
+            resultCode: "EXPECTED_VERSION_CONFLICT",
+          },
+          disposition: "DECIDED",
+        }),
+      } as unknown as SqliteEventStore;
+
+      const outcome = commitAccepted(store, decoded.request, {
+        aggregateId: PROJECT_ID,
+        eventPayload: { raced: true },
+        eventType: "RepositoryBound",
+        expectedVersion: 7,
+        result: { raced: true },
+      });
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) throw new Error("expected refusal");
+      expect(outcome.code).toBe("EXPECTED_VERSION_CONFLICT");
+      expect(outcome.error).toBeNull();
+    }
+  });
+
+  /** A NON-conflict store refusal must not pick up conflict details from a decision that
+   *  happens to carry decodable version bytes: the resultCode is what selects the branch. */
+  it("attaches nothing when the store refused with some other code", () => {
+    const decoded = decodeBootstrapRequestBytes(
+      new TextEncoder().encode(JSON.stringify(
+        envelope("project.bind_repository", 1, { observation: OBSERVATION }, "cmd-other-code"),
+      )),
+    );
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected an accepted envelope");
+
+    const store = {
+      commitExpectedVersionDecision: () => ({
+        decision: {
+          currentVersion: null,
+          effectDisposition: "NO_BUSINESS_EFFECT",
+          resultBytes: new TextEncoder().encode(JSON.stringify({
+            code: "SOME_OTHER_REFUSAL", expectedVersion: 0, observedVersion: 1, version: 1,
+          })),
+          resultCode: "SOME_OTHER_REFUSAL",
+        },
+        disposition: "DECIDED",
+      }),
+    } as unknown as SqliteEventStore;
+
+    const outcome = commitAccepted(store, decoded.request, {
+      aggregateId: PROJECT_ID,
+      eventPayload: { raced: true },
+      eventType: "RepositoryBound",
+      expectedVersion: 7,
+      result: { raced: true },
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("SOME_OTHER_REFUSAL");
+    expect(outcome.error).toBeNull();
   });
 
   it("a durably proposed hash is what the approval gate compares against", () => {

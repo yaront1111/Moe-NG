@@ -11,6 +11,7 @@ import {
   readWorkClaimLedger,
   runWorkClaimCommand,
 } from "./work-claim-services.js";
+import type { WorkClaimOutcome } from "./work-claim-services.js";
 
 const PROJECT = "proj-work-claim";
 const directory = mkdtempSync(join(tmpdir(), "moe-work-claim-"));
@@ -51,6 +52,24 @@ function expectDurableCasRefusal(commandId: string, principalId: string, item: s
     observedVersion: 1,
     resultCode: "EXPECTED_VERSION_CONFLICT",
     targetAggregateId: aggregateIdFor(item),
+  });
+}
+
+/**
+ * A conflict refusal must NAME the version the store observed, so a caller can retry at it.
+ * `actualVersion` is read back off the store's own aggregate head rather than copied from the
+ * request, which is what makes this arm go red if the daemon ever echoes its own expectedVersion.
+ */
+function expectConflictNamesObservedVersion(
+  outcome: WorkClaimOutcome, item: string, staleVersion: number,
+): void {
+  expect(outcome.ok).toBe(false);
+  if (outcome.ok) throw new Error("expected refusal");
+  expect(outcome.error).not.toBeNull();
+  expect(outcome.error?.code).toBe("EXPECTED_VERSION_CONFLICT");
+  expect({ ...outcome.error?.details }).toEqual({
+    actualVersion: store.getAggregateVersion(aggregateIdFor(item)),
+    expectedVersion: staleVersion,
   });
 }
 
@@ -132,6 +151,7 @@ describe("runWorkClaimCommand", () => {
       code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
     });
     expectDurableCasRefusal("cmd-stale-claim", "agent-b", item);
+    expectConflictNamesObservedVersion(stale, item, 0);
     expect({
       events: store.readEvents(aggregateIdFor(item)),
       record: readWorkClaimLedger(store, PROJECT).claims.get(item),
@@ -155,6 +175,7 @@ describe("runWorkClaimCommand", () => {
       code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
     });
     expectDurableCasRefusal("cmd-stale-renew", "agent-a", item);
+    expectConflictNamesObservedVersion(stale, item, 0);
     expect({
       events: store.readEvents(aggregateIdFor(item)),
       record: readWorkClaimLedger(store, PROJECT).claims.get(item),
@@ -179,6 +200,7 @@ describe("runWorkClaimCommand", () => {
       code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
     });
     expectDurableCasRefusal("cmd-stale-release", "agent-a", item);
+    expectConflictNamesObservedVersion(stale, item, 0);
     expect({
       events: store.readEvents(aggregateIdFor(item)),
       record: readWorkClaimLedger(store, PROJECT).claims.get(item),

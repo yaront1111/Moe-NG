@@ -10,8 +10,16 @@ import type {
 } from "@moe/store";
 
 import { BOOTSTRAP_COMMAND_KINDS } from "./bootstrap-contracts.js";
+import { conflictError } from "./bootstrap-conflict-error.js";
 import { unmetPrerequisites } from "./bootstrap-sequence.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
+
+/**
+ * Re-exported so the conflict decode has ONE public name even though it lives in its own module
+ * (this file is already near the line cap). Every commit seam that can receive a store conflict
+ * imports the same function; a second copy of the decode would drift.
+ */
+export { conflictError } from "./bootstrap-conflict-error.js";
 
 /** Re-exported so a service imports its whole composition surface from one module. */
 export {
@@ -165,7 +173,10 @@ function decided(
   response: { readonly decision: CommandDecisionRecord; readonly disposition: "DECIDED" | "REPLAYED" },
 ): ServiceOutcome {
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+    return refuse(
+      request.kind, response.decision.resultCode, "DURABLE_STORE",
+      conflictError(response.decision),
+    );
   }
   return Object.freeze({
     advisoryOnly: false as const,

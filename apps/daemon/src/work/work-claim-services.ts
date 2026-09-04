@@ -2,6 +2,7 @@ import type { JsonValue, RuntimeError } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionKey, CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import { conflictError } from "../bootstrap/bootstrap-conflict-error.js";
 import {
   decodeWorkClaimRequestBytes,
   isIsoInstant,
@@ -58,10 +59,11 @@ function refuse(
   kind: WorkClaimCommandKind | null,
   code: DaemonCode | string,
   refusedBy: WorkClaimRefusedBy,
+  error: RuntimeError | null = null,
 ): WorkClaimRefused {
   return Object.freeze({
     advisoryOnly: true as const, authority: "NONE" as const, code,
-    error: null, kind, ok: false as const, refusedBy,
+    error, kind, ok: false as const, refusedBy,
   });
 }
 
@@ -109,7 +111,10 @@ function commitAccepted(
     targetAggregateId: aggregateId,
   });
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+    return refuse(
+      request.kind, response.decision.resultCode, "DURABLE_STORE",
+      conflictError(response.decision),
+    );
   }
   return Object.freeze({
     advisoryOnly: false as const, authority: "DURABLE_DECISION" as const,

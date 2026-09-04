@@ -16,6 +16,26 @@ import type { NodeMission } from "./agent-wrapper.js";
  * agent meets carries a stable reason code from the layer that refused.
  */
 
+/**
+ * The two facts every seat needs and no seat could deduce, appended to EVERY brief.
+ *
+ * A live planning seat burned its whole claim on these: told only
+ * "EXPECTED_VERSION_CONFLICT" it had no version to resend at, so it swept versions upward and
+ * wrote seven rejection rows into the decision ledger; and it guessed at graph_get's payload
+ * until INPUT_INVALID, then tried to record a durable memory with a tool it does not have.
+ * The refusal detail now NAMES the observed version (daemon-command-dispatch.ts `detailOf`),
+ * which is what makes a single bounded retry possible — so the brief says to take it ONCE.
+ */
+const RETRY_ON_CONFLICT =
+  "If a command is refused EXPECTED_VERSION_CONFLICT, its detail names actualVersion=<n>: "
+  + "resend that one command ONCE with expectedVersion = n, then stop and report if it "
+  + "refuses again.";
+
+const READ_FACTS =
+  "graph_get takes exactly {\"projectId\": \"<your project id>\"} and nothing else. "
+  + "You have no file-write tool in this session: report findings in your final message, "
+  + "do not try to write memories or files.";
+
 /** Exported for its text contract: the agent learns the release payload shape from here. */
 export function codeMission(
   workItemId: string, nodeRef: string, expiresAt: string, brief: NodeMission,
@@ -39,6 +59,8 @@ export function codeMission(
     "either accept it or record a verifier-test-failed round for the next attempt.",
     "Every refusal carries a stable reason code — read it, correct the request, never",
     "work around a refusal, and report what the daemon actually answered.",
+    RETRY_ON_CONFLICT,
+    READ_FACTS,
   ];
   if (hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
@@ -120,6 +142,8 @@ export function compilerMission(
     "work_get_context (re-read it right before releasing). Every refusal carries",
     "a stable reason code - read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
+    RETRY_ON_CONFLICT,
+    READ_FACTS,
   ];
   return [...shared, ...step, ...operator, ...close].join(" ");
 }
@@ -138,6 +162,8 @@ export function mission(
     `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
     "a stable reason code — read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
+    RETRY_ON_CONFLICT,
+    READ_FACTS,
   ];
   if (hint !== null) {
     lines.push(`Suggested development payload for ${kind}: ${JSON.stringify(hint)}`);
