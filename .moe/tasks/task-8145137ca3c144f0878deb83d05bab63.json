@@ -124,7 +124,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-8c3e4f55",
+  "assignedWorkerId": "worker-12c76c19",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -146,7 +146,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:18:41.831Z",
-  "updatedAt": "2026-09-04T20:19:51.721Z",
+  "updatedAt": "2026-09-04T23:05:25.292Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:37:26.240Z",
     "plannedStepCount": 6,
@@ -184,7 +184,9 @@
   "planApprovedAt": "2026-09-04T14:40:48.206Z",
   "contextFetchedBy": [
     "worker-fd0e9639",
-    "worker-8c3e4f55"
+    "worker-8c3e4f55",
+    "governor-675cbcf7",
+    "worker-12c76c19"
   ],
   "workStartedAt": "2026-09-04T17:32:58.126Z",
   "commits": [
@@ -337,5 +339,16 @@
     "kind": "checkpoint",
     "sessionId": "worker-fd0e9639@2026-09-04T18:32:49Z",
     "at": "2026-09-04T18:32:58.831Z"
-  }
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 of 6 are COMPLETED and checkpointed across 6 commits (latest three: 9ce2e195, d89a14dc, e71ae3fe). Step 1 verified child 1 (task-ae6fd9ac, goal closure on live evidence) landed and re-measured the offer surface. Step 2 built the readiness fact: apps/daemon/src/goals/goal-close-readiness.ts (+ .js bridge) exporting GoalCloseReadiness {NO_CONTRACT|READY|NOT_READY|UNREADABLE} and readGoalCloseReadiness, pure over an injected DocumentCoverageReadPort, test-first. Step 3 added the one new code GOAL_CLOSE_CRITERIA_UNVERIFIED as the LAST member of the roster pin in goal-services.test.ts and wired the precondition. Step 4 added the offer gate in affordance-planning-offers.ts: PlanningOfferInput gained closeReadiness, consulted ONLY for EXECUTION_ENABLED/CLOSING goals, failing closed on UNREADABLE. Step 5 ran the verification gate and the rail-1 restore drill.",
+      "whatRemains": "ONLY step 6: ADVERSARIAL SELF-REVIEW + COMPLETE, then moe.complete_task. The step asks specifically about a goal with TWO contracts, and the other adversarial arms named in the step text. Re-run the focused files and complete. No production code is known to be outstanding — steps 1-5 delivered it.",
+      "pitfalls": "1) RE-RUN THE GATE, do not trust step 5's recorded counts. The shared checkout has moved a long way since: several rows landed, and a 51-file control-room wording pass (+636/-457, plus outcome-words.ts, run-words.ts, outcome-note.tsx) is uncommitted in the tree and owned by no row. 2) Three untracked zz-placeholder-*.test.ts files were inflating every daemon count by 51 tests / 3 files earlier today; they were deleted at human direction, so any count quoted in step 5's notes may be inflated. Re-measure rather than compare. 3) Repo-wide typecheck was RED earlier (TS6133 MIDDOT in goal-nodes.tsx) from that uncommitted UI work and is now green (pnpm --recursive typecheck EXIT=0 verified) - if you hit a control-room red, check whether it is yours before chasing it. 4) declaredFiles is EMPTY on this row: if a step forgot modifiedFiles, declare the paths before exiting or they land under whoever exits next - that mis-attribution already happened once today.",
+      "openQuestions": "Was step 6's adversarial pass already partly done in the lost session? Nothing durable records it - no comment, no commit, no step note - so treat it as not started and redo it. Also confirm whether the two-contract case the step names needs a new fixture or reuses the step-2 world; the step text warns that test files may not import each other's helpers across the cap.",
+      "releasedAt": "2026-09-04T23:05:13.611Z",
+      "releasedBy": "governor-675cbcf7",
+      "reason": "Human-approved release. worker-8c3e4f55 silent 155 min (9275s, isAlive false) holding this row at step 6 IN_PROGRESS. Distinguished from a false-positive stale signal: architect-20a6d1eb also read stale at 65 min but was demonstrably alive (it created task-40e52fa8 at 22:58:55 with createdBy ARCHITECT, parentTaskId task-f3edb8fb) — create_task does not refresh lastActivityAt, so the clock alone is not evidence. This seat produced NO side effects in the whole window: no commits, no comments, no rows, no step transitions. Absence of activity AND absence of artifacts, not idle time. Every other seat on the board is alive and moving. Row is released in place (stays WORKING, keeps all 6 checkpoint commits and 5 completed steps); worker-12c76c19 is IDLE and can resume it immediately."
+    }
+  ]
 }

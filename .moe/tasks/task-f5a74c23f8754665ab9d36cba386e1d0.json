@@ -1,0 +1,41 @@
+{
+  "id": "task-f5a74c23f8754665ab9d36cba386e1d0",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The preview runner starts the product, captures it, and always stops the process",
+  "description": "SPIDR child 2 of task-f3edb8fb39ad42ce8980dae7d62b604c (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-40e52fa8a85a4921b97bee933b00403f for the refusal codes it raises.\n\nWHAT THIS ROW OWNS: the daemon-side runner. Start the product's preview command in the project workspace, wait for its port, drive headless Chromium to the contract's journey entry URLs, capture one PNG per journey under `<project>/.moe-next/previews/<goalId>/<sha>/`, and write a `moe-preview-receipt/1` durable receipt. And - the part that actually matters - ALWAYS stop the child process. No UI in this row.\n\nMEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb:\n- The gap is real: `grep -rn 'moe-preview-receipt' --include=*.ts apps/ packages/` = ZERO hits.\n- REUSE, do not reinvent: `apps/daemon/src/orchestrator/verifier-process-runner.ts` (395 lines) already spawns a workspace command as a child process with timeouts and durable outcomes - read it before writing a second spawner. `apps/daemon/src/repository/landing-receipt-contracts.ts:20` defines `LANDING_RECEIPT_VERSION = \"moe-landing-receipt/1\"` and is the shape to mirror for `moe-preview-receipt/1`.\n- `apps/daemon/src/orchestrator/node-verifier.ts` (230) and `node-lander.ts` (193) show how a runner's outcome becomes a durable receipt.\n\nTHE DEPENDENCY EDGE - owner decision 2026-09-05, and the first thing this row must do. `apps/daemon/package.json` has TWELVE workspace dependencies and ZERO devDependencies; Playwright is only a ROOT devDependency (`@playwright/test` 1.62.1, package.json:49) serving the e2e lane. The owner chose to make Playwright a real daemon dependency rather than degrade the capture. Global rail 7 therefore binds: the plan's FIRST step adds the dependency to apps/daemon/package.json, runs the workspace install so pnpm-lock.yaml carries the importer entry for @moe/daemon, and proves the edge with a compiled probe importing from the BARE specifier that typechecks exit 0 and is deleted in the same command. A root-barrel grep does NOT satisfy this. There is no escape hatch - this repo has no tsconfig \"paths\" and no project references, so a deep relative import fails TS6059. Declare BOTH apps/daemon/package.json and pnpm-lock.yaml as owned paths.\n\nTHE HARD PART IS THE PROCESS, NOT THE PICTURE. A preview that leaks a child process is worse than no preview: it holds the port, and the next preview fails to bind. The process must stop on APPROVE, on REJECT, on a 30-minute timeout, and on daemon shutdown, and the tests must assert the PID is actually gone rather than that a flag was set.",
+  "definitionOfDone": [
+    "The runner resolves the preview command from the approved contract's deployment requirements, falling back to the workspace package.json `preview` -> `dev` -> `start` script in that order, and refuses PREVIEW_COMMAND_MISSING with its layer when none exists. A test asserts the fallback ORDER by giving a fixture workspace two of the three scripts and checking which ran - not merely that some command ran.",
+    "The port is taken from the contract when stated and otherwise detected from the child's stdout, with PREVIEW_START_TIMEOUT (code + layer asserted) when it never appears. Assert the timeout arm with a fixture product that starts and never listens, and use a short injected timeout so the arm does not actually wait 30 minutes.",
+    "A `moe-preview-receipt/1` durable receipt records {goalId, sha, url, pid, screenshots[], STARTED|REFUSED(code)} - mirroring the shape of `moe-landing-receipt/1` (repository/landing-receipt-contracts.ts:20). A test reads it back from the store and asserts every member, including that a REFUSED receipt carries its code and NO url.",
+    "SCREENSHOTS ARE REAL BYTES: against a fixture product (a tiny http server as the `preview` script) at least one PNG is written under `<project>/.moe-next/previews/<goalId>/<sha>/` and the test DECODES its bytes - asserting the PNG magic number and non-zero dimensions, never merely that a file exists at a path. Assert the receipt's screenshots[] entries point at the files actually written.",
+    "NO LEAKED PROCESS, asserted three ways by PID rather than by flag: the child is gone after APPROVE, after REJECT, and after a forced timeout. Use the same liveness check the J1 e2e uses for reaped pids. Add a fourth arm for daemon shutdown if the composition allows it; if it does not, say so explicitly in the completion record rather than silently covering three of four.",
+    "PREVIEW_GOAL_NOT_LANDED (code + layer) refuses a preview for a goal whose nodes are not all landed, asserted against a real store where one node is short - not a hand-built state.",
+    "The dependency edge is proven, not assumed: apps/daemon/package.json declares the browser dependency, pnpm-lock.yaml carries the importer entry for @moe/daemon, and a compiled probe importing the BARE specifier typechecks exit 0 (probe deleted in the same command). Quote all three (global rail 7).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "NO UI. This row writes no control-room code. The Needs-you card, the status strip stage, the Runs receipt row and the Playwright journey are child 3's.",
+    "READ verifier-process-runner.ts BEFORE writing a spawner. If its timeout/kill/outcome machinery can be reused or extracted, do that and say so; a second independent process runner in the same daemon is how one of them comes to leak.",
+    "PROCESS CLEANUP IS THE SUBJECT, not a detail. Every exit path stops the child. Assert by PID liveness, never by an internal flag - a flag proves the code believed it killed something.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work. The preview runs on the operator's machine and the workspace is trusted, per the documented v0.1 limitation.",
+    "Deployment to an environment is OUT of scope (the 'Containerized deployment' row owns it)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "dependsOn": [
+    "task-40e52fa8a85a4921b97bee933b00403f"
+  ],
+  "priority": "HIGH",
+  "order": 32,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T22:59:32.724Z",
+  "updatedAt": "2026-09-04T22:59:32.724Z"
+}

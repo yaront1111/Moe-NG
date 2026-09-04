@@ -1,0 +1,41 @@
+{
+  "id": "task-33ceae56edc348e9864bc592430fa1d0",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Approve the working preview in the browser, and reject it into rework",
+  "description": "SPIDR child 3 of task-f3edb8fb39ad42ce8980dae7d62b604c (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-40e52fa8a85a4921b97bee933b00403f, the kind) and child 2 (task-f5a74c23f8754665ab9d36cba386e1d0, the receipt this UI renders). This is the PROOF row for the Gate 2 feature: it owns the browser journey, the live drive, the docs sweep and the adversarial pass, so neither sibling files its own evidence row (global rail 21).\n\nWHAT THIS ROW OWNS: the operator's side of Gate 2. A Needs-you card 'Approve working preview' carrying the loopback URL (opening in a new tab), the captured screenshots inline, and Approve / Reject-with-findings. The goal status strip gains a PREVIEW stage. Runs shows the preview receipt per goal. REJECT moves the named nodes to REWORK on the board with the findings text visible.\n\nMEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb - every pattern this row needs already exists, so it composes rather than invents:\n- The Needs-you card + offer-wire pattern: `apps/control-room/src/v2/approvals/needs-you.tsx` and `offer-wire.ts` (`spendOffer`), with `escalation-port.ts` as the closest working example of a human decision reaching the daemon.\n- The browser-side roster a new decide kind touches, traced from `escalation.decide`: live/live-activity.ts, v2/approvals/needs-you-model.ts, v2/goals/goal-status.ts, v2/goals/work-labels.ts, v2/ops/activity-words.ts.\n- The board's REWORK column already exists: `apps/control-room/src/v2/board/board-columns.ts:20` BOARD_COLUMNS includes REWORK, and :47 routes a READY node with prior review rounds there. Rejecting into rework should reuse that column, not add one.\n- The Playwright lane: `pnpm test:e2e:browser` = `tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts`; existing specs under tests/e2e/control-room/ drive a REAL daemon (daemon-board.spec.ts, prd-to-approval.spec.ts).\n\nWORDS ARE THE PRODUCT HERE. Gate 2's question to the human is 'Is this product good enough and visually correct?' - the card must ask that, not surface a receipt dump. Refusal words render verbatim from the daemon's codes.",
+  "definitionOfDone": [
+    "The Needs-you card renders for a goal with a STARTED preview receipt: the loopback URL as a link opening in a new tab, the captured screenshots inline, and both Approve and Reject-with-findings controls. A control-room test asserts all three are present and that the card is ABSENT when no preview receipt exists.",
+    "APPROVE commits a durable decision that is read back from `/activity/read` carrying its verdict - assert the verdict value from the activity read, not from local component state, so a click that never reached the daemon cannot pass.",
+    "REJECT with findings moves the named node to REWORK on the board with the findings text visible. Assert the node's column is REWORK (reusing the existing BOARD_COLUMNS entry, board-columns.ts:20) and that the findings text renders - a rejection whose reason the operator cannot read is the defect this clause exists to prevent.",
+    "The goal status strip shows a PREVIEW stage while a preview is running, and the four refusal codes render as operator words, verbatim from the daemon: PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED, PREVIEW_DECISION_INVALID. Assert the rendered sentence for at least PREVIEW_COMMAND_MISSING and PREVIEW_START_TIMEOUT, and that an unknown code still renders verbatim rather than blank.",
+    "A Playwright journey under tests/e2e/control-room/ against a REAL daemon covers start -> card -> approve, with the `pnpm test:e2e:browser` count line quoted. No fixture-backed substitute (parent rail 4).",
+    "LIVE DRIVE: a preview started for UnAI (D:/projexts/UnAI) or a fresh scaffold app, with a real screenshot (path + sha256) and the committed decision recorded in a row comment under ~4500 chars. README's 'no working preview' clause is rewritten to the measured truth; `git grep -n 'no working preview'` returns 0 hits. If the live drive did not happen, say so plainly rather than implying it did.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "THIS ROW PROVES, IT DOES NOT REBUILD. If the card cannot render because child 2's receipt is missing a member, comment on THAT row and report blocked on it - do not add a daemon field here (global rail 4: a proof that repairs its own subject retires the question unanswered).",
+    "REUSE THE EXISTING PATTERNS: offer-wire.ts `spendOffer` for the decision, the existing REWORK column for rejection, needs-you.tsx for the card. A second decision wire or a new board column is a design regression, not a feature.",
+    "WORDS FOR HUMANS, not for tests (memory ui-legibility-pass-landed-2026-09-04). Ask Gate 2's actual question. Avoid an aria-live region that re-announces on every poll - PR #26's review caught exactly that; announce once and keep counters outside the live region.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work.",
+    "Check any new testid namespace is free before using it (`cr.board.*` was already taken once, memory board-screen-landed-2026-09-04), and keep JSX ASCII-only - an apostrophe in JSX reds the scheduler boundary scan."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "dependsOn": [
+    "task-40e52fa8a85a4921b97bee933b00403f",
+    "task-f5a74c23f8754665ab9d36cba386e1d0"
+  ],
+  "priority": "HIGH",
+  "order": 33,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T23:00:06.234Z",
+  "updatedAt": "2026-09-04T23:00:06.234Z"
+}

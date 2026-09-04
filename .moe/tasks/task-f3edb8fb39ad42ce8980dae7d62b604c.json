@@ -17,9 +17,40 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-20a6d1eb",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell: all production work lives in its three children and it carries dependsOn on every one, so it is not claimable for WORKING until they are DONE. Confirm that rather than assume it — read get_context.epicSiblings (or `git log moe/work-2026-09-04 --grep 'Moe-Task: <id>'`) for task-40e52fa8a85a4921b97bee933b00403f (the preview.decide kind), task-f5a74c23f8754665ab9d36cba386e1d0 (the runner and receipt), task-33ceae56edc348e9864bc592430fa1d0 (the browser card, journey, live drive and README). Record each child's landing sha and its completionSummary/reviewSummary in a step note; per global rail 11 read those instead of re-measuring HEAD. If any child is not DONE, report_blocked with blockedOnTaskIds naming it. Write no production code in this step.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THIS ROW'S DoD AGAINST WHAT THE CHILDREN ACTUALLY SHIPPED, in a step note, one line per DoD item. The mapping: DoD 1 (the published human-only kind, roster backfill, bidirectional roster tests, four refusal codes with code+layer) is child task-40e52fa8. DoD 2 (the runner, the receipt, real PNG bytes, and the pid gone after APPROVE / REJECT / timeout) is child task-f5a74c23. DoD 3, 4 and 5 (the Needs-you card, the Playwright journey over a real daemon, the live drive and the README rewrite) are child task-33ceae56. DoD 6's gates are run by every child and again here in step 3. Two things to check rather than assume: (a) the four refusal codes were DEFINED by child 1 but some are only REACHABLE through child 2's runner — confirm each is exercised somewhere, and name where, so a code that no test can reach is caught here rather than shipping as decoration; (b) child 2's DoD allowed the daemon-shutdown cleanup arm to be reported as uncovered if the composition would not permit it — read its completion record and, if it was skipped, say so plainly in this row's record instead of letting the parent DoD imply four arms were proven.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE — the composed Gate 2 feature, not any one child's slice. Each leg is a standalone foreground command with its `Test Files N passed` count line quoted verbatim; an exit-0 leg with no count line is a vacuous run and must not be reported as a pass (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. State explicitly that `pnpm test` runs ZERO tests under apps/** (global rail 18), so the two --filter legs are what cover the daemon and the control room, and that `pnpm test:e2e:browser` is the only leg covering the Playwright journey. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths, quoting foreign red verbatim rather than hiding it (global rail 3). The named verification command for this row's completion record is `pnpm test:e2e:browser`, because the browser journey is the only leg that exercises Gate 2 end to end.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. Child 3 owns the adversarial read of its own journey; this is the integration-level read only the parent can do, across all three diffs at once. Answer at minimum: (a) PROCESS LEAKS — can a preview child survive a daemon crash (not a clean shutdown), and if so what reclaims the port; the runner's cleanup was asserted on APPROVE, REJECT and timeout, so a crash is the path most likely to be uncovered. (b) CONCURRENCY — two goals previewing at once on the same machine: do they collide on a port, on the `<project>/.moe-next/previews/` path, or on the browser instance. (c) TRUST — the preview runs an arbitrary workspace script and drives a browser at a loopback URL; confirm nothing in the captured PNG path or the receipt lets a workspace script write outside `<project>/.moe-next/previews/<goalId>/<sha>/`. This is a boundary OBSERVATION, not boundary work: parent rail 2 keeps security out of scope, so record what you find and file it rather than fixing it here. (d) STALE RECEIPTS — what the card shows when a receipt names a pid that is long gone, or a screenshot file that was deleted. Where an answer is 'not covered', add it to the owning child's DoD or as a comment on this row — do not file a new evidence row (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Write the completion record naming, item by item, which child discharged which parent DoD clause and where the evidence lives — each child's task.verification, completionSummary and reviewSummary, plus the landing shas from step 1. A summary that only says 'children landed' does not discharge the parent. State explicitly whether the LIVE DRIVE in DoD 5 actually happened, quoting the row comment that holds its screenshot path, sha256 and committed decision; if it did not, say so rather than letting the README rewrite imply a proven preview. Confirm `git grep -n 'no working preview'` returns 0 hits, and that the README's surrounding 'What this is not' section was not made to overclaim while the clause was removed. Detail exceeding the 2000-char completionSummary cap goes in a row comment under ~4500 chars, one idea per comment (global rail 14). This row writes no production code: if the roll-up finds a real gap, comment on the owning child and report_blocked on it rather than patching here.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,8 +62,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:05.246Z",
-  "updatedAt": "2026-09-04T21:54:03.317Z",
+  "updatedAt": "2026-09-04T23:01:06.785Z",
   "metrics": {
-    "firstClaimAt": "2026-09-04T21:54:03.317Z"
-  }
+    "firstClaimAt": "2026-09-04T21:54:03.317Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "dependsOn": [
+    "task-40e52fa8a85a4921b97bee933b00403f",
+    "task-f5a74c23f8754665ab9d36cba386e1d0",
+    "task-33ceae56edc348e9864bc592430fa1d0"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:01:04.584Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning Gate 2 as one row: it needs a new operator-only command kind with the full 8-touchpoint roster backfill, a process runner with headless-browser capture and durable receipts, a Needs-you card with a rejection-into-rework path, a Playwright journey and a live drive — far past the 12-step/10-file thresholds, and task rail 1 mandates a SPIDR split into children under THIS row. The parent therefore became a roll-up shell. REJECTED, folding the runner and the vocabulary into one child: the refusal codes are needed by the runner AND by the browser words, so publishing them first as a dependency-free leaf lets both consumers build against a settled contract instead of racing it. REJECTED, letting child 2 or child 3 each carry its own evidence row: global rail 21 puts the e2e, docs sweep and adversarial pass in ONE row, which is child 3. REJECTED (owner decision 2026-09-05), capturing screenshots outside the daemon or degrading to a browser-free receipt: DoD 2 requires PNG bytes that decode, so Playwright becomes a real apps/daemon dependency and global rail 7's edge proof is child 2's first step.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL IN BOTH DIRECTIONS — `grep -rn 'preview.decide|preview.start|PREVIEW_COMMAND_MISSING|moe-preview-receipt' --include=*.ts apps/ packages/` returns ZERO hits, so nothing is being duplicated; and the existing apps/daemon/src/graph-preview-request.ts plus apps/control-room/src/preview/ are PLAN/document previews, not the product, so they must not be extended. WHAT ALREADY EXISTS TO COMPOSE: verifier-process-runner.ts (395 lines) already spawns a workspace command with timeouts and durable outcomes; repository/landing-receipt-contracts.ts:20 defines `moe-landing-receipt/1` as the receipt shape to mirror; needs-you.tsx + offer-wire.ts `spendOffer` + escalation-port.ts are the working human-decision wire; board-columns.ts:20 already has a REWORK column and :47 already routes a re-opened node there. TWO HAZARDS FOUND AT PLAN TIME, neither in the row's description. (1) `HUMAN_ONLY_STEPS` is DEFINED TWICE, byte-for-byte — agent-spawn-contract.ts:194 and agent-wrapper.ts:116 — with nothing asserting they agree; a human-only kind added to one roster only would leave the wrapper free to staff an operator gate, the same class of defect whose comment at agent-wrapper.ts:117-123 records 8 junk goals minted live. Child 1's DoD makes the equality assertion its most valuable artifact. (2) apps/daemon has TWELVE workspace dependencies and ZERO devDependencies; Playwright is only a ROOT devDependency (package.json:49, @playwright/test 1.62.1), so daemon-side capture is a genuinely new dependency edge needing the manifest edit, the lockfile importer entry and a compiled bare-specifier probe — there is no escape hatch, since this repo has no tsconfig paths and no project references (TS6059).",
+    "risks": "BIGGEST RISK — a leaked preview process. A child that survives holds the port and the next preview cannot bind, which is worse than having no preview at all. Child 2's DoD asserts the pid is gone by liveness rather than by flag on three paths, and step 4(a) of this roll-up makes the parent ask about the fourth: a daemon CRASH rather than a clean shutdown. SECOND — decorative refusal codes. Child 1 defines four codes but only child 2's runner can reach three of them; step 2(a) requires naming where each is exercised, so a code no test can reach is caught at the roll-up instead of shipping as documentation. THIRD — the live drive is the clause most likely to be quietly skipped while the README clause is deleted anyway, which would leave the docs claiming a capability nobody drove. Step 5 requires stating explicitly whether it happened. FOURTH — the browser dependency changes what installing the daemon costs; if the edge is added without the lockfile importer entry, every consumer breaks at runtime rather than at typecheck. FIFTH — the preview executes an arbitrary workspace script and captures a loopback page; parent rail 2 puts security work out of scope, so step 4(c) records the boundary observation and files it rather than letting a worker drift into unscoped hardening. SIXTH — dependsOn REPLACES rather than merges: if a fourth child is ever filed here, re-run set_task_dependencies with the full list or the parent silently re-ungates.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/control-room/src/v2/approvals/needs-you.tsx",
+      "apps/control-room/src/v2/board/board-columns.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:01:06.785Z"
 }

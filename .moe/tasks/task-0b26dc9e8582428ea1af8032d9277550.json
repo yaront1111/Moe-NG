@@ -17,8 +17,51 @@
     "Words are the product here (memory ui-legibility-pass-landed-2026-09-04): write for a human operator, not for a test. Avoid an aria-live region that announces on every poll - PR #26's review caught exactly that; announce once and keep the counter outside the live region.",
     "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE PREREQUISITE AND THE NARROWED SCOPE, NO EDITS. Read comment-4de0a900c7e440fc9d543f1ca2b0fc12 on this row FIRST: it supersedes DoD 1, which asks for a coverage fraction the strip already prints. (a) Confirm that: `grep -n 'criteria verified' apps/control-room/src/v2/goals/goal-status-strip.tsx` returns line 44 — if it does, DoD 1 is discharged by existing code and this row must NOT re-add it; quote the line in a step note as the evidence. (b) Confirm task-1d7b9df2579c491992b55de791c99f4f landed — `grep -n 'depends:' apps/daemon/src/http/affordance-read.ts` returns hits. This row folds the token that row emits; without it the new count is always zero and every arm would be vacuous, so report_blocked with blockedOnTaskIds [task-1d7b9df2579c491992b55de791c99f4f] rather than writing arms against a token nothing produces. (c) Record the pre-change `Test Files N passed` count for `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST, RUN RED, in apps/control-room/src/v2/goals/goal-status.test.tsx. (a) THE FOLD: a 3-node goal where node a is COMMITTED and nodes b and c are BLOCKED with `missing: [\"depends:a\"]` yields a waiting count of 2 — assert the number, and assert `blocked` and `replanned` stay 0, because those count the escalation and replan tokens and must not absorb the new one. (b) MIXED TOKENS: a node BLOCKED with both `depends:a` and `verification` is counted once as waiting and is not double-counted; a node BLOCKED on `escalation` alone is NOT counted as waiting. This arm is what stops the fold from being a naive `missing.length > 0`. (c) THE SENTENCE: the same 3-node goal renders a WORKING headline whose detail names how many nodes are waiting and on what — assert the rendered string, not the count alone, since the defect being fixed is a sentence that reads \"0 nodes are claimed right now. Nothing needs you until a review is exhausted\" while two nodes sit queued.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE FOLD AND SPEND IT. apps/control-room/src/v2/goals/goal-status.ts (164 lines): (a) `agentsOf` (:71-80) gains a count of nodes blocked on an unmet dependency, folded by testing each BLOCKED step's `missing` for the `depends:` PREFIX — prefix, not exact match, because the token carries a variable nodeKey (the same shape `labelForMissing` reads in work-labels.ts). Leave `blocked` and `replanned` exactly as they are: they key on the `escalation` and `replan` tokens and are different questions. (b) The WORKING branch (:150-158) spends it: when nodes are waiting on build order, say so and name the blocking node rather than reporting them as unclaimed. Keep the existing sentence for the case where nothing is waiting — this step ADDS a reading, it does not rewrite the branch. Do not add a new GoalStage: waiting on a dependency is still WORKING, and a new stage would need STAGE_WORDS and every consumer of the union updated for no gain. Step 2 goes green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "REGRESSION ARMS FOR THE BEHAVIOUR THIS ROW MUST NOT BREAK (DoD 3 and DoD 4, which are regressions here rather than new work). (a) READY_TO_CLOSE still fires ONLY at 100%: assert (verified 6, criteria 7) does NOT reach READY_TO_CLOSE and (verified 7, criteria 7) does — assert the `stage` value, not the words. The gate already exists at goal-status.ts:139-143; these arms exist so the new fold cannot perturb it. (b) NULL AND ZERO PATHS: coverage absent, coverage REFUSED with DOCUMENT_COVERAGE_READ_GOAL_UNBOUND (the NO_PRD branch at :100), and `totals.criteria === 0` all render the existing sentences with no NaN, no \"undefined\" and no \"0 of 0\" — assert the literal output for a null `progress`. (c) A goal with no node steps at all still reaches its existing stage (agentsOf returns null when steps is empty, :72) and the strip renders without the new fact.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILL, SCOPE PROOF, GATES. (a) MUTATION DRILL recorded in a step note (global rail 1): change the fold's prefix test to an exact-match on the literal string `depends:` and confirm the step-2(a) arm goes RED — an exact match never fires, because every real token carries a nodeKey suffix, and that is precisely how this feature would ship as a permanent zero. Restore and prove it with `git diff -- apps/control-room/src/v2/goals/goal-status.ts` showing empty (tracked file, clean at step 1). (b) SCOPE PROOF (DoD 5): `git diff --stat` for this row touches ONLY apps/control-room paths — no new daemon route, no new offer kind, no Needs-you entry. The expansion-approval card the row's original description mentioned is out of scope by owner ruling comment-fbe64776 on task-4423d2a4: with the fence lifted the whole graph is approved in ONE existing plan-approval decision. (c) GATES, standalone and foreground with the `Test Files N passed` count line quoted verbatim and compared against step 1's baseline (global rail 8): `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Note that `pnpm test` covers NO apps/** so it is not evidence here (global rail 18). Named verification command for completion: `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,8 +74,35 @@
   ],
   "priority": "MEDIUM",
   "order": 5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-4de0a900c7e440fc9d543f1ca2b0fc12",
+      "author": "architect-20a6d1eb",
+      "content": "DoD 1 IS ALREADY SATISFIED AT HEAD - narrowing this row before planning it (architect-20a6d1eb, 2026-09-05, HEAD df5bbfd5). I filed this row yesterday claiming the strip \"does not say the COVERAGE FRACTION in operator words\". Re-measuring before planning (global rail 6 applies to my own filings too) shows that is wrong:\n\n`apps/control-room/src/v2/goals/goal-status-strip.tsx:44`\n  if (progress !== null) facts.push(`${String(progress.verified)} of ${String(progress.criteria)} criteria verified`);\n\nThe fraction is already rendered as a fact chip whenever coverage is readable, on EVERY stage - not only at completion. `goal-status.ts:107-108` already computes `progress` from the coverage totals, and `:45` already renders \"N of M nodes accepted\" beside it. So DoD 1 as written asks for something that shipped.\n\nWHAT IS ACTUALLY MISSING, measured: `agentsOf` (goal-status.ts:71-80) folds the node steps into {accepted, blocked, replanned, total, working} and counts a BLOCKED step only when its `missing` contains \"escalation\" or \"replan\". It has no notion of a node waiting on a DEPENDENCY. Once task-1d7b9df2 lands the `depends:<nodeKey>` token, a 3-node goal with two nodes queued behind their parent will report blocked 0 and working 0, and the WORKING branch (:150-158) will tell the operator \"0 nodes are claimed right now. Nothing needs you until a review is exhausted.\" That sentence is actively misleading: two nodes are waiting on build order, not idle, and nothing on the strip says so.\n\nAMENDED SCOPE for this row (DoD 1 is superseded; DoD 2-6 stand):\n- DoD 1' : `agentsOf` gains a count of nodes BLOCKED on an unmet dependency, folded from the `depends:` prefix in `step.missing` - the same prefix shape task-1d7b9df2 emits and `labelForMissing` reads. A test asserts the count for a 3-node graph with two nodes queued behind one parent.\n- DoD 2 (the multi-node sentence) is where that count is spent: the WORKING branch names how many nodes are waiting and on what, instead of implying they are idle.\n- DoD 3 (READY_TO_CLOSE only at 100%) and DoD 4 (null-progress paths) stay as written and are REGRESSION arms here, not new behaviour - `goal-status.ts:139-143` already gates READY_TO_CLOSE on `progress.verified === progress.criteria`.\n\nQA: grade DoD 1' and not DoD 1. The strip already prints the fraction; asking for it again would be a no-op change dressed as a feature.",
+      "timestamp": "2026-09-04T23:02:06.336Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:41.200Z",
-  "updatedAt": "2026-09-04T20:23:41.200Z"
+  "updatedAt": "2026-09-04T23:03:00.053Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:01:24.426Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T23:02:57.883Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, implementing DoD 1 as written: the strip ALREADY renders the coverage fraction at goal-status-strip.tsx:44, on every stage. Re-adding it would be a no-op change dressed as a feature; the row is narrowed by comment-4de0a900 instead, and step 1 makes the worker re-measure that rather than take my word. REJECTED, a new GoalStage for dependency-waiting: the stage union is consumed by STAGE_WORDS and every strip consumer, and a node waiting on build order is still WORKING — a new stage would cost a roster update across consumers for no reading the operator does not already get from a better sentence. REJECTED, folding the new count into the existing `blocked` field: `blocked` keys on the `escalation` token and drives the ESCALATION stage and its Needs-you anchor; merging a dependency wait into it would route an operator to a decision that does not exist. REJECTED, an exact-match lookup for the token: it carries a variable nodeKey, so only a prefix test fires — this is the mutation the drill in step 5 forces. REJECTED, re-deriving build order in the strip: /runs/read and the board already carry dependsOn, and a second derivation is how the strip and the board come to disagree.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. THE ROW'S OWN DoD 1 IS STALE: goal-status-strip.tsx:44 already pushes `${verified} of ${criteria} criteria verified` as a fact chip whenever `progress` is non-null, and :45 already renders `${accepted} of ${total} nodes accepted` beside it; goal-status.ts:107-108 computes `progress` from the coverage totals. THE REAL GAP: `agentsOf` (goal-status.ts:71-80) folds node steps into {accepted, blocked, replanned, total, working}, counting a BLOCKED step only when `missing` includes the exact strings \"escalation\" or \"replan\". Nothing counts a node blocked on a dependency. Once task-1d7b9df2 emits `depends:<nodeKey>`, a 3-node goal with two nodes queued behind their parent reports blocked 0 / working 0 and the WORKING branch (:150-158) tells the operator \"0 nodes are claimed right now. Nothing needs you until a review is exhausted\" — which is false. THE TOKEN IS PREFIXED, not exact: `labelForMissing` (work-labels.ts:119) looks up MISSING_TOKENS by exact key and falls through to the raw token, which is why task-1d7b9df2 adds a prefix branch there; the same prefix shape must be used here. ALREADY BUILT, do not rebuild: READY_TO_CLOSE is already gated on `progress.verified === progress.criteria` (goal-status.ts:139-143); the board already renders build order (board-columns.ts:73 `after <nodeKey>`, board-lanes.tsx:77) from /runs/read's dependsOn. OUT OF SCOPE by owner ruling: the row's description asks for a Needs-you 'Approve expansion' entry; comment-fbe64776 on task-4423d2a4 put the expansion kinds out of scope, and with the fence lifted the whole graph is approved in ONE existing plan-approval decision.",
+    "risks": "BIGGEST RISK — a permanent zero. The `depends:` token carries a nodeKey suffix, so an exact-match fold never fires, the count is always 0, every sentence keeps its current wording and every arm still passes if the arms were written against the same mistake. Step 5(a)'s drill forces exactly that mutation and requires the arm to go red. SECOND — this row is downstream of task-1d7b9df2 and is vacuous without it: step 1 blocks rather than writing arms against a token nothing emits. THIRD — token overlap. A node can be blocked on a dependency AND awaiting verification; step 2(b) pins that it is counted once and that an escalation-only block is not counted as waiting, so the fold cannot degenerate into `missing.length > 0`. FOURTH — perturbing READY_TO_CLOSE. The completion gate is adjacent to the branch being edited and is the clause an operator most depends on; step 4(a) asserts both sides of it as a regression. FIFTH — scope creep into a Needs-you card or a daemon route: step 5(b) requires `git diff --stat` to show apps/control-room only. SIXTH — words are the product here; avoid an aria-live region that re-announces on every poll, which PR #26's review already caught once.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/goal-status.ts",
+      "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+      "apps/control-room/src/v2/goals/goal-status.test.tsx",
+      "apps/control-room/src/v2/goals/work-labels.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T23:03:00.053Z"
 }

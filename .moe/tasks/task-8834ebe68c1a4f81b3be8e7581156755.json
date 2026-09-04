@@ -1,0 +1,33 @@
+{
+  "id": "task-8834ebe68c1a4f81b3be8e7581156755",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The two HUMAN_ONLY_STEPS rosters are proven equal",
+  "description": "Filed by architect-20a6d1eb 2026-09-05 while planning task-40e52fa8a85a4921b97bee933b00403f (the preview.decide kind), which needed a third human-only entry and could not fit this guard inside its 10-file roster. A LEAF: no dependsOn, and it makes every future human-only kind safe to add.\n\nTHE DEFECT, measured at HEAD df5bbfd5 (branch moe/work-2026-09-04): `HUMAN_ONLY_STEPS` is DEFINED TWICE, byte-for-byte, in two files that do not import each other:\n- `apps/daemon/src/orchestrator/agent-spawn-contract.ts:194`\n- `apps/daemon/src/orchestrator/agent-wrapper.ts:116`\n`grep -rn HUMAN_ONLY_STEPS --include=*.ts apps/daemon/src` returns those two definitions plus ONE consumer, `agent-wrapper.ts:355` (`if (HUMAN_ONLY_STEPS.has(step.kind)) continue;`). Nothing found asserts the two sets agree.\n\nWHY IT MATTERS, in the words of the roster's own comment (agent-wrapper.ts:117-123): the surface began offering `goal.create` on EVERY read of an active project, and a wrapper that staffs it \"mints a fresh junk goal each pass forever - each successful creation clears the attempts counter, so the loop never exhausts. Measured live on the first real project: 8 junk goals in minutes.\" That is what this roster prevents. A future human-only kind added to only ONE of the two copies leaves the wrapper free to staff an operator gate - and because the copy the wrapper actually consults is the one in its own file, an entry added only to agent-spawn-contract.ts looks correct in review and does nothing.\n\nTHIS ROW DOES NOT CHANGE BEHAVIOUR. It adds the assertion that the two sets are equal, and - if the shape of the code allows it without disturbing either module's import graph - collapses them to one definition with the other re-exporting it. Prefer the collapse; fall back to the equality test alone if the collapse would create an import cycle between agent-wrapper.ts and agent-spawn-contract.ts (check before assuming, and record which you did and why).",
+  "definitionOfDone": [
+    "A test asserts the two HUMAN_ONLY_STEPS sets are EQUAL - set-equality in both directions, enumerated from both modules, not a subset check and not a hard-coded expected list (a hard-coded list is a third copy and drifts the same way). Deleting ONE entry from ONE roster must turn it red; verify that by doing it and quoting the failure.",
+    "Either the two definitions are collapsed to a single exported constant with the second module re-exporting it, or the step note records the exact reason the collapse was not safe (naming the import cycle it would create). If collapsed, the equality test still ships - it then also guards against a future re-fork.",
+    "No behaviour change: the set MEMBERSHIP is byte-identical before and after. Prove it by listing the sorted members before and after in the step note, and by `git diff -U0` containing no change to any `expect(` line in the wrapper's existing staffing tests.",
+    "The wrapper's consumer at agent-wrapper.ts:355 still refuses to staff every member: an existing staffing test covering a human-only kind stays green with its count unchanged, and if no such test exists, ADD one for a real member (e.g. approval.decide) so the roster's purpose is pinned by behaviour and not only by set arithmetic.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "NO NEW MEMBERS. This row does not add a kind to the roster - task-40e52fa8a85a4921b97bee933b00403f adds preview.decide, and it will rely on this guard. Adding a member here would make the before/after membership proof meaningless.",
+    "BEHAVIOUR IS UNCHANGED. If a test has to be adjusted to stay green, stop and report: that means the two rosters were NOT equal at HEAD, which is a live defect worth its own finding rather than a silent fix inside a refactor.",
+    "FEATURES ONLY: no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 30.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T23:04:30.167Z",
+  "updatedAt": "2026-09-04T23:04:30.167Z"
+}

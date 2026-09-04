@@ -366,8 +366,22 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         }
         return verificationMissing;
       };
+      // A node is a satisfied dependency exactly when this loop would call it
+      // COMMITTED — the review ledger's acceptance record, nothing else. An
+      // unresolvable producer key has no acceptance, so it blocks rather than
+      // silently un-gating the node that named it.
+      const acceptedByRef = new Map<string, boolean>();
+      const isAccepted = (nodeRef: string): boolean => {
+        const known = acceptedByRef.get(nodeRef);
+        if (known !== undefined) return known;
+        const accepted = readReviewLedger(config.store, config.projectId, nodeRef)
+          .accepted !== undefined;
+        acceptedByRef.set(nodeRef, accepted);
+        return accepted;
+      };
       for (const spec of nodes) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
+        acceptedByRef.set(spec.nodeRef, review.accepted !== undefined);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
         if (review.accepted !== undefined) {
           steps.push(Object.freeze({
@@ -404,11 +418,24 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           }));
           continue;
         }
-        offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+        // Build order. Every dependency whose review is not accepted is named,
+        // so the operator reads WHICH node is in the way rather than "blocked".
+        // A dependency-blocked node is offered nothing: the wrapper staffs from
+        // these offers, and one review.submit here staffs a node beside the
+        // parent it is waiting on. Reported BEFORE the verification tokens —
+        // a node that cannot start yet is not usefully described by its
+        // verifier queue — and the other blocking reasons keep their own
+        // earlier branches untouched.
+        const unmet = spec.dependsOn.filter((nodeRef) => !isAccepted(nodeRef))
+          .map((nodeRef) => `depends:${nodeRef}`);
+        if (unmet.length === 0) {
+          offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+        }
+        const blocked = unmet.length > 0 || awaitingVerify;
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
-          missing: awaitingVerify ? missingForVerification() : [],
-          status: awaitingVerify ? ("BLOCKED" as const) : ("READY" as const),
+          missing: [...unmet, ...(awaitingVerify ? missingForVerification() : [])],
+          status: blocked ? ("BLOCKED" as const) : ("READY" as const),
           version: review.version,
         }));
       }
