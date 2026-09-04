@@ -1,0 +1,102 @@
+{
+  "id": "task-960254c59cd84c46a9f38f8facbc0b7d",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Every in-repo project.activate sender goes through one fixture helper",
+  "description": "SPIDR child B0 of task-bb844c288fb346c0856778c738b9f073, filed by architect-20a6d1eb 2026-09-05. PREREQUISITE of task-4b9c394debe94b41a80e2b46c6d55ab8 (child B), which now declares dependsOn on this row.\n\nPURE REFACTOR. No behaviour changes, no assertion changes, no production source touched. Every existing test stays green for the SAME reason it is green today. If any assertion has to move to keep a test passing, STOP and report - that is the signal this row's premise is wrong.\n\nWHY IT EXISTS. Child B makes the daemon mint the activation witness and REFUSE a caller-supplied one. Twelve call sites across seven files write their own `envelope(\"project.activate\", N, { witness: ACTIVATION_WITNESS })` literal, so any correct delivery of child B reds all of them at once. Child B's owned roster (10 files) plus those consumers exceeds the 10-file plan threshold, and the delivering worker (worker-6ab7cede) correctly stopped rather than absorb them unscoped (rail 19). The alternative shape - land child B first and migrate consumers in a follow-up - would leave those files RED on the shared branch between the two landings, owned by neither row. Routing them through ONE helper first removes that window: child B then flips a single function body.\n\nMEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` = 12 hits / 7 files, unchanged from the governor triage in task-4b9c394d comment-6b2a932e:\n- apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:631 (inside `bootstrapSequence()`; this file also DEFINES `ACTIVATION_WITNESS` at :270 and the shared `send` at :202)\n- apps/daemon/src/bootstrap/bootstrap-durability.test.ts :83 :99 :229 :263 :299\n- apps/daemon/src/activation/admission-gate-resolver.test.ts:185\n- apps/daemon/src/planning/node-mission-test-fixtures.ts:262\n- apps/daemon/src/provider-profile/provider-profile-resolver.test.ts:169, :483\n- apps/daemon/src/work/foundation-launch-completion-wiring.test.ts:183\n- apps/daemon/src/work/launch-template-producer.test.ts:207\n\nTHREE SITES ARE NOT THE PLAIN LITERAL and must keep their exact current meaning:\n- durability:99 sends `{}` (an EMPTY payload, deliberately - it is the no-witness ingress-refusal arm). It must NOT be routed through a witness-emitting helper; leave it exactly as it is.\n- provider-profile-resolver:169 sends `{ witness: options.witness ?? ACTIVATION_WITNESS }` - the helper must accept an optional override so this stays parameterised.\n- provider-profile-resolver:483 sends `{ witness: { ...ACTIVATION_WITNESS, truthClass: \"OBSERVED\" } }` and expects a CORE_REDUCER refusal - the helper must accept a partial override merged over the base witness.\n\nNOT IN SCOPE: any production file, the vocabulary roster, the seed payloads, DEV_PAYLOADS, and every assertion in every file listed. Those are child B's.",
+  "definitionOfDone": [
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts exports ONE helper that builds the project.activate payload (e.g. `activatePayload(overrides?)`), returning `{ witness: ACTIVATION_WITNESS }` today and accepting a partial witness override merged over the base so provider-profile-resolver.test.ts:169 and :483 keep their exact current payloads. A fixture-level test asserts `activatePayload()` deep-equals `{ witness: ACTIVATION_WITNESS }` and that an override merges rather than replaces.",
+    "All ELEVEN witness-bearing sites call the helper: bootstrap-test-fixtures.ts:631, bootstrap-durability.test.ts (:83 :229 :263 :299), admission-gate-resolver.test.ts:185, node-mission-test-fixtures.ts:262, provider-profile-resolver.test.ts (:169 :483), foundation-launch-completion-wiring.test.ts:183, launch-template-producer.test.ts:207. Proven by `grep -rn 'witness: ACTIVATION_WITNESS' apps/ tests/ --include=*.ts` returning ZERO hits outside bootstrap-test-fixtures.ts.",
+    "bootstrap-durability.test.ts:99 is UNCHANGED - it sends `{}` on purpose. `git diff` for that file shows no edit within its `it(\"refuses activation carrying no witness, at the ingress layer\")` block; quote the diff hunk in a step note to prove it.",
+    "NOT ONE ASSERTION CHANGED anywhere: `git diff -U0` across the row's files contains no added or removed line matching `expect(`. Quote the command and its empty result. If an assertion HAD to change to stay green, stop and report instead - the premise of this row is that behaviour is untouched.",
+    "Gates quoted with their `Test Files N passed` count lines, and the counts must EQUAL the pre-change counts recorded in step 1 (a refactor that changes a test count has dropped or duplicated a test): `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "TOUCH NO PRODUCTION SOURCE. This row edits test files and one test-fixture module only. `git diff --stat` at completion must show zero files outside apps/daemon/src/**/*.test.ts, apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts, apps/daemon/src/planning/node-mission-test-fixtures.ts.",
+    "CHANGE NO ASSERTION AND NO REFUSAL EXPECTATION. The helper must produce byte-identical payloads to what each site sends today. This row exists so child B can flip one function body; it must not pre-empt any part of that flip.",
+    "bootstrap-durability.test.ts:99's empty `{}` payload is load-bearing - it is the arm that proves a witness-less activation refuses at DAEMON_INGRESS today. Child B INVERTS that arm's subject. Do not touch it here."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE, NO EDITS. This row's whole claim is \"nothing changed behaviourally\", so the evidence for that has to be captured BEFORE the first edit. (a) Run `pnpm --filter @moe/daemon test` and record the exact `Test Files N passed` AND `Tests N passed` lines in a step note — step 5 compares against these, because a refactor that changes a test COUNT has dropped or duplicated a test. (b) Re-run the shape grep `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` and confirm 12 hits across 7 files, matching the roster in this row's description. A different count means a peer moved a site while this row waited — stop and report rather than absorbing the difference. (c) `git status --porcelain` the seven files so peer dirt is distinguishable from your own edits later (global rail 5: the checkout is shared; never revert, stash or `git add -A`).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE HELPER, in apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts (660 lines; `ACTIVATION_WITNESS` is defined here at :270 and the shared `send` at :202, which is why this is the right home). Export ONE function that builds the project.activate payload — `activatePayload(overrides?: Partial<typeof ACTIVATION_WITNESS>)` — returning `{ witness: ACTIVATION_WITNESS }` when called bare, and `{ witness: { ...ACTIVATION_WITNESS, ...overrides } }` otherwise. It MERGES over the base rather than replacing, because provider-profile-resolver.test.ts:483 needs `{...ACTIVATION_WITNESS, truthClass: \"OBSERVED\"}` and :169 needs a whole-witness substitution. Give it a header comment saying WHY it exists: task-4b9c394debe94b41a80e2b46c6d55ab8 will change this one body so the daemon mints the witness, and every sender routes through here so that flip is a one-line change rather than a twelve-site edit. Add a fixture-level test asserting `activatePayload()` deep-equals `{ witness: ACTIVATION_WITNESS }` and that an override merges (the un-overridden members survive) rather than replacing the object.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MIGRATE THE EIGHT PLAIN SITES — each currently reads exactly `envelope(\"project.activate\", 2, { witness: ACTIVATION_WITNESS })` and becomes `envelope(\"project.activate\", 2, activatePayload())`, with the now-unused `ACTIVATION_WITNESS` import dropped from each file that no longer references it: bootstrap-test-fixtures.ts:631 (inside `bootstrapSequence()`, the same file as the helper — no import to drop), bootstrap-durability.test.ts :83 :263 :299 (:299 also passes a fourth argument `\"cmd-project.register\"` — keep it), admission-gate-resolver.test.ts:185, node-mission-test-fixtures.ts:262, foundation-launch-completion-wiring.test.ts:183, launch-template-producer.test.ts:207. Change NOTHING else on those lines — not the expectedVersion, not the command id, not a single assertion. Run the daemon suite after this step; every one of these files must still be green with an unchanged count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/activation/admission-gate-resolver.test.ts",
+        "apps/daemon/src/planning/node-mission-test-fixtures.ts",
+        "apps/daemon/src/work/foundation-launch-completion-wiring.test.ts",
+        "apps/daemon/src/work/launch-template-producer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MIGRATE THE THREE AWKWARD SITES, which are why this row needs care rather than a sed. (a) provider-profile-resolver.test.ts:169 sends `{ witness: options.witness ?? ACTIVATION_WITNESS }` — a whole-witness substitution, not a partial. Express it so an absent `options.witness` yields the bare base and a supplied one yields exactly that object; if the merge-shaped helper cannot express a full replacement cleanly, give it a second optional parameter or let the call site pass a complete override — state which you chose in the step note, and assert the payload is byte-identical to today's for BOTH branches. (b) provider-profile-resolver.test.ts:483 sends `{ witness: { ...ACTIVATION_WITNESS, truthClass: \"OBSERVED\" } }` and asserts refusedBy CORE_REDUCER — becomes `activatePayload({ truthClass: \"OBSERVED\" })`, assertion untouched. NOTE for the record, not for action here: task-4b9c394d will have to rewrite that arm's SUBJECT, because a caller will no longer be able to supply a witness at all — leave it working as-is. (c) bootstrap-durability.test.ts:99 sends `{}` and MUST NOT CHANGE: it is the arm proving a witness-less activation refuses at DAEMON_INGRESS today, and routing it through a witness-emitting helper would silently invert it. Quote the `git diff` hunk for that `it(...)` block showing it untouched (DoD 3).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/provider-profile/provider-profile-resolver.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "PROVE IT WAS A REFACTOR, then gate. (a) THE CENTRAL EVIDENCE (DoD 4): run `git diff -U0` across every file this row touched and grep the result for added or removed lines containing `expect(`. The result must be EMPTY — quote the command and its empty output. A non-empty result means behaviour moved and this row's premise is wrong: stop and report rather than adjusting an assertion to fit. (b) DoD 2: `grep -rn 'witness: ACTIVATION_WITNESS' apps/ tests/ --include=*.ts` returns hits ONLY inside bootstrap-test-fixtures.ts — quote it; this exact grep is what task-4b9c394d's step 1 runs to confirm this row landed. (c) GATES, each standalone and foreground, with the `Test Files N passed` and `Tests N passed` lines quoted verbatim and COMPARED against step 1's baseline — equal counts are part of the claim, and an exit-0 leg with no count line is a vacuous run (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Named verification command for completion: `pnpm --filter @moe/daemon test`. (d) No mutation drill is required or meaningful here — this row adds no behaviour to mutate; say so explicitly in the completion record so its absence reads as a deliberate call rather than an omission.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T21:44:59.057Z",
+  "updatedAt": "2026-09-04T21:47:41.098Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T21:46:40.996Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T21:47:38.948Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, skipping this row and letting task-4b9c394d absorb all twelve sites: that roster is 15 files against a 10-file hard threshold, which is exactly why the previous delivery attempt stopped and the governor re-planned it. REJECTED, migrating consumers AFTER the flip (the shape the delivering worker and governor both recommended): their own finding is that any correct flip reds these files, so a follow-up leaves them red on the shared branch, owned by neither row while broken. REJECTED, a codemod/sed across the seven files: three of the twelve sites are not the plain literal (an empty payload, a `??` substitution, a spread override) and a blind rewrite would invert the empty-payload arm silently — step 4 exists precisely for those. REJECTED, putting the helper anywhere but bootstrap-test-fixtures.ts: that module already defines both `ACTIVATION_WITNESS` (:270) and the shared `send` (:202) that all six external files import, so it is the one place every sender already reaches.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb while re-planning task-4b9c394d. `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` = 12 hits / 7 files. NINE are the plain `{ witness: ACTIVATION_WITNESS }` literal (bootstrap-test-fixtures.ts:631; bootstrap-durability.test.ts :83 :263 :299; admission-gate-resolver.test.ts:185; node-mission-test-fixtures.ts:262; foundation-launch-completion-wiring.test.ts:183; launch-template-producer.test.ts:207 — eight distinct call sites plus the fixture's own). THREE ARE NOT: bootstrap-durability.test.ts:99 sends `{}` deliberately; provider-profile-resolver.test.ts:169 sends `{ witness: options.witness ?? ACTIVATION_WITNESS }`; provider-profile-resolver.test.ts:483 sends `{ witness: { ...ACTIVATION_WITNESS, truthClass: \"OBSERVED\" } }`. All six external files import the shared `send` helper (bootstrap-test-fixtures.ts:202) and the `ACTIVATION_WITNESS` const (:270) from that one module, which is the seam this row exploits and which neither the original plan for task-4b9c394d nor the governor's triage noted. `ACTIVATION_WITNESS` is a frozen 9-key object; `providerMinimumProfileRef: \"provider-profile-1\"` must match `CLAUDE_PROFILE`'s, per the comment at :236-243 — do not alter the const itself. bootstrap-test-fixtures.ts is 660 lines; adding a small helper keeps it under the 400-line PRODUCTION cap discussion only because it is a fixture module, which global rail 2's per-file cap treats as out of scope for production sources.",
+    "risks": "BIGGEST RISK — silently inverting bootstrap-durability.test.ts:99. It sends an EMPTY payload on purpose to prove a witness-less activation refuses at DAEMON_INGRESS. Routing it through a witness-emitting helper would make it pass for the opposite reason and would destroy the arm task-4b9c394d must later rewrite. Step 4(c) makes the worker quote the untouched diff hunk. SECOND — the temptation to \"fix\" an assertion. This row's entire value is that behaviour did not move; DoD 4's `git diff -U0` grep for `expect(` is the gate, and a non-empty result is a stop-and-report, not something to reconcile. THIRD — the `??` site at provider-profile-resolver.test.ts:169 is a full substitution while :483 is a partial merge; a helper that only merges cannot express the first, and a helper that only replaces cannot express the second. Step 4(a) makes the worker choose and record which, and assert byte-identical payloads for both branches. FOURTH — test counts. A refactor must not change how many tests run; step 1 records the baseline precisely so step 5 can compare, because a dropped `it` is invisible in a green run. FIFTH — the shared checkout is dirty with peer WIP; report every touched path in complete_step.modifiedFiles and never sweep foreign paths into the commit.",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+      "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+      "apps/daemon/src/provider-profile/provider-profile-resolver.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T21:47:41.098Z"
+}

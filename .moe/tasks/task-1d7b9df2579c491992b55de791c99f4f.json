@@ -17,8 +17,71 @@
     "SHAPE CHANGE ALERT (global rail 19): adding a member to NodeSpec and a token to `missing` changes returned shapes that tests assert as literals. Before editing, grep for literal `missing: []` expectations, `nodes: () => [{...}]` fixtures (affordance-read.test.ts:191/623/688, affordance-read-planning.test.ts:641/836/854/858/916/921) and any hard-coded step counts; every asserting consumer must be in this row's affectedFiles or the row must be split.",
     "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE PREREQUISITE AND RE-MEASURE, NO EDITS. (a) Confirm task-f79d38b119984ae1ae51eba887a28b7d landed — `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- '*.ts'` returns 0 in production source and a multi-node structure can seal. Without it there is no multi-node graph for this gate to gate: report_blocked with blockedOnTaskIds [task-f79d38b119984ae1ae51eba887a28b7d]. (b) Confirm the gap is still open: `grep -n dependsOn apps/daemon/src/http/affordance-read.ts` must return NOTHING (measured at plan time — the file derives node status from the review ledger alone, so every un-accepted node is offered READY at once). If it now returns hits, a peer built this and you must stop and report rather than duplicate. (c) Record the pre-change `Test Files N passed` counts for `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CARRY THE DEPENDENCIES ONTO THE SURFACE CONTRACT. (a) apps/daemon/src/http/affordance-contract.ts:30-33 `interface NodeSpec { nodeRef; title }` gains `readonly dependsOn: readonly string[]` — REQUIRED, not optional. An optional member defaulting to `[]` is exactly how this gate would become vacuous: if compiled-node-source forgot to populate it every node would read \"no dependencies\" and the gate would pass while gating nothing. Required means the compiler names every site that must supply it. (b) apps/daemon/src/orchestrator/compiled-node-source.ts populates it: its local `SealedNode` (:111-116) and the `nodes()` mapping (:178-179) currently drop dependencies. Use the SAME derivation apps/daemon/src/http/runs-read.ts:103-104 already uses — `edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey).map((edge) => edge.producerNodeKey)` — reading `graph.content.snapshot.edges`. Do NOT hand-roll a second walk: the board renders build order from runs-read's version, and two spellings are how the board and the surface come to disagree about what blocks what. (c) A test in compiled-node-source.test.ts seals a 3-node chain and asserts the produced NodeSpec dependency lists EQUAL the submitted dependsOn, per node — not merely that the field is present.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-contract.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "UPDATE THE NODE FIXTURES that the required member breaks — named here at plan time, not left for the worker to hit at step 5 (global rail 19). Every literal `{ nodeRef, title }` needs the new member: apps/daemon/src/http/affordance-read.test.ts:191, :623, :688 (three inline `nodes: () => [{...}]` fixtures) and apps/daemon/src/http/affordance-read-planning.test.ts:600-601 (`NODE` and `SECOND_NODE` consts, used at :641, :836, :858). Give each `dependsOn: []` so their current behaviour is unchanged — these are pre-existing arms about other subjects and must stay green for their original reasons. Run both files: green, counts unchanged from step 1.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TESTS FIRST FOR THE GATE, in apps/daemon/src/http/affordance-read.test.ts. Run RED. (a) DIRECT BLOCK: a 2-node graph where b dependsOn a and a is NOT accepted — assert b's step is BLOCKED and its `missing` contains the EXACT string `depends:a` (assert the literal token, not merely that missing is non-empty), and assert b is NOT among nextAllowedCommands' review.submit offers while blocked. (b) RELEASE: once a's review IS accepted, b becomes READY on the next read. (c) TRANSITIVE: an a->b->c chain with ONLY a accepted — b is READY and c is BLOCKED on `depends:b`. Assert BOTH in one test, so a gate that only looks at the frontier's direct parents cannot pass. (d) NO-DEPENDENCY REGRESSION: a node with `dependsOn: []` behaves exactly as today (READY). (e) PRECEDENCE: a node that is BOTH dependency-blocked AND awaiting verification reports a deterministic asserted `missing` set — the architect does not mandate which order, but the test must NAME it so wrapper behaviour cannot drift silently later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "IMPLEMENT THE GATE in apps/daemon/src/http/affordance-read.ts (428 lines — keep the addition tight; the node loop is at :363-410). Inside the per-node loop, before the existing READY branch, resolve each of the node's `dependsOn` entries against the review ledger and emit `depends:<nodeKey>` into `missing` for EVERY dependency whose review is not accepted, marking the step BLOCKED when any is. ACCEPTED means exactly what the loop already uses at :366-371 to mark a node COMMITTED — `review.accepted !== undefined`. Do NOT invent a second notion of doneness (landing receipt, verifier receipt) for this gate: a node is a satisfied dependency precisely when the surface would call it COMMITTED (task rail 1). Keep the existing replan/escalation/verification branches and their tokens intact; this step ADDS a reason a node can be blocked, it does not reorder the others. Step 4 goes green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GIVE THE TOKEN OPERATOR WORDS. apps/control-room/src/v2/goals/work-labels.ts: `MISSING_TOKENS` (:85) is an EXACT-MATCH `Record<string,string>` and `labelForMissing` (:119) looks up by exact key, falling through to returning the raw token — so `depends:node-a` would render verbatim as `depends:node-a` in three places that already consume it (live-goal-create.ts:91, work-board.tsx:69, work-board-receipt.ts:47). Those three need NO edit: add a PREFIX branch to `labelForMissing` that recognises `depends:` and returns words naming the blocking node (e.g. `the node <nodeKey> being accepted first`). Then work-labels.test.ts: assert the rendered sentence for a real `depends:<nodeKey>` token, assert an unknown token still falls through verbatim (that behaviour is load-bearing), and extend the existing `MISSING_TOKENS` set-equality test at :100 to cover BOTH directions per global rail 9 — every token the daemon can emit has a reading AND every reading corresponds to an emittable token, enumerating the daemon side from the emitting seam in affordance-read.ts rather than from the label map, since a map that iterates itself can only see one direction.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/control-room/src/v2/goals/work-labels.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DRILL, GATES, ADVERSARIAL READ. (a) MUTATION DRILL recorded in a step note (global rail 1): make the gate ignore dependencies (return READY unconditionally) in affordance-read.ts and confirm BOTH the `depends:` token arm and the TRANSITIVE arm go RED — quote the failing assertions; restore, and prove the restore with `git diff -- apps/daemon/src/http/affordance-read.ts` showing empty (tracked file, clean at step 1, so an empty diff is sound proof). Then a second drill: make compiled-node-source populate `dependsOn` as `[]` always — the step-2(c) mapping arm must go RED. That second drill is the one that matters, because a gate fed empty dependencies is green and useless. (b) GATES, each standalone and foreground with its `Test Files N passed` count line quoted verbatim (an exit-0 leg with no count line is vacuous, global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Note that `pnpm test` covers NO apps/** so it is not evidence for either package here (global rail 18). Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm --filter @moe/daemon test`. (c) ADVERSARIAL READ in the note: what does the gate do when a dependency names a node that is not in the sealed graph at all (it must not silently treat it as satisfied); what happens on a dependsOn CYCLE — task-f79d38b1's step 7 was asked whether the compiler refuses one, so read its answer, and if a cycle CAN seal, say plainly that this gate deadlocks on it and file the follow-up; and does the wrapper's staffing loop see BLOCKED promptly enough that a dependent node is not claimed in the same pass its parent is accepted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.ts",
+        "apps/daemon/src/http/affordance-read.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,5 +97,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-04T20:22:33.322Z"
+  "updatedAt": "2026-09-04T21:49:30.225Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T21:47:41.465Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T21:49:28.071Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, making `dependsOn` OPTIONAL on NodeSpec to avoid touching the five node fixtures: an optional member defaulting to `[]` is precisely how this gate goes vacuous — a compiled-node-source that forgot to populate it would make every node read \"no dependencies\" and the gate would pass while gating nothing, with no test able to see it. Required costs two fixture files and buys compiler-enforced coverage of every construction site. REJECTED, hand-rolling a dependency walk inside affordance-read.ts: runs-read.ts:103-104 already spells the derivation and the BOARD renders build order from it, so a second spelling is how the board and the surface come to disagree. REJECTED, defining \"satisfied dependency\" as a landed/verified receipt rather than an accepted review: the loop already uses `review.accepted !== undefined` to mark a node COMMITTED, and a second notion of doneness would let a node be COMMITTED on the board while still blocking its child. REJECTED, adding `depends:<key>` to the MISSING_TOKENS map: that map is exact-match and the token carries a variable nodeKey, so it belongs in a prefix branch of `labelForMissing` — which also means the three existing render sites need no edit at all. REJECTED, folding the wrapper's staffing proof into this row: task-92d84d384e4443d7bf78c76024af5688 owns it and already declares dependsOn on this row.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -n dependsOn apps/daemon/src/http/affordance-read.ts` returns NOTHING — the per-node loop at :363-410 derives status from the review ledger alone (accepted -> COMMITTED :366-371; replanned -> BLOCKED [\"replan\"] :383; >=3 unsuccessful rounds -> BLOCKED [\"escalation\"] :396; clean round awaiting the verifier -> BLOCKED [verification tokens] :404; otherwise READY), so every un-accepted node of an approved plan is offered READY at once. THE FACT IS ALREADY SEALED, so no core or scheduler change is needed: compile-dispatcher.ts:220 seals per-node dependsOn and it lands in GraphRevisionContent two ways — `content.snapshot.edges` (GraphEdge[], packages/scheduler/src/graph-model.ts:41-45) and `content.nodeAuthority.definitions[].directHardDependencies`. THE DERIVATION IS ALREADY WRITTEN ONCE at apps/daemon/src/http/runs-read.ts:103-104 using the edges form; reuse it. THE CARRIER: affordance-contract.ts:30-33 NodeSpec is `{nodeRef, title}`, produced at compiled-node-source.ts:178-179 from a local SealedNode (:111-116) that drops dependencies. FIVE FIXTURE SITES construct NodeSpec literals and a required member breaks all of them: affordance-read.test.ts :191 :623 :688 and affordance-read-planning.test.ts :600-601 (NODE, SECOND_NODE, used at :641 :836 :858). LABELS: MISSING_TOKENS (work-labels.ts:85) is exact-match with four entries and `labelForMissing` (:119) falls through to the raw token; work-labels.test.ts:100 already holds a set-equality test over its keys. Three render sites consume `step.missing.map(labelForMissing)` — live-goal-create.ts:91, work-board.tsx:69, work-board-receipt.ts:47 — and need NO edit because the prefix branch lives inside the label function. ALREADY BUILT, do not rebuild: the board renders build order today (board-columns.ts:73 `after <nodeKey>`, board-lanes.tsx:77 \"Depends on\"), fed by /runs/read's dependsOn through live-runs.ts:62.",
+    "risks": "BIGGEST RISK — a vacuously green gate. If `dependsOn` arrives empty because compiled-node-source did not populate it, every arm in step 4 passes and the feature does not exist. Two defences: the member is REQUIRED so the compiler names every construction site, and step 7(a)'s SECOND drill forces empty dependencies and requires the mapping arm to go red. SECOND — a dependency naming a node absent from the sealed graph. Treating an unresolvable dependency as satisfied would silently un-gate the node; step 7(c) makes the worker decide and record the behaviour rather than leave it to chance. THIRD — a dependsOn CYCLE. compiled-authority-bodies refuses self-edges and unknown targets, but a longer cycle was NOT proven refused at plan time; task-f79d38b1's step 7 was asked the same question, so read its answer first. If a cycle can seal, this gate deadlocks rather than refuses — that is a follow-up row, not something to patch here. FOURTH — shape change ripple: NodeSpec gains a required member and `missing` gains a prefixed token; the five fixture sites are named in step 3, and a worker who finds a SIXTH must stop and report rather than take the extra path (global rail 19). FIFTH — precedence between blocking reasons is unspecified by the DoD; step 4(e) makes the test name it so the wrapper cannot drift later. SIXTH — the shared checkout is dirty with peer WIP; report every touched path in complete_step.modifiedFiles and never sweep foreign paths.",
+    "keyFiles": [
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/http/affordance-contract.ts",
+      "apps/daemon/src/orchestrator/compiled-node-source.ts",
+      "apps/daemon/src/http/runs-read.ts",
+      "apps/control-room/src/v2/goals/work-labels.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T21:49:30.225Z"
 }

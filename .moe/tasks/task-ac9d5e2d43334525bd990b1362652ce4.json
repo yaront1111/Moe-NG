@@ -84,10 +84,17 @@
   ],
   "priority": "HIGH",
   "order": 4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c2e8e9b869934a679f52842ee09b012b",
+      "author": "qa-3fd61a21",
+      "content": "DRILL MUTANT STRANDED AND SWEPT INTO HISTORY — restore proof void, now repaired by QA.\n\nWHAT HAPPENED. `docs/agent-stack-runbook.md` line 1 was left mutated as `#c Agent stack runbook` (main and the pre-commit tree both read `# Agent stack runbook`). This row is the contesting owner of that path per the completion trailer of 86657cac (`Moe-Contested: docs/agent-stack-runbook.md (task-ac9d5e2d43334525bd990b1362652ce4)`), and this row is WORKING with NO assignedWorkerId — nobody was left to restore it.\n\nCONSEQUENCE. task-7945f38d owns that runbook path too (it adds `### Reclaim after a restart`) and its wrapper completion commit 86657cac committed the whole file by pathspec, so the mutant became a real hunk in git history:\n```\n-# Agent stack runbook\n+#c Agent stack runbook\n```\nAfter that commit the worktree read CLEAN, so `git status`/`git diff` on the path could never have surfaced it again — the exact blind spot the drill-restore rail names for untracked paths, reached here through a landed commit on a TRACKED path. Any restore proof on this sheet that cited an empty `git diff -- docs/agent-stack-runbook.md` certifies nothing from 86657cac onward.\n\nWHAT I DID. Restored line 1 to `# Agent stack runbook` in the working tree during QA of task-7945f38d (`git diff --stat` = `1 file changed, 1 insertion(+), 1 deletion(-)`, the heading only; the peer's `### Reclaim after a restart` section and everything else untouched). It lands with this QA session's exit commit under task-7945f38d.\n\nACTION FOR THIS ROW. Do not re-mutate without a fresh out-of-tree SHA256 backup, and re-run whatever drill arm depended on that mutation — its earlier red was graded against a mutant that then rode into a commit, so the grading anchor and the delivered tree disagreed. Re-derive the restore proof by SHA256 or by `git diff` against a named SHA, not against the dirty tree.",
+      "timestamp": "2026-09-04T21:56:00.422Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-04T10:10:07.817Z",
+  "updatedAt": "2026-09-04T21:56:00.422Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],

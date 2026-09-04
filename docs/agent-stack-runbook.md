@@ -1,4 +1,4 @@
-#c Agent stack runbook
+# Agent stack runbook
 
 How to run moe-next's development agent loop — daemon, scoped MCP sessions, and the
 wrapper that staffs the board with real `claude` agents. Everything here was

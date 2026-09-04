@@ -18,8 +18,66 @@
     "FEATURES ONLY (inherited from the parent): the verifier stays the documented trusted-workspace v0.1 limitation. No signing, hermetic verification or freeze manifests.",
     "Never restart the wrapper to unstick a seat (claim TTL 30 min; memory real-seat-cannot-release-its-claim-2026-09-04). Read the latest WorkClaimed payload's expiresAt from the store and wait."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY EVERY PREREQUISITE ON DISK, NO EDITS. This row certifies capabilities four other rows shipped, so it starts by proving they are there rather than trusting the board (global rail 4 clause 2). Run and quote each: (a) task-f79d38b1 — `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- '*.ts'` is 0 in production source, and the mission text no longer says \"exactly ONE node\". (b) task-1d7b9df2 — `grep -n 'depends:' apps/daemon/src/http/affordance-read.ts` returns hits and NodeSpec carries `dependsOn`. (c) task-92d84d38 — `grep -n maxAgents apps/daemon/src/http/sessions-read.ts` returns hits. (d) task-0b26dc9e — the goal status strip renders a coverage fraction. (e) task-f99cec0b (already DONE, the row that replaced this parent's deleted observedVersion child) — `grep -n observedVersion apps/daemon/src/bootstrap/bootstrap-conflict-error.ts` returns hits; without it a second seat cannot release and the live drive stalls for a 30-minute TTL. Any absent prerequisite is a report_blocked with that row in blockedOnTaskIds — not a reason to build it here (task rail 1). Also read each prerequisite's completionSummary/reviewSummary from get_context.epicSiblings rather than re-deriving what they did (global rail 11).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TEACH THE REAL-PROCESS HARNESS A MULTI-NODE GRAPH. tests/e2e/foundation/j1-loop-harness.ts (412 lines) already spawns a REAL daemon, wrapper and agent: `startDaemon` (:200), `runSeed` (:235), `writeAgentShim(scratch, arm)` (:310), `runWrapper`/`spawnWrapper` (:340/:349), with `NODE_REF = SEEDED_LOW_RISK_TASK.nodeRef` (:50) — ONE node today. Extend it, do not fork it: seed a goal whose approved contract has criteria split across THREE nodes with a HARD chain. THE SHAPE IS LOAD-BEARING: make two nodes INDEPENDENT of each other and the third dependent on one of them. A straight a->b->c chain would make the parallel-staffing arm unreachable, and three independent nodes would make the blocking arm unreachable; this shape exercises both in one graph. Add an `AgentArm` value that delivers whichever node the wrapper staffs it onto, so one shim serves all three. Keep every existing arm and its behaviour untouched — j1-loop-real-process.e2e.test.ts's three arms must stay green with unchanged counts, and step 7 compares them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j1-loop-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE E2E, in a NEW file over the REAL daemon and the real MCP wire with NO fixtures (task rail 2 — a mock-backed journey does not discharge DoD 1, and if the shim cannot drive the real wire, report blocked rather than substituting fixtures). ONE goal, ONE approval decision, a sealed 3-node graph. Assert IN ORDER, each against durable state rather than log text: (a) the sealed graph carries exactly 3 execution-bearing nodes; (b) on the first staffing pass the TWO independent nodes are BOTH spawned while the dependent node's step reports BLOCKED with `depends:<nodeKey>` — assert both spawns by work-item id and the blocked token literally; (c) the dependent node is staffed only on a pass AFTER its parent's review is accepted; (d) all three deliver, verify and land against the SAME goalRef.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/e2e/foundation/multi-node-graph.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CLOSING GATE AND ITS NEGATIVE ARM, in the same new e2e file. (a) `POST /documents/coverage/read` reports every approved criterion VERIFIED once all three nodes are accepted, and the goal reaches ready-to-close only then. (b) THE NEGATIVE ARM, in the same test rather than a separate one so it cannot drift: at two-of-three nodes accepted the goal is NOT ready to close and coverage is short by exactly the third node's criteria — assert the verified/criteria numbers, not merely a boolean, because a gate asserted only in its satisfied state is vacuous (global rail 1). (c) NO SUCCESSOR GOAL WAS MINTED: assert the store holds exactly ONE goal aggregate at the end, counted from durable state — not inferred from the absence of a log line, which would pass on a store where nothing ran at all. This is the assertion that actually proves the parent's headline claim, that growth no longer requires a successor goal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j1-loop-harness.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/multi-node-graph.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "LIVE DRIVE ON THE LANE (task rail 3 — an offline e2e is necessary but does not discharge DoD 4). On UnAI at D:/projexts/UnAI (goal-c9d9850b or a fresh goal): a real planning seat proposes a multi-node graph, a human approves it IN THE BROWSER, and at least two nodes land on the same goal. Record in a ROW COMMENT, each under ~4500 chars and one idea per comment (global rail 14): the seat transcript, the store path, and the landing shas. NEVER RESTART THE WRAPPER to unstick a seat — the claim TTL is 30 minutes and a restart just waits a full lease; read the latest WorkClaimed payload's `expiresAt` from the store with a read-only peek and wait (memory real-seat-cannot-release-its-claim-2026-09-04). If the live drive cannot be completed in this session, say so plainly in the completion record and leave the row's other evidence intact rather than reporting a drive that did not happen.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "REWRITE THE DOCS CLAIM. README.md:91-92 currently reads \"an initial plan seals one node, so a goal is built one node at a time and growth goes through a successor goal\" — inside the \"What this is not\" section (:86) listing what is still missing or manual, and it is now false. Replace it with the measured truth: an initial plan seals the whole dependency graph; independent nodes build in parallel up to the configured seat limit; a node waits until its HARD dependencies are accepted; and REPLAN remains the path for a review that has exhausted its attempts, NOT the path for growth. Do not overclaim while editing a section whose whole purpose is honesty — if the live drive in step 5 did not happen, the sentence must not imply it did. Then `git grep -n \"one node at a time\"` returns 0 hits across README.md and docs/ (DoD 5). Check the surrounding sentences too: README.md:57 mentions replanning \"into a successor goal\" in the review-exhaustion context, which is still CORRECT and must be left alone.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND THE WHOLE-FEATURE ADVERSARIAL PASS. (a) GATES, each standalone and foreground with its `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`. State explicitly that `pnpm test` covers NO apps/** (global rail 18), and confirm j1-loop-real-process.e2e.test.ts's three existing arms are green with counts unchanged from before step 2. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths, quoting foreign red verbatim rather than hiding it (global rail 3). Named verification command for completion: `pnpm test:e2e`. (b) ADVERSARIAL PASS over the WHOLE parent feature's diff — this row owns it for all five children (global rail 21) — recorded in a step note answering at minimum: two wrapper passes racing on the same READY node, and whether the claim is the only fence; a dependency whose review is UNREADABLE rather than accepted or rejected (does the gate block or leak); a dependsOn CYCLE — read task-f79d38b1's and task-1d7b9df2's recorded answers first, and if a cycle can seal, state plainly that the surface deadlocks and file the follow-up row rather than patching here; what an operator sees with the seat limit at 1; and whether anything downstream still assumes one node per sealed graph.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j1-loop-harness.ts",
+        "README.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -39,5 +97,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:24:20.796Z",
-  "updatedAt": "2026-09-04T20:31:06.020Z"
+  "updatedAt": "2026-09-04T21:54:02.880Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T21:51:42.637Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T21:54:00.743Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, a fresh e2e harness: tests/e2e/foundation/j1-loop-harness.ts already spawns a real daemon, wrapper and agent as separate processes with a scriptable agent shim — exactly the 'scripted seat double on the real MCP wire' the DoD demands. Forking it would duplicate 412 lines of process plumbing and let the two drift. REJECTED, a fixture-backed journey: the parent rail requires a REAL daemon, and global rail 4 says a proof that only proves shapes retires the question unanswered — if the shim cannot drive the real wire the row reports blocked instead. REJECTED, asserting 'no successor goal' by the absence of a replan log line: that passes on a store where nothing ran; counting goal aggregates in durable state is the falsifiable form. REJECTED, splitting the live drive into its own row: global rail 21 puts whole-epic regression, e2e, the docs sweep and the adversarial pass in ONE row, and this is it. REJECTED, a 3-node chain a->b->c: that shape has no two independent nodes, so the parallel-staffing arm would be unreachable; the plan requires two independent plus one dependent so a single graph exercises both parallelism and blocking.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. THE HARNESS EXISTS AND IS THE RIGHT ONE: tests/e2e/foundation/j1-loop-harness.ts (412 lines) exports startDaemon (:200), runSeed (:235), writeAgentShim (:310), runWrapper (:340), spawnWrapper (:349), readyDaemonOrigin (:178), and an `AgentArm` union (:52) of scripted agent behaviours — real child processes, not fakes. Its NODE_REF (:50) is a single seeded node, which is what must become three. tests/e2e/foundation/j1-loop-real-process.e2e.test.ts drives three arms today (complete / forge-credential / skip-review) and must stay green. LANE COMMANDS: package.json:21 `test:e2e` = `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e`; :22 `test:e2e:browser` runs playwright against tests/e2e/control-room. THE DOCS CLAIM: README.md:91-92 carries the exact sentence, inside a \"What this is not\" section (:86) whose purpose is honesty about gaps — so the rewrite must not overclaim. README.md:57 separately mentions replanning \"into a successor goal\" for an exhausted review, which stays TRUE and must not be swept up. THE FIFTH PREREQUISITE: this row's dependsOn was repointed from a deleted duplicate child to task-f99cec0b7654450ca36d3864a4db5b5a (DONE), which shipped the observed version on EXPECTED_VERSION_CONFLICT via apps/daemon/src/bootstrap/bootstrap-conflict-error.ts — without it a real seat cannot work_release and the live drive stalls a full 30-minute claim TTL, which is exactly what happened on UnAI on 2026-09-04.",
+    "risks": "BIGGEST RISK — a green e2e that proves nothing. Every assertion in steps 3 and 4 must read durable state, not log text, and the coverage gate must be asserted in its UNSATISFIED state too; a closing gate asserted only when satisfied passes on a run where the goal was never built. SECOND — this row is the LAST line of defence for the whole feature, so a failing arm here is evidence a sibling under-delivered. Task rail 1 forbids patching production here: comment on the owning row and report blocked on it, because a proof that repairs its own subject retires the question unanswered (global rail 4). THIRD — the live drive is the clause most likely to be quietly skipped or overstated. Step 5 requires transcript, store path and landing shas in a row comment, and explicitly permits saying it did not happen rather than implying it did. FOURTH — the wrapper must never be restarted to unstick a seat; the claim TTL is 30 minutes and a restart waits a full lease, which cost a live session on 2026-09-04. FIFTH — the graph SHAPE is load-bearing: an a->b->c chain makes the parallel arm unreachable, so the plan mandates two independent nodes plus one dependent. SIXTH — extending a shared harness can silently change the three existing J1 arms; step 2 requires them untouched and step 7 compares their counts. SEVENTH — the cycle question is still open from task-f79d38b1 and task-1d7b9df2; if a dependsOn cycle can seal, this gate deadlocks rather than refuses, and that is a follow-up row, not a patch in the proof row.",
+    "keyFiles": [
+      "tests/e2e/foundation/j1-loop-harness.ts",
+      "tests/e2e/foundation/j1-loop-real-process.e2e.test.ts",
+      "tests/e2e/foundation/e2e-harness.ts",
+      "README.md",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T21:54:02.880Z"
 }

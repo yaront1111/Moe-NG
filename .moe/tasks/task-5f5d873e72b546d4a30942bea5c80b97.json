@@ -38,7 +38,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -76,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:43:36.605Z",
-  "updatedAt": "2026-09-04T21:38:50.418Z",
+  "updatedAt": "2026-09-04T21:58:27.200Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:55:21.786Z",
     "plannedStepCount": 3,
@@ -106,15 +106,11 @@
     "worker-c846071b"
   ],
   "workStartedAt": "2026-09-04T10:05:34.362Z",
-  "blockedReason": "Step 1 is the plan's own manual gate and it FAILS on all four measurements. This row owns 0 files; its two remaining steps (live drive + gates) assert behaviour that does not exist on disk yet.\n\nMeasured at worktree HEAD b224e82e (main 68eb1c5d), 2026-09-04 - full transcript in comment-95ca5fc1:\n- Children are PLANNING with ZERO plan steps and 0 commits (read from .moe/tasks/*.json; SPIDR children do not appear in get_context.epicSiblings at all): task-38ca5f66c8d146df97ed6a99b35edfbd (A, per-item work_get_context), task-f99cec0b7654450ca36d3864a4db5b5a (B, observed version + mission retry), task-7945f38da29249a291004f78b4024262 (C, dead-seat reclaim; already dependsOn B).\n- `git log main --grep \"Moe-Task: <child>\" --oneline | wc -l` = 0 for each of the three.\n- `grep -c SURFACE_ITEM apps/daemon/src/mcp-dispatch-port.ts` = 0; apps/daemon/src/mcp-work-context-query.ts: No such file or directory; `git grep -c WORK_ITEM_UNKNOWN -- apps packages` = no output.\n- `grep -rn observedVersion` over bootstrap-ledger.ts, work-claim-services.ts, daemon-command-dispatch.ts = no output (widened from the plan's `observedVersion=` anchor, still 0).\n- `ls apps/daemon/src/orchestrator/agent-wrapper-reclaim.ts` = No such file or directory; `git grep -c reclaimed -- apps/daemon/src/orchestrator` = no output.\n\nNo `[wrapper] reclaimed ...` line exists to observe on the UnAI lane. Building it here would re-implement three children's work in the shared worktree.\n\nGOVERNOR, beyond clearing the block: this parent's dependsOn is still [] (architect seats are refused: [NOT_ALLOWED] set_task_dependencies ... architect or governor role required). Please set_task_dependencies = the three child ids, else a hand-cleared block re-exposes this row with the children still unplanned. Route A and B to architects - they are the parallel leaves.",
-  "blockedOnTaskIds": [
-    "task-38ca5f66c8d146df97ed6a99b35edfbd",
-    "task-f99cec0b7654450ca36d3864a4db5b5a",
-    "task-7945f38da29249a291004f78b4024262"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T10:07:02.963Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "790875619b7b0efc80d67395d2ad5b5215d9d30d",

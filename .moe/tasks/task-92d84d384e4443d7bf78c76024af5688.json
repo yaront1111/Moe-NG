@@ -18,8 +18,78 @@
     "FEATURES ONLY (inherited from the parent): no security-boundary or policy work.",
     "Never restart the wrapper to unstick a seat while testing live (claim TTL is 30 min; memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE PREREQUISITE AND RE-MEASURE, NO EDITS. (a) Confirm task-1d7b9df2579c491992b55de791c99f4f landed — `grep -n 'depends:' apps/daemon/src/http/affordance-read.ts` returns hits and NodeSpec carries `dependsOn`. Step 3's HARD-dependency arm needs that gate to exist; without it report_blocked with blockedOnTaskIds [task-1d7b9df2579c491992b55de791c99f4f]. (b) Confirm the disclosure gap is still open: `grep -n maxAgents apps/daemon/src/http/sessions-read.ts` returns NOTHING. (c) Confirm parallel staffing already works and needs no change — read apps/daemon/src/orchestrator/agent-wrapper.ts:353-372: the loop iterates every ordered step and breaks only at `staffing.activeCount() >= config.maxAgents` (:356). This row ADDS PROOF and DISCLOSURE; it does not rewrite the loop. If you find yourself changing staffing logic, stop — that is scope creep. (d) Record pre-change `Test Files N passed` counts for `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/http/sessions-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "PROVE PARALLEL STAFFING, in apps/daemon/src/orchestrator/agent-wrapper.test.ts. These arms are this row's real deliverable — the behaviour exists but nothing pins it, so a later refactor could serialise staffing silently. (a) TWO INDEPENDENT READY NODES: a surface offering two READY unclaimed `node.deliver` steps with no dependencies produces TWO spawn reports in a SINGLE pass, asserted before either child exits (assert the spawned array length AND both work-item ids, not merely that spawning happened — an arm asserting only `length > 0` passes on a serial loop). (b) THE LIMIT IS HONOURED: with `maxAgents: 2` and THREE independent READY steps, exactly two spawn and the third does not — assert the third's ABSENCE by its work-item id, not by array length alone, so a pass cannot come from spawning a different pair. (c) `maxAgents: 1` staffs exactly one and leaves the rest, proving the break is the limit and not an accident of ordering.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PROVE THE DEPENDENCY GATE'S EFFECT ON STAFFING, same file — this is the half of DoD 3 that closes the loop between task-1d7b9df2's surface change and the wrapper. (a) A surface where node b is BLOCKED with `missing: [\"depends:a\"]` and node a is READY yields exactly ONE spawn, and it is a — assert by work-item id. (b) On the NEXT pass, with a's review accepted so the surface now reports b READY, b IS spawned. Assert the work-item id in each pass. (c) Assert the spawn COUNT in each pass explicitly: a pass that silently spawns zero must FAIL these arms rather than pass them vacuously (global rail 1). Note the loop already skips HUMAN_ONLY_STEPS and `session.*` kinds and orders `node.deliver` first (agent-wrapper.ts:348-357) — build the fake surface so those existing filters are not what produces the expected counts, or the arm proves the sort order rather than the gate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DISCLOSE THE LIMIT ON THE DAEMON READ. apps/daemon/src/http/sessions-read.ts: `SessionsView` (:37-43) gains the effective concurrency limit and the current active-seat count. SOURCE THE LIMIT HONESTLY — measured at plan time: the wrapper and the daemon are SEPARATE PROCESSES (agent-wrapper-main.ts and daemon-main.ts are distinct entry points), but apps/daemon/src/orchestrator/moe-up-main.ts builds ONE `childEnv` (:276) and spawns BOTH children with it (:201 daemon, :326 wrapper), so the daemon's `process.env` carries the same MOE_WRAPPER_MAX_AGENTS the wrapper parsed. Therefore: take the value by calling the EXISTING `readWrapperKnobs` (orchestrator/wrapper-knobs.ts:61) rather than re-parsing the variable — a second parser would drift from its strict NaN refusal (wrapper-knobs.ts:1-8 explains why a lenient parse is catastrophic here). Pass it in through `SessionsReadOptions` and supply it at the composition site daemon-store-foundation-composition.ts:353, so the port stays injectable and testable rather than reading process.env itself. NAME IT AS WHAT IT IS in the field name and its doc comment: the CONFIGURED limit this daemon was launched with, not a live observation of the wrapper — a daemon started standalone would report a limit no wrapper is honouring, and the comment must say so rather than let a reader assume it is measured.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/sessions-read.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TEST THE DAEMON READ, in apps/daemon/src/http/sessions-read.test.ts. (a) The disclosed limit EQUALS the injected knob value, and CHANGES when a different value is injected — both arms, because an arm asserting only `=== 2` passes against a hard-coded 2 and proves nothing (DoD 1). (b) The default with no env override is 2 (wrapper-knobs.ts:30 DEFAULT_MAX_AGENTS). (c) The active count reflects the sessions/claims the port already reads — assert it against a store with a known number of holding seats, and assert 0 on an empty store. (d) The refusal paths (SESSIONS_READ_CAPABILITY_DENIED, SESSIONS_READ_PROJECT_MISMATCH, SESSIONS_READ_UNREADABLE) still answer with their existing codes and layer and do NOT carry the new members — a refusal that grew a concurrency field would break the refusal frame's exact-arity decode in the browser.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/sessions-read.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MOVE THE BROWSER DECODER IN THE SAME ROW — non-negotiable, and measured: apps/control-room/src/live/live-sessions.ts:110 decodes with `exactDataRecord(response, [\"outcome\",\"readAt\",\"sessions\",\"totals\",\"unreadable\"])`, an EXACT-ARITY check (:46-48 rejects any key count mismatch). A daemon response carrying a new member therefore fails the WHOLE read as `invalidResponse()` and the Seats screen goes blank — a daemon-only change is not a partial delivery here, it is a regression (task rail 2). Add the new members to that key list and decode them with the same `count()` guard the totals use. Then assert the round trip: a response carrying the new members decodes to a view exposing them, and a response MISSING them is rejected rather than silently defaulted — the point of exact arity is that a stale daemon is detected, not papered over. There is no live-sessions.test.ts today; add one, or extend the existing decoder coverage if it lives elsewhere — state which in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-sessions.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "RENDER IT ON SEATS, in apps/control-room/src/v2/ops/activity-screens.tsx (the sessions panel is at `data-testid=\"cr.sessions.root\"`, :114). Show the concurrency limit and how many seats are active in OPERATOR WORDS, not a raw number pair — an operator watching a 3-node goal needs to understand why only two nodes are moving. Render only what the daemon stated (the file's own header rule, :13). Then extend apps/control-room/src/v2/ops/activity-screens.test.tsx: assert the rendered sentence for (limit 2, active 2) and for (limit 2, active 0) — the two readings an operator actually sees — and assert the panel still renders when the read REFUSES, with no NaN and no \"undefined\". Do not add a new testid namespace without checking it is free (`cr.board.*` was already taken once).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "DRILL, GATES, ADVERSARIAL READ. (a) MUTATION DRILL recorded in a step note (global rail 1): change the wrapper's limit break at agent-wrapper.ts:356 from `>=` to `>` and confirm the step-2(b) three-READY arm goes RED (quote the failing assertion); restore and prove it with `git diff -- apps/daemon/src/orchestrator/agent-wrapper.ts` showing empty (tracked, clean at step 1). Second drill: hard-code the disclosed limit to 2 in sessions-read.ts and confirm the step-5(a) injected-value arm goes RED — this is the drill that matters, because a hard-coded 2 looks correct against the default. (b) GATES, each standalone and foreground with its `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. `pnpm test` covers NO apps/**, so it is not evidence for either package here (global rail 18). Attribute any red by merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm --filter @moe/daemon test`. (c) ADVERSARIAL READ in the note: what does an operator see when the daemon was launched WITHOUT the wrapper (the disclosed limit is then configured-but-unhonoured — is the wording still truthful); can `activeCount` and the disclosed active count disagree because they are read at different moments; and does anything cache the sessions response such that a changed limit is not reflected until a reload.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/http/sessions-read.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,5 +105,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:07.326Z",
-  "updatedAt": "2026-09-04T20:23:07.326Z"
+  "updatedAt": "2026-09-04T21:51:41.946Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T21:49:30.658Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T21:51:39.697Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, a durable store-backed per-project seat limit with its own command kind: the user decided 2026-09-04 to expose the existing env knob, and a new kind would drag in the full 8-touchpoint roster backfill (vocabulary, registry, families, v2 registry, MCP allowlist, generated client, digest mirrors) for a number that is already correct at 2. REJECTED, having sessions-read read `process.env` directly: the port is constructed with injected options everywhere else and an env read inside it cannot be tested for the CHANGES-when-injected arm that stops a hard-coded 2 passing. REJECTED, re-parsing MOE_WRAPPER_MAX_AGENTS in the daemon: wrapper-knobs.ts:1-8 documents why a lenient parse is catastrophic (NaN makes `active < NaN` always false, staffing nothing forever), so the daemon calls the SAME `readWrapperKnobs` rather than growing a second parser that can drift. REJECTED, rewriting the staffing loop: it already staffs every READY unclaimed step up to maxAgents (agent-wrapper.ts:353-372); this row adds the proof that pins that behaviour and the disclosure that explains it. REJECTED, landing the daemon field without the browser decoder: measured exact-arity decoding makes that a Seats-screen regression, not a partial delivery.",
+    "codebaseInsights": "MEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb. PARALLEL STAFFING ALREADY WORKS — the row's description overstates the gap: agent-wrapper.ts:353-372 iterates all ordered steps and breaks only at `staffing.activeCount() >= config.maxAgents` (:356); `activeCount` is `this.active.size` (agent-wrapper-staffing.ts:55). wrapper-knobs.ts:30 `DEFAULT_MAX_AGENTS = 2`, read at :72 from MOE_WRAPPER_MAX_AGENTS with a floor of 1, reaching the wrapper via agent-wrapper-main.ts:259. THE PROCESS BOUNDARY, and why the disclosure is honest: daemon-main.ts and agent-wrapper-main.ts are SEPARATE entry points, so the HTTP server cannot see the wrapper's parsed knobs — but moe-up-main.ts builds ONE `childEnv` at :276 and spawns BOTH with it (:201 daemon, :326 wrapper), so the same variable is visible to both in the launched configuration. That makes `readWrapperKnobs(process.env).maxAgents` a truthful CONFIGURED limit, and the plan requires the field name and comment to say configured rather than observed, because a standalone daemon would report a limit no wrapper honours. THE EXACT-ARITY TRAP: live-sessions.ts:110 decodes with `exactDataRecord(response, [\"outcome\",\"readAt\",\"sessions\",\"totals\",\"unreadable\"])` and :46-48 rejects on any key-count mismatch, so a daemon-only field addition blanks the Seats screen. COMPOSITION: createSessionsReadPort is built at daemon-store-foundation-composition.ts:353 with `{projectId, store}` — the injection point for the new value. SessionsView is at sessions-read.ts:37-43; the refusal frame is `{code, layer, outcome}` and must not grow. Seats renders in activity-screens.tsx under `data-testid=\"cr.sessions.root\"` (:114). Test files that exist: sessions-read.test.ts, agent-wrapper.test.ts, activity-screens.test.tsx. NO live-sessions.test.ts exists — step 6 must add one or extend coverage elsewhere and say which.",
+    "risks": "BIGGEST RISK — a hard-coded 2. The default IS 2, so an arm asserting the disclosed limit equals 2 passes against a literal and proves nothing. Step 5(a) requires a CHANGES-when-injected arm and step 8(a)'s second drill forces the hard-code to go red. SECOND — the honesty of the disclosure. The daemon reports what ITS env says; if a wrapper is started separately with a different value, or no wrapper runs at all, the number is configured-but-unhonoured. The plan requires the naming and comment to carry that distinction rather than implying a live measurement; step 8(c) makes the worker read the operator wording back. THIRD — exact-arity decoding means the daemon and browser halves MUST land together; a worker who lands the daemon field alone blanks Seats, and the round-trip assertion in step 6 is what catches it. FOURTH — vacuous staffing arms. An arm asserting only that spawning happened passes on a serial loop, and an arm asserting only array length passes when the wrong pair spawns; steps 2 and 3 require work-item ids and explicit counts, including the absence of the third item. FIFTH — the staffing loop already filters HUMAN_ONLY_STEPS, `session.*` kinds and sorts node.deliver first (:348-357); a fake surface built carelessly can make those filters produce the expected counts, so the arm would prove the sort order rather than the limit. SIXTH — this row depends on task-1d7b9df2 for the `depends:` token its step-3 arms consume; step 1 checks and blocks rather than faking the surface shape.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/orchestrator/wrapper-knobs.ts",
+      "apps/daemon/src/http/sessions-read.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/control-room/src/live/live-sessions.ts",
+      "apps/control-room/src/v2/ops/activity-screens.tsx",
+      "apps/daemon/src/orchestrator/moe-up-main.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T21:51:41.946Z"
 }
