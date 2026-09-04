@@ -27,6 +27,7 @@ import { handleDocumentCoverageReadRequest } from "./document-coverage-route.js"
 import { RUNS_READ_PATH } from "./runs-read-contract.js";
 import { handleRunsReadRequest } from "./runs-read-route.js";
 import { POLICY_READ_PATH, handlePolicyReadRequest } from "./policy-read.js";
+import { ACTIVATION_READ_PATH, handleActivationReadRequest } from "./activation-read.js";
 import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
@@ -81,6 +82,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   V2_COMMAND_PATH,
   RUNS_READ_PATH,
   POLICY_READ_PATH,
+  ACTIVATION_READ_PATH,
   HEALTH_READ_PATH,
   ACTIVITY_READ_PATH,
   SESSIONS_READ_PATH,
@@ -294,6 +296,17 @@ function servePolicy(
   reply(response, result.httpStatus, result.body);
 }
 
+/** ASYNC alone among the reads: the activation receipts are measured, not projected. */
+async function serveActivation(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): Promise<void> {
+  const result = await handleActivationReadRequest({
+    activation: options.activation, authenticator: options.deps.authenticator,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveHealth(
   response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
 ): void {
@@ -440,6 +453,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
   }
+  if (path === ACTIVATION_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ACTIVATION_REQUEST_INVALID");
+    return;
+  }
   if (path === HEALTH_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_HEALTH_REQUEST_INVALID");
     return;
@@ -484,6 +501,8 @@ export async function serveReadDispatch(
     serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
     servePolicy(response, request, options, body);
+  } else if (path === ACTIVATION_READ_PATH) {
+    await serveActivation(response, request, options, body);
   } else if (path === HEALTH_READ_PATH) {
     serveHealth(response, request, options, body);
   } else if (path === RUNS_READ_PATH) {

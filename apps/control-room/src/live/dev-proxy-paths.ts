@@ -3,6 +3,7 @@
  * Manager routes deliberately use a separate origin and cookie authority.
  */
 export const DEV_PROXY_PATHS = Object.freeze([
+  "/activation/read",
   "/activity/read",
   "/affordances/read",
   "/bootstrap",

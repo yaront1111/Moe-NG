@@ -11,6 +11,7 @@ import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-rea
 import type { DocumentCoverageReadPort } from "./document-coverage-contract.js";
 import type { RunsReadPort } from "./runs-read-contract.js";
 import type { PolicyReadPort } from "./policy-read.js";
+import type { ActivationReadPort } from "./activation-read.js";
 import type { HealthReadPort } from "./health-read.js";
 import type { ActivityReadPort } from "./activity-read.js";
 import type { SessionsReadPort } from "./sessions-read.js";
@@ -139,6 +140,8 @@ export interface StartListenerOptions {
   readonly runs?: RunsReadPort;
   /** Absent means the policy read refuses as unavailable. */
   readonly policy?: PolicyReadPort;
+  /** Absent means the activation receipts read refuses as unavailable. */
+  readonly activation?: ActivationReadPort;
   /** Absent means the health read refuses as unavailable. */
   readonly health?: HealthReadPort;
   /** Absent means the activity read refuses as unavailable. */
