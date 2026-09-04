@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
+import { useClock } from "../components/freshness.js";
 import { RunsScreen } from "./runs-screen.js";
 
 /**
@@ -25,6 +26,9 @@ export interface LiveRunsProps {
 export function LiveRuns({ headers, onConnection, onOpenBoard, pollMs, read }: LiveRunsProps): JSX.Element {
   const [outcome, setOutcome] = useState<RunsOutcome | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // The instant the daemon last ANSWERED (not merely was asked); null until it has.
+  const [lastAnswerMs, setLastAnswerMs] = useState<number | null>(null);
+  const clockMs = useClock();
   const generation = useRef(0);
 
   useEffect(() => {
@@ -40,7 +44,9 @@ export function LiveRuns({ headers, onConnection, onOpenBoard, pollMs, read }: L
         if (generation.current !== run) return;
         setOutcome(next);
         setNowMs(Date.now());
-        onConnection?.(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED" ? "DISCONNECTED" : "CONNECTED");
+        const answered = !(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED");
+        if (answered) setLastAnswerMs(Date.now());
+        onConnection?.(answered ? "CONNECTED" : "DISCONNECTED");
       }, () => {
         inFlight = false;
         if (generation.current === run) {
@@ -53,5 +59,5 @@ export function LiveRuns({ headers, onConnection, onOpenBoard, pollMs, read }: L
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [headers, onConnection, pollMs, read]);
 
-  return <RunsScreen nowMs={nowMs} onOpenBoard={onOpenBoard} outcome={outcome} />;
+  return <RunsScreen freshness={{ clockMs, lastAnswerMs }} nowMs={nowMs} onOpenBoard={onOpenBoard} outcome={outcome} />;
 }

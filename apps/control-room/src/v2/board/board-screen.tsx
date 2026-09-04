@@ -11,6 +11,7 @@ import { readGoalCatalog } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
+import { Freshness, useClock } from "../components/freshness.js";
 import { MIDDOT } from "../glyphs.js";
 import { GoalPublish, publishOffer } from "../goals/goal-publish.js";
 import type { PublishPort } from "../goals/publish-port.js";
@@ -38,6 +39,8 @@ export interface BoardScreenProps {
   readonly activity: ActivityOutcome | null;
   readonly brief: string | null;
   readonly coverage: DocumentCoverageOutcome | null;
+  /** When the daemon last answered the runs read, on a live clock; absent on a pure render. */
+  readonly freshness?: { readonly clockMs: number; readonly lastAnswerMs: number | null } | undefined;
   readonly goalId: string;
   readonly nowMs: number;
   readonly onNeedsYou?: (() => void) | undefined;
@@ -66,7 +69,7 @@ function criterionStatements(coverage: DocumentCoverageOutcome | null): Readonly
 }
 
 export function BoardScreen(props: BoardScreenProps): JSX.Element {
-  const { activity, brief, coverage, goalId, nowMs, onNeedsYou, publishing, runId, runs, surface, title } = props;
+  const { activity, brief, coverage, freshness, goalId, nowMs, onNeedsYou, publishing, runId, runs, surface, title } = props;
   const status = deriveGoalStatus({ coverage, goalId, runId, surface });
   const goal = goalOf(runs, goalId);
   const fold = goal === null || goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs);
@@ -89,6 +92,11 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
         status={status}
         title={goal?.title ?? title}
       />
+      {freshness === undefined ? null : (
+        <div className="cr2-kanban-freshness">
+          <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.kanban.freshness" />
+        </div>
+      )}
       {showPublish ? (
         <div className="cr2-kanban-publish" id={GOAL_SECTION_IDS.publish}>
           <GoalPublish frame={publishing.frame} goal={goal} goalId={goalId} port={publishing.port} />
@@ -129,10 +137,16 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
 
 const POLL_MS = 5_000;
 
-/** One bounded poller: latest answer wins, a rejected read becomes the given failure value. */
-function usePolled<T>(read: () => Promise<T>, failure: T, pollMs: number): { readonly nowMs: number; readonly value: T | null } {
+/**
+ * One bounded poller: latest answer wins, a rejected read becomes the given failure value.
+ * `answeredMs` is the instant the daemon last ANSWERED (a transport failure is not an answer).
+ */
+function usePolled<T extends { readonly status: string; readonly code?: string }>(
+  read: () => Promise<T>, failure: T, pollMs: number,
+): { readonly answeredMs: number | null; readonly nowMs: number; readonly value: T | null } {
   const [value, setValue] = useState<T | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [answeredMs, setAnsweredMs] = useState<number | null>(null);
   const generation = useRef(0);
   useEffect(() => {
     const run = generation.current + 1;
@@ -147,6 +161,7 @@ function usePolled<T>(read: () => Promise<T>, failure: T, pollMs: number): { rea
         if (generation.current !== run) return;
         setValue(next);
         setNowMs(Date.now());
+        if (!(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED")) setAnsweredMs(Date.now());
       }, () => {
         inFlight = false;
         if (generation.current === run) setValue(failure);
@@ -156,7 +171,7 @@ function usePolled<T>(read: () => Promise<T>, failure: T, pollMs: number): { rea
     const timer = setInterval(tick, pollMs);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [failure, pollMs, read]);
-  return { nowMs, value };
+  return { answeredMs, nowMs, value };
 }
 
 const RUNS_FAILURE: RunsOutcome = Object.freeze({ code: "RUNS_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
@@ -195,6 +210,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
   const runs = usePolled(runsReader, RUNS_FAILURE, pollMs ?? POLL_MS);
   const coverage = usePolled(coverageReader, COVERAGE_FAILURE, pollMs ?? POLL_MS);
   const activity = usePolled(activityReader, ACTIVITY_FAILURE, pollMs ?? POLL_MS);
+  const clockMs = useClock();
   // The brief is the human's own words at creation; it never changes, so one read is enough.
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   useEffect(() => {
@@ -208,6 +224,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
       activity={activity.value}
       brief={brief}
       coverage={coverage.value}
+      freshness={{ clockMs, lastAnswerMs: runs.answeredMs }}
       goalId={goalId}
       nowMs={runs.nowMs}
       onNeedsYou={onNeedsYou}

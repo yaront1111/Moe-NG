@@ -5,8 +5,16 @@ import type { RunGoalView, RunNodeStatus, RunNodeView, RunsOutcome } from "../..
 import { BOARD_COLUMNS, COLUMN_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
 import type { BoardColumn, BoardFold } from "../board/board-columns.js";
 import { BoardLanes } from "../board/board-lanes.js";
+import { Freshness } from "../components/freshness.js";
+import type { FreshnessProps } from "../components/freshness.js";
 import { MIDDOT } from "../glyphs.js";
 import { publishLine } from "../goals/goal-publish.js";
+
+/** When the daemon last answered, on the live screen's own clock; absent on a pure render. */
+export interface ScreenFreshness {
+  readonly clockMs: number;
+  readonly lastAnswerMs: FreshnessProps["lastAnswerMs"];
+}
 
 /**
  * RUNS: every goal's work as a board. The project's node counts across the six columns come
@@ -17,6 +25,7 @@ import { publishLine } from "../goals/goal-publish.js";
  */
 
 export interface RunsScreenProps {
+  readonly freshness?: ScreenFreshness | undefined;
   readonly nowMs: number;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   readonly outcome: RunsOutcome | null;
@@ -164,7 +173,9 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
 }
 
 /** The project's node counts across the six columns, as a strip of heads, plus one sentence. */
-function Totals({ outcome, nowMs }: { readonly outcome: Extract<RunsOutcome, { status: "RUNS" }>; readonly nowMs: number }): JSX.Element {
+function Totals({ freshness, outcome, nowMs }: {
+  readonly freshness: ScreenFreshness | undefined; readonly outcome: Extract<RunsOutcome, { status: "RUNS" }>; readonly nowMs: number;
+}): JSX.Element {
   const counts: Record<BoardColumn, number> = { BLOCKED: 0, DONE: 0, QUEUED: 0, REVIEW: 0, REWORK: 0, WORKING: 0 };
   for (const goal of outcome.goals) {
     if (goal.nodes.length === 0) continue;
@@ -176,6 +187,9 @@ function Totals({ outcome, nowMs }: { readonly outcome: Extract<RunsOutcome, { s
   return (
     <div className="cr2-runs-totals" data-testid="cr.runs.totals" title={sentence}>
       <span className="cr2-runs-totals-sentence">{sentence}</span>
+      {freshness === undefined ? null : (
+        <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.runs.freshness" />
+      )}
       {BOARD_COLUMNS.map((column) => (
         <span className="cr2-runs-total" data-column={column} data-count={String(counts[column])} data-testid={`cr.runs.total.${column}`} key={column}>
           <span className="cr2-runs-total-count">{String(counts[column])}</span>
@@ -186,7 +200,7 @@ function Totals({ outcome, nowMs }: { readonly outcome: Extract<RunsOutcome, { s
   );
 }
 
-export function RunsScreen({ nowMs, onOpenBoard, outcome }: RunsScreenProps): JSX.Element {
+export function RunsScreen({ freshness, nowMs, onOpenBoard, outcome }: RunsScreenProps): JSX.Element {
   return (
     <section className="cr2-runs" data-testid="cr.runs.root">
       {outcome === null ? (
@@ -197,7 +211,7 @@ export function RunsScreen({ nowMs, onOpenBoard, outcome }: RunsScreenProps): JS
         </p>
       ) : (
         <>
-          <Totals nowMs={nowMs} outcome={outcome} />
+          <Totals freshness={freshness} nowMs={nowMs} outcome={outcome} />
           {outcome.goals.length === 0 ? (
             <div className="cr2-goals-empty" data-testid="cr.runs.empty">
               <p className="cr2-goals-empty-title">No goals to run yet.</p>

@@ -8,6 +8,7 @@ import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
+import { useClock } from "../components/freshness.js";
 import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { createGoalDispatcher } from "./live-goal-create.js";
@@ -88,6 +89,8 @@ export function LiveGoalsHome({
 }: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [runs, setRuns] = useState<RunsOutcome | null>(null);
+  const [lastAnswerMs, setLastAnswerMs] = useState<number | null>(null);
+  const clockMs = useClock();
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
@@ -108,7 +111,10 @@ export function LiveGoalsHome({
     ? createGoalCatalogFeed({
       headers: setup.headers,
       intervalMs: POLL_INTERVAL_MS,
-      onFrame: setCatalog,
+      onFrame: (frame) => {
+        setCatalog(frame);
+        if (frame.connection === "CONNECTED") setLastAnswerMs(Date.now());
+      },
     })
     : null), [setup]);
 
@@ -196,6 +202,7 @@ export function LiveGoalsHome({
       <GoalsHome
         createDisabledReason={createDisabled}
         data={data}
+        freshness={setup.ok ? { clockMs, lastAnswerMs } : undefined}
         onCreateGoal={onCreateGoal}
         onOpenBoard={onOpenBoard}
       />

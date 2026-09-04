@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import "../styles/cordum-goals.css";
+import { Freshness } from "../components/freshness.js";
 import { ActionButton } from "../components/primitives.js";
 import { EMDASH } from "../glyphs.js";
 import { GoalCard } from "./goal-card.js";
@@ -56,6 +57,8 @@ export interface GoalsHomeProps {
   readonly initialCreating?: boolean;
   /** Honest refusal shown while live goal prose has no durable backend contract. */
   readonly createDisabledReason?: string | undefined;
+  /** When the daemon last answered the list, on a live clock; absent on fixtures. */
+  readonly freshness?: { readonly clockMs: number; readonly lastAnswerMs: number | null } | undefined;
 }
 
 export function GoalsHome({
@@ -64,6 +67,7 @@ export function GoalsHome({
   onCreateGoal,
   initialCreating = false,
   createDisabledReason,
+  freshness,
 }: GoalsHomeProps): JSX.Element {
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
@@ -185,6 +189,9 @@ export function GoalsHome({
           value={search}
         />
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>
+        {freshness === undefined ? null : (
+          <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.goals.freshness" />
+        )}
         <div className="cr2-goals-new">
           <ActionButton
             ariaPressed={creating && createDisabledReason === undefined}

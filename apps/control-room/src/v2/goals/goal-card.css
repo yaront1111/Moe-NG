@@ -84,3 +84,18 @@
   grid-column: 1 / -1;
   margin-bottom: 6px;
 }
+
+/* When the daemon last answered the goals list, beside the count. */
+.cr2-goals-filter .cr2-freshness {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.cr2-goals-filter .cr2-freshness[data-quiet="true"] {
+  color: var(--cr-danger);
+  font-weight: 600;
+}

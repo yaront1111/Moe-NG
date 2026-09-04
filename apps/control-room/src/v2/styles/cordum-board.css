@@ -444,3 +444,20 @@
 }
 
 .cr2-run-goal .cr2-kanban-lanes { margin-top: 10px; }
+
+/* ------------------------------------------------------------------ freshness */
+
+.cr2-freshness {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  white-space: nowrap;
+}
+
+.cr2-freshness[data-quiet="true"] {
+  color: var(--cr-danger);
+  font-weight: 600;
+}
+
+.cr2-kanban-freshness { grid-column: 1 / -1; margin-top: -6px; }
