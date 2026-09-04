@@ -107,8 +107,8 @@ describe("the runs screen", () => {
     expect(screen.getByTestId("cr.runs.loading")).toBeTruthy();
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ code: "LISTENER_RUNS_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.runs.refusal").textContent).toBe("The runs could not be read right now (LISTENER_RUNS_UNAVAILABLE).");
-    expect(screen.getByTestId("cr.runs.refusal").getAttribute("title")).toContain("CONTROL_ROOM_LISTENER");
+    expect(screen.getByTestId("cr.runs.refusal").textContent).toContain("The runs could not be read right now");
+    expect(screen.getByTestId("cr.runs.refusal").textContent).toContain("LISTENER_RUNS_UNAVAILABLE @ CONTROL_ROOM_LISTENER");
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ ...outcome, goals: [], totals: { ...outcome.totals, goals: 0, nodes: 0, IN_PROGRESS: 0, READY: 0 } }} />);
     expect(screen.getByTestId("cr.runs.empty").textContent).toContain("No goals to run yet.");

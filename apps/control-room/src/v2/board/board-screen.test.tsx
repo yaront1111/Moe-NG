@@ -83,11 +83,11 @@ describe("BoardScreen", () => {
   it("folds the goal's nodes into six columns with counts, one line per card, and a finding only where it is the next question", () => {
     render(<BoardScreen activity={ACTIVITY} brief="Make evidence survive." coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="Evidence ledger" />);
     for (const column of BOARD_COLUMNS) expect(screen.getByTestId(`cr.kanban.count.${column}`).textContent).toBe("1");
-    expect(screen.getByTestId("cr.kanban.line.n-queue").textContent).toBe("after n-work");
+    expect(screen.getByTestId("cr.kanban.line.n-queue").textContent).toBe("waiting on other work");
     expect(screen.getByTestId("cr.kanban.line.n-work").textContent).toBe("an agent seat · lease ends in 12 min");
     expect(screen.getByTestId("cr.kanban.line.n-review").textContent).toBe("delivered 2 min ago · waiting on the verifier");
     expect(screen.getByTestId("cr.kanban.line.n-rework").textContent).toBe("sent back ×2 · rejected: implementation");
-    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("verified · committed 4f2a91cd");
+    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("verified · landed");
     expect(screen.getByTestId("cr.kanban.line.n-stuck").textContent).toBe("every review attempt used; needs your decision");
     expect(screen.getByTestId("cr.kanban.finding.n-rework").textContent).toBe(FINDING.detail);
     expect(screen.getByTestId("cr.kanban.finding.n-stuck").textContent).toBe(FINDING.detail);

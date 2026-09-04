@@ -8,7 +8,7 @@ import type {
   Gate1ReadOutcome,
 } from "./gate1-approval.js";
 import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * The GATE 1 card (approve the Product Contract): rendered above the plan
@@ -159,7 +159,8 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       data-testid="cr.gate1.card"
     >
       <h2 className="cr2-slot-kicker" id={headingId}>
-        {`PRODUCT CONTRACT ${MIDDOT} YOUR APPROVAL, GATE 1 ${MIDDOT} ${goalId}`}
+        Product contract
+        <span className="cr2-visually-hidden">{` for ${goalId}`}</span>
       </h2>
       {shownState.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading" role="status">
@@ -184,7 +185,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               data-testid={`cr.gate1.question.${row.clarificationId}`}
               key={row.clarificationId}
             >
-              <h3 className="cr2-approve-heading">{`QUESTION ${MIDDOT} ${row.question}`}</h3>
+              <h3 className="cr2-approve-heading">{`Question ${MIDDOT} ${row.question}`}</h3>
               {row.options.map((option) => (
                 <ActionButton
                   disabled={busy}
@@ -252,14 +253,10 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
           {`Contract approval accepted ${MIDDOT} no current contract projection was returned.`}
         </p>
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal" role="alert">
-          {refusalWords(shownState.outcome)}
-        </p>
+        <RefusalNote refusal={shownState.outcome} role="alert" testId="cr.gate1.refusal" />
       )}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal" role="alert">
-          {refusalWords(refusal)}
-        </p>
+        <RefusalNote refusal={refusal} role="alert" testId="cr.gate1.dispatchrefusal" />
       )}
     </section>
   );

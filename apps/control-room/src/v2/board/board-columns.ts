@@ -70,7 +70,7 @@ const LEASE_WARNING_MS = 60 * 60_000;
 export function cardLine(node: RunNodeView, column: BoardColumn, nowMs: number): string {
   switch (column) {
     case "QUEUED":
-      return node.dependsOn.length === 0 ? "ready for an agent" : `after ${node.dependsOn.join(", ")}`;
+      return node.dependsOn.length === 0 ? "ready for an agent" : "waiting on other work";
     case "WORKING": {
       // `lastActivityAt` is the last DECISION on the node (a review round, an acceptance), never
       // the seat's claim or its renewals, so the card does not pretend to know when the seat
@@ -94,8 +94,8 @@ export function cardLine(node: RunNodeView, column: BoardColumn, nowMs: number):
     }
     case "DONE": {
       if (node.landing === null) return "verified";
-      if (node.landing.outcome === "COMMITTED") return `verified ${MIDDOT} committed ${(node.landing.sha ?? "").slice(0, 8)}`;
-      return `verified ${MIDDOT} not committed: ${node.landing.code ?? "refused"}`;
+      if (node.landing.outcome === "COMMITTED") return `verified ${MIDDOT} landed`;
+      return `verified ${MIDDOT} not landed yet`;
     }
     case "BLOCKED":
       return node.status === "ACCEPTED" || node.status === "DELIVERED" || node.status === "IN_PROGRESS" || node.status === "READY"

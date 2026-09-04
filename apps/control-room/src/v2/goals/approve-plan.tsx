@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
-import { refusalTitle, refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 import { ARROW_LEFT, MIDDOT } from "../glyphs.js";
 import type {
   PlanningRunAcceptanceView,
@@ -184,9 +184,7 @@ function OutcomeView({ outcome }: { readonly outcome: PlanningRunOutcome }): JSX
   if (outcome.status === "RUN") return <RunView outcome={outcome} />;
   // REFUSED and ERROR both name their code and layer plainly, never a blank.
   return (
-    <p className="cr2-approve-refusal" data-testid="cr.approve.refusal" title={refusalTitle(outcome)}>
-      {refusalWords(outcome)}
-    </p>
+    <RefusalNote refusal={outcome} role="alert" testId="cr.approve.refusal" />
   );
 }
 

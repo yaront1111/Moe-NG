@@ -170,13 +170,13 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
   const { catalog, coverage, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
-      countLabel: "WAITING FOR THE GOAL CATALOG", items: Object.freeze([]),
+      countLabel: "Waiting for the goal catalog", items: Object.freeze([]),
       note: "Nothing is listed until the daemon's durable goal catalog answers.",
     });
   }
   if (catalog.outcome !== "GOALS") {
     return Object.freeze({
-      countLabel: `${catalog.outcome} ${MIDDOT} ${catalog.detail}`, items: Object.freeze([]),
+      countLabel: "The goals could not be read", items: Object.freeze([]),
       note: `The goal catalog answered ${catalog.outcome}: ${catalog.detail}.`,
     });
   }
@@ -187,7 +187,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));
   const count = items.length;
   return Object.freeze({
-    countLabel: `${String(count)} DECISION${count === 1 ? "" : "S"} ${MIDDOT} NEEDS YOU`,
+    countLabel: `${String(count)} decision${count === 1 ? "" : "s"} ${MIDDOT} needs you`,
     items: Object.freeze(items),
     note: surface === null
       ? "The daemon's offers have not arrived yet; plan approvals appear once they do."

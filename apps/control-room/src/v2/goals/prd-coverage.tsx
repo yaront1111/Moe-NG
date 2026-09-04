@@ -5,7 +5,7 @@ import type {
   CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
 import { MIDDOT } from "../glyphs.js";
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -206,15 +206,16 @@ export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Ele
 
   return (
     <section className="cr2-approve" data-testid="cr.coverage.card">
-      <p className="cr2-slot-kicker">{`PRD COVERAGE ${MIDDOT} ${goalId}`}</p>
+      <p className="cr2-slot-kicker">
+        PRD coverage
+        <span className="cr2-visually-hidden">{` for ${goalId}`}</span>
+      </p>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.coverage.loading">Reading coverage...</p>
       ) : state.outcome.status === "COVERAGE" ? (
         <CoverageBody coverage={state.outcome} />
       ) : (
-        <p className="cr2-approve-refusal" data-testid="cr.coverage.refusal">
-          {refusalWords(state.outcome)}
-        </p>
+        <RefusalNote refusal={state.outcome} testId="cr.coverage.refusal" />
       )}
     </section>
   );

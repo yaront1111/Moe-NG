@@ -96,8 +96,8 @@
 
 .cr2-goals-count {
   font-family: var(--cr-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: var(--cr-fs-caption);
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -459,8 +459,7 @@
 .cr2-goal-pill-label {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-micro);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -1405,8 +1404,7 @@
   margin-bottom: 6px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 .cr2-goal-status-headline {
@@ -1430,8 +1428,7 @@
 .cr2-goal-status-next-kicker {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 .cr2-goal-status-next-label {

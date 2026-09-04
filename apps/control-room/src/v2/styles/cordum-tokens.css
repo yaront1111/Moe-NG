@@ -97,9 +97,9 @@
   --cr-font-mono: "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 
   /* Type scale (px, tuned to the 13px body of the design) */
-  --cr-fs-micro: 9px;
-  --cr-fs-mono: 9.5px;
-  --cr-fs-caption: 10.5px;
+  --cr-fs-micro: 11px;
+  --cr-fs-mono: 11px;
+  --cr-fs-caption: 11px;
   --cr-fs-sm: 11.5px;
   --cr-fs-body: 12.5px;
   --cr-fs-base: 13px;

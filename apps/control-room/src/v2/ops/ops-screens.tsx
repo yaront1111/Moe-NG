@@ -3,7 +3,7 @@ import type { JSX } from "react";
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -46,11 +46,7 @@ function upFor(startedAt: string, nowMs: number): string {
 function Refusal({ outcome, testId }: {
   readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>; readonly testId: string;
 }): JSX.Element {
-  return (
-    <p className="cr2-approve-refusal" data-testid={testId}>
-      {refusalWords(outcome)}
-    </p>
-  );
+  return <RefusalNote refusal={outcome} testId={testId} />;
 }
 
 function Fact({ label, value, testId }: {
@@ -136,7 +132,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
         </ol>
       )}
       <span className="cr2-goals-count" data-testid="cr.policy.count">
-        {`${String(outcome.slices.length)} INSTALLED ${MIDDOT} ${String(outcome.evaluations.length)} EVALUATION${outcome.evaluations.length === 1 ? "" : "S"} ${MIDDOT} VERSION ${String(outcome.aggregateVersion)}`}
+        {`${String(outcome.slices.length)} installed ${MIDDOT} ${String(outcome.evaluations.length)} evaluation${outcome.evaluations.length === 1 ? "" : "s"} ${MIDDOT} version ${String(outcome.aggregateVersion)}`}
       </span>
       {outcome.slices.length === 0 ? (
         <div className="cr2-goals-empty" data-testid="cr.policy.empty">
@@ -150,7 +146,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
               <p className="cr2-slot-kicker">
                 {`${KIND_WORDS[slice.kind]} ${MIDDOT} installed ${ago(slice.installedAt, nowMs)}`}
                 {slice.contentDigestMatches === null ? "" : slice.contentDigestMatches
-                  ? ` ${MIDDOT} bytes match the ref` : ` ${MIDDOT} BYTES DO NOT MATCH THE REF`}
+                  ? ` ${MIDDOT} bytes match the ref` : ` ${MIDDOT} bytes do not match the ref`}
               </p>
               <p className="cr2-approve-mono cr2-ops-ref">{slice.sliceRef}</p>
               {slice.rules === null ? null : (

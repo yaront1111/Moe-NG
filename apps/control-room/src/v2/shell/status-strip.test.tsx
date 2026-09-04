@@ -74,7 +74,7 @@ function firstBar(): Element {
 describe("truth-04: the status strip names what it measures", () => {
   it("labels the daemon link instead of claiming an event relay", () => {
     render(<StatusStrip clockPresent descriptor={CONNECTED} />);
-    expect(screen.getByTestId("cr.shell.link.label").textContent).toBe("DAEMON LINK");
+    expect(screen.getByTestId("cr.shell.link.label").textContent).toBe("Daemon link");
     expect(screen.getByTestId("cr.shell.statusstrip").textContent).not.toContain("EVENT RELAY");
   });
 

@@ -79,8 +79,7 @@
   display: inline-block;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-accent-text, var(--cr-accent));
 }
 
@@ -103,8 +102,7 @@
 .cr2-kanban-next-kicker {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -156,8 +154,7 @@
   margin: 0 0 8px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -247,8 +244,7 @@
   margin: 0;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-micro);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -313,8 +309,7 @@
   margin: 0 0 8px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -420,8 +415,7 @@
 .cr2-runs-total-word {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-micro);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
 }
 
@@ -429,8 +423,7 @@
   margin-left: 10px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-wide);
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--cr-ink-soft);
   vertical-align: middle;
 }

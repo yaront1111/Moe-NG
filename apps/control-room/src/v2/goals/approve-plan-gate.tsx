@@ -4,6 +4,7 @@ import { ActionButton } from "../components/primitives.js";
 import type {
   ApprovalAuthorization, ApprovalGrant, PlanApprovalOutcome,
 } from "./plan-approval.js";
+import { RefusalNote } from "../components/outcome-note.js";
 import { refusalWords } from "../components/refusal-words.js";
 
 /**
@@ -40,9 +41,11 @@ function WithheldReason({ authorization }: {
   readonly authorization: Extract<ApprovalAuthorization, { status: "WITHHELD" }>;
 }): JSX.Element {
   return (
-    <p className="cr2-approve-note" data-testid="cr.approve.reason">
-      {`Approval is not offered for this run: ${refusalWords(authorization)}`}
-    </p>
+    <RefusalNote
+      refusal={authorization}
+      said={`Approval is not offered for this run. ${refusalWords(authorization)}`}
+      testId="cr.approve.reason"
+    />
   );
 }
 
@@ -62,9 +65,7 @@ export function ApproveGate({ authorization, busy, onApprove, refusal }: Approve
         ? <WithheldReason authorization={authorization} />
         : null}
       {refusal === null ? null : (
-        <p className="cr2-approve-refusal" data-testid="cr.approve.dispatch-refusal">
-          {refusalWords(refusal)}
-        </p>
+        <RefusalNote refusal={refusal} role="alert" testId="cr.approve.dispatch-refusal" />
       )}
     </div>
   );

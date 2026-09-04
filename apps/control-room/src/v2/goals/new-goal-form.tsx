@@ -116,7 +116,7 @@ export function NewGoalForm({
         onDrop={onDrop}
       >
         <div className="cr2-prd-lead">
-          <span className="cr2-field-label">DROP prd.md OR PASTE TEXT</span>
+          <span className="cr2-field-label">Drop a PRD or paste text</span>
           <button
             className="cr2-prd-browse"
             onClick={() => inputRef.current?.click()}

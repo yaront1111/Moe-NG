@@ -43,7 +43,7 @@ describe("columnOf", () => {
 describe("cardLine", () => {
   it("states one fact per column, in a person's words", () => {
     expect(cardLine(node("READY"), "QUEUED", NOW)).toBe("ready for an agent");
-    expect(cardLine(node("READY", { dependsOn: ["n-1", "n-2"] }), "QUEUED", NOW)).toBe("after n-1, n-2");
+    expect(cardLine(node("READY", { dependsOn: ["n-1", "n-2"] }), "QUEUED", NOW)).toBe("waiting on other work");
     const working = node("IN_PROGRESS", {
       claim: { active: true, claimedBy: "sess-wrap-abc", expiresAt: "2026-09-04T08:12:00.000Z", status: "OPEN" },
       lastActivityAt: "2026-09-04T07:45:00.000Z",
@@ -55,9 +55,9 @@ describe("cardLine", () => {
     expect(cardLine(rework, "REWORK", NOW)).toBe("sent back ×2 · rejected: implementation");
     expect(cardLine(node("ACCEPTED"), "DONE", NOW)).toBe("verified");
     expect(cardLine(node("ACCEPTED", { landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "4f2a91cdabcdef" } }), "DONE", NOW))
-      .toBe("verified · committed 4f2a91cd");
+      .toBe("verified · landed");
     expect(cardLine(node("ACCEPTED", { landing: { branch: null, code: "LANDING_BASELINE_MISSING", files: [], outcome: "REFUSED", sha: null } }), "DONE", NOW))
-      .toBe("verified · not committed: LANDING_BASELINE_MISSING");
+      .toBe("verified · not landed yet");
     expect(cardLine(node("ESCALATION_REQUIRED"), "BLOCKED", NOW)).toBe("every review attempt used; needs your decision");
     expect(cardLine(node("REPLANNED"), "BLOCKED", NOW)).toBe("replanned into a successor goal");
   });

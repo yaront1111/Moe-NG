@@ -15,7 +15,7 @@ function targetWords(targetAggregateId: string): string {
   if (targetAggregateId.startsWith("publish:")) return `the publish of goal ${targetAggregateId.slice(13, 21)}`;
   return targetAggregateId;
 }
-import { refusalWords } from "../components/refusal-words.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -27,11 +27,7 @@ import { refusalWords } from "../components/refusal-words.js";
 function Refusal({ outcome, testId }: {
   readonly outcome: { readonly code: string; readonly layer: string; readonly status: string }; readonly testId: string;
 }): JSX.Element {
-  return (
-    <p className="cr2-approve-refusal" data-testid={testId} role="status">
-      {refusalWords(outcome)}
-    </p>
-  );
+  return <RefusalNote refusal={outcome} testId={testId} />;
 }
 
 type ActivityEntries = Extract<ActivityOutcome, { readonly entries: unknown }>["entries"];
@@ -50,7 +46,7 @@ export interface ActivityPanelProps {
 export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.activity.root">
-      <h3 className="cr2-approve-heading">{`ACTIVITY ${MIDDOT} ${scopeLabel}`}</h3>
+      <h3 className="cr2-approve-heading">{`Decisions ${MIDDOT} ${scopeLabel}`}</h3>
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.activity.loading">Reading the ledger...</p>
       ) : outcome.status !== "ACTIVITY" ? (
@@ -115,7 +111,7 @@ export interface SessionsPanelProps {
 export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.sessions.root">
-      <h3 className="cr2-approve-heading">{`SEATS ${MIDDOT} WHO IS WORKING`}</h3>
+      <h3 className="cr2-approve-heading">{`Seats ${MIDDOT} who is working`}</h3>
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.sessions.loading">Reading the seats...</p>
       ) : outcome.status !== "SESSIONS" ? (
