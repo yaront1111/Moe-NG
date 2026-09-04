@@ -6,6 +6,8 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import { ProviderPauseProvider } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 import { BOARD_COLUMNS } from "./board-columns.js";
 import { toneOf } from "./board-feed.js";
 import { BoardScreen, LiveBoard } from "./board-screen.js";
@@ -79,6 +81,14 @@ const ACTIVITY: ActivityOutcome = {
   refusalsRecorded: false, scope: { goalId: GOAL, targets: 8 }, status: "ACTIVITY", totalDecisions: 4,
 };
 
+const PAUSE: ProviderPause = {
+  lastLine: "Claude usage limit reached. Your limit will reset at 11:30 (UTC).",
+  provider: "claude", resetAt: "2026-09-03T11:30:00.000Z", since: "2026-09-03T10:00:00.000Z",
+  workItemId: "node.deliver@n-work",
+};
+// Spelled out, not built by calling the production formatter.
+const WAITING = `Waiting for the provider limit to reset at ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()}`;
+
 describe("BoardScreen", () => {
   it("folds the goal's nodes into six columns with counts, one line per card, and a finding only where it is the next question", () => {
     render(<BoardScreen activity={ACTIVITY} brief="Make evidence survive." coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="Evidence ledger" />);
@@ -114,6 +124,18 @@ describe("BoardScreen", () => {
     expect(screen.getByTestId("cr.kanban.stage").textContent).toBe("Agents working");
     expect(screen.getByTestId("cr.kanban.next").getAttribute("href")).toBe("#cr-goal-board");
     expect(screen.queryByTestId("cr.kanban.publish")).toBeNull();
+  });
+
+  it("makes the header's one next step the provider limit while the wrapper is paused", () => {
+    render(<BoardScreen activity={ACTIVITY} brief={null} coverage={COVERAGE} goalId={GOAL} nowMs={NOW} paused={PAUSE} runId={RUN} runs={RUNS} surface={SURFACE} title="t" />);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe(WAITING);
+    // The rest of the header is untouched: the pause is the next step, not the stage.
+    expect(screen.getByTestId("cr.kanban.stage").textContent).toBe("Agents working");
+    expect(screen.getByTestId("cr.kanban.progress").textContent).toContain("1 of 2 acceptance criteria verified");
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
+    cleanup();
+    render(<BoardScreen activity={ACTIVITY} brief={null} coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="t" />);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe("Watch the board");
   });
 
   it("lists the decisions latest first in a person's words, resolving targets to names and skipping seat records", () => {
@@ -172,5 +194,28 @@ describe("LiveBoard", () => {
     expect(readCoverage).toHaveBeenCalledWith(GOAL);
     expect(readActivity).toHaveBeenCalledWith(GOAL);
     expect(readCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes the pause from the shell's context and hands it to the board it renders", async () => {
+    const readers = {
+      readActivity: async (): Promise<ActivityOutcome> => ACTIVITY,
+      readCatalog: async (): Promise<GoalCatalogFrame> => ({ connection: "CONNECTED", detail: "", goals: [], outcome: "GOALS" }),
+      readCoverage: async (): Promise<DocumentCoverageOutcome> => COVERAGE,
+      readRuns: async (): Promise<RunsOutcome> => RUNS,
+    };
+    render(
+      <ProviderPauseProvider value={PAUSE}>
+        <LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} {...readers} runId={RUN} surface={SURFACE} title="t" />
+      </ProviderPauseProvider>,
+    );
+    // findByTEXT, not findByTestId: the element exists from the first paint holding the
+    // UNKNOWN stage's "Wait", so a testid lookup would settle before the reads land.
+    await screen.findByText(WAITING);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe(WAITING);
+    cleanup();
+    // No provider above it: the board says what it says today.
+    render(<LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} {...readers} runId={RUN} surface={SURFACE} title="t" />);
+    await screen.findByText("Watch the board");
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe("Watch the board");
   });
 });

@@ -16,6 +16,8 @@ import { GoalPublish, publishOffer } from "../goals/goal-publish.js";
 import type { PublishPort } from "../goals/publish-port.js";
 import { deriveGoalStatus } from "../goals/goal-status.js";
 import { GOAL_SECTION_IDS } from "../goals/goal-status-strip.js";
+import { useProviderPause } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 import { foldBoard } from "./board-columns.js";
 import { BoardFeed } from "./board-feed.js";
 import { BoardHeader } from "./board-header.js";
@@ -41,6 +43,8 @@ export interface BoardScreenProps {
   readonly goalId: string;
   readonly nowMs: number;
   readonly onNeedsYou?: (() => void) | undefined;
+  /** The shell-wide provider pause; the host reads it, this screen stays pure. */
+  readonly paused?: ProviderPause | null | undefined;
   /** The publish decision's two inputs; absent (tests, fixtures) means no publish card. */
   readonly publishing?: BoardPublishing | undefined;
   readonly runId: string;
@@ -66,8 +70,8 @@ function criterionStatements(coverage: DocumentCoverageOutcome | null): Readonly
 }
 
 export function BoardScreen(props: BoardScreenProps): JSX.Element {
-  const { activity, brief, coverage, goalId, nowMs, onNeedsYou, publishing, runId, runs, surface, title } = props;
-  const status = deriveGoalStatus({ coverage, goalId, runId, surface });
+  const { activity, brief, coverage, goalId, nowMs, onNeedsYou, paused, publishing, runId, runs, surface, title } = props;
+  const status = deriveGoalStatus({ coverage, goalId, paused, runId, surface });
   const goal = goalOf(runs, goalId);
   const fold = goal === null || goal.nodes.length === 0
     ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED");
@@ -201,6 +205,8 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     return (): void => { live = false; };
   }, [catalogReader]);
   const brief = catalog?.goals.find((entry) => entry.goalId === goalId)?.brief?.instructions ?? null;
+  // The shell's one health poll, never a second one of the board's own.
+  const paused = useProviderPause();
   return (
     <BoardScreen
       activity={activity.value}
@@ -209,6 +215,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
       goalId={goalId}
       nowMs={runs.nowMs}
       onNeedsYou={onNeedsYou}
+      paused={paused}
       publishing={publishing}
       runId={runId}
       runs={runs.value}

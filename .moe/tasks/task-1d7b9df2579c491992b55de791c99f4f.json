@@ -158,11 +158,17 @@
       "author": "worker-75411639",
       "content": "STEP 7 OVERFLOW — drill restore proof, and the DoD-by-DoD map. Kept out of the step note because notes truncate silently at 5000 chars.\n\nDRILL RESTORE PROOF, IN FULL. The plan's instruction (\"prove the restore with `git diff -- apps/daemon/src/http/affordance-read.ts` showing empty (tracked file, clean at step 1, so an empty diff is sound proof)\") rests on a premise that was FALSE by the time the drill ran. The file was clean at step 1, yes — but by step 7 it carried this row's own uncommitted gate. An empty `git diff` at that point would have proven I had LOST 27 lines of delivered work, not that I had restored it. `git diff` is a sound restore proof only for a file your task did not itself modify.\n\nWhat I did instead, per the drill-restore-proof rail:\n  1. `git status --porcelain` the exact targets FIRST -> both ` M` (tracked, dirty), neither `??`.\n  2. Copy to %TEMP%\\drill-worker-75411639-<name>.ts, then hash BOTH live and backup in the SAME call and compare -> MATCH=True for both, so the backup provably holds the pre-drill bytes.\n       affordance-read.ts        8300563097F7E182FDE45B70E92432DD53A64151AB858BE5D93C3901ABB4FF34\n       compiled-node-source.ts   05CCFE8DC0F16DC46DEBF7C35130F505C7E4B7829B6EA460E5CDC852828EECD5\n  3. Mutate, run, restore by copy.\n  4. Re-hash in a SEPARATE call from the copy — a PowerShell copy can silently no-op, and \"the command returned\" is not evidence the bytes moved. Both MATCH=True. Backups then deleted.\nFor QA: re-hashing the delivered files and comparing to those two digests is the cheap way to confirm the restore actually happened, rather than taking my word for it.\n\nDoD COVERAGE, ITEM BY ITEM.\n1. NodeSpec carries dependencies, populated with runs-read's derivation, 3-node chain asserted EQUAL to the submitted dependsOn per node -> compiled-node-source.test.ts arm \"carries each sealed node's hard dependencies through, exactly as submitted\". Uses the REAL `compiledPlanAuthority` + `decodeGraphContent` compile, not a hand-built snapshot. Asserts the nodeRef list too, so it cannot pass by producing fewer nodes.\n2. BLOCKED with `depends:<nodeKey>` for every unaccepted dependency, READY only when all accepted, exact token strings, and NOT among review.submit offers -> arm \"blocks a dependent node on depends:<nodeKey> and offers it nothing to submit\" (asserts the literal `depends:node-dep-a` and `offeredKindsFor(...) === []`), plus \"releases the dependent node the moment its dependency is ACCEPTED\".\n3. Precedence pinned + zero-dependency regression -> \"PRECEDENCE: reports dependencies AND verification together, dependencies first\" asserts the exact array `[\"depends:node-dep-c\", \"verification\"]`; \"leaves a node with no dependencies exactly as it was\" is the regression arm.\n4. Transitive a->b->c with only a ACCEPTED, both facts in ONE arm -> \"gates the WHOLE chain, not just the frontier's direct parents\".\n5. Operator words + bidirectional roster from the emitting seam -> work-labels.test.ts, four new arms plus the seam scanners. Enumerates the daemon side from affordance-read.ts source text, NOT from the label map.\n6. Mutation drill recorded -> step-7 note, both drills, restore proof above.\n7. Gates quoted with count lines -> step-7 note. control-room and typecheck EXIT 0; the daemon full suite is red on a peer's uncommitted change, proven in two commands and disclosed rather than hidden.\n\nTWO ARMS BEYOND THE DoD, because each closes a way the gate could be almost-right and pass everything else:\n- FAN-OUT: a node depending on two unaccepted nodes names BOTH tokens. A gate that stopped at the first unmet dependency passes every other arm in the block.\n- DANGLING: a dependency naming a key in no sealed roster stays BLOCKED. This is step 7(c)'s adversarial question answered as an executable arm instead of prose — it is the one case where guessing \"satisfied\" silently un-gates a node.\n\nWHAT I DID NOT DO, deliberately, each with its reason:\n- Did NOT dedupe repeated `depends:` tokens. runs-read.ts does not dedupe and the board renders build order from it; deduping only here would re-create the two-spellings divergence this row exists to prevent.\n- Did NOT add a runtime guard for an undefined `dependsOn`. The member is required and both producers set it unconditionally; a defensive branch would be unreachable and would weaken the type as documentation.\n- Did NOT split affordance-read.ts (455 lines, already 428 before this row). Splitting would have moved the replan/escalation branches this row is required not to disturb, and put a file move in front of QA's diff. Recommend the epic-final hardening row split it along the surface / node-lifecycle seam.\n- Did NOT migrate the peer's `project.activate` sender in my own file. Their surface is still moving (runBootstrapCommand gained a 5th `receipts` parameter; activation-receipts.ts is untracked), and writing this row's tests against an uncommitted design is how it breaks again on their next iteration.",
       "timestamp": "2026-09-04T23:36:03.168Z"
+    },
+    {
+      "id": "comment-c8cee10e5ebf4de1bd4f064c0783c10d",
+      "author": "qa-3fd61a21",
+      "content": "FROM QA (grading task-8145137c) — YOUR `dependsOn` CHANGE SHIPPED IN TWO COMMITS, AND FOR A WHILE ONLY HALF OF IT WAS IN HISTORY. Resolved now; recording it so the interval is not mistaken for someone else's regression later.\n\nWHAT HAPPENED. Your surface-side gate in `apps/daemon/src/http/affordance-read.ts` (the `acceptedByRef`/`isAccepted` memo and the `spec.dependsOn.filter(...)` unmet-dependency branch, now ~:369-380 and :429-441) was swept into commit 09fa59ef — a task-8145137c checkpoint that owned the same FILE for its own +6 lines, so the wrapper's pathspec commit could not exclude your hunk. The wrapper's trailer mis-attributed it: `Moe-Contested: apps/daemon/src/http/affordance-read.ts (task-138fab3075884df98c3c220e74c1a3e9)`. It is yours, not task-138fab30's — I posted the same measurement there before the ownership was clear; disregard it on that row.\n\nYour `NodeSpec.dependsOn` half in `apps/daemon/src/http/affordance-contract.ts` stayed uncommitted until 9d0ed510. Between 09fa59ef and 9d0ed510 the branch did not typecheck standalone. Measured in a clean worktree at 416ecc6b (node tsc, node vitest — never `pnpm` in a worktree, it tries to purge node_modules):\n- `tsc --project apps/daemon/tsconfig.json` EXIT 1, exactly 3 errors, all yours:\n  src/http/affordance-read.ts(429,28): error TS2339: Property 'dependsOn' does not exist on type 'NodeSpec'.\n  src/http/affordance-read.ts(429,46): error TS7006: Parameter 'nodeRef' implicitly has an 'any' type.\n  src/http/affordance-read.ts(430,17): error TS7006: Parameter 'nodeRef' implicitly has an 'any' type.\n- daemon suite: Test Files 412 passed | 1 failed (413); Tests 8207 passed | 4 failed (8211). Sole red file `src/http/affordance-read.test.ts` (19 tests | 4 failed), every one `TypeError: Cannot read properties of undefined (reading 'filter')` — `spec.dependsOn` undefined at runtime. Arms: \"code node steps > offers only agent-authored review submission for an approved, unaccepted node\" (:382), \"> blocks a clean submitted node on daemon verification\" (:410), \"> names only the daemon's verification once both standing verifier slices are installed\" (:426), \"a node whose review is exhausted waits on a human escalation > returns the node to READY with review.submit offered once a human escalates\" (:677).\n- Bisect: 19/19 green at 293c4c17, at b61cbc78 and at 414eb699; 4-failed at 09fa59ef, whose only code change is that hunk.\n\n`git grep -c dependsOn HEAD -- apps/daemon/src/http/affordance-contract.ts` = 2 at 9d0ed510, so the standalone break is closed. I did NOT re-measure the suite after your landing: by then a third peer's uncommitted activation-ingress work (`ACTIVATION_WITNESS_CALLER_SUPPLIED` in `bootstrap-services.ts`, absent at every commit) had reddened ~35 arms across http/ and activation/ in the shared checkout, so the working tree is no longer a usable anchor for your row either. Verify yours in a clean worktree at a named SHA, not in `D:\\projexts\\moe-next`.\n\nTAKEAWAY FOR THIS ROW: when a type field and its consumer live in two files, land both in one commit — a consumer committed alone is green in your dirty tree and red for everyone else.",
+      "timestamp": "2026-09-04T23:43:17.745Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-04T23:38:10.102Z",
+  "updatedAt": "2026-09-04T23:43:17.745Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:47:41.465Z",
     "plannedStepCount": 7,
@@ -217,5 +223,79 @@
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T23:38:10.102Z"
+  "blockedAt": "2026-09-04T23:38:10.102Z",
+  "commits": [
+    {
+      "sha": "9d0ed510cc554076ed296791adbf8e5f775dd0df",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-04T22:37:59Z",
+      "paths": [
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+        "apps/control-room/src/v2/goals/work-labels.test.ts",
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/http/affordance-contract.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.ts"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-04T23:38:45.581Z",
+      "treeId": "3a1dacb5418718b077c5f01d769b671500720707",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-92d84d384e4443d7bf78c76024af5688"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read-planning.test.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/http/affordance-contract.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts"
+  ],
+  "touchedFiles": [
+    ".moe-scratch-labels-arms.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/http/affordance-contract.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    ".moe-scratch-depends-arms.ts"
+  ],
+  "unattributedPaths": [
+    ".moe-tmp-step4.py",
+    ".moe-tmp-step5.py",
+    ".moe-tmp-step6.py",
+    ".moe-tmp-step7.py",
+    ".moe-tmp-step7b.py"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-75411639@2026-09-04T22:37:59Z",
+    "at": "2026-09-04T23:38:45.581Z"
+  }
 }

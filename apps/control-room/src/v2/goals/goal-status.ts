@@ -1,5 +1,7 @@
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import { pauseResetWords } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 
 /**
  * WHERE A GOAL STANDS, in one line, and THE ONE THING TO DO NEXT. Derived from two daemon
@@ -86,13 +88,31 @@ function status(stage: GoalStage, headline: string, next: GoalNext, extra: {
   return Object.freeze({ agents: extra.agents ?? null, headline, next, progress: extra.progress ?? null, stage });
 }
 
+/**
+ * The one thing to do while the provider is paused: nothing, until the limit resets. Only
+ * the WORKING stage asks it - a goal waiting on a contract, an escalation or a close is
+ * waiting on a PERSON, and a paused wrapper does not change what that person should do.
+ * The wrapper serves one provider, so a pause raised on another goal's node still stops
+ * this goal's agents; the detail names the item that hit the limit so that is visible.
+ */
+function pausedNext(paused: ProviderPause): GoalNext {
+  return {
+    anchor: "board",
+    detail: `The ${paused.provider} seat hit its limit on ${paused.workItemId}; the wrapper staffs again at ${paused.resetAt}.`,
+    label: `Waiting for the provider limit to reset at ${pauseResetWords(paused)}`,
+  };
+}
+
 export function deriveGoalStatus(input: {
   readonly coverage: DocumentCoverageOutcome | null;
   readonly goalId: string;
+  /** The shell-wide provider pause, or null when none is known. Only WORKING reads it. */
+  readonly paused?: ProviderPause | null | undefined;
   readonly runId: string;
   readonly surface: SurfaceFrame | null;
 }): GoalStatus {
   const { coverage, goalId, runId, surface } = input;
+  const paused = input.paused ?? null;
   const steps = nodeSteps(surface, nodeKeysOf(coverage));
   const agents = agentsOf(steps);
 
@@ -150,7 +170,7 @@ export function deriveGoalStatus(input: {
   }
   if (agents !== null) {
     const remaining = agents.total - agents.accepted;
-    return status("WORKING", `Agents are working: ${String(agents.accepted)} of ${String(agents.total)} nodes accepted.`, {
+    return status("WORKING", `Agents are working: ${String(agents.accepted)} of ${String(agents.total)} nodes accepted.`, paused !== null ? pausedNext(paused) : {
       anchor: "board",
       detail: remaining === 0
         ? "Every node is accepted; the verifier's last acceptance is on the board."

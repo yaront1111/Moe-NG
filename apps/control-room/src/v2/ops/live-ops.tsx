@@ -8,6 +8,7 @@ import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
+import { useProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
 import { HealthScreen, PolicyScreen } from "./ops-screens.js";
 import type { PolicyInstallState } from "./ops-screens.js";
@@ -117,7 +118,9 @@ export function LiveHealth({ headers, onConnection, pollMs, read }: LiveOpsProps
 export function LiveSessions({ headers, pollMs, read }: LiveOpsProps<SessionsOutcome>): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<SessionsOutcome> => readSessions(headers)));
   const { nowMs, outcome } = useOpsRead(reader, SESSIONS_FAILURE, pollMs ?? POLL_MS, undefined);
-  return <SessionsPanel nowMs={nowMs} outcome={outcome} />;
+  // The pause comes from the shell's one health poll, never a second one of this screen's own.
+  const paused = useProviderPause();
+  return <SessionsPanel nowMs={nowMs} outcome={outcome} paused={paused} />;
 }
 
 export interface LiveActivityProps extends LiveOpsProps<ActivityOutcome> {

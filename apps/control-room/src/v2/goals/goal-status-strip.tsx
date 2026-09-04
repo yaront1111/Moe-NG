@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { ARROW_RIGHT, MIDDOT } from "../glyphs.js";
+import { useProviderPause } from "../shell/pause-context.js";
 import { deriveGoalStatus } from "./goal-status.js";
 import type { GoalStatus } from "./goal-status.js";
 
@@ -104,5 +105,7 @@ export function LiveGoalStatus({ goalId, onNeedsYou, pollMs, read, runId, surfac
     const timer = setInterval(tick, pollMs ?? POLL_MS);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [goalId, pollMs, read]);
-  return <GoalStatusStrip onNeedsYou={onNeedsYou} status={deriveGoalStatus({ coverage, goalId, runId, surface })} />;
+  // The shell's one health poll, never a second one of the strip's own.
+  const paused = useProviderPause();
+  return <GoalStatusStrip onNeedsYou={onNeedsYou} status={deriveGoalStatus({ coverage, goalId, paused, runId, surface })} />;
 }

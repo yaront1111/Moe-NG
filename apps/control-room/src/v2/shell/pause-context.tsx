@@ -38,15 +38,33 @@ export function useProviderPause(): ProviderPause | null {
 }
 
 /**
+ * WHEN THE WRAPPER STAFFS AGAIN, in the viewer's own locale. The instant is the
+ * daemon's; one this box cannot parse is shown RAW, never as "Invalid Date" and never
+ * dropped - hiding a live pause behind a formatting miss is the one thing this line
+ * must not do. Every surface that prints the reset instant goes through here, so a
+ * screen cannot quietly regress to a bare `new Date(...)`.
+ */
+export function pauseResetWords(paused: ProviderPause): string {
+  const at = Date.parse(paused.resetAt);
+  return Number.isNaN(at) ? paused.resetAt : new Date(at).toLocaleString();
+}
+
+/**
  * The one sentence the shell says about a pause, so the strip, the Seats panel and
- * the board next-step cannot word it three different ways. The instant is the
- * daemon's, rendered in the viewer's own locale; one this box cannot parse is shown
- * RAW, never as "Invalid Date" and never dropped - hiding a live pause behind a
- * formatting miss is the one thing this line must not do. Same idiom as
+ * the board next-step cannot word it three different ways. Same idiom as
  * `agentsWords` on the Health screen.
  */
 export function pauseWords(paused: ProviderPause): string {
-  const at = Date.parse(paused.resetAt);
-  const when = Number.isNaN(at) ? paused.resetAt : new Date(at).toLocaleString();
-  return `Agents paused: ${paused.provider} limit, resumes ${when}`;
+  return `Agents paused: ${paused.provider} limit, resumes ${pauseResetWords(paused)}`;
+}
+
+/**
+ * The Seats line: the shell's sentence plus the seat's own last line, which is the
+ * operator's only clue WHICH limit fired. The daemon gates `lastLine` on being a
+ * string, not on being non-empty, so a seat that printed nothing before it died really
+ * does arrive empty; say so rather than trailing off after the colon.
+ */
+export function pauseSeatWords(paused: ProviderPause): string {
+  const line = paused.lastLine.trim() === "" ? "(no output)" : paused.lastLine;
+  return `${pauseWords(paused)} - last line from the seat: ${line}`;
 }

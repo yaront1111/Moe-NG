@@ -5,6 +5,8 @@ import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { pauseSeatWords } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 
 /**
@@ -107,9 +109,11 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
 export interface SessionsPanelProps {
   readonly nowMs: number;
   readonly outcome: SessionsOutcome | null;
+  /** The shell-wide provider pause, or null/absent when none is known. */
+  readonly paused?: ProviderPause | null | undefined;
 }
 
-export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Element {
+export function SessionsPanel({ nowMs, outcome, paused }: SessionsPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.sessions.root">
       <h3 className="cr2-approve-heading">Seats</h3>
@@ -119,6 +123,11 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
         <Refusal outcome={outcome} testId="cr.sessions.refusal" what="seats" />
       ) : (
         <>
+          {/* Above the list, and above the empty line: an empty Seats panel is exactly when a
+              person needs to be told the wrapper is waiting rather than broken. */}
+          {paused === undefined || paused === null ? null : (
+            <p className="cr2-needs-note" data-testid="cr.sessions.paused">{pauseSeatWords(paused)}</p>
+          )}
           <p className="cr2-needs-note" data-testid="cr.sessions.count">
             {`${String(outcome.totals.live)} live ${MIDDOT} ${String(outcome.totals.expired)} expired ${MIDDOT} ${String(outcome.totals.closed)} closed`
               + (outcome.unreadable ? ` ${MIDDOT} some session records did not read` : "")}
