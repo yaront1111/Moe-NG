@@ -118,7 +118,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-65786a7d",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:37.267Z",
-  "updatedAt": "2026-09-04T18:20:38.589Z",
+  "updatedAt": "2026-09-04T18:24:47.793Z",
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -186,7 +186,8 @@
   },
   "planApprovedAt": "2026-09-04T09:51:29.130Z",
   "contextFetchedBy": [
-    "worker-80f8bfe1"
+    "worker-80f8bfe1",
+    "qa-65786a7d"
   ],
   "workStartedAt": "2026-09-04T17:28:43.352Z",
   "reviewStartedAt": "2026-09-04T18:20:27.523Z",

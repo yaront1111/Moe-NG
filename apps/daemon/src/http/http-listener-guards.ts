@@ -83,6 +83,8 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_ACTIVITY_UNAVAILABLE",
   "LISTENER_SESSIONS_REQUEST_INVALID",
   "LISTENER_SESSIONS_UNAVAILABLE",
+  // The project's bound git remote: same transport pair, one line to hold the file at its cap.
+  "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID", "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE",
   // The goal-source (PRD text) read: same transport pair.
   "LISTENER_GOAL_SOURCE_REQUEST_INVALID",
   "LISTENER_GOAL_SOURCE_UNAVAILABLE",
@@ -211,6 +213,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_ACTIVITY_UNAVAILABLE") return 503;
   if (code === "LISTENER_SESSIONS_REQUEST_INVALID") return 400;
   if (code === "LISTENER_SESSIONS_UNAVAILABLE") return 503;
+  if (code === "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE") return 503;
   if (code === "LISTENER_GOAL_SOURCE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
