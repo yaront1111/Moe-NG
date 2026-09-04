@@ -93,10 +93,17 @@
   ],
   "priority": "HIGH",
   "order": 2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f2060d78540d46069e64aff7eef1b1e7",
+      "author": "architect-16a01670",
+      "content": "PORT CONTRACT FROM CHILD A (task-741dad13, planned 2026-09-04 by architect-16a01670) - plan against these once A lands (verify on disk first: apps/daemon/src/bootstrap/activation-receipts.ts + activation-receipts-measure.ts).\n\nExports: ACTIVATION_RECEIPT_MEMBERS (repository|provider|store|backup|distribution|policy), ACTIVATION_RECEIPT_CODES (ACTIVATION_REPOSITORY_UNMEASURED, ACTIVATION_PROVIDER_UNMEASURED, ACTIVATION_STORE_UNMEASURED, ACTIVATION_BACKUP_FAILED, ACTIVATION_DISTRIBUTION_UNMEASURED, ACTIVATION_POLICY_UNMEASURED), layer value \"DAEMON_ACTIVATION_RECEIPTS\" (module-private const, type-exported as ActivationReceiptsLayer), measureActivationReceipts(input, ports) -> ActivationReceipts (schemaVersion \"moe-activation-receipts/1\", frozen, JSON-serialisable), nodeActivationReceiptPorts(), activationWitnessOf(receipts) -> {ok:true, witness} | {ok:false, refusals[]}, repositoryObservationOf(receipts) -> RepositoryObservation | null.\n\nInput B fills from daemon config: { projectId (MOE_PROJECT_ID), projectRoot, storePath (MOE_STORE_PATH), artifactRoot (moe-cli-main.ts:229 derivation, repo root under pnpm start), agentCommand (MOE_AGENT_COMMAND ?? DEFAULT_AGENT_COMMAND) }.\n\nPorts B must wire to production readers: committedProbeRef() -> the committed provider.probe's providerMinimumProfileRef (readProbe, provider-profile-reader-checks.ts:113; reader-checks.ts:192-193 requires the witness ref to EQUAL it); installedPolicySliceRefs() -> installedSlices(stateOf(ledger, aggregateId)) from bootstrap-policy-services.ts:49 (empty set => ACTIVATION_POLICY_UNMEASURED, so the browser installs policy from the Policy screen BEFORE activating - already one click, PR #16). git/fs/env/now/backup come from nodeActivationReceiptPorts().\n\nB's own scope per the parent record: project.activate mints the witness from these receipts and REFUSES a caller-supplied witness with a stable code; move the two fakers together (apps/daemon/src/orchestrator/demo-seed-payloads.ts:127-137 and apps/control-room/src/live/live-dispatch-payloads.ts:111-119) plus tests/e2e/control-room/board-chain.spec.ts, or the tree goes red. Also mint the project.bind_repository observation from repositoryObservationOf (baseRevisionHash = sha256 of \"git-sha1:<40hex>\\n\" because core validHash wants 64 hex); the browser DEV_PAYLOADS fake it today.",
+      "timestamp": "2026-09-04T09:55:20.806Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:03.414Z",
-  "updatedAt": "2026-09-04T09:49:18.364Z",
+  "updatedAt": "2026-09-04T09:55:20.806Z",
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],

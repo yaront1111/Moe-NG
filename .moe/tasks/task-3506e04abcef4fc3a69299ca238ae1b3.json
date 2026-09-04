@@ -17,8 +17,68 @@
     "The card spells NO witness, NO version and NO payload the daemon can state itself. Child B made the daemon mint the witness, so `project.activate` is sent with an EMPTY payload; a card that spells a witness re-opens the exact defect this feature closes.",
     "Refusals are rendered as the daemon's own `code @ layer`, never paraphrased or prettified. Do NOT add a nav id: mount on the Goals screen per the row's mount decision, or stop and report."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE the two patterns this row copies, before writing a line. (a) `apps/control-room/src/v2/ops/policy-install-port.ts` (83 lines) end to end: `createPolicyInstallPort(wire)` wraps `spendOffer(wire, kind, affordance, body, label, LAYER)`; `readSurfaceOnce(headers)` POSTs /affordances/read with `AbortSignal.timeout(15_000)` and returns `frameOfSurface(await response.json())`; `installStandardPolicy(port, readSurface, slices)` loops, RE-READS the surface at the top of EVERY iteration, finds the offer by `commandKind`, records SURFACE_UNREADABLE if the read throws, records POLICY_INSTALL_NOT_OFFERED if no offer matches, spends it, pushes the step, and BREAKS on the first `!outcome.ok`. (b) `apps/control-room/src/v2/ops/live-ops.tsx:83-104` `LivePolicy`: it holds all state (useOpsRead poll, the port in useState, busy, steps) and renders the PURE `PolicyScreen`. Confirm `apps/control-room/src/v2/approvals/offer-wire.ts` still exports `spendOffer` and `OfferWire`/`OfferOutcome`, and that `cr.activate` is still unused (`grep -rn \"cr\\.activate\" apps tests` = 0 matches at 68eb1c5d).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/policy-install-port.ts",
+        "apps/control-room/src/v2/ops/live-ops.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE PORT. Create `apps/control-room/src/v2/ops/activation-port.ts` as a near-transcription of policy-install-port.ts, differing only in what it drives: a FIXED ORDERED chain of four kinds — project.register, project.bind_repository, provider.probe, project.activate — rather than a caller-supplied slice list. Export `ACTIVATION_CHAIN_KINDS` as a frozen array in that exact order (it is the prerequisite order at apps/daemon/src/bootstrap/bootstrap-sequence.ts:31), a LAYER const (`CONTROL_ROOM_ACTIVATION` or similar), and `driveActivationChain(port, readSurface, kinds)`. Rules, all inherited from the pattern: re-read the surface at the top of EVERY step because each commit moves the aggregate version and a cached offer carries a stale one; a read that throws is its own recorded SURFACE_UNREADABLE step; an absent offer for the step's kind is its own recorded code, never a guessed version; BREAK on the first refusal so the operator sees exactly which command the daemon refused and why; keep the daemon's `{code, layer}` in the step record unrewritten. THE BODIES ARE EMPTY OR DAEMON-STATED: `project.activate` is sent with NO witness (child B made the daemon mint it), and no step may spell a version. Keep the module <=250 lines; it should land near policy-install-port.ts's 83.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/activation-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PORT TESTS. Create `apps/control-room/src/v2/ops/activation-port.test.ts`. ARMS: (1) all four offers present — assert four steps recorded, in the ACTIVATION_CHAIN_KINDS order, all ok, and assert the surface was RE-READ four times (count the reader calls; a port that reads once and reuses the frame passes a naive test and fails against a real daemon); (2) a mid-chain refusal on provider.probe — assert the chain STOPS, exactly three steps recorded, and the third carries the daemon's exact code AND layer unrewritten; (3) no offer for project.activate — assert its own not-offered code at this row's layer, and that no command was sent for it; (4) the surface reader throws — assert SURFACE_UNREADABLE recorded and the chain stopped; (5) the sent payload for project.activate is EMPTY — assert no `witness` key is transmitted, since a card that spells one re-opens the defect the whole feature closes. Verify arms 2 and 3 go red by mutating the production surface (swap the codes); an arm that stays green when the code changes is not testing the code (global rail 1).",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/activation-port.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE SCREEN, as its own module. Create `apps/control-room/src/v2/ops/activation-screen.tsx` holding a PURE `ActivateScreen` (props in, JSX out, no fetch, no state) plus its `LiveActivate` container in the `LivePolicy` shape — in this module rather than live-ops.tsx, because ops-screens.tsx already carries PolicyScreen + HealthScreen and a third would risk the 250-line cap. The screen renders: a receipt list, one row per member, each showing measured / missing and the daemon's `reason` string VERBATIM; the signing entry rendered as NOT a trust boundary in v0.1 with its reason, visually distinct from a measured receipt and never counted as one; one Activate button; and the chain's step records, each refusal shown as the daemon's `code @ layer` unparaphrased. Testids under the free `cr.activate.*` namespace (cr.activate.root, cr.activate.receipt.<member>, cr.activate.signing, cr.activate.button, cr.activate.step.<kind>, cr.activate.refusal). THE BUTTON MUST BE DISABLED WHILE THE CHAIN IS IN FLIGHT — two concurrent chains would race the same aggregate version, and `busy` in the LivePolicy pattern is exactly that guard. Keep the file <=250 lines; split the screen and container if it grows.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/activation-screen.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "SCREEN TESTS. Create `apps/control-room/src/v2/ops/activation-screen.test.tsx`. ARMS: (1) all six receipts measured — each renders with its testid and measured state; (2) one member missing — its row shows missing with the daemon's reason text verbatim (assert the exact string, not a substring of a paraphrase); (3) the signing entry renders as not-measured with its reason and is NOT presented as a measured receipt; (4) a refusal step renders as `code @ layer` exactly — assert the rendered text equals the daemon's own two fields joined, so a future prettifier breaks the test; (5) the button is disabled while busy and a second click while in flight does not start a second chain (assert the drive function was called once); (6) NO SECRET REACHES THE DOM — drive the component with a surface payload carrying a recognisable fake token and assert it appears nowhere in the rendered container, including in reason strings and title attributes.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/activation-screen.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MOUNT IT SO A PERSON CAN REACH IT. Wire `LiveActivate` into the Goals screen beside the blocked New Goal, through `apps/control-room/src/v2/cordum-app.tsx` (:39 is where the Live* components are imported, :322-324 is where they are rendered per nav id — follow that shape). DO NOT ADD A NAV ID: `apps/control-room/src/v2/shell/shell-model.ts:80-88` NAV_IDS is goals/approvals/runs/resources/health/policy with no 'setup' entry, and widening it drags in its roster tests and is not this row's decision. The card belongs where the operator actually hits the wall — the Goals screen, where live-goal-create refuses. Add a test that renders the MOUNTED path (not the screen in isolation) and finds `cr.activate.root`, so 'the component exists' cannot pass for 'a person can reach it'. If the Goals screen cannot host the card without breaching its own 250-line cap, STOP and report rather than taking a nav id unilaterally.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL REVIEW. Quote `wc -l` for every new production file (<=250 each) and confirm ops-screens.tsx was NOT grown. Run and QUOTE THE COUNT LINES: `pnpm --filter @moe/control-room test` and `pnpm typecheck`. A bare `pnpm test` is NOT evidence for an apps/** claim — the root vitest include carries no apps/** (global rail 18) — and grade every leg on its `Test Files N passed` line, not its exit code (global rail 8). Repo-wide legs are a path-attributed baseline (global rail 3): merge-base failures, HEAD failures, delta intersected with owned paths, foreign red disclosed verbatim. ADVERSARIAL PASS: a double-click on Activate; the daemon restarting mid-chain (the surface read fails between steps — does the operator see which step was reached?); a chain re-run after a partial success (the already-committed commands are no longer offered — does the card report that as a refusal or as already-done?); a receipt whose `reason` is very long or contains markup (it must not break the layout or be rendered as HTML); and the read route being absent entirely (the dev proxy missing the path, which is child C's fifth touchpoint — the card must degrade to a stated refusal, not a blank screen). Report every touched path in complete_step.modifiedFiles.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,5 +94,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:50:26.826Z",
-  "updatedAt": "2026-09-04T09:50:26.826Z"
+  "updatedAt": "2026-09-04T09:53:04.509Z",
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T09:53:02.401Z",
+  "metrics": {
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7
+  },
+  "planningNotes": {
+    "approachesConsidered": "This row is the UI half split out of task-0a5d7212 at plan time (that row enumerated to twelve owned paths, over the 10 cap).\n\nRejected putting `ActivateScreen` in ops-screens.tsx: it already carries PolicyScreen (:82) and HealthScreen (:180); a third screen risks the 250-line cap and would force a split mid-implementation. Its own module pair costs the same two files and leaves headroom.\n\nRejected putting `LiveActivate` in live-ops.tsx (the convention for Live* containers): keeping the container beside its screen saves an owned path and keeps this row at seven. The convention is worth breaking here and the plan says so explicitly rather than leaving it as an unexplained deviation.\n\nRejected a new 'setup' nav id: shell-model.ts:80-88 NAV_IDS has six entries and no setup; widening it pulls in CORDUM_NAV_ITEMS and their roster tests, and the operator's actual wall is the Goals screen, where live-goal-create refuses. Mounting there is both cheaper and better placed. Made a rail so a worker does not quietly take a nav id instead.\n\nRejected having the card send a witness of any kind: child B made the daemon mint it, so `project.activate` goes out with an empty payload. An arm in the port tests asserts no `witness` key is transmitted.",
+    "codebaseInsights": "MEASURED AT main 68eb1c5d.\n\nTHE PORT PATTERN — apps/control-room/src/v2/ops/policy-install-port.ts, 83 lines, transcribe it: `POLICY_INSTALL_COMMAND_KIND` + `POLICY_INSTALL_LAYER` + `SURFACE_TIMEOUT_MS = 15_000`; `createPolicyInstallPort(wire)` returns `{submit}` delegating to `spendOffer(wire, kind, affordance, body, label, LAYER)`; `readSurfaceOnce(headers)` POSTs /affordances/read with AbortSignal.timeout and returns `frameOfSurface(await response.json())`; `installStandardPolicy(port, readSurface, slices)` re-reads at the TOP of every iteration, records SURFACE_UNREADABLE on a throw, records POLICY_INSTALL_NOT_OFFERED when no offer matches the commandKind, spends, pushes a step, and BREAKS on the first `!outcome.ok`. Its stated reason for re-reading: 'every install moves the aggregate's version and the daemon re-offers at the new one'.\n\nTHE CONTAINER PATTERN — live-ops.tsx:83-104 `LivePolicy`: `useOpsRead(reader, FAILURE, pollMs, onConnection)` for the poll; the port and surface reader in `useState` initialisers; `busy` guarding re-entry (`if (port === null || outcome === null || ... || busy) return`); `steps` holding the recorded chain; renders the pure `PolicyScreen`. Mirror all of it, including the busy guard — that is the double-click defence.\n\nWIRE — apps/control-room/src/v2/approvals/offer-wire.ts exports `spendOffer`, `OfferWire`, `OfferOutcome`; apps/control-room/src/live/live-board-feed.ts exports `frameOfSurface` and `SurfaceFrame` (.offers / .steps / .outcome / .connection).\n\nCHAIN ORDER — apps/daemon/src/bootstrap/bootstrap-sequence.ts:31 holds project.activate's prerequisites; the seed's order at demo-seed-plan.ts:190-193 is project.register -> project.bind_repository -> provider.probe -> project.activate.\n\nLABELS — apps/control-room/src/v2/goals/work-labels.ts:46 already maps `\"project.activate\"` to 'Activate the project' and :68 lists the chain kinds. Take the card's labels from there rather than minting new strings.\n\nTESTIDS — v2 uses `cr.<screen>.<part>`: cr.policy.root, cr.policy.standard, cr.policy.standard.<kind>, cr.policy.install.nowire. `cr.activate` is FREE (0 matches). `cr.board.*` is taken.\n\nMOUNTING — cordum-app.tsx:39 imports Live* and :322-324 renders per nav id; shell-model.ts:80-88 NAV_IDS = goals, approvals, runs, resources, health, policy.",
+    "risks": "1. A PORT THAT READS THE SURFACE ONCE PASSES A NAIVE TEST AND FAILS AGAINST A REAL DAEMON. Every accepted command moves the aggregate version, so the second command needs a fresh offer. The port test must COUNT reader calls, not just assert four ok steps — otherwise the one bug this pattern exists to prevent ships green.\n\n2. DOUBLE-CLICK RACES TWO CHAINS at the same aggregate version. The `busy` guard from LivePolicy is the defence; a disabled attribute alone is not, because a fast second click can land before React re-renders. Guard in the handler, assert the drive function was called once.\n\n3. THIS CARD RENDERS DAEMON-SUPPLIED STRINGS onto the operator's screen and into e2e screenshots. The receipts read may carry a `reason` per member; a credential value that leaked into one would be published here. Assert the fake token appears nowhere in the rendered container — and never render a reason as HTML.\n\n4. THIS ROW DEPENDS ON A ROUTE THAT MAY NOT BE PROXIED. Child C's fifth touchpoint is `apps/control-room/src/live/dev-proxy-paths.ts`; if it is missed, the read 404s under the dev server only — which is where this row is developed and where the e2e lane runs. If the card sees nothing, check that list before suspecting this row's code.\n\n5. A PARTIAL RE-RUN IS THE COMMON OPERATOR CASE. After a chain stops mid-way, the already-committed commands are no longer offered. The card must report 'already done' rather than showing the operator a refusal for work that succeeded — covered in the adversarial step.\n\n6. Breaking the Live*-lives-in-live-ops.tsx convention is deliberate (path-cap arithmetic) and is stated in the plan so a reviewer does not read it as an accident.",
+    "keyFiles": [
+      "apps/control-room/src/v2/ops/policy-install-port.ts",
+      "apps/control-room/src/v2/ops/live-ops.tsx",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/v2/approvals/offer-wire.ts",
+      "apps/control-room/src/live/live-board-feed.ts",
+      "apps/control-room/src/v2/goals/work-labels.ts",
+      "apps/control-room/src/v2/cordum-app.tsx",
+      "apps/control-room/src/v2/shell/shell-model.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T09:53:04.509Z"
 }

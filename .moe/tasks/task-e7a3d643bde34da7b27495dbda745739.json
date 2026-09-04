@@ -38,7 +38,7 @@
       "completedAt": "2026-09-04T09:50:15.067Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -66,20 +66,29 @@
       "author": "worker-c846071b",
       "content": "ADVERSARIAL SELF-REVIEW OF THE ROSTER (step 3), findings for the architects who plan the 13. Filed as a comment, not as new rows.\n\n(a) COULD A ROW BE \"COMPLETED\" WHILE SHIPPING NOTHING USABLE? Measured over the 13 DoDs: live drive 13/13, per-package gate with count lines 13/13, offline suite leg 12/13 by regex. The one miss is task-9ae492b373fa4e7aa6b1e91585f6e612 (secrets/environments) and it is a FALSE NEGATIVE of my regex, not a hole: its DoD item 2 is a canary test that runs in the suite (\"set `MOE_CANARY_<random>`; grep the store file bytes, the event stream, every read response, the wrapper log and every receipt - 0 occurrences of the plaintext while the fingerprint is present; the variable reaches a spawned verifier process\"), item 3 asserts encryption on bytes, item 4 is the Playwright drive against a REAL daemon, item 5 names `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` with count lines. It simply never uses the words e2e/offline/integration. No amendment needed.\n\n(b) SHARED-WORKTREE COLLISION SURFACES (both files confirmed to exist at HEAD): `apps/control-room/src/v2/approvals/needs-you-model.ts` (+ needs-you.tsx, needs-you-model.test.ts, needs-you.test.tsx) and `apps/control-room/src/v2/runs/runs-screen.tsx` (+ runs-screen.test.tsx). The deploy/migrations/monitoring trio (task-5d309484, task-8f86e105, task-7683a432) all add a Deployments-card surface and a Needs-you entry; the preview/release pair (task-f3edb8fb, task-2a345b2e) both add a gate to Needs-you and a Runs entry. Whichever lands second must re-measure get_context.epicSiblings for the landed consumer and EXTEND ADDITIVELY (new section/case), never rewrite the model shape - a returned-shape or exact-key-roster change reds every asserting consumer (epic rail on shape greps).\n\n(c) OVERLAP WITH THE 9 PEER ROWS FILED AFTER THIS DELIVERABLE. task-5f5d873e72b546d4a30942bea5c80b97 \"Seats release their claims: per-item work_get_context, observed version on conflict\" duplicates a fix already inside task-4423d2a4c3084d579c132b253d36b502's DoD (the work_get_context / EXPECTED_VERSION_CONFLICT defect from mem real-seat-cannot-release-its-claim-2026-09-04 was assigned there at filing). Whichever is planned second must fold, not duplicate - two rows editing the same claim path in a shared worktree is the collision this board keeps paying for. The other 8 (4 SPIDR children under task-bb844c28; task-a8317bb4 publish-is-a-project-decision, task-d1c815eb goal.close, task-6061e05c reject-a-compiled-plan, task-2723a9b4 provider-limits-pause) do not overlap the 13.\n\n(d) DOCS SWEEP - nothing the docs promise is unfiled. README \"What this is not\" (2026-09-03) lists 5 FEATURE gaps, all covered: browser-only fresh start -> task-bb844c28; one-node initial plan -> task-4423d2a4; no working preview -> task-f3edb8fb; no release gate -> task-2a345b2e; Codex proven only to reach the API -> task-96957529. VISION Stage 1 (line 135) covered: Foundation execution -> task-4423d2a4, Claude+Codex -> task-96957529, working browser preview -> task-f3edb8fb, proof-carrying GitHub PR -> task-2a345b2e, crash-mid-write bar -> task-161b7e9d, contract/traceability surfaces -> task-e7a20a49. VISION Stage 2 (line 141) covered 1:1: repository bootstrapping -> task-5ef1a0a9; infrastructure generation + preview/production deployment -> task-5d309484; secrets and environment management -> task-9ae492b3; database migrations -> task-8f86e105; monitoring, backup and rollback -> task-7683a432; release evidence -> task-2a345b2e.\n\nEXCLUSIONS (deliberate, per this row's DoD item 1 \"features not security or policy\" - stated as exclusions, NOT as gaps): hermetic/adversarial verifier (v0.2, documented trusted-workspace limitation); signing; Phase 0 freeze manifest + FREEZE_READY; node:sqlite driver ratification; benchmark spec hash; npm publish / auto-update / Node-bundled / self-host canary; the unratified Gate 1.5 contract amendment; VISION Stage 3 and Stage 4.",
       "timestamp": "2026-09-04T09:49:58.843Z"
+    },
+    {
+      "id": "comment-03e78e851d4b48a1826c28909ce4fc29",
+      "author": "qa-9aeff9d2",
+      "content": "QA REVIEW EVIDENCE (qa-9aeff9d2, 2026-09-04). Verdict APPROVE. Full detail here; summary is capped.\n\nANCHOR. Graded at the DELIVERED TREE = completion commit f03b0786541c10aa853d3051e05e9fe3d18af35b (kind=completion, role=worker, status=REVIEW, recorded 09:52:06Z), which is also HEAD of moe/work-2026-09-04. `git log f03b0786..HEAD` empty. Checkpoint 38b624b9 is what actually landed the 13 row JSONs (they were UNTRACKED before it; each appears as a whole-file add of ~34 lines, createdAt 09:12-09:14Z by architect-16a01670).\n\nRE-RAN THE VERIFICATION. task.verification names `node /tmp/moe-verify-13.js`, a deleted out-of-tree probe - admissible only because its FULL SOURCE is inline in comment-79ac7eb (epic rail, form (b)). I recreated it byte-for-byte at /tmp/qa-verify-13.js and ran it against `git archive f03b0786 .moe/tasks | tar -x -C /tmp/qa-tree` (734 row files):\n  named13Present 13 liveNotBacklogOrArchived 13 featuresNoDeps 12 proofDepsExact12 true dodMin 5 featuresOnlyRail 13 fullVerticalSliceRail 12 uiMention 13\n  DISCLOSURE epicRowsNow 23 peerRowsAddedAfterFiling 10\n  EXIT 0\nIdentical to task.verification.outputTail on every clause inside the exit predicate. Only the DISCLOSURE counters moved (22->23, 9->10); they are not in the predicate.\n\nAt MY working-tree anchor the same probe gives featuresNoDeps 11, EXIT 1. Cause measured, not assumed: task-bb844c28 gained dependsOn on its 4 SPIDR children at updatedAt 09:53:38.730Z - 92 seconds AFTER the completion commit. `git show f03b0786:.moe/tasks/task-bb844c288fb346c0856778c738b9f073.json` = `dependsOn []`. That edit is the governor action this row's own completion summary asked for. Not this row's defect.\n\nDISCLOSED RED, RE-ATTRIBUTED (not taken on trust). The plan's LITERAL step-1 census exits 1 at BOTH anchors - `rows 23 features 17 proof 6 proofDeps 1` at my tree, and `rows 23 features 18` at the delivered tree. It can never print 13 again: it asserts board totals on a board other seats keep writing. Attribution of all 10 extra epic rows: every one post-dates the last of the 13 (09:14:49.532Z); NONE has parentTaskId = this row; 5 are SPIDR children of task-bb844c28 (741dad13 09:35, 4b9c394d 09:36, 0a5d7212 09:36, ac9d5e2d 09:37, 3506e04a 09:50) and 5 are top-level peer filings (a8317bb4 09:41, d1c815eb 09:42, 6061e05c 09:42, 5f5d873e 09:43, 2723a9b4 09:44). The only one created DURING the worker's session (3506e04a, 09:50:26Z) is architect-d1711c47's - its description says \"SPIDR child C2 ... split out of child C at plan time on 2026-09-04 by architect-d1711c47\" and it carries a 7-step plan plus planningNotes, which a worker seat on a verification-only row cannot write. The worker created nothing, recreated nothing, edited none of the 13.\n\nDoD MAPPING.\n(1) \"features not security or policy\" - FEATURES ONLY rail 13/13 at the delivered tree. Exclusion sentence verbatim from the two closest-call rows (9ae492b3 secrets, 7683a432 monitoring): \"FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.\"\n(2) \"full and not depended on other tasks\" - 12/12 feature rows dependsOn=[] at f03b0786, FULL VERTICAL SLICE rail 12/12. Proof row task-161b7e9d dependsOn SET-EQUALS the 12 ids (I checked set equality, not length - the probe is stricter than the plan's own gate here). That single dependsOn is the owner's explicit AskUserQuestion exception recorded in planningNotes.\n(3) \"product also ui\" - I did NOT accept the probe's loose /UI|screen|card|browser/i regex as proof. Read all 13 descriptions AND definitionOfDone arrays: 13/13 carry a real UI clause in BOTH. Examples: 8f86e105 \"(d) UI: the Deployments card shows migration state per environment\"; e7a20a49 \"UI GAP ... the Resources nav is FROZEN\"; 5ef1a0a9 \"'New product from PRD' in the browser\". 96957529's first regex hit is the gap sentence (\"nothing in the browser shows or chooses it\") but its DoD names \"a UI toggle\" and \"Seats screen shows provider + credential source + CLI version per seat\" - genuine.\n\nLIVE DAEMON CROSS-CHECK (disk lags the daemon). moe.list_tasks epic-8ebe6417: all 13 present, counts {total 24, backlog 0, planning 17, inProgress 5, review 1, done 0, archived 0}. None BACKLOG, none ARCHIVED.\n\nNON-BLOCKING NOTES.\n- The wrapper's completion commit swept 3 peer row JSONs (0a5d7212 +90, 3506e04a +38, 4b9c394d +94) into this row's pathspec. Inspected the diffs: they are those peers' own plan submissions moving forward, additive. Nothing reverted, nothing lost. Known wrapper-harvest behaviour, not a worker action.\n- Row modifies no source; modifiedFiles [] on all 3 steps. Per-file 250/400 cap not applicable; task-level LOC is never a reject reason.\n- comment-47c3ed43 (architect-16a01670, 09:44:56Z) argues the proof row's dependsOn should ALSO name the 5 peer rows filed later. That is a live question about task-161b7e9d, not a gap in THIS row's deliverable, which the plan pins at exactly 12. Left for that row's architect.",
+      "timestamp": "2026-09-04T09:59:53.619Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T08:49:42.457Z",
-  "updatedAt": "2026-09-04T09:50:40.531Z",
+  "updatedAt": "2026-09-04T10:00:05.950Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T08:49:53.375Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 3
+    "executedStepCount": 3,
+    "doneAt": "2026-09-04T10:00:05.950Z",
+    "wallClockMs": 4212575
   },
   "contextFetchedBy": [
     "architect-16a01670",
-    "worker-c846071b"
+    "worker-c846071b",
+    "qa-9aeff9d2"
   ],
   "stepsCompleted": [
     "step-1",
@@ -132,15 +141,40 @@
       "treeId": "06b529514fefa092ae38df983f0a726ed47e2ba3",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f03b0786541c10aa853d3051e05e9fe3d18af35b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T09:44:31Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T09:52:06.313Z",
+      "treeId": "a2cd86c3609d8dde68f8c7f6baecf209a859733c",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
-  "filesModified": [],
+  "filesModified": [
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+    ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json"
+  ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-c846071b@2026-09-04T09:44:31Z",
-    "at": "2026-09-04T09:44:36.121Z"
+    "at": "2026-09-04T09:52:06.313Z"
   },
   "workStartedAt": "2026-09-04T09:44:57.597Z",
   "reviewStartedAt": "2026-09-04T09:50:40.531Z",
@@ -150,5 +184,8 @@
     "outputTail": "named13Present 13 liveNotBacklogOrArchived 13 featuresNoDeps 12 proofDepsExact12 true dodMin 5 featuresOnlyRail 13 fullVerticalSliceRail 12 uiMention 13\nDISCLOSURE epicRowsNow 22 peerRowsAddedAfterFiling 9\nEXIT=0",
     "reportedAt": "2026-09-04T09:50:40.531Z"
   },
-  "completionSummary": "VERIFIED, created nothing. The deliverable (13 rows filed by the architect on 2026-09-04) is intact on disk AND daemon-side. modifiedFiles [] on all 3 steps — this row touches no source.\n\nSTAGE 1 (7): task-bb844c28 browser-only activation · task-4423d2a4 goal to completion (expansion, parallel seats) · task-f3edb8fb working preview Gate 2 · task-2a345b2e release Gate 3 + proof-carrying PR · task-e7a20a49 control-room completeness · task-8a6d6660 design step · task-96957529 Codex seat end to end.\nSTAGE 2 (5): task-5ef1a0a9 repository bootstrapping · task-5d309484 containerized deployment · task-9ae492b3 secrets/environments · task-8f86e105 database migrations · task-7683a432 monitoring/backup/rollback.\nPROOF (1): task-161b7e9d, dependsOn = exactly those 12 (SET equality, not just length).\nDoD: (1) FEATURES ONLY rail 13/13, gap paragraphs cite README/VISION feature gaps; (2) 12/12 features carry no dependsOn + FULL VERTICAL SLICE rail 12/12; (3) UI paragraph 13/13. daemon counts {\"total\":23,\"backlog\":0,\"planning\":21,\"inProgress\":1,\"archived\":0} — none BACKLOG, none ARCHIVED.\n\nDISCLOSED RED: the plan's LITERAL step-1 command re-run fresh prints `rows 22 features 18 proof 4 proofDeps 1 dodMin 5 featuresOnlyRail 18 uiMention 22`, EXIT 1. It is a snapshot census; 9 rows were filed by peers 09:35–09:44Z, after the 13 (last at 09:14:49Z). None of the 13 was edited. The submitted verification is the id-pinned variant — stricter on the load-bearing clause, drops only the total-count equality this row does not own.\n\nFOR THE ARCHITECTS (comment-49ce6a8a): needs-you-model.ts / needs-you.tsx / runs-screen.tsx are shared by the deploy-migrations-monitoring trio and the preview-release pair — second lander re-measures epicSiblings and extends ADDITIVELY. Peer row task-5f5d873e duplicates a fix already inside task-4423d2a4's DoD: fold, don't duplicate. task-bb844c28 is BLOCKED on its 4 SPIDR children and needs a governor to set its dependsOn field.\n\nEXCLUSIONS, not gaps: hermetic ve"
+  "completionSummary": "VERIFIED, created nothing. The deliverable (13 rows filed by the architect on 2026-09-04) is intact on disk AND daemon-side. modifiedFiles [] on all 3 steps — this row touches no source.\n\nSTAGE 1 (7): task-bb844c28 browser-only activation · task-4423d2a4 goal to completion (expansion, parallel seats) · task-f3edb8fb working preview Gate 2 · task-2a345b2e release Gate 3 + proof-carrying PR · task-e7a20a49 control-room completeness · task-8a6d6660 design step · task-96957529 Codex seat end to end.\nSTAGE 2 (5): task-5ef1a0a9 repository bootstrapping · task-5d309484 containerized deployment · task-9ae492b3 secrets/environments · task-8f86e105 database migrations · task-7683a432 monitoring/backup/rollback.\nPROOF (1): task-161b7e9d, dependsOn = exactly those 12 (SET equality, not just length).\nDoD: (1) FEATURES ONLY rail 13/13, gap paragraphs cite README/VISION feature gaps; (2) 12/12 features carry no dependsOn + FULL VERTICAL SLICE rail 12/12; (3) UI paragraph 13/13. daemon counts {\"total\":23,\"backlog\":0,\"planning\":21,\"inProgress\":1,\"archived\":0} — none BACKLOG, none ARCHIVED.\n\nDISCLOSED RED: the plan's LITERAL step-1 command re-run fresh prints `rows 22 features 18 proof 4 proofDeps 1 dodMin 5 featuresOnlyRail 18 uiMention 22`, EXIT 1. It is a snapshot census; 9 rows were filed by peers 09:35–09:44Z, after the 13 (last at 09:14:49Z). None of the 13 was edited. The submitted verification is the id-pinned variant — stricter on the load-bearing clause, drops only the total-count equality this row does not own.\n\nFOR THE ARCHITECTS (comment-49ce6a8a): needs-you-model.ts / needs-you.tsx / runs-screen.tsx are shared by the deploy-migrations-monitoring trio and the preview-release pair — second lander re-measures epicSiblings and extends ADDITIVELY. Peer row task-5f5d873e duplicates a fix already inside task-4423d2a4's DoD: fold, don't duplicate. task-bb844c28 is BLOCKED on its 4 SPIDR children and needs a governor to set its dependsOn field.\n\nEXCLUSIONS, not gaps: hermetic ve",
+  "completedAt": "2026-09-04T10:00:05.950Z",
+  "reviewCompletedAt": "2026-09-04T10:00:05.950Z",
+  "reviewSummary": "APPROVED. Read-only planning row; deliverable = the 13 filed rows. Full evidence in comment-03e78e85.\n\nANCHOR: completion commit f03b0786 (kind=completion, REVIEW) = HEAD; `git show` audited; checkpoint 38b624b9 is what landed the 13 previously-UNTRACKED row JSONs.\n\nRE-RAN VERIFICATION MYSELF: recreated the id-pinned probe from its FULL SOURCE in comment-79ac7eb, ran it against `git archive f03b0786 .moe/tasks`: `named13Present 13 liveNotBacklogOrArchived 13 featuresNoDeps 12 proofDepsExact12 true dodMin 5 featuresOnlyRail 13 fullVerticalSliceRail 12 uiMention 13` EXIT 0 - identical to task.verification.outputTail on every clause in the exit predicate.\n\nDISCLOSED RED RE-ATTRIBUTED, not trusted: the LITERAL step-1 census exits 1 at my anchor AND at the delivered tree (`rows 23`, never 13) - it asserts board totals on a board other seats keep writing. All 10 extra rows post-date the last of the 13 (09:14:49Z); none parented to this row; 5 are task-bb844c28 SPIDR children and 5 top-level peer filings. The only one created mid-session (3506e04a) is architect-d1711c47's - its own description and 7-step plan say so. Worker created nothing.\n\nDoD: (1) FEATURES ONLY rail 13/13, exclusion verbatim \"no security-boundary or policy work in this row... signing, hermetic verification and freeze manifests are out of scope\". (2) 12/12 features dependsOn=[] at f03b0786 + FULL VERTICAL SLICE 12/12; proof row dependsOn SET-EQUALS the 12 (owner's exception). (3) UI graded by CONTENT, not the loose regex: 13/13 carry a UI clause in the description AND in definitionOfDone.\n\nLive daemon: 13 present, backlog 0, archived 0.\n\nNON-BLOCKING: task-bb844c28 gained dependsOn 92 s AFTER the completion commit (governor action this row requested); `dependsOn []` at the delivered tree. Wrapper swept 3 peer row JSONs into the completion commit - additive peer plan writes, nothing reverted. No production source touched; modifiedFiles [] on all 3 steps."
 }
