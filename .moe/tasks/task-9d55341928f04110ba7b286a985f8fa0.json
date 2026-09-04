@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:42:11.826Z",
-  "updatedAt": "2026-09-04T21:02:27.628Z",
+  "updatedAt": "2026-09-04T21:04:13.696Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:30:18.460Z",
     "plannedStepCount": 7,
@@ -306,6 +306,33 @@
       "treeId": "c4ca61b3eb74cb8d08435f3ddfdce2ed9d1318e6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "094d1903bb4aa55c206c9b0d6863c2cebe935332",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-04T20:19:49Z",
+      "paths": [
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/http/repository-remote-read.test.ts",
+        "apps/daemon/src/http/repository-remote-read.ts"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-04T21:04:13.696Z",
+      "treeId": "daa71621df1a8fea8252430bd7a3708577bb04f7",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-278faf81c10845ffa571716105aa19e3"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -324,18 +351,50 @@
   ],
   "touchedFiles": [
     "apps/daemon/src/http/repository-remote-read.ts",
-    "apps/daemon/src/http/repository-remote-read.test.ts"
+    "apps/daemon/src/http/repository-remote-read.test.ts",
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/http/repository-remote-read.js",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.ts",
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/http/http-listener.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/orchestrator/zz-placeholder-alpha.test.ts",
-    "apps/daemon/src/orchestrator/zz-placeholder-beta.test.ts",
-    "apps/daemon/src/orchestrator/zz-placeholder-gamma.test.ts"
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-columns.ts",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/goals/goal-catalog-model.test.ts",
+    "apps/control-room/src/v2/goals/goal-catalog-model.ts",
+    "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.tsx",
+    "apps/control-room/src/v2/runs/run-words.ts",
+    "apps/control-room/src/v2/shell/shell-model.ts",
+    "apps/control-room/src/v2/styles/cordum-board.css",
+    "apps/control-room/src/v2/styles/cordum-goals.css",
+    "apps/control-room/src/v2/styles/cordum-shell.css",
+    "apps/control-room/src/v2/styles/cordum-tokens.css"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-80f8bfe1@2026-09-04T18:30:54Z",
-    "at": "2026-09-04T18:31:03.721Z"
+    "kind": "completion",
+    "sessionId": "worker-cceb207f@2026-09-04T20:19:49Z",
+    "at": "2026-09-04T21:04:13.696Z"
   },
   "declaredFiles": [
     "apps/daemon/src/http/http-listener-guards.ts",
