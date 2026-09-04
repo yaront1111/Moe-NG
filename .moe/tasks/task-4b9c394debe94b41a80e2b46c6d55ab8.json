@@ -17,8 +17,70 @@
     "DO NOT EDIT packages/core. The minted witness must satisfy the EXISTING validActivation; if it cannot, stop and report rather than widening core's roster.",
     "Both fakers move together or the tree goes red: the seed (demo-seed-payloads.ts) and DEV_PAYLOADS (apps/control-room/src/live/live-dispatch-payloads.ts, asserted by tests/e2e/control-room/board-chain.spec.ts). Name all of them in affectedFiles at plan time - discovering one at step 5 is the plan-time grep this rail exists to force."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE the dispatch shape before touching anything — the whole design of this row rests on it. Confirm by reading: (a) `apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts:223-232` — `HandlerContext` is `{humanReview?, ledger, request, store}` and `CommandHandler = (context) => ServiceOutcome`, i.e. FULLY SYNCHRONOUS; (b) `apps/daemon/src/bootstrap/bootstrap-services.ts:193-221` — `runBootstrapCommand` is synchronous and passes `humanReview` in from ITS OWN ARGUMENTS, never off the decoded bytes (the comment at :216-217 states exactly that guarantee — it is the pattern this row copies); (c) `apps/daemon/src/daemon-command-async-entries.ts` (87 lines) — `AsyncCommandKind` is a union of two kinds and `createAsyncCommandEntries` returns entries keyed by kind, each `{asyncHandler, handler (a refusing sync stub), kind, payloadKeys, requiredCapability}`; (d) READ-ONLY CHECK, not an edit: `apps/daemon/src/daemon-command-registry.ts:205-212` — `entryOf` looks up `asyncEntries[kind]` GENERICALLY and returns it whole via `commandAuthority.wrapAsync`, so adding a kind needs NO registry edit. That file is deliberately NOT in this row's owned paths. Verify (d) yourself: if the registry turns out to need an edit, this row is over its path cap — STOP and report rather than absorb it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CARRY THE RECEIPTS THE WAY `humanReview` TRAVELS. In `bootstrap-ledger-vocabulary.ts`, add an OPTIONAL `receipts?: ActivationReceiptSet` to `HandlerContext` (type imported from child A's `bootstrap/activation-receipts.js`). In `bootstrap-services.ts`, give `runBootstrapCommand` a receipts parameter alongside `humanReview` and thread it into the context object the same way — spread rather than assigned, because under exactOptionalPropertyTypes an explicit `undefined` is a DIFFERENT thing from an absent key. THE POINT OF THIS SHAPE: receipts reach the handler only from the CALLER'S arguments, so a request payload structurally cannot present them — the identical guarantee the humanReview comment already documents. Do NOT make `CommandHandler` async: that would change every handler's type and every call site, and the async-entry mechanism in the next step exists precisely so you do not have to.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINT, AND REFUSE THE CALLER'S. Rewrite `activateProject` in `bootstrap-services.ts:108-120`. New order: (1) if `request.payload` carries a `witness` key at all, refuse ACTIVATION_WITNESS_CALLER_SUPPLIED at DAEMON_INGRESS and commit nothing — refuse rather than silently ignore, or an operator would believe they supplied authority they did not; (2) if `context.receipts` is absent, refuse (the sync path cannot measure, and a defaulted witness is exactly the defect this row closes); (3) if ANY receipt member is `known:false`, refuse the WHOLE activation with THAT MEMBER'S code and layer from child A — no partial witness, no defaulted member, nothing committed; (4) otherwise build the EXACT 9-key witness from the measured values — `artifactPathRef`, `backupPathRef`, `credentialRef`, `distributionManifestHash`, `policyRevisionHash`, `providerMinimumProfileRef`, `signingKeyRef` (child A's fixed `signing/unsigned-source-checkout`), `storeDriverRef`, `truthClass: \"DAEMON_VERIFIED\"` — and pass it to `reduceAndCommit`. `providerMinimumProfileRef` must be the ref the COMMITTED provider.probe registered, not a re-derived one, or core refuses on the mismatch. Remember core's `exact()` roster: an extra key refuses just as hard as a missing one, and the two hashes must match /^[0-9a-f]{64}$/.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE `project.activate` AS AN ASYNC ENTRY. In `daemon-command-async-entries.ts`, widen `AsyncCommandKind` with `\"project.activate\"`, add a receipts-measurement port to `AsyncCommandEntryOptions` (defaulting to child A's real `measureActivationReceipts` composed with `nodeGitRunner`, so an unconfigured daemon still measures rather than skipping), and return a third entry whose `asyncHandler` awaits the measurement and then calls `runBootstrapCommand(store, bytes, bootstrapTable, undefined, receipts)`, with the shared refusing sync `handler` the other two entries use. Follow the file's conditional-spread idiom for optional options. Keep it under 250 lines. Then update `daemon-command-vocabulary.ts`'s PAYLOAD_KEYS so `\"project.activate\"` no longer declares `[\"witness\"]` — the payload carries no witness now — and update whatever roster test asserts that map, keeping it BIDIRECTIONAL (global rail 9): enumerate the served kinds from the dispatch seam, not only from the constant, so a deleted entry cannot shrink its own iteration and stay green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TESTS — the refusal matrix and the accepted path. In `bootstrap-services.test.ts`, using `bootstrap-test-fixtures.ts` (teach its `send` helper to pass receipts; it calls `runBootstrapCommand` at :203 and :217): ARM 1 — a caller-supplied `witness` refuses ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS **and** the durable decision count is UNCHANGED (assert the count, not just the refusal — a rejected verdict that still reaches the store writes an audit row). ARM 2 (×6) — one arm per receipt member: exactly that member `known:false`, assert its exact code AND layer, the other five measured, and nothing committed. ARM 3 — all six measured: assert the COMMITTED event payload carries the actual measured values (repo toplevel + HEAD sha, provider CLI version, store path/driver, backup sha256), not merely that nine keys are present. ARM 4 — drive the REAL `reduceProject` with the minted witness and assert acceptance, proving core is satisfied without editing core. Verify every refusal arm goes red by mutating the production surface (swap one code for another); an arm that stays green is not testing its code (global rail 1).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MIGRATE THE TWO FAKERS. The daemon now refuses any caller-supplied witness, so both existing senders break unless they move in THIS commit. (1) `apps/daemon/src/orchestrator/demo-seed-plan.ts:192` — change `build(\"project.activate\", 2, { witness: activationWitness(input) })` to send NO witness. Keep the chain ORDER at :190-196 byte-identical (project.register -> project.bind_repository -> provider.probe -> project.activate -> policy.install ×3) — parent DoD 4 greps it. DELIBERATELY LEAVE `activationWitness` in demo-seed-payloads.ts EXPORTED AND UNTOUCHED: deleting it would drag demo-seed-payloads.ts AND `demo-seed-payloads.test.ts:124` (which asserts on it) into this row and breach its path cap. It becomes unused by the plan, which is correct and in scope; removing it is a follow-up, not this row. (2) `apps/control-room/src/live/live-dispatch-payloads.ts:111-119` — `DEV_PAYLOADS[\"project.activate\"]` drops its fake witness (artifact-1/backup-1/hex64(\"cafe\")) to an empty payload. (3) `tests/e2e/control-room/board-chain.spec.ts` — update whatever it asserts about the project.activate dispatch report; that spec clicks the whole chain from an EMPTY store, so it is the test that actually proves the migration landed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL REVIEW. Run and QUOTE THE COUNT LINES: `pnpm --filter @moe/daemon test` (must show demo-seed-*.test.ts green), `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane — label it 'root lane only, apps/** not covered'; the root vitest include carries no apps/**, global rail 18). Grade every leg on its `Test Files N passed` line, never its exit code: `pnpm --filter <pkg>` prints 'No projects matched the filters' and EXITS 0 for a non-package (global rail 8). Prove the seed chain order is unchanged by grep, not by reading. Repo-wide legs are a path-attributed baseline (global rail 3): record merge-base failures, HEAD failures, and the delta intersected with this row's owned paths; disclose any foreign red verbatim. ADVERSARIAL PASS: what happens when two `project.activate` requests race the same aggregate version; when the measurement throws rather than returning `known:false` (it must not escape as a 500 — an unhandled rejection in the asyncHandler is a refusal you failed to code); when a REPLAY of a previously accepted activate arrives (`replayOf` answers at bootstrap-services.ts:203 BEFORE the handler — confirm the replay path does not re-measure or write a second backup); and when the daemon is composed without the receipts port. Report every touched path in complete_step.modifiedFiles.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,5 +96,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:03.414Z",
-  "updatedAt": "2026-09-04T09:36:03.414Z"
+  "updatedAt": "2026-09-04T09:49:18.364Z",
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T09:49:16.207Z",
+  "metrics": {
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "planningNotes": {
+    "approachesConsidered": "THE CENTRAL PROBLEM: measurement is asynchronous but `CommandHandler = (context) => ServiceOutcome` is synchronous (bootstrap-ledger-vocabulary.ts:230) and so is `runBootstrapCommand`.\n\nRejected (a) making CommandHandler async — changes every handler's type, HandlerTable, runBootstrapCommand and every call site including three test harnesses; enormous blast radius for one kind.\nRejected (b) synchronous IO inside the handler (execFileSync/copyFileSync) — blocks the daemon event loop on a git spawn and a file copy for every activation.\nRejected (c) the daemon states a measured witness on a read and the browser spends the offer carrying it (the policy-install shape) — a witness that crosses the wire can be altered by a hostile caller, which is the exact defect being closed.\n\nCHOSEN (d): `project.activate` becomes a third ASYNC REGISTRY ENTRY. `daemon-command-async-entries.ts` already exists for kinds 'whose services are genuinely ASYNCHRONOUS', carrying an `asyncHandler` plus a refusing sync stub, and `daemon-command-registry.ts:209-212` looks entries up generically and returns them whole — so no registry edit, which is also what keeps this row inside its path cap. The asyncHandler awaits the measurement and passes the receipts into `runBootstrapCommand` as an ARGUMENT, exactly as `humanReview` travels today. That gives the same structural guarantee the humanReview comment states at bootstrap-services.ts:216-217: the payload cannot present the thing. Handler stays sync, blast radius stays at this kind.",
+    "codebaseInsights": "MEASURED AT main 68eb1c5d.\n\nDISPATCH SHAPE (the load-bearing measurement):\n- bootstrap-ledger-vocabulary.ts:223-232 — `HandlerContext {humanReview?, ledger, request, store}`; `CommandHandler = (context) => ServiceOutcome` (SYNC); `HandlerTable = Readonly<Partial<Record<BootstrapCommandKind, CommandHandler>>>`.\n- bootstrap-services.ts:193-221 — `runBootstrapCommand(store, input, handlers, humanReview?)`, sync. Order: decode -> replay -> handler lookup -> ledger read -> missingPrerequisites -> handler. THE REPLAY CHECK PRECEDES THE HANDLER, so a replayed activate must not re-measure or re-backup.\n- bootstrap-services.ts:216-217 comment: 'The witness travels only from this call's own arguments — never off the decoded bytes — so a payload cannot present one.' This row copies that sentence's mechanism for receipts.\n- daemon-command-async-entries.ts (87 lines) — `AsyncCommandKind` union of 2; `createAsyncCommandEntries(options)` returns `Record<AsyncCommandKind, CommandRegistryEntry>`; each entry is `{asyncHandler, handler: <shared refusing sync stub>, kind, payloadKeys, requiredCapability}`. Note its exactOptionalPropertyTypes idiom: options are SPREAD conditionally, never assigned `undefined`.\n- http/http-contract.ts:205-213 — `asyncHandler?` is optional and `handler` stays REQUIRED, so existing entries keep their exact type.\n- daemon-command-registry.ts:205-212 — `entryOf` answers `asyncEntries[kind]` FIRST and returns it whole through `commandAuthority.wrapAsync`. GENERIC: adding a kind to the returned record needs no registry edit. It is deliberately NOT an owned path; VERIFY before relying on it, and report if it turns out to need an edit.\n\nWHAT activateProject DOES TODAY (bootstrap-services.ts:108-120): reads `payload.witness`, refuses BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS if absent, otherwise hands the CALLER'S OBJECT straight to `reduceAndCommit`. Nothing measures anything.\n\nCORE'S CONTRACT (packages/core/src/project/project-validation.ts): :21-24 ACTIVATION_KEYS = exact 9; :158 validActivation uses `exact()` so an extra key refuses like a missing one; :132 validProjectRef = any non-empty string; :136 validHash = /^[0-9a-f]{64}$/; :140 strongTruth = DAEMON_VERIFIED|HUMAN_APPROVED only. CORE IS NOT EDITED BY THIS ROW.\n\nTHE TWO FAKERS: demo-seed-plan.ts:192 sends `activationWitness(input)` from demo-seed-payloads.ts:127-137; live-dispatch-payloads.ts:111-119 `DEV_PAYLOADS` sends artifact-1/backup-1/hex64('cafe'), and tests/e2e/control-room/board-chain.spec.ts clicks the whole chain from an empty store against it.\n\nPATH-CAP ARITHMETIC (why the plan says to leave `activationWitness` alone): the owned paths are bootstrap-ledger-vocabulary.ts, bootstrap-services.ts, bootstrap-services.test.ts, bootstrap-test-fixtures.ts, daemon-command-async-entries.ts, daemon-command-vocabulary.ts, demo-seed-plan.ts, live-dispatch-payloads.ts, board-chain.spec.ts = 9. Deleting `activationWitness` would pull in demo-seed-payloads.ts AND demo-seed-payloads.test.ts:124 (which asserts on it) as a 10th and 11th, and an unexpected registry edit would be a 12th. Leaving it exported and unused is the deliberate, in-scope choice that keeps headroom.",
+    "risks": "1. THIS ROW BREAKS TWO SHIPPED SENDERS ON PURPOSE. The seed and DEV_PAYLOADS both supply a witness; once it is refused, both red until migrated — and board-chain.spec.ts asserts against DEV_PAYLOADS, so it is a third. All three are in the owned-path roster; a worker who migrates only one has not finished and will read the others' failures as foreign red.\n\n2. THE REPLAY PATH PRECEDES THE HANDLER (bootstrap-services.ts:203-204). A replayed activate must return the stored decision WITHOUT re-measuring or writing a second backup file. If the measurement is done in the asyncHandler BEFORE runBootstrapCommand, a replay still pays for a git spawn and a store copy — acceptable for correctness but wasteful, and it writes a stray backup. Prefer measuring lazily, or accept and document it; the adversarial step asks for this explicitly.\n\n3. AN UNHANDLED REJECTION IN THE asyncHandler IS A 500, NOT A REFUSAL. Child A returns `known:false` for expected failures, but a genuinely thrown error (EACCES, ENOENT on an odd host) must still be caught and turned into a coded refusal, or fail-closed becomes fail-loudly-with-a-stack-trace.\n\n4. `providerMinimumProfileRef` MUST MATCH THE COMMITTED PROBE. `recordProbe` already refuses PROVIDER_PROFILE_REF_MISMATCH when the envelope ref and the body's disagree; the activation witness names the same ref, so re-deriving it instead of reading what provider.probe committed will refuse at core with a confusing code.\n\n5. exactOptionalPropertyTypes IS ON. An explicit `undefined` is not an absent key. Follow the conditional-spread idiom already used in daemon-command-async-entries.ts and daemon-command-registry.ts:194-202, or the types will not compile.\n\n6. If the registry turns out to need an edit after all, the row gains a 10th path with no headroom left. That is a STOP-and-report, not something to absorb (plan-time enumeration rail).",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-services.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+      "apps/daemon/src/daemon-command-async-entries.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/http/http-contract.ts",
+      "packages/core/src/project/project-validation.ts",
+      "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+      "apps/control-room/src/live/live-dispatch-payloads.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T09:49:18.364Z"
 }

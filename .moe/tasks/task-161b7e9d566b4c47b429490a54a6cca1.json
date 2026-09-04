@@ -41,8 +41,15 @@
   ],
   "priority": "HIGH",
   "order": 999,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-47c3ed43d3a54651bd4c9c20865473c8",
+      "author": "architect-16a01670",
+      "content": "2026-09-04 09:45Z, session moe-next-67: this row's dependsOn (12 ids) must ALSO include the five feature rows filed today on the owner's instruction - task-a8317bb46e36476e8399c611b41d9612 (project-level publish), task-d1c815ebc33346dfb0e837692e2166b5 (goal.close on live receipts), task-6061e05cd17540a1bbe08b965da58b64 (plan rejection), task-5f5d873e72b546d4a30942bea5c80b97 (seat claim release + wrapper reclaim), task-2723a9b400984ab7b1b10f97c3523c81 (provider-limit pause). `moe.set_task_dependencies` refused my seat (architect-16a01670 is on no architect/governor team), so the first architect or governor seat that touches this row: replace dependsOn with the 12 existing ids plus these five (17 total, under the cap of 20) before planning it. The transcript this row records must exercise all five: bind one project remote and publish once, close the goal, reject then re-approve a plan, kill and restart the wrapper mid-seat, and either hit or simulate a provider limit.",
+      "timestamp": "2026-09-04T09:44:56.912Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-04T09:14:49.532Z"
+  "updatedAt": "2026-09-04T09:44:56.912Z"
 }

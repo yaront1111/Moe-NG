@@ -1,0 +1,38 @@
+{
+  "id": "task-3506e04abcef4fc3a69299ca238ae1b3",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Activate project card: the browser drives the chain from one button",
+  "description": "SPIDR child C2 of task-bb844c288fb346c0856778c738b9f073, split out of child C (task-0a5d7212a7f644d5891df4e0e1545787) at plan time on 2026-09-04 by architect-d1711c47: the combined route+UI row enumerated to TWELVE owned paths, over the 10 cap, so the daemon read (C) and the browser card (C2) are separate rows. dependsOn C. Measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the v2 'Activate project' card. It renders the six receipts as measured/missing with their reasons from the read C ships, and drives project.register -> project.bind_repository -> provider.probe -> project.activate from one button.\n\nMEASURED AT 68eb1c5d:\n- COPY THIS PATTERN EXACTLY: apps/control-room/src/v2/ops/policy-install-port.ts (83 lines). `installStandardPolicy` loops the work, RE-READS the surface before every step (each commit moves the aggregate version, so a cached offer is a stale version), finds the offer by `commandKind`, spends it with `spendOffer`, STOPS AT THE FIRST REFUSAL, and keeps the daemon's own {code, layer}. An absent offer is its own recorded refusal (POLICY_INSTALL_NOT_OFFERED), never a guessed version. `readSurfaceOnce` POSTs /affordances/read with a 15s AbortSignal.timeout.\n- THE CONTAINER/SCREEN SPLIT: apps/control-room/src/v2/ops/live-ops.tsx:83-104 `LivePolicy` holds the state (useOpsRead poll, the port, busy, steps) and renders the PURE `PolicyScreen` from ops-screens.tsx:82. Mirror that split.\n- ops-screens.tsx already holds PolicyScreen + HealthScreen; adding a third screen there risks the 250-line cap, so the Activate screen gets its OWN module pair.\n- TESTID NAMESPACE: v2 uses `cr.<screen>.<part>` (cr.policy.root, cr.policy.standard, cr.policy.install.nowire). `grep -rn \"cr\\.activate\" apps tests` returns NOTHING at 68eb1c5d, so `cr.activate.*` is free. `cr.board.*` is already taken.\n- MOUNTING: apps/control-room/src/v2/cordum-app.tsx:39 imports the Live* components and :322-324 renders them per nav id; apps/control-room/src/v2/shell/shell-model.ts:80-88 NAV_IDS = goals, approvals, runs, resources, health, policy. THERE IS NO 'setup' NAV ID.\n\nMOUNT DECISION (settled at plan time, do not re-derive): mount the card on the GOALS screen beside the blocked New Goal, NOT as a new nav id. That is where the operator actually hits the wall (live-goal-create.ts refuses there), and it avoids widening NAV_IDS/CORDUM_NAV_ITEMS and their roster tests. If the implementing worker finds the goals screen cannot host it without breaching its own line cap, that is a STOP-and-report, not a new nav id taken unilaterally.\n\nNOT IN SCOPE: the daemon read route (child C); the live-goal-create.ts copy replacement, the Playwright journey and the docs (child D).",
+  "definitionOfDone": [
+    "apps/control-room/src/v2/ops/ gains an activation port mirroring policy-install-port.ts: it re-reads the affordance surface before EVERY step, finds each offer by commandKind, stops at the FIRST refusal, and keeps the daemon's own {code, layer} unrewritten. Tests cover all four commands accepted; a mid-chain refusal stopping the chain with the exact code and layer; and an absent offer reported as its own code rather than a guessed version.",
+    "The Activate card is its own module pair (screen + test), not an addition to ops-screens.tsx, and every production file stays <=250 physical lines (`wc -l` quoted). It renders each of the six receipts as measured/missing with the reason text the daemon stated, verbatim.",
+    "signingKeyRef renders as NOT a trust boundary in v0.1 with its reason, never as a measured receipt (human decision 2026-09-04); a test asserts it is presented as not-measured.",
+    "Card testids are pinned in a control-room test under the free `cr.activate.*` namespace; a test asserts the button is disabled while the chain is in flight so a double-click cannot start two chains.",
+    "The card is reachable in the running app: mounted on the Goals screen beside the blocked New Goal, wired through cordum-app.tsx. A test renders the mounted path and finds the card.",
+    "No credential value, csrf token or header reaches the DOM; a test drives the port with a recognisable fake token in the surface payload and asserts it appears nowhere in the rendered output.",
+    "Gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`. A bare `pnpm test` is NOT evidence for an apps/** claim - the root vitest include carries no apps/** (global rail 18)."
+  ],
+  "taskRails": [
+    "MIRROR policy-install-port.ts; do not invent a second dispatch idiom. Re-read the surface between steps - each commit moves the aggregate version and a cached offer is a stale version.",
+    "The card spells NO witness, NO version and NO payload the daemon can state itself. Child B made the daemon mint the witness, so `project.activate` is sent with an EMPTY payload; a card that spells a witness re-opens the exact defect this feature closes.",
+    "Refusals are rendered as the daemon's own `code @ layer`, never paraphrased or prettified. Do NOT add a nav id: mount on the Goals screen per the row's mount decision, or stop and report."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bb844c288fb346c0856778c738b9f073",
+  "dependsOn": [
+    "task-0a5d7212a7f644d5891df4e0e1545787"
+  ],
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:50:26.826Z",
+  "updatedAt": "2026-09-04T09:50:26.826Z"
+}
