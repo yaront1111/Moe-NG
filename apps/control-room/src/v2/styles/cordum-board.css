@@ -381,3 +381,66 @@
 @media (prefers-reduced-motion: reduce) {
   .cr2-kanban-bar-fill { transition: none; }
 }
+
+/* ------------------------------------------------------------------ runs screen */
+
+.cr2-runs-totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 0 0 14px;
+}
+
+.cr2-runs-totals-sentence {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  margin-right: 8px;
+}
+
+.cr2-runs-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cr2-runs-total-count {
+  font-size: var(--cr-fs-lg);
+  font-weight: 600;
+  color: var(--cr-ink);
+}
+
+.cr2-runs-total[data-count="0"] .cr2-runs-total-count { color: var(--cr-ink-soft); }
+.cr2-runs-total[data-column="DONE"]:not([data-count="0"]) .cr2-runs-total-count { color: var(--cr-accent); }
+.cr2-runs-total[data-column="REWORK"]:not([data-count="0"]) .cr2-runs-total-count,
+.cr2-runs-total[data-column="BLOCKED"]:not([data-count="0"]) .cr2-runs-total-count { color: var(--cr-danger); }
+
+.cr2-runs-total-word {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-wide);
+  text-transform: uppercase;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-goal-state {
+  margin-left: 10px;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  text-transform: uppercase;
+  color: var(--cr-ink-soft);
+  vertical-align: middle;
+}
+
+.cr2-run-goal[data-stuck="true"] .cr2-run-goal-run { color: var(--cr-danger); }
+
+.cr2-run-goal-publish {
+  margin: 2px 0 0;
+  font-size: var(--cr-fs-caption);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-run-goal .cr2-kanban-lanes { margin-top: 10px; }

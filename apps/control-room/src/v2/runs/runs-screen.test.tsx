@@ -3,7 +3,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { RunNodeView, RunsOutcome } from "../../live/live-runs.js";
-import { RunsScreen, STATUS_WORDS, nodeEvidence } from "./runs-screen.js";
+import { RunsScreen, nodeEvidence } from "./runs-screen.js";
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -55,44 +55,60 @@ describe("nodeEvidence", () => {
 });
 
 describe("the runs screen", () => {
+  const stuck = node({
+    nodeKey: "node-c", objective: "Refuse edits.",
+    review: { escalated: false, findings: [{ detail: "the guard is missing", round: 1, ruleId: "R1", severity: "HIGH", subject: "s" }], latestRoute: "REJECT_IMPLEMENTATION", rounds: 1, unreadable: false, unsuccessfulRounds: 1, version: 2 },
+  });
   const outcome: RunsOutcome = {
     goals: [
+      { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], publish: null, run: null, title: null },
       {
         goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
-        nodes: [node(), node({ nodeKey: "node-b", objective: "Refuse edits.", dependsOn: ["node-a"], status: "IN_PROGRESS",
-          claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T21:00:00.000Z", status: "OPEN" } })],
-        publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
+        nodes: [node(), node({ nodeKey: "node-b", objective: "Persist it.", dependsOn: ["node-a"], status: "IN_PROGRESS",
+          claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T21:00:00.000Z", status: "OPEN" } }), stuck],
+        publish: { branch: "main", code: null, decisionId: "d-1", outcome: "PUSHED", remoteUrl: "git@github.com:acme/app.git", requestedAt: "2026-09-02T19:00:00.000Z", sha: "0123456789abcdef", url: null },
+        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
       },
-      { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], publish: null, run: null, title: null },
     ],
     status: "RUNS",
-    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
+    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 2, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 3 },
   };
 
-  it("renders the totals, each goal's run line, and the node ladder with status words", async () => {
+  it("counts the project's nodes by column, then shows each goal as a board with stuck goals first", async () => {
     const onOpenBoard = vi.fn();
     render(<RunsScreen nowMs={NOW} onOpenBoard={onOpenBoard} outcome={outcome} />);
-    expect(screen.getByTestId("cr.runs.totals").textContent).toBe("2 goals · 2 nodes · 1 in progress · 1 ready for an agent");
-    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("Run run-1 · activated · approval bound");
-    expect(screen.getByTestId("cr.runs.goal.goal-1").textContent).toContain("GOAL · Active");
-    expect(screen.getByTestId("cr.runs.goal.goal-2").textContent).toContain("GOAL · Draft");
-    expect(screen.getByTestId("cr.runs.node.node-a.status").textContent).toBe(STATUS_WORDS.READY);
-    expect(screen.getByTestId("cr.runs.node.node-b.status").textContent).toBe(STATUS_WORDS.IN_PROGRESS);
-    expect(screen.getByTestId("cr.runs.node.node-b.evidence").textContent).toContain("held by sess-wrap-2");
-    expect(screen.queryByTestId("cr.runs.node.node-a.findings")).toBeNull();
+    expect(screen.getByTestId("cr.runs.totals").textContent).toContain("2 goals · 3 nodes");
+    expect(screen.getByTestId("cr.runs.total.QUEUED").getAttribute("data-count")).toBe("1");
+    expect(screen.getByTestId("cr.runs.total.WORKING").getAttribute("data-count")).toBe("1");
+    expect(screen.getByTestId("cr.runs.total.REWORK").getAttribute("data-count")).toBe("1");
+    // The goal with stuck work comes first although the wire listed it second.
+    const sections = screen.getAllByTestId(/^cr\.runs\.goal\.goal-\d$/u);
+    expect(sections.map((section) => section.getAttribute("data-testid"))).toEqual(["cr.runs.goal.goal-1", "cr.runs.goal.goal-2"]);
+    expect(screen.getByTestId("cr.runs.goal.goal-1").getAttribute("data-stuck")).toBe("true");
+    expect(screen.getByTestId("cr.runs.goal.goal-1").textContent).toContain("Active");
+    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("3 nodes · 1 working · 1 stuck");
+    expect(screen.getByTestId("cr.runs.goal.goal-1.publish").textContent).toBe("Pushed 0123456789 on main to git@github.com:acme/app.git");
+    // The goal's nodes are the same six lanes the opened goal shows.
+    expect(screen.getByTestId("cr.kanban.line.node-a").textContent).toBe("ready for an agent");
+    // A lease a full hour out is not a warning yet; the card names the seat and nothing else.
+    expect(screen.getByTestId("cr.kanban.line.node-b").textContent).toBe("an agent seat");
+    expect(screen.getByTestId("cr.kanban.finding.node-c").textContent).toBe("the guard is missing");
+    expect(screen.getByTestId("cr.runs.goal.goal-2").textContent).toContain("Planning");
     expect(screen.getByTestId("cr.runs.goal.goal-2.run").textContent).toBe("No plan has been run for this goal yet.");
     expect(screen.getByTestId("cr.runs.goal.goal-2.empty")).toBeTruthy();
+    expect(screen.queryByTestId("cr.runs.goal.goal-2.publish")).toBeNull();
     expect((screen.getByTestId("cr.runs.goal.goal-2.open") as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByTestId("cr.runs.goal.goal-1.open"));
     expect(onOpenBoard).toHaveBeenCalledWith("goal-1", "run-1", "Build it");
   });
 
-  it("shows loading, a refusal at its layer, and the empty project", () => {
+  it("shows loading, a refusal in plain words with the code kept, and the empty project", () => {
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={null} />);
     expect(screen.getByTestId("cr.runs.loading")).toBeTruthy();
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ code: "LISTENER_RUNS_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.runs.refusal").textContent).toBe("REFUSED · LISTENER_RUNS_UNAVAILABLE · CONTROL_ROOM_LISTENER");
+    expect(screen.getByTestId("cr.runs.refusal").textContent).toBe("The runs could not be read right now (LISTENER_RUNS_UNAVAILABLE).");
+    expect(screen.getByTestId("cr.runs.refusal").getAttribute("title")).toContain("CONTROL_ROOM_LISTENER");
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ ...outcome, goals: [], totals: { ...outcome.totals, goals: 0, nodes: 0, IN_PROGRESS: 0, READY: 0 } }} />);
     expect(screen.getByTestId("cr.runs.empty").textContent).toContain("No goals to run yet.");

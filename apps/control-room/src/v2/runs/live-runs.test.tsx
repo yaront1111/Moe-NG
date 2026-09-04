@@ -32,7 +32,7 @@ describe("LiveRuns", () => {
       const view = render(<LiveRuns headers={{}} onConnection={onConnection} onOpenBoard={vi.fn()} pollMs={1_000} read={read} />);
       expect(read).toHaveBeenCalledTimes(1);
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-      expect(screen.getByTestId("cr.runs.node.node-a")).toBeTruthy();
+      expect(screen.getByTestId("cr.kanban.card.node-a")).toBeTruthy();
       expect(onConnection).toHaveBeenLastCalledWith("CONNECTED");
       await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
       expect(read).toHaveBeenCalledTimes(2);
