@@ -24,6 +24,7 @@ import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createNodeLander } from "./node-lander.js";
 import { createNodePublisher } from "./node-publisher.js";
@@ -340,6 +341,19 @@ async function main(): Promise<void> {
       timeoutMs: knobs.agentTimeoutMs,
     });
     secureSpawn = agentSpawner;
+
+    // Boot reclaim, ONCE before the first staffing pass: a restart otherwise leaves
+    // its own dead children's claims fenced for the full 30-minute claim expiry.
+    const reclaimed = runReclaimPass({
+      clock: () => Date.now(), deps: provider.provide(), isProcessAlive: probeProcessAlive,
+      log: (line: string) => { process.stdout.write(`${line}\n`); },
+      mintSecret: () => randomUUID().replaceAll("-", ""), operatorCredential: config.credential,
+      projectId: config.projectId, store: verifierStore,
+    });
+    const kept = reclaimed.filter((done) => done.outcome !== "RECLAIMED").length;
+    process.stdout.write(`[wrapper] reclaim pass: ${String(reclaimed.length - kept)} `
+      + `reclaimed, ${String(kept)} kept\n`);
+    if (stop.requested()) return;
 
     const { intervalMs, once } = knobs;
     let lastIdle = "";

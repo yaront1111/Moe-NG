@@ -294,3 +294,56 @@ describe("wrapper staffing handle is project-asserted", () => {
     expect(source).not.toContain("SqliteEventStore.open(config.storePath)");
   });
 });
+
+/**
+ * The boot-time reclaim has to run in the SHIPPED binary, exactly once, before
+ * the first staffing pass. Both halves are load-bearing and neither is visible
+ * to a behavioural test of the pass itself: a reclaim that never runs leaves the
+ * 30-minute wait exactly as it was, and one that runs inside the interval loop
+ * would fight the wrapper's own live children every tick.
+ */
+describe("wrapper binary reclaim wiring", () => {
+  const SOURCE = readFileSync(
+    new URL("./agent-wrapper-main.ts", import.meta.url), "utf8",
+  );
+  const reclaimCall = (source: string): string => {
+    const start = source.indexOf("runReclaimPass({");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("});", start);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  };
+
+  it("runs the reclaim after the spawner is armed and before the interval loop", () => {
+    const armed = SOURCE.indexOf("secureSpawn = agentSpawner;");
+    const reclaim = SOURCE.indexOf("runReclaimPass({");
+    const loop = SOURCE.indexOf("for (;;) {");
+    expect(armed).toBeGreaterThan(-1);
+    expect(loop).toBeGreaterThan(-1);
+    expect(reclaim).toBeGreaterThan(armed);
+    expect(reclaim).toBeLessThan(loop);
+  });
+
+  it("calls it exactly once, so it can never be inside the loop", () => {
+    expect(SOURCE.split("runReclaimPass(").length).toBe(2);
+  });
+
+  it("hands it the real store, the real probe and the operator credential", () => {
+    // WHAT is injected, not merely that the call exists: a pass built over a
+    // stub probe or a second store would report a clean board it never read.
+    const call = reclaimCall(SOURCE);
+    expect(call).toContain("isProcessAlive: probeProcessAlive");
+    expect(call).toContain("store: verifierStore");
+    expect(call).toContain("operatorCredential: config.credential");
+    expect(call).toContain("projectId: config.projectId");
+  });
+
+  it("prints the pass summary even when it reclaimed nothing", () => {
+    expect(SOURCE).toContain("[wrapper] reclaim pass:");
+  });
+
+  it("scans a slice that can actually fail (positive control)", () => {
+    const stripped = SOURCE.replace("runReclaimPass({", "");
+    expect(() => expect(stripped.split("runReclaimPass(").length).toBe(2)).toThrow();
+  });
+});

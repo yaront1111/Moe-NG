@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,10 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
+import { readSessionLedger } from "../identity/session-read-model.js";
+import { runSessionCommand } from "../identity/session-services.js";
+import { commitRaw, installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "./work-claim-contracts.js";
 import {
   aggregateIdFor,
@@ -16,8 +21,22 @@ import type { WorkClaimOutcome } from "./work-claim-services.js";
 const PROJECT = "proj-work-claim";
 const directory = mkdtempSync(join(tmpdir(), "moe-work-claim-"));
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
+// `session.open` binds the store's recovery identity, so the seat fixtures below
+// need it installed before any of them can seed a holder session.
+installTestRecoveryBinding(store);
+
+/** Per-arm stores for the holder-liveness suite: an unreadable session ledger is
+ * a whole-STORE fact, so those arms cannot share one. */
+const seatStores: SqliteEventStore[] = [];
 
 afterAll(() => {
+  while (seatStores.length > 0) {
+    try {
+      seatStores.pop()?.close();
+    } catch {
+      // Cleanup must not mask a test failure.
+    }
+  }
   store.close();
   rmSync(directory, { force: true, recursive: true });
 });
@@ -25,11 +44,12 @@ afterAll(() => {
 const encoder = new TextEncoder();
 let sequence = 0;
 
-function run(
+function runOn(
+  target: SqliteEventStore, projectId: string,
   kind: string, principalId: string, payload: Record<string, unknown>,
   expectedVersion = 0, decidedAt = "2026-08-09T12:00:00.000Z", commandId?: string,
 ) {
-  return runWorkClaimCommand(store, encoder.encode(JSON.stringify({
+  return runWorkClaimCommand(target, encoder.encode(JSON.stringify({
     commandId: commandId ?? `cmd-claim-${String(sequence += 1)}`,
     correlationId: "corr-claim",
     decidedAt,
@@ -37,9 +57,84 @@ function run(
     kind,
     payload,
     principalId,
-    projectId: PROJECT,
+    projectId,
     schemaVersion: WORK_CLAIM_SCHEMA_VERSION,
   })));
+}
+
+function run(
+  kind: string, principalId: string, payload: Record<string, unknown>,
+  expectedVersion = 0, decidedAt = "2026-08-09T12:00:00.000Z", commandId?: string,
+) {
+  return runOn(store, PROJECT, kind, principalId, payload, expectedVersion, decidedAt, commandId);
+}
+
+function seatStore(projectId: string): SqliteEventStore {
+  const fresh = SqliteEventStore.openEphemeralForProjectTest(projectId);
+  installTestRecoveryBinding(fresh);
+  seatStores.push(fresh);
+  return fresh;
+}
+
+/** Opens a REAL seat session through the production session pipeline. */
+function openSeat(
+  target: SqliteEventStore, projectId: string, sessionId: string, expiresAt: string,
+): void {
+  const outcome = runSessionCommand(target, encoder.encode(JSON.stringify({
+    commandId: `cmd-seat-open-${sessionId}`,
+    correlationId: "corr-seat",
+    decidedAt: "2026-08-09T11:00:00.000Z",
+    expectedVersion: 0,
+    kind: "session.open",
+    payload: {
+      capabilities: ["work.write"],
+      credentialSha256: createHash("sha256").update(sessionId, "utf8").digest("hex"),
+      expiresAt,
+      sessionId,
+    },
+    // The seat's own working principal IS its session id (session-authenticator),
+    // which is what `work.claim` under the seat's bearer records as `claimedBy`.
+    principalId: sessionId,
+    projectId,
+    schemaVersion: SESSION_SCHEMA_VERSION,
+  })));
+  if (!outcome.ok) throw new Error(`session.open setup failed: ${outcome.code}`);
+}
+
+function closeSeat(target: SqliteEventStore, projectId: string, sessionId: string): void {
+  const version = readSessionLedger(target, projectId).sessions.get(sessionId)?.version;
+  if (version === undefined) throw new Error(`no seat session ${sessionId} to close`);
+  const outcome = runSessionCommand(target, encoder.encode(JSON.stringify({
+    commandId: `cmd-seat-close-${sessionId}`,
+    correlationId: "corr-seat",
+    decidedAt: "2026-08-09T11:30:00.000Z",
+    expectedVersion: version,
+    kind: "session.close",
+    payload: { sessionId },
+    principalId: "operator-local",
+    projectId,
+    schemaVersion: SESSION_SCHEMA_VERSION,
+  })));
+  if (!outcome.ok) throw new Error(`session.close setup failed: ${outcome.code}`);
+}
+
+/**
+ * Puts bytes the session fold cannot parse into the log, through the PRODUCTION
+ * commit seam: an accepted `session.open` decision whose stored result carries no
+ * session facts is exactly what `readSessionLedger` reports as `unreadable`.
+ */
+function corruptSessionLedger(target: SqliteEventStore, projectId: string): void {
+  commitRaw(target, {
+    commandId: "cmd-seat-corrupt",
+    correlationId: "corr-seat",
+    decidedAt: "2026-08-09T11:00:00.000Z",
+    expectedVersion: 0,
+    kind: "session.open",
+    payload: { sessionId: "sess-corrupt" },
+    principalId: "sess-corrupt",
+    projectId,
+    schemaVersion: SESSION_SCHEMA_VERSION,
+  }, {}, "sess-corrupt");
 }
 
 const ITEM = "goal.create@goal-live-1";
@@ -86,9 +181,15 @@ describe("runWorkClaimCommand", () => {
     });
   });
 
-  it("refuses release by a non-claimant", () => {
+  it("refuses release by a non-claimant while the holder's seat is LIVE", () => {
+    // The rule that admits a DEAD holder's release turns on holder liveness, so
+    // this arm must give "agent-a" the live seat it never had: without one the
+    // release would now be ADMITTED and this refusal would go vacuous.
+    openSeat(store, PROJECT, "agent-a", "2026-08-09T15:00:00.000Z");
     const outcome = run("work.release", "agent-b", { workItemId: ITEM });
-    expect(outcome).toMatchObject({ code: "WORK_CLAIM_NOT_CLAIMANT", ok: false });
+    expect(outcome).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
   });
 
   it("renews only for the claimant, then releases, then the fence lifts", () => {
@@ -303,5 +404,143 @@ describe("runWorkClaimCommand replay proves same bytes", () => {
     expect(reused).toMatchObject({
       code: "WORK_CLAIM_COMMAND_ID_REUSED", ok: false, refusedBy: "DAEMON_PREREQUISITE",
     });
+  });
+});
+
+/**
+ * THE DEAD-SEAT RULE. A seat claims under its OWN bearer, so `claimedBy` is the
+ * seat's session id and the secret that could release it dies with the wrapper
+ * process. Before this rule the only exit was the claim's 30-minute expiry.
+ *
+ * Every arm here seeds REAL session facts through `runSessionCommand` and reads
+ * the verdict back off the durable work ledger, so nothing is asserted against a
+ * reimplementation of the predicate.
+ */
+describe("a claim whose holder seat is not live may be released by a non-claimant", () => {
+  const HELD = "node.deliver@dead-seat-node";
+  const OPERATOR = "operator-local";
+
+  function holdItem(target: SqliteEventStore, projectId: string, holder: string): void {
+    const claimed = runOn(
+      target, projectId, "work.claim", holder, { expiresAt: LATER, workItemId: HELD },
+    );
+    if (!claimed.ok) throw new Error(claimed.code);
+  }
+
+  function expectAdmittedRelease(target: SqliteEventStore, projectId: string, holder: string) {
+    const outcome = runOn(
+      target, projectId, "work.release", OPERATOR, { workItemId: HELD }, 1,
+    );
+    expect(outcome).toMatchObject({ disposition: "DECIDED", ok: true });
+    // The RECORD, not just the outcome: the release commits WorkReleased and the
+    // ledger still names the holder that was released.
+    expect(readWorkClaimLedger(target, projectId).claims.get(HELD)).toMatchObject({
+      claimedBy: holder, status: "RELEASED",
+    });
+    expect(target.readEvents(aggregateIdFor(HELD)).map((event) => event.eventType))
+      .toEqual(["WorkClaimed", "WorkReleased"]);
+  }
+
+  it("admits the release when the holder's only seat session is CLOSED", () => {
+    const projectId = "proj-dead-seat-closed";
+    const target = seatStore(projectId);
+    openSeat(target, projectId, "sess-dead-closed", "2026-08-09T15:00:00.000Z");
+    closeSeat(target, projectId, "sess-dead-closed");
+    holdItem(target, projectId, "sess-dead-closed");
+
+    expectAdmittedRelease(target, projectId, "sess-dead-closed");
+  });
+
+  it("admits the release when the holder's seat is OPEN but expired at decidedAt", () => {
+    const projectId = "proj-dead-seat-expired";
+    const target = seatStore(projectId);
+    // OPEN, never closed, and already past its horizon when the daemon decides.
+    openSeat(target, projectId, "sess-dead-expired", "2026-08-09T11:45:00.000Z");
+    holdItem(target, projectId, "sess-dead-expired");
+
+    expectAdmittedRelease(target, projectId, "sess-dead-expired");
+  });
+
+  it("admits the release when the holder has no seat session at all", () => {
+    const projectId = "proj-dead-seat-absent";
+    const target = seatStore(projectId);
+    holdItem(target, projectId, "sess-dead-absent");
+    expect(readSessionLedger(target, projectId).sessions.size).toBe(0);
+
+    expectAdmittedRelease(target, projectId, "sess-dead-absent");
+  });
+
+  it("still refuses a non-claimant work.renew when the holder is dead", () => {
+    const projectId = "proj-dead-seat-renew";
+    const target = seatStore(projectId);
+    holdItem(target, projectId, "sess-dead-renew");
+
+    const outcome = runOn(target, projectId, "work.renew", OPERATOR, {
+      expiresAt: "2026-08-09T14:00:00.000Z", workItemId: HELD,
+    }, 1);
+
+    // Only RELEASE widens. Renewal is the holder's keepalive and would let a
+    // stranger extend a fence it does not own.
+    expect(outcome).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(readWorkClaimLedger(target, projectId).claims.get(HELD)).toMatchObject({
+      expiresAt: LATER, status: "OPEN",
+    });
+  });
+
+  it("refuses the release while any seat session of the holder is LIVE", () => {
+    const projectId = "proj-dead-seat-live";
+    const target = seatStore(projectId);
+    openSeat(target, projectId, "sess-live-holder", "2026-08-09T15:00:00.000Z");
+    holdItem(target, projectId, "sess-live-holder");
+
+    const outcome = runOn(
+      target, projectId, "work.release", OPERATOR, { workItemId: HELD }, 1,
+    );
+
+    expect(outcome).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(readWorkClaimLedger(target, projectId).claims.get(HELD)).toMatchObject({
+      status: "OPEN",
+    });
+    expect(target.readEvents(aggregateIdFor(HELD)).map((event) => event.eventType))
+      .toEqual(["WorkClaimed"]);
+  });
+
+  it("lets the dead holder itself release, exactly as before", () => {
+    const projectId = "proj-dead-seat-self";
+    const target = seatStore(projectId);
+    openSeat(target, projectId, "sess-self", "2026-08-09T15:00:00.000Z");
+    closeSeat(target, projectId, "sess-self");
+    holdItem(target, projectId, "sess-self");
+
+    const outcome = runOn(
+      target, projectId, "work.release", "sess-self", { workItemId: HELD }, 1,
+    );
+
+    expect(outcome).toMatchObject({ disposition: "DECIDED", ok: true });
+  });
+
+  it("refuses the release when the session ledger is unreadable, failing closed", () => {
+    const projectId = "proj-dead-seat-unreadable";
+    const target = seatStore(projectId);
+    holdItem(target, projectId, "sess-unreadable");
+    corruptSessionLedger(target, projectId);
+    // The precondition itself, or this arm would silently be arm 3 again.
+    expect(readSessionLedger(target, projectId).unreadable).toBe(true);
+
+    const outcome = runOn(
+      target, projectId, "work.release", OPERATOR, { workItemId: HELD }, 1,
+    );
+
+    // Corrupt bytes are not evidence the holder is dead: a fold that could not
+    // be understood must never read as "nobody is home".
+    expect(outcome).toMatchObject({
+      code: "WORK_CLAIM_NOT_CLAIMANT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(target.readEvents(aggregateIdFor(HELD)).map((event) => event.eventType))
+      .toEqual(["WorkClaimed"]);
   });
 });

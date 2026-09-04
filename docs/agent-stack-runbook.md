@@ -1,4 +1,4 @@
-# Agent stack runbook
+#c Agent stack runbook
 
 How to run moe-next's development agent loop — daemon, scoped MCP sessions, and the
 wrapper that staffs the board with real `claude` agents. Everything here was
@@ -376,6 +376,35 @@ config file lives in a wrapper-owned temp directory, is removed when that
 agent exits, and the directory goes when the wrapper process does. The wrapper
 also closes the durable scoped session after the child exits; expiry is the
 fallback if cleanup cannot reach the daemon.
+
+### Reclaim after a restart
+
+A seat claims under its OWN credential and that secret dies with the wrapper's
+child, so after a restart nothing -- you included -- could release what its dead
+seats held. The 30-minute claim expiry was the only way out.
+
+THE RULE: the daemon admits a `work.release` from a non-claimant only when the
+holder has NO live session -- every session naming that principal closed,
+expired, or absent. A LIVE holder is never overridden, and an unreadable session
+ledger still refuses `WORK_CLAIM_NOT_CLAIMANT`. `work.renew` is unchanged.
+
+THE PASS: the wrapper reclaims ONCE at boot, before its first staffing pass
+(`MOE_WRAPPER_ONCE=1` runs it, then that one pass). For a recorded, never-retired
+child whose pid is known AND dead it closes the seat's session, releases the
+claim, then retires the record -- in that order, because the daemon refuses the
+release while the session is open. A live child, an unknown pid or an unreadable
+record is left untouched; a recycled pid reads alive and waits out the expiry.
+
+```
+[wrapper] reclaimed <item> from <session>
+[wrapper] kept <item>: child alive
+[wrapper] kept <item>: pid unknown
+[wrapper] reclaim pass: <n> reclaimed, <m> kept
+```
+
+The summary prints even at zero, so "ran, found nothing" differs from "never
+ran". The Seats screen needs no change: a reclaimed seat is a CLOSED session
+with an empty `holding` -- already what it renders.
 
 ### Git landing (what happens to the files after acceptance)
 

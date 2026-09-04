@@ -3,6 +3,7 @@ import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionKey, CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { conflictError } from "../bootstrap/bootstrap-conflict-error.js";
+import { holderHasLiveSession } from "./work-claim-holder-liveness.js";
 import {
   decodeWorkClaimRequestBytes,
   isIsoInstant,
@@ -203,7 +204,23 @@ function decide(
     return refuse(request.kind, "WORK_CLAIM_NOT_FOUND", "DAEMON_PREREQUISITE");
   }
   if (held.claimedBy !== request.principalId) {
-    return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE");
+    // RELEASE, and only release, widens for a holder that is no longer live.
+    // A seat claims under its own bearer, and that secret dies with the wrapper
+    // process, so before this the claim's 30-minute expiry was the ONLY exit
+    // from a dead seat's hold — nobody on the board, operator included, could
+    // hand the item back. Renewal stays claimant-only: it is the holder's
+    // keepalive, and letting a stranger extend a fence it does not own would be
+    // a new authority rather than a recovery.
+    //
+    // A LIVE holder is NEVER overridden, and neither is one this daemon cannot
+    // read: `null` (unreadable or throwing session ledger) fails closed with the
+    // same code, because corrupt bytes are not evidence that a seat is gone.
+    const live = request.kind === "work.release"
+      ? holderHasLiveSession(store, request.projectId, held.claimedBy, request.decidedAt)
+      : true;
+    if (live !== false) {
+      return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE");
+    }
   }
   const result: JsonValue = request.kind === "work.release"
     ? { claimedBy: held.claimedBy, expiresAt: held.expiresAt, status: "RELEASED", workItemId }
