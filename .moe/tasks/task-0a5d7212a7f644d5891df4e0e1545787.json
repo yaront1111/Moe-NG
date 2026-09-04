@@ -117,8 +117,8 @@
       "completedAt": "2026-09-04T18:18:42.330Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-65786a7d",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -148,11 +148,17 @@
       "author": "worker-80f8bfe1",
       "content": "GATE EVIDENCE 2/2 — adversarial pass, file sizes, and the three items the NEXT rows must pick up. worker-80f8bfe1, step 6.\n\n## Adversarial pass (the plan's four questions, each answered by a shipped arm)\n1. **No store yet** -> `measureStore` refuses `no store file at <path>` -> `ACTIVATION_STORE_UNMEASURED` at child A's layer, the other members still measured. Exercised by the REAL-filesystem arm, which points at a fresh `mkdtemp` with no store.\n2. **Measurement THROWS** -> caught in `readActivation` -> `{code:\"ACTIVATION_READ_UNREADABLE\", layer:\"ACTIVATION_READ\", outcome:\"REFUSED\"}` at HTTP 200. Arm asserts neither the thrown message nor the canary token reaches the wire — no 500, no stack.\n3. **Polled every 2 s** -> NOTHING is written. Two independent arms: a fake `fs.mkdir` recorder plus a THROWING `backup` port, neither of which fires across three polls; and the real node fs with `existsSync(<root>/.moe-next) === false` after two reads. Drills C and E prove both are load-bearing.\n4. **Two reads race** -> `Promise.all` of two posts returns BYTE-IDENTICAL bodies and still zero writes. Nothing in the module holds mutable state; every returned object is `Object.freeze`d and each read builds its own.\n\nAlso walked: null/empty/array/oversized bodies (the `emptyBody` fence refuses `[]`, `null` and any keyed object; `readBoundedBody` refuses oversize before the handler); TOCTOU on the store file (`exists` then open — a vanished file is caught and becomes a coded refusal, not a throw); handle cleanup (`readApplicationId` closes in `finally`; this module opens nothing).\n\n## PER-POLL COST — a real finding for C2 (task-3506e04abcef4fc3a69299ca238ae1b3)\nEach read spawns up to THREE `git rev-parse` processes (`--show-toplevel` + `HEAD` on the project root, `HEAD` on the artifact root when no `MANIFEST-CLOSURE.txt` is present), opens the store read-only once, and resolves `providerCredentials` twice (once inside the measurement, once for the redaction fence). The plan rules `git rev-parse` per poll acceptable. But on this Windows host the measured process-spawn latency cliff is ~10 s (see the 149 s foundation-attempt run above), so **C2 should read this route ON DEMAND and after each chain command, not on a 2 s timer.** Three spawns every two seconds on a loaded host will queue.\n\n## A REAL DEFECT FOUND AND FIXED, plus one left upstream\nThe step-4 canary arm caught a git stderr tail publishing the token VERBATIM onto the wire: `\"reason\":\"fatal: env ANTHROPIC_AUTH_TOKEN=sk-ant-CANARY-…\"` on two member rows. Fixed at the boundary that publishes: `secretValues()` derives the values from the production `providerCredentials(providerFor(agentCommand), env, exists)`, keeps `secret === true` entries, and `scrub()`s them to `[redacted]` out of every row's `reason` and `ref`. Drill D (remove the scrub) reds that arm, so the fence is load-bearing.\nLEFT UPSTREAM, for the epic-final hardening row: `receiptDetail` in `apps/daemon/src/bootstrap/activation-receipts-ports.ts:20` only truncates and calls `toWellFormed()` — it does NOT redact. Child B's witness path carries the same unredacted `detail` into `credentialRef`. That file is child A's (DONE) and outside this row's owned paths.\nNOT scrubbed, deliberately: `repository.toplevel`, `store.storePath`, `distribution.root`. They come from configuration and git STDOUT, not from observed stderr, and blanket-scrubbing a configured path would make a legitimate project root unreadable on the card.\n\n## FILE SIZES\n- NEW production: `activation-read.ts` **250** (at the plan's target), `activation-read.js` 1 (bridge).\n- NEW tests (not held to the production cap): `activation-read.test.ts` 538, `http-listener-read-dispatch.test.ts` 171.\n- `affordance-read.ts` is **422 lines, byte-IDENTICAL** — `git diff --stat` on it is EMPTY. Nothing was added to the over-cap file, exactly as the task rail demands.\n- **DISCLOSED: `http-listener-guards.ts` is now 400 lines, up from 396.** My first draft took it to 402, OVER the 400 cap — caught in this step and corrected by folding the new roster comment into the existing policy/health one (net +4: two roster entries and two `statusFor` entries, zero new comment lines). It now sits EXACTLY AT the cap. **The next route to add a LISTENER code pair must split this file first.** `http-listener-read-dispatch.ts` 521 and `http-listener.ts` 346 were already over/near before this row (+19 and +3 here); neither is newly broken by this diff.\n\n## SCOPE, restated for the grader\nThis row is the DAEMON READ ROUTE ONLY. DoD clauses 3, 4, 5 and 6 as filed (the activation port, the card, its testids, verbatim-refusal rendering) moved to task-3506e04abcef4fc3a69299ca238ae1b3 at plan time — see step-1's note and the architect's planningNotes. Clause 5 (signingKeyRef NOT a trust boundary, with its reason) IS delivered here: the view carries `signing {trustBoundary:false, reason:\"not a trust boundary in v0.1\", ref:\"signing/unsigned-source-checkout\"}` and an arm asserts it is absent from the six members.\nALSO NOT WIRED, by measurement: the production composition. `StoreDependencyConfig` (daemon-store-foundation-composition.ts:80) carries only projectId/storePath/nodeSpecsDir — it has no projectRoot, artifactRoot or agentCommand, so composing a real port needs that interface widened plus daemon-store-dependencies.ts:87 and daemon-entry.ts:281, four paths outside this row's cap and a 469-line file already over cap. Absent the port the route answers `LISTENER_ACTIVATION_UNAVAILABLE` 503, the shipped fail-closed shape of every other read. Whoever wires it needs those three edits plus `committedProbeRef` (provider-profile-reader-checks.ts:113) and `installedPolicySliceRefs` (bootstrap-policy-services.ts:49), which child B was already wiring for the witness.",
       "timestamp": "2026-09-04T18:18:13.763Z"
+    },
+    {
+      "id": "comment-b6bfb68379a546a6828976aa48196d46",
+      "author": "qa-3fd61a21",
+      "content": "QA VERIFICATION RECORD — qa-3fd61a21, 2026-09-04. APPROVED against DoD clauses 1, 2 and 7 (3/4/6 moved to task-3506e04a at plan time; clause 5's daemon half IS delivered here).\n\n## Delivered tree\nCompletion commit `6c0986ea802e220db47059c19109938fb3f6ea56`, `git branch --contains` -> `moe/work-2026-09-04`. 11 paths, 1120 insertions. The five later `wip` commits on this row (recordedBy qa-65786a7d) hold FOREIGN content — the repository-remote read route of task-f99cec0b — swept by a peer session's exit hook under this row's trailer. I graded 6c0986ea, not HEAD.\n\n## Gates I RE-RAN MYSELF (count lines, not exit codes)\n1. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http` -> `Test Files 49 passed (49)` / `Tests 634 passed (634)`, PIPESTATUS[0]=0. (Worker recorded 48/625; the delta is the peer's repository-remote file, now landed.)\n2. The two suites this row adds, alone -> `Test Files 2 passed (2)` / `Tests 27 passed (27)`.\n3. `pnpm --filter @moe/control-room test` -> `Test Files 134 passed (134)` / `Tests 1654 passed (1654)`, PIPESTATUS[0]=0.\n4. `pnpm typecheck` -> exit 1, TWO errors, BOTH foreign: `src/planning/approval-intent-rejection.ts(110,3)` and `src/planning/approval-intent.test.ts(469,3)`, TS2322 `JsonObject | readonly JsonValue[]`. `git status --porcelain` reports both ` M`, and `git diff -U2` shows line 110's `runRecordOf` is an UNCOMMITTED working-tree ADDITION from task-3780109018bb49b2bf3a00b18952d7ff. Failing-path set INTERSECT owned-path set = EMPTY. `apps/control-room typecheck: Done`.\n\n## Two mutation drills I ran (rail 1: an arm that stays green is not testing the code)\n- DRILL A — neutered `scrub()` in activation-read.ts to return its input. Result `Tests 1 failed | 19 passed (20)`, red at activation-read.test.ts:404, the git-STDERR canary arm. The redaction fence is LOAD-BEARING. Restored with `git checkout --`; `git status --porcelain` on the path is EMPTY (tracked path, valid restore proof).\n- DRILL B — deleted `ACTIVATION_READ_PATH` from `JSON_ROUTES` while LEAVING the dispatch branch in place, i.e. the served-but-not-advertised direction rail 9 exists to catch. Result `Tests 4 failed | 3 passed (7)`. The set-equality is genuinely bidirectional, not a roster self-iteration. Restored; status EMPTY.\n\n## Per-file caps, measured main -> delivered\n`activation-read.ts` 250 (new, at target) - `http-listener.ts` 343->346 - `http-listener-guards.ts` 396->400 (AT the cap, disclosed by the worker) - `http-listener-read-dispatch.ts` 502->521 (already over 400 at main; +19 is the minimum registration cost and the plan directed those touchpoints there). `affordance-read.ts`: `git diff main 6c0986ea --stat` on it is EMPTY, 422 lines byte-identical — the task rail held. Its 428 lines at HEAD are task-8145137c's, not this row's.\n\n## Not a rejection, but it must be owned by someone\nThe `activation` port is never composed at the ONE production listener call site (`daemon-entry.ts:262`); `:281-286` wires policy, health, activity, sessions, repositoryRemote and goalSource but not activation, so the running daemon answers `LISTENER_ACTIVATION_UNAVAILABLE` 503. Out of this row's approved 6-path scope and honestly disclosed by worker-80f8bfe1 with the exact edits enumerated. Raised on task-3506e04a (the consuming card row, currently WORKING) and to #governors, because C2's DoD does not own it either.",
+      "timestamp": "2026-09-04T20:40:28.215Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:37.267Z",
-  "updatedAt": "2026-09-04T18:30:13.646Z",
+  "updatedAt": "2026-09-04T20:41:29.080Z",
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -170,7 +176,9 @@
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
     "firstClaimAt": "2026-09-04T17:28:22.312Z",
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-04T20:41:29.080Z",
+    "wallClockMs": 11586768
   },
   "planningNotes": {
     "approachesConsidered": "SCOPE SPLIT AT PLAN TIME. As filed, this row owned the daemon read AND the browser card. Enumerating every consumer gave twelve owned paths — route, .js bridge, route test, http-listener-read-dispatch.ts, dev-proxy-paths.ts, activation port, port test, screen, screen test, live-ops.tsx, cordum-app.tsx, shell-model.ts — over the 10 cap. Per the plan-time enumeration rail ('if naming every consumer would breach the row's path cap, that is a SPLIT signal at plan time, not a discovery for the worker at step 5'), the UI half was filed as task-3506e04abcef4fc3a69299ca238ae1b3 with dependsOn on this row. This row keeps 5 owned paths and has real headroom.\n\nRejected adding the read to `affordance-read.ts`: it is 422 lines, already over the 400 hard cap. A dedicated read gets its own module — the shipped idiom, as policy-read.ts and runs-read-contract.ts both do.\n\nRejected serving the receipts as extra fields on the existing affordance surface: the card needs them before any offer is spent, and widening a surface every screen already polls would couple the activation feature to every consumer of that response.",
@@ -187,7 +195,8 @@
   "planApprovedAt": "2026-09-04T09:51:29.130Z",
   "contextFetchedBy": [
     "worker-80f8bfe1",
-    "qa-65786a7d"
+    "qa-65786a7d",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-04T17:28:43.352Z",
   "reviewStartedAt": "2026-09-04T18:20:27.523Z",
@@ -337,6 +346,21 @@
       "treeId": "2a6a42e9f45b0b9ea0e404b32c71fd523e123e54",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "dc270a3c17c4916129ded2fe26963a643a78c1e8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-65786a7d@2026-09-04T18:30:44Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json"
+      ],
+      "recordedBy": "qa-65786a7d",
+      "recordedAt": "2026-09-04T18:30:52.704Z",
+      "treeId": "ec57c1ba6852975067ee74b2b7390937b3607782",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -354,7 +378,10 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-65786a7d@2026-09-04T18:30:05Z",
-    "at": "2026-09-04T18:30:13.646Z"
-  }
+    "sessionId": "qa-65786a7d@2026-09-04T18:30:44Z",
+    "at": "2026-09-04T18:30:52.704Z"
+  },
+  "completedAt": "2026-09-04T20:41:29.080Z",
+  "reviewCompletedAt": "2026-09-04T20:41:29.080Z",
+  "reviewSummary": "APPROVED on DoD 1, 2, 7 (3/4/6 moved to task-3506e04a at plan time; clause 5's daemon half delivered). Graded commit 6c0986ea (branch --contains moe/work-2026-09-04), NOT HEAD - the 5 later wip commits here hold task-f99cec0b's route, swept under this trailer by a peer. Full record in my row comment.\n\nGATES I RE-RAN (counts, not exit codes): daemon src/http -> Test Files 49 passed (49) / Tests 634 passed (634); the 2 new suites alone -> 2 passed (2) / 27 passed (27); control-room -> 134 passed (134) / 1654 passed (1654). typecheck exits 1 on TWO FOREIGN errors only: approval-intent-rejection.ts(110,3) + approval-intent.test.ts(469,3) TS2322, both ' M', git diff -U2 shows :110 runRecordOf is a working-tree ADDITION from task-3780109018bb. Failing paths INTERSECT owned = EMPTY; control-room typecheck Done.\n\nTWO DRILLS, not trusting the arms. (A) neutered scrub() -> 1 failed | 19 passed, red at the git-stderr canary: the redaction fence is load-bearing. (B) deleted ACTIVATION_READ_PATH from JSON_ROUTES but KEPT its dispatch branch (served-but-not-advertised) -> 4 failed | 3 passed: rail-9 set-equality is truly bidirectional. Both restored, git status --porcelain EMPTY per path.\n\nCAPS main->delivered: activation-read.ts 250 new; http-listener.ts 343->346; guards 396->400 (at cap, disclosed); read-dispatch 502->521, already over at main, +19 = minimum plan-directed registration cost. affordance-read.ts diff EMPTY, 422 byte-identical - task rail held.\n\nRAISED NOT REJECTED: the activation port is never composed at the one production call site (daemon-entry.ts:262; :281-286 wires the other six reads), so the live daemon 503s. Outside this row's approved 6-path scope, disclosed by the worker with edits enumerated. Filed on task-3506e04a and #governors - needs a wiring row."
 }

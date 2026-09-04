@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { ACTIVATION_READ_PATH } from "./activation-read.js";
 import { JSON_ROUTES } from "./http-listener-read-dispatch.js";
+import { REPOSITORY_REMOTE_READ_PATH } from "./repository-remote-read.js";
 
 /**
  * task-0a5d7212: the read-route roster, asserted BIDIRECTIONALLY (global rail 9).
@@ -87,9 +88,15 @@ function proxiedPaths(): ReadonlySet<string> {
  * silently: `/product-contract/gate-1/read` predates this row and is recorded, not fixed,
  * because this row does not own that route. A route absent from the proxy works in
  * production and fails only under the dev server, which is where the e2e lane runs.
+ *
+ * `/repository/remote/read` is recorded here by task-9d553419, which lands the daemon route
+ * only: the proxy list lives in the control-room package and belongs to task-e6000b57, which
+ * lands the decoder and the proxy pins together. Recording it keeps the census exact instead
+ * of letting the arm below go subset-shaped, and REMOVING this line is what that row's proxy
+ * edit has to do — a census entry that outlives its gap reds here.
  */
 const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
-  "/product-contract/gate-1/read",
+  "/product-contract/gate-1/read", "/repository/remote/read",
 ]);
 
 describe("the read-route roster and the surface it advertises agree in BOTH directions", () => {
@@ -103,7 +110,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(25);
+    expect(roster.size).toBe(26);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
@@ -132,6 +139,20 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(guardIdentifiers(source).has("ACTIVATION_READ_PATH")).toBe(true);
     expect(JSON_ROUTES).toContain(ACTIVATION_READ_PATH);
     expect(ACTIVATION_READ_PATH).toBe("/activation/read");
+  });
+
+  it("registers the repository-remote read in all three seams", () => {
+    const source = dispatchSource();
+
+    // task-9d553419's route, named directly for the same reason as the arm above: the set arms
+    // would catch its removal only as an off-by-one naming nothing, and the three seams fail
+    // differently — no roster entry sends it to the ASSET host (not a 404), no branch falls
+    // through to the unconditional `else`, no guard accepts a GET.
+    expect(rosterIdentifiers(source).has("REPOSITORY_REMOTE_READ_PATH")).toBe(true);
+    expect(branchIdentifiers(source).has("REPOSITORY_REMOTE_READ_PATH")).toBe(true);
+    expect(guardIdentifiers(source).has("REPOSITORY_REMOTE_READ_PATH")).toBe(true);
+    expect(JSON_ROUTES).toContain(REPOSITORY_REMOTE_READ_PATH);
+    expect(REPOSITORY_REMOTE_READ_PATH).toBe("/repository/remote/read");
   });
 
   it("proxies every served JSON route in development, bar a named census", () => {

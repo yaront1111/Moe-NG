@@ -92,10 +92,17 @@
   ],
   "priority": "HIGH",
   "order": 4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-57081875bace4c3f9c12cf2a1c9a3919",
+      "author": "qa-3fd61a21",
+      "content": "QA FINDING FROM YOUR PREREQUISITE (task-0a5d7212, approved 2026-09-04 by qa-3fd61a21) — READ BEFORE YOU BUILD THE CARD.\n\nTHE DAEMON READ YOU CONSUME IS NOT COMPOSED IN PRODUCTION. `/activation/read` is registered, guarded and dispatched, and its 20 route arms are green — but the `activation` port is never constructed at the production listener call site, so the RUNNING daemon answers `LISTENER_ACTIVATION_UNAVAILABLE` at HTTP 503 for every request.\n\nMEASURED, not inferred (qa-3fd61a21, at branch moe/work-2026-09-04):\n- `grep -rn \"startControlRoomListener(\" apps/daemon/src --include=*.ts | grep -v test` -> exactly ONE production call site, `apps/daemon/src/daemon-entry.ts:262`.\n- `apps/daemon/src/daemon-entry.ts:281-286` composes SIX read ports: `policy`, `health`, `activity`, `sessions`, `repositoryRemote`, `goalSource`. There is NO `activation:` line. Every sibling read is wired; this one alone is not.\n\nWHY IT IS NOT A DEFECT IN task-0a5d7212: its approved plan was narrowed to route-only (6 owned paths). worker-80f8bfe1 measured and DISCLOSED the wiring cost in its second row comment: `StoreDependencyConfig` (daemon-store-foundation-composition.ts:80) carries only projectId/storePath/nodeSpecsDir — it has no `projectRoot`, `artifactRoot` or `agentCommand` — so composing a real port needs that interface widened plus `daemon-store-dependencies.ts:87` and `daemon-entry.ts:281`, and it needs `committedProbeRef` (provider-profile-reader-checks.ts:113) and `installedPolicySliceRefs` (bootstrap-policy-services.ts:49). Four paths outside that row's cap, one file already over 400 lines.\n\nWHAT THIS MEANS FOR YOU: your DoD clause 2 (\"renders each of the six receipts ... verbatim\") and clause 5 (\"the card is reachable in the running app\") cannot be demonstrated against a live daemon today — the card will render the unavailable refusal, forever, no matter how correct your port is. Your tests will pass against fixtures and the feature will still not exist for an operator.\n\nDO NOT quietly narrow your DoD to fixtures, and do NOT reimplement the composition inside a test. Either (a) get the wiring row filed and declare it in your `dependsOn`, or (b) if an architect rules the wiring inside your scope, own those paths explicitly. Raising to #governors in parallel.\n\nALSO FROM THE SAME ROW, worth having before you set a poll interval: each read spawns up to THREE `git rev-parse` processes and resolves `providerCredentials` twice. On this Windows host the measured spawn-latency cliff is ~10s. Read this route ON DEMAND and after each chain command — NOT on a 2s timer.",
+      "timestamp": "2026-09-04T20:40:04.077Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:50:26.826Z",
-  "updatedAt": "2026-09-04T10:10:05.835Z",
+  "updatedAt": "2026-09-04T20:40:04.077Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],

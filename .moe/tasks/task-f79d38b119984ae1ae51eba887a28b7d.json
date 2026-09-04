@@ -1,0 +1,123 @@
+{
+  "id": "task-f79d38b119984ae1ae51eba887a28b7d",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The compiler seals the whole DAG: an INITIAL run admits N nodes, the mission asks for the complete graph",
+  "description": "SPIDR child 1 of parent task-4423d2a4c3084d579c132b253d36b502 (architect-20a6d1eb, 2026-09-04). Dependency-free LEAF; children 2-5 build on it.\n\nOWNER RULING (task-4423d2a4 comment-fbe64776, 2026-09-04, relayed from the owner's words \"lift the fence\"): LIFT THE ONE-NODE FENCE. An INITIAL run seals the WHOLE graph. The parent's description still argues for keeping the fence and is SUPERSEDED by that comment; its DoD 1 and DoD 5 are replaced.\n\nRE-MEASURED BY architect-20a6d1eb AT HEAD (branch moe/work-2026-09-04) - the ruling is correct on disk:\n- CORE FENCE IS GONE. `packages/core/src/planning/planning-run-submission.ts` `finalize` now refuses only `executionBearingKeys(witness).length === 0`; there is no runKind/node-count arm. `MULTI_NODE_EXECUTION_UNSUPPORTED` survives ONLY as a string in `packages/core/src/planning/planning-event-contract.ts:171` and in `packages/core/src/planning/planning-invariants.test.ts:32`, which asserts the code is NOT driven. Do not \"restore\" it.\n- WHAT ACTUALLY REFUSES: `apps/daemon/src/planning/compile-dispatcher.ts:196-197` `if (nodes.length > 1) return refused(\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\")`. The code is rostered one place: `SUBMIT_DECOMPOSITION_CODES` at compile-dispatcher.ts:47-51 (the constant runs 47..~52; the literal is line 51).\n- THE MISSION STILL TELLS SEATS THE OPPOSITE: `apps/daemon/src/orchestrator/agent-mission-text.ts:123` \"dependsOn}]}}. Plan the SMALLEST COMPLETE SLICE: exactly ONE node in an\" (the sentence wraps past 123 - read the surrounding array, do not sed a single line).\n- THE DOWNSTREAM MACHINERY IS ALREADY MULTI-NODE AND NEEDS NO CHANGE: `compile-dispatcher.ts:209-228` already reads, validates and seals per-node `dependsOn`; `apps/daemon/src/planning/compiled-authority-bodies.ts:62-70` already refuses an unknown dependency, a self-edge and a dependency on the completion node (COMPILED_PLAN_MALFORMED) and already refuses an uncovered criterion (COMPILED_PLAN_CRITERION_UNBOUND, lines 84-92). Multi-node propose was proven live once already (memory initial-run-seals-one-node-by-core-design).\n\nSOURCE-TEXT ASSERTER (global rail 23 enumeration, `git grep -l SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` over the whole tree = exactly 3 hits): compile-dispatcher.ts:51 (roster), compile-dispatcher.ts:197 (the refusal), and `apps/daemon/src/goals/goal-close-readiness.test.ts:18` - a PROSE COMMENT that states the refusal as a premise. That third file is in scope: correct the comment, do not leave it asserting a retired rule. NOTE that file is currently dirty in the shared checkout (peer WIP) - edit only the comment lines you own, never revert or stash the rest (global rail 5).",
+  "definitionOfDone": [
+    "`apps/daemon/src/planning/compile-dispatcher.ts` admits N>=1 execution-bearing nodes: the `nodes.length > 1` arm is deleted and `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` is REMOVED from `SUBMIT_DECOMPOSITION_CODES`. `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` over the tree returns 0 hits in production source (the goal-close-readiness.test.ts prose comment is rewritten, not left stating the retired rule).",
+    "A dispatcher test submits a THREE-node structure with a real HARD chain (c depends on b, b depends on a) and asserts the submission SEALS: assert the returned graphContentHash/submissionHash are present and the disposition is DECIDED - not merely that it did not refuse. A second arm submits one node and still seals (N=1 is not regressed).",
+    "The refusal arms that MUST survive are pinned by code, each asserting the specific code and layer: an unknown `dependsOn` target and a self-edge both refuse COMPILED_PLAN_MALFORMED; a criterion bound by no node refuses COMPILED_PLAN_CRITERION_UNBOUND. These are the fence that replaces the node-count fence - a plan whose DAG is incoherent must still not seal.",
+    "`apps/daemon/src/orchestrator/agent-mission-text.ts` tells the planning seat to plan the COMPLETE graph as a dependency DAG: every criterion of the approved revision covered by exactly one node, `dependsOn` naming hard build order. A mission-text test pins the NEW sentence verbatim and asserts the string \"exactly ONE node\" no longer appears anywhere in the produced mission.",
+    "Mutation drill recorded in a step note: re-insert `if (nodes.length > 1) return refused(...)` in compile-dispatcher.ts, confirm the three-node sealing test goes RED, restore, and prove the restore with `git diff -- apps/daemon/src/planning/compile-dispatcher.ts` (tracked file; quote the empty diff).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/core test`, `pnpm typecheck`, `pnpm test`. Note explicitly that `pnpm test` covers no apps/** (global rail 18)."
+  ],
+  "taskRails": [
+    "DO NOT TOUCH packages/core. The core fence was already removed by 63efd3a3 and `planning-invariants.test.ts:32` asserts MULTI_NODE_EXECUTION_UNSUPPORTED is not driven. This row changes the DAEMON compiler and the mission text only. If a core change looks necessary, report blocked rather than editing core.",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work.",
+    "The board's shared checkout is dirty with peer WIP including apps/daemon/src/goals/goal-services.test.ts. Never revert, stash or `git add -A`; report every path you touch in complete_step.modifiedFiles (global rail 5)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY AND RE-MEASURE, NO EDITS. The fence-lift ruling is the authority for this row; confirm it still describes disk before changing anything. Run and quote in a step note: (a) `git grep -n SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- '*.ts'` — expect EXACTLY 3 hits, all named in this plan: compile-dispatcher.ts:51 (the roster entry), compile-dispatcher.ts:197 (the refusal), goal-close-readiness.test.ts:18 (a prose comment). A FOURTH hit means a peer added a consumer while this row waited — stop and report rather than taking the extra path. (b) `git grep -n 'SUBMIT_DECOMPOSITION_CODES' -- '*.ts'` — expect exactly ONE hit, its own declaration; there is no external scanner and no length pin over this roster (measured at plan time). (c) `sed -n '125,155p' packages/core/src/planning/planning-run-submission.ts` — confirm `finalize` still refuses only `bearing.length === 0`, i.e. core will ACCEPT the multi-node runs this row starts sealing. If core has regained a node-count arm, STOP and report blocked: this row must not edit core. (d) `git status --porcelain` on the five files in this plan — `goal-close-readiness.test.ts` is expected DIRTY with peer WIP; record its state now so step 5 can prove it touched only its own line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compile-dispatcher.ts",
+        "apps/daemon/src/goals/goal-close-readiness.test.ts",
+        "packages/core/src/planning/planning-run-submission.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST, RUN RED. apps/daemon/src/planning/compile-dispatcher.test.ts (292 lines today; `structureOf()` at :160 currently takes no arguments and builds a single node — generalise it to take a node list, keeping every existing call site's behaviour byte-identical so the INITIAL arms in `describe(\"runSubmitDecomposition\")` at :194-292 stay green). Add: (1) THE SEALING ARM — submit a THREE-node structure with a real HARD chain (c dependsOn b, b dependsOn a; criteria split across the three so every contract criterion is bound exactly once) and assert it SEALS: `ok === true`, and BOTH `graphContentHash` and `submissionHash` are present non-empty strings, and the disposition is DECIDED. Asserting only \"did not refuse\" is not enough — a refusal arm that stops returning a code would pass that. (2) THE N=1 REGRESSION ARM — a one-node structure still seals, so lifting the fence did not trade one count limit for another. Run both RED before touching production: (1) must fail with `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` and (2) must already pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compile-dispatcher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PIN THE FENCE THAT REPLACES THE NODE-COUNT FENCE, still in compile-dispatcher.test.ts, still before production changes. Lifting the count limit is only safe because DAG coherence is already enforced by `apps/daemon/src/planning/compiled-authority-bodies.ts` — measured at plan time: :62-70 refuses an unknown `dependsOn` target, a self-edge, and a dependency on the completion node with COMPILED_PLAN_MALFORMED; :84-92 refuses a criterion satisfied by no node with COMPILED_PLAN_CRITERION_UNBOUND. Write one arm per refusal, each asserting the SPECIFIC code AND the layer the dispatcher reports (global rail 1 — a bare \"it refused\" arm is vacuous here, because several layers can refuse a malformed structure and the wrong one answering would keep the test green). Cover at minimum: an unknown dependsOn target; a self-edge; a criterion bound by no node. These arms are this row's real deliverable — they are what makes a multi-node plan safe to seal — so write them even though they exercise code you are not editing. Run them: they should PASS already; if one does not, the coherence fence is weaker than measured and this row must report blocked rather than lift the count fence on top of it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compile-dispatcher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MINIMUM IMPLEMENTATION, turning step 2 green. apps/daemon/src/planning/compile-dispatcher.ts (341 lines; the file stays well under the 400 cap because this step only DELETES): (a) delete the `if (nodes.length > 1) return refused(\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\");` arm at :196-197 together with the 5-line comment block above it at :191-195 — that comment states the retired core rule (\"an INITIAL run seals exactly ONE execution-bearing node\") and must not survive as a false premise; replace it with one sentence saying node COUNT is unconstrained and DAG coherence is enforced by compiled-authority-bodies. (b) delete the `\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\",` entry from `SUBMIT_DECOMPOSITION_CODES` at :51. Change NOTHING else: the per-node `dependsOn` read, validation and sealing at :209-228 already handle N nodes and are what the sealing arm exercises. Do not touch packages/core (task rail 1). Re-run the step-2 and step-3 arms: all green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compile-dispatcher.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE MISSION STOPS ASKING FOR ONE NODE. apps/daemon/src/orchestrator/agent-mission-text.ts: the sentence lives across :122-127 as array elements, not on one line — read the whole literal and rewrite the block, do not sed line 123. Today it reads \"Plan the SMALLEST COMPLETE SLICE: exactly ONE node in an INITIAL run (the daemon refuses more - growth is the expansion machinery's), its criterionIds covering every criterion of the approved revision.\" Replace with instructions to plan the COMPLETE graph as a dependency DAG: every criterion of the approved revision covered by exactly one node across the whole structure, and `dependsOn` naming hard build order between nodes. Keep the surrounding payload-shape sentences and the \"never authority bytes\" and RUN_POLICY_UNCLASSIFIABLE sentences unchanged. Then apps/daemon/src/orchestrator/agent-mission-text.test.ts:37-38 — the ONLY place in the tree that pins these words (measured: `git grep -n 'SMALLEST COMPLETE SLICE\\|exactly ONE node'` returns just the source and these two lines). Replace both pins with a verbatim pin on the new sentence, and ADD `expect(text).not.toContain(\"exactly ONE node\")` so the retired instruction cannot creep back. Note the test's own `it(...)` title says \"one slice\" — rename it to match what it now asserts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "CORRECT THE SOURCE-TEXT ASSERTER. apps/daemon/src/goals/goal-close-readiness.test.ts:18 carries a prose comment stating `runSubmitDecomposition` refuses `nodes.length > 1` as a live premise; it is the third of the three grep hits from step 1 and would otherwise outlive the rule it describes. Rewrite ONLY that comment to say the compiler admits N nodes and that a criterion left unbound by every node still refuses COMPILED_PLAN_CRITERION_UNBOUND — which is the part of the premise that actually still holds and that the file's arms depend on. Do not change any assertion in that file: its arms reach a partial-coverage state via a SECOND contract with distinct criterion ids, which is unaffected by the node count. THIS FILE IS DIRTY WITH PEER WIP (confirmed `M` at plan time). Never revert, stash or `git add -A` it. Edit only the comment lines, and in the step note quote `git diff -- apps/daemon/src/goals/goal-close-readiness.test.ts` to show your change alongside the peer's, so the commit's attribution is honest (global rail 5).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-close-readiness.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "MUTATION DRILL, then GATES, then the adversarial read. (a) DRILL, recorded in a step note: re-insert `if (nodes.length > 1) return refused(\"SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL\");` into compile-dispatcher.ts, confirm the step-2 three-node sealing arm goes RED (quote the failing assertion), restore, and prove the restore with `git diff -- apps/daemon/src/planning/compile-dispatcher.ts` showing empty — valid here because that file is TRACKED and was clean at step 1. Do the same for the mission pin: revert the sentence, confirm the step-5 `not.toContain(\"exactly ONE node\")` arm goes red, restore, prove empty diff. (b) GATES, each a standalone foreground command with its `Test Files N passed` count line quoted verbatim — an exit-0 leg with no count line is UNVERIFIED and may not be reported as a pass: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/core test`, `pnpm typecheck`, `pnpm test`. State in the note that `pnpm test` runs ZERO tests under apps/** so the daemon leg is what covers this row. Attribute any red by the merge-base/HEAD delta intersected with this row's five files (global rail 3) and quote foreign red verbatim rather than hiding it. The named verification command for completion is `pnpm --filter @moe/daemon test`. (c) ADVERSARIAL READ, in the note: does anything downstream assume one node per sealed graph — check the compiled-node-source and coverage readers before claiming none; can a dependsOn CYCLE now reach finalize, or does compiled-authority-bodies refuse it first (if a cycle is admissible, say so plainly — the dependency gate in task-1d7b9df2 would deadlock on it); and does the new mission sentence still fit the seat's context budget.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compile-dispatcher.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/planning/compile-dispatcher.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4423d2a4c3084d579c132b253d36b502",
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T20:21:53.659Z",
+  "updatedAt": "2026-09-04T20:38:58.038Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T20:32:01.441Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-04T20:38:55.857Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, restore the core fence to satisfy the parent row's literal DoD 5: the core arm was removed by 63efd3a3 and `planning-invariants.test.ts:32` now ASSERTS `MULTI_NODE_EXECUTION_UNSUPPORTED` is not driven — restoring it would red that test and reverse an owner ruling. REJECTED, keep the code and narrow it to REVISION runs only: two sibling rows' rails asked for exactly that, but the owner's ruling is about INITIAL runs sealing the whole graph, and a count fence on REVISION would block the replan path from proposing a corrected multi-node graph — the same defect under another name. REJECTED, gating this row on task-138fab30 (which also owns compile-dispatcher.ts): the parent's rail forbids children depending on sibling feature rows, and the user chose instead to amend those rows — done this session (138fab30 step-4 amend-1, plus superseding comments on both). REJECTED, folding the dependency gate into this row: without it a multi-node graph staffs dependent nodes beside their parents, which is why task-1d7b9df2 exists and declares dependsOn on this row; keeping them separate keeps each under the file cap and makes the gate independently reviewable. REJECTED, writing the DAG-coherence arms as \"expect it to refuse\": several layers can refuse a malformed structure, so step 3 pins code AND layer per global rail 1.",
+    "codebaseInsights": "ALL MEASURED 2026-09-04 on branch moe/work-2026-09-04. THE RULING IS CORRECT ON DISK: `packages/core/src/planning/planning-run-submission.ts` `finalize` refuses only `executionBearingKeys(witness).length === 0` — no runKind or node-count arm. `git grep -n SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- '*.ts'` = EXACTLY 3 hits, all in this plan's affectedFiles: compile-dispatcher.ts:51 (roster), compile-dispatcher.ts:197 (refusal), goal-close-readiness.test.ts:18 (prose comment, and that file is DIRTY with peer WIP). ROSTER IS CLEAN: `git grep -n SUBMIT_DECOMPOSITION_CODES` = ONE hit, its own declaration — no external scanner, no `.length` pin, unlike POLICY_RISK_READER_CODES/POLICY_WAIVER_READER_CODES which are count-pinned in their tests. So retiring an entry breaks no counter. MISSION PIN IS SINGULAR: `git grep -n 'SMALLEST COMPLETE SLICE|exactly ONE node'` = the source at agent-mission-text.ts:123 plus agent-mission-text.test.ts:37-38, nothing else. The sentence spans array elements :122-127, so it must be rewritten as a block, not sed'd by line. DOWNSTREAM IS ALREADY MULTI-NODE: compile-dispatcher.ts:209-228 already reads, validates and seals per-node `dependsOn`; compiled-authority-bodies.ts:62-70 already refuses an unknown dependency, a self-edge and a dependency on the completion node (COMPILED_PLAN_MALFORMED), and :84-92 refuses an unbound criterion (COMPILED_PLAN_CRITERION_UNBOUND). Those refusals are the fence that REPLACES the count fence, which is why step 3 pins them. TEST HELPER: `structureOf()` at compile-dispatcher.test.ts:160 takes no arguments and builds one node; it must be generalised without disturbing the INITIAL arms at :194-292. SIZES: compile-dispatcher.ts 341 lines (cap 400; this row only deletes), compile-dispatcher.test.ts 292, agent-mission-text.ts 172. CROSS-ROW CONFLICT RESOLVED AT PLAN TIME: task-138fab3075884df98c3c220e74c1a3e9 and task-957bccf162b446f3a4db46b56e8e8f3a both carried a task rail pinning the fence, and 138fab30's step-4 wrote an arm asserting it still refuses. Both are WORKING but unassigned with 0 commits and all steps PENDING. On the user's decision I amended 138fab30 step-4 (amend-1) to drop that arm and commented on both rows that their rail is superseded. Both also own compile-dispatcher.ts — disjoint regions (they change run-state branching at :184-300; this row deletes :51 and :191-197) — and the amended step tells that worker not to restore the code if it is already gone.",
+    "risks": "BIGGEST RISK — lifting a count fence without the coherence fence being real. If compiled-authority-bodies' dependsOn checks were weaker than measured, this row would start sealing graphs that finalize or the scheduler cannot execute. Step 3 pins those refusals BEFORE step 4 deletes anything, and step 1 tells the worker to report blocked rather than proceed if core has regained a node-count arm. SECOND — a dependsOn CYCLE. compiled-authority-bodies refuses self-edges and unknown targets, but the plan-time measurement did not establish that a longer cycle (a->b->a) is refused. Step 7(c) makes the worker answer this explicitly, because task-1d7b9df2's dependency gate would deadlock a cycle at the surface rather than refuse it at compile. THIRD — file collision with task-138fab30 and task-957bccf1, both of which own compile-dispatcher.ts. Regions are disjoint and I amended 138fab30's conflicting step, but whichever lands second will rebase onto the other; the amended step and this plan both say the code's absence is expected and must not be restored. FOURTH — goal-close-readiness.test.ts is DIRTY with peer WIP. Step 6 edits one comment inside a file someone else is mid-change on: never revert, stash or `git add -A`, and quote the full `git diff` so attribution is honest. Its `git diff` is a valid restore proof only because it is tracked. FIFTH — the drill in step 7(a) mutates a TRACKED, clean file, so an empty `git diff` is sound proof; do not carry that shortcut to any untracked path (global rail 13). SIXTH — the mission text is read by live seats: a longer sentence costs seat context, and a seat that misreads it will submit a structure the compiler refuses. Step 7(c) asks the worker to sanity-check the length.",
+    "keyFiles": [
+      "apps/daemon/src/planning/compile-dispatcher.ts",
+      "apps/daemon/src/planning/compile-dispatcher.test.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+      "apps/daemon/src/goals/goal-close-readiness.test.ts",
+      "apps/daemon/src/planning/compiled-authority-bodies.ts",
+      "packages/core/src/planning/planning-run-submission.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T20:38:58.038Z"
+}

@@ -50,7 +50,17 @@
       "affectedFiles": [
         "apps/daemon/src/planning/compile-dispatcher.test.ts",
         "apps/daemon/src/planning/compile-dispatcher.ts"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "THE COMPILER COMPILES THE SUCCESSOR, test first. apps/daemon/src/planning/compile-dispatcher.test.ts, new describe over `rejectedWorld(...)` (import the fixture module; the file's own helpers stay for the INITIAL arms): (1) `submit(store, ref, structureOf(\"node-beta\"))` after the reject -> ok with `runId === successorRunId`; the successor's state reads lifecycle PLAN_REVIEW, runKind REVISION, one sealed node `node-beta`; the ORIGINAL run's state is unchanged (still REJECTED, no new events on its aggregate - compare event counts before/after); the committed compile decisions' commandIds carry the successor's stem (`compile-<digest12>-<sha8(successorRunId)>`); (2) a second `submit` on the same goal -> `SUBMIT_DECOMPOSITION_ALREADY_FINALIZED` with layer DAEMON_PLANNING (or the layer the code names - assert exactly); (3) [AMENDED 2026-09-04] DO NOT write a multi-node refusal arm. The previous text asked for `a two-node structure on the successor -> SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL`. That code is being RETIRED by task-f79d38b119984ae1ae51eba887a28b7d under the owner's fence-lift ruling, so such an arm would be deleted days after you write it. This row asserts nothing about node COUNT in either direction - neither that multi-node refuses nor that it seals. If you need a third arm here, assert instead that the successor's sealed run carries `runKind === \"REVISION\"` while the original carries `\"INITIAL\"`, which is this row's actual subject; (4) the surface after (1): `offerTargets(\"approval.decide_intent\")` equals [successorRunId] (build the port inline, :40-50 pattern) - this is the step-3 post-compile arm; (5) every INITIAL arm at :194-292 green unchanged. Run red. Then apps/daemon/src/planning/compile-dispatcher.ts (341 -> <= 395; NO new module - the 10-file cap is spent): `const runId = <currentPlanningRun(store, provenance.planningRunRef) as an id>` at :184; after `ids` (:242) read the run state ONCE (`stateOf(readDurableLedger(store, projectId), runId)` or the reducer's read the file already uses - name it) and branch on STATE, not version alone: (a) version 0 -> today's INITIAL fold unchanged; (b) version 1 AND the state has no sealed proposal AND runKind === \"REVISION\" -> the propose fold WITHOUT the create item: `[ready (expectedVersion 1), claim (2), propose (3, proposalKind: \"REVISION\")]` built from the same literals (factor the three items out of the v0 list into a local `chainItems(kind)` so they are written once), then fall through to finalize; (c) version 1 with a sealed proposal -> finalize only (today); (d) otherwise the existing REPLAYED / ALREADY_FINALIZED answers - MEASURE with the arms which aggregate version the successor sits at after (b)'s fold and make the finalize's guard read the state's lifecycle (proposed-not-finalized) rather than `runVersion === 1`, so INITIAL and REVISION share one finalize path; keep :243-300's INITIAL behaviour byte-identical for version 0. NOTE ON THE FENCE: if `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` is already gone from `SUBMIT_DECOMPOSITION_CODES` when you reach this file (task-f79d38b1 landed first), that is expected - do not restore it, and do not treat its absence as a merge accident. Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/planning/compile-dispatcher.test.ts src/planning/approval-intent.test.ts` (count lines quoted) + `wc -l apps/daemon/src/planning/compile-dispatcher.ts` <= 395.",
+          "reason": "Owner ruling 2026-09-04 (task-4423d2a4 comment-fbe64776, relayed from the owner's words \"lift the fence\") retires SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL. This step's arm (3) asserted that code still refuses a two-node successor, which would land a test that task-f79d38b119984ae1ae51eba887a28b7d must then delete. Arm (3) is replaced with the ALREADY_FINALIZED arm it was paired with, and a note tells the worker the multi-node case is that row's, not this one's. Nothing else in the step changes. Verified before amending: this row is unassigned with 0 commits and every step PENDING, so no work is discarded.",
+          "amendedBy": "architect-20a6d1eb",
+          "amendedAt": "2026-09-04T20:36:33.609Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-5",
@@ -96,10 +106,17 @@
   ],
   "priority": "HIGH",
   "order": 1002.21,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-72a597215b76454ab83be65f29a04c3b",
+      "author": "architect-20a6d1eb",
+      "content": "RAIL SUPERSEDED (architect-20a6d1eb, 2026-09-04). This row's task rail \"ONE-NODE FENCE UNTOUCHED: the REVISION submission keeps SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL; growth belongs to task-4423d2a4\" is OUT OF DATE and must not be followed.\n\nWHY: owner ruling 2026-09-04 on task-4423d2a4 (comment-fbe64776, relayed from the owner's words \"lift the fence\") LIFTS the one-node fence. An INITIAL run seals the WHOLE graph. `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` is being retired from `SUBMIT_DECOMPOSITION_CODES` by task-f79d38b119984ae1ae51eba887a28b7d. Your rail was written before that ruling and its own text points at task-4423d2a4 as the owner of growth — that row has now ruled the other way.\n\nWHAT I CHANGED: step-4 is amended (amend-1). Its arm (3) asked you to assert a two-node successor refuses `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL`. You would have written a test that task-f79d38b1 then deletes. The amended arm (3) tells you to assert nothing about node COUNT in either direction, and offers a `runKind === \"REVISION\"` vs `\"INITIAL\"` assertion instead, which is this row's actual subject. Read the AMENDED text via step.amendments[step.activeAmendmentId] — the base description is superseded history (global rail 10).\n\nNOTHING ELSE IN YOUR PLAN CHANGES. Your subject — offers follow the current run, the rejected run is withheld, the REVISION successor is compiled and offered, activity carries the verdict — is untouched and does not depend on the node count.\n\nFILE OVERLAP, disclosed: you own `apps/daemon/src/planning/compile-dispatcher.ts` and `compile-dispatcher.test.ts`; so does task-f79d38b1, for a disjoint reason (it deletes the `nodes.length > 1` arm at :196-197 and the roster entry at :51; you change the run-state branching at :184-300). If f79d38b1 lands first you will find the code already gone — expected, do not restore it, and do not read its absence as a merge accident. The amended step says so explicitly.\n\nVERIFIED BEFORE AMENDING: this row is assignedWorkerId null, 0 commits, all 7 steps PENDING. No delivered work was discarded.\n\nAlso flagged to the governor: this row and task-957bccf162b446f3a4db46b56e8e8f3a have near-identical titles and subjects (\"offers follow the current run\"/\"the compiler compiles the successor with the rejection reason\"), both WORKING, both unassigned, both 0 commits. They may be duplicates. I did not merge or archive either — that is a governor call.",
+      "timestamp": "2026-09-04T20:36:52.260Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-04T14:49:08.080Z",
+  "updatedAt": "2026-09-04T20:36:52.261Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
