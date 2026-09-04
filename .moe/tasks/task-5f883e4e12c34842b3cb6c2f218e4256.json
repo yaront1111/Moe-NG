@@ -1,0 +1,39 @@
+{
+  "id": "task-5f883e4e12c34842b3cb6c2f218e4256",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "preview.decide is fenced to the operator: MCP-excluded, human-only, on the shared contract",
+  "description": "SPIDR child 1b of task-f3edb8fb39ad42ce8980dae7d62b604c, split out by architect-20a6d1eb 2026-09-05 when child 1a's plan measured 12 distinct files against the 10-file hard cap. Cut along the INTERFACE axis: task-40e52fa8a85a4921b97bee933b00403f DEFINES the contract and wires it into the daemon's own roster; this row PUBLISHES it on the shared surface and FENCES it to the operator.\n\ndependsOn task-40e52fa8 (the kind must exist before it can be published) and task-8834ebe68c1a4f81b3be8e7581156755 (the HUMAN_ONLY_STEPS equality guard must exist before this row adds the third member to two rosters).\n\nWHAT THIS ROW OWNS, all measured at HEAD df5bbfd5 (branch moe/work-2026-09-04):\n1. `apps/daemon/src/mcp-tool-allowlist.ts` - `preview.decide` joins the roster of kinds the daemon WIRES BUT REFUSES TO ADVERTISE OVER MCP, beside `approval.decide` and `graph.approve`. Read that file's header before editing: the MCP port authenticates with the operator bootstrap credential (`mcp-main.ts:112-127`), so an MCP caller would authenticate AS the operator and receive a real witness. Exclusion is the fence; a capability gate is not.\n2. `packages/contracts/src/runtime/runtime-vocabulary.ts` - the shared runtime command roster (the sorted list at :90-100).\n3. `packages/control-room-client/src/generated/generated-client.ts` - REGENERATED, never hand-edited. `packages/control-room-client/package.json:18` defines `generate` = `node --experimental-strip-types generator/generate.ts`; the generator emits `GENERATED_CONTRACT_DIGEST` (:905) and the pins object (:909), `contract-pins.ts` re-exports it, and `client-compat.ts:169` compares it against a manifest's `contractSchemaHash`. A hand-added entry with a stale digest passes every grep and fails the compat check at runtime.\n4. BOTH `HUMAN_ONLY_STEPS` rosters - `apps/daemon/src/orchestrator/agent-spawn-contract.ts:194` and `apps/daemon/src/orchestrator/agent-wrapper.ts:116`. The wrapper consults its OWN copy at :355, so an entry added only to agent-spawn-contract.ts looks correct in review and lets the wrapper staff an operator gate.\n\nFIVE FILES. That is the whole row.",
+  "definitionOfDone": [
+    "`preview.decide` is in the MCP wired-but-not-advertised roster, and the allowlist's existing exact-set-equality test (both directions, roster vs the port's table) is green. Beyond set arithmetic, assert the BEHAVIOUR the allowlist header demands: a `preview.decide` dispatch over the MCP port hits the generic refusal asserted BY CODE, while an operator-authenticated dispatch through the daemon's own seam reaches the handler.",
+    "`preview.decide` is on the shared runtime command roster in packages/contracts/src/runtime/runtime-vocabulary.ts.",
+    "The generated client was REGENERATED, not hand-edited: run `pnpm --filter @moe/control-room-client generate`, commit its output, and quote the OLD and NEW `GENERATED_CONTRACT_DIGEST` values in a step note. A step note that cannot show a changed digest means the generator did not run.",
+    "`preview.decide` is in BOTH HUMAN_ONLY_STEPS rosters. Prove the guard from task-8834ebe6 works by adding it to ONE roster first, quoting the equality test's failure, then adding it to the other and quoting the pass - that single sequence evidences both that the entry is in both rosters and that a future one-sided edit cannot slip through.",
+    "A wrapper staffing test asserts `preview.decide` is NOT staffed when it appears READY on the surface - the roster's actual purpose. Assert by work-item id that no seat was spawned for it, not merely that the pass produced some spawn count.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test` (the root lane IS real evidence here because packages/contracts and packages/control-room-client are touched, unlike the apps/** legs)."
+  ],
+  "taskRails": [
+    "NEVER HAND-EDIT the generated client. Run the generator and commit its output; a stale pinned digest is a runtime failure that no grep will catch.",
+    "HUMAN GATES ARE HUMAN-ONLY (inherited): operator-only, MCP-excluded, in BOTH HUMAN_ONLY_STEPS rosters, every refusal carrying a stable code asserted with its layer.",
+    "THIS ROW ADDS NO HANDLER AND NO RUNNER. The contract and its daemon wiring are task-40e52fa8's; the preview process, receipt and screenshots are task-f5a74c23's.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "dependsOn": [
+    "task-40e52fa8a85a4921b97bee933b00403f",
+    "task-8834ebe68c1a4f81b3be8e7581156755"
+  ],
+  "priority": "HIGH",
+  "order": 31.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T23:06:27.098Z",
+  "updatedAt": "2026-09-04T23:06:27.098Z"
+}
