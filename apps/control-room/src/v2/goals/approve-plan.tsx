@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
+import { refusalTitle, refusalWords } from "../components/refusal-words.js";
 import { ARROW_LEFT, MIDDOT } from "../glyphs.js";
 import type {
   PlanningRunAcceptanceView,
@@ -60,16 +61,21 @@ type LoadState =
   | { readonly phase: "LOADING" }
   | { readonly phase: "LOADED"; readonly outcome: PlanningRunOutcome };
 
+/** The step kinds a sealed plan carries, in a person's words; an unknown kind stays as spelled. */
+const STEP_KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  "node.deliver": "an agent builds it and the verifier checks it",
+});
+
 function PlanSection({ plan }: { readonly plan: PlanningRunPlanView }): JSX.Element {
   return (
     <section className="cr2-approve-block" data-testid="cr.approve.plan">
-      <h3 className="cr2-approve-heading">{`PLAN ${MIDDOT} ${plan.steps.length} steps`}</h3>
+      <h3 className="cr2-approve-heading">{`THE PLAN ${MIDDOT} ${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"}`}</h3>
       <ol className="cr2-approve-steps">
-        {plan.steps.map((step) => (
+        {plan.steps.map((step, index) => (
           <li className="cr2-approve-step" data-testid={`cr.approve.step.${step.stepId}`} key={step.stepId}>
             <span className="cr2-approve-step-head">
-              <span className="cr2-approve-mono">{step.stepId}</span>
-              <span className="cr2-approve-kind">{step.kind}</span>
+              <span className="cr2-approve-kind">{`Step ${String(index + 1)} ${MIDDOT} ${STEP_KIND_WORDS[step.kind] ?? step.kind}`}</span>
+              <span className="cr2-approve-mono" title="The step's id in the sealed plan">{step.stepId}</span>
             </span>
             <span className="cr2-approve-step-body">{step.description}</span>
           </li>
@@ -108,23 +114,21 @@ function AcceptanceSection(
   );
 }
 
-function bannerText(
-  reviewable: boolean, approval: PlanningRunApprovalState, lifecycle: string,
-): string {
+function bannerText(reviewable: boolean, approval: PlanningRunApprovalState): string {
   if (reviewable) return "Ready for your approval";
   // A decided run really does stay in PLAN_REVIEW; "still planning" would be the wrong truth.
   if (approval === "BOUND") {
-    return `Approved - the decision is bound to this run; execution proceeds (run lifecycle ${lifecycle})`;
+    return "Approved - the plan is bound to this goal; the agents proceed.";
   }
   if (approval === "UNREADABLE") {
-    return `Approval state unreadable - not offered for approval, lifecycle ${lifecycle}`;
+    return "The approval state could not be read, so approval is not offered.";
   }
-  return `Still planning - not ready to approve yet, lifecycle ${lifecycle}`;
+  return "Still planning - not ready to approve yet.";
 }
 
 function ReviewableBanner(
-  { reviewable, lifecycle, approval }: {
-    readonly reviewable: boolean; readonly lifecycle: string;
+  { reviewable, approval }: {
+    readonly reviewable: boolean;
     readonly approval: PlanningRunApprovalState;
   },
 ): JSX.Element {
@@ -135,7 +139,7 @@ function ReviewableBanner(
       data-reviewable={reviewable ? "true" : "false"}
       data-testid="cr.approve.banner"
     >
-      {bannerText(reviewable, approval, lifecycle)}
+      {bannerText(reviewable, approval)}
     </p>
   );
 }
@@ -149,14 +153,14 @@ function RunView(
   if (!outcome.sealed || outcome.plan === null) {
     return (
       <div className="cr2-approve-empty" data-testid="cr.approve.empty">
-        <ReviewableBanner approval={outcome.approval} lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
+        <ReviewableBanner approval={outcome.approval} reviewable={outcome.reviewable} />
         <p className="cr2-slot-body">The plan is not sealed yet; nothing to review.</p>
       </div>
     );
   }
   return (
     <div className="cr2-approve-body">
-      <ReviewableBanner approval={outcome.approval} lifecycle={outcome.lifecycle} reviewable={outcome.reviewable} />
+      <ReviewableBanner approval={outcome.approval} reviewable={outcome.reviewable} />
       <PlanSection plan={outcome.plan} />
       {outcome.acceptance === null ? null : <AcceptanceSection acceptance={outcome.acceptance} />}
       <details className="cr2-approve-inspect" data-testid="cr.approve.inspect">
@@ -176,8 +180,8 @@ function OutcomeView({ outcome }: { readonly outcome: PlanningRunOutcome }): JSX
   if (outcome.status === "RUN") return <RunView outcome={outcome} />;
   // REFUSED and ERROR both name their code and layer plainly, never a blank.
   return (
-    <p className="cr2-approve-refusal" data-testid="cr.approve.refusal">
-      {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
+    <p className="cr2-approve-refusal" data-testid="cr.approve.refusal" title={refusalTitle(outcome)}>
+      {refusalWords(outcome)}
     </p>
   );
 }
@@ -187,7 +191,7 @@ function AppliedLine({ state }: { readonly state: LoadState }): JSX.Element | nu
   if (state.phase !== "LOADED" || state.outcome.status !== "RUN") return null;
   return (
     <p className="cr2-approve-banner" data-testid="cr.approve.applied">
-      {`Approved ${MIDDOT} the daemon now reports approval ${state.outcome.approval}, lifecycle ${state.outcome.lifecycle}`}
+      {`Approved ${MIDDOT} the daemon recorded your decision (approval ${state.outcome.approval}, lifecycle ${state.outcome.lifecycle})`}
     </p>
   );
 }

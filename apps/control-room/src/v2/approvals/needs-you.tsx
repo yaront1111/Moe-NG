@@ -5,6 +5,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import type { OfferOutcome } from "./offer-wire.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * The NEEDS YOU queue: one card per decision the daemon is waiting on, in the order a
@@ -87,7 +88,7 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   if (result.outcome === null) return null;
   return result.outcome.ok
     ? (result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine)
-    : `REFUSED ${MIDDOT} ${result.outcome.code} ${MIDDOT} ${result.outcome.layer}`;
+    : refusalWords(result.outcome);
 }
 
 function DecisionCard({ item, onDecide, onOpenBoard, result }: {

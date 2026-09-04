@@ -247,7 +247,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
     );
     await user.click(await screen.findByTestId("cr.gate1.approve"));
     expect((await screen.findByRole("alert")).textContent)
-      .toContain(`${refused.code} · ${refused.layer}`);
+      .toContain(`${refused.code} at ${refused.layer}`);
 
     rerender(<Gate1Card
       goalId="goal-live-2"
@@ -255,7 +255,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
       read={async () => ({ code: "READ_REFUSED", layer: "DAEMON_READ", status: "REFUSED" })}
     />);
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("REFUSED · READ_REFUSED · DAEMON_READ");
+      .toContain("The daemon refused the read (READ_REFUSED at DAEMON_READ)");
   });
 
   it("turns a synchronous read failure into an accessible local error", async () => {
@@ -265,7 +265,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
       read={() => { throw new Error("offline"); }}
     />);
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("ERROR · GATE1_READ_FAILED · CONTROL_ROOM_GATE1");
+      .toContain("The Product Contract could not be read (GATE1_READ_FAILED at CONTROL_ROOM_GATE1)");
   });
 
   it("ignores an old goal dispatch and resets busy/refusal state for the new goal", async () => {

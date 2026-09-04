@@ -1,10 +1,10 @@
 import type { JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
-import { MIDDOT } from "../glyphs.js";
 import type {
   ApprovalAuthorization, ApprovalGrant, PlanApprovalOutcome,
 } from "./plan-approval.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * The Approve control: the one write on the plan-review screen, and the operator's
@@ -41,7 +41,7 @@ function WithheldReason({ authorization }: {
 }): JSX.Element {
   return (
     <p className="cr2-approve-note" data-testid="cr.approve.reason">
-      {`Approval is not offered for this run ${MIDDOT} ${authorization.code} ${MIDDOT} ${authorization.layer}`}
+      {`Approval is not offered for this run: ${refusalWords(authorization)}`}
     </p>
   );
 }
@@ -63,7 +63,7 @@ export function ApproveGate({ authorization, busy, onApprove, refusal }: Approve
         : null}
       {refusal === null ? null : (
         <p className="cr2-approve-refusal" data-testid="cr.approve.dispatch-refusal">
-          {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
+          {refusalWords(refusal)}
         </p>
       )}
     </div>

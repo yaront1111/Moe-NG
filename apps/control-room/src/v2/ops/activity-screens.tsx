@@ -4,6 +4,7 @@ import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
 import { MIDDOT } from "../glyphs.js";
 import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -17,7 +18,7 @@ function Refusal({ outcome, testId }: {
 }): JSX.Element {
   return (
     <p className="cr2-approve-refusal" data-testid={testId} role="status">
-      {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
+      {refusalWords(outcome)}
     </p>
   );
 }

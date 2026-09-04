@@ -113,7 +113,7 @@ describe("the PRD coverage card", () => {
       code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
     })} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent)
-      .toBe("REFUSED · DOCUMENT_COVERAGE_READ_GOAL_UNBOUND · DOCUMENT_COVERAGE_READ");
+      .toBe("This goal was created without a PRD (DOCUMENT_COVERAGE_READ_GOAL_UNBOUND at DOCUMENT_COVERAGE_READ)");
     cleanup();
     render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent).toContain("COVERAGE_READ_FAILED");

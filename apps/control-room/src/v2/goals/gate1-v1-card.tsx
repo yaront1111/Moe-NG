@@ -7,6 +7,7 @@ import type {
   Gate1ApprovalOutcomeV1, Gate1ApprovalPortV1, Gate1ClarificationViewV1, Gate1PendingViewV1,
   Gate1ReadOutcomeV1,
 } from "./gate1-v1-approval.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * The GATE 1 card on the V1 plane (approve the Product Contract): rendered above the plan
@@ -199,12 +200,12 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
         </p>
       ) : (
         <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal">
-          {`${state.outcome.status} ${MIDDOT} ${state.outcome.code} ${MIDDOT} ${state.outcome.layer}`}
+          {refusalWords(state.outcome)}
         </p>
       )}
       {refusal === null ? null : (
         <p className="cr2-approve-refusal" data-testid="cr.gate1.dispatchrefusal">
-          {`REFUSED ${MIDDOT} ${refusal.code} ${MIDDOT} ${refusal.layer}`}
+          {refusalWords(refusal)}
         </p>
       )}
     </section>

@@ -5,6 +5,7 @@ import type {
   CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
 import { MIDDOT } from "../glyphs.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -212,7 +213,7 @@ export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Ele
         <CoverageBody coverage={state.outcome} />
       ) : (
         <p className="cr2-approve-refusal" data-testid="cr.coverage.refusal">
-          {`${state.outcome.status} ${MIDDOT} ${state.outcome.code} ${MIDDOT} ${state.outcome.layer}`}
+          {refusalWords(state.outcome)}
         </p>
       )}
     </section>

@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -47,7 +48,7 @@ function Refusal({ outcome, testId }: {
 }): JSX.Element {
   return (
     <p className="cr2-approve-refusal" data-testid={testId}>
-      {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
+      {refusalWords(outcome)}
     </p>
   );
 }

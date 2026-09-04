@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import { readGoalSource } from "../../live/live-goal-source.js";
 import type { GoalSourceOutcome } from "../../live/live-goal-source.js";
 import { MIDDOT } from "../glyphs.js";
+import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * THE PRD, on the goal that binds it. The daemon planned this goal from one stored text;
@@ -26,7 +27,7 @@ export function PrdPanel({ outcome }: PrdPanelProps): JSX.Element {
       ? <p className="cr2-needs-note" data-testid="cr.prd.unbound">This goal was created without a PRD.</p>
       : (
         <p className="cr2-approve-refusal" data-testid="cr.prd.refusal" role="status">
-          {`${outcome.status} ${MIDDOT} ${outcome.code} ${MIDDOT} ${outcome.layer}`}
+          {refusalWords(outcome)}
         </p>
       );
   }

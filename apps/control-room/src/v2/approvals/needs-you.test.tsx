@@ -65,7 +65,7 @@ describe("the Needs-you queue", () => {
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
     rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
-    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toBe("REFUSED · REVIEW_ESCALATION_NOT_REACHED · DAEMON_PREREQUISITE");
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toBe("This node has not used every review attempt yet (REVIEW_ESCALATION_NOT_REACHED at DAEMON_PREREQUISITE)");
   });
 
   it("asks twice before closing a goal, then shows the daemon's answer", async () => {

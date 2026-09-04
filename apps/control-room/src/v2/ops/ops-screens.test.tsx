@@ -88,7 +88,7 @@ describe("PolicyScreen", () => {
     expect(screen.getByTestId("cr.policy.loading")).toBeTruthy();
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ code: "LISTENER_POLICY_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.policy.refusal").textContent).toBe("REFUSED · LISTENER_POLICY_UNAVAILABLE · CONTROL_ROOM_LISTENER");
+    expect(screen.getByTestId("cr.policy.refusal").textContent).toBe("The daemon is not serving the policy read (LISTENER_POLICY_UNAVAILABLE at CONTROL_ROOM_LISTENER)");
     cleanup();
     render(<PolicyScreen nowMs={NOW} outcome={{ ...POLICY, evaluations: [], slices: [] }} />);
     expect(screen.getByTestId("cr.policy.empty").textContent).toContain("No policy installed.");

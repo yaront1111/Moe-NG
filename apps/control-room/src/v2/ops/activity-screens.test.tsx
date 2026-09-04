@@ -69,7 +69,7 @@ describe("ActivityPanel", () => {
     expect(screen.getByTestId("cr.activity.loading")).toBeTruthy();
     cleanup();
     render(<ActivityPanel nowMs={NOW} outcome={{ code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "ACTIVITY_READ", status: "REFUSED" }} scopeLabel="Alpha" />);
-    expect(screen.getByTestId("cr.activity.refusal").textContent).toBe("REFUSED · ACTIVITY_READ_GOAL_UNKNOWN · ACTIVITY_READ");
+    expect(screen.getByTestId("cr.activity.refusal").textContent).toBe("The daemon does not know this goal (ACTIVITY_READ_GOAL_UNKNOWN at ACTIVITY_READ)");
     cleanup();
     render(<ActivityPanel nowMs={NOW} outcome={{ ...ACTIVITY, entries: [], totalDecisions: 0 }} scopeLabel="Alpha" />);
     expect(screen.getByTestId("cr.activity.empty").textContent).toContain("Nothing has been decided here yet.");

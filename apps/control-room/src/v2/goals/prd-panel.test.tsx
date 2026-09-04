@@ -28,7 +28,7 @@ describe("PrdPanel", () => {
     expect(screen.getByTestId("cr.prd.unbound").textContent).toBe("This goal was created without a PRD.");
     cleanup();
     render(<PrdPanel outcome={{ code: "GOAL_SOURCE_INVALID", layer: "DAEMON_READ_MODEL", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.prd.refusal").textContent).toBe("REFUSED · GOAL_SOURCE_INVALID · DAEMON_READ_MODEL");
+    expect(screen.getByTestId("cr.prd.refusal").textContent).toBe("The PRD bound to this goal did not read back cleanly (GOAL_SOURCE_INVALID at DAEMON_READ_MODEL)");
     cleanup();
     render(<PrdPanel outcome={null} />);
     expect(screen.getByTestId("cr.prd.loading")).toBeTruthy();
