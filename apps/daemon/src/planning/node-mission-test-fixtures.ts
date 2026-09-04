@@ -27,8 +27,8 @@ import {
 import type { SqliteEventStore } from "@moe/store";
 
 import {
-  ACTIVATION_WITNESS, OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID,
-  envelope, evaluationInput, hex64, openStore, send,
+  OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID,
+  activatePayload, envelope, evaluationInput, hex64, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
 import {
@@ -259,7 +259,7 @@ export function capabilities(): unknown {
     }),
     envelope("policy.install", 0, { slice: POLICY_SLICE }),
     envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
-    envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
+    envelope("project.activate", 2, activatePayload()),
   ];
   for (const step of steps) {
     const outcome = send(store, step);

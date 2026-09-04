@@ -24,8 +24,8 @@ import type { WorktreeAssignment } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
 import {
-  ACTIVATION_WITNESS, OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID,
-  closeStores, envelope, evaluationInput, hex64, openStore, send,
+  OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID,
+  activatePayload, closeStores, envelope, evaluationInput, hex64, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
 import { credentialSha256Of } from "../identity/session-authenticator.js";
@@ -180,7 +180,7 @@ function seedStore(options: SeedOptions = {}): SqliteEventStore {
         ...(options.skipRuntime === true ? { runtime: null } : {}) }),
       envelope("policy.install", 0, { slice: POLICY_SLICE }),
       envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
-      envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
+      envelope("project.activate", 2, activatePayload()),
     ];
   for (const step of steps) {
     const outcome = send(store, step);

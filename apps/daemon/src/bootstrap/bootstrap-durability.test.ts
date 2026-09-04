@@ -6,11 +6,11 @@ import { commitAccepted, missingPrerequisites, readDurableLedger } from "./boots
 import { PREREQUISITE_ALTERNATIVES } from "./bootstrap-sequence.js";
 import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import {
-  ACTIVATION_WITNESS,
   GOAL_CREATE_COMMAND_ID,
   OBSERVATION,
   PROJECT_ID,
   RUN_ID,
+  activatePayload,
   approvalPayload,
   approvalRecord,
   bootstrapSequence,
@@ -80,7 +80,7 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
     registerAndBind(store);
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }));
+    const outcome = send(store, envelope("project.activate", 2, activatePayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -226,9 +226,7 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     const before = decisionCount(store);
     const head = readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID);
 
-    const outcome = send(store, envelope("project.activate", 99, {
-      witness: ACTIVATION_WITNESS,
-    }));
+    const outcome = send(store, envelope("project.activate", 99, activatePayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -260,7 +258,7 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     registerAndBind(store);
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }));
+    const outcome = send(store, envelope("project.activate", 2, activatePayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -296,7 +294,7 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     // must not hand back the register decision dressed as an accepted activation.
     const outcome = send(
       store,
-      envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }, "cmd-project.register"),
+      envelope("project.activate", 2, activatePayload(), "cmd-project.register"),
     );
 
     expect(outcome.ok).toBe(false);

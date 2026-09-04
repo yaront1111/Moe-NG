@@ -34,11 +34,11 @@ import { CLAUDE_LAUNCH_RESUME_FLAGS, launchClaude } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
 import {
-  ACTIVATION_WITNESS,
   OBSERVATION,
   POLICY_REF,
   POLICY_SLICE,
   PROJECT_ID,
+  activatePayload,
   closeStores,
   decisionCount,
   envelope,
@@ -204,7 +204,7 @@ function capabilities(options: SeedOptions = {}): unknown {
         envelope("provider.probe", 0, { observation }),
         envelope("policy.install", 0, { slice: POLICY_SLICE }),
         envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
-        envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
+        envelope("project.activate", 2, activatePayload()),
       ];
   for (const step of steps) {
     const outcome = send(store, step);

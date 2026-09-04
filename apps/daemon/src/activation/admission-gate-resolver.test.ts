@@ -42,7 +42,7 @@ import type { JsonObject } from "@moe/contracts";
 
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import {
-  ACTIVATION_WITNESS, GOAL_ID, PROJECT_ID, driveThrough, envelope, send,
+  GOAL_ID, PROJECT_ID, activatePayload, driveThrough, envelope, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { decodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import {
@@ -182,7 +182,7 @@ function seedProjectWithoutPolicy(store: SqliteEventStore): void {
   // policy ones. `project.activate` then follows on the PROJECT aggregate at version 2 — the
   // policy commands live on `${projectId}-policy` and never move it.
   driveThrough(store, "policy.install");
-  const activated = send(store, envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }));
+  const activated = send(store, envelope("project.activate", 2, activatePayload()));
   if (!activated.ok) throw new Error(`project.activate refused: ${activated.code}`);
 }
 

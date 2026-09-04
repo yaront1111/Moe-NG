@@ -280,6 +280,28 @@ export const ACTIVATION_WITNESS = Object.freeze({
 });
 
 /**
+ * The ONE `project.activate` payload builder every in-repo sender goes through.
+ *
+ * WHY IT EXISTS: task-4b9c394debe94b41a80e2b46c6d55ab8 makes the daemon MINT the activation
+ * witness and REFUSE a caller-supplied one. Every sender routing through this body turns that
+ * flip into a one-function change instead of a twelve-site edit, and removes the window where
+ * those files would sit red on the shared branch owned by neither row. Do not inline
+ * `{ witness: ACTIVATION_WITNESS }` at a call site again.
+ *
+ * `overrides` MERGES over the base rather than replacing it, so a caller naming one member
+ * keeps the other eight (`provider-profile-resolver.test.ts` plants a weak `truthClass` that
+ * way). An absent or explicitly-`undefined` `overrides` yields the frozen base itself, which is
+ * the branch `options.witness ?? ACTIVATION_WITNESS` used to take.
+ */
+export function activatePayload(
+  overrides?: Partial<Record<keyof typeof ACTIVATION_WITNESS, unknown>>,
+): Record<string, unknown> {
+  return {
+    witness: overrides === undefined ? ACTIVATION_WITNESS : { ...ACTIVATION_WITNESS, ...overrides },
+  };
+}
+
+/**
  * `sliceRef` is a 64-hex string on purpose: `validateEvaluationInput` requires
  * `policyRevisionRef` to be hex64 while `validSlice` accepts any non-empty ref, so a slice
  * installed under a human-readable ref could never be named by a valid evaluation input.
@@ -628,7 +650,7 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("policy.install", 0, { slice: POLICY_SLICE }),
     envelope("policy.install", 1, { slice: CLASSIFYING_POLICY_SLICE }, "cmd-install-classified"),
     envelope("policy.validate", 2, { input: evaluationInput(POLICY_REF) }),
-    envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
+    envelope("project.activate", 2, activatePayload()),
     envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
     envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }),
     // The shipped journey FINALIZES before it approves: this request carries the finalize

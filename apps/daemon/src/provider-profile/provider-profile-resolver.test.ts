@@ -33,6 +33,7 @@ import {
   POLICY_REF,
   POLICY_SLICE,
   PROJECT_ID,
+  activatePayload,
   closeStores,
   envelope,
   evaluationInput,
@@ -166,7 +167,7 @@ function seed(options: SeedOptions = {}): Seeded {
         envelope("provider.probe", 0, { observation }),
         envelope("policy.install", 0, { slice: POLICY_SLICE }),
         envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
-        envelope("project.activate", 2, { witness: options.witness ?? ACTIVATION_WITNESS }),
+        envelope("project.activate", 2, activatePayload(options.witness)),
       ];
   for (const step of steps) {
     const outcome = send(store, step);
@@ -480,9 +481,9 @@ describe("resolveCurrentProviderProfile — truth and scope", () => {
       expect(send(store, step).ok).toBe(true);
     }
 
-    const outcome = send(store, envelope("project.activate", 2, {
-      witness: { ...ACTIVATION_WITNESS, truthClass: "OBSERVED" },
-    }));
+    const outcome = send(store, envelope(
+      "project.activate", 2, activatePayload({ truthClass: "OBSERVED" }),
+    ));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
