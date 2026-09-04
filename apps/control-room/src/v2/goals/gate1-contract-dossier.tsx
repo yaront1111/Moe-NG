@@ -3,6 +3,15 @@ import type { JSX, ReactNode } from "react";
 
 import { MIDDOT } from "../glyphs.js";
 
+/**
+ * THE PRODUCT CONTRACT a person approves at Gate 1. Four things lead, because they are the
+ * decision: what we will build (objectives), what we will not (negative scope), how we will
+ * know it is done (the acceptance criteria), and the product questions still open (material
+ * decisions). Everything else the revision carries - user jobs, journeys, the six requirement
+ * groups, assumptions, budgets, metrics, provenance, retired ids - is the same dossier one
+ * click away, so approval is a reading, not a scroll past an eighteen-section dump.
+ */
+
 interface DossierItem {
   readonly details?: readonly string[];
   readonly id: string;
@@ -97,18 +106,61 @@ function Provenance({ revision }: { readonly revision: ProductContractRevisionV2
   );
 }
 
-export function Gate1ContractDossier({
-  revision,
-}: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
+/** The sections that are the decision. */
+function Essentials({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
   return (
-    <div className="cr2-approve-body" data-testid="cr.gate1.pending">
+    <>
       <DossierSection
         items={revision.objectives.map((row) => ({
           id: row.objectiveId, statement: row.statement,
         }))}
         sectionId="objectives"
-        title="OBJECTIVES"
+        title="WHAT WE WILL BUILD"
       />
+      <DossierSection
+        items={revision.negativeScope.map((row) => ({
+          id: row.scopeId, statement: row.statement,
+        }))}
+        sectionId="negative-scope"
+        title="WHAT WE WILL NOT BUILD"
+      />
+      <DossierSection
+        items={revision.criteria.map((row) => ({
+          details: [
+            `requirement ${row.requirementId}`,
+            `verification ${row.verification}`,
+            row.supersedesCriterionId === null
+              ? "supersedes none"
+              : `supersedes ${row.supersedesCriterionId}`,
+          ],
+          id: row.criterionId,
+          statement: row.statement,
+        }))}
+        sectionId="criteria"
+        title="HOW WE WILL KNOW IT IS DONE"
+      />
+      <DossierSection
+        items={revision.materialDecisions.map((row) => ({
+          details: [
+            row.selectedOptionId === null
+              ? "selected option unresolved"
+              : `selected option ${row.selectedOptionId}`,
+            ...row.options.map((option) => `${option.optionId}: ${option.statement}`),
+          ],
+          id: row.decisionId,
+          statement: row.question,
+        }))}
+        sectionId="material-decisions"
+        title="PRODUCT DECISIONS STILL OPEN"
+      />
+    </>
+  );
+}
+
+/** The rest of the revision, verbatim, behind one fold. */
+function FullContract({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
+  return (
+    <>
       <DossierSection
         items={revision.userJobs.map((row) => ({
           details: [`user ${row.user}`], id: row.userJobId, statement: row.job,
@@ -145,28 +197,6 @@ export function Gate1ContractDossier({
         "requirements.deployment", "DEPLOYMENT REQUIREMENTS", revision.deploymentRequirements,
       )}
       <DossierSection
-        items={revision.criteria.map((row) => ({
-          details: [
-            `requirement ${row.requirementId}`,
-            `verification ${row.verification}`,
-            row.supersedesCriterionId === null
-              ? "supersedes none"
-              : `supersedes ${row.supersedesCriterionId}`,
-          ],
-          id: row.criterionId,
-          statement: row.statement,
-        }))}
-        sectionId="criteria"
-        title="ACCEPTANCE CRITERIA"
-      />
-      <DossierSection
-        items={revision.negativeScope.map((row) => ({
-          id: row.scopeId, statement: row.statement,
-        }))}
-        sectionId="negative-scope"
-        title="NEGATIVE SCOPE"
-      />
-      <DossierSection
         items={revision.assumptions.map((row) => ({
           details: [`validated by ${row.validationCriterionId}`],
           id: row.assumptionId,
@@ -198,20 +228,6 @@ export function Gate1ContractDossier({
         title="SUCCESS METRICS"
       />
       <DossierSection
-        items={revision.materialDecisions.map((row) => ({
-          details: [
-            row.selectedOptionId === null
-              ? "selected option unresolved"
-              : `selected option ${row.selectedOptionId}`,
-            ...row.options.map((option) => `${option.optionId}: ${option.statement}`),
-          ],
-          id: row.decisionId,
-          statement: row.question,
-        }))}
-        sectionId="material-decisions"
-        title="MATERIAL DECISIONS"
-      />
-      <DossierSection
         items={[{
           details: [joined("criteria", revision.productCompleteDefinition.criterionIds)],
           id: "product-complete-definition",
@@ -235,6 +251,26 @@ export function Gate1ContractDossier({
         sectionId="retired"
         title="RETIRED IDENTIFIERS"
       />
+    </>
+  );
+}
+
+export function Gate1ContractDossier({
+  revision,
+}: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
+  const requirementCount = revision.functionalRequirements.length + revision.nonFunctionalRequirements.length
+    + revision.securityPrivacyRequirements.length + revision.technologyRequirements.length
+    + revision.uxAccessibilityRequirements.length + revision.deploymentRequirements.length;
+  return (
+    <div className="cr2-approve-body" data-testid="cr.gate1.pending">
+      <Essentials revision={revision} />
+      <details className="cr2-goal-fold" data-testid="cr.gate1.contract.full">
+        <summary className="cr2-goal-fold-summary">
+          {`The full contract ${MIDDOT} ${String(requirementCount)} requirements, ${String(revision.userJobs.length)} user jobs,`
+            + ` ${String(revision.journeys.length)} journeys, assumptions, budgets, metrics, provenance`}
+        </summary>
+        <FullContract revision={revision} />
+      </details>
     </div>
   );
 }

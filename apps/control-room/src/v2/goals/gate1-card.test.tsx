@@ -166,7 +166,7 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
     expect(screen.getByRole("heading", {
       level: 2, name: /PRODUCT CONTRACT.*GATE 1.*goal-live-1/,
     })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3, name: /OBJECTIVES/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: /WHAT WE WILL BUILD/ })).toBeTruthy();
   });
 
   it("dispatches the selected daemon option and re-reads for approval", async () => {
