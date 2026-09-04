@@ -340,6 +340,9 @@ export function createStoreDependencies(
   /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
   const composedAt = (config.clock ?? (() => new Date().toISOString()))();
   const health = (): HealthReadPort => createHealthReadPort({
+    // The SAME clock every authority decision reads, so a provider pause and the decisions the
+    // daemon takes while it holds agree on what "now" is.
+    clock,
     nodeSpecsDir: config.nodeSpecsDir ?? null,
     projectId: config.projectId,
     readPlane: () => commandAuthorityPlane().readPlane(),

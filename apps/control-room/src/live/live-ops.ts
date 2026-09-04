@@ -52,9 +52,15 @@ export type PolicyOutcome =
   | { readonly status: "REFUSED"; readonly code: string; readonly layer: string }
   | { readonly status: "ERROR"; readonly code: string; readonly layer: string };
 
+/** A provider limit the fleet is waiting out, exactly as /health/read states it. */
+export interface ProviderPauseView {
+  readonly lastLine: string; readonly provider: string; readonly resetAt: string; readonly since: string; readonly workItemId: string;
+}
+
 export type HealthOutcome =
   | {
     readonly status: "HEALTH";
+    readonly agents: { readonly paused: ProviderPauseView | null };
     readonly daemon: {
       readonly commandAuthorityPlane: string;
       readonly nodeSpecsDir: string | null;
@@ -208,18 +214,31 @@ export function mapPolicyAnswer(status: number, response: unknown): PolicyOutcom
   });
 }
 
+// The stated pause, null, or `false` for a frame this build may not read. `false` is NOT "no
+// pause": a missing or drifted `agents` is refused, never rendered as calm; an empty line is real.
+function pausedOf(value: unknown): ProviderPauseView | false | null {
+  const agents = exactDataRecord(value, ["paused"]);
+  if (agents === null) return false;
+  if (agents.paused === null) return null;
+  const at = exactDataRecord(agents.paused, ["lastLine", "provider", "resetAt", "since", "workItemId"]);
+  if (at === null || typeof at.lastLine !== "string" || !nonEmptyString(at.provider)
+    || !nonEmptyString(at.resetAt) || !nonEmptyString(at.since) || !nonEmptyString(at.workItemId)) return false;
+  return Object.freeze({ lastLine: at.lastLine, provider: at.provider, resetAt: at.resetAt, since: at.since, workItemId: at.workItemId });
+}
+
 export function mapHealthAnswer(status: number, response: unknown): HealthOutcome {
   const refusal = refusalFrom(response);
   if (refusal !== null) return refusal;
   if (status !== 200) return invalidResponse();
-  const record = exactDataRecord(response, ["daemon", "ledger", "outcome", "readAt", "verifier"]);
+  const record = exactDataRecord(response, ["agents", "daemon", "ledger", "outcome", "readAt", "verifier"]);
   if (record === null || record.outcome !== "HEALTH" || !nonEmptyString(record.readAt)) return invalidResponse();
   const daemon = exactDataRecord(record.daemon, [
     "commandAuthorityPlane", "nodeSpecsDir", "pid", "projectId", "protocolVersion", "startedAt", "storePath",
   ]);
   const ledger = exactDataRecord(record.ledger, ["aggregates", "commandKinds", "decisionCount", "goals", "lastDecidedAt"]);
   const verifier = verifierOf(record.verifier);
-  if (daemon === null || ledger === null || verifier === null
+  const paused = pausedOf(record.agents);
+  if (daemon === null || ledger === null || verifier === null || paused === false
     || !nonEmptyString(daemon.commandAuthorityPlane) || !nullableString(daemon.nodeSpecsDir) || !count(daemon.pid)
     || !nonEmptyString(daemon.projectId) || !nonEmptyString(daemon.protocolVersion) || !nonEmptyString(daemon.startedAt)
     || typeof daemon.storePath !== "string" || !count(ledger.aggregates) || !count(ledger.commandKinds)
@@ -227,6 +246,7 @@ export function mapHealthAnswer(status: number, response: unknown): HealthOutcom
     return invalidResponse();
   }
   return Object.freeze({
+    agents: Object.freeze({ paused }),
     daemon: Object.freeze({
       commandAuthorityPlane: daemon.commandAuthorityPlane, nodeSpecsDir: daemon.nodeSpecsDir, pid: daemon.pid,
       projectId: daemon.projectId, protocolVersion: daemon.protocolVersion, startedAt: daemon.startedAt,

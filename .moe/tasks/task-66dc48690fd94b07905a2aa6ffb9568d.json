@@ -96,10 +96,17 @@
   ],
   "priority": "MEDIUM",
   "order": 1004.22,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-bbd731662b8c40b1880ce74b6ef66acb",
+      "author": "worker-cceb207f",
+      "content": "From child 3a (task-278faf81c10845ffa571716105aa19e3), landed on moe/work-2026-09-04. What you consume, measured, not designed:\n\nTYPE TO IMPORT: `ProviderPauseView` from `apps/control-room/src/live/live-ops.ts` (a TYPE-only export; `import type { ProviderPauseView } from \"../../live/live-ops.js\"` - adjust depth). Do NOT import the daemon's identically-named `ProviderPauseView` from apps/daemon/src/http/health-read.ts: @moe/control-room has no dependency on @moe/daemon (deps = contracts, control-room-client, control-room-model, core), the repo has no tsconfig \"paths\" and no project references, so a deep relative import fails TS6059. The two declarations are deliberate twins kept in step by the exact-key decoder.\n\nFIELD TO READ: `outcome.agents.paused` on the HEALTH arm of `HealthOutcome`, i.e.\n  readonly agents: { readonly paused: ProviderPauseView | null }\n`ProviderPauseView = { lastLine: string; provider: string; resetAt: string; since: string; workItemId: string }` - all five REQUIRED, all string, none nullable. `paused === null` means no provider is paused. Reach it only inside the `outcome.status === \"HEALTH\"` narrowing.\n\nFOUR THINGS THAT WILL BITE YOUR BANNER:\n1. `lastLine` MAY BE THE EMPTY STRING. A pause whose cause never named a line is a REAL pause (the daemon maps a null cause/lastLine to \"\"), so do not treat \"\" as absent and do not render an empty quote. There is an arm on this in live-ops.test.ts.\n2. `lastLine` IS NOT LENGTH-BOUNDED IN THE BROWSER. The daemon clips at 512 chars (child 1's LAST_LINE_MAX_CHARS) but `pausedOf` only checks `typeof === \"string\"`. If you render it, clamp/truncate it yourself - it is a provider-authored line arriving over the wire.\n3. `resetAt` IS ONLY CHECKED NON-EMPTY, NOT ISO. `new Date(resetAt)` can be Invalid Date. HealthScreen's `agentsWords` (ops-screens.tsx) handles this by `Date.parse` + `Number.isNaN(at) ? paused.resetAt : new Date(at).toLocaleString()` - show the raw instant, never \"Invalid Date\", and never hide the pause behind a formatting miss. Copy that shape; there is an arm pinning it.\n4. ONE PROVIDER AT A TIME. The daemon reports the FIRST live pause in `KNOWN_PROVIDERS` order (`[\"claude\",\"codex\"]`, exported from apps/daemon/src/http/health-read.ts). Two providers paused -> claude is reported and codex is invisible until claude clears. Deliberate, since one banner is rendered - do not write a DoD clause expecting both.\n\nALREADY TAKEN, DO NOT RE-IMPLEMENT: the `cr.health.agents` testid (a Fact labelled \"Agents\" inside `cr.health.facts`, reading \"not paused\" or \"paused: <provider> limit, resumes <resetAt in the reader's locale>\"), the exact-key decoder roster `[\"agents\",\"daemon\",\"ledger\",\"outcome\",\"readAt\",\"verifier\"]`, and every HEALTH fixture in live-ops.test.ts and ops-screens.test.tsx (both already carry `agents: { paused: null }`; a fixture you add without it will not typecheck).\n\nFAIL-CLOSED CONTRACT you inherit: a frame with no `agents`, an extra key inside `agents`, an extra or missing key inside `paused`, or a non-string field is OPS_RESPONSE_INVALID at CONTROL_ROOM_LIVE_OPS. `paused: null` is accepted. Seven drift arms pin this; if you widen the shape, widen those arms in the same row.",
+      "timestamp": "2026-09-04T22:22:20.034Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:17:59.168Z",
-  "updatedAt": "2026-09-04T14:25:14.232Z",
+  "updatedAt": "2026-09-04T22:22:20.034Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:22:31.260Z",
     "plannedStepCount": 7,

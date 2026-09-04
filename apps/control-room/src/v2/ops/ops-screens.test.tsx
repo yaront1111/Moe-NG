@@ -27,7 +27,14 @@ const POLICY: PolicyOutcome = {
   verifier: { calibration: false, policy: true },
   waivers: { reason: "No command on this daemon records a policy waiver.", supported: false },
 };
+/** The daemon's five-key pause, as /health/read serves it; the line is carried, never parsed. */
+const PAUSED = {
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude", resetAt: "2026-09-02T20:30:00.000Z", since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+};
 const HEALTH: HealthOutcome = {
+  agents: { paused: null },
   daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:35:00.000Z" },
   readAt: "2026-09-02T20:00:00.000Z", status: "HEALTH", verifier: { calibration: true, policy: true },
@@ -105,6 +112,18 @@ describe("HealthScreen", () => {
     expect(screen.getByTestId("cr.health.store").textContent).toBe("D:/store.sqlite");
     expect(screen.getByTestId("cr.health.decisions").textContent).toBe("40");
     expect(screen.getByTestId("cr.health.verifier").textContent).toBe("The verifier can accept delivered work.");
+    expect(screen.getByTestId("cr.health.agents").textContent).toBe("not paused");
+  });
+
+  it("names the paused provider and when it resumes, in the reader's own locale", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { paused: PAUSED } }} />);
+    expect(screen.getByTestId("cr.health.agents").textContent)
+      .toBe(`paused: claude limit, resumes ${new Date("2026-09-02T20:30:00.000Z").toLocaleString()}`);
+  });
+
+  it("still names the pause when the reset instant is one this browser cannot read", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { paused: { ...PAUSED, resetAt: "whenever" } } }} />);
+    expect(screen.getByTestId("cr.health.agents").textContent).toBe("paused: claude limit, resumes whenever");
   });
 });
 

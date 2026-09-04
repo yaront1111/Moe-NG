@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
+import type { HealthOutcome, PolicyOutcome, PolicySliceKind, ProviderPauseView } from "../../live/live-ops.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
@@ -42,6 +42,22 @@ function upFor(startedAt: string, nowMs: number): string {
   const rest = minutes % 60;
   if (hours < 24) return rest === 0 ? `${String(hours)} h` : `${String(hours)} h ${String(rest)} min`;
   return `${String(Math.floor(hours / 24))} d ${String(hours % 24)} h`;
+}
+
+/**
+ * What the fleet is waiting for, in the reader's own words and time zone.
+ *
+ * The reset instant is the daemon's fact; the LOCALE is the reader's, so the resume time is
+ * formatted here rather than served pre-rendered. Date and time both, because a weekly limit
+ * resumes on another day.
+ */
+function agentsWords(paused: ProviderPauseView | null): string {
+  if (paused === null) return "not paused";
+  const at = Date.parse(paused.resetAt);
+  // An instant this browser cannot read is shown RAW, never as "Invalid Date", and never as calm:
+  // hiding a live pause behind a formatting miss is the one thing this line must not do.
+  const when = Number.isNaN(at) ? paused.resetAt : new Date(at).toLocaleString();
+  return `paused: ${paused.provider} limit, resumes ${when}`;
 }
 
 function Refusal({ outcome, testId, what }: {
@@ -204,6 +220,7 @@ export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; reado
         <Fact label="Aggregates" value={String(ledger.aggregates)} />
         <Fact label="Command kinds used" value={String(ledger.commandKinds)} />
         <Fact label="Goals bound to a PRD" value={ledger.goals === null ? "unreadable" : String(ledger.goals)} />
+        <Fact label="Agents" testId="cr.health.agents" value={agentsWords(outcome.agents.paused)} />
       </dl>
       <p className="cr2-approve-banner" data-testid="cr.health.verifier">{verifierWords(outcome.verifier)}</p>
     </section>

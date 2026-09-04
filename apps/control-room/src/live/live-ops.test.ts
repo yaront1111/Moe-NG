@@ -16,7 +16,14 @@ const POLICY = Object.freeze({
   verifier: { calibration: true, policy: true },
   waivers: { reason: "No command on this daemon records a policy waiver.", supported: false },
 });
+/** The daemon's own five-key pause shape, as /health/read serves it. */
+const PAUSED = Object.freeze({
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude", resetAt: "2026-09-02T20:30:00.000Z", since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+});
 const HEALTH = Object.freeze({
+  agents: { paused: null },
   daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:30:00.000Z" },
   outcome: "HEALTH", readAt: "2026-09-02T20:00:00.000Z", verifier: { calibration: true, policy: false },
@@ -30,7 +37,11 @@ describe("mapPolicyAnswer / mapHealthAnswer", () => {
       verifier: { calibration: true, policy: true }, waivers: { reason: POLICY.waivers.reason, supported: false },
     });
     expect(mapHealthAnswer(200, HEALTH)).toStrictEqual({
-      daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt, status: "HEALTH", verifier: HEALTH.verifier,
+      agents: HEALTH.agents, daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt, status: "HEALTH", verifier: HEALTH.verifier,
+    });
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: PAUSED } })).toStrictEqual({
+      agents: { paused: PAUSED }, daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt,
+      status: "HEALTH", verifier: HEALTH.verifier,
     });
   });
 
@@ -48,6 +59,18 @@ describe("mapPolicyAnswer / mapHealthAnswer", () => {
     expect(mapHealthAnswer(200, { ...HEALTH, daemon: { ...HEALTH.daemon, pid: "4242" } })).toStrictEqual(invalid);
     expect(mapHealthAnswer(200, { ...HEALTH, extra: 1 })).toStrictEqual(invalid);
     expect(mapHealthAnswer(500, {})).toStrictEqual(invalid);
+    // A daemon too old to state whether the agents are paused may not be read as "not paused".
+    const { agents: _dropped, ...withoutAgents } = HEALTH;
+    expect(mapHealthAnswer(200, withoutAgents)).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: undefined })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: null, extra: 1 } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, extra: 1 } } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, resetAt: 5 } } })).toStrictEqual(invalid);
+    const { workItemId: _gone, ...missingKey } = PAUSED;
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: missingKey } })).toStrictEqual(invalid);
+    // An empty last line is REAL (a pause whose cause never named one); it must not be refused.
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, lastLine: "" } } }))
+      .toMatchObject({ agents: { paused: { lastLine: "" } }, status: "HEALTH" });
   });
 });
 
