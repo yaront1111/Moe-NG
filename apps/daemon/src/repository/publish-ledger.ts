@@ -1,8 +1,10 @@
-import type { CommandDecisionRecord, EventDraft, SqliteEventStore } from "@moe/store";
+import { decodeBoundedJsonBytes } from "@moe/contracts";
+import type { CommandDecisionRecord, EventDraft, SqliteEventStore, StoredEvent } from "@moe/store";
 
 import {
   NODE_PUBLISHER_PRINCIPAL_ID, PUBLISH_RECEIPT_COMMAND_KIND, PUBLISH_RECEIPT_VERSION,
-  REPOSITORY_PUBLISH_COMMAND_KIND, decodePublishReceiptBytes, publishAggregateId, publishReceiptId,
+  REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND, admitRemoteUrl,
+  decodePublishReceiptBytes, publishAggregateId, publishReceiptId, remoteAggregateId,
 } from "./publish-receipt-contracts.js";
 import type { PublishReceiptV1, PublishRefusal } from "./publish-receipt-contracts.js";
 
@@ -16,6 +18,12 @@ import type { PublishReceiptV1, PublishRefusal } from "./publish-receipt-contrac
 
 const encoder = new TextEncoder();
 const LEDGER_PAGE_SIZE = 200;
+
+/** Restated by hand: the binding payload carries these three keys and nothing else. */
+const REMOTE_BOUND_KEYS = ["boundAt", "boundBy", "remoteUrl"] as const;
+
+/** The project's current remote: which url, when it was bound, and by which principal. */
+export type ProjectRemote = Readonly<{ boundAt: string; boundBy: string; remoteUrl: string }>;
 
 export interface PublishRequest {
   readonly decidedAt: string;
@@ -110,6 +118,53 @@ export function readPublishLedger(
     }));
   }
   return states;
+}
+
+/**
+ * The remote the operator bound for this project, or null while none is readable.
+ *
+ * FAIL CLOSED, and deliberately: the LAST binding is the operator's current answer, so an
+ * unreadable or no-longer-admissible last binding reads as null rather than falling back to the
+ * remote it replaced. Silently resolving a superseded remote would push a goal's branch somewhere
+ * the operator has already moved away from, which is worse than refusing.
+ *
+ * `admitRemoteUrl` is re-applied on the READ as well as the write: a stored url stays subject to
+ * today's admission rule, so tightening that rule retires old bindings instead of grandfathering
+ * them into a push.
+ */
+export function readProjectRemote(store: SqliteEventStore, projectId: string): ProjectRemote | null {
+  let events: readonly StoredEvent[];
+  try {
+    events = store.readEvents(remoteAggregateId(projectId));
+  } catch {
+    return null;
+  }
+  let latest: StoredEvent | null = null;
+  for (const event of events) {
+    if (event.eventType !== REMOTE_BOUND_EVENT_TYPE) continue;
+    if (latest === null || event.aggregateSequence >= latest.aggregateSequence) latest = event;
+  }
+  return latest === null ? null : decodeBinding(latest.payload);
+}
+
+function decodeBinding(payload: Uint8Array): ProjectRemote | null {
+  const decoded = decodeBoundedJsonBytes(payload);
+  if (!decoded.ok || typeof decoded.value !== "object" || decoded.value === null
+    || Array.isArray(decoded.value)) {
+    return null;
+  }
+  const record = decoded.value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== REMOTE_BOUND_KEYS.length || !REMOTE_BOUND_KEYS.every((key) => keys.includes(key))) {
+    return null;
+  }
+  const { boundAt, boundBy } = record;
+  const remoteUrl = admitRemoteUrl(record["remoteUrl"]);
+  if (remoteUrl === null || typeof boundAt !== "string" || boundAt === ""
+    || typeof boundBy !== "string" || boundBy === "") {
+    return null;
+  }
+  return Object.freeze({ boundAt, boundBy, remoteUrl });
 }
 
 export function readPublishReceipt(

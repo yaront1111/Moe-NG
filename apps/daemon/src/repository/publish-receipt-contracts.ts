@@ -17,6 +17,22 @@ export const PUBLISH_RECEIPT_VERSION = "moe-publish-receipt/1" as const;
 export const PUBLISH_RECEIPT_COMMAND_KIND = "internal.repository.publish_receipt" as const;
 export const REPOSITORY_PUBLISH_COMMAND_KIND = "repository.publish" as const;
 
+/**
+ * The PROJECT's remote, bound by the first publish that names one and reused by every publish
+ * that sends `remoteUrl: null`. It is a second LEG of the publish decision rather than a command
+ * of its own: `repository.publish`'s payload roster is frozen at `["goalId", "remoteUrl"]`, and a
+ * binding that could outlive its publish (or a publish that could outlive its binding) is exactly
+ * the split-brain one fenced decision prevents.
+ */
+export const REMOTE_BOUND_EVENT_TYPE = "RepositoryRemoteBound" as const;
+
+/** `remoteUrl: null` and no binding to resolve: the operator must name a remote once. */
+export const PUBLISH_REMOTE_UNBOUND = "PUBLISH_REMOTE_UNBOUND" as const;
+
+/** A named remote `admitRemoteUrl` refuses. Distinct from the generic payload code so the
+ *  browser can say WHICH field is wrong without the daemon echoing the url back. */
+export const PUBLISH_REMOTE_URL_INVALID = "PUBLISH_REMOTE_URL_INVALID" as const;
+
 export interface PublishRefusal {
   readonly code: string;
   readonly detail: string;
@@ -108,6 +124,11 @@ function freezeDeep<T>(value: T): T {
 /** Every publish fact for a goal lands beside the goal, never on it. */
 export function publishAggregateId(goalId: string): string {
   return `publish:${goalId}`;
+}
+
+/** One remote per PROJECT, on a stream of its own so a binding never bumps a goal's version. */
+export function remoteAggregateId(projectId: string): string {
+  return `remote:${projectId}`;
 }
 
 /** One receipt per publish decision: the id is a pure function of that decision. */
