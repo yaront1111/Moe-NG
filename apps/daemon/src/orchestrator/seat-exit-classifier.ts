@@ -106,6 +106,22 @@ export const SEAT_EXIT_ROSTER: readonly SeatExitRosterEntry[] = Object.freeze([
   }),
   Object.freeze({
     capturedFrom:
+      "LIVE: two UnAI seats (node.deliver@kernel-redaction, node.deliver@boot-spares-a-live-held-claim)"
+      + " exited 1 with this as their last line at 2026-09-05 ~17:35 Asia/Jerusalem, up.local.log"
+      + " lines 1147-1148, while the account's five-hour window was exhausted. The wrapper read"
+      + " both as FAILED, charged the attempts and recorded a verifier round on one of them.",
+    id: "claude/rate-limit-429",
+    // Anchored at the line start with the status code: a seat that merely QUOTES an API error
+    // inside its own prose does not start a line with it.
+    pattern: /^\s*API Error: Request rejected \(429\)/iu,
+    provider: "claude" as const,
+    // No instant in the line: the pause ledger falls back to its bounded default.
+    resetOf: null,
+    sample: "API Error: Request rejected (429) · This request would exceed your account's rate limit."
+      + " Please try again later.",
+  }),
+  Object.freeze({
+    capturedFrom:
       "LIVE `codex exec --skip-git-repo-check \"say hi\"` at 2026-09-04T17:36:55Z, codex-cli"
       + " 0.152.0, exit 1, stderr. Sentence confirmed in the shipped codex.exe.",
     id: "codex/usage-limit",

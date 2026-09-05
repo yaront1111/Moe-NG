@@ -344,6 +344,9 @@ async function main(): Promise<void> {
       contract: createProductContractReadPort({ projectId: config.projectId, store: verifierStore }),
       deps: provider.provide(),
       documents: provider.goalSource?.(),
+      // The seats' only MCP host is THIS one: without the graph reader every graph_get a
+      // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).
+      graph: provider.graph?.(),
       subscriptions,
     });
     const mcpStarted = await mcpHost.start();

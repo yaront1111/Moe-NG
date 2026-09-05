@@ -87,6 +87,17 @@ const CLAUDE_RATE_LIMIT: ProviderLineFixture = {
   rosterId: "claude/rate-limit",
 };
 
+const CLAUDE_RATE_LIMIT_429: ProviderLineFixture = {
+  capturedAt: "2026-09-05T14:35:00.000Z",
+  capturedFrom:
+    "LIVE: UnAI drive, two seats exited 1 with this line (up.local.log 1147-1148) while the"
+    + " account's five-hour window was exhausted; the wrapper charged both attempts.",
+  expectedResetAt: null,
+  line: "API Error: Request rejected (429) \u00B7 This request would exceed your account's rate"
+    + " limit. Please try again later.",
+  provider: "claude",
+  rosterId: "claude/rate-limit-429",
+};
 const CODEX_USAGE_LIMIT: ProviderLineFixture = {
   capturedAt: "2026-09-04T17:36:55.000Z",
   capturedFrom:
@@ -105,7 +116,8 @@ const CODEX_USAGE_LIMIT: ProviderLineFixture = {
 };
 
 const FIXTURES: readonly ProviderLineFixture[] = Object.freeze([
-  CLAUDE_SESSION_LIMIT, CLAUDE_USAGE_LIMIT, CLAUDE_WEEKLY_LIMIT, CLAUDE_RATE_LIMIT, CODEX_USAGE_LIMIT,
+  CLAUDE_SESSION_LIMIT, CLAUDE_USAGE_LIMIT, CLAUDE_WEEKLY_LIMIT, CLAUDE_RATE_LIMIT,
+  CLAUDE_RATE_LIMIT_429, CODEX_USAGE_LIMIT,
 ]);
 
 /** Ordinary seat noise the classifier must NEVER read as a provider limit. */
