@@ -185,10 +185,20 @@ describe("bootstrap replay proves same bytes — guard ordering and unprovable r
     expect(stored?.effectDisposition).toBe("NO_BUSINESS_EFFECT");
     expect(stored?.replayRequestSha256).toBeNull();
 
-    expect(replayOf(store, stale)).toBeNull();
+    // Neither the same bytes nor other bytes are answered from that row as an accepted replay.
+    // Nor does the seam fall through any more: the store folds the presented version into the
+    // request identity, so a resubmit at the refreshed version raised IdempotencyConflictError
+    // from the commit seam and a resubmit at the stale one only replayed the refusal — the id is
+    // spent, and the seam says so under its own code instead of a bare store conflict.
+    const spent = { code: "BOOTSTRAP_COMMAND_ID_SPENT", refusedBy: "DAEMON_PREREQUISITE" };
+    expect(replayOf(store, stale)).toMatchObject({ ok: false, ...spent });
     const otherBytes = requestOf(
       envelope("project.register", 0, { owner: "owner-9" }, "cmd-stale"),
     );
-    expect(replayOf(store, otherBytes)).toBeNull();
+    expect(replayOf(store, otherBytes)).toMatchObject({ ok: false, ...spent });
+    const refreshed = requestOf(envelope(
+      "project.register", store.getAggregateVersion(PROJECT_ID), { owner: "owner-1" }, "cmd-stale",
+    ));
+    expect(replayOf(store, refreshed)).toMatchObject({ ok: false, ...spent });
   });
 });

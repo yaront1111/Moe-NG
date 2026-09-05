@@ -271,10 +271,15 @@ export function replayOf(
   }
   // No same-bytes evidence, no replay: a refused decision's receipt commits the rejection audit
   // payload, so its `replayRequestSha256` is null and nothing here could prove the resubmit is
-  // the command that was decided. Falling through is not a fail-open — the command is decided
-  // again from scratch — and it must stay AHEAD of the byte compare below, which reads a digest
-  // only an accepted decision carries.
-  if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // the command that was decided. It used to fall through as "decided again from scratch", but
+  // the store folds the presented version into the request identity, so a resubmit at the
+  // refreshed version was never re-decided — it raised IdempotencyConflictError from the commit
+  // seam (a bare 409 at the transport), and a resubmit at the stale version only replayed the
+  // refusal. The id is spent: say so, under this layer's own code, and stay AHEAD of the byte
+  // compare below, which reads a digest only an accepted decision carries.
+  if (existing.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, "BOOTSTRAP_COMMAND_ID_SPENT", "DAEMON_PREREQUISITE");
+  }
   // The key does not cover the payload either, so a caller reusing a commandId under the SAME
   // kind with DIFFERENT bytes would otherwise be handed the earlier result as an accepted
   // replay: authority for a command never decided with those bytes. The store's own conflict arm
