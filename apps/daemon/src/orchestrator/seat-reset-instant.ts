@@ -132,14 +132,28 @@ function firstFutureInstant(candidates: readonly (number | null)[], exitMs: numb
   return null;
 }
 
+/** The zone this process runs in — the one codex rendered its dated reset line in. */
+export function hostTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
 /**
  * The reset instant a provider line names, as ISO, or null when it names none this module reads.
  *
- * The codex form carries no zone — codex renders it in the HOST's local wall clock. Reading it as
- * UTC is deliberate: for any zone east of UTC that moves the instant LATER, so the pause outlasts
- * the limit rather than expiring early into another refusal.
+ * The codex form carries no zone — codex renders it in the HOST's local wall clock (its own
+ * renderer converts the reset to `Local` before formatting). It is read in that zone. It used to
+ * be read as UTC on the theory that this only ever moved the instant later; that holds east of
+ * UTC and inverts west of it, where the pause expired hours EARLY, the gate discarded it as
+ * already past, and the fleet walked back into the limit every default pause. `hostZone` is a
+ * parameter so a test can pin both directions; an unresolvable zone falls back to the UTC read.
  */
-export function resolveResetInstant(text: string, exitAt: string): string | null {
+export function resolveResetInstant(
+  text: string, exitAt: string, hostZone: string = hostTimeZone(),
+): string | null {
   const exitMs = Date.parse(exitAt);
   if (!Number.isFinite(exitMs) || text === "") return null;
   const wall = CLAUDE_WALL_CLOCK.exec(text);
@@ -148,10 +162,12 @@ export function resolveResetInstant(text: string, exitAt: string): string | null
   if (dated !== null) {
     const month = monthIndex(dated[1] as string);
     if (month < 0) return null;
-    const utc = Date.UTC(
-      Number(dated[3]), month, Number(dated[2]), hour24(Number(dated[4]), dated[6] as string),
-      Number(dated[5]), 0, 0,
-    );
+    const year = Number(dated[3]);
+    const day = Number(dated[2]);
+    const hour = hour24(Number(dated[4]), dated[6] as string);
+    const minute = Number(dated[5]);
+    const inZone = knownZone(hostZone) ? wallClockToUtc(hostZone, year, month, day, hour, minute) : null;
+    const utc = inZone ?? Date.UTC(year, month, day, hour, minute, 0, 0);
     return Number.isFinite(utc) ? new Date(utc).toISOString() : null;
   }
   const iso = ISO_DATE.exec(text);

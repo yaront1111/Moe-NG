@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SEAT_EXIT_ROSTER, classifySeatExit, resolveResetInstant } from "./seat-exit-classifier.js";
+import { hostTimeZone } from "./seat-reset-instant.js";
 
 /**
  * FIXTURE PROVENANCE — every line below is provider bytes, never typed from memory.
@@ -105,9 +106,10 @@ const CODEX_USAGE_LIMIT: ProviderLineFixture = {
     + " 0.152.0; exited 1 and printed this on stderr (twice). Sentence confirmed in the shipped"
     + " codex.exe: `You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to"
     + " purchase more credits` + ` or try again at <slot>.`.",
-  // Codex prints the reset in the HOST's local wall clock with no zone. Reading it as UTC can only
-  // move the instant LATER for a zone east of UTC, i.e. it pauses longer, never shorter.
-  expectedResetAt: "2026-09-08T10:46:00.000Z",
+  // Codex prints the reset in the HOST's local wall clock with no zone, so the honest instant is
+  // host-dependent. The oracle is the engine's own local-time parse of the same wall clock (an
+  // unzoned ISO string parses as local time), independent of the resolver under test.
+  expectedResetAt: new Date("2026-09-08T10:46:00").toISOString(),
   line:
     "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase"
     + " more credits or try again at Sep 8th, 2026 10:46 AM.",
@@ -283,9 +285,18 @@ describe("resolveResetInstant", () => {
       .toBe("2026-09-08T07:46:00.000Z");
   });
 
-  it("resolves the codex dated form in UTC", () => {
-    expect(resolveResetInstant("try again at Sep 8th, 2026 10:46 AM.", EXIT_AT))
-      .toBe("2026-09-08T10:46:00.000Z");
+  it("resolves the codex dated form in the HOST zone codex rendered it in, either side of UTC", () => {
+    // Codex prints the reset in the host's local wall clock with no zone. Reading it as UTC was
+    // late by hours east of UTC (safe) and EARLY by hours west of it: the pause expired before the
+    // limit lifted and the fleet walked back into the refusal every default pause.
+    const line = "try again at Sep 8th, 2026 10:46 AM.";
+    expect(resolveResetInstant(line, EXIT_AT, "America/New_York")).toBe("2026-09-08T14:46:00.000Z");
+    expect(resolveResetInstant(line, EXIT_AT, "Asia/Jerusalem")).toBe("2026-09-08T07:46:00.000Z");
+    expect(resolveResetInstant(line, EXIT_AT, "UTC")).toBe("2026-09-08T10:46:00.000Z");
+    // An unresolvable zone falls back to the UTC read rather than answering nothing.
+    expect(resolveResetInstant(line, EXIT_AT, "Not_A/Zone")).toBe("2026-09-08T10:46:00.000Z");
+    // The default is the process's own zone, the one codex rendered in.
+    expect(resolveResetInstant(line, EXIT_AT)).toBe(resolveResetInstant(line, EXIT_AT, hostTimeZone()));
   });
 
   it("resolves a date-only instant to midnight UTC", () => {
