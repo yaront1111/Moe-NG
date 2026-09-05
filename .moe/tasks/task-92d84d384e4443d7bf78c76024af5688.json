@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:07.326Z",
-  "updatedAt": "2026-09-05T04:48:27.962Z",
+  "updatedAt": "2026-09-05T04:49:24.777Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:49:30.658Z",
     "plannedStepCount": 8,
@@ -231,7 +231,8 @@
     "apps/control-room/src/v2/ops/activity-screens.test.tsx",
     ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
     ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
-    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
+    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
+    ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json"
   ],
   "completionSummary": "Parallel seats are now PINNED and the limit is DISCLOSED end to end. Full evidence in comment-64ef90b2 (gates, drills, denominators, exemplar sentences, follow-ups); design record in mem:task-task-92d84d384e4443d7bf78c76024af5688-handoff.\n\nRE-MEASURED FIRST: parallel staffing already worked (agent-wrapper.ts:352 breaks only at `activeCount() >= maxAgents`) and the prerequisite task-1d7b9df2 had landed (a8b67152; `depends:` at affordance-read.ts:443, NodeSpec.dependsOn required). The staffing loop was NOT touched.\n\nPROOF (5 wrapper arms, all by WORK-ITEM ID, never array length): two independent READY nodes spawn in ONE pass with both ids and `active === 2` and two DISTINCT agent sessions; maxAgents 2 vs THREE READY spawns exactly [lim-a, lim-b] with lim-c absent by id AND unclaimed in the durable ledger; maxAgents 1 vs the same three spawns exactly one; a node BLOCKED on `depends:dep-a` is withheld while a seat is FREE (`active === 1` under maxAgents 2 — so the DEPENDENCY withheld it, not the limit) and is spawned on the next pass once the surface reports it READY, with dep-a's claim still OPEN v1 so the second pass is the dependency moving, not a replay; plus a source-text arm pinning the `depends:` token to the producer.\n\nDISCLOSURE: SessionsView gains `concurrency { activeSeats, configuredAgentLimit }`. The limit is REQUIRED (not defaulted — that is how a hard-code hides) and sourced at the composition site from `readWrapperKnobs(process.env).maxAgents`, the wrapper's own strict parser, so it inherits the NaN refusal. Named CONFIGURED, not observed, in the field name, doc comment and operator wording (\"This daemon is SET TO RUN N agents at once\"), because a standalone daemon reports a limit no wrapper honours. `activeSeats` is the measured half: LIVE seats holding an active claim.\n\nBROWSER MOVED IN THE SAME ROW (exact-arity decode would otherwise BLANK Seats): live-sessions.ts key roster is now the exported SESSIONS_FRAME_KEYS, `concurrency` decoded with the same ",
   "commits": [
@@ -266,6 +267,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "a2615ce5237a7c910572a270c11a0d6206e577a4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T04:34:41Z",
+      "paths": [
+        ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T04:49:24.777Z",
+      "treeId": "af8a323477c7e73f9be53e5c42ac62da603894bf",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -282,9 +299,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-05T03:13:56Z",
-    "at": "2026-09-05T04:15:53.901Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T04:34:41Z",
+    "at": "2026-09-05T04:49:24.777Z"
   },
   "completedAt": "2026-09-05T04:48:27.961Z",
   "reviewCompletedAt": "2026-09-05T04:48:27.961Z",

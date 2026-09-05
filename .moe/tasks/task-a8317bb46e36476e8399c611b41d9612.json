@@ -46,7 +46,7 @@
       "completedAt": "2026-09-05T04:17:24.612Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -80,16 +80,24 @@
       "author": "worker-75411639",
       "content": "FOLLOW-UP FOR THE EPIC-FINAL HARDENING ROW (this row is NOT it: get_context.isEpicFinal = false). Recorded as a comment per the DELIVERY BIAS rail, not filed as a new row.\n\n**One security-census entry this epic owes.** `pnpm test:security` reds on `boundary-roster.security.ts` + `durable-store-boundaries.security.ts` (the two files share the census). The TASK-LV module-private allowlist arm at `boundary-roster.security.ts:822` prints exactly two unlisted declarations:\n```\nLIVE_ACTIVATION_LAYER@apps/control-room/src/live/live-activation.ts\nLIVE_REPOSITORY_REMOTE_LAYER@apps/control-room/src/live/live-repository-remote.ts\n```\nThe second is **ours** — child 3 (task-e6000b57, commit e5f8477f) created `live-repository-remote.ts` with a module-private `*_LAYER` const and did not backfill the census. The parent task description anticipated exactly this (\"tests/security layer census if a new *_LAYER constant is declared\"); it was missed. `LIVE_ACTIVATION_LAYER` is the activation row's, not ours.\n\nThe scan-minus-ROSTER arm at `:738` prints three more, all foreign to this epic:\n```\nACTIVATION_LAYER@apps/control-room/src/v2/ops/activation-port.ts\nPREVIEW_LAYERS@apps/daemon/src/preview/preview-contracts.ts\nPREVIEW_CODE_LAYERS@apps/daemon/src/preview/preview-contracts.ts\n```\n\n**Why I did not fix ours here, and why a one-name patch is the wrong move.** The backfill is a single coordinated commit across coupled pins that must move together (`mem:gotcha-boundary-roster-backfill-is-four-coupled-edits`, re-confirmed against this roll): `EXPECTED_PRIVATE_COUNT` and `UNSCANNED_PRIVATE_LAYERS` (imported at `boundary-roster.security.ts:85`, so they live in a sibling module), `EXPECTED_INVISIBLE_NUMERATOR`/`EXPECTED_INVISIBLE_DENOMINATOR` (`:808-810`, currently 234) / `EXPECTED_INVISIBLE_SHARE_PER_MILLE` (282), `EXPECTED_ROSTER_SIZE`, `EXPECTED_DISTRIBUTION`, the five-axis partition sum, plus hard-coded length pins in **other files** (`durable-store-boundaries.security.ts:273`, `runtime-provider-invariants.ts:257`). This roll's numbers: `expected [Array(171)] to have a length of 168` (exported scan 168 -> 171), `expected 68 to be 66`, `expected 9 to be 8`. Adding only `LIVE_REPOSITORY_REMOTE_LAYER` leaves the set arm red on `LIVE_ACTIVATION_LAYER` and reconciling the counts would mean claiming four peer rows' entries — the exact \"greens one file, ships a red lane\" failure that memory records. It needs ONE owner doing all five names at once, and the list decays, so the DoD must say *run the lane and take the printed diff as authoritative* rather than freeze a count.\n\n**Second follow-up, carried from child 3's QA (reviewSummary, task-e6000b57): there is still no way to land a first commit outside a real seat.** `internal.repository.landing_receipt` has no HTTP ingress (`grep -n record_landing apps/daemon/src/daemon-command-vocabulary.ts` = 0), so child 2's gate means no e2e or browser lane can ever reach a Publish control. The bind/publish/receipt chain is proven at the daemon handler and the unbound half is proven over HTTP against a real daemon, but the PUSHED half has no automated lane. A daemon landing lane is the prerequisite; task rail 1 (FULL VERTICAL SLICE, no sibling dependsOn) put it out of reach here.\n\n**Third: the live push on UnAI is gated on the owner, not on code.** Step 2 re-measured it read-only today — `readProjectRemote(store,\"unai\")` = null, zero `repository.publish` decisions, zero `RepositoryRemoteBound` events, no `remote:<projectId>` aggregate, three landing receipts all REFUSED (2x `LANDING_BASELINE_MISSING`, 1x `NOTHING_TO_COMMIT`), and `git -C D:/projexts/UnAI remote -v` empty. Both preconditions are the owner's: name a remote once, get one node to land. Nothing was invented.",
       "timestamp": "2026-09-05T04:16:31.285Z"
+    },
+    {
+      "id": "comment-ecc946ce4f834452801923a4d7adfd6c",
+      "author": "qa-3fd61a21",
+      "content": "QA RED ATTRIBUTION (qa-3fd61a21, 2026-09-05, HEAD on moe/work-2026-09-04, all five gates re-run by me). Extends comment-0e19cd55 for whoever holds the epic-final hardening row — three measurements the completion record does not contain.\n\n**1. `pnpm test` is 4 failed, not 6, and none of the four touches this feature.** `Test Files 4 failed | 421 passed | 2 skipped (427)` / `Tests 4 failed | 10261 passed | 60 skipped (10325)`, EXIT=1. Failing files, all under `tests/integration/**`:\n- `control-room/compiled-product-journey.test.ts:331` — `expected [ 'goal.create', …(8) ] to include 'goal.close'`. This is task-8145137c's close gate (`closeReadiness` at affordance-planning-offers.ts:180-191, landed as WIP `09fa59ef`/`b61cbc78` while that row is still WORKING), NOT child 2's publish gate.\n- `portability/goal-brief-mcp-readback.test.ts:165` — `seeding refused at project.activate: BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS`. Activation row.\n- `release/release-version-surfaces.test.ts:844` — unclassified `v0.1` occurrences, every one in `activation-receipts.*` / `activation-read.*`. Activation row.\n- `import/legacy-import-commit.test.ts` — COMMAND_ID_CONFLICT arm.\n\nDecisive check, cheaper than per-file blame: `grep -aoc \"publish\\|remoteUrl\"` over the whole root-run log = **0**. This epic's surface is not mentioned once in the failure output.\n\n**2. `pnpm test:security` never reaches the census — it dies at `tsc`.** `apps/daemon/src/planning/approval-intent-rejection.ts(3,22): error TS2305: Module '\"@moe/core\"' has no exported member 'rejectRun'.` EXIT=1. `rejectRun` IS exported at `packages/core/src/index.ts:53` in this workspace; the resolution is bent: `fs.realpathSync(\"node_modules/@moe/core\")` -> `C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-glance-to-main\\packages\\core`, a foreign scratch checkout. Environment artifact + a foreign row's file (`0965b1e1`, task-3780109018).\n\n**3. The census was ALREADY red before child 3, so `LIVE_REPOSITORY_REMOTE_LAYER` did not turn a gate red.** At `e5f8477f^`: `preview-contracts.ts` carries 8 `_LAYER` hits while `PREVIEW_LAYERS` and `PREVIEW_CODE_LAYERS` have 0 roster entries in `boundary-roster.security.ts` (positive control: that file is 1216 lines there and does roster `\"ACTIVATION_BUDGET_LAYER\"` etc., so the zero is real, not a bad path). The backfill is still owed — it is a fold-in, not a regression.\n\n**4. `affordance-read.ts` is 468 lines at HEAD, over the 400 hard cap — but this epic contributed 7 of the 46.** 422 at main `68eb1c5d` (already over cap before the epic), then `f01a4c32` +6 (foreign), `ebca5210` +7 (child 2), `09fa59ef` +30/-3 and `b61cbc78` +6 (both task-8145137c). Pre-existing over-cap, so not this row's defect — but the extraction planningNotes asked for was never done and the file is still growing under three rows at once.",
+      "timestamp": "2026-09-05T05:03:04.475Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:41:53.294Z",
-  "updatedAt": "2026-09-05T04:18:47.264Z",
+  "updatedAt": "2026-09-05T05:03:58.827Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:33:53.477Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 3
+    "executedStepCount": 3,
+    "doneAt": "2026-09-05T05:03:58.827Z",
+    "wallClockMs": 66605350
   },
   "dependsOn": [
     "task-19d2329c25934099b2ff10086987d1c5",
@@ -124,7 +132,8 @@
   },
   "planApprovedAt": "2026-09-04T10:39:21.826Z",
   "contextFetchedBy": [
-    "worker-75411639"
+    "worker-75411639",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T03:40:56.751Z",
   "reviewStartedAt": "2026-09-05T04:17:56.499Z",
@@ -163,5 +172,8 @@
     "kind": "completion",
     "sessionId": "worker-75411639@2026-09-05T03:40:36Z",
     "at": "2026-09-05T04:18:47.264Z"
-  }
+  },
+  "completedAt": "2026-09-05T05:03:58.827Z",
+  "reviewCompletedAt": "2026-09-05T05:03:58.827Z",
+  "reviewSummary": "APPROVED. 0-file verification parent; commit `2cf187fb` = 2 board JSONs only (git show --stat). 4 children DONE, shas confirmed: 47141db5, 094d1903, ebca5210, e5f8477f.\n\nALL 5 GATES RE-RUN BY ME. daemon `416 passed (416) / 8315 passed (8315)` EXIT=0 — matches task.verification. control-room `142 passed (142) / 1792 passed (1792)` EXIT=0. typecheck EXIT=0 w/ `$ tsc` echoes. `pnpm test` `4 failed | 421 passed | 2 skipped (427)` EXIT=1. test:security EXIT=1. Both reds FOREIGN, attributed per file in comment-ecc946ce: the 4 root failures are task-8145137c's in-flight close gate, the activation row (x2), a legacy-import arm — `grep -aoc \"publish|remoteUrl\"` over the whole root log = 0. Security lane dies at tsc because node_modules/@moe/core realpaths into a foreign %TEMP% checkout while `rejectRun` IS exported at packages/core/src/index.ts:53. Row owns 0 paths: attributed intersection empty.\n\nFEATURE RE-MEASURED AT HEAD, not read off the record: PUBLISH_REMOTE_UNBOUND at publish-services.ts:61, arms assert code AND layer (goal-publish-remote.test.ts:213/:232/:301); offer gate affordance-planning-offers.ts:175-179 via hasLandedCommit, REFUSED excluded, absent/present arms :201/:212; publisher argv asserted; `moe.publish.remoteUrl` grep = 0; Health RepositoryCard ops-screens.tsx:232; runbook :530 + README :54-56 rewritten. E2E run alone: publish-remote 1 passed vs REAL daemon pid 3524:61902, live 5-key unbound frame printed.\n\n2 DoD HALVES UNMET; unreachability re-measured by me: `grep -c landing_receipt daemon-command-vocabulary.ts` = 0, `git -C D:/projexts/UnAI remote -v` empty w/ 1 commit. Both need a daemon landing lane + an owner-named remote. Unbound state recorded verbatim, nothing fabricated.\n\nCARRIED FORWARD: LIVE_REPOSITORY_REMOTE_LAYER census backfill (arm already red pre-child-3) and affordance-read.ts 468 (422 pre-epic, 7 of 46 ours)."
 }
