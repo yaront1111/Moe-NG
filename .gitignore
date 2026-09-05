@@ -63,6 +63,10 @@ Thumbs.db
 /.moe/tmp/
 /.moe/scratch/
 
+# Local junctions of .moe/skills for Claude Code discovery. The durable skill
+# tree stays in /.moe/skills/; these links must not be committed as copies.
+/.claude/skills/
+
 # moe-up dev launcher scratch state (stores, credentials) - never commit
 .moe-dev/
 
