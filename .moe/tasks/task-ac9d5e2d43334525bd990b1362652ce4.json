@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T23:12:49.364Z",
+  "updatedAt": "2026-09-05T23:19:14.911Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -208,19 +208,66 @@
       "treeId": "563f1ab1c0f6cc1a1d1c402ea90966e3a3363d13",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "6d759782e0475fd9b43aa5aa5ef63b805fae1d68",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:12:50Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+        "docs/agent-stack-runbook.md",
+        "README.md"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:19:14.911Z",
+      "treeId": "841ee6bffc1ddc018045a64d4a6e86b18349c594",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
     ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
     ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
-    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+    "docs/agent-stack-runbook.md",
+    "README.md"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+    "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publish-services.ts",
+    "apps/daemon/src/repository/repository-bootstrap-command.ts",
+    "apps/daemon/src/repository/repository-recovery-git.test.ts",
+    "apps/daemon/src/repository/repository-recovery-native.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary.test.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
+    "packages/runner/src/platform/windows/windows-status.ts",
+    "packages/runner/src/verification/criterion-check-executor.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-75411639@2026-09-05T03:22:25Z",
-    "at": "2026-09-05T03:32:23.539Z"
+    "sessionId": "worker-2739fee7@2026-09-05T23:12:50Z",
+    "at": "2026-09-05T23:19:14.911Z"
   }
 }
