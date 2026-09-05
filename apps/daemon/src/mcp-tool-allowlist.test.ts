@@ -140,7 +140,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(11);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(14);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -171,7 +171,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 11, queries: 6, vocabulary: 47, wired: 42 });
+    }).toEqual({ excluded: 14, queries: 6, vocabulary: 50, wired: 42 });
   });
 
   it("is deterministic and frozen", () => {

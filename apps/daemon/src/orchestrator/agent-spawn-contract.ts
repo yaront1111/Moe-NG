@@ -196,6 +196,7 @@ export interface ProviderPauseFacts {
  * absent here would let the wrapper mint an agent session to take a human act.
  */
 export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // GOAL CREATION IS A PRODUCT INTENT, not a chain chore: since the affordance
   // surface began offering goal.create on EVERY read of an active project
   // (task-9d2d44aa), a wrapper that staffs it mints a fresh junk goal each pass
