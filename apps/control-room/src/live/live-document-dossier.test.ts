@@ -89,6 +89,17 @@ describe("live document dossier mapping", () => {
   it.each([
     ["wrong authority", { ...DOSSIER, authority: "TASK_WRITE" }],
     ["extra response field", { ...DOSSIER, extra: true }],
+    // The other half of the exact-key fence. Without this arm a decoder that only counted
+    // keys upward would stay green while a daemon that stopped sending `eventId` - the very
+    // field the feed keys its identity on - went unnoticed.
+    ["response missing eventId", (() => {
+      const { eventId: _dropped, ...rest } = DOSSIER;
+      return rest;
+    })()],
+    ["response missing aggregateSequence", (() => {
+      const { aggregateSequence: _dropped, ...rest } = DOSSIER;
+      return rest;
+    })()],
     ["duplicate source binding", {
       ...DOSSIER,
       proposal: {

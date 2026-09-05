@@ -24,6 +24,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/graph/get",
   "/planning/run/read",
   "/policy/read",
+  "/product-contract/gate-1/read",
   "/product-contract/pending/read",
   "/repository/remote/read",
   "/runs/read",

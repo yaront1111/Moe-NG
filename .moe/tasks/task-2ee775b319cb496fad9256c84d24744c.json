@@ -155,7 +155,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:00.435Z",
-  "updatedAt": "2026-09-05T09:12:53.500Z",
+  "updatedAt": "2026-09-05T09:13:01.840Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:36:05.863Z",
     "plannedStepCount": 6,
@@ -213,7 +213,8 @@
     "apps/control-room/src/v2/resources/resources-refusals.test.tsx",
     "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
     ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
-    ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json"
+    ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json",
+    ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json"
   ],
   "completionSummary": "Resources is LIVE: the nav entry has a real route, the SOON chip is gone, and the screen renders 13 measured project facts from reads that already existed. No daemon route, no new command kind, no second decoder.\n\nGATES (fresh): `pnpm --filter @moe/control-room test` -> Test Files 147 passed (147) / Tests 1843 passed (1843), exit 0. `pnpm typecheck` -> all 19 packages Done, exit 0. Baseline at step 1 was 142/1792, so this row adds 5 files and 51 tests. `pnpm test` is NOT quoted: the root vitest include carries no apps/**, so it runs zero tests against this code (global rail 18).\n\nDoD 1 - LIVE. The freeze was a ROUTE, not a flag. Both the parent row and this row's description named `live: boolean` at shell-model.ts:25; that field belongs to `ConnectionDescriptor` and governs nothing here. The real mechanism is absence from `BUILT_NAV_ROUTES`, which makes `resolveNavDestinations()` emit `NAV_DESTINATION_NOT_BUILT` and drives nav-rail.tsx:80/:90/:118-121. Three lines in shell-routes.ts (route kind, union arm, map entry) and the chip disappeared on its own -- nav-rail.tsx untouched, the chip machinery and reason codes intact. Asserted as DoD 1 requires: `queryByTestId(\"cr.nav.resources.unavailable\")` is null, the button is not disabled, no aria-describedby, no data-unavailable-reason.\n\nDoD 2 - THE FACTS. 13 facts, one per row, four sections: repository (root, HEAD, bound remote), provider (CLI, credential source), store (path, backup, distribution), policy revision, seat limit + seats in use. Sources: /activation/read, /health/read, /policy/read, /sessions/read, /repository/remote/read -- all already served AND already decoded in the browser. Named values asserted by exact string. Frames are not hand-waved: each goes through the PRODUCTION exact-key decoder and a `decoded()` helper asserts the SUCCESS arm, so a drifted fixture reds at the decode instead of quietly rendering refusals. NOTE: there is NO live control-room daemon on this host (both ports answer http 426 Upg",
   "commits": [
@@ -249,6 +250,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "85aceb0dd6371c8990045b714278d81414dd1abd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T09:06:24Z",
+      "paths": [
+        ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
+        ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T09:13:01.840Z",
+      "treeId": "1b6303b47fec2dca2d9c881fccf11489e2bd52bf",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -264,12 +281,14 @@
     "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx",
     "apps/control-room/src/v2/shell/shell-routes.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/environment/environment-contracts.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-cceb207f@2026-09-05T08:37:52Z",
-    "at": "2026-09-05T09:06:15.902Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T09:06:24Z",
+    "at": "2026-09-05T09:13:01.840Z"
   },
   "completedAt": "2026-09-05T09:12:53.500Z",
   "reviewCompletedAt": "2026-09-05T09:12:53.500Z",

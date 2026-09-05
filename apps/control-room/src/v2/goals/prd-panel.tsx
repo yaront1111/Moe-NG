@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import type { ControlRoomTransport } from "@moe/control-room-client";
+
 import { readGoalSource } from "../../live/live-goal-source.js";
 import type { GoalSourceOutcome } from "../../live/live-goal-source.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { LivePrdDossier } from "./prd-dossier.js";
 
 /**
  * THE PRD, on the goal that binds it. The daemon planned this goal from one stored text;
@@ -49,12 +52,19 @@ export function PrdPanel({ outcome }: PrdPanelProps): JSX.Element {
 export interface LivePrdProps {
   readonly goalRef: string;
   readonly headers: Readonly<Record<string, string>>;
+  /**
+   * Injectable for tests; the default reads POST /documents/dossier/read. The two reads on
+   * this panel are INDEPENDENT: either can refuse without blanking the other.
+   */
+  readonly dossierTransport?: Pick<ControlRoomTransport, "readDocumentDossier"> | undefined;
   /** Injectable for tests; the default reads POST /goals/source/read with the session's headers. */
   readonly read?: ((goalRef: string) => Promise<GoalSourceOutcome>) | undefined;
 }
 
 /** One read on mount: the bound text is immutable, so nothing polls. */
-export function LivePrd({ goalRef, headers, read }: LivePrdProps): JSX.Element {
+export function LivePrd(
+  { dossierTransport, goalRef, headers, read }: LivePrdProps,
+): JSX.Element {
   const [outcome, setOutcome] = useState<GoalSourceOutcome | null>(null);
   const [reader] = useState(() => read ?? ((ref: string): Promise<GoalSourceOutcome> => readGoalSource(headers, ref)));
   useEffect(() => {
@@ -70,6 +80,9 @@ export function LivePrd({ goalRef, headers, read }: LivePrdProps): JSX.Element {
     <section className="cr2-ops-panel" data-testid="cr.prd.panel">
       <h3 className="cr2-approve-heading">{`SOURCE ${MIDDOT} WHAT THIS GOAL WAS PLANNED FROM`}</h3>
       <PrdPanel outcome={outcome} />
+      {/* The stored text above, and beside it the daemon's intake dossier: which documents
+          it read and what work it proposed from them. Same read as the legacy surface. */}
+      <LivePrdDossier headers={headers} transport={dossierTransport} />
     </section>
   );
 }
