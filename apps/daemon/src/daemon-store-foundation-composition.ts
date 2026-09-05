@@ -31,6 +31,9 @@ import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
+import type { DesignReadInput } from "./design/design-store.js";
+import { readDesignRevision } from "./design/design-store.js";
+import type { DesignReadPort } from "./http/design-read.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { NodeSpec } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
@@ -331,6 +334,18 @@ export function createStoreDependencies(
     createGoalSourceReadPort({ projectId: config.projectId, store });
 
   /**
+   * The versioned design aggregate, read. Closed over THIS root's store and NOTHING ELSE --
+   * `projectId` deliberately stays out of the closure even though every neighbouring port binds
+   * it. `readDesignRevision` matches the stored record's projectId against its INPUT, and the
+   * HTTP handler feeds that input from the AUTHENTICATED PRINCIPAL; binding a second project
+   * here would make the check agree with itself and hide a principal/project mismatch rather
+   * than refuse it. `design-read.ts:24` records the same rule from the consuming side.
+   */
+  const designReads = (): DesignReadPort => Object.freeze({
+    read: (input: DesignReadInput) => readDesignRevision(store, input),
+  });
+
+  /**
    * The pending-plan read and the operator document ingest, both bound to this root's own store
    * and project - the only place those are FACTS rather than request input. The ingest mints its
    * correlation id and decision time per call, here, for the same reason.
@@ -486,6 +501,7 @@ export function createStoreDependencies(
     budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     commandAuthorityPlane,
+    designReads,
     documentCoverage,
     documentDossiers,
     documentIngest,

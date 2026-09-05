@@ -22,6 +22,7 @@ import {
   CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
 } from "./bootstrap/bootstrap-test-fixtures.js";
 import { FIXTURE_ACTIVATION_RECEIPTS } from "./bootstrap/bootstrap-test-fixtures.js";
+import { designAggregateId } from "./design/design-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
@@ -284,6 +285,36 @@ describe("createStoreDependencies", () => {
         layer: "DAEMON_READ_MODEL",
         ok: false,
         outcome: "REFUSED",
+      });
+      expect(inspection.getAggregateVersion(aggregateId)).toBe(before);
+    } finally {
+      inspection.close();
+    }
+  });
+
+  /**
+   * The design read, resolved through the REAL composition root. A fresh project has appended
+   * no revision, so the honest answer is `DESIGN_REVISION_ABSENT` at the LEDGER layer -- the
+   * LAYER is asserted with the code because the same code minted at another layer would mean a
+   * different surface answered. `projectId` travels in the INPUT rather than being bound at
+   * composition time: the HTTP handler passes the authenticated principal's project, so binding
+   * it here as well would hide a principal/project mismatch.
+   */
+  it("provides a design read port that answers ABSENT from the bound store without writing", () => {
+    const port = provider.designReads?.();
+    expect(port).toBeDefined();
+    if (port === undefined) return;
+
+    const inspection = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const aggregateId = designAggregateId("goal-missing");
+      const before = inspection.getAggregateVersion(aggregateId);
+      expect(port.read({ goalRef: "goal-missing", projectId: PROJECT })).toStrictEqual({
+        code: "DESIGN_REVISION_ABSENT",
+        layer: "LEDGER",
+        ok: false,
+        sourceCode: null,
+        sourceLayer: null,
       });
       expect(inspection.getAggregateVersion(aggregateId)).toBe(before);
     } finally {
@@ -719,7 +750,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // unreachable from the real daemon while every direct-injection test stays
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "activation", "activity", "affordances", "budgetCommitment", "commandAuthorityPlane", "documentCoverage",
+        "activation", "activity", "affordances", "budgetCommitment", "commandAuthorityPlane",
+        "designReads", "documentCoverage",
         "documentDossiers",
         "documentIngest", "goalCatalog", "goalSource",
         "graph", "health",
@@ -755,7 +787,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph.request_expansion", "graph.supersede",
         "integration.accept_output", "journal.append",
         "plan.propose", "planning.submit_decomposition", "policy.install",
-        "policy.validate",
+        "policy.validate", "preview.decide",
         "product_contract.answer_clarification", "product_contract.approve_gate_1",
         "product_contract.ask_clarification", "product_contract.propose_revision",
         "project.activate", "project.bind_repository", "project.register",

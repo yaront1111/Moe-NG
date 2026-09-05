@@ -116,6 +116,11 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the goal-source reader is always wired");
     return port();
   },
+  designReads: () => {
+    const port = fromEnv().designReads;
+    if (port === undefined) throw new Error("unreachable: the design reader is always wired");
+    return port();
+  },
   documentDossiers: () => {
     const port = fromEnv().documentDossiers;
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");

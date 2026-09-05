@@ -28,6 +28,7 @@ import type {
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { DesignReadPort } from "./http/design-read.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
@@ -38,6 +39,12 @@ export interface OptionalDaemonPortProvider {
   documentIngest?(): DocumentIngestPort;
   /** The goal-scoped full-PRD reader, bound to this daemon's own project. */
   goalSource?(): GoalSourceReadPort;
+  /**
+   * The versioned design-aggregate reader. Bound to this daemon's store but NOT to a project:
+   * the read takes its projectId from the authenticated principal, so a port that pre-bound one
+   * would answer its own binding rather than fence the caller's.
+   */
+  designReads?(): DesignReadPort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
   /** The strict durable GoalCreated catalog, bound to this daemon's own project. */
@@ -110,6 +117,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly sessions?: SessionsReadPort;
   readonly repositoryRemote?: RepositoryRemoteReadPort;
   readonly goalSource?: GoalSourceReadPort;
+  readonly designReads?: DesignReadPort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -140,6 +148,7 @@ const FACTORIES = Object.freeze([
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
   "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "goalSource",
+  "designReads",
   "sessionHandshake",
 ] as const);
 
@@ -324,6 +333,14 @@ export function resolveOptionalDaemonPorts(
     if (goalSource !== undefined && !hasMethods(goalSource, ["read"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const designReadsFactory = provider.designReads;
+    if (designReadsFactory !== undefined && typeof designReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const designReads = designReadsFactory?.call(provider);
+    if (designReads !== undefined && !hasMethods(designReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -417,6 +434,7 @@ export function resolveOptionalDaemonPorts(
       ...(sessions === undefined ? {} : { sessions }),
       ...(repositoryRemote === undefined ? {} : { repositoryRemote }),
       ...(goalSource === undefined ? {} : { goalSource }),
+      ...(designReads === undefined ? {} : { designReads }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),
