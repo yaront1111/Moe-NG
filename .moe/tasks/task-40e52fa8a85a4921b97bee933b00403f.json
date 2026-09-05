@@ -74,12 +74,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor re-plan handoff (human-directed). Only BLOCKED row on this epic with no blockedOnTaskIds and no resource, so nothing would ever auto-clear it. DEADLOCK, verified: this row's DoD-2 needs preview.decide on RUNTIME_COMMAND_KINDS (grep -c preview.decide runtime-vocabulary.ts = 0) because runtime-envelope.ts:142 refuses an unknown kind INPUT_INVALID before the registry and the operator fence; that line is DoD-2 of task-5f883e4e, whose dependsOn is exactly [this row]. The worker correctly did NOT declare blockedOnTaskIds [5f883e4e] because it would close a cycle. Step 1 clause (c) stop-and-report fired correctly on two out-of-plan files: runtime-vocabulary.ts (moved out by amend-1) and daemon-store-dependencies.test.ts (hand-written 46-kind roster at :745 vs a derived served set, invisible to a kind-literal grep). Steps 1-3 COMPLETED and preview-contracts.ts delivered green (30 tests, exit 0, three drills SHA256-restored) - do not redo. Architect: proposed fix is to widen this row 7 -> 9 files and strike DoD-2 from task-5f883e4e so the clause has one owner; both clauses cannot stand. Full analysis preserved in comment-c2c35da7 before this transition nulled the block fields.",
+  "reopenReason": "Governor unblock with the human's nod. Row was BLOCKED with no blockedOnTaskIds and no blockedResourceId, so nothing would ever auto-clear it, and it directly gates 5 of the 20 WORKING rows (f3edb8fb, 5f883e4e, f5a74c23, 33ceae56, 06ac0da1) on a board where zero WORKING rows are claimable. worker-fa42c94f stopped correctly under rail 19: the plan's digest-mirror census is stale (inherited from task-ad61563a). Needed change is an AMENDMENT, not a split: add apps/control-room/src/data/data-adapter.test.ts and apps/control-room/src/v2/goals/approve-plan.test.tsx to step-2 and keyFiles (one hex swap each), and add `pnpm --filter @moe/control-room test` to step-6 gates and DoD 6 plus a drill arm. Steps 2-6 are otherwise executable as written; NO edits were made to the tree. Full evidence: comment-7fcbd8418b674a3d970d41f91acaf73a.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
   "priority": "HIGH",
@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T11:32:34.718Z",
+  "updatedAt": "2026-09-05T13:19:32.820Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -151,10 +151,10 @@
     "worker-fa42c94f"
   ],
   "workStartedAt": "2026-09-04T23:14:51.216Z",
-  "blockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T11:31:57.173Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "declaredFiles": [
     "apps/daemon/src/preview/preview-contracts.ts",
     "apps/daemon/src/preview/preview-contracts.js",
@@ -291,7 +291,7 @@
     "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
     "at": "2026-09-05T11:32:34.718Z"
   },
-  "priorBlockedReason": "STEP 1 CLAUSE (c) STOP-AND-REPORT FIRED. Amended text (activeAmendmentId=amend-1, global rail 10): \"If the trace names a file outside this plan's seven, STOP and report - there is no headroom.\" It names TWO. Verbatim evidence: comment-6093ee6b869d4383bf6dec53c9334b02.\n\n1. apps/daemon/src/daemon-store-dependencies.test.ts - unnamed, hard red. :670 `registryKinds: [...deps.registry.keys()].sort()` vs a hand-written 46-kind roster at :745 (\"A new command writes its own kind here\"). registry.ts:392 DERIVES the served set from Object.keys(PAYLOAD_KEYS), so step 4's entry alone reds it. Invisible to a kind-literal grep in production source.\n\n2. packages/contracts/src/runtime/runtime-vocabulary.ts - moved OUT by amend-1, needed twice.\n(i) TYPECHECK: RUNTIME_COMMAND_KINDS lacks \"preview.decide\"; registry.test.ts types Row.kind (:75), REGISTRATION_ORDER (:280), OPERATOR_ONLY (:306) as RuntimeCommandKind, with set-equality sweeps at :814/:820-821 forbidding omission. Probe: `TS2322: Type '\"preview.decide\"' is not assignable to type '\"approval.decide\" | ... 95 more ... | \"work.resume\"'`.\n(ii) REACHABILITY, decisive: http-command-ingress.ts:152 -> runtime-envelope.ts:142 `if (!isCommandKind(...)) return commandFailure(invalidInput())`. preview.decide is refused INPUT_INVALID at the envelope BEFORE the registry and the operator fence, so step 4's \"MUST BE SERVED, NOT ONLY ADVERTISED\" and DoD-2's \"reaches the handler\" are unreachable here.\n\nNot taking the file: task-5f883e4e12c34842b3cb6c2f218e4256 is WORKING and its DoD-2 owns that line plus the four digest mirrors. It dependsOn THIS row, so blockedOnTaskIds would close a cycle - omitted deliberately.\n\nDELIVERED GREEN (DoD 4, 5): apps/daemon/src/preview/preview-contracts.ts (249 lines) + .js bridge + test. Tests 30 passed (30), exit 0. Three mutation drills RED, SHA256-restored.\n\nFIX: give this row one RUNTIME_COMMAND_KINDS line + daemon-store-dependencies.test.ts; strike DoD-2 from task-5f883e4e.",
+  "priorBlockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
   "blockedOnTaskIds": null,
   "inferredPaths": [
     "scripts/up.ps1",
