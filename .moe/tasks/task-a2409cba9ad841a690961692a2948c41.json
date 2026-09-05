@@ -1,0 +1,39 @@
+{
+  "id": "task-a2409cba9ad841a690961692a2948c41",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "environment.set_variable and unset_variable are published operator-only",
+  "description": "SPIDR child 1b of task-9ae492b373fa4e7aa6b1e91585f6e612, split out by architect-20a6d1eb 2026-09-05 when child 1a's roster measured ~12 distinct files against the 10-file hard cap. Cut along the INTERFACE axis: task-d0c63cd8848a4da18ad3fbb8eb1d95c3 owns the cipher, the contract and the encrypted store; this row PUBLISHES the two commands and fences them to the operator.\n\ndependsOn task-d0c63cd8848a4da18ad3fbb8eb1d95c3 - the handlers write through its store.\n\nOPERATOR-ONLY AND MCP-EXCLUDED, unlike the design kinds. `mcp-tool-allowlist.ts:87-89` serves ALL command kinds MINUS `MCP_EXCLUDED_COMMAND_KINDS` (:59), so a command is excluded by being ADDED to that roster - the opposite of the design kinds, where absence is what serves them. Read that file's header first: the MCP port authenticates with the operator bootstrap credential (mcp-main.ts:112-127), so an MCP caller holding it authenticates AS the operator and would receive a real witness. Exclusion is the fence; a capability gate is not one.\n\nSetting an environment variable is emphatically not an agent's decision: an agent that could write a variable could write one the deploy then delivers to a production process.\n\nROSTER: daemon-command-vocabulary.ts (kinds, capability, family, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS), daemon-command-families.ts (:83-94), daemon-command-registry.ts (`entryOf` :205-212), mcp-tool-allowlist.ts (EXCLUDED), HUMAN_ONLY_STEPS (agent-spawn-contract.ts:195 - ONE definition; agent-wrapper.ts:24 re-exports it, do not look for a second), packages/contracts runtime-vocabulary and the REGENERATED client (`pnpm --filter @moe/control-room-client generate`; it pins GENERATED_CONTRACT_DIGEST checked at client-compat.ts:169 - never hand-edit).\n\nTWO PAYLOAD-KEY TEST TABLES must both gain rows and are invisible to a grep for the kind literal in production source: daemon-command-vocabulary.test.ts (~:170-182) and daemon-command-registry.test.ts (~:197-203 plus the flat roster ~:283-300).\n\nTHE PAYLOAD CARRIES A SECRET. `environment.set_variable {environment, name, value}` is the only command on this board whose payload holds a value that must never be logged. Whatever the ingress does with payloads generally - echoing them into a refusal detail, a decision record, a debug line - must not happen for this kind. Child 1a's canary greps the store, events, reads and receipts; THIS row's surface is the command ingress path, and it is the one child 1a cannot see.",
+  "definitionOfDone": [
+    "Both kinds published OPERATOR-ONLY and MCP-EXCLUDED with the full roster backfill, and a BIDIRECTIONAL set-equality test enumerating the SERVED kinds from the dispatch seam; verify by deleting each entry from each side in turn and confirming every deletion reds.",
+    "Both are in `MCP_EXCLUDED_COMMAND_KINDS` and in HUMAN_ONLY_STEPS, asserted BEHAVIOURALLY as well as by membership: an AGENT-authenticated dispatch is REFUSED (assert the code), while an OPERATOR-authenticated one reaches the handler. An agent that could set a variable could set one the deploy delivers to a production process.",
+    "THE INGRESS DOES NOT LEAK THE VALUE - the surface child 1a's canary cannot reach. Set `MOE_CANARY_<random>` through the REAL command path and grep for the plaintext in: the refusal detail of a deliberately malformed request, the command decision record, the request-bytes digest path, and any daemon log line the dispatch writes. ZERO occurrences. A value echoed into a refusal message is the classic leak and it lives on exactly this path.",
+    "The four refusal codes from child 1a (ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN, ENV_STORE_KEY_UNAVAILABLE) are raised at the command edge with code AND layer asserted, and NONE of their messages contains the submitted value.",
+    "Both payload-key TEST tables gain their rows; the generated client is REGENERATED (never hand-edited) with the OLD and NEW GENERATED_CONTRACT_DIGEST quoted.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts and the generated client are touched)."
+  ],
+  "taskRails": [
+    "OPERATOR-ONLY AND MCP-EXCLUDED. This is the opposite of the design kinds in the same epic: here a command is excluded by BEING ADDED to MCP_EXCLUDED_COMMAND_KINDS. An agent must never set an environment variable.",
+    "THE PAYLOAD HOLDS A SECRET. Nothing on the ingress path may echo it - not a refusal detail, not a decision record, not a log line. This is the surface child 1a's canary cannot see, which is why it is a DoD clause here.",
+    "NO CIPHER, NO STORE, NO UI: those are child 1a (task-d0c63cd8) and child 3 (task-ba83b202).",
+    "HUMAN_ONLY_STEPS has exactly ONE definition (agent-spawn-contract.ts:195); agent-wrapper.ts:24 re-exports it. Do not look for a second.",
+    "NEVER HAND-EDIT the generated client; run the generator and quote both digests."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3"
+  ],
+  "priority": "HIGH",
+  "order": 101.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T08:42:20.804Z",
+  "updatedAt": "2026-09-05T08:42:20.804Z"
+}

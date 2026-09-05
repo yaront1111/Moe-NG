@@ -1,0 +1,40 @@
+{
+  "id": "task-06ac0da1ace64032855affc4ab0c1a4e",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "design.submit and design.read are published and reachable by a seat",
+  "description": "SPIDR child 1b of task-8a6d6660c31c4e119f962d13e6f1505d, split out by architect-20a6d1eb 2026-09-05 when child 1a's roster measured 11 distinct files against the 10-file hard cap. Cut along the INTERFACE axis: task-5e90317e80ac4b86a9704b6b8ba8874a owns the CONTRACT and the versioned AGGREGATE; this row PUBLISHES the two kinds and makes them reachable.\n\ndependsOn task-5e90317e80ac4b86a9704b6b8ba8874a - the kinds dispatch into its store.\n\nTHESE ARE SEAT KINDS, THE EXCEPTION ON THIS BOARD. Every other kind this epic adds is human-only and MCP-EXCLUDED. `design.submit` is submitted BY AN AGENT and `design.read` is read by seats AND the operator, so both must be REACHABLE over MCP. Copying the approval.decide / escalation.decide pattern here would make the design step unstaffable while looking correct in review - that is the single most likely failure of this row.\n\nTHE TWO KINDS TAKE DIFFERENT ROUTES TO BEING SERVED, measured at HEAD (branch moe/work-2026-09-04):\n- `mcp-tool-allowlist.ts:87-89` builds the served set as ALL command kinds MINUS `MCP_EXCLUDED_COMMAND_KINDS` (:59), PLUS `MCP_SERVED_QUERY_KINDS` (:27). So `design.submit`, being a COMMAND, is served by simply NOT being added to the exclusion roster - there is no positive action, and the mistake would be adding it there out of habit.\n- `design.read` is a QUERY: it must be ADDED to `MCP_SERVED_QUERY_KINDS` (:27, beside product_contract.read, graph.get, events.read, documents.source_read) AND given a handler in the dispatch map at `mcp-dispatch-port.ts:302` (`\"product_contract.read\": answerProductContractRead` is the shape). A query in the roster with no handler advertises a capability the port cannot serve.\n\nDAEMON ROSTER: daemon-command-vocabulary.ts (kind, capability, family, PAYLOAD_KEYS), daemon-command-families.ts (the per-kind flag block :83-94), daemon-command-registry.ts (`entryOf` :205-212). TWO PAYLOAD-KEY TEST TABLES must both gain rows and are invisible to a grep for the kind literal: daemon-command-vocabulary.test.ts (~:170-182) and daemon-command-registry.test.ts (~:197-203 plus the flat roster ~:283-300).\n\nTHE SHARED CONTRACT AND THE GENERATED CLIENT (packages/contracts runtime-vocabulary + `pnpm --filter @moe/control-room-client generate`) are needed only when the BROWSER must dispatch these kinds. The operator reads the design through child 3's screen; decide at plan time whether that needs the generated client, and if so include it - never hand-edit it, since it pins GENERATED_CONTRACT_DIGEST checked at client-compat.ts:169.",
+  "definitionOfDone": [
+    "`design.submit` and `design.read` are published across the daemon roster (vocabulary kind/capability/family/PAYLOAD_KEYS, families flag, registry entry) with a BIDIRECTIONAL set-equality test enumerating the SERVED kinds from the dispatch seam; verify by deleting each entry from each side in turn and confirming all four deletions go red.",
+    "BOTH ARE SEAT-REACHABLE OVER MCP, asserted behaviourally rather than by roster membership: an AGENT-authenticated dispatch of `design.submit` REACHES the handler, and an agent-authenticated `design.read` returns its answer. This is the opposite of every other kind this epic adds, and the arm exists because copying the human-only pattern would make the design step unstaffable while passing review.",
+    "`design.submit` is NOT in `MCP_EXCLUDED_COMMAND_KINDS` and NOT in HUMAN_ONLY_STEPS - assert both absences explicitly, since each is a place a well-meaning worker would add it by habit.",
+    "`design.read` is in `MCP_SERVED_QUERY_KINDS` (mcp-tool-allowlist.ts:27) AND has a handler in the dispatch map (mcp-dispatch-port.ts:302 area). Assert BOTH: a query advertised without a handler promises a capability the port cannot serve, and the allowlist's own parity test compares the roster against the port's table.",
+    "Both payload-key TEST tables gain their rows (daemon-command-vocabulary.test.ts and daemon-command-registry.test.ts, including its flat kind roster) - these are invisible to a grep for the kind literal in production source and have cost this board a rejected plan before.",
+    "If the browser must dispatch either kind, packages/contracts' runtime vocabulary and the REGENERATED client move with it (`pnpm --filter @moe/control-room-client generate`, quoting the OLD and NEW GENERATED_CONTRACT_DIGEST). If it need not, say so explicitly in the record rather than leaving it ambiguous for child 3.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, plus `pnpm test` if packages/ was touched."
+  ],
+  "taskRails": [
+    "SEAT KINDS, NOT HUMAN GATES. Do not add `design.submit` to MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS. The surrounding pattern invites exactly that mistake and it would silently make the design step unstaffable.",
+    "A SERVED QUERY NEEDS BOTH a roster entry and a dispatch handler. One without the other is an advertised capability the port cannot serve.",
+    "NO AGGREGATE WORK: the contract and the versioned store are task-5e90317e80ac4b86a9704b6b8ba8874a's. No wrapper, no mission, no UI.",
+    "NEVER HAND-EDIT the generated client; run the generator and quote both digests.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a"
+  ],
+  "priority": "HIGH",
+  "order": 61.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T08:40:28.076Z",
+  "updatedAt": "2026-09-05T08:40:28.076Z"
+}

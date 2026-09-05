@@ -19,8 +19,74 @@
     "This is a CAPABILITY row under the FEATURES ONLY rail, not trust-boundary work - it introduces no new boundary. Do not expand it into key rotation, audit logging or access control.",
     "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ THE FINDINGS, MEASURE THE SEAMS, NO EDITS. comment-f26ea546ec794416b4f970cde1c317fc on this row records two things: the scope narrowed (publishing the two commands moved to task-a2409cba9ad841a690961692a2948c41, so DoD 1 is NOT this row's), and the append-only store means UNSET CANNOT ERASE history. (a) Confirm the gap: `grep -rn 'environment\\.set_variable|ENVIRONMENT_' --include=*.ts apps/ packages/` returns only unrelated hits (agent-spawn-environment.ts's RUNTIME_ENVIRONMENT_KEYS :14 and PROVIDER_ENVIRONMENT_PREFIXES :28, a CARRY_FORWARD_ENVIRONMENT_CHANGED fixture). (b) MEASURE THE CRYPTO SEAM: the daemon uses `node:crypto` widely but ONLY `createHash` (activation-ledger-codec.ts:16, activation-receipts-measure.ts:10 and others) — there is NO existing encryption helper, so the cipher is new. Choose an AEAD (AES-256-GCM is the obvious one), and record the choice, the nonce discipline and where the salt lives. (c) Read `identity/session-authenticator.ts:68`, which documents why credential comparison is constant-time and how an early length check leaks length through timing — the same care applies here. (d) Confirm the store takes opaque `Uint8Array` payloads (store-contracts.ts:32,43) so sealed bytes need no schema fight.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+        "apps/daemon/src/identity/session-authenticator.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE CIPHER, in a new apps/daemon/src/environment/environment-cipher.ts (+ its `.js` bridge). Derive the key FROM THE DAEMON CREDENTIAL — the decision is recorded in this row's description and is not the worker's to revisit (DPAPI is Windows-only and this repo ships on three platforms). Expose seal/open over bytes, with the key derivation INJECTABLE so tests can drive a known key without a real credential on disk. NONCE DISCIPLINE IS THE PART TO GET RIGHT: a repeated nonce under the same key breaks AES-GCM catastrophically, so generate per-seal and store it with the ciphertext; state in a comment why. `open` with the WRONG key must FAIL AUTHENTICATION rather than return garbage — that is the property that makes a copied store useless rather than merely scrambled. Test: round trip; wrong key fails closed; a tampered ciphertext fails closed; two seals of the SAME plaintext produce DIFFERENT bytes (proving the nonce is not fixed — a test that only round-trips passes with a constant nonce).",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/environment/environment-cipher.ts",
+        "apps/daemon/src/environment/environment-cipher.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE CONTRACT MODULE, in a new apps/daemon/src/environment/environment-contracts.ts (+ `.js` bridge). Export the environments roster (verify | preview | production), the variable-name validity rule, the size bound, and a CLOSED code->layer map for ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN and ENV_STORE_KEY_UNAVAILABLE, with the code roster DERIVED from the map's keys — mirroring planning/expansion-request-contracts.ts, whose header explains why the refusal factory takes no layer argument. Also export the READ shape: `{name, isSet, sha256 fingerprint, updatedAt}` and NOTHING ELSE. Making the read shape a typed contract here is what stops a value being added to it later by accident.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/environment/environment-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE STORE, in a new apps/daemon/src/environment/environment-store.ts (+ `.js` bridge), writing sealed bytes as an event payload and folding the current state per environment. Reads return the contract shape from step 3 — name, isSet, fingerprint, updatedAt — and NEVER a value, on EVERY path including refusals. The fingerprint is the sha256 of the PLAINTEXT (it is the operator's only feedback that an update took, since they can never see the value back) and must CHANGE when the value changes and be STABLE when it does not. `unset` removes the variable from the CURRENT state. Test over a real store: set/read/unset round trip; fingerprint changes on update and is stable on a no-op re-set; ENV_ENVIRONMENT_UNKNOWN, ENV_NAME_INVALID and ENV_VALUE_TOO_LARGE each assert code + layer; ENV_STORE_KEY_UNAVAILABLE when the key cannot be derived.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/environment/environment-store.ts",
+        "apps/daemon/src/environment/environment-store.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE CANARY LEAK HUNT — this row's central evidence (the parent's DoD 2, minus the spawn and ingress halves which belong to task-72b22fcf and task-a2409cba). Set `MOE_CANARY_<random>` through the real store path, then grep for the PLAINTEXT in: the store FILE BYTES, the event stream, every read response, and every receipt. ZERO occurrences, while the sha256 fingerprint IS present. GREP BYTES, NOT PARSED VALUES: a plaintext surviving inside a serialised blob is invisible to a parsed assertion, and that is exactly how this leaks. Assert the refusal messages carry no value either — an error string is the classic leak. Then the ERASURE CLAUSE from comment-f26ea546: after `unset`, assert the ciphertext IS still present in the event stream (the log is append-only, so unset means 'no longer current', not 'erased') while the PLAINTEXT is still absent. Asserting both stops anyone mistaking unset for scrubbing, and keeps the property that actually matters.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/environment/environment-store.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ENCRYPTED AT REST, PROVEN ON BYTES. Copy the store file and open it WITHOUT the daemon credential: the read answers ENV_STORE_KEY_UNAVAILABLE (code + layer) AND the copied file's BYTES contain no plaintext. Assert BOTH halves — a refusal alone proves the code declined, not that the bytes are unreadable, and 'a copied store without the key must be useless' is the requirement this row exists to satisfy. Also cover the adjacent cases: a credential file that is PRESENT BUT UNREADABLE, and a credential that is present but WRONG — both must refuse rather than return garbage, which is what step 2's fail-closed `open` guarantees.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/environment/environment-store.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DRILLS, SCOPE PROOF, GATES. (a) DRILLS (global rail 1), each recorded in a step note: fix the nonce to a constant — the step-2 'two seals differ' arm must go RED (a round-trip-only test would not have noticed); make a refusal message include the submitted value — the step-5 canary must go RED; make `open` return garbage instead of failing authentication on a wrong key — the step-6 copied-store arm must go RED. Restore after each. EVERY MODULE THIS ROW CREATES IS UNTRACKED until committed and `git diff` is BLIND to untracked paths, so prove each restore by SHA256 against an out-of-tree backup in %TEMP% suffixed by worker id, in a call SEPARATE from the restore — a PowerShell copy can silently no-op and 'the command returned' is not evidence the bytes moved (global rail 13). (b) SCOPE PROOF: `git diff --stat` shows NO change to daemon-command-vocabulary.ts, daemon-command-registry.ts, daemon-command-families.ts, mcp-tool-allowlist.ts or the generated client — those belong to task-a2409cba9ad841a690961692a2948c41. (c) GATES with the `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`. `pnpm test` covers no apps/** and this row touches no packages/** (global rail 18) — say so rather than quoting it. Named verification command: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/environment/environment-cipher.ts",
+        "apps/daemon/src/environment/environment-store.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,8 +96,38 @@
   "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
   "priority": "HIGH",
   "order": 101,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f26ea546ec794416b4f970cde1c317fc",
+      "author": "architect-20a6d1eb",
+      "content": "TWO PLANNING FINDINGS before this row is worked (architect-20a6d1eb, 2026-09-05).\n\n1. SCOPE NARROWED. Publishing `environment.set_variable` / `environment.unset_variable` on the roster and fencing them MCP-excluded moved to task-a2409cba9ad841a690961692a2948c41 - this row's roster measured ~12 distinct files against the 10-file hard cap. This row owns the CIPHER, the CONTRACT and the ENCRYPTED STORE. DoD 1 (the published commands) is therefore that sibling's, not this row's; DoD 2-6 stay here, minus the spawn half of the canary which is task-72b22fcf's.\n\n2. UNSET CANNOT ERASE, AND THE ROW SHOULD SAY SO. The store is an APPEND-ONLY event log - `packages/store/src/store-contracts.ts` persists `payload: Uint8Array` per event and events are never mutated in place; the whole system replays from them. So an `environment.unset_variable` removes a variable from the CURRENT state, but the ciphertext of every value ever set REMAINS IN HISTORY. That is not a defect to fix here - it is a property to state, because two reasonable people will otherwise assume opposite things:\n   - What unset DOES guarantee: the value is no longer current, no longer delivered to any spawn, no longer readable through the reads.\n   - What it does NOT: erase the ciphertext from the event stream, or make a previously-exported store safe if the key later leaks.\n   The key is derived from the daemon credential (the decision recorded in this row's description), so the history is unreadable without it - which is what makes this acceptable rather than alarming. But an operator who pastes a production secret, realises the mistake, and unsets it has NOT scrubbed their store, and the runbook should say that plainly. Key rotation would be the real remedy and is explicitly out of scope under the FEATURES ONLY rail.\n\nI am adding a DoD clause for it rather than leaving it implicit: the row must ASSERT that a value survives in the event stream as ciphertext after unset (so nobody later mistakes unset for erasure), and must state the limitation in whatever doc the parent's runbook clause covers. Asserting it also protects the canary: a test that greps the event stream for the PLAINTEXT after an unset must still find zero, which is the property that actually matters.\n\nMEASURED SEAMS for the worker: the daemon already uses `node:crypto` widely but only `createHash` (activation-ledger-codec.ts:16, activation-receipts-measure.ts:10, and others) - there is no existing encryption helper, so the cipher module is new. `identity/session-authenticator.ts:68` shows the codebase already reasons about timing leaks on credential comparison; follow that care. The store takes opaque `Uint8Array` payloads, so sealed bytes fit an event payload without a schema fight.",
+      "timestamp": "2026-09-05T08:42:48.497Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:14.933Z",
-  "updatedAt": "2026-09-05T00:45:14.933Z"
+  "updatedAt": "2026-09-05T08:43:47.039Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T08:41:30.124Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T08:43:44.904Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, Windows DPAPI for the at-rest key: the parent left it to the architect and DPAPI is Windows-only while this repo ships on Windows, macOS and Linux — it would mean a platform-locked feature or two implementations of the most sensitive code in the row. The daemon credential already exists, already gates the store, keeps ONE secret to manage, and makes a copied store useless on every platform. REJECTED, keeping the roster publication in this row: it measured ~12 distinct files against the 10-file hard cap, so the two commands moved to task-a2409cba9ad841a690961692a2948c41 along the interface axis. REJECTED, a round-trip-only cipher test: it passes with a constant nonce, which breaks AES-GCM catastrophically — hence the 'two seals of the same plaintext differ' arm and its drill. REJECTED, asserting the canary on parsed values: a plaintext surviving inside a serialised blob is invisible to a parsed assertion, which is precisely how this class of feature leaks; the greps are over bytes. REJECTED, treating unset as erasure: the store is append-only, so the honest position is that unset makes a value non-current and unreadable-without-the-key, and the row asserts that rather than implying a scrub.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: no per-project or per-environment variable store exists; the only `ENVIRONMENT_` hits are agent-spawn-environment.ts's closed allowlist constants (`RUNTIME_ENVIRONMENT_KEYS` :14, `PROVIDER_ENVIRONMENT_PREFIXES` :28) and a CARRY_FORWARD fixture. THERE IS NO ENCRYPTION HELPER ANYWHERE: the daemon imports `node:crypto` in many places but only `createHash` (activation-ledger-codec.ts:16, activation-ledger-contracts.ts:22, foundation-activation-transition.ts:20, activation-receipts-measure.ts:10, activation-receipts-ports.ts:9), so the cipher module is genuinely new rather than an extension. THE STORE TAKES OPAQUE BYTES: store-contracts.ts persists `payload: Uint8Array` (:32, :43) and `committedResultBytes` (:76), so sealed bytes fit an event payload without a schema change — and, because the log is APPEND-ONLY and replayed, a sealed value stays in history after unset, which is the finding recorded in comment-f26ea546. PRIOR ART FOR THE CARE REQUIRED: identity/session-authenticator.ts:68 documents constant-time credential comparison and why an early length check leaks length through timing. THE CONTRACT SHAPE to mirror is planning/expansion-request-contracts.ts (closed code->layer map, derived code roster, layer-less refusal factory).",
+    "risks": "BIGGEST RISK — a plaintext secret somewhere durable. The canary greps BYTES rather than parsed values because a value surviving inside a serialised blob is invisible to a parsed assertion, and the drill in step 7 forces a refusal message to carry the value so the arm proves it bites. SECOND — nonce reuse. A fixed nonce passes every round-trip test and breaks AES-GCM completely; the 'two seals differ' arm plus its drill is the only thing that catches it, and it is the single most likely cryptographic mistake here. THIRD — `open` returning garbage instead of failing authentication on a wrong key: that would make a copied store scrambled rather than useless, which is a materially weaker claim than the one the row makes. FOURTH — mistaking unset for erasure: the log is append-only, and an operator who pastes a production secret and unsets it has NOT scrubbed their store; the row asserts the ciphertext persists so nobody later assumes otherwise, and the limitation belongs in the runbook. FIFTH — scope leak into the sibling's roster files, which would both breach the cap and collide; step 7(b) makes their absence a proof obligation. SIXTH — drill restores on UNTRACKED modules need out-of-tree SHA256 comparison in a separate call (global rail 13).",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+      "apps/daemon/src/identity/session-authenticator.ts",
+      "apps/daemon/src/planning/expansion-request-contracts.ts",
+      "packages/store/src/store-contracts.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T08:43:47.039Z"
 }
