@@ -133,7 +133,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-05T23:19:54.888Z",
+  "updatedAt": "2026-09-05T23:20:46.876Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,
@@ -195,6 +195,21 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "e846175acc8578f33b566d5125a2873c7cc5b501",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:20:28Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:20:46.876Z",
+      "treeId": "cc444c5bc5fb9926b9fe4a352469dff789eece74",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -217,6 +232,7 @@
     "apps/control-room/src/live/live-effect-read.ts",
     "apps/control-room/src/v2/goals/publish-port.ts",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
@@ -236,6 +252,7 @@
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
     "apps/daemon/src/repository/git-publication-native.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
     "apps/daemon/src/repository/publish-services.ts",
     "apps/daemon/src/repository/repository-execution-recovery.ts",
     "apps/daemon/src/repository/repository-landing-attempt.js",
@@ -276,7 +293,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T23:03:43Z",
-    "at": "2026-09-05T23:19:54.888Z"
+    "sessionId": "worker-d6e44333@2026-09-05T23:20:28Z",
+    "at": "2026-09-05T23:20:46.876Z"
   }
 }
