@@ -232,11 +232,18 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     if (name === "HEAD") return { code: "DETACHED_HEAD", detail: "the workspace has no branch checked out", ok: false };
     // The remote is the URL the human named, never a configured remote name: the decision
     // says where the bytes go, and a renamed origin cannot redirect it.
-    const pushed = await run(top, ["push", "--", remoteUrl, `HEAD:refs/heads/${name}`]);
+    const sha = head.stdout.trim();
+    const ref = `refs/heads/${name}`;
+    const pushed = await run(top, ["push", "--", remoteUrl, `${sha}:${ref}`]);
     if (pushed.code !== 0) {
       return { code: "GIT_PUSH_FAILED", detail: tail(`${pushed.stdout}${pushed.stderr}`), ok: false };
     }
-    return { ok: true, receipt: Object.freeze({ branch: name, sha: head.stdout.trim() }) };
+    const confirmed = await run(top, ["ls-remote", "--refs", "--", remoteUrl, ref]);
+    const remoteRefs = confirmed.stdout.trim().split(/\r?\n/u);
+    if (confirmed.code !== 0 || remoteRefs.length !== 1 || remoteRefs[0] !== `${sha}\t${ref}`) {
+      return { code: "GIT_PUSH_FAILED", detail: "remote branch did not confirm the pushed commit", ok: false };
+    }
+    return { ok: true, receipt: Object.freeze({ branch: name, sha }) };
   };
 
   return Object.freeze({ commit, observe, push });
