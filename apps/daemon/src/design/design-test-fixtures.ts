@@ -1,4 +1,4 @@
-import type { DesignRevision } from "./design-contracts.js";
+import type { DesignRevision, DesignSkip } from "./design-contracts.js";
 
 /**
  * INPUTS ONLY for the design suites. No `expect`, no `describe`, no `it`.
@@ -37,6 +37,14 @@ export function designRevisionFixture(): DesignRevision {
         ],
       },
     ],
+  };
+}
+
+/** One lawful DECLARED SKIP: the two-key shape, with the operator's stated reason. */
+export function designSkipFixture(): DesignSkip {
+  return {
+    reason: "Internal CLI tool: the operator plans straight from the approved contract",
+    skipped: true,
   };
 }
 

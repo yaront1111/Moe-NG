@@ -45,6 +45,13 @@ export const DESIGN_SECTION_KEYS = Object.freeze([
   "apiSurface", "componentList", "dataModel", "nonFunctional", "screens",
 ] as const);
 
+/**
+ * A DECLARED SKIP: this goal plans without a design. Sorted, and compared by exact arity like the
+ * revision roster, which is what makes a HALF-SKIPPED value unrepresentable rather than merely
+ * discouraged — `{skipped, reason, ...six sections}` is eight keys and satisfies neither roster.
+ */
+export const DESIGN_SKIP_KEYS = Object.freeze(["reason", "skipped"] as const);
+
 export const DESIGN_JOURNEY_KEYS = Object.freeze(["journey", "screens"] as const);
 export const DESIGN_SCREEN_KEYS = Object.freeze(["screen", "states"] as const);
 export const DESIGN_ENTITY_KEYS = Object.freeze(["entity", "fields", "relations"] as const);
@@ -103,6 +110,33 @@ export interface DesignRevision {
   readonly screens: readonly DesignJourney[];
 }
 
+/**
+ * The design step, DECLARED SKIPPED rather than omitted — a compiler seat that simply receives no
+ * design cannot tell "the operator skipped it" from "the read failed", and will guess.
+ *
+ * `skipped` is the LITERAL `true`, never a boolean: `skipped: false` would be a lawful revision
+ * carrying no design at all, exactly the half-skipped state this shape exists to refuse. A
+ * non-skip is expressed by submitting an actual design. `reason` is bounded because a skip is a
+ * product decision, and an unexplained one is a decision nobody can review later.
+ */
+export interface DesignSkip {
+  readonly reason: string;
+  readonly skipped: true;
+}
+
+/** What a design revision slot can hold. Narrow it with `isDesignSkip`, never by hand. */
+export type DesignRevisionOrSkip = DesignRevision | DesignSkip;
+
+/**
+ * The ONE narrowing two consumer rows share, so neither re-implements it and they cannot drift.
+ * It answers on the OWN literal `true`, not on the marker's presence: a hand-cast `skipped: false`
+ * is a design that was never drawn, and calling it a skip is the confusion this slice removes.
+ */
+export function isDesignSkip(value: DesignRevisionOrSkip): value is DesignSkip {
+  return Object.hasOwn(value, "skipped")
+    && (value as Readonly<Partial<DesignSkip>>).skipped === true;
+}
+
 export interface DesignRefusal {
   readonly code: DesignCode;
   readonly layer: DesignLayer;
@@ -114,7 +148,7 @@ export interface DesignRefusal {
 }
 
 export type DesignRevisionResult =
-  | { readonly ok: true; readonly revision: DesignRevision }
+  | { readonly ok: true; readonly revision: DesignRevisionOrSkip }
   | DesignRefusal;
 
 export function designRefusal(
@@ -226,10 +260,36 @@ function nonFunctional(value: unknown): DesignNonFunctional | null {
 }
 
 /**
+ * OWN `skipped` marker, never inherited: `"skipped" in value` would walk the prototype chain and
+ * re-open the hole `exactDesignRecord` deliberately closes.
+ */
+function carriesSkipMarker(value: unknown): boolean {
+  return typeof value === "object" && value !== null
+    && Reflect.ownKeys(value).includes("skipped");
+}
+
+/** Exact arity again, so a skip that still carries sections fails the roster rather than a check. */
+function decodeSkip(value: unknown): DesignRevisionResult {
+  const item = exactDesignRecord(value, DESIGN_SKIP_KEYS);
+  if (item === null || item["skipped"] !== true || !boundedDesignText(item["reason"])) {
+    return designRefusal("DESIGN_SHAPE_INVALID");
+  }
+  return Object.freeze({
+    ok: true as const,
+    revision: Object.freeze({ reason: item["reason"], skipped: true as const }),
+  });
+}
+
+/**
  * The ONE decode of seat bytes in this slice. It copies every accepted member into a fresh frozen
  * record, so a caller retaining a reference to the input cannot mutate what the daemon persisted.
+ *
+ * TWO ADMITTED ARITIES, discriminated on the presence of an own `skipped` marker: the two-key skip
+ * and the unchanged six-key revision. A seventh REQUIRED key would have made every existing
+ * six-key payload refuse and forced every real design to carry `skipped: false` as wire noise.
  */
 export function decodeDesignRevision(value: unknown): DesignRevisionResult {
+  if (carriesSkipMarker(value)) return decodeSkip(value);
   const item = exactDesignRecord(value, DESIGN_REVISION_KEYS);
   if (item === null) return designRefusal("DESIGN_SHAPE_INVALID");
   const apiSurface = routes(item["apiSurface"]);

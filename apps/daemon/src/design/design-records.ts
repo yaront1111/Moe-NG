@@ -8,7 +8,7 @@ import {
   designRefusal,
   exactDesignRecord,
   type DesignRefusal,
-  type DesignRevision,
+  type DesignRevisionOrSkip,
 } from "./design-contracts.js";
 
 /**
@@ -42,7 +42,8 @@ export interface DesignRecord {
   readonly goalRef: string;
   readonly profile: typeof DESIGN_PROFILE;
   readonly projectId: string;
-  readonly revision: DesignRevision;
+  /** A real design OR a declared skip. `DESIGN_RECORD_KEYS` is unchanged: this is ONE key. */
+  readonly revision: DesignRevisionOrSkip;
   readonly schemaVersion: typeof DESIGN_REVISION_VERSION;
   readonly submittedAt: string;
   readonly version: number;

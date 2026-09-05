@@ -25,9 +25,9 @@ import {
   approveGate1, boundWorld, committedRevision,
 } from "../planning/plan-reject-test-fixtures.js";
 import {
-  DESIGN_REVISION_KEYS, DESIGN_SECTION_KEYS, designAggregateId,
+  DESIGN_REVISION_KEYS, DESIGN_SECTION_KEYS, DESIGN_SKIP_KEYS, designAggregateId, isDesignSkip,
 } from "./design-contracts.js";
-import { designRevisionFixture, secondDesignRevisionFixture }
+import { designRevisionFixture, designSkipFixture, secondDesignRevisionFixture }
   from "./design-test-fixtures.js";
 import { readApprovedDesignContract, readDesignRevision, submitDesignRevision }
   from "./design-store.js";
@@ -124,6 +124,9 @@ describe("submitDesignRevision over a real store", () => {
       const read = readDesignRevision(world.store, { goalRef: GOAL_ID, projectId: PROJECT_ID });
       expect(read.ok).toBe(true);
       if (!read.ok) throw new Error(`read refused: ${read.code}@${read.layer}`);
+      // A design and a skip now share this slot, so the arm pins which one came back before it
+      // indexes sections: a skip here would compare undefined to undefined per section and pass.
+      if (isDesignSkip(read.record.revision)) throw new Error("a design must not read as a skip");
       // PER SECTION, so a dropped one names itself instead of failing as one opaque inequality.
       expect(read.record.revision[section]).toEqual(designRevisionFixture()[section]);
       expect(JSON.stringify(read.record.revision[section]))
@@ -204,6 +207,137 @@ describe("submitDesignRevision over a real store", () => {
     if (read.ok) throw new Error("an unwritten version must be refused");
     expect(read.code).toBe("DESIGN_REVISION_ABSENT");
     expect(read.layer).toBe("LEDGER");
+  });
+});
+
+/**
+ * A DECLARED SKIP on the same aggregate, over the same REAL store and the same production journey.
+ *
+ * THREE STATES, NOT TWO. "No design was ever submitted", "the design step was skipped" and "a real
+ * design exists" are three different facts, and any TWO of them cannot tell the third apart — a
+ * compiler seat that receives nothing cannot distinguish a skip from a failed read, and will
+ * guess. Every arm below reads back through `readDesignRevision` and names WHICH of the three it
+ * got: the absent case by its refusal CODE and LAYER, the other two by `isDesignSkip`.
+ */
+describe("a design that is SKIPPED rather than submitted", () => {
+  it("lands a version, and reads back as a skip carrying the operator's reason", () => {
+    const world = approvedWorld();
+    const submitted = submit(world, 0, designSkipFixture(), "skip-v1");
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok) throw new Error(`skip refused: ${submitted.code}@${submitted.layer}`);
+    expect(submitted.record.version).toBe(1);
+
+    const read = readDesignRevision(world.store, { goalRef: GOAL_ID, projectId: PROJECT_ID });
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error(`skip unreadable: ${read.code}@${read.layer}`);
+    expect(isDesignSkip(read.record.revision)).toBe(true);
+    if (!isDesignSkip(read.record.revision)) throw new Error("a skip must read back as a skip");
+    expect(read.record.revision.skipped).toBe(true);
+    expect(read.record.revision.reason).toBe(designSkipFixture().reason);
+    expect(Object.keys(read.record.revision).sort()).toEqual([...DESIGN_SKIP_KEYS].sort());
+    // The record's own arity did NOT move: `revision` is one key whose value is the union.
+    expect(read.record.contractRef).toEqual(world.ref);
+    expect(read.versions).toEqual([1]);
+  });
+
+  it("is distinguishable from BOTH an absent design and a real design", () => {
+    // THE THREE STATES, measured in one arm so no pair can stand in for the triple.
+    const absent = approvedWorld();
+    const absentRead = readDesignRevision(absent.store, {
+      goalRef: GOAL_ID, projectId: PROJECT_ID,
+    });
+    expect(absentRead.ok).toBe(false);
+    if (absentRead.ok) throw new Error("an empty aggregate must not read as a design");
+    expect(absentRead.code).toBe("DESIGN_REVISION_ABSENT");
+    expect(absentRead.layer).toBe("LEDGER");
+
+    const skipped = approvedWorld();
+    expect(submit(skipped, 0, designSkipFixture(), "three-states-skip").ok).toBe(true);
+    const skippedRead = readDesignRevision(skipped.store, {
+      goalRef: GOAL_ID, projectId: PROJECT_ID,
+    });
+    if (!skippedRead.ok) {
+      throw new Error(`skip unreadable: ${skippedRead.code}@${skippedRead.layer}`);
+    }
+    expect(isDesignSkip(skippedRead.record.revision)).toBe(true);
+
+    const designed = approvedWorld();
+    expect(submit(designed, 0, designRevisionFixture(), "three-states-design").ok).toBe(true);
+    const designedRead = readDesignRevision(designed.store, {
+      goalRef: GOAL_ID, projectId: PROJECT_ID,
+    });
+    if (!designedRead.ok) {
+      throw new Error(`design unreadable: ${designedRead.code}@${designedRead.layer}`);
+    }
+    expect(isDesignSkip(designedRead.record.revision)).toBe(false);
+    expect(designedRead.record.revision).toEqual(designRevisionFixture());
+  });
+
+  it("refuses DESIGN_CONTRACT_NOT_APPROVED at CONTRACT_AUTHORITY with no Gate 1 grant", () => {
+    // THE FREE FENCE, PINNED. `submitDesignRevision` decodes first and re-proves the approval
+    // second, so a SKIP travels the identical path a design travels: you cannot skip the design
+    // for a goal whose product contract was never approved. A refactor that hoisted the approval
+    // read or short-circuited on skips would open that window silently — this arm closes it.
+    const world = unapprovedWorld();
+    const refused = submit(world, 0, designSkipFixture(), "skip-not-approved");
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("a skip must not bypass the Gate 1 fence");
+    expect(refused.code).toBe("DESIGN_CONTRACT_NOT_APPROVED");
+    expect(refused.layer).toBe("CONTRACT_AUTHORITY");
+    expect(refused.sourceCode).toBe("PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT");
+    expect(refused.sourceLayer).toBe("PRODUCT_CONTRACT_GATE_1_READER");
+    expect(world.store.readEvents(designAggregateId(GOAL_ID))).toHaveLength(0);
+  });
+
+  it.each([
+    ["a skip that still carries all six sections", {
+      ...designRevisionFixture(), ...designSkipFixture(),
+    }],
+    ["an un-skipped marker carrying no sections", { reason: "changed my mind", skipped: false }],
+  ])("refuses %s DESIGN_SHAPE_INVALID at REQUEST and appends nothing", (_label, value) => {
+    // Against the UNAPPROVED world on purpose: that world would ALSO refuse, so asserting the
+    // CODE pins that the decoder answered rather than the approval gate covering for it.
+    const world = unapprovedWorld();
+    const refused = submit(world, 0, value, `half-skipped-${_label.slice(0, 12)}`);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("a half-skipped revision must be refused");
+    expect(refused.code).toBe("DESIGN_SHAPE_INVALID");
+    expect(refused.layer).toBe("REQUEST");
+    expect(world.store.readEvents(designAggregateId(GOAL_ID))).toHaveLength(0);
+  });
+
+  it("keeps a skip at v1 readable after a real design lands at v2", () => {
+    // The operator is allowed to change their mind, and history must show that they did.
+    const world = approvedWorld();
+    expect(submit(world, 0, designSkipFixture(), "mind-change-v1").ok).toBe(true);
+    expect(submit(world, 1, designRevisionFixture(), "mind-change-v2").ok).toBe(true);
+
+    const one = readDesignRevision(world.store, {
+      goalRef: GOAL_ID, projectId: PROJECT_ID, version: 1,
+    });
+    if (!one.ok) throw new Error(`version 1 unreadable: ${one.code}@${one.layer}`);
+    expect(isDesignSkip(one.record.revision)).toBe(true);
+    expect(one.record.revision).toEqual(designSkipFixture());
+
+    const latest = readDesignRevision(world.store, { goalRef: GOAL_ID, projectId: PROJECT_ID });
+    if (!latest.ok) throw new Error(`latest unreadable: ${latest.code}@${latest.layer}`);
+    expect(latest.record.version).toBe(2);
+    expect(isDesignSkip(latest.record.revision)).toBe(false);
+    expect(latest.record.revision).toEqual(designRevisionFixture());
+    expect(latest.versions).toEqual([1, 2]);
+    expect(world.store.readEvents(designAggregateId(GOAL_ID))).toHaveLength(2);
+  });
+
+  it("refuses DESIGN_REVISION_CONFLICT at LEDGER for a second skip at the same version", () => {
+    const world = approvedWorld();
+    expect(submit(world, 0, designSkipFixture(), "skip-conflict-v1").ok).toBe(true);
+    const stale = submit(world, 0, designSkipFixture(), "skip-conflict-stale");
+    expect(stale.ok).toBe(false);
+    if (stale.ok) throw new Error("a stale expected version must be refused for a skip too");
+    expect(stale.code).toBe("DESIGN_REVISION_CONFLICT");
+    expect(stale.layer).toBe("LEDGER");
+    expect(world.store.readEvents(designAggregateId(GOAL_ID))).toHaveLength(1);
+    expect(world.store.getAggregateVersion(designAggregateId(GOAL_ID))).toBe(1);
   });
 });
 
