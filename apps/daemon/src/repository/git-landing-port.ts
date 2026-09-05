@@ -74,9 +74,9 @@ const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const DETAIL_TAIL = 600;
 const MOE_DIRECTORIES: ReadonlySet<string> = new Set([".moe", ".moe-next"]);
 /** The identity every landing carries: Moe's, never the operator's. */
-const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
+export const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
 
-function landingEnvironment(): NodeJS.ProcessEnv {
+export function landingEnvironment(): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     // GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE from a parent shell would redirect the landing.
