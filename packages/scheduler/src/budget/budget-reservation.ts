@@ -129,7 +129,7 @@ const isView = (value: unknown): value is BudgetAvailableView =>
   isPlainRecord(value) && isRef(value.accountId) && isCount(value.version) && oneOf(value.state, BUDGET_ACCOUNT_STATES)
   && isPlainArray(value.meters) && value.meters.length > 0 && value.meters.length <= MAX_BUDGET_METERS
   && value.meters.every((entry) => isPlainRecord(entry) && isRef(entry.meter) && BUCKET_AMOUNTS.every((key) => isCount(entry[key])))
-  && new Set(value.meters.map((entry) => entry.meter)).size === value.meters.length;
+  && new Set(value.meters.map((entry) => (entry as { readonly meter: string }).meter)).size === value.meters.length;
 /** The account length prefix keeps the join injective, so no two distinct pairs can collide. */
 export const deriveReservationId = (accountId: string, admissionRef: string): string => `reservation:${accountId.length}:${accountId}:${admissionRef}`;
 /** A caller-supplied amount is a fact, so a zero-quantity protected line refuses, never defaults. */
