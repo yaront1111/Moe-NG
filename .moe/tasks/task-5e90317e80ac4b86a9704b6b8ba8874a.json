@@ -142,7 +142,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:36:37.231Z",
-  "updatedAt": "2026-09-05T09:27:22.684Z",
+  "updatedAt": "2026-09-05T09:29:02.073Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:39:20.992Z",
     "plannedStepCount": 6,
@@ -195,7 +195,56 @@
     "apps/daemon/src/design/design-records.ts",
     "apps/daemon/src/design/design-records.js",
     "apps/daemon/src/design/design-store.test.ts",
-    "apps/daemon/src/design/design-test-fixtures.ts"
+    "apps/daemon/src/design/design-test-fixtures.ts",
+    ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+    ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
+    ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json"
   ],
-  "completionSummary": "DELIVERED: the design CONTRACT and its versioned durable aggregate `design:<goalId>`. 9 new files, all under apps/daemon/src/design/, ZERO tracked files changed. Full gate ledger, verbatim failing lines and drill transcripts: row comment-ca856af399dd4470b058384e764e3614.\n\nREAD THE VERIFICATION FIELD CAREFULLY - I did NOT submit the plan's named command, and here is why. `pnpm --filter @moe/daemon test` EXIT=1 with EXACTLY ONE failure: `src/http/http-listener-read-dispatch.test.ts` asserting `expected [] to strictly equal [ '/product-contract/gate-1/read' ]`. That red is FOREIGN and named: commit 79d4c263 `feat(task-1c9587ed1b2b4e1abd6b51396ee672f8)` LANDED DURING this session (HEAD moved 4ff10f9a -> 79d4c263) and added that route to apps/control-room/src/live/dev-proxy-paths.ts without removing it from the daemon-side census that test reads as SOURCE TEXT (`grep -c 'gate-1/read'` = 1 at HEAD, 0 at 4ff10f9a). I MEASURED the (2)-minus-(1) delta instead of arguing it: I moved my entire apps/daemon/src/design/ directory out of the tree and re-ran that test with my diff wholly ABSENT - BASELINE_EXIT=1, byte-identical assertion. Delta intersected with owned paths = EMPTY (epic rail 3). Directory restored, proven by SHA256 manifest diff over all 9 files. The verification field carries the owned leg, run fresh in the completing turn: EXIT=0, `Test Files 2 passed (2)` / `Tests 48 passed (48)`. `pnpm typecheck` EXIT=0, 19 `$ tsc` echoes, execution proven by a planted-error positive control. `pnpm test` deliberately NOT quoted: root vitest has no apps/** and this row touches no packages/** (rail 18).\n\nDoD, clause by clause. (1) is NOT satisfied by this row and was never in scope: the amended step-1 moved publishing the two kinds and the bidirectional roster set-equality to task-06ac0da1ace64032855affc4ab0c1a4e when the roster measured 11 files against the 10-file cap. Same for (2), MCP seat-reachability. This row is the CONTRACT + AGGREGATE half. (3) THREE refusals, code AND l"
+  "completionSummary": "DELIVERED: the design CONTRACT and its versioned durable aggregate `design:<goalId>`. 9 new files, all under apps/daemon/src/design/, ZERO tracked files changed. Full gate ledger, verbatim failing lines and drill transcripts: row comment-ca856af399dd4470b058384e764e3614.\n\nREAD THE VERIFICATION FIELD CAREFULLY - I did NOT submit the plan's named command, and here is why. `pnpm --filter @moe/daemon test` EXIT=1 with EXACTLY ONE failure: `src/http/http-listener-read-dispatch.test.ts` asserting `expected [] to strictly equal [ '/product-contract/gate-1/read' ]`. That red is FOREIGN and named: commit 79d4c263 `feat(task-1c9587ed1b2b4e1abd6b51396ee672f8)` LANDED DURING this session (HEAD moved 4ff10f9a -> 79d4c263) and added that route to apps/control-room/src/live/dev-proxy-paths.ts without removing it from the daemon-side census that test reads as SOURCE TEXT (`grep -c 'gate-1/read'` = 1 at HEAD, 0 at 4ff10f9a). I MEASURED the (2)-minus-(1) delta instead of arguing it: I moved my entire apps/daemon/src/design/ directory out of the tree and re-ran that test with my diff wholly ABSENT - BASELINE_EXIT=1, byte-identical assertion. Delta intersected with owned paths = EMPTY (epic rail 3). Directory restored, proven by SHA256 manifest diff over all 9 files. The verification field carries the owned leg, run fresh in the completing turn: EXIT=0, `Test Files 2 passed (2)` / `Tests 48 passed (48)`. `pnpm typecheck` EXIT=0, 19 `$ tsc` echoes, execution proven by a planted-error positive control. `pnpm test` deliberately NOT quoted: root vitest has no apps/** and this row touches no packages/** (rail 18).\n\nDoD, clause by clause. (1) is NOT satisfied by this row and was never in scope: the amended step-1 moved publishing the two kinds and the bidirectional roster set-equality to task-06ac0da1ace64032855affc4ab0c1a4e when the roster measured 11 files against the 10-file cap. Same for (2), MCP seat-reachability. This row is the CONTRACT + AGGREGATE half. (3) THREE refusals, code AND l",
+  "commits": [
+    {
+      "sha": "34baaf520cdfcf05b4ea431d258ed004f1c2d67c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-05T08:41:42Z",
+      "paths": [
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
+        ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json",
+        "apps/daemon/src/design/design-contracts.js",
+        "apps/daemon/src/design/design-contracts.test.ts",
+        "apps/daemon/src/design/design-contracts.ts",
+        "apps/daemon/src/design/design-records.js",
+        "apps/daemon/src/design/design-records.ts",
+        "apps/daemon/src/design/design-store.js",
+        "apps/daemon/src/design/design-store.test.ts",
+        "apps/daemon/src/design/design-store.ts",
+        "apps/daemon/src/design/design-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-05T09:29:02.073Z",
+      "treeId": "53233778c4e99a3c14888a946ed1a9bb683cf127",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/design/design-contracts.js",
+    "apps/daemon/src/design/design-contracts.ts",
+    "apps/daemon/src/design/design-store.ts",
+    "apps/daemon/src/design/design-contracts.test.ts",
+    "apps/daemon/src/design/design-records.ts",
+    "apps/daemon/src/design/design-test-fixtures.ts",
+    "apps/daemon/src/design/design-store.js",
+    "apps/daemon/src/design/design-store.test.ts",
+    "apps/daemon/src/design/design-records.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-05T08:41:42Z",
+    "at": "2026-09-05T09:29:02.073Z"
+  }
 }
