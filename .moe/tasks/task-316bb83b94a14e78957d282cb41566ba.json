@@ -139,7 +139,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T03:29:37.065Z",
-  "updatedAt": "2026-09-05T11:59:12.895Z",
+  "updatedAt": "2026-09-05T12:01:31.824Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T09:27:21.166Z",
     "plannedStepCount": 7,
@@ -201,6 +201,23 @@
       "treeId": "8f273caaae57044b380110cbeae3e7c76b133696",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "1405368c2d69decbb85242deb8e5d387fc9e50a8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-61579b07@2026-09-05T11:05:46Z",
+      "paths": [
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
+      ],
+      "recordedBy": "worker-61579b07",
+      "recordedAt": "2026-09-05T12:01:31.824Z",
+      "treeId": "2c5002e7cea2f1715467d88054e0c847d1cd0340",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -212,14 +229,17 @@
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/daemon-main-activation-boot.test.ts",
-    "apps/daemon/src/daemon-entry-activation-refusals.test.ts"
+    "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+    ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-61579b07@2026-09-05T11:05:46Z",
-    "at": "2026-09-05T11:06:04.362Z"
+    "at": "2026-09-05T12:01:31.824Z"
   },
   "reviewStartedAt": "2026-09-05T11:59:12.894Z",
   "verification": {

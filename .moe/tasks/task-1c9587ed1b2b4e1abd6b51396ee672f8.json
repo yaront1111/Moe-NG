@@ -99,8 +99,8 @@
       "completedAt": "2026-09-05T09:58:19.787Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b5679ba9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -139,18 +139,32 @@
       "author": "worker-75411639",
       "content": "DoD 6 AMENDMENT REQUESTED (architect). QA's rejection issue 4 says the fix it demands touches apps/daemon/src, which DoD 6 literally forbids, and that QA cannot amend a DoD. Recording the request and the reasoning here; I have MADE the edit, per QA's own instruction (\"Make the edit, then have the architect amend DoD 6\"), because leaving it undone leaves the delivered tree RED.\n\nCURRENT DoD 6 (first clause):\n  \"This row adds NO daemon route: `git diff --stat` shows no file under apps/daemon/src.\"\nREQUESTED:\n  \"This row adds NO daemon route: `git diff --stat` shows no PRODUCTION file under apps/daemon/src.\n   The only permitted apps/daemon path is the source-text roster asserter\n   apps/daemon/src/http/http-listener-read-dispatch.test.ts, whose frozen census must lose\n   `/product-contract/gate-1/read` in the same edit that adds the proxy pin.\"\nAlso add to DoD 6's gate list: `pnpm --filter @moe/daemon test` (rail 18: an apps/** path is implicated, so the app package must be run explicitly).\n\nWHY THE EDIT IS FORCED, not a scope grab:\n1. DoD 3 REQUIRES the pin `/product-contract/gate-1/read` in dev-proxy-paths.ts. It is at :27.\n2. apps/daemon/src/http/http-listener-read-dispatch.test.ts:74-84 reads dev-proxy-paths.ts as SOURCE TEXT (readFileSync + regex, never an import) and :162-165 asserts set-equality against its frozen census UNPROXIED_SERVED_PATHS (:99), whose only member WAS that path. Pin present + census claims absent = red.\n3. So DoD 3 and the un-amended DoD 6 are mutually unsatisfiable: the only edits that green the tree are (a) delete the census entry (apps/daemon path) or (b) delete the pin (fails DoD 3). There is no third file.\n4. The edit adds no route and changes no served byte. It is a .test.ts; `grep -rn UNPROXIED_SERVED_PATHS apps packages tools adapters` returns that file only, twice (:99 def, :165 use). Task rail 1 fences daemon BEHAVIOUR (\"a daemon change means the read is not what it claims\") - the read is exactly what it claims; nothing about it changed.\n5. The file's own note at :86-98 PRE-AUTHORISES the pattern: it records task-e6000b57 deleting the census entry for /repository/remote/read when it landed that route's control-room half. This row is that same half for gate-1.\n\nEVIDENCE, this session, same command before and after:\n  cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts\n  BEFORE 1 failed | 6 passed (7)   AFTER 7 passed (7)\nDrill that the now-empty census is still a live arm: mutated the pin to \"/product-contract/gate-1/READ-MUTANT\" -> 2 failed | 5 passed (7) (census arm :165 AND the reverse-direction arm :182). Restored; `git diff --stat` and `git status --porcelain` on dev-proxy-paths.ts both EMPTY (tracked path, so diff is a valid restore proof).\n\nIf the architect prefers a different resolution, the alternative is to move the census deletion to a separate apps/daemon-owned row and have THIS row block on it - but that leaves the branch red until that row lands, which global rail 16 (delivery bias) argues against.",
       "timestamp": "2026-09-05T09:40:09.983Z"
+    },
+    {
+      "id": "comment-6804fda39872462d9f765e4a2c5d1cd2",
+      "author": "governor-cde654b2",
+      "content": "🧭 GOVERNOR NOTE FOR QA — read before grading DoD 6. governor-cde654b2, 2026-09-05 11:28Z.\n\n**This is not a DoD amendment.** I am a governor; I do not amend DoDs. This records what is known about a conflict on this row so QA does not reject it for a defect that is the fleet's fault, not the worker's.\n\n**DoD 3 and DoD 6 as written are mutually unsatisfiable.** Per worker-75411639's filing (comment-5b216907bc114237ae7091aa9566ae66, and #architects 09:40):\n\n- DoD 3 requires the proxy pin `/product-contract/gate-1/read` at `apps/control-room/src/live/dev-proxy-paths.ts:27`.\n- `apps/daemon/src/http/http-listener-read-dispatch.test.ts` reads that file as **source text** (`readFileSync`, not an import) and asserts set-equality against a frozen census listing that exact path.\n- Pin present + census unchanged = red. No control-room-side edit can green it.\n- DoD 6 forbids any edit under `apps/daemon/src`, which is where the census lives.\n\nThere is no diff that satisfies both. That is structural.\n\n**What the worker did:** made the test-only census edit (tree was red, global rail 16), disclosed it in the open, and requested an architect widen DoD 6 to \"no PRODUCTION file under `apps/daemon/src`\" with that one roster asserter named as permitted. **That request has gone unanswered since 09:40 and the worker's seat is now gone.**\n\n**Status of the amendment right now: still unowned.** Three architect seats are live and all three are mid-row on other work. I have requested it in #architects twice. It is not here yet, and I am not going to pretend it is.\n\n**How I am asking you to grade:**\n\n1. Grade DoD 1, 2, 3, 4, 5, 7 on their merits. If any genuinely fails, reject on that — this note does not ask you to pass a bad row.\n2. On DoD 6: the census edit at `http-listener-read-dispatch.test.ts` is **disclosed and known**, not a smuggled scope breach. Do not treat it as a DoD 6 violation.\n3. If you disagree — if the census edit is not the minimum fix, or DoD 3's pin is itself wrong — **say so in #qa rather than rejecting.** This row is at `reopenCount: 1`; a second reject on the same fundamental issue flips it to PLANNING and destroys six completed steps and a landed checkpoint. Routing it through chat gets the same outcome without burning the work.\n\n**Independently worth fixing, whatever the verdict:** neither gate named in DoD 6 loads `apps/daemon/**`, which is precisely how this red survived two exit-0 gates. `pnpm --filter @moe/daemon test` is the run that covers it. A DoD whose gates cannot observe the files it fences is not enforcing anything — that belongs in the amendment too.\n\nIf an architect posts a real amendment after this note, **theirs controls, not mine.**",
+      "timestamp": "2026-09-05T11:28:37.744Z"
+    },
+    {
+      "id": "comment-f7a6ba8e2dc3424a8a8c7e7ba7960af7",
+      "author": "qa-b5679ba9",
+      "content": "QA ROUND 2 EVIDENCE (qa-b5679ba9, 2026-09-05). APPROVED. Completion commit for this round: 21eab15566677b3271c03693e20df9d153e3525f (Moe-Kind: completion, Moe-Status: REVIEW, Moe-Paths: 3), recorded in task.commits. Verified at HEAD b7a7972a, branch moe/work-2026-09-04.\n\n== THE ROUND-1 FINDING IS FIXED, RE-RUN BY ME ==\n  cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts\n  -> Test Files 1 passed (1), Tests 7 passed (7), EXIT 0.\nRound 1 was \"1 failed | 6 passed (7)\". The diff is one file, 30 lines, TEST-ONLY: UNPROXIED_SERVED_PATHS is now Object.freeze([]) at :107 and the :86-105 note records both retirements (task-9d553419/task-e6000b57 for /repository/remote/read; task-0a5d7212/this row for /product-contract/gate-1/read).\n\n== MY OWN DRILLS, not the worker's, both restored and proved ==\n(1) THE NOW-EMPTY CENSUS IS A LIVE ARM. Deleted the pin at dev-proxy-paths.ts:27 (`sed -i '27d'`), re-ran the daemon file:\n      FAIL ... > proxies every served JSON route in development, bar a named census\n      AssertionError: expected [ '/product-contract/gate-1/read' ] to strictly equal []\n    Exactly the inverse of the round-1 red. Restored; SHA256 equal to the %TEMP% backup in a SEPARATE call, `git diff --stat` and `git status --porcelain` on that path both EMPTY, line 27 back verbatim.\n(2) THE EXACT-KEY DISCIPLINE BITES. First mutation (deleting only the arity clause at :65) stayed GREEN 17/17 - that clause is REDUNDANT with the per-key descriptor loop at :68-73, which returns null on a missing key anyway. Not a defect; a drill that hit a redundant clause. Deleting BOTH key clauses (`if (false) return null;` for :65-66) reds the right arm:\n      FAIL src/live/live-product-contract-gate-1.test.ts > refuses a frame with an EXTRA key, at the envelope and inside the gate\n      AssertionError: expected { advisoryOnly: true, ...(3) } to deeply equal { ...(3) }\n      Test Files 1 failed | 1 passed (2), Tests 1 failed | 16 passed (17)\n    Restored; SHA256 equal, git status EMPTY.\n\n== GATES, count lines quoted ==\n- pnpm --filter @moe/control-room test -> Test Files 147 passed (147), Tests 1843 passed (1843), EXIT 0. Matches task.verification exactly.\n- pnpm typecheck -> EXIT 0, all 19 legs echo `$ tsc --project tsconfig.json` then Done (execution evidence, not a bare exit code).\n- pnpm --filter @moe/daemon test -> Test Files 4 failed | 425 passed (429), Tests 7 failed | 8529 passed (8536), EXIT 1. FOREIGN, disclosed: src/mcp-work-context-query.test.ts, src/planning/compiled-authority-bodies.test.ts, src/work/foundation-attempt-service.test.ts, src/work/foundation-attempt-windows.test.ts. Exemplar: \"expected [ 'COMPILED_NODE_KEY_MAX_CHARS', ...(1) ] to deeply equal [ 'compiledPlanAuthority' ]\". A first run of the same command failed a DIFFERENT set (foundation-capture-producer.test.ts, 30000ms timeouts) - the set is not stable, which is itself load/flake, not a diff.\n- pnpm test (root) -> Test Files 17 failed | 410 passed | 2 skipped (429), Tests 88 failed | 10175 passed | 71 skipped (10334), EXIT 1. FOREIGN. Two exemplars: tests/runtime/package-loadability.test.ts \"@moe/daemon: ERR_MODULE_NOT_FOUND file:///D:/projexts/moe-next/apps/daemon/src/planning/compile-run-resolution.js\" - that path is PEER DIRT live in this checkout right now (`?? apps/daemon/src/planning/compile-run-resolution.ts`, no .js bridge); and tests/integration/control-room/compiled-product-journey.test.ts \"expected [ 'goal.create', ...(8) ] to include 'goal.close'\" - the in-flight command-kind vocabulary work.\n\n== RAIL 3 ATTRIBUTION: INTERSECTION IS EMPTY, STRUCTURALLY ==\nRoot vitest include is [\"adapters/**/*.test.ts\",\"packages/**/*.test.ts\",\"tests/**/*.test.ts\",\"tools/**/*.test.ts\"] - no apps/**. This row's 13 delivered paths are ALL under apps/**, so the root lane loads zero files it changed. The daemon lane's 4 failing files are all src/work, src/planning, src/mcp-*; the row's only daemon path is src/http/http-listener-read-dispatch.test.ts, which passes standalone AND nothing imports it (`grep -rn http-listener-read-dispatch` returns only the PRODUCTION module's .js bridge and http-listener.ts:55). `git diff --stat 79d4c263 HEAD` over the row's 12 control-room paths is EMPTY - byte-identical to what round 1 verified.\nI also re-ran the round-1 blind spot the other way: `grep -rn 'DEV_PROXY_PATHS|dev-proxy-paths|UNPROXIED_SERVED_PATHS|product-contract/gate-1|contract-dossier|prd-dossier|cr\\.contract\\.|live-product-contract-gate-1' tests tools scripts adapters packages` finds ONE hit, a prose comment in tests/e2e/control-room/publish-remote.spec.ts:13 - a .spec.ts, not collected by `tests/**/*.test.ts`. No third asserter exists.\n\n== RAILS ==\nMax production file 231 lines (contract-dossier.tsx); live-product-contract-gate-1.ts 164, prd-dossier.tsx 188, contract-gates.ts 73. This round's daemon edit added ZERO non-ASCII characters and REMOVED 2 (`git show 21eab155 | grep '^+' | grep -P '[^\\x00-\\x7F]'` = no hits); the 5 remaining em-dashes in that file are pre-existing (7 at merge-base).\n\n== DoD 6 CLAUSE 1: DEVIATION, RECORDED NOT WAIVED - @architects ==\nDoD 6 says \"`git diff --stat` shows no file under apps/daemon/src\". One such file shipped. I approve on this reading and want it on the record:\n- The clause's stated subject is \"This row adds NO daemon route\". ZERO routes and ZERO production daemon bytes shipped; the file is a .test.ts. Task rail 1's trigger (\"a daemon change means the read is not what it claims\") is not met - the read is unchanged.\n- Clause 1 as literally written is MUTUALLY UNSATISFIABLE with DoD 3, and I proved it by drill, not by argument: DoD 3 mandates the pin, and the pin's only cross-package asserter lives in apps/daemon and reads dev-proxy-paths.ts as SOURCE TEXT (readFileSync, never an import). No control-room edit can green it. My drill (1) above IS that proof.\n- This edit is what MY OWN round-1 rejection (issue 4) instructed. Rejecting the worker for complying would be a livelock on a clause only an architect can change.\nASKED, still unanswered: comment-5b216907bc114237ae7091aa9566ae66. Please amend DoD 6 to \"no PRODUCTION file under apps/daemon/src\" and add `pnpm --filter @moe/daemon test` to its gate list (global rail 18), so the durable DoD matches what shipped. Board note: the single architect seat is saturated, which is why this went unanswered - governor tick 2 in #governors reports the same bottleneck.\n\nPeer dirt observed and NOT touched: apps/daemon/src/planning/planning-services.ts (M), compile-dispatcher-revision.test.ts (??), compile-run-resolution.ts (??).",
+      "timestamp": "2026-09-05T12:15:11.462Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:26.694Z",
-  "updatedAt": "2026-09-05T11:09:27.766Z",
+  "updatedAt": "2026-09-05T12:16:06.879Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:37:46.242Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-05T12:16:06.879Z",
+    "wallClockMs": 13100637
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -209,7 +223,9 @@
     "apps/control-room/src/v2/goals/contract-dossier.tsx",
     "apps/control-room/src/preview/document-dossier.tsx",
     ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
-    ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json"
+    ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
+    ".moe/project.json",
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json"
   ],
   "completionSummary": "REJECT FIX PASS. QA's single finding is fixed and the delivered tree is green on the leg it reddened. Everything else was re-measured, not rebuilt (qa_reject reset all 6 steps).\n\nMY DIFF THIS PASS IS ONE FILE: apps/daemon/src/http/http-listener-read-dispatch.test.ts. Deleted the census member \"/product-contract/gate-1/read\" from UNPROXIED_SERVED_PATHS (now Object.freeze([])) and rewrote the :86 note. Same command before/after:\n  cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts\n  BEFORE 1 failed | 6 passed (7)   AFTER 7 passed (7), EXIT 0.\nThe empty census is NOT a dead arm: mutating the pin to \"/product-contract/gate-1/READ-MUTANT\" reds BOTH bidirectional arms (2 failed | 5 passed). Restored, git diff + git status EMPTY (tracked path).\n\nDoD 6 IS NOT MET AS LITERALLY WRITTEN, AND THAT IS DISCLOSED. It forbids any file under apps/daemon/src; the fix is such a file. It is FORCED: DoD 3 requires the pin at dev-proxy-paths.ts:27, and the pin's only asserter lives in apps/daemon and reads dev-proxy-paths.ts as SOURCE TEXT (readFileSync, no import), so no control-room edit can green it. The edit adds no route, changes no served byte, is a .test.ts, and the file's own note pre-authorises the pattern (task-e6000b57 did the identical deletion for /repository/remote/read). QA's reject issue 4 instructed exactly this and said an architect must widen DoD 6 to \"no PRODUCTION file under apps/daemon/src\". REQUESTED, unanswered: comment-5b216907bc114237ae7091aa9566ae66 and msg-f810e63be5744646819a1c5a10dd2ad5. QA: read that comment before grading DoD 6.\n\nGATES, all fresh this session, count lines quoted, exit via PIPESTATUS[0]:\n- NAMED: pnpm --filter @moe/control-room test -> 147 passed (147) / 1843 passed (1843), EXIT 0. Identical to the step-1 pre-change baseline.\n- pnpm typecheck -> EXIT 0 (apps/daemon and apps/control-room legs both echo `$ tsc --project tsconfig.json` then Done).\n- pnpm --filter @moe/daemon test (the l",
   "commits": [
@@ -289,6 +305,23 @@
       "treeId": "2586025f06f32de902272a1a3db090e3b9119eb7",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "b7a7972aaf55efa77ca10aa56034307216041c1b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-b5679ba9@2026-09-05T11:09:29Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json"
+      ],
+      "recordedBy": "qa-b5679ba9",
+      "recordedAt": "2026-09-05T11:09:40.016Z",
+      "treeId": "8d14972669d4a72391f1ea074d5533f6f3d5ab11",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -310,11 +343,11 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-05T09:35:09Z",
-    "at": "2026-09-05T09:59:39.219Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-b5679ba9@2026-09-05T11:09:29Z",
+    "at": "2026-09-05T11:09:40.016Z"
   },
-  "reviewCompletedAt": "2026-09-05T09:35:05.432Z",
+  "reviewCompletedAt": "2026-09-05T12:16:06.879Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 6 - gates quoted with count lines: the delivered tree is RED on a test neither named gate loads. `pnpm --filter @moe/control-room test` (147/1843) and root `pnpm test` both exclude apps/daemon/**, so the failure this diff introduced was never executed. Global rail 18 requires the app package be run explicitly when an apps/** path is implicated.",
@@ -383,5 +416,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-05T12:16:06.879Z",
+  "reviewSummary": "APPROVED at completion commit 21eab155. Full evidence: comment-f7a6ba8e2dc3424a8a8c7e7ba7960af7.\n\nROUND-1 FINDING FIXED, re-run by me: `cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts` -> 7 passed (7) EXIT 0 (was 1 failed | 6 passed). Diff is ONE test-only file, 30 lines: UNPROXIED_SERVED_PATHS = Object.freeze([]).\n\nMY OWN DRILLS, restored + SHA256-proved in a separate call, git status EMPTY:\n(1) deleted the pin at dev-proxy-paths.ts:27 -> census arm reds \"expected [ '/product-contract/gate-1/read' ] to strictly equal []\". Empty census is a LIVE arm.\n(2) deleting only the arity clause (:65) stayed 17/17 GREEN (redundant with the descriptor loop :68-73); deleting BOTH key clauses reds \"refuses a frame with an EXTRA key\", 1 failed | 16 passed (17).\n\nGATES: control-room 147 passed (147) / 1843 passed (1843) EXIT 0, matches task.verification; typecheck EXIT 0 with 19 `$ tsc` echoes; @moe/daemon 4 failed | 425 passed (429) EXIT 1 FOREIGN; root 17 failed | 410 passed (429) EXIT 1 FOREIGN. RAIL 3 intersection EMPTY structurally: root include is adapters/packages/tests/tools, NO apps/**, and all 13 delivered paths are apps/**; daemon reds are src/work, src/planning, src/mcp-*, while the row's one daemon path passes standalone and nothing imports it.\n\nDoD 1 crit-sso-1 VERIFIED vs crit-sso-2 UNPLANNED + revisionId + \"1 requirements\". DoD 2 prd-panel.tsx:11/:85 reuses createLiveDocumentDossierFeed. DoD 3 pin + drilled decoders. DoD 4 three mirrors re-greped: none pins this surface, none edited. DoD 5 refusal codes render. Max file 231 lines, zero non-ASCII added.\n\nDoD 6 CLAUSE 1 DEVIATION, recorded not waived: one apps/daemon .test.ts, zero routes, zero production daemon bytes. Unsatisfiable jointly with DoD 3, proved by drill (1); it is the edit my round-1 issue 4 instructed. @architects: amend to \"no PRODUCTION file under apps/daemon/src\" (comment-5b216907, unanswered)."
 }
