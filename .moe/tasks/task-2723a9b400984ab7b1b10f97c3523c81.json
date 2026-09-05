@@ -84,7 +84,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:44:09.114Z",
-  "updatedAt": "2026-09-05T03:41:17.270Z",
+  "updatedAt": "2026-09-05T03:43:33.878Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:43:42.120Z",
     "plannedStepCount": 3,
@@ -132,6 +132,32 @@
     "outputTail": "Test Files  416 passed (416)\n     Tests  8315 passed (8315)\n  Duration  325.21s (transform 26.17s, setup 0ms, import 258.09s, tests 958.26s, environment 25ms)",
     "reportedAt": "2026-09-05T03:41:17.270Z"
   },
-  "filesModified": [],
-  "completionSummary": "SPIDR PARENT, verification + live evidence only. ZERO owned files, zero edits; five probe files created and deleted, `git status --porcelain` empty on each.\n\nCHILDREN, all DONE and landed on moe/work-2026-09-04 (`main` is BEHIND the fleet branch and returns zero - measure on the branch): 1 task-756d81f117fb4ef6aeca2c676f433c91 (classifier/tail/pause ledger) feat df5bbfd5; 2 task-4109c1a0e1154ca89576183dae7a5336 (tee/classify/refund/pause gate) feat 2b03e5a5; 3 task-ac71a55ead3d468eab7329131f04ab7e (health read + Seats/shell/board + e2e + runbook) feat 019f5d98.\n\nLIVE EVIDENCE (comment-e428c844) - THE LIMIT WAS REAL, NOT SCRIPTED. This host's codex account is genuinely exhausted, so a REAL codex-cli 0.152.0 seat spawned by the SHIPPED spawner emitted the roster line itself: `ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 8th, 2026 10:46 AM.` (exit 1, stderr). Observed in order: SPAWNED, the provider's own bytes teed through byte-for-byte, `agent exited 1`, `[wrapper] provider limit: codex paused until 2026-09-08T10:46:00.000Z (...)`, then `provider paused ... (active 0)` on every later pass with exactly ONE SPAWNED. `/health/read` 200 with the exact 5-key roster. Real browser pairing completed; shell strip and Seats both read \"Agents paused: codex limit, resumes 9/8/2026, 1:46:00 PM\" with the seat's verbatim last line in the title attribute. Screenshots + logs at D:\\projexts\\UnAI\\.moe-next\\provider-limit-evidence-w12c76c19\\. NEGATIVE CONTROL from the other real provider: an invalid CLAUDE_CODE_OAUTH_TOKEN answers `Failed to authenticate. API Error: 401 OAuth access token is invalid.` and classifies FAILED, matched:null - recorded as designed, never forced into a limit. THE REFUND, discriminated not asserted: `clearProviderPause` restaffed the same item FOUR times against maxItemAttempts=3 with ZERO STAFFING_ATTEMPTS_EXHAUSTED; the FAILED control (ordinary TypeError, exit 1) produced no l"
+  "filesModified": [
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+  ],
+  "completionSummary": "SPIDR PARENT, verification + live evidence only. ZERO owned files, zero edits; five probe files created and deleted, `git status --porcelain` empty on each.\n\nCHILDREN, all DONE and landed on moe/work-2026-09-04 (`main` is BEHIND the fleet branch and returns zero - measure on the branch): 1 task-756d81f117fb4ef6aeca2c676f433c91 (classifier/tail/pause ledger) feat df5bbfd5; 2 task-4109c1a0e1154ca89576183dae7a5336 (tee/classify/refund/pause gate) feat 2b03e5a5; 3 task-ac71a55ead3d468eab7329131f04ab7e (health read + Seats/shell/board + e2e + runbook) feat 019f5d98.\n\nLIVE EVIDENCE (comment-e428c844) - THE LIMIT WAS REAL, NOT SCRIPTED. This host's codex account is genuinely exhausted, so a REAL codex-cli 0.152.0 seat spawned by the SHIPPED spawner emitted the roster line itself: `ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 8th, 2026 10:46 AM.` (exit 1, stderr). Observed in order: SPAWNED, the provider's own bytes teed through byte-for-byte, `agent exited 1`, `[wrapper] provider limit: codex paused until 2026-09-08T10:46:00.000Z (...)`, then `provider paused ... (active 0)` on every later pass with exactly ONE SPAWNED. `/health/read` 200 with the exact 5-key roster. Real browser pairing completed; shell strip and Seats both read \"Agents paused: codex limit, resumes 9/8/2026, 1:46:00 PM\" with the seat's verbatim last line in the title attribute. Screenshots + logs at D:\\projexts\\UnAI\\.moe-next\\provider-limit-evidence-w12c76c19\\. NEGATIVE CONTROL from the other real provider: an invalid CLAUDE_CODE_OAUTH_TOKEN answers `Failed to authenticate. API Error: 401 OAuth access token is invalid.` and classifies FAILED, matched:null - recorded as designed, never forced into a limit. THE REFUND, discriminated not asserted: `clearProviderPause` restaffed the same item FOUR times against maxItemAttempts=3 with ZERO STAFFING_ATTEMPTS_EXHAUSTED; the FAILED control (ordinary TypeError, exit 1) produced no l",
+  "commits": [
+    {
+      "sha": "50da1426ead9fc720b1079c34a476a620acb536f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-12c76c19@2026-09-05T02:43:48Z",
+      "paths": [
+        ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+      ],
+      "recordedBy": "worker-12c76c19",
+      "recordedAt": "2026-09-05T03:43:33.877Z",
+      "treeId": "2e01f06605ff3afb260d7feaa5377c5abc44a595",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-12c76c19@2026-09-05T02:43:48Z",
+    "at": "2026-09-05T03:43:33.877Z"
+  }
 }
