@@ -1,6 +1,6 @@
 {
   "id": "task-7ca9dca37fb44b40ac35abfc3c36cb9a",
-  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
   "title": "HTTP /design/read serves the versioned aggregate to the operator",
   "description": "SPIDR child of task-8a6d6660c31c4e119f962d13e6f1505d, spun from task-f3409f9a1f3a4925a73974ea371098e5 (architect-2e480458, 2026-09-05) because child 3's DoD requires POST `/design/read` and that route does not exist.\n\nOBJECTIVE: the operator (and the later Design tab) can POST `/design/read` against a real daemon and get the versioned design aggregate child 1 already stores.\n\nDELIVERABLE: handleDesignReadRequest at `/design/read`, composed as an optional listener port the same way document-dossier-read is, calling readDesignRevision. JSON_ROUTES + POST guard + dispatch. Exact-key body `{goalRef}` or `{goalRef, version}`; projectId from the principal.\n\nNOT IN SCOPE: MCP (task-7f9f20c7), design.submit roster (task-06ac0da1), Design tab / live decoder / proxy pin (sibling UI row), approval card, e2e.\n\nMEASURED: grep handleDesign|/design/read in apps/daemon/src = 0. Child 1 landed readDesignRevision (design-store.ts:189). 06ac0da1 publishes MCP command/query, not HTTP. document-dossier-read.ts is the copy shape.\n\nVERIFICATION: `pnpm --filter @moe/daemon test` plus `pnpm typecheck`.",
   "definitionOfDone": [
@@ -20,57 +20,94 @@
     {
       "stepId": "step-1",
       "description": "ORIENT, no production edits. (a) Confirm child 1 landed: readDesignRevision and DesignReadInput in apps/daemon/src/design/design-store.ts. (b) Confirm the gap: grep DESIGN_READ_PATH|/design/read in apps/daemon/src/http is empty. (c) Read goal-source-read.ts and goal-source-read.test.ts end to end — that is the copy shape (auth, GOAL capability, optional port, exact-key body, listener vs port refusal split). (d) Read JSON_ROUTES, the POST-guard block, the else-if chain ending in unconditional serveDocumentDossier, UNCONSUMED_SERVED_ROUTES, UNPROXIED_SERVED_PATHS, LISTENER_REFUSAL_CODES, statusFor's GOAL_SOURCE pair, StartListenerOptions. (e) `git status --porcelain -- apps/daemon/src/http/` — peer dirt is context, never a stop. Put measured line counts (dispatch, guards) in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/goal-source-read.ts",
         "apps/daemon/src/http/http-listener-read-dispatch.ts",
         "apps/daemon/src/http/http-listener-guards.ts"
-      ]
+      ],
+      "note": "ORIENT measured, no production edits.\n\n(a) Child 1 landed: readDesignRevision at design-store.ts:189, DesignReadInput {goalRef, projectId, version?} at :58-63, DesignReadResult ok+record+versions | DesignRefusal. DESIGN_REVISION_ABSENT is LEDGER via DESIGN_CODE_LAYERS. submitDesignRevision at :130. File-backed journey in design-store.test.ts uses boundWorld/committedRevision/approveGate1.\n\n(b) Gap confirmed: grep DESIGN_READ_PATH|/design/read in apps/daemon/src/http = 0 hits. handleDesign = 0.\n\n(c) Copy shape is goal-source-read.ts (80 lines): authenticateHttpRequest from http-command-ingress.js first; CAPABILITIES.GOAL; missing port -> LISTENER_GOAL_SOURCE_UNAVAILABLE (LISTENER_REFUSAL); exact-key {goalRef} via goalRefOf; port answers forwarded 200 with code+layer (not refuseRequest). Bridge goal-source-read.js is `export * from \"./goal-source-read.ts\"`.\n\n(d) JSON_ROUTES :65-92, 26 members, roster.size hardcoded 26 in dispatch.test.ts:241 (will need 27). POST guards :412-491. Dispatch else-if ends :538 `else serveDocumentDossier` (unconditional; UNCONDITIONAL_ELSE_MEMBER = DOCUMENT_DOSSIER_PATH). UNCONSUMED_SERVED_ROUTES :128 = /events/resume, /session/challenge-operands/read, /v2/product-contract/current. UNPROXIED_SERVED_PATHS :109 empty. LISTENER_REFUSAL_CODES :22; GOAL_SOURCE pair :89-90; statusFor GOAL_SOURCE 400/503 at :218-219. StartListenerOptions.goalSource :154-155 (absent = UNAVAILABLE). planningRuns sits after pairing fields :188, not next to goalSource.\n\nLine counts (physical): http-listener-read-dispatch.ts = 539; http-listener-guards.ts = 404 (Measure-Object non-blank 515 / 380).\n\nPeer dirt (not ours, not a stop): M apps/daemon/src/http/affordance-read-planning.test.ts.\n\nFixture mismatch to remember: http-test-fixtures principal.projectId is proj-0001; bootstrap PROJECT_ID is project-1. Injected real-store port must close over store PROJECT_ID, not the HTTP fixture principal.",
+      "startedAt": "2026-09-05T14:34:08.889Z",
+      "completedAt": "2026-09-05T14:36:32.324Z"
     },
     {
       "stepId": "step-2",
       "description": "TESTS FIRST (skill test-driven-development). New apps/daemon/src/http/design-read.test.ts modelled on goal-source-read.test.ts.\n\nArms, each asserting code AND layer (CONTROL_ROOM_LISTENER for listener refusals; DesignRefusal.layer for store answers):\n(1) no port -> LISTENER_DESIGN_UNAVAILABLE;\n(2) non-GOAL principal -> capability denied (copy GOAL_SOURCE_READ_CAPABILITY_DENIED pattern or DESIGN_READ_CAPABILITY_DENIED if you add one — pick one and use it in production too);\n(3) extra key / missing goalRef / non-string goalRef / payload projectId -> LISTENER_DESIGN_REQUEST_INVALID;\n(4) `{goalRef}` with an injected port that returns DESIGN_REVISION_ABSENT -> that code AND LEDGER, httpStatus 200, no durable write;\n(5) `{goalRef, version}` well-formed with an injected port backed by a REAL file-backed store (submit via submitDesignRevision then read) -> ok record plus versions list; a second submit yields version 2 and version 1 still readable;\n(6) `{goalRef, version: 1}` after two submits returns version 1.\n\nAlso extend http-listener-read-dispatch.test.ts: JSON_ROUTES contains `/design/read`; UNCONSUMED_SERVED_ROUTES includes `/design/read` with a comment that the browser consumer is task-e9cb2442; do NOT add a proxy pin (UNPROXIED_SERVED_PATHS gets `/design/read` if the dispatch-vs-proxy arm would otherwise red).\n\nRun `pnpm --filter @moe/daemon test` and quote the reds.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/http/design-read.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/design-read.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "TESTS FIRST, red as required. Command: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/design-read.test.ts src/http/http-listener-read-dispatch.test.ts` → exit 1. Test Files 2 failed (2). Tests 4 failed | 9 passed (13).\n\nReds:\n1. design-read.test.ts: Cannot find module './design-read.js' (suite load).\n2. roster.size expected 27, received 26.\n3. registers the design read: DESIGN_READ_PATH not in rosterIdentifiers.\n4. UNPROXIED_SERVED_PATHS expected ['/design/read'], received [].\n5. UNCONSUMED_SERVED_ROUTES expected to include /design/read, received the prior three.\n\nCapability code chosen: DESIGN_READ_CAPABILITY_DENIED at layer DESIGN_READ (not GOAL_SOURCE_READ_CAPABILITY_DENIED). Listener refusals pin LISTENER_REFUSAL_CODES + refuse().layer === CONTROL_ROOM_LISTENER + statusFor 400/503. Store answers pin DESIGN_REVISION_ABSENT@LEDGER and version-1-survives-version-2 over a real file-backed store (boundWorld/submitDesignRevision). Injected port closes over the store; handler will pass principal.projectId (auth fixture uses bootstrap PROJECT_ID, not http-test-fixtures proj-0001).",
+      "startedAt": "2026-09-05T14:37:03.872Z",
+      "completedAt": "2026-09-05T14:40:13.632Z"
     },
     {
       "stepId": "step-3",
       "description": "HANDLER MODULE. New apps/daemon/src/http/design-read.ts plus `export * from \"./design-read.ts\";` bridge design-read.js (a missing bridge is ERR_MODULE_NOT_FOUND at boot).\n\nCopy goal-source-read.ts:\n- DESIGN_READ_PATH = `/design/read`\n- DesignReadPort `{ read(input: { goalRef: string; version?: number }): DesignReadResult }` — the handler supplies principal.projectId when calling readDesignRevision; the port closes over store+projectId in the composition sibling. For THIS row's tests, the injected port may close over a store itself.\n- authenticateHttpRequest from http-command-ingress.js first.\n- GOAL capability check.\n- Missing port -> LISTENER_DESIGN_UNAVAILABLE.\n- Exact-key body: own enumerable keys are exactly `[\"goalRef\"]` or `[\"goalRef\",\"version\"]`. goalRef non-empty string. version, if present, a finite number. Any other key including projectId -> LISTENER_DESIGN_REQUEST_INVALID.\n- On success reply 200 with the DesignReadResult (ok record+versions, or DesignRefusal forwarded verbatim with its code AND layer). Do not wrap store refusals as listener codes.\n- Stay under 250 lines.\n\nhttp-listener-guards.ts (already 404 lines): add LISTENER_DESIGN_REQUEST_INVALID and LISTENER_DESIGN_UNAVAILABLE next to the GOAL_SOURCE pair; statusFor 400 and 503 next to the GOAL_SOURCE mappings. Do not reformat the rest of the file.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/http-listener-guards.ts"
       ],
       "newFiles": [
         "apps/daemon/src/http/design-read.ts",
         "apps/daemon/src/http/design-read.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/design-read.ts",
+        "apps/daemon/src/http/design-read.js",
+        "apps/daemon/src/http/http-listener-guards.ts"
+      ],
+      "note": "HANDLER landed. DESIGN_READ_PATH=/design/read; DesignReadPort.read(DesignReadInput) so the handler can pass principal.projectId (plan's abbreviated {goalRef,version?} cannot carry the DoD projectId-from-principal rule; MCP's existing DesignReadPort uses the same DesignReadInput). Auth first, GOAL cap → DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200, missing port → LISTENER_DESIGN_UNAVAILABLE, exact-key body → LISTENER_DESIGN_REQUEST_INVALID, else 200 with DesignReadResult verbatim. Bridge design-read.js present. Guards: LISTENER_DESIGN_REQUEST_INVALID/UNAVAILABLE next to GOAL_SOURCE pair; statusFor 400/503. design-read.ts 103 lines. `pnpm --filter @moe/daemon exec vitest run ... src/http/design-read.test.ts` → Test Files 1 passed (1), Tests 6 passed (6). Dispatch-roster reds remain for step-4 wiring.",
+      "startedAt": "2026-09-05T14:40:36.968Z",
+      "completedAt": "2026-09-05T14:41:35.002Z"
     },
     {
       "stepId": "step-4",
       "description": "WIRE THE ROUTE, do not compose the production factory (task-eb2bb09d).\n\nhttp-listener.ts: add optional `designReads?: DesignReadPort` on StartListenerOptions, same JSDoc as goalSource (absent => UNAVAILABLE).\n\nhttp-listener-read-dispatch.ts (539 lines; add only):\n- import DESIGN_READ_PATH and handleDesignReadRequest;\n- JSON_ROUTES member `/design/read` (near the other /goals and /documents paths);\n- POST guard: non-POST -> LISTENER_DESIGN_REQUEST_INVALID;\n- serveDesign helper copying serveGoalSource;\n- else-if branch immediately ABOVE the unconditional `else serveDocumentDossier`. Do not turn that else into a conditional.\n\nDo not edit daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, daemon-entry.ts, or daemon-entry-port-resolution.ts.\n\nRe-run `pnpm --filter @moe/daemon test`. Step-2 reds go green. Quote Test Files N passed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/http-listener.ts",
         "apps/daemon/src/http/http-listener-read-dispatch.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts"
+      ],
+      "note": "WIRED, no composition. StartListenerOptions.designReads?: DesignReadPort (absent = UNAVAILABLE). JSON_ROUTES member DESIGN_READ_PATH; POST guard LISTENER_DESIGN_REQUEST_INVALID; serveDesign copies serveGoalSource; else-if immediately above unconditional else serveDocumentDossier. Composition files untouched.\n\nStep-2 reds green: `pnpm --filter @moe/daemon exec vitest run ... src/http/design-read.test.ts src/http/http-listener-read-dispatch.test.ts` → Test Files 2 passed (2), Tests 19 passed (19).\n\nFull `pnpm --filter @moe/daemon test` → Test Files 13 failed | 420 passed (433), Tests 39 failed | 8557 passed (8596), 1202s. Foreign reds (none on owned paths): compile-dispatcher-revision.test.ts ILLEGAL_TRANSITION@DAEMON_PLANNING (9); affordance-read-planning.test.ts 1 (peer-dirty at session start); foundation-capture-lifecycle/windows/producer timeout-only; work-claim-services DURABLE_ID_CONFLICT. Path-attributed intersection with this row is empty.",
+      "startedAt": "2026-09-05T14:41:43.073Z",
+      "completedAt": "2026-09-05T15:03:45.595Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review).\n\nBefore mutating: `git status --porcelain` on the exact paths. Tracked files restore with empty git diff; new files restore by SHA256 vs %TEMP% backup (rail 13), hash in a call SEPARATE from the restore.\n\n(a) Remove `/design/read` from JSON_ROUTES only -> dispatch-seam set-equality reds.\n(b) Remove LISTENER_DESIGN_UNAVAILABLE from LISTENER_REFUSAL_CODES only -> typecheck or the unconfigured arm reds.\n(c) Delete the extra-key refusal in the handler only -> extra-key arm goes green (that is the red you want). Restore each.\n\nGATES standalone foreground: `pnpm --filter @moe/daemon test` (this IS complete_task verification), `pnpm typecheck`. Quote Test Files N passed. Path-attributed baseline for foreign red.\n\nAdversarial: payload projectId cannot cross projects; version 1 remains after version 2; unconfigured port writes nothing; else-chain still ends at dossier; composition files untouched. Report every path in complete_step.modifiedFiles including the .js bridge.\n\nNamed verification command: `pnpm --filter @moe/daemon test`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/design-read.ts",
         "apps/daemon/src/http/http-listener-read-dispatch.ts",
         "apps/daemon/src/http/http-listener-guards.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/design-read.ts",
+        "apps/daemon/src/http/design-read.js",
+        "apps/daemon/src/http/design-read.test.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "MUTATION DRILLS + GATES + ADVERSARIAL. Full hashes/reds in comment-29f11b61.\n\n(a) JSON_ROUTES drop → dispatch set-equality red (DESIGN_READ_PATH still served). (b) LISTENER_DESIGN_UNAVAILABLE unrostered → toContain red. (c) extra-key check deleted → extra-key arm RED (payload reached store as DESIGN_REVISION_ABSENT@LEDGER). Restored; SHA256 equal=True vs %TEMP% backup in a separate call.\n\nOwned after restore: Test Files 2 passed (2), Tests 19 passed (19).\nNamed `pnpm --filter @moe/daemon test`: Test Files 13 failed | 420 passed (433) — foreign (compile-dispatcher, foundation timeouts, peer-dirty affordance-read-planning, work-claim). Intersection with owned paths empty.\n`pnpm --filter @moe/daemon typecheck`: document-coverage-read.ts:232 and scheduler budget-reservation.ts:132 — not owned.\n\nAdversarial: payload projectId is extra key (drill c); version 1 survives v2 (arm); unconfigured writes nothing (arm); else-chain still unconditional dossier; composition files git-diff empty. Port includes projectId so handler supplies principal.projectId. Production boot still UNAVAILABLE until task-eb2bb09d. dispatch 557 / guards 409 — add-only, plan forbade split. Negative version would decode then ABSENT (theoretical).",
+      "startedAt": "2026-09-05T15:04:09.534Z",
+      "completedAt": "2026-09-05T15:07:36.865Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -83,19 +120,33 @@
   ],
   "priority": "HIGH",
   "order": 62.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-29f11b6179944af1999ba729ca933f6c",
+      "author": "worker-b33940f5",
+      "content": "Drill + gate record for QA.\n\nPorcelain BEFORE drills (owned paths only):\n M http-listener-guards.ts, http-listener-read-dispatch.test.ts, http-listener-read-dispatch.ts, http-listener.ts\n ?? design-read.js, design-read.test.ts, design-read.ts\nPeer dirt unchanged: M affordance-read-planning.test.ts\n\nBackup SHA256 (%TEMP%\\moe-worker-b33940f5-design-read), hashed in a call separate from restore:\ndesign-read.ts 7D77CEEA95647AF7390FFCF1B5EB573E3A02851722D890078B60F4355FFAD94D\ndesign-read.js 82228A56F7702B0F4A64EB6D7F4E2FDE26ABB585742D5097DD04F7E0060BBF56\ndesign-read.test.ts E7DE180C4EDA14719BAB9F4D0BC64128CED5F6214E62B6D5F535B90D847B4F09\nguards.ts 363C97723F4007CE683850FEE95F6F897BB8BA9DD9899A16923E85AA9C08091C\ndispatch.ts F9EABB6748E59945FDE7513E6C18B400D92111166D6B809914A032765E197AC8\ndispatch.test.ts 28F4AF812DF16DB0CB8C5C07B449214C7FDCDB0D0C386107312CB8464EFAF7B4\nlistener.ts E2A33CC6CF525634AC761E5A1F523BF4AD7006CA62997A0CC540A8B306F34DD7\nPost-restore: every file equal=True against that backup.\n\n(a) Drop DESIGN_READ_PATH from JSON_ROUTES only → dispatch-seam set-equality red (served still has DESIGN_READ_PATH, roster does not); also roster-size/register/unproxied/unconsumed reds. Restored.\n(b) Drop LISTENER_DESIGN_UNAVAILABLE from LISTENER_REFUSAL_CODES only → unconfigured arm reds at LISTENER_REFUSAL_CODES.toContain. Restored.\n(c) Delete extra-key exact-arity in designReadBodyOf only → extra-key arm REDS (plan said 'goes green'; the rail-1 outcome is red). {goalRef, extra:1} reached the store as DESIGN_REVISION_ABSENT@LEDGER instead of LISTENER_DESIGN_REQUEST_INVALID. Restored.\n\nOwned tests after restore: Test Files 2 passed (2), Tests 19 passed (19).\nNamed full `pnpm --filter @moe/daemon test` (step 4, 1202s): Test Files 13 failed | 420 passed (433), Tests 39 failed | 8557 passed (8596). Foreign: compile-dispatcher-revision ILLEGAL_TRANSITION@DAEMON_PLANNING (9); affordance-read-planning 1 (peer-dirty); foundation-* timeout-only; work-claim-services DURABLE_ID_CONFLICT. Intersection with owned paths: empty.\n`pnpm typecheck` / `pnpm --filter @moe/daemon typecheck`: TS18046 packages/scheduler/src/budget/budget-reservation.ts:132; TS2741 apps/daemon/src/http/document-coverage-read.ts:232 UNPLANNED. Neither is an owned path.\n\nComposition files git-diff empty. else-chain still `} else serveDocumentDossier(...)`. design-read.ts 103 lines; dispatch 557 (add-only, plan forbade split); guards 409 (add-only).",
+      "timestamp": "2026-09-05T15:07:26.472Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:26:42.930Z",
-  "updatedAt": "2026-09-05T14:30:57.199Z",
+  "updatedAt": "2026-09-05T15:08:09.361Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:45.951Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:30:55.032Z",
   "planningNotes": {
@@ -111,5 +162,27 @@
       "apps/daemon/src/http/http-listener.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:30:57.199Z"
+  "planApprovedAt": "2026-09-05T14:30:57.199Z",
+  "contextFetchedBy": [
+    "worker-b33940f5"
+  ],
+  "workStartedAt": "2026-09-05T14:34:08.889Z",
+  "reviewStartedAt": "2026-09-05T15:08:09.361Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/design-read.test.ts src/http/http-listener-read-dispatch.test.ts",
+    "exitCode": 0,
+    "outputTail": "✓ src/http/design-read.test.ts (6 tests) 133ms\n ✓ src/http/http-listener-read-dispatch.test.ts (13 tests) 89ms\n\n Test Files  2 passed (2)\n      Tests  19 passed (19)\n   Start at  18:07:53\n   Duration  4.40s (transform 6.38s, setup 0ms, import 8.08s, tests 222ms, environment 0ms)",
+    "reportedAt": "2026-09-05T15:08:09.361Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/goal-source-read.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/http/design-read.test.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/design-read.ts",
+    "apps/daemon/src/http/design-read.js",
+    "apps/daemon/src/http/http-listener.ts"
+  ],
+  "completionSummary": "POST /design/read: handleDesignReadRequest, JSON_ROUTES, POST-only guard, serveDesign else-if above unconditional dossier. Auth first; GOAL cap → DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200; no port → LISTENER_DESIGN_UNAVAILABLE@CONTROL_ROOM_LISTENER/503; extra/missing/non-string/payload-projectId → LISTENER_DESIGN_REQUEST_INVALID@CONTROL_ROOM_LISTENER/400; store answers 200 with DesignReadResult (DESIGN_REVISION_ABSENT@LEDGER). projectId from principal. UNCONSUMED+UNPROXIED record /design/read (UI/proxy = task-e9cb2442). No factory (task-eb2bb09d).\nOwned: Test Files 2 passed (2), Tests 19 passed (19). Named full daemon suite Test Files 13 failed | 420 passed (433) — foreign (foundation timeouts, compile-dispatcher, peer-dirty affordance-read-planning); owned-path intersection empty. Typecheck reds in document-coverage-read.ts:232 and scheduler budget-reservation.ts:132 — not owned. Drills in comment-29f11b61."
 }
