@@ -101,9 +101,9 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
     kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
     payloadKeys: ["decision", "decisionReason", "dependencyChanges", "runId"] },
-  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_HUMAN_REQUIRED", kind: "criterion_check.approve", httpStatus: 403,
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_MALFORMED", kind: "criterion_check.approve",
     layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "criterionId", "check"] },
-  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_HUMAN_REQUIRED", kind: "criterion_check.verify", httpStatus: 403,
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_MALFORMED", kind: "criterion_check.verify",
     layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "integratedSha", "approvals"] },
   // task-b8272ee0. The SHIPPED daemon supplies no cutover evidence root, so the composition
   // root's own fail-closed branch answers here — registered and refusing, never removed from
@@ -412,6 +412,7 @@ async function sendAsync(
   commandKind: RuntimeCommandKind,
   payload: Readonly<Record<string, unknown>>,
   credential: string = CREDENTIAL,
+  origin: "MCP_STDIO" | "HTTP_LISTENER" = "MCP_STDIO",
 ): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
   return await handleAsyncCommandRequest(deps, {
     body: new TextEncoder().encode(JSON.stringify({
@@ -421,7 +422,7 @@ async function sendAsync(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  }, "MCP_STDIO");
+  }, origin);
 }
 
 function openSession(
@@ -905,7 +906,8 @@ describe("registered command table", () => {
 
   it.each(ROWS)("$kind reaches its own family handler and refuses with its code", async (row) => {
     const answered = row.asyncOnly === true
-      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {})
+      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {}, CREDENTIAL,
+        row.kind === "repository.recover" ? "HTTP_LISTENER" : "MCP_STDIO")
       : send(`cmd-empty-${row.kind}`, row.kind, {});
     expect(answered).toMatchObject({
       httpStatus: row.httpStatus ?? 422,
