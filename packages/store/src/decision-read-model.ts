@@ -33,7 +33,24 @@ import {
 import { EventLedgerStore } from "./event-ledger.js";
 import { loadVerifiedDecisionLegRoster } from "./decision-leg-roster-read.js";
 
+/**
+ * Above this many cached decisions the cache is dropped whole and rebuilt on demand: a bound on
+ * memory for a long-lived handle, never a correctness fence (every entry is re-derivable).
+ */
+const DECODED_DECISION_CACHE_LIMIT = 100_000;
+
 export class DecisionReadModelStore extends EventLedgerStore {
+  /**
+   * Decoded decisions by position, for the paged read path only. A committed decision never
+   * changes at its position (the ledger is append-only), so one decode plus sha verification is
+   * good for the life of this handle. Without it every read model walked the whole ledger from
+   * position 0 on every request, re-running two to three SELECTs, the receipt validation and the
+   * hashing per decision each time: one control-room surface read cost ~14 s of CPU and the
+   * daemon stopped answering its pollers (measured 2026-09-05). The startup validation scan and
+   * the by-key read keep decoding fresh: they exist to prove the rows, not to serve them.
+   */
+  readonly #decodedByPosition = new Map<bigint, StoredCommandDecision>();
+
   // A snapshot read like its paged sibling below: decoding a decision loads
   // its receipt and validates the aggregate tail across several SELECTs, which
   // must all observe one WAL snapshot or a concurrent commit reads as corrupt.
@@ -105,12 +122,22 @@ export class DecisionReadModelStore extends EventLedgerStore {
     decisionPosition: bigint,
     liveBindingAlreadyValidated = false,
   ): StoredCommandDecision | null {
+    if (liveBindingAlreadyValidated) {
+      const cached = this.#decodedByPosition.get(decisionPosition);
+      if (cached !== undefined) return cached;
+    }
     const row = this.database
       .prepare(COMMAND_DECISION_BY_POSITION_QUERY)
       .get(decisionPosition);
-    return row === undefined
-      ? null
-      : this.mapCommandDecision(row, liveBindingAlreadyValidated);
+    if (row === undefined) return null;
+    const decoded = this.mapCommandDecision(row, liveBindingAlreadyValidated);
+    if (liveBindingAlreadyValidated) {
+      if (this.#decodedByPosition.size >= DECODED_DECISION_CACHE_LIMIT) {
+        this.#decodedByPosition.clear();
+      }
+      this.#decodedByPosition.set(decisionPosition, decoded);
+    }
+    return decoded;
   }
 
   private mapCommandDecision(

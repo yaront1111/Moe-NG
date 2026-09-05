@@ -10,6 +10,41 @@ import { bytes, text } from "./sqlite-event-store-test-helpers.js";
 import { RECEIPT_OUTBOX_QUERY } from "./sqlite-event-store.js";
 
 describe("SqliteEventStore core", () => {
+  it("serves a decision page from its decoded cache without staleness or shared bytes", () => {
+    const store = storeModule.SqliteEventStore.openEphemeralForTest();
+    const commit = (n: number): void => {
+      const result = store.commitExpectedVersionDecision({
+        commandKind: "cache.probe",
+        committedResultBytes: bytes(`{"n":${String(n)}}`),
+        correlationId: `corr-${String(n)}`,
+        decidedAt: "2026-09-05T12:00:00.000Z",
+        events: [{
+          eventId: `evt-cache-${String(n)}`, eventType: "CacheProbed",
+          payload: bytes(`{"n":${String(n)}}`),
+        }],
+        expectedVersion: n - 1,
+        key: { commandId: `cmd-cache-${String(n)}`, principalId: "p", projectId: "moe-test-project" },
+        requestBytes: bytes(`{"n":${String(n)}}`),
+        targetAggregateId: "agg-cache",
+      });
+      expect(result.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+    };
+    commit(1); commit(2);
+    const first = store.readCommandDecisionsAfter(0n, 10);
+    const second = store.readCommandDecisionsAfter(0n, 10);
+    expect(second.items.map((d) => d.decisionPosition)).toEqual(first.items.map((d) => d.decisionPosition));
+    expect(second.items).toEqual(first.items);
+    // A cached decode must hand every reader its own bytes: mutating one page never leaks.
+    first.items[0]!.resultBytes.fill(0);
+    expect(text(store.readCommandDecisionsAfter(0n, 10).items[0]!.resultBytes)).toBe('{"n":1}');
+    // A commit after a cached read is visible on the next page read: the cache is by position.
+    commit(3);
+    expect(store.readCommandDecisionsAfter(0n, 10).items).toHaveLength(3);
+    expect(store.readCommandDecisionsAfter(first.items[1]!.decisionPosition, 10).items.map((d) => d.decisionPosition))
+      .toEqual([first.items[1]!.decisionPosition + 1n]);
+    store.close();
+  });
+
   it("exposes the durable store entry point", () => {
     expect(storeModule).toHaveProperty("SqliteEventStore");
   });
