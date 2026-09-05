@@ -133,7 +133,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-05T23:20:46.876Z",
+  "updatedAt": "2026-09-05T23:24:45.587Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,
@@ -210,6 +210,52 @@
       "treeId": "cc444c5bc5fb9926b9fe4a352469dff789eece74",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "74251dd4e226aaa76dc89cb0acb8a9a0fccc868f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:21:19Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:21:35.757Z",
+      "treeId": "4f6148dc271cedc9dc62d88d237616ef26b2d6c7",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "4f5b41931fe57e1f9fd67c2448feea0bec6f49de",
+      "ref": "refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232321Z",
+      "kind": "rescue",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:22:11Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:23:24.899Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "MOE_RESCUE_REF task=task-facff1d1e7ce44a6b1101490524890a9 ref=refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232321Z sha=4f5b41931fe57e1f9fd67c2448feea0bec6f49de reason=ref-contention"
+    },
+    {
+      "sha": "63299f6d5d19aa2d1271dc66eeaf6b0e9e2bcf25",
+      "ref": "refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232440Z",
+      "kind": "rescue",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:24:02Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:24:44.933Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "MOE_RESCUE_REF task=task-facff1d1e7ce44a6b1101490524890a9 ref=refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232440Z sha=63299f6d5d19aa2d1271dc66eeaf6b0e9e2bcf25 reason=ref-contention"
     }
   ],
   "filesModified": [
@@ -219,7 +265,8 @@
     "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
     "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
     "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/repository/repository-bootstrap-command.ts"
+    "apps/daemon/src/repository/repository-bootstrap-command.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
@@ -291,9 +338,10 @@
     "packages/runner/src/verification/criterion-check-executor.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "failed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T23:20:28Z",
-    "at": "2026-09-05T23:20:46.876Z"
+    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
+    "sessionId": "worker-d6e44333@2026-09-05T23:24:02Z",
+    "at": "2026-09-05T23:24:45.587Z"
   }
 }
