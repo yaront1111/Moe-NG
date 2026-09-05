@@ -183,7 +183,7 @@
       "completedAt": "2026-09-05T18:05:05.908Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -217,20 +217,29 @@
       "author": "worker-afd89b78",
       "content": "FORWARD NOTE FOR CHILD 2 (the `repository.bootstrap` command row) AND FOR THE EPIC-FINAL ROW task-99f364e3a6104ee993b6820c580a52fb — PACKAGING OF THE LOCKFILE ASSET.\n\nThe plan flagged a suspected packaging gap: a `.yaml` asset under apps/daemon/src may not be enumerated by tools/packaging/pack-source.ts, shipping an installed artifact whose generator cannot read its own lockfile. I MEASURED it instead of forwarding the guess. Three of the four failure modes are REFUTED; one real risk remains and it is not the one named.\n\nREFUTED 1 - pack-source is extension-agnostic. `PACK_SOURCE_ARCHIVE_PATHSPEC` (tools/packaging/pack-source-integrity.ts:28) is `[\".\", \":(exclude)<PACK_SOURCE_RUNTIME_STATE_ROOT>\"]`, fed to `git archive`. There is no extension allowlist anywhere in that path. The asset ships iff it is git-TRACKED — which it is, since it is reported in complete_step.modifiedFiles and lands in this row's commit.\n\nREFUTED 2 - the asset is not classified as a secret. Probed against the PRODUCTION predicate, not by reading the regex:\n  isSensitivePackSourcePath(\"apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v1-lock.yaml\") -> false\n  isSensitivePackSourcePath(\"pnpm-lock.yaml\") -> false\nThis mattered: `yaml`/`yml` ARE in SECRET_DOCUMENT_EXTENSIONS (pack-source-sensitive.ts:5), so the extension alone put the asset one predicate away from a PACK_SENSITIVE_PATH_PRESENT refusal. It survives because the stem `controlled-profile-v1-lock` matches neither EXACT_SECRET_STEMS nor SENSITIVE_DOCUMENT_STEM. NAMING CONSTRAINT FOR A FUTURE PROFILE BUMP: do not rename the asset to anything whose stem contains `auth`, `credential(s)`, `secret(s)`, `token(s)`, `api-key`, `access-key` or `service-account` as a `[-_.]`-delimited part — that would make packaging refuse the release.\n\nREFUTED 3 - the asset is not mistaken for a test artifact. Probed against the production classifier:\n  isTestArtifact(\".../assets/controlled-profile-v1-lock.yaml\") -> false\n  isTestArtifact(\".../controlled-profile-generator.ts\") -> false\n  isTestArtifact(\".../controlled-profile-generator.js\") -> false\n  isTestArtifact(\".../controlled-profile-generator.test.ts\") -> true   (same as the existing sibling apps/daemon/src/repository/publish-ledger.test.ts -> true)\nSo production modules and the asset ship, the two .test.ts files are stripped, and this row introduces no new classification class.\n\nTHE REAL RESIDUAL RISK, for child 2 to carry: tools/packaging/distribution-inventory.ts is a HAND-MAINTAINED roster of explicit asset paths, not a directory walk (see PROVIDER_CLAUDE_ASSETS and its comment about a directory walk finding fixtures). `grep -c \"apps/daemon/src/repository/\" tools/packaging/distribution-inventory.ts` -> 0, so today the whole repository/ directory is outside that roster and this row is not a new exception. But when child 2 wires `repository.bootstrap` into the SHIPPED daemon closure, whatever backfills that roster must add SEVEN paths, not three:\n  controlled-profile-generator.ts + .js\n  controlled-profile-root-templates.ts + .js\n  controlled-profile-package-templates.ts + .js\n  assets/controlled-profile-v1-lock.yaml    <- the one a \".ts files under the new directory\" sweep silently drops\nA roster missing only the asset produces the exact failure the plan feared: an installed artifact that loads, resolves and typechecks, and then throws ENOENT from `readFileSync(new URL(\"./assets/...\", import.meta.url))` the first time a human bootstraps a product. That is a runtime-only failure with no compile-time or grep-level signal, so it is worth an explicit assertion rather than a careful edit.\n\nSUGGESTED CHEAP GUARD for whoever owns the roster: an arm that calls `generateControlledProfile` against the INSTALLED tree (not the source tree) and asserts the emitted `pnpm-lock.yaml` is non-empty. That converts a silent packaging omission into a red.",
       "timestamp": "2026-09-05T18:03:29.950Z"
+    },
+    {
+      "id": "comment-63c59cb96e094d66b1fd0330faab004a",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION RECORD (qa-d81848bc, 2026-09-05) — full evidence for the approval; reviewSummary is capped at 2000 so the denominators live here.\n\nCOMMIT AUDITED: `git show 2feed27b` — 9 owned files under apps/daemon/src/repository/controlled-profile/; the only other paths are wrapper-written .moe/tasks board JSON. Per-file caps OK: package-templates 250, generator.test 248, root-templates 215, build.test 173, generator 136, three 1-line .js bridges. The 1082-line assets/controlled-profile-v1-lock.yaml is a minted lockfile asset, not a source module.\n\nGATES RE-RUN BY ME (not trusted from the record):\n1. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/controlled-profile` -> `Test Files 2 passed (2)` / `Tests 11 passed | 1 skipped (12)`, 660ms.\n2. CHILD RUN, `MOE_SCAFFOLD_BUILD=1` + the same command on controlled-profile-build.test.ts with `--testTimeout=1800000` -> `Tests 2 passed (2)`, ZERO skipped, `Test Files 1 passed (1)`, 17.49s. Child's own legs: `pnpm install --frozen-lockfile=0, pnpm typecheck=0, pnpm test=0, pnpm build=0`; child count lines `[1,1]` — packages/api `Test Files 1 passed (1)` / `Tests 3 passed (3)`, packages/web `Test Files 1 passed (1)` / `Tests 1 passed (1)`. DoD 2 is satisfied by MY run, not only the worker's (their cold figure was 27.43s; mine is 17.49s warm-store).\n3. Leak check after: `ls $TEMP/moe-scaffold-*` -> 0 dirs. Epic rail 4 holds.\n\nMUTATION DRILLS — I did not take the golden's load-bearing-ness on faith:\n- Drill A: `root-templates.ts:78` `\"node_modules/\"` -> `\"node_modules\"`. Golden arm (a) RED, naming the path with the sha delta: `.gitignore f826c49d… -> 33f7fe15…`, `Tests 1 failed | 9 passed (10)`. The inline GOLDEN_MANIFEST is a real pin, not a value the test derives from the same map.\n- Drill B: swapped the two guards in `generateControlledProfile` (name checked before version). Exactly ONE arm red — \"answers the version code when the version and the name are both invalid\" — the other refusal arms stayed green because each has a single bad input. Precedence AND the reason code + layer are pinned, not merely `ok:false`.\n- RESTORE PROOF for both: files are TRACKED as of 2feed27b, so `git checkout -- <path>` then `git diff -- <path>` -> `[]`, `git status --porcelain -- <dir>` -> empty, and the restored lines echoed back verbatim.\n\nINDEPENDENTLY MEASURED (probe against the production surface, product name \"zeta-probe\"): tree = 22 files; files differing between two product names = exactly [\"README.md\",\"package.json\"]; `.gitignore` covers node_modules/ dist/ .env; `.env.example` is CHANGE_ME placeholders only and docker-compose uses `${POSTGRES_PASSWORD:?…}` — zero credential literals in any of the 22 emitted files (epic rail 3). Lockfile asset: `lockfileVersion: '9.0'`, `importers:` keyed by DIRECTORY (`.`, packages/api, packages/web), `grep -c \"<product name>\"` -> 0, which is the property the one-static-asset design rests on. `grep -c controlled-profile apps/daemon/src/index.ts` -> 0, so the barrel closure guarded by index-surface.test.ts is intact.\n\nFOREIGN RED, DISCLOSED AND PATH-ATTRIBUTED (project rail 3) — none of it this row's:\n- `pnpm --filter @moe/daemon test` -> `Test Files 8 failed | 430 passed (438)` / `Tests 19 failed | 8659 passed | 1 skipped (8679)`, 1307.38s. ZERO failures under src/repository/controlled-profile. The reds are src/work/foundation-capture-producer / foundation-capture-lifecycle / foundation-attempt-service — the documented peer `project.activate BOOTSTRAP_PREREQUISITE_MISSING` breakage, plus `Test timed out in 30000ms` under a contended box.\n- `pnpm typecheck` -> exit 1 at packages/scheduler/src/budget/budget-reservation.ts(132,42) TS18046 'entry' is of type 'unknown' — tracked, committed at e53e3e6a by a different task, clean in git status. `pnpm --filter @moe/daemon typecheck` adds apps/daemon/src/planning/rejection-instructions.ts(59,38) TS7053 — an UNTRACKED peer file, absent from this commit. tsc emits ALL diagnostics for a project, so zero controlled-profile errors is a positive result, not a fail-fast artifact.\n- Intersection of (HEAD failing paths minus baseline) with this row's owned paths is EMPTY.\n\nNOTE FOR CHILD 2 / the epic-final row: a peer row already consumes this generator — apps/daemon/src/repository/deployment/deployment-infrastructure-generator.{ts,test.ts} (untracked, in flight) imports CONTROLLED_PROFILE_VERSION, controlledProfileRootFiles and controlledProfilePackageFiles by relative path. The consumer edge exists; the module is not dead code.",
+      "timestamp": "2026-09-05T18:35:52.148Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:05.163Z",
-  "updatedAt": "2026-09-05T18:06:48.859Z",
+  "updatedAt": "2026-09-05T18:36:18.269Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T16:49:30.584Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-05T18:36:18.269Z",
+    "wallClockMs": 6407685
   },
   "contextFetchedBy": [
     "architect-fa3a3e17",
-    "worker-afd89b78"
+    "worker-afd89b78",
+    "qa-d81848bc"
   ],
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -282,6 +291,31 @@
       "treeId": "63f7ec5b013d3fc7f34943a15670b05666f7b9f4",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "2feed27bb68041c9d2d338a1063259c9a21568eb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-afd89b78@2026-09-05T17:01:50Z",
+      "paths": [
+        ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v1-lock.yaml",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-build.test.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.js",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.js",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.js",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts"
+      ],
+      "recordedBy": "worker-afd89b78",
+      "recordedAt": "2026-09-05T18:07:20.162Z",
+      "treeId": "8962c8cbf45620b3899e267076b65c43aec291f5",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -293,14 +327,16 @@
     "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.js",
     "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v1-lock.yaml",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-build.test.ts"
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-build.test.ts",
+    ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
+    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-afd89b78@2026-09-05T17:01:50Z",
-    "at": "2026-09-05T17:02:27.995Z"
+    "at": "2026-09-05T18:07:20.162Z"
   },
   "workStartedAt": "2026-09-05T17:04:39.999Z",
   "reviewStartedAt": "2026-09-05T18:06:48.858Z",
@@ -310,5 +346,19 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  2 passed (2)\n      Tests  11 passed | 1 skipped (12)\n   Start at  21:06:10\n   Duration  1.16s (transform 46ms, setup 0ms, import 76ms, tests 8ms, environment 0ms)\n\nPIPESTATUS=0\n\n--- CHILD RUN (DoD 2), run separately with MOE_SCAFFOLD_BUILD=1, exit 0, ZERO skipped ---\nCHILD RUN legs: pnpm install --frozen-lockfile=0, pnpm typecheck=0, pnpm test=0, pnpm build=0\nCHILD RUN test count lines: [1,1]\npackages/api test:  Test Files  1 passed (1) / Tests  3 passed (3)\npackages/web test:  Test Files  1 passed (1) / Tests  1 passed (1)\n Test Files  1 passed (1)\n      Tests  2 passed (2)\nWALL_CLOCK_SECONDS=25",
     "reportedAt": "2026-09-05T18:06:48.858Z"
   },
-  "completionSummary": "Deterministic controlled-profile scaffold generator + proof the app it emits BUILDS. 9 new files under apps/daemon/src/repository/controlled-profile/ (3 modules + 3 .js bridges + lockfile asset + 2 tests). Emitted tree = 22 files.\n\nDoD 1 GOLDEN: controlled-profile-generator.test.ts, 10 tests, golden INLINE. Pins the 22-entry sorted \"<path>  <sha256>\" manifest, files.size against a SEPARATE literal (22), and the FULL bytes of package.json / docker-compose.yml / .github/workflows/ci.yml. Byte-identity across two identical generations compared as entry arrays (order + content). NAME-ONLY DIFF asserted as a COMPUTED diff -> [\"README.md\",\"package.json\"], with a separate toBeGreaterThan(0) guard so a name-ignoring generator cannot pass.\nDoD 2 THE APP BUILDS: controlled-profile-build.test.ts. CHILD RUN with MOE_SCAFFOLD_BUILD=1 -> four SEPARATE foreground legs (spawnSync, shell:false, argv arrays, stop on first nonzero) all exit 0: install --frozen-lockfile, typecheck, test, build. Child's OWN count lines: packages/api \"Test Files 1 passed (1)/Tests 3 passed\", packages/web \"Test Files 1 passed (1)/Tests 1 passed\". Parent: Tests 2 passed (2), ZERO skipped. WALL CLOCK 27.43s (25-35s incl. startup) on a warm store; timeout 1_800_000ms. Also asserts the build EMITTED (existsSync on web/dist/index.html and api/dist/server.js) - exit 0 is not emission.\nDoD 3 LOCKFILE: assets/controlled-profile-v1-lock.yaml, 34463 bytes, lockfileVersion '9.0', minted with pnpm 11.0.8, LF-normalized on read. Emitted, non-empty, CR-free (golden arm e) AND byte-identical after `install --frozen-lockfile` (build arm). One static asset serves every product because pnpm keys importers by DIRECTORY - measured: importer keys are `.`, `packages/api`, `packages/web`, and the mint product name appears 0 times in the bytes.\nDoD 4 VERSION CONSTANT: CONTROLLED_PROFILE_VERSION=\"controlled-1\" is the single source. Unknown version returns the FULL object {ok:false, code:\"BOOTSTRAP_PROFILE_VERSION_UNKNOWN\", refuse"
+  "completionSummary": "Deterministic controlled-profile scaffold generator + proof the app it emits BUILDS. 9 new files under apps/daemon/src/repository/controlled-profile/ (3 modules + 3 .js bridges + lockfile asset + 2 tests). Emitted tree = 22 files.\n\nDoD 1 GOLDEN: controlled-profile-generator.test.ts, 10 tests, golden INLINE. Pins the 22-entry sorted \"<path>  <sha256>\" manifest, files.size against a SEPARATE literal (22), and the FULL bytes of package.json / docker-compose.yml / .github/workflows/ci.yml. Byte-identity across two identical generations compared as entry arrays (order + content). NAME-ONLY DIFF asserted as a COMPUTED diff -> [\"README.md\",\"package.json\"], with a separate toBeGreaterThan(0) guard so a name-ignoring generator cannot pass.\nDoD 2 THE APP BUILDS: controlled-profile-build.test.ts. CHILD RUN with MOE_SCAFFOLD_BUILD=1 -> four SEPARATE foreground legs (spawnSync, shell:false, argv arrays, stop on first nonzero) all exit 0: install --frozen-lockfile, typecheck, test, build. Child's OWN count lines: packages/api \"Test Files 1 passed (1)/Tests 3 passed\", packages/web \"Test Files 1 passed (1)/Tests 1 passed\". Parent: Tests 2 passed (2), ZERO skipped. WALL CLOCK 27.43s (25-35s incl. startup) on a warm store; timeout 1_800_000ms. Also asserts the build EMITTED (existsSync on web/dist/index.html and api/dist/server.js) - exit 0 is not emission.\nDoD 3 LOCKFILE: assets/controlled-profile-v1-lock.yaml, 34463 bytes, lockfileVersion '9.0', minted with pnpm 11.0.8, LF-normalized on read. Emitted, non-empty, CR-free (golden arm e) AND byte-identical after `install --frozen-lockfile` (build arm). One static asset serves every product because pnpm keys importers by DIRECTORY - measured: importer keys are `.`, `packages/api`, `packages/web`, and the mint product name appears 0 times in the bytes.\nDoD 4 VERSION CONSTANT: CONTROLLED_PROFILE_VERSION=\"controlled-1\" is the single source. Unknown version returns the FULL object {ok:false, code:\"BOOTSTRAP_PROFILE_VERSION_UNKNOWN\", refuse",
+  "touchedFiles": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-build.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.js",
+    "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v1-lock.yaml",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.js",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.js"
+  ],
+  "completedAt": "2026-09-05T18:36:18.269Z",
+  "reviewCompletedAt": "2026-09-05T18:36:18.269Z",
+  "reviewSummary": "APPROVED. Commit 2feed27b audited; 9 owned files, per-file caps OK (max 250). Full evidence: comment-63c59cb96e094d66b1fd0330faab004a.\n\nRE-RAN MYSELF: owned leg `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/controlled-profile` -> `Test Files 2 passed (2)` / `Tests 11 passed | 1 skipped (12)`. CHILD RUN, MOE_SCAFFOLD_BUILD=1 -> `Tests 2 passed (2)` ZERO skipped; four child legs all exit 0; child count lines `Test Files 1 passed (1)` x2 (api 3, web 1); 17.49s. DoD 2 proven by my run. 0 leaked temp dirs after.\n\nMUTATION-VERIFIED, not read: (A) `\"node_modules/\"`->`\"node_modules\"` at root-templates.ts:78 reds golden arm (a) naming the path with the sha delta, so the inline manifest is a real pin. (B) swapping the two guards reds exactly the \"version code wins when both invalid\" arm, pinning precedence + code + `refusedBy: \"DAEMON_INGRESS\"`. Both restored: `git diff` empty on tracked files, porcelain clean.\n\nMEASURED INDEPENDENTLY: 22-file tree; name-bearing paths exactly [README.md, package.json]; lockfile `lockfileVersion: '9.0'`, importers keyed by DIRECTORY, 0 product-name hits; lockfile-unchanged-after-install asserted in the passing build arm (DoD 3); CI bytes carry `pnpm typecheck` + `pnpm test` (DoD 5); zero credential literals, CHANGE_ME only (epic rail 3); .gitignore covers node_modules/dist/.env; index.ts barrel closure intact.\n\nFOREIGN RED DISCLOSED (project rail 3), none this row's: daemon suite `Test Files 8 failed | 430 passed (438)`, ZERO under src/repository/controlled-profile — reds are src/work/foundation-* (documented peer project.activate BOOTSTRAP_PREREQUISITE_MISSING + 30s timeouts). `pnpm typecheck` exit 1 at packages/scheduler/src/budget/budget-reservation.ts:132 (commit e53e3e6a, another task); daemon typecheck adds untracked peer apps/daemon/src/planning/rejection-instructions.ts:59. tsc emits all project diagnostics, so zero controlled-profile errors is positive evidence. Owned-path red delta EMPTY."
 }

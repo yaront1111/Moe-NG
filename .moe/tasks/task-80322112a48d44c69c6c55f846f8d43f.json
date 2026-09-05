@@ -18,8 +18,95 @@
     "THE OWNER'S GITHUB ACCOUNT AND VISIBILITY ARE THE OWNER'S. Never invent an owner, never make a repository public by default, and never let a credential reach the form or a log.",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE AND PREMISE CENSUS. This row proves; it does not rebuild. Establish that everything it certifies exists, and re-measure the three stale premises recorded in planningNotes.\n\nPREREQUISITES — record each command and output:\n- `git grep -rn \"repository.bootstrap\" -- packages/contracts apps/daemon/src` — child 2's command kind, served and advertised.\n- `git grep -rn \"BOOTSTRAP_DIR_NOT_EMPTY\\|BOOTSTRAP_GIT_UNAVAILABLE\\|BOOTSTRAP_GH_UNAVAILABLE\\|BOOTSTRAP_PROFILE_VERSION_UNKNOWN\" -- apps/daemon/src` — all FOUR codes, since all four must surface as operator words.\n- `git grep -rn \"CONTROLLED_PROFILE_VERSION\" -- apps/daemon/src` — child 1, already landed (sha 2feed27b); read its completionSummary from epicSiblings rather than re-measuring.\n- The activation wall: does `ACTIVATION_CHAIN_KINDS` (apps/control-room/src/v2/ops/activation-port.ts) now include `policy.install`, or does `/activation/read` still return blocking:[\"policy\"] on an unseeded lane? That is task-d342a2b1's fix and DoD 2 is unreachable without it.\n\nIF ANY IS MISSING: STOP and `moe.report_blocked` with `blockedOnTaskIds`. Do NOT mock a refusal code, do NOT narrow the journey to stop before activation, and do NOT reimplement a gate's authority in the spec. A journey that mocks what it claims to prove retires the question unanswered.\n\nSTALE PREMISES TO CONFIRM: `git grep -n \"cannot be started from the browser alone\"` (expected ZERO — DoD 5's gate is already satisfied, see step 8) and `git grep -n \"cannot drive the pre-activation chain\"` (expected ZERO — the wording the description offers for reuse is gone; copy the REPLACEMENT at live-goal-create.ts:90-100 instead).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.ts",
+        "apps/control-room/src/v2/goals/live-goal-create.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE FORM (DoD 1). Add the \"New product from PRD\" surface as a NEW component under apps/control-room/src/v2/ — do not grow live-goal-create.ts, which is already 229 lines against a 250-line target.\n\nFIELDS: directory (new or empty), PRD file, product name, and GitHub owner + visibility marked VISIBLY OPTIONAL. A form that implies GitHub is required hides the local-only path child 2 exists to support, and that is the single most likely way this row ships something worse than nothing.\n\nVISIBILITY HAS NO DEFAULT THAT CREATES A PUBLIC REPOSITORY. The owner supplies owner and visibility; never invent an owner, never preselect public. No credential field, ever — `gh` uses the operator's own CLI auth (child 2's rail), so a token has no reason to reach this form, a log line, or a receipt.\n\nCOPY PATTERN: reuse the shape at live-goal-create.ts:90-100 — a refusal names the specific reason AND a next step that names a card on THIS screen; prerequisites come from the production label helper, never a paraphrase. Do not reuse the sentence the description quotes; it was deleted.\n\nCONSTRAINTS from the row rails: ASCII-only sources, apostrophe-free JSX text (the scheduler package-boundary scan reds on an apostrophe in JSX), and check the new testid namespace is FREE before claiming it — `git grep -n \"cr\\.<namespace>\" -- apps tests` — because `cr.board.*` was already taken once.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/products/new-product-form.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/products/new-product-form.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "DISPATCH AND COMPOSITION. Wire the form to child 2's command, then to the EXISTING goal creation.\n\n1. Add the `repository.bootstrap` payload to the dispatch table in apps/control-room/src/live/live-dispatch-payloads.ts (285 lines; `DEV_PAYLOADS` at :56 with `project.bind_repository` at :117, `PLANNING_CHAIN_STEPS` at :166). FIRST determine which table the V2 PRODUCT surface actually reads — `DEV_PAYLOADS` is the legacy dev board's, and `main.tsx:101` serves the legacy shell only for `?v1=1`. Adding to the wrong table wires a surface no operator sees.\n2. After the command succeeds, create the goal with the PRD through the EXISTING `goal.create_with_source`. Do NOT write a second goal-creation path; the existing lane continues unchanged after this point, and that is the whole design.\n3. The payload carries directory, product name, profile version and the OPTIONAL owner/visibility. It carries no credential.\n\nMOUNT THE FORM where an operator can reach it without a URL parameter, and add the route/nav entry in the same step — a component no screen renders is dead code that satisfies every existence grep while the feature does not exist.\n\nIf the payload shape child 2 published differs from what you expect, use CHILD 2's shape and say so. A second shape that happens to typecheck is a contract drift the epic-final row will find.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/v2/products/new-product-form.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE FOUR REFUSALS AS OPERATOR WORDS (DoD 3) — component test, `new-product-form.test.tsx`.\n\nAll four of child 2's codes render with their code VERBATIM plus operator words. Assert the RENDERED TEXT by exact match, not a substring that a reworded sentence would still satisfy.\n\nBOOTSTRAP_GH_UNAVAILABLE IS THE ONE THAT MATTERS AND IT GETS ITS OWN ARM. It is a PARTIAL SUCCESS: the local repository exists, is committed and is bound; only the GitHub half did not happen. The copy must say that. An operator told \"bootstrap failed\" when they hold a perfectly good local repository will delete it and start again — that is the concrete harm, and it is why this arm asserts the wording specifically rather than asserting that some error appeared. Assert the copy does NOT contain a total-failure word, and DOES name the local repository as intact.\n\nMUTATE AND CONFIRM RED: change the partial-success copy to a generic failure string and confirm the arm reds. A refusal-rendering test that has never been seen red is not evidence.\n\nAlso assert: no rendered string contains a token-shaped value on any path (epic rail 3), and the GitHub fields read as optional in the rendered output, not merely in a comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/products/new-product-form.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/products/new-product-form.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE JOURNEY (DoD 2) — a NEW spec, tests/e2e/control-room/new-product-from-prd.spec.ts. Do NOT edit tests/e2e/control-room/activation-fresh-project.spec.ts: it is a peer's untracked in-flight file owned by task-ac9d5e2d, and editing it in the shared checkout is a collision. REUSE its harness and its lessons.\n\nHARNESS: `withDaemonBackedControlRoom` / `DaemonLane` from ./daemon-ports.js, `seed: \"NONE\"`. Assert `lane.seedPid` is NULL before touching the page — documented at daemon-ports.ts:245-249, worked example at board-chain.spec.ts:429-434. A journey that cannot prove it ran unseeded proves nothing here.\n\nNO SCRIPT AND NO SEED ANYWHERE IN THE PATH (row rail 1). The claim is that the BROWSER is sufficient; a scratchpad helper anywhere makes the claim false while the test stays green. Assert the absence structurally, not by intention.\n\nTHREE LESSONS CARRIED FROM THE PEER SPEC, each already paid for:\n- Drive the bare `lane.baseUrl`. `main.tsx:101` serves the legacy shell only for `?v1=1`, so a journey clicking `cr.liveboard.*` re-proves the old dev board and leaves the shipped surface untested.\n- SEAT THE RECORDER BEFORE THE FIRST CLICK — a card's dispatch report lives only until the next surface poll re-keys the card (board-chain.spec.ts:26-33), so a watcher on its own schedule can watch a dispatch succeed and see nothing.\n- Assert receipts as MEASURED: read the lane's HEAD sha from GIT, never from what the page said, and fail a row that reads as a `<projectId>-*` literal — that shape is what a placeholder looks like.\n\nASSERT THE WHOLE OUTCOME: directory created; `git log --oneline` in it is EXACTLY ONE line (assert the line count, not a substring); repository bound; project in the manager catalog; the PRD goal created; the lane continuing. Quote the `pnpm test:e2e:browser` count line.\n\nTEARDOWN: the lane, the daemon child and the created directory released in a `finally`, on the throwing path too (epic rail 4) — a leaked port or directory makes every later gate on this board inadmissible.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE LOCAL-ONLY VARIANT — same spec, its own arm, and the one that guards the row's most important behaviour.\n\nRun the journey with the GitHub fields LEFT EMPTY. Assert it SUCCEEDS end to end: directory, single commit, bound repository, catalog entry, goal created — with no GitHub interaction attempted at all. A local-only bootstrap is a success, not a degraded mode.\n\nThen run it with GitHub requested but `gh` unavailable on the lane. Assert the form renders the PARTIAL-SUCCESS copy from step 4, and assert the LOCAL half still completed: the repository exists, is committed and is bound. This is the arm that stops a future change from turning a missing `gh` into a total failure.\n\nASSERT BOTH VARIANTS ACTUALLY RAN. If they share a table or a loop, assert the case count — a swept case that silently yields zero cases passes. Two variants that produce identical end states would mean the GitHub half changed nothing, which is a finding rather than a pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE LIVE DRIVE (DoD 4). Create a THROWAWAY repository under the OWNER'S GitHub account, from the browser, and record the URL and receipt id in a row comment under ~4500 chars (comments truncate silently at 5000).\n\nTHE OWNER SUPPLIES THE ACCOUNT AND THE VISIBILITY. Never invent an owner. Never make a repository public by default. If the owner has not supplied them, ASK in the row comment and take the `gh`-absent outcome below rather than guessing — a public repository created under someone's account without their say is not undoable by deleting it.\n\nIF `gh` IS ABSENT OR UNAUTHENTICATED ON THE LANE, that is a COMPLETE outcome, not a partial one: record the `BOOTSTRAP_GH_UNAVAILABLE` refusal VERBATIM together with the successful LOCAL bootstrap — directory, single commit, bound repository, catalog entry. Do not treat it as a failed step and do not retry with a different account.\n\nNO CREDENTIAL IN THE COMMENT, the transcript, or a screenshot. Check the transcript before pasting: `gh` output can echo a remote URL with embedded userinfo (epic rail 3).\n\nRecord the date of the drive — step 8's doc edit is dated to it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE DOCS (DoD 5) — AND THE GATE AS WRITTEN IS ALREADY VACUOUS, so read this before editing.\n\nMEASURED: `git grep -n \"cannot be started from the browser alone\"` returns ZERO HITS at HEAD. task-ac9d5e2d already removed that sentence. Running the DoD's grep and reporting 0 proves NOTHING about this row's work — report it as already-satisfied-on-arrival, name the row that satisfied it, and do the real work below. Do not claim credit for a gate that was green before you started.\n\nWHAT IS ACTUALLY LEFT, and it is a DIFFERENT claim: README:29 now reads \"**Fresh start, from the browser alone**: the Activate project card reads the...\" — that is about ACTIVATING AN EXISTING project. This row shipped something else: CREATING A NEW PRODUCT REPOSITORY from a PRD. Add or correct the sentence that covers the new capability, dated to step 7's live drive, and make sure the two claims are distinguishable to a reader — conflating them would overstate what ships.\n\nVISION: docs/VISION.md:141 (\"**Stage 2 - PRD to deployed MVP:** repository bootstrapping; ...\") and :127 (\"Support exceptionally well: new repository creation; ...\") are the status lines. Rewrite to the MEASURED truth with the live-drive date — and only for repository bootstrapping. The other Stage 2 items (infrastructure generation, deployment, secrets, migrations, monitoring) are other rows' and must not be marked shipped here.\n\nDo NOT re-edit the README and runbook sentences task-ac9d5e2d rewrote. If you believe one is now wrong, comment on that row.\n\nIf a doc needed no change, name the files you READ to reach that conclusion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md",
+        "docs/VISION.md"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "GATES AND ADVERSARIAL PASS (DoD 6).\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test`\n- `pnpm --filter @moe/control-room test`\n- `pnpm typecheck`\n- `pnpm test:e2e:browser`\nName explicitly that root `pnpm test` covers no apps/** file, so the control-room leg carries the apps/** claim. Path-attributed baseline: merge-base failures, HEAD failures, subtract, intersect with this row's owned paths; complete only when that intersection is EMPTY, and disclose foreign red verbatim with its failing paths.\n\nADVERSARIAL PASS, as an attacker on an operator-supplied form:\n- What does the form do with a directory that is NOT empty? The refusal must be BOOTSTRAP_DIR_NOT_EMPTY rendered as operator words, and NOTHING may be written — this is the path where a wrong directory buries someone's work.\n- A directory path that escapes, a UNC path, an empty string, a path that is a FILE. Each needs a defined answer.\n- A product name with a quote, a slash, a leading dot, or 200 characters — child 1 validates it, so assert the refusal SURFACES rather than crashing the form.\n- A PRD file that is enormous, empty, or not text.\n- DOUBLE SUBMIT: two clicks in flight at once. Does the second refuse DIR_NOT_EMPTY, or does it race the first into a half-written tree? Assert which.\n- Does any error path, log line or screenshot carry a credential or a remote URL with embedded userinfo?\n- ASCII-only sources and apostrophe-free JSX confirmed by the scheduler boundary scan; every production file under 250 lines (`wc -l` the new files and quote it).\n\nA DEFECT FOUND HERE IS NOT FIXED HERE (row rail 3): a scaffold defect is child 1's (task-4a0f7064), a command defect is child 2's (task-facff1d1). Comment on the owning row and `moe.report_blocked` — do not patch across the seam.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,12 +116,34 @@
   "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
   "dependsOn": [
     "task-4a0f706437a042059789be2ebdb98bc0",
-    "task-facff1d1e7ce44a6b1101490524890a9"
+    "task-facff1d1e7ce44a6b1101490524890a9",
+    "task-d342a2b158764fefa8dbf2a5365e7bf7",
+    "task-ac9d5e2d43334525bd990b1362652ce4"
   ],
   "priority": "HIGH",
   "order": 83,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:43:05.459Z",
-  "updatedAt": "2026-09-05T00:43:05.459Z"
+  "updatedAt": "2026-09-05T18:28:57.936Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T18:24:22.265Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-fa3a3e17"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T18:28:55.762Z",
+  "planningNotes": {
+    "approachesConsidered": "EXTENDING activation-fresh-project.spec.ts vs A NEW SPEC. Chosen: a NEW spec file reusing that one's HARNESS. They are different journeys — that one proves an existing project can be activated and a goal created; this one proves a NEW PRODUCT REPOSITORY can be created from a PRD. Editing a peer's untracked in-flight file in a shared checkout is the collision the rails forbid, and two journeys in one file fail for unrelated reasons. The harness, the `seed: \"NONE\"` discipline and the three header lessons ARE reused.\n\nWHETHER TO PLAN AROUND THE ACTIVATION WALL. Rejected outright. Mocking past `ACTIVATION_POLICY_UNMEASURED`, or narrowing DoD 2 to a journey that stops before activation, would be exactly the false completion task-ac9d5e2d refused to file. Declaring the dependency is the fix the rails name, and it is a fix by re-ordering, not a block.\n\nWHETHER TO RE-EDIT THE README SENTENCES task-ac9d5e2d ALREADY REWROTE. No. This row's doc work is the part that row did not own: VISION Stage 2's \"repository bootstrapping\" line and whatever README says about creating a NEW product, dated to THIS row's live drive.\n\nSize: 7 files, 9 steps, inside both thresholds.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. THREE of this row's description/DoD premises are STALE and one of them makes a DoD gate vacuous. Read all three before starting.\n\n(1) THE README CLAUSE THIS ROW WAS TOLD TO FALSIFY IS ALREADY GONE. `git grep -n \"cannot be started from the browser alone\" -- README.md docs/` returns ZERO HITS at HEAD. DoD 5 writes exactly that grep as its gate, so the gate is ALREADY SATISFIED and proves nothing. `task-ac9d5e2d43334525bd990b1362652ce4` removed the sentence in its steps 4-5. README:29 now reads, positively, \"**Fresh start, from the browser alone**: the Activate project card reads the...\". The real doc work left for this row is NARROWER and different in kind: README:29's claim is about ACTIVATING AN EXISTING project, not about CREATING A NEW PRODUCT REPOSITORY. Those are different capabilities and only the second is this row's. See step 8.\n\n(2) THE `live-goal-create.ts:91` SENTENCE THE DESCRIPTION QUOTES NO LONGER EXISTS. The description says its :91 sentence reads \"cannot drive the pre-activation chain\" and offers it as wording to reuse. That sentence was DELETED by task-ac9d5e2d (its DoD 2 asserts the grep returns 0). The file is 229 lines and :90-100 now carries the REPLACEMENT: `goalCreateRefusal` returns \"...blocked until <missing> commits. Next step: use the Activate project card on this screen; it drives the whole chain from the browser.\" THAT is the honest-blocker pattern to copy — refusal + a named next step naming a card on the same screen, prerequisites from `labelForMissing` and never a paraphrase, and no sentence carrying a credential.\n\n(3) THE BROWSER-ONLY JOURNEY ALREADY EXISTS AND IS BLOCKED ON A REAL DEFECT. `tests/e2e/control-room/activation-fresh-project.spec.ts` (untracked at HEAD, owned by task-ac9d5e2d) already drives a real daemon with `seed: \"NONE\"` and asserts `lane.seedPid` is null. That row is BLOCKED, and its blockedReason is the wall this row would hit too: with `seed: \"NONE\"` three chain steps go green and the fourth refuses `ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS`. Cause, as it measured it: `ACTIVATION_CHAIN_KINDS` (activation-port.ts:29) mirrors `COMMAND_PREREQUISITES[\"project.activate\"]` (bootstrap-sequence.ts:31-35), which omits `policy.install`, while the witness measures the policy receipt as the digest of the INSTALLED SLICE SET (activation-receipts.ts:38). `/activation/read` returns blocking:[\"provider\",\"policy\"]; `provider.probe` clears provider, NOTHING clears policy. Every other lane seeds, so ONLY `seed: \"NONE\"` exposes it. The fix is `task-d342a2b158764fefa8dbf2a5365e7bf7` (WORKING). I have therefore set this row's dependsOn to include BOTH task-d342a2b1 and task-ac9d5e2d, and filed an overlap notice on the latter (comment-0d3db1fb).\n\nHARNESS AND JOURNEY PRECEDENT TO REUSE, NOT REINVENT — all three from that spec's header, each earned:\n- `main.tsx:101` serves the legacy shell only for `?v1=1`, so bare `lane.baseUrl` IS the product. A journey clicking `cr.liveboard.*` re-proves the old dev board and leaves the shipped surface untested.\n- A card's dispatch report lives ONLY until the next surface poll re-keys the card (board-chain.spec.ts:26-33). Seat the recorder BEFORE the first click or you will watch a dispatch succeed and see nothing.\n- Assert receipts as MEASURED, not merely present: read the lane's HEAD sha from git rather than from anything the page said, and refuse a row that reads as a `<projectId>-*` literal — that shape is what a placeholder looks like.\n- The lane helpers are `withDaemonBackedControlRoom` / `DaemonLane` in tests/e2e/control-room/daemon-ports.ts; `seedPid` is documented null for `seed: \"NONE\"` at :245-249. board-chain.spec.ts:429-434 is a second worked example.\n\nCHILD 1 HAS LANDED (task-4a0f7064, REVIEW, sha 2feed27b, merged). Its completionSummary reports a 22-file emitted tree, `CONTROLLED_PROFILE_VERSION=\"controlled-1\"`, and the child build run green in 27.43s. Read it from epicSiblings rather than re-measuring. CHILD 2 (task-facff1d1) is WORKING and was itself split into task-28fb953b (engine) and task-c2b5a9f0 (contract publication); its four refusal codes are defined there.\n\nDISPATCH SURFACE: apps/control-room/src/live/live-dispatch-payloads.ts is 285 lines with `DEV_PAYLOADS` at :56 (`project.bind_repository` at :117) and `PLANNING_CHAIN_STEPS` at :166. Note DEV_PAYLOADS is the legacy DEV board's table — confirm which table the v2 product surface actually reads before adding to it."
+  },
+  "planApprovedAt": "2026-09-05T18:28:57.936Z"
 }

@@ -17,8 +17,97 @@
     "RE-MEASURE BEFORE PLANNING, BOTH DIRECTIONS. Every claim in this description about what exists on disk is STALE BY DEFAULT - including the digest-mirror list and the HUMAN_ONLY_STEPS note. Read the dependsOn rows' completionSummary and reviewSummary from get_context.epicSiblings rather than re-measuring HEAD, and grep for anything they do not cover.",
     "FEATURES ONLY (inherited): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GAP CENSUS FIRST — this row builds no gate, so its first act is to establish that every capability it certifies actually landed. All four dependsOn rows were WORKING at plan time; `dependsOn` gates the WORKING claim, but measure anyway.\n\nFor EACH gate kind this epic published — enumerate them from the epic's rows rather than from this plan, then measure each on all four surfaces:\n  `git grep -n \"<kind>\" -- packages/contracts/src/runtime/runtime-vocabulary.ts apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts packages/control-room-client/src/generated/generated-client.ts`\nAt plan time only `preview.decide` was present anywhere (shared contract only); `release.decide`, `design.submit` and `design.read` were absent from all three rosters. Expect that to have changed.\n\nA kind present in the shared contract but not yet served by the daemon is a DOCUMENTED intermediate state, not a defect — `apps/daemon/src/goals/goal-create-with-source.ts:35` records an existing kind in exactly that position. Do not file it.\n\nIF A GATE IS GENUINELY MISSING at execution: STOP. The output is a PREREQUISITE PRODUCTION ROW with the gap measured symbol by symbol, filed in PLANNING with this row's id in its description, plus `moe.report_blocked` with `blockedOnTaskIds` naming it. Do NOT narrow the DoD, do NOT mock the gate's authority, and do NOT reimplement authority inside a test. A proof that only proves shapes retires the question unanswered, and a falsely retired gate cannot be repaired.\n\nAlso read each dependsOn row's `completionSummary` and `reviewSummary` through `get_context.epicSiblings` — the rails direct that read INSTEAD of re-measuring HEAD — and grep only for what they do not cover. Record the roster of kinds you found; every later step enumerates from it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "FULL REGRESSION BASELINE (DoD 1). Run every leg standalone and quote its `Test Files N passed` count line. An exit-0 leg with NO count line RAN NOTHING and is not evidence: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0 when the package name is wrong, and \"No test files found\" is also exit 0.\n\n- `pnpm --filter @moe/daemon test`\n- `pnpm --filter @moe/control-room test`\n- `pnpm --filter @moe/control-room-client test`\n- `pnpm --filter @moe/contracts test`\n- `pnpm typecheck`\n- `pnpm test` (root lane)\n\nState plainly in the note that root `pnpm test` covers NO `apps/**` file — the root vitest include lists only `adapters/** packages/** tests/** tools/**` — so the two app legs are not optional and a bare root count line is never evidence for an apps/** claim.\n\nRun this BEFORE writing any new arm, and keep the output: it is the merge-base half of the path-attributed baseline the completion record needs. Any red here that your diff did not cause is disclosed verbatim with its failing file paths, never hidden and never fabricated green.\n\nDO NOT record these numbers as expectations anywhere in the code you write. Epic rail 3: four sibling rows move the same count literals in sequence and this row is last — a frozen count is one a concurrent row moves first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-roster-coherence.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/gates-roster-coherence.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE SHARED ROSTER IS COHERENT, BOTH DIRECTIONS (DoD 2, first half). Write `apps/daemon/src/gates-roster-coherence.test.ts`.\n\nEnumerate the SERVED set from the IMPLEMENTATION SEAM, never from a roster constant: the composed registry's keys (daemon-command-registry.ts:194 spreads the family handler tables) and `wiredMcpToolKinds()` (mcp-tool-allowlist.ts:81, itself derived from `Object.keys(PAYLOAD_KEYS)` minus the exclusion). Assert SET EQUALITY against the advertised runtime roster and the generated client. A subset check passes while a served capability has silently vanished from the advertised surface; a test that iterates the roster shrinks its own iteration when an entry is deleted and stays green.\n\nREAD `apps/daemon/src/daemon-store-dependencies.test.ts:238` FIRST — it already asserts `[...v2.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`. If it already covers a direction, extend it or cite it rather than landing a duplicate arm with a second exclusion list that can drift.\n\nDERIVE, DO NOT FREEZE. No count literal, no transcribed kind list in this file. Assert relationships between production surfaces so a sibling row bumping a roster cannot red this arm spuriously.\n\nMUTATION DRILL, both directions, recorded in the step note: delete one gate kind from the ADVERTISED side and confirm RED; restore and prove it. Delete the same kind from the SERVED side (its handler-table entry) and confirm RED; restore and prove it. These are TRACKED files so `git diff -- <path>` is a valid restore proof; the new test file is UNTRACKED, so if you mutate it, back it up out of tree and prove the restore by SHA256 in a separate call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-roster-coherence.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE DIGEST MIRROR CENSUS (DoD 2, second half) — as a COMMITTED ARM, not a transcript. A claim about files this row does not own is a premise unless it is a command that survives the commit and runs at the delivered tree.\n\nAdd an arm to `gates-roster-coherence.test.ts` that reads the digest from `packages/control-room-client/src/generated/generated-client.ts`, then reads each mirror file and asserts it carries THAT value — so the arm reds when a future regeneration leaves a mirror behind, instead of certifying a one-time grep.\n\nCENSUS BY THE HEX, NEVER BY THE SYMBOL. Three of the four mirrors do not mention `GENERATED_CONTRACT_DIGEST` at all; they hard-code the value, and one is a `.tsx` that a `*.ts`-only grep cannot see. Run:\n  D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"')\n  git grep -n \"$D\" -- . ':!.moe' ':!.serena'\nAt plan time this returned FOUR hits: generated-client.ts:907, packages/control-room-client/src/generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255. RE-RUN IT — that set moves, and the arm must enumerate the mirrors it finds rather than hard-coding this list.\n\nDistinguish the two populations in the note: the three TRANSCRIBED mirrors above do NOT follow a regeneration and are hand edits; the symbol IMPORTERS (contract-pins.ts:7, contract-digest.test.ts:21, apps/daemon/src/cutover/v2-readiness-evidence-{collector.ts,producers.test.ts}) DO follow automatically.\n\nTwo of the four live under apps/control-room, which is in none of `pnpm test`, `pnpm typecheck` or the daemon leg — so `pnpm --filter @moe/control-room test` is the only leg that can catch a stale one. Quote it here as well as in step 9.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-roster-coherence.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE HUMAN-ONLY FENCE HOLDS FOR THE WHOLE SET AT ONCE (DoD 4). Write `apps/daemon/src/gates-human-only-fence.test.ts`.\n\nEnumerate the gate kinds from the IMPLEMENTATION SEAM (the served registry keys filtered to this epic's kinds), not from a hand list, so a kind added to two of the three rosters cannot pass by being absent from the list the test iterates. For EVERY gate kind, assert ALL THREE AXES TOGETHER:\n1. OPERATOR-PRINCIPAL-ONLY — present in `OPERATOR_PRINCIPAL_KINDS` (daemon-command-vocabulary.ts:355).\n2. MCP-EXCLUDED — absent from `wiredMcpToolKinds()`. Assert against that function, which computes the actual served-over-MCP surface (mcp-tool-allowlist.ts:81), not against the exclusion roster: the exclusion list is DERIVED from `OPERATOR_PRINCIPAL_KINDS` (:78), so asserting it against axis 1 would be circular and would pass with the fence broken.\n3. HUMAN_ONLY_STEPS — present in the set at agent-spawn-contract.ts:195. Note this is ONE Set re-exported by agent-wrapper.ts, NOT a byte-for-byte duplicate; several task descriptions on this board still claim otherwise and that claim is stale.\n\nA kind fenced on two of three axes is the defect class this arm exists for — it is what minted 8 junk goals live — so assert the three together per kind and report which axis failed, not merely that one did.\n\nThen the REFUSAL: dispatch each gate kind with an AGENT-authenticated principal and assert the specific stable reason CODE and the LAYER that refused. Never merely that it failed — a test asserting only \"refused\" is one added layer away from vacuous, because a second refusal layer can answer first and the arm stays green while no longer testing its subject. Mutate the fence and confirm the arm reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-human-only-fence.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/gates-human-only-fence.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE THREE HUMAN GATES COMPOSE ON ONE GOAL (DoD 3, main variant). Write `apps/daemon/src/gates-compose-journey.test.ts`.\n\nAgainst a REAL store built by the production journey, drive ONE goal through the operator's four decisions IN SEQUENCE, each through the REAL command path:\n1. Gate 1 — `product_contract.approve_gate_1` (apps/daemon/src/product-contract/product-contract-gate-1-command.ts).\n2. The design step — `design.submit`.\n3. Gate 2 — the working preview, `preview.decide`.\n4. Gate 3 — the release, `release.decide`.\nAssert the goal reaches the end state, and assert the ORDERING is enforced: attempting a later gate before its predecessor must refuse with its specific code and layer. A sequence that happens to pass when run in order proves less than one that refuses when run out of order.\n\nMOCK NOTHING THAT DECIDES. A journey that mocks any gate's authority proves the shape and retires the question unanswered — that is the failure this row exists to prevent, and it is a rejection, not a shortcut. Test doubles are permitted only for things outside the decision path (a clock, a process launcher, a network call); every authority check runs its production code. State in the note exactly what was doubled and why each is not a decider.\n\nRead the existing harnesses in tests/e2e/foundation/ (e2e-harness.ts, j1-loop-harness.ts, j3-crash-harness.ts, j4-replan-harness.ts) before inventing a fourth harness shape — reuse the store-construction pattern rather than a new one. Note they run in `pnpm test:e2e`, a different lane from this row's verification command.\n\nTeardown: every store handle and temp directory released in a `finally`, on the throwing path too.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-compose-journey.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/gates-compose-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE SKIPPED-DESIGN VARIANT (DoD 3, second half) — same file, its own arm. The loop must reach a release WITHOUT a design.\n\nDrive a second goal: Gate 1 approved, the design SKIPPED, the preview approved, the release approved. Assert the goal reaches the same end state and that the skip is recorded on the aggregate rather than inferred from an absence — `task-365e5d978ba24c92a91b3ee19ab90558` (DONE, sha 70f9b643) shipped the skip as a recorded state whose decoder refuses a half-skipped revision, so assert against that recorded state and, if the decoder is reachable from here, assert a half-skipped revision is still refused with its code and layer.\n\nASSERT THE VARIANT ACTUALLY RAN. A swept or parameterised case that silently yields zero cases passes: if the two variants share a table, assert the table's length and that both branch labels executed. A skip that is implemented as \"the arm did not run\" is indistinguishable from a broken arm.\n\nThen the negative: assert the SKIPPED path and the SUBMITTED path reach end states that differ where they should — the design version the plan was built on is present in one and explicitly absent in the other. Two paths that produce byte-identical end states would mean the design step changed nothing, which is a finding, not a pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-compose-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE ADVERSARIAL PASS OVER THE WHOLE EPIC DIFF (DoD 5). Not a re-review of any one row — look for what the four bands got wrong ABOUT EACH OTHER. All four wrote to the same shared roster files in sequence, and that is where this epic's risk lives.\n\nGet the diff: `git log --oneline` for the epic's rows and a combined diff across every path they touched. Then hunt specifically for:\n- A CONTRACT THAT DRIFTED between producer and consumer — a payload key the daemon reads that the client never sends, or a field the client sends that no handler reads.\n- A REFUSAL CODE WHOSE LAYER DISAGREES across two bands — the same code attributed to different layers by two rows. Grep each gate's codes and compare their layer literals.\n- A COUNT LITERAL TWO ROWS BOTH MOVED — check the hand-transcribed rosters (runtime-contract.test.ts, daemon-command-registry.test.ts, daemon-command-registry-human-approver.test.ts) for a number that is right by luck: does the transcription's ORDER match the production tuple's sort? runtime-contract.test.ts:117-125 asserts sortedness against the production tuple precisely because a misplaced kind was once copied into the transcription and both stayed green.\n- DUPLICATED HELPERS that should have been shared — four bands solving the same decode or fence problem four ways.\n- A GATE WHOSE OFFER IS SERVED BUT WHOSE COMMAND PATH REFUSES IT — the affordance surface offering a step the dispatcher will not accept. Check each gate's offer against its handler.\n\nRECORD WHAT WAS CHECKED AND WHAT WAS FOUND. A pass that finds nothing MUST say what it looked for — an unqualified \"no issues found\" is not a result. Put the list in a row comment (comments truncate silently at 5000 chars; keep it under ~4500). Anything found that is not this row's to fix becomes a prerequisite row or a comment, per DELIVERY BIAS — not a silent fix inside an epic-final row.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/gates-roster-coherence.test.ts",
+        "apps/daemon/src/gates-human-only-fence.test.ts",
+        "apps/daemon/src/gates-compose-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "DOCS SWEEP (DoD 6) AND THE FINAL GATES — one pass, held back from the individual rows so the same file is not re-edited five times.\n\nDOCS. Read `docs/VISION.md`, `docs/agent-stack-runbook.md` and `README.md` (the epic's plausible surface; also glance at docs/release-provenance.md if Gate 3 changed what a release carries). Update: the operator-facing WORDS for all four gates so the browser's vocabulary matches what shipped; the runbook and README if either now understates what the browser can do; and ANY doc that still describes a gate as unbuilt. Quote the files changed. IF NOTHING NEEDED CHANGING, name the files you READ to reach that conclusion — an unevidenced \"docs are fine\" is not a sweep.\n\nFINAL GATES — re-run every leg from step 2 and quote every `Test Files N passed` count line:\n`pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/contracts test`, `pnpm typecheck`, `pnpm test`.\nThe verification command recorded on `moe.complete_task` is `pnpm --filter @moe/daemon test`. Repeat that root `pnpm test` covers no apps/** file, so the two app legs carry the apps/** claim.\n\nPATH-ATTRIBUTED BASELINE: step 2's run is the merge-base half; this run is the HEAD half. Subtract, intersect with this row's owned paths, and complete only when that intersection is EMPTY. Disclose any foreign red verbatim with its exact failing lines and file paths — as the epic-final row you will likely see peer red, and attributing it to this row is as wrong as hiding it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/VISION.md",
+        "docs/agent-stack-runbook.md",
+        "README.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -37,5 +126,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T16:46:09.494Z",
-  "updatedAt": "2026-09-05T16:46:09.494Z"
+  "updatedAt": "2026-09-05T18:22:16.029Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T18:18:02.155Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 10
+  },
+  "contextFetchedBy": [
+    "architect-fa3a3e17"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T18:22:13.862Z",
+  "planningNotes": {
+    "approachesConsidered": "WHERE THE THREE NEW TEST FILES LIVE. Considered tests/integration/ (root lane) and tests/e2e/foundation/ (its own lane). CHOSEN: apps/daemon/src, because this row's stated verification command is `pnpm --filter @moe/daemon test` and because the journey drives daemon command handlers against a real store rather than a real process. The root vitest include has no apps/**, so these files run in exactly one lane and cannot be double-counted as root-lane evidence.\n\nONE COMBINED TEST FILE vs THREE. Chosen three, split by subject — roster coherence, the human-only fence, the composed journey — because they fail for unrelated reasons and a single file would make an epic-final red hard to attribute. Six distinct files total, well inside the cap.\n\nFREEZING THE ROSTER COUNTS. Rejected outright — epic rail 3. Four sibling rows move the same count literals in sequence and this row is last; any number written into its arms is one a concurrent row moves first. Every arm here derives its expectation from the production surface and asserts SET EQUALITY, never a count.\n\nWHAT HAPPENS IF A GATE IS MISSING AT EXECUTION. This row builds nothing (task rail 1). Step 1 makes the gap census the first act and routes a gap to a prerequisite row measured symbol by symbol — never a narrowed DoD, never a mock, never authority reimplemented in the test. A proof that only proves shapes retires the question unanswered, and a falsely retired gate cannot be repaired.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05, at PLAN time. All four dependsOn rows are WORKING, so this row executes against a tree that does not exist yet. Every number below is a plan-time reading and MUST be re-measured at execution — epic rail 3 forbids freezing a roster count in a gate.\n\nTHE GATE KINDS ARE NOT LANDED YET. Per-kind measurement of the three rosters:\n  preview.decide  — runtime-vocabulary.ts: PRESENT (1 hit). daemon PAYLOAD_KEYS: ABSENT. HUMAN_ONLY_STEPS: ABSENT.\n  release.decide  — all three ABSENT.\n  design.submit   — all three ABSENT.\n  design.read     — all three ABSENT.\nSo `preview.decide` is mid-publication: advertised in the shared contract, not yet served by the daemon. That is the documented intermediate state (apps/daemon/src/goals/goal-create-with-source.ts:35 records an existing kind in RUNTIME_COMMAND_KINDS and not in the daemon table), NOT a defect to file. It is also exactly why this row's roster arm must be written to enumerate the kinds it finds rather than to assert a frozen list.\n\nTHE DIGEST CENSUS — AND A CORRECTION I MADE TO MY OWN EARLIER MEASUREMENT TODAY. A `git grep` for the SYMBOL `GENERATED_CONTRACT_DIGEST` finds ONE literal and concludes, wrongly, that regeneration cascades everywhere. THREE OF THE FOUR MIRRORS NEVER MENTION THE SYMBOL — they hard-code the hex. Census by VALUE:\n  D=$(grep -o '\\\"[0-9a-f]\\{64\\}\\\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\\\"')\n  git grep -n \"$D\" -- . ':!.moe' ':!.serena'\nAt plan time, digest ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076, FOUR hits, two under apps/control-room exactly as the epic rail says:\n  packages/control-room-client/src/generated/generated-client.ts:907   (generated source)\n  packages/control-room-client/src/generated-coverage.test.ts:36       (`const CONTRACT_DIGEST = \"...\"`, hand-transcribed)\n  apps/control-room/src/data/data-adapter.test.ts:18                   (bare hex)\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255             (`contractSchemaHash:` — a .tsx, invisible to a *.ts-only grep)\nThe symbol IMPORTERS (contract-pins.ts:7 re-export, contract-digest.test.ts:21 derive-and-compare, apps/daemon/src/cutover/v2-readiness-evidence-{collector.ts:6,producers.test.ts:4}) DO follow a regeneration automatically. The three transcribed mirrors do not. Two of the four are invisible to `pnpm test` (root vitest include has no apps/**), to `pnpm typecheck` and to the daemon leg — which is the concrete shape of \"a forgotten mirror ships two hard-throwing tests behind three green gates\".\n\nHUMAN_ONLY_STEPS IS ONE SET, NOT TWO. `apps/daemon/src/orchestrator/agent-spawn-contract.ts:195`, re-exported by agent-wrapper.ts. The description's warning that several task descriptions claim a byte-for-byte duplicate is correct and that claim is stale — confirmed by `git grep -ln HUMAN_ONLY_STEPS -- apps packages tests tools`, which returns agent-spawn-contract.ts, agent-wrapper.ts and http/affordance-planning-offers.test.ts only. No count or membership guard reads the set, so it is the one roster of the three that takes a plain addition.\n\nTHE MCP FENCE IS DERIVED, NOT TRANSCRIBED. `apps/daemon/src/mcp-tool-allowlist.ts:78` computes MCP_EXCLUDED_COMMAND_KINDS as `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()`, and `WIRED_KINDS` (:81) as `Object.keys(PAYLOAD_KEYS)` minus that exclusion. So `wiredMcpToolKinds()` is the SERVED-over-MCP surface computed from the implementation seam — it is the right enumeration source for this row's fence arm, and it is NOT a roster constant that shrinks its own iteration.\n\nTHE SERVED SEAM for the bidirectional roster arm: `apps/daemon/src/daemon-command-registry.ts:194` composes the registry by spreading the family handler tables (BOOTSTRAP_HANDLERS, GOAL_HANDLERS, PLANNING_HANDLERS, …). `apps/daemon/src/daemon-store-dependencies.test.ts:238` already asserts `[...v2.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition` — read that arm before writing a second one, and extend rather than duplicate if it already covers a direction.\n\nGATE 1 EXISTS AND IS THE JOURNEY'S FIRST DECISION: apps/daemon/src/product-contract/product-contract-gate-1-command.ts, kind `product_contract.approve_gate_1`, already in the runtime roster.\n\nJOURNEY PRECEDENT: tests/e2e/foundation/ carries real end-to-end harnesses (j1-loop-harness.ts, j3-crash-harness.ts, j4-replan-harness.ts, e2e-harness.ts) driving real processes. Read them before inventing a fourth harness shape; but note tests/e2e runs in `pnpm test:e2e`, not the daemon lane, and this row's verification command is `pnpm --filter @moe/daemon test`.\n\nDOCS SURFACE IS SMALL: docs/VISION.md, docs/agent-stack-runbook.md, README.md, docs/release-provenance.md, docs/REPOSITORY_HYGIENE.md."
+  },
+  "planApprovedAt": "2026-09-05T18:22:16.029Z"
 }

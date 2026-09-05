@@ -143,7 +143,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T18:16:19.844Z",
+  "updatedAt": "2026-09-05T18:17:02.705Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 5,
@@ -402,6 +402,47 @@
       "treeId": "b3180b942f17a3f072fdce9c441337c102a2792c",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "e3066278b99b94fb4905bbb6d396add77702e610",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T16:46:03Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T18:17:02.705Z",
+      "treeId": "3082064e7f3ba272af6aba5dc8a43920c20e174d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -411,23 +452,33 @@
     "apps/daemon/src/daemon-command-vocabulary.test.ts",
     "apps/daemon/src/daemon-command-registry.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts"
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/preview/preview-contracts.js",
     "apps/daemon/src/preview/preview-contracts.ts",
-    "apps/daemon/src/preview/preview-contracts.test.ts"
+    "apps/daemon/src/preview/preview-contracts.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-families.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/orchestrator/node-lander.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts"
+    "tests/e2e/foundation/j5-compiler-agent.mjs",
+    "tests/e2e/foundation/j5-plan-reject-harness.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-b33940f5@2026-09-05T15:15:20Z",
-    "at": "2026-09-05T15:15:28.629Z"
+    "kind": "completion",
+    "sessionId": "worker-d6e44333@2026-09-05T16:46:03Z",
+    "at": "2026-09-05T18:17:02.705Z"
   },
   "priorBlockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
   "blockedOnTaskIds": null,
