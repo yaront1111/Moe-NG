@@ -67,11 +67,18 @@
     {
       "stepId": "step-4",
       "description": "THE COMPILER COMPILES THE SUCCESSOR, test first. apps/daemon/src/planning/compile-dispatcher.test.ts, new describe over `rejectedWorld(...)` (import the fixture module; the file's own helpers stay for the INITIAL arms): (1) `submit(store, ref, structureOf(\"node-beta\"))` after the reject -> ok with `runId === successorRunId`; the successor's state reads lifecycle PLAN_REVIEW, runKind REVISION, one sealed node `node-beta`; the ORIGINAL run's state is unchanged (still REJECTED, no new events on its aggregate - compare event counts before/after); the committed compile decisions' commandIds carry the successor's stem (`compile-<digest12>-<sha8(successorRunId)>`); (2) a second `submit` on the same goal -> `SUBMIT_DECOMPOSITION_ALREADY_FINALIZED` with layer DAEMON_PLANNING (or the layer the code names - assert exactly); (3) a two-node structure on the successor -> `SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL` (the fence is unchanged for REVISION runs; the code name stays); (4) the surface after (1): `offerTargets(\"approval.decide_intent\")` equals [successorRunId] (build the port inline, :40-50 pattern) - this is the step-3 post-compile arm; (5) every INITIAL arm at :194-292 green unchanged. Run red. Then apps/daemon/src/planning/compile-dispatcher.ts (341 -> <= 395; NO new module - the 10-file cap is spent): `const runId = <currentPlanningRun(store, provenance.planningRunRef) as an id>` at :184; after `ids` (:242) read the run state ONCE (`stateOf(readDurableLedger(store, projectId), runId)` or the reducer's read the file already uses - name it) and branch on STATE, not version alone: (a) version 0 -> today's INITIAL fold unchanged; (b) version 1 AND the state has no sealed proposal AND runKind === \"REVISION\" -> the propose fold WITHOUT the create item: `[ready (expectedVersion 1), claim (2), propose (3, proposalKind: \"REVISION\")]` built from the same literals (factor the three items out of the v0 list into a local `chainItems(kind)` so they are written once), then fall through to finalize; (c) version 1 with a sealed proposal -> finalize only (today); (d) otherwise the existing REPLAYED / ALREADY_FINALIZED answers - MEASURE with the arms which aggregate version the successor sits at after (b)'s fold and make the finalize's guard read the state's lifecycle (proposed-not-finalized) rather than `runVersion === 1`, so INITIAL and REVISION share one finalize path; keep :243-300's INITIAL behaviour byte-identical for version 0. Gate from apps/daemon: `pnpm exec vitest run --root . --config package.json src/planning/compile-dispatcher.test.ts src/planning/approval-intent.test.ts` (count lines quoted) + `wc -l apps/daemon/src/planning/compile-dispatcher.ts` <= 395.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/compile-dispatcher.test.ts",
         "apps/daemon/src/planning/compile-dispatcher.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/planning/compile-dispatcher-revision.test.ts"
+      ],
+      "note": "STEP 4 CLOSED WITH ZERO PRODUCTION CHANGE FROM THIS ROW. The blocker is gone and the dispatcher work step 4 specified was ALREADY LANDED by the prerequisite I filed — re-implementing it would have been a silent duplicate (build-order rail).\n\nPREREQUISITE task-4595697e IS DONE (feat fd1b455d, qa 766f397d). It landed exactly step 4's production seam and MORE: `compile-run-resolution.ts` (93) resolves `{runId, runKind, baseVersion}` from `currentPlanningRun` and FAILS CLOSED on `unreadable`; `planning-services.ts` reads the run's RAW head once at handler entry (`Math.max(versionOf(ledger,runId), store.getAggregateVersion(runId))`); `compile-dispatcher.ts` (388) re-bases every version gate on `baseVersion` (0 INITIAL / 1 REVISION) and sets `proposalKind: target.runKind`. Its arms live in a NEW file `compile-dispatcher-revision.test.ts`, deliberately NOT in compile-dispatcher.test.ts, so \"the INITIAL path is unchanged\" stays provable by hash (its header says so). I honoured that: `compile-dispatcher.ts` is SHA256-identical to HEAD (ef6297a0…, both sides) and compile-dispatcher.test.ts is untouched by me this step.\n\nWHAT THE PREREQUISITE ALREADY PINS (verified by reading its arms, not its summary): successor compiles to PLAN_REVIEW/runKind REVISION; original left byte-untouched; identical resubmission REPLAYS; changed-structure resubmission refuses SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT @ COMPILE_DISPATCHER; two-hop chain (reject the successor, compile run 3); unreadable walk refuses SUBMIT_DECOMPOSITION_RUN_UNREADABLE @ COMPILE_DISPATCHER; the propose fence refuses EXPECTED_VERSION_CONFLICT @ DAEMON_PLANNING under a real racing writer.\n\nTHREE GAPS REMAINED. I closed all three, tests only.\n\n(1) DoD 1's POST-COMPILE HALF — nobody's but mine. affordance-read-planning.test.ts (991 -> 1033), one arm + one helper `offerPairsOver`. Over the real reject world: CONTROL first (`planning.submit_decomposition` == [goalId] before the compile, so the arm cannot pass on a surface that never moved), then `submit`, then `compiled.runId === successorRunId` asserted BEFORE anything else (without it, a compile that landed back on the rejected run still reads as \"the surface followed the successor\"), then per-kind set-equality `approval.decide_intent` == `approval.decide` == [successorRunId], `planning.submit_decomposition` == [] (the compiler card is spent), refs toEqual `{[successor]: goal}`. Plus WHOLE-SURFACE set-equality: every offer rendered as `commandKind@target`, filtered to `@originalRunId`, toEqual([]) — \"the rejected run is never re-offered\" is a claim about EVERY kind and a per-kind check only sees the kinds it names.\n\n(2) DoD 2's \"ids keyed on the successor runId\" — asserted NOWHERE at HEAD. New arm in compile-dispatcher-revision.test.ts asserting against the production `idsOf`, never a re-derivation of `compile-<digest12>-<sha8(runId)>`. Discriminator asserted to EXIST first (successor stem != original stem, same digest); the original's INITIAL family is present and the successor's absent BEFORE the compile; after it, the successor's `propose` and `finalize` are present and the ids under that stem are EXACTLY those two (a third would mean an unaccounted leg).\n\n(3) DoD 2's \"second submission refuses SUBMIT_DECOMPOSITION_ALREADY_FINALIZED\" is a STALE PREMISE — production answers REPLAYED or SUBMISSION_CONFLICT there (both already pinned). I did not narrow the DoD: I pinned the code where it ACTUALLY fires, which had zero arms. Enumerated at compile-dispatcher.ts:280-348: `>= base+2` replays, `== base` folds, `== base+1` finalizes, everything else refuses — i.e. `runVersion < base`, IMPOSSIBLE for INITIAL (base 0) and reachable for a REVISION successor (base 1) only at head 0. That is a TORN MINT: `commitIntentRejection` commits the rejection and the successor's PlanningRunCreated as legs of ONE decision, so a reachable successor with an empty stream means the multi-leg commit did not land whole. New arm builds it with `tornMintStore` (same Proxy technique/precedent as the file's `unreadableRunStore`), asserts the walk still REACHES the successor (so the refusal is the head arithmetic, not the resolver), refuses ALREADY_FINALIZED @ COMPILE_DISPATCHER (code and layer separately), and runs the same submission through the UNWRAPPED store as the control.\n\nDoD 2's \"one-node fence arm unchanged\": SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL is 0 hits repo-wide (lifted by task-4423d2a4, recorded in step 1). Nothing to keep unchanged; I changed no node-count behaviour.\n\nDRILLS RUN NOW (not deferred), both on compile-dispatcher.ts, one at a time:\n- M-B `idsOf(ref.revisionDigest, provenance.planningRunRef)` (ids back on the immutable ref) -> arm (2) red: `Error: submit refused: BOOTSTRAP_COMMAND_BYTES_CONFLICT @ DAEMON_PLANNING` at :266 — the exact collision with the rejected run's already-banked INITIAL family that the run-keyed stem exists to prevent. All 9 arms red.\n- M-C delete the `else if (runVersion !== baseVersion + 1)` guard",
+      "startedAt": "2026-09-05T14:26:45.981Z",
+      "completedAt": "2026-09-05T14:35:05.315Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -102,13 +109,14 @@
     {
       "stepId": "step-6",
       "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` / `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo); from apps/daemon `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts src/daemon-command-registry.test.ts src/daemon-command-vocabulary.test.ts` green UNCHANGED (no kind or payload change; count lines quoted). PATH-ATTRIBUTED BASELINE: HEAD failures minus the step 1d baseline, intersected with the nine owned paths, EMPTY; foreign red disclosed verbatim. `wc -l` quoted: affordance-planning-offers.ts <= 200, compile-dispatcher.ts <= 395, activity-read.ts <= 215, affordance-read.ts <= (its landed size + 4, pre-existing over cap, recorded). DRILL (global rail 1): the new fixture module is UNTRACKED -> SHA256 backup in %TEMP%\\moe-drill-<workerId>\\, restore proven in a separate command; tracked files: capture `git diff -- <path>` before, compare after. One mutation at a time, red line quoted: (1) `currentRun` ignored at :115 (planReviewable on the immutable ref) -> the post-reject 'no decide_intent' arm red; (2) `refs[goal.planningRunRef]` kept on the immutable ref -> the planningGoalRefs arm red; (3) the dispatcher takes `provenance.planningRunRef` again -> the successor-compile arm red (ALREADY_FINALIZED or a refusal on the rejected run); (4) `proposalKind: \"INITIAL\"` on the REVISION fold -> the runKind/PLAN_REVIEW arm red (or the core's admission refuses - quote which); (5) verdictOf returns null for decide_intent -> the re-aimed :121 arm red. Record the five red lines + restore proofs in the step note (< 4500 chars).",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-planning-offers.ts",
         "apps/daemon/src/planning/compile-dispatcher.ts",
         "apps/daemon/src/http/activity-read.ts",
         "apps/daemon/src/http/affordance-read.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T14:35:36.951Z"
     },
     {
       "stepId": "step-7",
@@ -121,7 +129,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-2739fee7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -156,12 +164,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-05T14:00:28.686Z",
+  "updatedAt": "2026-09-05T14:35:36.951Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -170,7 +178,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-5"
+    "step-5",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T14:49:05.945Z",
@@ -191,7 +200,8 @@
   },
   "planApprovedAt": "2026-09-04T14:49:08.080Z",
   "contextFetchedBy": [
-    "worker-cceb207f"
+    "worker-cceb207f",
+    "worker-2739fee7"
   ],
   "workStartedAt": "2026-09-05T01:29:24.469Z",
   "declaredFiles": [

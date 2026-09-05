@@ -946,6 +946,20 @@ describe("after a REJECT the surface follows the goal's successor run", () => {
     };
   }
 
+  /** Every offer on the surface as `commandKind@targetAggregateId`, sorted. */
+  function offerPairsOver(world: SqliteEventStore): string[] {
+    let issued = 0;
+    const result = createAffordancePort({
+      mintId: () => `reject-pairs-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    }).readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result.nextAllowedCommands
+      .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`)
+      .sort();
+  }
+
   function refsOver(world: SqliteEventStore): Readonly<Record<string, string>> {
     let issued = 0;
     const result = createAffordancePort({
@@ -987,5 +1001,34 @@ describe("after a REJECT the surface follows the goal's successor run", () => {
     // EXACT map. The rejected run's key must be absent, or the surface's authority map still
     // binds a run nobody may act on to this goal.
     expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+  });
+
+  it("moves both approval kinds onto the SUCCESSOR once the compiler runs, and re-offers the "
+    + "rejected run under NO kind", () => {
+    const world = rejectedWorld("the second slice is missing");
+    const targets = portOver(world.store);
+    // CONTROL, before the compile: the surface is offering the compiler, not an approval. Without
+    // this line the assertions below could hold on a surface that had never moved at all.
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    // FIRST. `compiled.runId` is what the dispatcher actually wrote to; if the compile had landed
+    // back on the rejected run every assertion below would still be readable as "the surface
+    // followed the successor" while the plan was sealed onto a run the operator already refused.
+    expect(compiled.runId).toBe(world.successorRunId);
+
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+    expect(targets("approval.decide")).toEqual([world.successorRunId]);
+    // The compiler card is spent: the successor is reviewable, so the ladder has moved past it.
+    expect(targets("planning.submit_decomposition")).toEqual([]);
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+
+    // SET-EQUALITY OVER THE WHOLE SURFACE, not one kind at a time: "the rejected run is never
+    // re-offered" is a claim about EVERY offer, and a per-kind check only sees the kinds it
+    // names. Asserting the empty list (rather than `not.toContain`) prints the offending
+    // `commandKind@target` pairs verbatim when it fails.
+    expect(offerPairsOver(world.store)
+      .filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
   });
 });

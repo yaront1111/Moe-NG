@@ -21,11 +21,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 import { planningStateFromDurableRecord } from "./approval-gate.js";
+import { idsOf } from "./compile-run-resolution.js";
 import { currentPlanningRun } from "./current-planning-run.js";
 import {
   OPERATOR,
   PROJECT_ID,
+  RUN_ID,
   closeStores,
   nodeOf,
   rejectPlan,
@@ -236,7 +239,105 @@ describe("a REVISION successor run compiles", () => {
       if (!control.ok) throw new Error(`control refused: ${control.code} @ ${control.layer}`);
       expect(control.runId).toBe(successorRunId);
     });
+
+  /**
+   * task-138fab30 DoD 2, "ids keyed on the successor runId".
+   *
+   * The INITIAL compile of the SAME approved revision already wrote its own family under the
+   * ORIGINAL run's stem, so the successor's compile is only restartable if `idsOf` keys on the
+   * run as well as the digest — otherwise the second compile arrives under ids the store has
+   * already decided and is answered as a replay of the rejected run's plan.
+   *
+   * Asserted against the production `idsOf`, never a re-derivation here: a test that recomputed
+   * `compile-<digest12>-<sha8(runId)>` would keep passing after production changed the scheme.
+   */
+  it("writes its compile decisions under the SUCCESSOR's derived id family", () => {
+    const { originalRunId, ref, store, successorRunId } = rejectedWorld("ids follow the successor");
+    const successorIds = idsOf(ref.revisionDigest, successorRunId);
+    const originalIds = idsOf(ref.revisionDigest, originalRunId);
+    // The discriminator has to EXIST before absence/presence below means anything: same digest,
+    // different run, so a scheme keyed on the digest alone would make these two identical.
+    expect(successorIds["stem"]).not.toBe(originalIds["stem"]);
+    // The rejected run's INITIAL compile already banked its own family, and it stays banked.
+    expect(commandIdsOf(store)).toContain(originalIds["propose"]);
+    expect(commandIdsOf(store)).not.toContain(successorIds["propose"]);
+
+    const compiled = submit(store, ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    expect(compiled.runId).toBe(successorRunId);
+
+    const after = commandIdsOf(store);
+    expect(after).toContain(successorIds["propose"]);
+    expect(after).toContain(successorIds["finalize"]);
+    // EXACTLY the two decisions this compile dispatches — the fold's internal chain items ride
+    // inside the propose decision's payload and mint no decisions of their own, so a third id
+    // under this stem would mean the dispatcher grew a leg nobody accounted for.
+    expect(after.filter((id) => id.startsWith(`${successorIds["stem"] as string}-`)))
+      .toEqual([successorIds["finalize"], successorIds["propose"]].sort());
+  });
+
+  /**
+   * The ONLY reachable path to `SUBMIT_DECOMPOSITION_ALREADY_FINALIZED` after task-4595697e
+   * re-based the version gates on `baseVersion`, measured by enumeration at
+   * compile-dispatcher.ts:280-348: `>= base + 2` replays, `== base` folds, `== base + 1`
+   * finalizes, and everything else refuses here — which is `runVersion < base`, impossible for an
+   * INITIAL run (base 0) and reachable for a REVISION successor (base 1) only at head 0.
+   *
+   * That is a TORN MINT: `commitIntentRejection` commits the rejection and the successor's
+   * `PlanningRunCreated` as legs of one decision, so a successor the walk can reach while its own
+   * stream is empty means the multi-leg commit did not land whole. Compiling onto it would seal a
+   * plan onto a run that was never created. task-138fab30's DoD asked for this code on a SECOND
+   * submission; production answers REPLAYED or SUBMISSION_CONFLICT there (the two arms above), so
+   * the code is pinned where it actually fires rather than left with no arm at all.
+   */
+  it("refuses ALREADY_FINALIZED when the successor's own mint never landed", () => {
+    const { ref, store, successorRunId } = rejectedWorld("a torn successor mint");
+    const torn = tornMintStore(store, successorRunId);
+    // The walk still REACHES the successor - the rejection event that names it is on the
+    // original's stream - so this is the head arithmetic refusing, not the resolver.
+    expect(currentPlanningRun(torn, RUN_ID).runId).toBe(successorRunId);
+    expect(torn.getAggregateVersion(successorRunId)).toBe(0);
+
+    const refusedOutcome = submit(torn, ref);
+
+    expect(refusedOutcome.ok).toBe(false);
+    expect(refusalOf(refusedOutcome).code).toBe("SUBMIT_DECOMPOSITION_ALREADY_FINALIZED");
+    expect(refusalOf(refusedOutcome).layer).toBe("COMPILE_DISPATCHER");
+    // THE CONTROL: the same submission through the UNWRAPPED store commits, so the refusal is
+    // attributable to the torn head and not to the Proxy having broken the store.
+    const control = submit(store, ref);
+    if (!control.ok) throw new Error(`control refused: ${control.code} @ ${control.layer}`);
+    expect(control.runId).toBe(successorRunId);
+  });
 });
+
+/** Every committed decision's command id, as the durable ledger reads them. */
+const commandIdsOf = (store: SqliteEventStore): string[] =>
+  decisionsOf(store, 200).map((decision) => decision.key.commandId).sort();
+
+/**
+ * A store that reports `runId` as never minted - head 0 and an empty stream - while every other
+ * aggregate answers truthfully, so the rejection event naming it still resolves the walk.
+ *
+ * Same Proxy technique and same reason as `unreadableRunStore` above: `SqliteEventStore` freezes
+ * itself, so a method cannot be shadowed by assignment.
+ */
+function tornMintStore(store: SqliteEventStore, runId: string): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property, receiver): unknown {
+      if (property === "readEvents") {
+        return (aggregateId: string): unknown =>
+          aggregateId === runId ? [] : target.readEvents(aggregateId);
+      }
+      if (property === "getAggregateVersion") {
+        return (aggregateId: string): number =>
+          aggregateId === runId ? 0 : target.getAggregateVersion(aggregateId);
+      }
+      const value: unknown = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
 
 const encoder = new TextEncoder();
 
