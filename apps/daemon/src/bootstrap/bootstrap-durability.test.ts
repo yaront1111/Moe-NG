@@ -6,16 +6,20 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_COMMAND_KINDS, decodeBootstrapRequestBytes } from "./bootstrap-contracts.js";
-import { commitAccepted, missingPrerequisites, readDurableLedger } from "./bootstrap-ledger.js";
+import {
+  commitAccepted, humanReviewWitness, missingPrerequisites, readDurableLedger,
+} from "./bootstrap-ledger.js";
 import { PREREQUISITE_ALTERNATIVES } from "./bootstrap-sequence.js";
 import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import {
   ACTIVATION_WITNESS,
   FIXTURE_ACTIVATION_RECEIPTS,
   GOAL_CREATE_COMMAND_ID,
+  GOAL_ID,
   OBSERVATION,
   PROJECT_ID,
   RUN_ID,
+  acceptancePayload,
   activatePayload,
   approvalPayload,
   approvalRecord,
@@ -49,7 +53,8 @@ import type { ActivationReceiptPorts } from "./activation-receipts-ports.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
-import { scanGlobalEvents } from "../goals/goal-closure-test-fixtures.js";
+import { scanGlobalEvents, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
+import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 
 /**
  * Durability behaviour of the nine bootstrap services: the command-driven sequence (DoD 1),
@@ -126,6 +131,25 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
     const outcome = send(
       store, envelope("project.activate", 2, { witness: { ...ACTIVATION_WITNESS } }),
     );
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("ACTIVATION_WITNESS_CALLER_SUPPLIED");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(decisionCount(store)).toBe(before);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(false);
+  });
+
+  it.each([
+    ["a string", "x"], ["a number", 42], ["a boolean", true], ["an array", []], ["null", null],
+  ])("refuses activation carrying %s as its witness the same way", (_shape, witness) => {
+    // Only an object witness used to be refused; every other shape was ignored silently, which
+    // is the same caller attempt to present a witness with a quieter answer.
+    const store = openStore();
+    driveThrough(store, "project.activate");
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("project.activate", 2, { witness }));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -633,6 +657,172 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+
+/**
+ * THE BROWSER'S APPROVAL SATISFIES CLOSE AND PUBLISH (task-ebbcbdb4).
+ *
+ * `goal.close` and `repository.publish` both require a durable `approval.decide`
+ * (bootstrap-sequence.ts:22 and :25). The browser's paired session approves through
+ * `approval.decide_intent` instead, so a goal approved IN THE BROWSER commits no
+ * `approval.decide` and its prerequisite was unsatisfiable FOREVER — measured live on the UnAI
+ * project, where a goal at 10/10 criteria VERIFIED refused BOOTSTRAP_PREREQUISITE_MISSING while
+ * `/affordances/read` went on offering the operator a Close button.
+ *
+ * These arms drive the REAL intent seam (`runApprovalIntentCommand`), never a hand-built ledger
+ * row: the claim is about what the production approval commits, so a fixture that added the kind
+ * itself would prove nothing about production.
+ */
+describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
+  const INTENT_OPERATOR = "principal-1";
+  const REJECT_REASON = "the plan does not close the goal";
+
+  /** The browser's approve wire, driven at its own production seam against a real store. */
+  function decideIntent(
+    store: SqliteEventStore,
+    commandId: string,
+    decision: "APPROVE" | "REJECT",
+  ): ServiceOutcome {
+    return runApprovalIntentCommand({
+      commandId,
+      correlationId: "corr-intent-close",
+      decidedAt: "2026-09-05T12:00:00.000Z",
+      expectedVersion: store.getAggregateVersion(RUN_ID),
+      humanReview: humanReviewWitness(INTENT_OPERATOR, commandId),
+      payload: {
+        decision,
+        decisionReason: decision === "APPROVE" ? "the plan is sound" : REJECT_REASON,
+        dependencyChanges: { additions: [], challenges: [], removals: [] },
+        runId: RUN_ID,
+      },
+      principalId: INTENT_OPERATOR,
+      projectId: PROJECT_ID,
+      store,
+      targetAggregateId: RUN_ID,
+    });
+  }
+
+  /** Everything the journey commits BEFORE its approval — the world with neither approval kind. */
+  function unapprovedWorld(): SqliteEventStore {
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    return store;
+  }
+
+  /** A goal approved the way the BROWSER approves it, and no other way. */
+  function intentApprovedWorld(commandId = "cmd-intent-approve-close"): SqliteEventStore {
+    const store = unapprovedWorld();
+    const approved = decideIntent(store, commandId, "APPROVE");
+    expect(approved.ok, approved.ok ? "" : `${approved.code}@${approved.refusedBy}`).toBe(true);
+
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    // The divergence every arm below rests on: the SEEDED kind is absent, so nothing but the
+    // alternative can satisfy the gate. Were it present these arms would pass on the old table.
+    expect(ledger.kinds.has("approval.decide_intent")).toBe(true);
+    expect(ledger.kinds.has("approval.decide")).toBe(false);
+    return store;
+  }
+
+  it("accepts goal.close on a goal approved through approval.decide_intent", () => {
+    const store = intentApprovedWorld();
+    seedReviewAcceptance(store);
+
+    const closed = send(
+      store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
+
+    expect(closed.ok, closed.ok ? "" : `${closed.code}@${closed.refusedBy}`).toBe(true);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("goal.close")).toBe(true);
+  });
+
+  it("accepts repository.publish on a goal approved through approval.decide_intent", () => {
+    const store = intentApprovedWorld("cmd-intent-approve-publish");
+
+    const published = send(store, envelope(
+      "repository.publish", 0,
+      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+    ));
+
+    expect(published.ok, published.ok ? "" : `${published.code}@${published.refusedBy}`).toBe(true);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("repository.publish")).toBe(true);
+  });
+
+  it("still refuses goal.close at DAEMON_PREREQUISITE when NEITHER approval kind is committed", () => {
+    const store = unapprovedWorld();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    expect(ledger.kinds.has("approval.decide")).toBe(false);
+    expect(ledger.kinds.has("approval.decide_intent")).toBe(false);
+    const before = decisionCount(store);
+
+    const closed = send(store, envelope("goal.close", 2, acceptancePayload()));
+
+    // The gate is CORRECTED, not REMOVED: the code and the LAYER are both pinned, because three
+    // layers can refuse here and a goal-shaped refusal would mean the sequence gate never ran.
+    expect(closed.ok).toBe(false);
+    if (closed.ok) throw new Error("expected refusal");
+    expect(closed.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    expect(closed.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("still refuses repository.publish at DAEMON_PREREQUISITE when NEITHER kind is committed", () => {
+    const store = unapprovedWorld();
+    const before = decisionCount(store);
+
+    const published = send(store, envelope(
+      "repository.publish", 0,
+      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+    ));
+
+    expect(published.ok).toBe(false);
+    if (published.ok) throw new Error("expected refusal");
+    expect(published.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    expect(published.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("names the PRIMARY approval kind as missing, never the alternative", () => {
+    const store = unapprovedWorld();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+
+    // The refusal response carries no missing-kind detail, so the STABLE MEMBER KIND is read off
+    // the production reader itself. The control room parses `missing` as plain strings
+    // (live/live-board-feed.ts:118-127); leaking `approval.decide_intent` here would rename the
+    // board's BLOCKED card after an act no operator can perform on a project that never paired.
+    expect(missingPrerequisites(ledger, "goal.close")).toEqual(["approval.decide"]);
+    expect(missingPrerequisites(ledger, "repository.publish")).toEqual(["approval.decide"]);
+  });
+
+  /**
+   * THE ASYMMETRY THE WIDENING INTRODUCES, MEASURED RATHER THAN ASSUMED.
+   *
+   * `approval.decide` has no REJECT branch at all (PLANNING_HANDLERS, planning-services.ts:341),
+   * but `approval.decide_intent` does, and a rejection "is a human decision, not an error path"
+   * that "commits through the same one-decision seam" (approval-intent-rejection.ts:18-24). So a
+   * REJECTED browser approval DOES put `approval.decide_intent` in the committed set and DOES
+   * satisfy this project-wide sequence gate.
+   *
+   * That is safe only because the sequence gate was never the per-goal authority: it asks whether
+   * the project has been through an approval at all, and the goal's OWN authority then answers.
+   * This arm pins that second answer, so a future change that removed it would redden here
+   * instead of shipping a closeable rejected goal.
+   */
+  it("lets a REJECTED approval.decide_intent past the sequence gate and no further", () => {
+    const store = unapprovedWorld();
+    const rejected = decideIntent(store, "cmd-intent-reject-close", "REJECT");
+    expect(rejected.ok, rejected.ok ? "" : `${rejected.code}@${rejected.refusedBy}`).toBe(true);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("approval.decide_intent")).toBe(true);
+
+    const closed = send(
+      store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
+
+    expect(closed.ok).toBe(false);
+    if (closed.ok) throw new Error("expected refusal");
+    // NOT the sequence gate — a rejected run gets past it, exactly as an approved one does — and
+    // NOT accepted either: the goal's own authority is what refuses.
+    expect(closed.refusedBy).not.toBe("DAEMON_PREREQUISITE");
+    expect(closed.code).not.toBe("BOOTSTRAP_PREREQUISITE_MISSING");
   });
 });
 

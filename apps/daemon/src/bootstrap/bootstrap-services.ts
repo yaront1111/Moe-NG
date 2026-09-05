@@ -146,7 +146,10 @@ const UNMEASURED_RECEIPTS: ActivationReceipts = Object.freeze({
  */
 const activateProject: CommandHandler = (context): ServiceOutcome => {
   const { receipts, request } = context;
-  if (payloadObject(request.payload, "witness") !== null) {
+  // Key PRESENCE, not object shape: a caller-supplied `witness` of any type — string, number,
+  // boolean, array, null — is the same attempt to present a witness, and used to be ignored
+  // silently while only an object was refused.
+  if (Object.hasOwn(request.payload, "witness")) {
     return refuse(request.kind, "ACTIVATION_WITNESS_CALLER_SUPPLIED", "DAEMON_INGRESS");
   }
   const assembly = activationWitnessOf(receipts ?? UNMEASURED_RECEIPTS);
