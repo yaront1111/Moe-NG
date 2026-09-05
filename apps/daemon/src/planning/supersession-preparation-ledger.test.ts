@@ -158,6 +158,28 @@ describe("commitPreparation lands the pair in one decision or none (task-32c1ba4
     const decisionsBefore = decisionCount(store);
     const replayed = accept(commitPreparation(prepareContext(store, "cmd-prepare-1")));
     expect(replayed.disposition).toBe("REPLAYED");
+    expect(replayed.generation.binding.generation).toBe(1);
+    expect(counts(store)).toEqual(before);
+    expect(decisionCount(store)).toBe(decisionsBefore);
+  });
+
+  it("REPLAY: answers the replayed command's OWN generation after a release and a second prepare", () => {
+    const store = preparedStore();
+    accept(releasePreparation(releaseContext(store, "cmd-release-1", 1, 1)));
+    // Released and nothing current: the replay used to refuse PAIR_SPLIT for a decision that
+    // had landed, because it read "what is current now" instead of what the command minted.
+    const afterRelease = accept(commitPreparation(prepareContext(store, "cmd-prepare-1")));
+    expect(afterRelease.disposition).toBe("REPLAYED");
+    expect(afterRelease.generation.binding.generation).toBe(1);
+    const second = accept(commitPreparation(prepareContext(store, "cmd-prepare-2")));
+    expect(second.generation.binding.generation).toBe(2);
+    const before = counts(store);
+    const decisionsBefore = decisionCount(store);
+    // Generation 2 is current; the replay of the first command still answers generation 1.
+    const replayed = accept(commitPreparation(prepareContext(store, "cmd-prepare-1")));
+    expect(replayed.disposition).toBe("REPLAYED");
+    expect(replayed.generation.binding.generation).toBe(1);
+    expect(replayed.generation.supersessionPlanId).toBe(afterRelease.generation.supersessionPlanId);
     expect(counts(store)).toEqual(before);
     expect(decisionCount(store)).toBe(decisionsBefore);
   });

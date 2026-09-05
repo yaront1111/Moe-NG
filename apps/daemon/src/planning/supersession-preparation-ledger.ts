@@ -119,13 +119,15 @@ export function commitPreparation(context: HandlerContext): PreparationLedgerRes
   const goalRef = String(request.payload["goalRef"]);
   const aggregateId = preparationAggregateId(request.projectId, goalRef);
   if (replayed !== null) {
-    const history = foldPreparationHistory(store, aggregateId);
-    if (!history.ok || history.current === null) {
-      return refusePreparation("SUPERSESSION_PREPARATION_PAIR_SPLIT", LEDGER);
-    }
+    // The replayed command's OWN generation, read back off its PREPARED event — never
+    // `foldPreparationHistory(...).current`, which is whatever is current NOW: after a release
+    // and a second preparation an honest replay of the first command answered generation 2, and
+    // after a release with nothing prepared it refused PAIR_SPLIT for a decision that had landed.
+    const own = priorPreparation(store, aggregateId, request.commandId);
+    if (own === null) return refusePreparation("SUPERSESSION_PREPARATION_PAIR_SPLIT", LEDGER);
     return Object.freeze({
       decision: replayed.decision, disposition: "REPLAYED" as const,
-      generation: history.current, ok: true as const,
+      generation: own, ok: true as const,
     });
   }
   const proposal = proposeSupersessionPreparation(store, request.payload);
@@ -257,6 +259,26 @@ export function releasePreparation(
 }
 
 /** The already-released record an exact replay must be handed back, read off committed events. */
+/**
+ * The generation a replayed preparation command minted: its own PREPARED event, found by the
+ * command id the store traced onto it, trusted only while the record still agrees with the
+ * event that carried it. Null when the aggregate holds no such event, which is the PAIR_SPLIT
+ * arm: the decision landed but its record is not on the aggregate it named.
+ */
+function priorPreparation(
+  store: SqliteEventStore, aggregateId: string, commandId: string,
+): SupersessionPreparationGeneration | null {
+  for (const event of store.readEvents(aggregateId)) {
+    if (event.eventType !== PREPARATION_EVENT_TYPES.PREPARED) continue;
+    if (event.decisionTrace?.commandId !== commandId) continue;
+    const payload = payloadOf(event);
+    const generation = payload?.["generation"];
+    const record = payload?.["record"];
+    if (typeof generation === "number" && isGenerationRecord(record, generation)) return record;
+  }
+  return null;
+}
+
 function priorRelease(
   store: SqliteEventStore, projectId: string, goalRef: string, generation: number,
 ): SupersessionPreparationGeneration | null {
