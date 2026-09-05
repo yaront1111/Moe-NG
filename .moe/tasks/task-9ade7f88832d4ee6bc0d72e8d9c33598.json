@@ -73,7 +73,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-0520a42e",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -92,7 +92,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:42:27.077Z",
-  "updatedAt": "2026-09-05T19:31:56.701Z",
+  "updatedAt": "2026-09-05T19:39:18.397Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:51:00.402Z",
     "plannedStepCount": 5,
@@ -124,5 +124,58 @@
   "contextFetchedBy": [
     "worker-0520a42e"
   ],
-  "workStartedAt": "2026-09-05T19:18:26.479Z"
+  "workStartedAt": "2026-09-05T19:18:26.479Z",
+  "commits": [
+    {
+      "sha": "e48552656f74531d63dc5f79cbc2673888b05394",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-0520a42e@2026-09-05T19:17:46Z",
+      "paths": [
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+        "apps/control-room/src/v2/goals/live-goal-create.test.ts",
+        "apps/control-room/src/v2/goals/live-goal-create.ts"
+      ],
+      "recordedBy": "worker-0520a42e",
+      "recordedAt": "2026-09-05T19:38:53.623Z",
+      "treeId": "f3b1ae2e98a49394b7f8aab1f4477a50fd8d392a",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/goals/live-goal-create.test.ts",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/live-goal-create.ts",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+    "apps/control-room/src/v2/goals/live-goal-create.test.ts",
+    "apps/control-room/src/v2/goals/live-goal-create.ts"
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/goals/live-goal-create.ts",
+    "apps/control-room/src/v2/goals/live-goal-create.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/repository/git-publication.test.ts",
+    "docs/plans/2026-09-05-deep-review-remediation.md",
+    "tests/integration/distribution/pack-artifact-sweep.test.ts",
+    "tests/integration/release/release-version-surfaces.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-0520a42e@2026-09-05T19:17:46Z",
+    "at": "2026-09-05T19:38:53.623Z"
+  }
 }

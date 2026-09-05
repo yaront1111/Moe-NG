@@ -21,37 +21,56 @@
     {
       "stepId": "step-1",
       "description": "ORIENT, no production edits. (a) Confirm producers: grep DESIGN_READ_PATH in apps/daemon/src/http and designReads in daemon-entry.ts. If either is absent, STOP and report_blocked on task-7ca9dca3 / task-eb2bb09d. (b) Read the landed HTTP success and refusal JSON from design-read.ts / its test — those key sets ARE the decoder roster. (c) Read live-goal-source.ts and live-goal-source.test.ts (copy shape). (d) Read DEV_PROXY_PATHS, live-document-proxy.test.ts hard list, UNCONSUMED_SERVED_ROUTES and UNPROXIED_SERVED_PATHS. (e) Confirm cr.design.* is free. (f) git status --porcelain apps/control-room apps/daemon/src/http. Record the landed frame keys in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-goal-source.ts",
         "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
-      ]
+      ],
+      "note": "Producer prerequisite eb2bb09d is landed/DONE per epicSiblings (HTTP 200 design absence via production composition). Grep DESIGN_READ_PATH and designReads confirms handler/entry. HTTP forwards raw {ok,record,versions}; record exact keys contractRef,goalRef,profile,projectId,revision,schemaVersion,submittedAt,version. Revision keys apiSurface,componentList,dataModel,nonFunctional,openDecisions,screens; entity keys entity,fields,relations. Landed producer ALSO supports exact {reason,skipped:true}, so decode/render this instead of treating a valid skip as corruption. Real refusal keys code,layer,ok:false,sourceCode,sourceLayer; listener code/layer and route code/layer/outcome. cr.design.* is free. Read source client/card/proxy siblings. Proxy roster is not globally sorted; follow plan insert after goals/source/read without unrelated sorting. Dirty cordum-app and daemon dispatch test carry peer advanced-frame/reachability changes, preserved; coordination posted. All other intended paths absent or clean. Baseline control-room/daemon/typecheck runs started foreground/polled with logs outside tree. No edits.",
+      "startedAt": "2026-09-05T19:20:55.417Z",
+      "completedAt": "2026-09-05T19:22:59.931Z"
     },
     {
       "stepId": "step-2",
       "description": "TESTS FIRST (skill test-driven-development).\n\n(1) live-design.test.ts modelled on live-goal-source.test.ts: mapDesignAnswer maps an exact success frame (keys from step 1) including a dataModel entity named e.g. Order; extra key -> ERROR DESIGN_RESPONSE_INVALID; missing key -> same; DESIGN_REVISION_ABSENT {code, layer} or {code, layer, outcome:REFUSED} -> REFUSED with that code AND layer; listener {code:LISTENER_DESIGN_UNAVAILABLE, layer:CONTROL_ROOM_LISTENER} -> REFUSED. readDesign posts exactly JSON.stringify({ goalRef }) to /design/read.\n\n(2) design-card.test.tsx: success renders version and the entity name Order (DoD 2/3); DESIGN_REVISION_ABSENT renders words that there is no design (not a blank card); other refusals use OutcomeNote with code and layer; loading copy while null. Apostrophe-free JSX.\n\n(3) live-document-proxy.test.ts: add `/design/read` to the hard-coded list in the SAME place as DEV_PROXY_PATHS will get it (after `/goals/source/read`).\n\nRun `pnpm --filter @moe/control-room test` and quote the reds.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-document-proxy.test.ts"
       ],
       "newFiles": [
         "apps/control-room/src/live/live-design.test.ts",
         "apps/control-room/src/v2/goals/design-card.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-design.test.ts",
+        "apps/control-room/src/v2/goals/design-card.test.tsx",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/live/live-design.ts",
+        "apps/control-room/src/v2/goals/design-card.tsx"
+      ],
+      "note": "RED confirmed focused foreground: pnpm --filter @moe/control-room test --maxWorkers=2 src/live/live-design.test.ts src/v2/goals/design-card.test.tsx src/live/live-document-proxy.test.ts => exit 1, Test Files 3 failed (3), Tests 13 failed (13). Failures name unimplemented decoder/fetch, missing card elements, and missing /design/read proxy entry. Added only typed throwing/empty production scaffolds in this test step so modules load and assertions execute rather than import-resolution errors; implementation follows steps 3/4. Tests cover exact keys at 9 nested records, skip, provenance-preserving refusals, frozen snapshot, invalid versions/types/descriptors, exact session POST, transport/JSON failures, five sections/version/absence, stale goal completion and current headers. Full named CR red run is still being polled; baseline full gate already finished exit 1: 2 failed/149 passed files, 4 failed/1879 passed tests (foreign shell layout 3 and scaffold timeout 1).",
+      "startedAt": "2026-09-05T19:23:00.142Z",
+      "completedAt": "2026-09-05T19:28:21.007Z"
     },
     {
       "stepId": "step-3",
       "description": "DECODER + FETCH. New apps/control-room/src/live/live-design.ts copying live-goal-source.ts.\n- POST /design/read with `{ goalRef }`, headers from the session, 15s timeout, injectable post.\n- exactDataRecord (own enumerable, exact key set, no prototype, no accessors).\n- Success: exact-key the landed HTTP success frame, then exact-key record (DESIGN_RECORD_KEYS) and revision (DESIGN_REVISION_KEYS). Recurse dataModel entities on DESIGN_ENTITY_KEYS so a dropped entity field names itself. Copy those key lists as frozen constants; do not import apps/daemon.\n- DESIGN_REVISION_ABSENT and other DesignRefusal/listener frames -> status REFUSED with code AND layer.\n- Extra/missing key -> ERROR DESIGN_RESPONSE_INVALID at CONTROL_ROOM_LIVE_DESIGN.\nStay under 250 lines. ASCII only.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/control-room/src/live/live-design.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-design.ts"
+      ],
+      "note": "Implemented browser-only exact-key frozen decoder and session POST {goalRef}, AbortSignal.timeout(15000), injectable post, transport/JSON errors. Nested contracts, all five sections, entity fields/relations, arrays and declared skip are copied/validated; unknown schema/profile refused as DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN. Raw store and route/listener code+layer retained. Focused foreground pnpm --filter @moe/control-room test --maxWorkers=2 src/live/live-design.test.ts: exit 0, Test Files 1 passed (1), Tests 7 passed (7). No daemon import. Real producer/frame exercise remains part of final verification (normal unit fixture alone not claimed as that evidence).",
+      "startedAt": "2026-09-05T19:28:21.211Z",
+      "completedAt": "2026-09-05T19:30:27.762Z"
     },
     {
       "stepId": "step-4",
       "description": "CARD, MOUNT, PROXY PIN.\n\n(1) New apps/control-room/src/v2/goals/design-card.tsx copying contract-dossier / prd-panel: DesignCard presentational + LiveDesign that reads on mount (injectable read). data-testid cr.design.card / .version / .body / .none / .refusal / .loading. Five sections visible when DESIGN; version in the kicker; DESIGN_REVISION_ABSENT -> cr.design.none words \"This goal has no design yet.\" (never an empty section); other refusals OutcomeNote. No apostrophes. Under 250 lines.\n\n(2) cordum-app.tsx (454 lines — add only): import LiveDesign, mount it on the opened-goal body next to LiveContractDossier, passing open.goalId and attached.headers. Do not reformat.\n\n(3) dev-proxy-paths.ts: insert `/design/read` after `/goals/source/read`.\n\n(4) http-listener-read-dispatch.test.ts: remove `/design/read` from UNCONSUMED_SERVED_ROUTES and from UNPROXIED_SERVED_PATHS if present. The live-design.ts path literal is the consumer the scan wants. Keep every remaining UNCONSUMED path mentioned in that file's comments (positive control :337).\n\nDo not edit approve-plan.tsx or approve-plan-gate.tsx.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/cordum-app.tsx",
         "apps/control-room/src/live/dev-proxy-paths.ts",
@@ -59,17 +78,28 @@
       ],
       "newFiles": [
         "apps/control-room/src/v2/goals/design-card.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/design-card.tsx",
+        "apps/control-room/src/v2/goals/design-card.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "LiveDesign mounted directly after LiveContractDossier with opened goalRef and attached.headers. Five sections plus open decisions/version; absence and declared skip are words; other code/layer visible through OutcomeNote. Subject/session changes discard late reads and clear stale presentation without an injected wait. All stored text rendered as React text. Pin /design/read after goals/source/read, retire it from both daemon census arrays; peer Advanced/reachability changes preserved. Focused control-room 4 files/62 tests PASS (17.40s), including existing CordumApp suite; daemon dispatch pin 1 file/14 tests PASS (7.62s); control-room typecheck exit 0. Real durable design -> HTTP -> decoder proof 1 file/1 test PASS, full recreatable source in comment-e829916205b94643a2c51ec18d967817. New card 103 physical lines, decoder 183. Source mount pin originally hit jsdom URL scheme mismatch; corrected test to package-relative filesystem path (no production workaround).",
+      "startedAt": "2026-09-05T19:30:28.006Z",
+      "completedAt": "2026-09-05T19:37:01.161Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review). git status --porcelain the exact paths first. New files are untracked: copy to %TEMP% suffixed by worker id BEFORE mutating; restore; prove SHA256 equality in a SEPARATE call. Tracked files: empty git diff.\n\n(a) Delete the extra-key arm's expected key from exactDataRecord for the success frame -> extra-key test goes green (that is the red you want on the decoder). Restore.\n(b) Remove `/design/read` from DEV_PROXY_PATHS only -> live-document-proxy.test.ts and/or UNPROXIED arm reds.\n(c) Remove the DESIGN_REVISION_ABSENT copy from the card -> cr.design.none arm reds or the card is blank. Restore each.\n\nGATES standalone foreground, quote Test Files N passed: `pnpm --filter @moe/control-room test` (complete_task verification command), `pnpm --filter @moe/daemon test` (UNCONSUMED/UNPROXIED pins), `pnpm typecheck`. Path-attributed baseline for foreign red.\n\nAdversarial: extra key never renders as a design; no-design copy is words not emptiness; payload cannot include projectId; cordum-app still under a split-later 400 (add-only); no daemon import. Report every path including new files.\n\nNamed verification command: `pnpm --filter @moe/control-room test`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/live/live-design.ts",
         "apps/control-room/src/live/dev-proxy-paths.ts",
         "apps/control-room/src/v2/goals/design-card.tsx"
-      ]
+      ],
+      "startedAt": "2026-09-05T19:37:01.472Z"
     }
   ],
   "status": "WORKING",
@@ -85,22 +115,36 @@
   ],
   "priority": "HIGH",
   "order": 62.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-e829916205b94643a2c51ec18d967817",
+      "author": "worker-f72a1438",
+      "content": "REAL PRODUCER FRAME, anchored to production-at-verification (HEAD 4c3880cb plus this row's live-design.ts). No daemon imports in browser source. Temporary Vitest source below is complete and recreatable; place outside tree and execute: pnpm --filter @moe/daemon exec vitest run --root <temporary-directory> --config D:/projexts/moe-next/apps/daemon/package.json --maxWorkers=1 design-frame.test.ts. Fresh output: Test Files 1 passed (1), Tests 1 passed (1), exit 0 (6.68s). Real durable submit, real readDesignRevision, real handleDesignReadRequest, JSON wire round-trip, then production mapDesignAnswer. Named entity Order/version 1 arrives; extra key refuses at the browser decoder.\n\nimport { afterEach, expect, it } from \"D:/projexts/moe-next/node_modules/vitest/dist/index.js\";\nimport { GOAL_ID, PROJECT_ID, closeStores } from \"D:/projexts/moe-next/apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts\";\nimport { approveGate1, boundWorld, committedRevision } from \"D:/projexts/moe-next/apps/daemon/src/planning/plan-reject-test-fixtures.ts\";\nimport { designRevisionFixture } from \"D:/projexts/moe-next/apps/daemon/src/design/design-test-fixtures.ts\";\nimport { readDesignRevision, submitDesignRevision } from \"D:/projexts/moe-next/apps/daemon/src/design/design-store.ts\";\nimport { handleDesignReadRequest } from \"D:/projexts/moe-next/apps/daemon/src/http/design-read.ts\";\nimport { CAPABILITIES } from \"D:/projexts/moe-next/apps/daemon/src/daemon-command-vocabulary.ts\";\nimport { WIRE_PROTOCOL_VERSION } from \"D:/projexts/moe-next/apps/daemon/src/http/http-contract.ts\";\nimport { mapDesignAnswer } from \"D:/projexts/moe-next/apps/control-room/src/live/live-design.ts\";\nafterEach(closeStores);\nit(\"decodes an Order from the real committed design through the real HTTP handler\", () => {\n  const store = boundWorld();\n  const contractRef = committedRevision(store);\n  approveGate1(store, contractRef);\n  const revision = { ...designRevisionFixture(), dataModel: [{ entity: \"Order\", fields: [\"id\"], relations: [] }] };\n  expect(submitDesignRevision(store, { commandId: \"cmd-design-browser\", contractRef,\n    correlationId: \"corr-design-browser\", decidedAt: \"2026-09-05T09:00:00.000Z\", expectedVersion: 0,\n    goalRef: GOAL_ID, principalId: \"designer\", projectId: PROJECT_ID, revision }).ok).toBe(true);\n  const answer = handleDesignReadRequest({\n    authenticator: { authenticate: () => ({ verdict: \"AUTHENTICATED\", principal: {\n      principalId: \"operator\", projectId: PROJECT_ID, capabilities: [CAPABILITIES.GOAL] } }) },\n    designReads: { read: (input) => readDesignRevision(store, input) },\n  }, { body: new TextEncoder().encode(JSON.stringify({ goalRef: GOAL_ID })), credential: \"fixture\",\n    protocolVersion: WIRE_PROTOCOL_VERSION });\n  expect(answer.kind).toBe(\"REPLY\");\n  if (answer.kind !== \"REPLY\") throw new Error(\"No HTTP answer\");\n  expect(answer.httpStatus).toBe(200);\n  const wire = JSON.parse(JSON.stringify(answer.body));\n  expect(mapDesignAnswer(answer.httpStatus, wire)).toMatchObject({ status: \"DESIGN\",\n    record: { version: 1, goalRef: GOAL_ID, revision: { dataModel: [{ entity: \"Order\", fields: [\"id\"], relations: [] }] } } });\n  expect(mapDesignAnswer(200, { ...wire, extra: true })).toEqual({ status: \"ERROR\",\n    code: \"DESIGN_RESPONSE_INVALID\", layer: \"CONTROL_ROOM_LIVE_DESIGN\" });\n  console.log(\"REAL_HTTP_DESIGN Order version=1; extra-key ERROR DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN\");\n});",
+      "timestamp": "2026-09-05T19:35:16.463Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:27:06.954Z",
-  "updatedAt": "2026-09-05T14:39:22.375Z",
+  "updatedAt": "2026-09-05T19:39:18.405Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:36:26.414Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
-    "architect-2e480458"
+    "architect-2e480458",
+    "worker-f72a1438"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:39:20.196Z",
   "planningNotes": {
@@ -119,5 +163,6 @@
       "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:39:22.375Z"
+  "planApprovedAt": "2026-09-05T14:39:22.375Z",
+  "workStartedAt": "2026-09-05T19:20:55.417Z"
 }

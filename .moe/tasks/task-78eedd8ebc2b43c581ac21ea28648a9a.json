@@ -30,12 +30,17 @@
   "parentTaskId": "task-8f86e10504c74e248ccfa6f427b41a15",
   "dependsOn": [
     "task-463f195efd2f4fd2886790029a474194",
-    "task-ff41c5c9efa34494b7b91e6f0ddcb7c2"
+    "task-ff41c5c9efa34494b7b91e6f0ddcb7c2",
+    "task-0a56ecee17b740a3abb7f850e5250c99",
+    "task-537320eed95348dc9bc3afc879dc0563"
   ],
   "priority": "HIGH",
   "order": 113,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-05T00:48:57.960Z"
+  "updatedAt": "2026-09-05T19:39:22.332Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:32:30.829Z"
+  }
 }

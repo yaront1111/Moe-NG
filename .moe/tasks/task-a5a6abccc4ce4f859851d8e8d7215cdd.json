@@ -93,7 +93,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "qa-4f771bb8",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:43:12.160Z",
-  "updatedAt": "2026-09-05T19:22:33.233Z",
+  "updatedAt": "2026-09-05T19:39:18.399Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:51:03.242Z",
     "plannedStepCount": 6,
@@ -149,5 +149,48 @@
   "contextFetchedBy": [
     "qa-4f771bb8"
   ],
-  "workStartedAt": "2026-09-05T19:09:23.618Z"
+  "workStartedAt": "2026-09-05T19:09:23.618Z",
+  "commits": [
+    {
+      "sha": "a93f907c61e8ce8cc954c89da22b79c209bd39b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T19:36:16Z",
+      "paths": [
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-a5a6abccc4ce4f859851d8e8d7215cdd.json",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T19:38:18.534Z",
+      "treeId": "e9b79b98dab2fecb356a9c057671a406e3cfa426",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-read.test.ts",
+          "taskId": "task-ebbcbdb4967748daa84f314b39bd3960"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-a5a6abccc4ce4f859851d8e8d7215cdd.json",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/http/affordance-read.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-05T19:36:16Z",
+    "at": "2026-09-05T19:38:18.534Z"
+  }
 }

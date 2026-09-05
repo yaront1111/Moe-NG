@@ -23,21 +23,25 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE AT CLAIM. Every number in this row's description and DoD is STALE BY DESIGN — sibling kind-publishing rows move the same literals, and rail 4 forbids freezing any count from the DoD. Three values had ALREADY moved between the row's filing and this plan (2026-09-05): the digest was `ed5f6b87…`, now `31f0e8a4…`; `commands.size` was 104, now 106; the generated digest line was :907, now :911. Take the PRINTED expected-vs-received as authoritative over anything written here.\n\nRun and print each:\n  (a) `grep -rn 'deployment.set_target\\|deployment.deploy' packages apps --include=*.ts --include=*.tsx` — must be EMPTY. If either kind is already published, a sibling beat you here: STOP and report rather than double-adding (global rail 6, closed-gap direction).\n  (b) `grep -n 'commands.size' packages/contracts/src/runtime/runtime-contract.test.ts` — read the CURRENT literal. Measured 106 at :106 at plan time.\n  (c) THE CENSUS, by hex and never by symbol (rail 1):\n        D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"'); echo \"$D\"\n        git grep -n \"$D\" -- . ':!.moe' ':!.serena'\n      Measured FOUR hits at plan time: generated-client.ts:911 (regenerated, never edited), generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255. Re-census: if a FIFTH mirror has appeared it is in scope and must be updated; if one has moved file or line, follow it. A `git grep GENERATED_CONTRACT_DIGEST` would find only ONE of these — three hard-code the hex and one is a `.tsx` a `*.ts`-only grep cannot see.\n\nRecord the OLD digest verbatim now; step 3 needs it to quote OLD -> NEW.\n\nThe checkout is shared and sibling contract rows touch these same six files. A literal that has moved since this plan is EXPECTED, not a conflict — re-measure and continue. Never revert, stash or `git add -A`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/contracts/src/runtime/runtime-contract.test.ts",
         "packages/control-room-client/src/generated/generated-client.ts"
-      ]
+      ],
+      "note": "RE-MEASURED AT CLAIM. Every one of the plan's three literals had moved AGAIN between plan and claim — rail 4 proving itself a second time on this row.\n\n(a) GAP CONFIRMED PRESENT. `grep -rn 'deployment.set_target\\|deployment.deploy' packages apps --include=*.ts --include=*.tsx` -> EMPTY (exit 1). Neither kind is published; no sibling beat me here. Not a duplicate of a landed surface.\n\n(b) COUNT LITERAL. `grep -n 'commands.size' packages/contracts/src/runtime/runtime-contract.test.ts`:\n    31:  * tuple under test can never fail, which is what the previous `commands.size ===\n    107:    expect(commands.size).toBe(107);\n  Plan said 106 at :106. NOW 107 at :107. A sibling published a kind while this row sat. I will move the literal from the MEASURED 107 to 109 (+2), never from the plan's 106, and will take the printed expected-vs-received over both.\n\n(c) CENSUS BY HEX (never by symbol):\n    D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"'); git grep -n \"$D\" -- . ':!.moe' ':!.serena'\n  OLD_DIGEST = db43c1bc6e7e3c67825903acb2416ce7b9456d71efaea24f9320531b1f4c1522\n  (plan recorded 31f0e8a4…; row description recorded ed5f6b87… — BOTH stale, this is the third value.)\n  FOUR hits, same four files as the plan, no fifth mirror, but the generated line moved :911 -> :913:\n    apps/control-room/src/data/data-adapter.test.ts:18          (bare hex, no symbol)\n    apps/control-room/src/v2/goals/approve-plan.test.tsx:255    (contractSchemaHash:, a .tsx)\n    packages/control-room-client/src/generated-coverage.test.ts:36  (const CONTRACT_DIGEST)\n    packages/control-room-client/src/generated/generated-client.ts:913 (GENERATED, regenerate never edit)\n\nFINDING NOT IN THE PLAN — A FIFTH REGENERATION-COUPLED LITERAL THE HEX CENSUS CANNOT SEE.\n`packages/control-room-client/src/generated-coverage.test.ts:35` holds\n  const GENERATED_FILE_SHA256 = \"1465b2284c82b4febca92e99a9278f9260ca3f9587763be3bb5b68107562b928\";\nasserted at :164 by \"matches the committed golden hash of the generated file\"\n  expect(createHash(\"sha256\").update(readFileSync(GENERATED_FILE)).digest(\"hex\")).toBe(GENERATED_FILE_SHA256)\nThis is a sha256 of the generated file BYTES, not of the contract surface, so it is a DIFFERENT hex and the digest census provably misses it — yet it moves on every regeneration. Leaving it stale reds the row's own named verification command at :164. It lives in an already-owned path (DoD 4 names this exact file) and is the same regeneration cascade, so updating it is in scope, not a scope leap. Flagging it explicitly because a future row censusing only the contract digest would ship a red here.\n\nINSERTION NEIGHBOURHOOD, both files carry the IDENTICAL line:\n  packages/contracts/src/runtime/runtime-vocabulary.ts:90\n  packages/contracts/src/runtime/runtime-contract.test.ts:40\n  \"cutover.preview\", \"cutover.quiesce\", \"dependency.challenge\", \"effect.activate\",\n\nSORT POSITION VERIFIED BY RUNNING A REAL SORT under JS collation (the same [...tuple].sort() the production arm at :126-133 uses), not by eye:\n  node -e '...[\"cutover.quiesce\",\"dependency.challenge\",\"deployment.deploy\",\"deployment.set_target\",\"effect.activate\"]...'\n  sorted : cutover.quiesce < dependency.challenge < deployment.deploy < deployment.set_target < effect.activate\n  MATCH  : true\nSo both kinds go after `dependency.challenge`, before `effect.activate`, with deploy before set_target. Counter-intuitive but confirmed.\n\nSHARED-CHECKOUT STATE. All six of my files already carry peer dirt (` M` each) — a sibling contract row's uncommitted work; `environment.set_variable`/`environment.unset_variable` are already present in both rosters. Per the rails I am NOT reverting, stashing or `git add -A`-ing any of it; I edit only my kinds and my hexes. Baseline recorded so a later red can be attributed by path.\n\nDAEMON FILES CLEAN (DoD 5 baseline): `git status --porcelain` over daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, agent-spawn-contract.ts returns EMPTY. Will re-prove at step 5.\n\nNo files modified in this step — measurement only.",
+      "startedAt": "2026-09-05T19:29:10.105Z",
+      "completedAt": "2026-09-05T19:32:11.417Z"
     },
     {
       "stepId": "step-2",
       "description": "THE ROSTER EDIT — two files, both by hand, both at the SORTED position.\n\nTHE POSITION IS COUNTER-INTUITIVE AND IS THE MOST LIKELY MISTAKE IN THIS ROW. `deployment.*` does NOT go next to `cutover.*` or anywhere a reader scanning for \"deploy\" would put it. Verified by actual string sort at plan time:\n    cutover.quiesce  <  dependency.challenge  <  deployment.deploy  <  deployment.set_target  <  effect.activate\n`dependency` sorts BEFORE `deployment` because the fourth character is `e` (101) against `l` (108). So BOTH kinds go immediately after `dependency.challenge` and immediately before `effect.activate`, and `deployment.deploy` precedes `deployment.set_target`.\n\n(1) packages/contracts/src/runtime/runtime-vocabulary.ts — insert both kinds there. At plan time that neighbourhood is one line, :90: `\"cutover.preview\", \"cutover.quiesce\", \"dependency.challenge\", \"effect.activate\",`.\n\n(2) packages/contracts/src/runtime/runtime-contract.test.ts — the hand-transcribed `EXPECTED_COMMAND_KINDS` (:35) carries the IDENTICAL line; insert both kinds in the same slot, and move the literal `expect(commands.size).toBe(N)` (:106) by exactly TWO. DO NOT replace the transcription with anything derived from `RUNTIME_COMMAND_KINDS` — the file's own header (:29-34) records that an expectation computed from the tuple under test can never fail, which is what the previous `commands.size === RUNTIME_COMMAND_KINDS.length` arm did. Keep the comment at :105 explaining why the count is a literal.\n\nWHY THE SORT ARM CATCHES YOU IF YOU GET IT WRONG, and why you should still get it right by hand: the \"keeps every command kind at its sorted position\" arm (:126-133) sorts the PRODUCTION tuple and diffs it, so a wrong slot in runtime-vocabulary.ts reds. But a wrong slot copied consistently into BOTH files still reds only that one arm — the `toEqual(EXPECTED_COMMAND_KINDS)` arm stays green because the mistranscription follows the mistake. That is exactly how `product_contract.approve_gate_1` once landed between `profile.register` and `project.activate` (:117-124). Read the arm's failure output rather than guessing.\n\nNO PER-KIND PAYLOAD TYPE (rail 6). `packages/control-room-client/generator/generate.ts:37-39` states payloads stay `JsonObject` and that generating per-kind payload types would invent a contract that does not exist. Payload KEYS are the parent row's daemon-side `PAYLOAD_KEYS` edit, not this row's.\n\nRun `pnpm test` (root lane covers `packages/**`) and read the contract suite's output now — a fast signal before regenerating.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/contracts/src/runtime/runtime-contract.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T19:32:14.061Z"
     },
     {
       "stepId": "step-3",
@@ -76,16 +80,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:53:34.370Z",
-  "updatedAt": "2026-09-05T19:02:10.990Z",
+  "updatedAt": "2026-09-05T19:39:18.393Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:58:28.884Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T19:02:08.787Z",
   "planningNotes": {
@@ -102,5 +109,9 @@
       "packages/control-room-client/generator/generate.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T19:02:10.990Z"
+  "planApprovedAt": "2026-09-05T19:02:10.990Z",
+  "contextFetchedBy": [
+    "worker-caece97b"
+  ],
+  "workStartedAt": "2026-09-05T19:29:10.105Z"
 }

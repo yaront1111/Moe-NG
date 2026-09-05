@@ -172,7 +172,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-d6e44333",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -225,7 +225,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:58.974Z",
-  "updatedAt": "2026-09-05T19:22:02.800Z",
+  "updatedAt": "2026-09-05T19:39:55.313Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:29:26.800Z",
     "plannedStepCount": 10,
@@ -322,7 +322,13 @@
     ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json",
     ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
     ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
-    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json"
+    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/shell/advanced-frames.test.ts",
+    "apps/control-room/src/v2/shell/advanced-frames.ts",
+    "apps/control-room/src/v2/styles/cordum-shell.css"
   ],
   "completionSummary": "Bidirectional consumer roster in the existing daemon asserter. 3 JSON routes remain unconsumed with reasons: /events/resume (TBD), /v2/product-contract/current (browser uses pending/read), /session/challenge-operands/read (proxy-only). /graph/get consumed via live-graph-get.ts. Command-kind exclusions named with sense (planning.write is a capability). Advanced forensic toggle (cr.advanced.*, off by default). Playwright resources-and-contract.spec.ts 1 passed; full e2e lane 19 passed / 6 failed (UNMET, foreign). Named gate: Test Files 149 passed (149), Tests 1853 passed (1853).",
   "commits": [
@@ -393,14 +399,54 @@
       "treeId": "06235219fbfc293645c0d28d7a24468802ff6af4",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4653ed182581b8014a80a5cee3630279e1167ec0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T18:17:39Z",
+      "paths": [
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/shell/advanced-frames.test.ts",
+        "apps/control-room/src/v2/shell/advanced-frames.ts",
+        "apps/control-room/src/v2/shell/cordum-shell.tsx",
+        "apps/control-room/src/v2/styles/cordum-shell.css",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T19:39:55.313Z",
+      "treeId": "0ec06eab9588f12f083bfaaa6113172f3f4a1f0a",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/cordum-app.tsx",
+          "taskId": "task-e9cb2442a9a44408bea35cfce6a1897b"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-e9cb2442a9a44408bea35cfce6a1897b"
+        }
+      ],
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/repository/git-publication.test.ts",
+    "docs/plans/2026-09-05-deep-review-remediation.md",
+    "Moe-NG_Deep_Review_2026-09-05.md",
+    "tests/integration/distribution/pack-artifact-sweep.test.ts",
+    "tests/integration/release/release-version-surfaces.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b33940f5@2026-09-05T16:47:15Z",
-    "at": "2026-09-05T16:47:40.494Z"
+    "sessionId": "worker-d6e44333@2026-09-05T18:17:39Z",
+    "at": "2026-09-05T19:39:55.313Z"
   },
   "reviewCompletedAt": "2026-09-05T14:46:32.549Z",
   "rejectionDetails": {
@@ -496,5 +542,17 @@
       "releasedBy": "governor-afbde490",
       "reason": "Human-approved release. worker-b33940f5 silent 5265s (88 min, isAlive false) holding this row at READING_CONTEXT with 0/10 steps started. Pinged in #workers at 16:55 per the escalation ladder; no reply, no activity change. Operator confirmed the release. Not an idle-time release: the seat is confirmed gone and the human gave the nod."
     }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/shell/advanced-frames.ts",
+    "tests/e2e/control-room/resources-and-contract.spec.ts",
+    "apps/control-room/src/v2/shell/cordum-shell.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/shell/advanced-view.test.tsx",
+    "apps/control-room/src/v2/shell/advanced-view.tsx",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/v2/styles/cordum-shell.css",
+    "apps/control-room/src/v2/shell/advanced-frames.test.ts"
   ]
 }

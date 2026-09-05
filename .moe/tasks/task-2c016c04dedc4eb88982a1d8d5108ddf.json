@@ -136,7 +136,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "assignedWorkerId": "qa-d81848bc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -172,7 +172,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:45:43.617Z",
-  "updatedAt": "2026-09-05T19:27:14.160Z",
+  "updatedAt": "2026-09-05T19:39:47.247Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:26:45.539Z",
     "plannedStepCount": 7,
@@ -208,7 +208,8 @@
   "planApprovedAt": "2026-09-05T00:27:54.977Z",
   "contextFetchedBy": [
     "worker-0520a42e",
-    "qa-f2906c26"
+    "qa-f2906c26",
+    "qa-d81848bc"
   ],
   "workStartedAt": "2026-09-05T17:51:16.249Z",
   "declaredFiles": [
@@ -246,7 +247,11 @@
     ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
     ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
     ".moe/tasks/task-945bb541777a4b789983382f9513f43c.json",
-    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json"
+    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+    ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json"
   ],
   "completionSummary": "A re-staffed compiler seat now reads WHY the operator rejected its plan, proved by a real-process journey. Full evidence in row comments comment-7e2a822a (gates + path attribution) and comment-7de74530 (5 drills + adversarial review).\n\nDELIVERED. New pure module `apps/daemon/src/planning/rejection-instructions.ts` (**120 lines**, cap 120) + `.js` bridge: `latestRejectionReason(store, projectId, planningRunRef)` walks child 1's run chain and answers the LATEST rejection, and `composeCompilerInstructions(brief, rejection)` appends `PLAN REJECTED by the operator: <reason>. Submit a DIFFERENT decomposition that addresses it.` Wired into `agent-wrapper-main.ts`'s `compilerInstructions`: **483 -> 489 lines, growth exactly +6** (the DoD cap). 29 unit/fence arms, 2 source-text pins, and one e2e journey.\n\nA PLAN PREMISE WAS WRONG AND IS CORRECTED IN THE CODE. The reason is NOT on the `PlanningRunRejected` event - that payload is `{commandId, findingsRef, kind, successorRunId, version}` and `approval-intent-rejection.ts:145` says so. It lives on the REJECTED RUN'S DURABLE RECORD, so the read is `stateOf(readDurableLedger(store, projectId), rejectedRunId)` - which is why the signature takes a projectId. Second correction: `compilerInstructions` holds a goalId, not a run ref; deriving it via `refsOfGoal` (the same function goal-create WRITES it with) is the only resolution that fits +6 lines, and an arm pins the derivation against the goal's own durable record so a divergence reds.\n\nTHE MARKER FENCE (task rail 1). Child 1 stores a hostile reason VERBATIM - asserted, as the control that makes the fence non-vacuous. `composeCompilerInstructions` neutralises `OPERATOR INSTRUCTIONS` (killing both `<<<`/`>>>` markers in one length-preserving pass that cannot re-emerge), so a reason cannot close the operator block early. Graded at BOTH altitudes: the composed string, and the real `compilerMission` output where the sentence must sit strictly BETWEEN the markers.\n\nTHE JOURNEY (DoD 3), ",
   "commits": [
@@ -283,6 +288,25 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "f3dbe022b3595c1da95ace85965c1e2811c1eee8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T19:27:19Z",
+      "paths": [
+        ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+        ".moe/tasks/task-2c016c04dedc4eb88982a1d8d5108ddf.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T19:37:12.187Z",
+      "treeId": "0bf659d7f201359d0e001ed38ed89c2761305118",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -299,14 +323,13 @@
     "apps/daemon/src/planning/rejection-instructions-fence.test.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/orchestrator/seat-exit-classifier.test.ts",
-    "apps/daemon/src/orchestrator/seat-reset-instant.ts",
+    "apps/daemon/src/repository/git-publication.test.ts",
     "Moe-NG_Deep_Review_2026-09-05.md"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0520a42e@2026-09-05T17:50:43Z",
-    "at": "2026-09-05T19:17:09.659Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-05T19:27:19Z",
+    "at": "2026-09-05T19:37:12.187Z"
   }
 }
