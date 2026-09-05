@@ -50,7 +50,17 @@
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/control-room-client/src/generated/generated-client.ts"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "SKIP THE SHARED ROSTER AND THE GENERATOR. task-40e52fa8a85a4921b97bee933b00403f now owns both (re-plan 2026-09-05, architect-3c27f2ab): packages/contracts/src/runtime/runtime-vocabulary.ts AND `pnpm --filter @moe/control-room-client generate`. Do NOT add preview.decide here and do NOT run the generator. (a) Confirm the predecessor landed: grep -n preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts and packages/control-room-client/src/generated/generated-client.ts both hit. If either is missing, report_blocked with blockedOnTaskIds [task-40e52fa8a85a4921b97bee933b00403f]. (b) Record the CURRENT GENERATED_CONTRACT_DIGEST from generated-client.ts:905 in the step note as already-changed-by-predecessor; an unchanged-from-your-step-1 value is expected and is NOT a failure. (c) Proceed to MCP exclusion (step 2/3) and HUMAN_ONLY_STEPS (step 5). This step is a confirmation, not an edit.",
+          "reason": "task-40e52fa8 re-plan now owns RUNTIME_COMMAND_KINDS and the generated client; this step would duplicate both and its 'digest must change' clause would falsely fail after a no-op generate.",
+          "amendedBy": "architect-3c27f2ab",
+          "amendedAt": "2026-09-05T11:21:32.636Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-5",
@@ -90,11 +100,17 @@
       "author": "architect-20a6d1eb",
       "content": "CORRECTION (architect-20a6d1eb, 2026-09-05): this row's description claims `HUMAN_ONLY_STEPS` is \"DEFINED TWICE, byte-for-byte\" in agent-spawn-contract.ts:194 and agent-wrapper.ts:116. THAT IS FALSE at HEAD. I filed a guard row (task-8834ebe68c1a4f81b3be8e7581156755) against that premise and have DELETED it, and cleared it from this row's dependsOn.\n\nMEASURED, `grep -rn HUMAN_ONLY_STEPS --include=*.ts apps/daemon/src` in full:\n  agent-spawn-contract.ts:195  export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([   <- the ONLY definition\n  agent-wrapper.ts:17          import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from \"./agent-spawn-contract.js\";\n  agent-wrapper.ts:24          export { HUMAN_ONLY_STEPS } from \"./agent-spawn-contract.js\";   <- a RE-EXPORT, not a copy\n  agent-wrapper.ts:351         if (HUMAN_ONLY_STEPS.has(step.kind)) continue;\n  http/affordance-planning-offers.test.ts:23,209,263\n\n`grep -rn 'HUMAN_ONLY_STEPS: ReadonlySet|HUMAN_ONLY_STEPS =' --include=*.ts apps/daemon/src` returns ONE line. There is a single Set. The wrapper re-exports it deliberately, and the comment at agent-wrapper.ts:23 says why: \"the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.\"\n\nA BIDIRECTIONAL GUARD ALSO ALREADY EXISTS: apps/daemon/src/http/affordance-planning-offers.test.ts:209 asserts every kind that must be human-only IS in the set, and :263 asserts every kind that must NOT be is absent. Both directions, already green.\n\nWHY I GOT IT WRONG: an earlier grep in this session reported a second `export const HUMAN_ONLY_STEPS ... new Set([` at agent-wrapper.ts:116. Re-reading that file at :110-120 shows a `spawnAgent` doc comment there instead. The checkout is shared and peers are active on this branch, so either a peer collapsed the duplicate between my two measurements or the earlier line number was stale. I did not chase which - what matters is the state NOW, which I verified twice with two different greps.\n\nCONSEQUENCE FOR THIS ROW: DoD item 4 says to add `preview.decide` to \"BOTH HUMAN_ONLY_STEPS rosters\" and to prove a guard by making a one-sided edit. There is only ONE roster, so that sequence is impossible. AMENDED: add `preview.decide` to the single Set at agent-spawn-contract.ts:195, and instead of the one-sided-edit drill, extend the EXISTING bidirectional assertion in affordance-planning-offers.test.ts so `preview.decide` is named among the kinds that must be human-only - that test is the guard, and it already exists. This also drops agent-wrapper.ts from the row's file roster, leaving four files.\n\nQA: grade DoD 4 as amended. A row that \"adds it to both rosters\" cannot be satisfied when there is one.",
       "timestamp": "2026-09-04T23:08:42.277Z"
+    },
+    {
+      "id": "comment-9305e9c1808f46a4b4f8743b2fcfdba6",
+      "author": "architect-3c27f2ab",
+      "content": "DoD AMENDMENT (architect-3c27f2ab, 2026-09-05), parent task-40e52fa8 re-plan.\n\nSTRIKE DoD-2 (\"preview.decide is on the shared runtime command roster in runtime-vocabulary.ts\"). That line is now owned by task-40e52fa8 — keeping it here was the cycle (this row dependsOn 40e52fa8, and 40e52fa8 cannot typecheck or reach a handler without RUNTIME_COMMAND_KINDS).\n\nSTRIKE DoD-3 as a regeneration GATE (\"quote OLD and NEW digest\"). task-40e52fa8 now runs `pnpm --filter @moe/control-room-client generate` because generated-coverage.test.ts:89 is a shape consumer of RUNTIME_COMMAND_KINDS: adding the kind without regenerating fails typecheck. After 40e52fa8 is DONE the digest is already changed; running generate again will no-op and a \"digest must change\" clause would falsely fail.\n\nTHIS ROW KEEPS: DoD-1 MCP wired-but-not-advertised + behavioural arm; DoD-4 HUMAN_ONLY_STEPS (one Set at agent-spawn-contract.ts:195, extend affordance-planning-offers.test.ts:209/263); DoD-5 wrapper staffing test; gates.\n\nStep 4 is amended to match. QA: grade DoD-2 and DoD-3 as struck, owned by task-40e52fa8.",
+      "timestamp": "2026-09-05T11:21:32.474Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-04T23:12:02.298Z",
+  "updatedAt": "2026-09-05T11:21:32.637Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
