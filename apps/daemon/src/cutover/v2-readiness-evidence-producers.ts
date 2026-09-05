@@ -24,8 +24,14 @@ export interface V2EvidenceFilePorts {
   readonly readDirectory: (path: string) => readonly string[];
   /** Trimmed stdout of one git invocation under `cwd`; throws on a non-zero exit. */
   readonly git: (args: readonly string[], cwd: string) => string;
-  /** Runs one package.json script under `cwd` and captures its exit code and combined output. */
-  readonly runGate: (script: string, cwd: string) => Readonly<{ exitCode: number; output: string }>;
+  /**
+   * Runs one package.json script under `cwd` and captures its exit code and combined output.
+   * `exitCode` is null when the gate never completed (spawn failure, signal, overflowed pipe);
+   * `failure` then names why, and the producer refuses the evidence as unreadable rather than RED.
+   */
+  readonly runGate: (script: string, cwd: string) => Readonly<{
+    exitCode: number | null; failure?: string | undefined; output: string;
+  }>;
 }
 
 const encoder = new TextEncoder();
@@ -291,11 +297,20 @@ export function produceAcceptanceEvidence(
   if (status !== "") {
     return refusedEvidence(kind, "V2_EVIDENCE_INPUT_INVALID", "the working tree is not clean");
   }
-  const gates = ACCEPTANCE_GATE_SCRIPTS.map((script) => {
+  const gates: { command: string; countLine: string | null; exitCode: number; outputSha256: string }[] = [];
+  for (const script of ACCEPTANCE_GATE_SCRIPTS) {
     const run = ports.runGate(script, input.sourceRoot);
+    // A gate that never COMPLETED — the binary was absent, the runner was killed, its output
+    // overflowed the pipe — has no exit code. That is an unobserved outcome and is refused as
+    // unreadable input; it used to be reported as exit 1 and graded RED, sending the operator
+    // hunting for a failing test that never ran.
+    if (run.exitCode === null) {
+      return refusedEvidence(kind, "V2_EVIDENCE_INPUT_UNREADABLE",
+        `gate ${script} never completed: ${run.failure ?? "no exit status"}`);
+    }
     const countLine = lastMatch(run.output, script === "test:e2e" ? VITEST_COUNT_LINE : PLAYWRIGHT_COUNT_LINE);
-    return { command: script, countLine, exitCode: run.exitCode, outputSha256: sha256Hex(run.output) };
-  });
+    gates.push({ command: script, countLine, exitCode: run.exitCode, outputSha256: sha256Hex(run.output) });
+  }
   const vitestLeg = gates[0];
   const browserLeg = gates[1];
   if (vitestLeg === undefined || browserLeg === undefined) throw new Error("unreachable: two legs");

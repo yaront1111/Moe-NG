@@ -142,6 +142,28 @@ describe("collectV2ReadinessEvidence", () => {
     }
   }, 60_000);
 
+  it("refuses acceptance evidence as UNREADABLE, not RED, when a gate never completed", async () => {
+    // spawnSync's default 1 MiB pipe SIGTERMed a GREEN e2e run with ENOBUFS and an absent binary
+    // gave ENOENT; both used to be mapped to exit 1 and graded V2_EVIDENCE_GATE_RED, sending the
+    // operator after a failing test that never ran. No exit status is an unobserved outcome.
+    const opened = await world("gate-never-ran");
+    const receipt = collectV2ReadinessEvidence({
+      ...opened.ports,
+      runGate: (script) => script === "test:e2e"
+        ? { exitCode: null, failure: "ENOBUFS", output: " Test Files  1 passed (1)\n" }
+        : { exitCode: 0, output: "  2 passed (10s)\n" },
+    }, {
+      evidenceRoot: opened.evidenceRoot, projectId: PROJECT_ID,
+      security: { securityOut: opened.securityOut, sourceRoot: opened.sourceRoot },
+      sourceCommit: COMMIT, sourceRoot: opened.sourceRoot, storePath: opened.storePath,
+      storeRoot: opened.storeRoot, windows: { releaseEvidencePath: opened.windowsEvidence },
+    });
+    expect(receipt.produced).not.toHaveProperty("acceptanceEvidence");
+    expect(receipt.refused.acceptanceEvidence).toMatchObject({
+      code: "V2_EVIDENCE_INPUT_UNREADABLE", detail: "gate test:e2e never completed: ENOBUFS",
+    });
+  }, 60_000);
+
   it("refuses every kind on a malformed source commit and writes nothing", async () => {
     const opened = await world("bad-commit");
     const receipt = collect(opened, "not-a-commit");
