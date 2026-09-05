@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join, win32 as windowsPath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS, agentEnvironment,
+import { agentEnvironment,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
+import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
   AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
@@ -78,7 +79,7 @@ function spawnRuntime(
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
-    const coding = request.workspace !== null;
+    const role = agentRoleForWorkspace(request.workspace);
     // Build before writing the credential: Windows shell quoting can refuse the invocation.
     let invocation;
     try {
@@ -87,7 +88,7 @@ function spawnRuntime(
         "--ignore-user-config",
         "--skip-git-repo-check",
         "--ephemeral",
-        "--sandbox", coding ? "workspace-write" : "read-only",
+        "--sandbox", role.sandbox,
         "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
         "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
         "-",
@@ -105,8 +106,8 @@ function spawnRuntime(
         "--no-session-persistence",
         "--strict-mcp-config",
         "--mcp-config", mcpConfigPath,
-        "--tools", coding ? CODING_BUILTIN_TOOLS : "",
-        "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
+        "--tools", role.builtinTools,
+        "--allowedTools", role.allowedTools,
       ], platform);
     } catch (error) {
       // ONLY the landed typed refusal owns a stable code. Anything else — an

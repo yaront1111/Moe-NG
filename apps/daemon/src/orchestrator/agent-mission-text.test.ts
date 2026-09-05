@@ -135,10 +135,15 @@ describe("every mission carries the seat-facing recovery and read facts", () => 
       expect(text).toContain("then stop and report if it refuses again");
     });
 
-    it(`${name} states the graph_get payload and that the seat cannot write files`, () => {
+    it(`${name} states the graph_get payload and its role's file permissions`, () => {
       expect(text).toContain('graph_get takes exactly {"projectId"');
       expect(text).toContain("and nothing else");
-      expect(text).toContain("no file-write tool");
+      if (name === "codeMission") {
+        expect(text).toContain("You may edit files in your assigned workspace and run its tests");
+        expect(text).not.toContain("no file-write tool");
+      } else {
+        expect(text).toContain("no file-write tool");
+      }
       expect(text).toContain("report findings in your final message");
     });
 
@@ -154,7 +159,8 @@ describe("every mission carries the seat-facing recovery and read facts", () => 
       const clauses = text.split(/(?<=[.:;])\s+/).filter((clause) => /memor/i.test(clause));
       expect(clauses.length).toBeGreaterThan(0);
       for (const clause of clauses) {
-        expect(clause).toContain("do not try to write memories or files");
+        expect(clause).toContain(name === "codeMission"
+          ? "do not try to write memories" : "do not try to write memories or files");
       }
       expect(text).not.toMatch(/(record|store|save|persist) (a |the |your )?(durable )?memor/i);
     });

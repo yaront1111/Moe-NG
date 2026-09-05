@@ -7,9 +7,7 @@
  * under the per-file line rail while it grows a start-admission surface. Nothing
  * here spawns, writes, or observes: every function is pure over its arguments.
  */
-export const CHAIN_TOOLS = "mcp__moe-next,mcp__moe-next__*";
-export const CODING_TOOLS = `${CHAIN_TOOLS},Edit,Write,Read,Glob,Grep,Bash`;
-export const CODING_BUILTIN_TOOLS = "Edit,Write,Read,Glob,Grep,Bash";
+export { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS } from "./agent-role-contract.js";
 
 const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
   "ALL_PROXY", "APPDATA", "COLORTERM", "COMSPEC", "FORCE_COLOR", "HOMEDRIVE",

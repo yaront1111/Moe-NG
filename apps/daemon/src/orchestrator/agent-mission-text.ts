@@ -2,6 +2,7 @@ import type { JsonObject } from "@moe/contracts";
 
 import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { agentRoleForWorkspace } from "./agent-role-contract.js";
 
 /**
  * The mission briefs handed to a spawned agent.
@@ -38,10 +39,9 @@ const RETRY_ON_CONFLICT =
  * seat reported exactly that, 2026-09-05). The placeholder survives only for a caller that
  * did not name one.
  */
-function readFacts(projectId: string | null): string {
+function readFacts(projectId: string | null, workspace: string | null = null): string {
   return `graph_get takes exactly {"projectId": "${projectId ?? "<your project id>"}"} and `
-    + "nothing else. You have no file-write tool in this session: report findings in your "
-    + "final message, do not try to write memories or files.";
+    + `nothing else. ${agentRoleForWorkspace(workspace).fileInstructions}`;
 }
 
 /** Exported for its text contract: the agent learns the release payload shape from here. */
@@ -69,7 +69,7 @@ export function codeMission(
     "Every refusal carries a stable reason code — read it, correct the request, never",
     "work around a refusal, and report what the daemon actually answered.",
     RETRY_ON_CONFLICT,
-    readFacts(projectId),
+    readFacts(projectId, brief.workspace),
   ];
   if (hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
