@@ -22,8 +22,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY EVERY PREREQUISITE ON DISK, NO EDITS. This row certifies capabilities four other rows shipped, so it starts by proving they are there rather than trusting the board (global rail 4 clause 2). Run and quote each: (a) task-f79d38b1 — `git grep -c SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL -- '*.ts'` is 0 in production source, and the mission text no longer says \"exactly ONE node\". (b) task-1d7b9df2 — `grep -n 'depends:' apps/daemon/src/http/affordance-read.ts` returns hits and NodeSpec carries `dependsOn`. (c) task-92d84d38 — `grep -n maxAgents apps/daemon/src/http/sessions-read.ts` returns hits. (d) task-0b26dc9e — the goal status strip renders a coverage fraction. (e) task-f99cec0b (already DONE, the row that replaced this parent's deleted observedVersion child) — `grep -n observedVersion apps/daemon/src/bootstrap/bootstrap-conflict-error.ts` returns hits; without it a second seat cannot release and the live drive stalls for a 30-minute TTL. Any absent prerequisite is a report_blocked with that row in blockedOnTaskIds — not a reason to build it here (task rail 1). Also read each prerequisite's completionSummary/reviewSummary from get_context.epicSiblings rather than re-deriving what they did (global rail 11).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-05T05:51:38.567Z"
     },
     {
       "stepId": "step-2",
@@ -128,7 +129,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:24:20.796Z",
-  "updatedAt": "2026-09-05T05:50:53.154Z",
+  "updatedAt": "2026-09-05T05:51:55.132Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:51:42.637Z",
     "plannedStepCount": 7,
@@ -161,7 +162,8 @@
   },
   "planApprovedAt": "2026-09-04T21:54:02.880Z",
   "contextFetchedBy": [
-    "worker-75411639"
+    "worker-75411639",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T04:49:01.014Z",
   "reviewStartedAt": "2026-09-05T05:40:29.213Z",
@@ -216,15 +218,29 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "44f6414e2a703ca2b2ff414a6408ed36eb4503f0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T05:50:53Z",
+      "paths": [
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T05:50:58.691Z",
+      "treeId": "68adc58818840f206146330d99d3754c7962a095",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
-    "kind": "completion",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-56ac23da@2026-09-05T04:48:41Z",
-    "at": "2026-09-05T05:40:50.854Z"
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-75411639@2026-09-05T05:50:53Z",
+    "at": "2026-09-05T05:50:58.691Z"
   },
   "reviewCompletedAt": "2026-09-05T05:50:49.285Z",
   "rejectionDetails": {
