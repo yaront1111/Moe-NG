@@ -335,3 +335,40 @@ describe("operator document ingest", () => {
     expect(hostile.refusal.layer).toBe("DAEMON_INGRESS");
   });
 });
+
+describe("operator ingest after goal.create_with_source bound the same document", () => {
+  it("ingests the PRD the goal binding already landed, instead of refusing EXPECTED_VERSION_CONFLICT forever", async () => {
+    const fixtures = await import("../bootstrap/bootstrap-test-fixtures.js");
+    const store = fixtures.openStore();
+    try {
+      fixtures.driveThrough(store, "goal.create");
+      const source = { displayPath: "docs/prd.md", mediaType: "text/markdown", text: MARKDOWN };
+      const bound = fixtures.send(store, fixtures.envelope("goal.create_with_source", 0, {
+        instructions: "Build it.", source, title: "Bound goal",
+      }, fixtures.GOAL_CREATE_COMMAND_ID));
+      if (!bound.ok) throw new Error(`goal bind refused: ${bound.code}`);
+
+      // The goal binding leg appended the content-addressed source at version 1 under the goal's
+      // own decision key. The ingest used to present expectedVersion 0 against it, refuse
+      // EXPECTED_VERSION_CONFLICT, persist the refusal row and replay it on every retry.
+      const first = ingestDocument(store, {
+        correlationId: "ingest-after-goal", decidedAt: "2026-09-05T12:00:00.000Z",
+        payload: source, principalId: "operator-local", projectId: fixtures.PROJECT_ID,
+      });
+      expect(first.ok).toBe(true);
+      if (!first.ok) throw new Error("ingest was refused");
+      expect(first.contentSha256).toBe(sha256Of(MARKDOWN));
+      expect(first.disposition).toBe("DECIDED");
+
+      const again = ingestDocument(store, {
+        correlationId: "ingest-after-goal", decidedAt: "2026-09-05T12:00:00.000Z",
+        payload: source, principalId: "operator-local", projectId: fixtures.PROJECT_ID,
+      });
+      expect(again.ok).toBe(true);
+      if (!again.ok) throw new Error("re-ingest was refused");
+      expect(again.disposition).toBe("REPLAYED");
+    } finally {
+      fixtures.closeStores();
+    }
+  });
+});
