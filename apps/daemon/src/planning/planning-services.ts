@@ -110,6 +110,33 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   if (runId === null || commands === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+  /**
+   * THE OPTIMISTIC FENCE'S OBSERVATION, TAKEN ONCE AT HANDLER ENTRY.
+   *
+   * `readDurableLedger` keys `aggregates` by `decision.targetAggregateId`
+   * (bootstrap-ledger.ts:96-117), so a run minted as somebody ELSE'S SECONDARY leg is invisible
+   * to it: `versionOf` answers 0 forever while the store observes its real head. That is exactly
+   * a REVISION successor, which `commitIntentRejection` commits as an `extraLegs` leg of the
+   * REJECTED run's decision — its head is 1 and the ledger reads 0, so a propose fenced on
+   * `versionOf` alone could never commit. `buildPlanningAuthorityLeg`
+   * (planning-authority-persistence.ts:205) already fences a SECONDARY leg on
+   * `store.getAggregateVersion` for this same reason; this extends it to the PRIMARY leg when
+   * the primary aggregate was itself minted as a secondary one.
+   *
+   * THE READ IS AT ENTRY, NOT AT COMMIT, and that placement is the property. It happens at the
+   * same instant `runBootstrapCommand` folded `context.ledger` (bootstrap-services.ts:256), so
+   * the concurrent-writer window this fence exists to catch is UNCHANGED: a writer that moves
+   * the head after this line — during the fold, the authority build or the gate persist — still
+   * conflicts at commit. Sliding this read down to just before `commitAcceptedLegs` would shrink
+   * that window to nothing, which `compile-dispatcher-revision.test.ts` reds.
+   *
+   * `Math.max` is a provable NO-OP today: `readDurableLedger` folds only `EFFECTS_COMMITTED`
+   * decisions, and a refused decision's audit event targets a separate audit aggregate with
+   * `currentVersion: null` (decision-ledger-canonical.ts:178-208), so `versionOf` is never above
+   * the raw head. It is kept because it states the invariant the fence depends on — never fence
+   * BELOW what we already folded — and stays correct if the ledger later learns secondary legs.
+   */
+  const entryVersion = Math.max(versionOf(ledger, runId), store.getAggregateVersion(runId));
   const terminal = classifyPlanningChain(commands);
   if (terminal.kind === "UNSUPPORTED") {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
@@ -151,7 +178,7 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
     aggregateId: runId,
     eventPayload: folded.events as unknown as JsonValue,
     eventType: "PlanProposed",
-    expectedVersion: versionOf(ledger, runId),
+    expectedVersion: entryVersion,
     result,
   };
   // THREE legs at most, one decision. A body row cannot survive a refused propose, and an

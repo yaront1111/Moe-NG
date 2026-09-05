@@ -155,7 +155,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:26.694Z",
-  "updatedAt": "2026-09-05T12:16:06.879Z",
+  "updatedAt": "2026-09-05T12:17:27.459Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:37:46.242Z",
     "plannedStepCount": 6,
@@ -225,7 +225,8 @@
     ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
     ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
     ".moe/project.json",
-    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json"
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+    ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json"
   ],
   "completionSummary": "REJECT FIX PASS. QA's single finding is fixed and the delivered tree is green on the leg it reddened. Everything else was re-measured, not rebuilt (qa_reject reset all 6 steps).\n\nMY DIFF THIS PASS IS ONE FILE: apps/daemon/src/http/http-listener-read-dispatch.test.ts. Deleted the census member \"/product-contract/gate-1/read\" from UNPROXIED_SERVED_PATHS (now Object.freeze([])) and rewrote the :86 note. Same command before/after:\n  cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts\n  BEFORE 1 failed | 6 passed (7)   AFTER 7 passed (7), EXIT 0.\nThe empty census is NOT a dead arm: mutating the pin to \"/product-contract/gate-1/READ-MUTANT\" reds BOTH bidirectional arms (2 failed | 5 passed). Restored, git diff + git status EMPTY (tracked path).\n\nDoD 6 IS NOT MET AS LITERALLY WRITTEN, AND THAT IS DISCLOSED. It forbids any file under apps/daemon/src; the fix is such a file. It is FORCED: DoD 3 requires the pin at dev-proxy-paths.ts:27, and the pin's only asserter lives in apps/daemon and reads dev-proxy-paths.ts as SOURCE TEXT (readFileSync, no import), so no control-room edit can green it. The edit adds no route, changes no served byte, is a .test.ts, and the file's own note pre-authorises the pattern (task-e6000b57 did the identical deletion for /repository/remote/read). QA's reject issue 4 instructed exactly this and said an architect must widen DoD 6 to \"no PRODUCTION file under apps/daemon/src\". REQUESTED, unanswered: comment-5b216907bc114237ae7091aa9566ae66 and msg-f810e63be5744646819a1c5a10dd2ad5. QA: read that comment before grading DoD 6.\n\nGATES, all fresh this session, count lines quoted, exit via PIPESTATUS[0]:\n- NAMED: pnpm --filter @moe/control-room test -> 147 passed (147) / 1843 passed (1843), EXIT 0. Identical to the step-1 pre-change baseline.\n- pnpm typecheck -> EXIT 0 (apps/daemon and apps/control-room legs both echo `$ tsc --project tsconfig.json` then Done).\n- pnpm --filter @moe/daemon test (the l",
   "commits": [
@@ -322,6 +323,22 @@
       "treeId": "8d14972669d4a72391f1ea074d5533f6f3d5ab11",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "47a5750ed51a841551aaf6f299e9ca084669e9ef",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-b5679ba9@2026-09-05T11:09:29Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json"
+      ],
+      "recordedBy": "qa-b5679ba9",
+      "recordedAt": "2026-09-05T12:17:27.458Z",
+      "treeId": "7a5e164f94a08aeaddb9851188eed526b01ef2dd",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -345,7 +362,7 @@
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-b5679ba9@2026-09-05T11:09:29Z",
-    "at": "2026-09-05T11:09:40.016Z"
+    "at": "2026-09-05T12:17:27.458Z"
   },
   "reviewCompletedAt": "2026-09-05T12:16:06.879Z",
   "rejectionDetails": {

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 /**
  * `planning.submit_decomposition` — the MIDDLE of the PRD product: an agent
  * submits plan STRUCTURE; the daemon verifies the human's Gate 1 approval,
@@ -34,6 +33,7 @@ import { resolveProductContractGate1 } from "../product-contract/product-contrac
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
 import { compiledPlanAuthority } from "./compiled-authority-bodies.js";
+import { idsOf, resolveCompileRun, sealedSubmissionHash } from "./compile-run-resolution.js";
 import { COMPILED_NODE_RISK_PROFILE } from "./compiled-authority-contracts.js";
 import type { CompiledNodeInput } from "./compiled-authority-contracts.js";
 
@@ -48,6 +48,8 @@ export const SUBMIT_DECOMPOSITION_CODES = Object.freeze([
   "SUBMIT_DECOMPOSITION_MALFORMED",
   "SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH",
   "SUBMIT_DECOMPOSITION_ALREADY_FINALIZED",
+  "SUBMIT_DECOMPOSITION_RUN_UNREADABLE",
+  "SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT",
 ] as const);
 
 export interface SubmitDecompositionInput {
@@ -120,19 +122,6 @@ function stringField(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-/** One derived identity family per approved revision: restartable by construction. */
-// Keyed on the revision AND the run: an approved revision is keyed by the PRD's content sha,
-// so two goals over the same PRD compile the same revision, and event ids keyed on the digest
-// alone collided (DURABLE_ID_CONFLICT on the second goal's first submit, measured 2026-09-03
-// on UnAI with a real planning seat). The run is the goal's own.
-function idsOf(revisionDigest: string, runId: string): Record<string, string> {
-  const stem = `compile-${revisionDigest.slice(0, 12)}-${createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8)}`;
-  return {
-    claim: `${stem}-claim`, create: `${stem}-create`, finalize: `${stem}-finalize`,
-    propose: `${stem}-propose`, ready: `${stem}-ready`, stem,
-  };
-}
-
 function dispatch(
   store: SqliteEventStore,
   input: SubmitDecompositionInput,
@@ -203,7 +192,12 @@ export function runSubmitDecomposition(
     store, input.projectId, goalRef, revision.sourceDocumentDigests,
   );
   if (!provenance.ok) return refused(provenance.code, provenance.layer, provenance.detail);
-  const runId = provenance.planningRunRef;
+  // THE GOAL'S CURRENT RUN, not the one it was created with. `planningRunRef` is immutable on the
+  // goal record, so after a REJECT it still names the run that was rejected; the run that can
+  // accept a plan is its successor. A stale walk refuses rather than compiling onto a last-good id.
+  const target = resolveCompileRun(store, provenance.planningRunRef);
+  if (target === null) return refused("SUBMIT_DECOMPOSITION_RUN_UNREADABLE");
+  const runId = target.runId;
 
   const completionNodeKey = structure["completionNodeKey"];
   const nodes = structure["structureNodes"] ?? structure["nodes"];
@@ -277,10 +271,23 @@ export function runSubmitDecomposition(
   if (!compiled.ok) return refused(compiled.code, compiled.layer, compiled.detail);
 
   const ids = idsOf(ref.revisionDigest, runId);
-  // MEASURED, not inferred: the whole propose fold commits ONE run event (v1)
-  // and the finalize a second (v2) - the chain items' 0..4 are fold-internal.
+  // MEASURED, not inferred: the whole propose fold commits ONE run event and
+  // the finalize a second - the chain items' 0..4 are fold-internal.
+  // The thresholds are OFFSETS from the run's own base head, not literals: an INITIAL run starts
+  // at 0, a REVISION successor at 1 because the rejection already minted its `PlanningRunCreated`
+  // (see `resolveCompileRun`). With baseVersion 0 every comparison below is byte-identical in
+  // behaviour to the literals it replaced, which is why the INITIAL path is unchanged.
   const runVersion = store.getAggregateVersion(runId);
-  if (runVersion >= 2) {
+  if (runVersion >= target.baseVersion + 2) {
+    // FAIL CLOSED ON A CHANGED SUBMISSION. This branch dispatches no leg, so the store's own
+    // command-bytes conflict never sees a resubmission that arrives here: without this check a
+    // DIFFERENT structure under the same derived command ids answers `ok` carrying the hashes of
+    // a plan that was never sealed on the run. Measured 2026-09-05 on a compiled REVISION run:
+    // the caller got REPLAYED with submissionHash a28e4ab2... while the run held f6c57f28...
+    // A genuine crash-restart re-dispatch submits the same bytes and still replays.
+    if (sealedSubmissionHash(store, input.projectId, runId) !== compiled.submissionHash) {
+      return refused("SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT");
+    }
     return Object.freeze({
       disposition: "REPLAYED" as const,
       graphContentHash: compiled.graphContentHash,
@@ -293,11 +300,11 @@ export function runSubmitDecomposition(
   const witness = (fields: Record<string, string>): Record<string, unknown> =>
     Object.freeze({ ...fields, truthClass: "DAEMON_VERIFIED" });
 
-  if (runVersion === 0) {
+  if (runVersion === target.baseVersion) {
     const proposed = dispatch(store, input, ids["propose"] as string, runId, [
       {
         commandId: ids["create"], expectedVersion: 0, goalRef, kind: "planning.create_draft",
-        runId, runKind: "INITIAL",
+        runId, runKind: target.runKind,
       },
       {
         commandId: ids["ready"], expectedVersion: 1, kind: "planning.ready",
@@ -324,7 +331,10 @@ export function runSubmitDecomposition(
         expectedVersion: 3,
         graphContentBytesBase64: compiled.graphContentBytesBase64,
         kind: "plan.propose",
-        proposalKind: "INITIAL",
+        // MUST track the run's own kind: the core refuses a proposal whose kind differs from the
+        // run's with ILLEGAL_TRANSITION (planning-run-submission.ts:118), which is exactly what
+        // keeps an INITIAL authority path from being replayed onto a REVISION run and back.
+        proposalKind: target.runKind,
         submissionHash: compiled.submissionHash,
         witness: witness({
           attemptRef: `${ids["stem"]}-attempt`, submissionRef: `${ids["stem"]}-submission`,
@@ -332,7 +342,7 @@ export function runSubmitDecomposition(
       },
     ]);
     if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING", detailOf(proposed));
-  } else if (runVersion !== 1) {
+  } else if (runVersion !== target.baseVersion + 1) {
     // A run someone else advanced to an unexpected shape is not this seam's to force.
     return refused("SUBMIT_DECOMPOSITION_ALREADY_FINALIZED");
   }
