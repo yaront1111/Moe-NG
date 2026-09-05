@@ -107,8 +107,15 @@ function proxiedPaths(): ReadonlySet<string> {
  * so only `grep -rn DEV_PROXY_PATHS apps packages tools` finds this asserter.
  *
  * `/design/read` is now proxied and consumed by the opened-goal Design card.
+ *
+ * - `/environments/read`: recorded by task-ef76a7f4523d46f48a2f9eb19595e801, which owns the
+ *   daemon half ONLY. Its task rail 4 forbids it touching apps/control-room at all, because the
+ *   Environments screen -- exact-key client decoder plus the proxy pin -- is
+ *   task-ba83b202265d40d1885d3091f009b0a2, which declares dependsOn against it. That row
+ *   retires this entry in the same edit that adds the pin, exactly as task-e6000b57 and
+ *   task-1c9587ed retired the two above.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/read"]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -145,6 +152,9 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   "/budget/commitment/read",
   "/documents/ingest",
+  // Same pair as the proxy census above and retired by the same row: the daemon half landed
+  // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
+  "/environments/read",
   "/events/resume",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
@@ -312,7 +322,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(27);
+    expect(roster.size).toBe(28);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");

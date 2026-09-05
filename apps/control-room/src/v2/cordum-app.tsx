@@ -20,6 +20,7 @@ import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-
 import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
 import { LiveContractDossier } from "./goals/contract-dossier.js";
+import { LiveCriterionEvidence } from "./goals/live-criterion-evidence.js";
 import { LiveDesign } from "./goals/design-card.js";
 import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
@@ -306,6 +307,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
                 readGate={readGate ?? undefined}
               />
             )}
+            <LiveCriterionEvidence goalRef={open.goalId} setup={attached} />
             <LiveDesign goalRef={open.goalId} headers={attached.headers} />
           </div>
           {/* The plan stays in the open while it waits for a decision; once decided (or not
@@ -380,7 +382,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       : view === "policy" && live.setup.ok
       ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} setup={live.setup} />
       : view === "health" && live.setup.ok
-      ? <LiveHealth headers={live.setup.headers} onConnection={reportConnection} />
+      ? <LiveHealth headers={live.setup.headers} setup={live.setup} onConnection={reportConnection} />
       : view === "resources" && live.setup.ok
       ? <LiveResources headers={live.setup.headers} />
       : view === "approvals" && live.setup.ok
