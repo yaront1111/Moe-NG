@@ -120,8 +120,8 @@
       "completedAt": "2026-09-05T07:37:38.546Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-3fd61a21",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -191,18 +191,26 @@
       "author": "worker-75411639",
       "content": "STEP 7 — GATE LEDGER (worker-75411639, 2026-09-05, after the live drive), and a FLAKE IN MY OWN PROOF ARM that I am disclosing rather than hiding.\n\nGATES, each standalone and foreground, count lines verbatim:\n    pnpm --filter @moe/daemon test        EXIT 0   Test Files 416 passed (416) / Tests 8315 passed (8315)\n    pnpm --filter @moe/control-room test  EXIT 0   Test Files 142 passed (142) / Tests 1792 passed (1792)\n    pnpm typecheck                        EXIT 0   ends \"apps/daemon typecheck: Done\"\n    pnpm test                             EXIT 1   Test Files 4 failed | 422 passed | 2 skipped (428) / Tests 4 failed | 10264 passed | 60 skipped (10328)\n    pnpm test:e2e                         EXIT 1   tsc leg only\n    npx vitest run tests/e2e              EXIT 0   Test Files 16 passed | 1 skipped (17) / Tests 155 passed | 1 skipped (156)\nGLOBAL RAIL 18, stated explicitly: `pnpm test` covers NO apps/** — the root vitest include has no apps/** glob, so the daemon and control-room numbers above come from their own per-package runs and nothing in this ledger reads a bare `pnpm test` as evidence for an apps/** claim.\n\nTHE TWO REDS, ATTRIBUTED (global rail 3), neither in this row's owned roster (README.md + tests/e2e/foundation/*):\n1. `pnpm test:e2e` reds on its `tsc -p tests/e2e/foundation/tsconfig.json` leg, one error:\n       apps/daemon/src/planning/approval-intent-rejection.ts(3,22): error TS2305:\n       Module '\"@moe/core\"' has no exported member 'rejectRun'.\n   CAUSE, measured: the WHOLE `node_modules/@moe/` roster in this shared checkout is symlinked out of the repo into a peer's scratch worktree — `node_modules/@moe/core -> /tmp/moe-glance-to-main/packages/core`, and the same for contracts, daemon, import, jetbrains-adapter, mcp, runner, all dated Sep 5 02:23. `grep -c rejectRun node_modules/@moe/core/src/index.ts` = 0; `grep -c rejectRun packages/core/src/index.ts` = 1. POSITIVE CONTROL: `pnpm typecheck` is EXIT 0 with \"apps/daemon typecheck: Done\" on that very file, so the source compiles and only the repointed resolution does not. I did NOT repair the links: they are foreign state in a shared checkout and re-linking would rewrite node_modules under every live session.\n2. `pnpm test` — the SAME FOUR foreign files QA already attributed at cef5804f, unchanged by my diff (README.md only, +12/-6): goal-brief-mcp-readback, compiled-product-journey, legacy-import-commit, release-version-surfaces (2 arms). I re-measured the last one because it SCANS README.md: its failure lists README.md's `0.1.0` as the EXPECTED classified entry and 5 UNCLASSIFIED `v0.1` extras, every one in `apps/daemon/src/bootstrap/activation-receipts.*` and `apps/daemon/src/http/activation-read.*` — peer files. `git diff -- README.md | grep -c -E \"0\\.1\\.0|v0\\.1\"` on added lines = 0, so my edit introduced no version literal. (2)-minus-(1) intersected with my owned paths is EMPTY.\n\nTHE THREE PRE-EXISTING J1 ARMS ARE GREEN AND UNCHANGED: \"carries one seeded node to COMMITTED through the daemon's own verifier\", \"refuses a forged bearer with AUTHENTICATION_FAILED and commits nothing\", \"stays un-COMMITTED when the agent exits 0 without submitting\" — 3 arms, same count as before step 2.\n\nTHE FLAKE, MEASURED, IN MY OWN FILE. `multi-node-graph.e2e.test.ts` arm 1 is LOAD-SENSITIVE. This session, on bytes byte-identical to what QA verified twice green (`git diff --stat cef5804f -- tests/e2e/foundation` is EMPTY):\n    under load (right after the 416-file daemon suite, lane residue): 3 red / 5 runs\n    on a quiet box:                                                  0 red / 9 runs\nThe failure is always the same line — `expect(claimedWorkItems(scratch)).toEqual([workItemFor(ALPHA), workItemFor(BETA)])` — with THREE entries where two are expected, the first being `node.deliver@node-alpha`.\nIT IS NOT THE DEPENDENCY GATE LEAKING. The third key sorts AFTER `node.deliver@…`, and my own adversarial pass (comment-26e3ee55, Q5/follow-up D) already named the only such item: `plan.propose@run-live-1`, the DEVELOPMENT default subject at `affordance-read.ts:56/63`, which that pass flagged as \"a phantom seat against a run their goal has nothing to do with\" and explicitly predicted would red this `toEqual` if it were ever claimed. Under load the pass's timing lets the wrapper claim it, and the whole-ledger equality catches it. So the flake is a SYMPTOM OF FOLLOW-UP D, not of the feature under test — and the arm's own dependency assertion, `expect(claimedWorkItems(scratch)).not.toContain(workItemFor(OMEGA))`, is unaffected.\nI did NOT edit the arm: QA's scope fence is \"touch nothing under `tests/e2e/foundation/`\", and the durable fix is retiring the dev-subject offer (follow-up D), which this row does not own (task rail 1). FOLLOW-UP M: until D lands, tighten arm 1 to assert the two node work items are claimed and OMEGA is not, instead of whole-ledger equality.",
       "timestamp": "2026-09-05T07:37:10.532Z"
+    },
+    {
+      "id": "comment-31f2a607e16d4cbd918b64db0a966c1e",
+      "author": "qa-3fd61a21",
+      "content": "QA VERIFICATION LEDGER, ROUND 2 (qa-3fd61a21, 2026-09-05). APPROVED. I re-measured DoD 4 MYSELF against the live UnAI store, read-only via `node:sqlite`, rather than trusting the row's comments. Every claim held.\n\nDoD 4 — INDEPENDENTLY CONFIRMED AT `D:/projexts/UnAI/.moe-next/store.sqlite`:\n1. THE GRAPH IS REAL AND MULTI-NODE. `GRAPH_BODY_RECORDED` at 2026-09-05T06:35:29.854Z, `graph-body:unai:48f21d72…`, `MOE-GRAPH-CONTENT/3`, author `sess-wrap-c97792d8…` (a seat, not me). Decoded `nodeAuthority.definitions` = 5, `completionNode n5-immutable-record-seal`, edges from `directHardDependencies`:\n    n1-evidence-record-core          <- []\n    n2-synchronous-persistence-seam  <- []\n    n3-idempotent-ingestion          <- n1, n2\n    n4-source-anchors                <- n1\n    n5-immutable-record-seal         <- n3, n4\n   Two independent roots plus a real HARD chain — the shape the offline e2e proves, authored live. Objectives are prose about UnAI's evidence kernel, not fixture text.\n2. APPROVED BY A BROWSER OPERATOR. `command_decisions`: command_id 97dd7277-8d76-4621-86e2-3eedd5bc6930, kind `approval.decide_intent`, decided_at 2026-09-05T06:54:54.599Z, EFFECTS_COMMITTED, target goal-78e1288b…, expected_version 1 -> current_version 2. principal 936b73ac-9f2a-4cf1-a823-38fc183d6772 is `SessionAuthorityPrincipalCreated {\"kind\":\"HUMAN\",\"profileRevisionId\":\"operator-pairing-profile:v1\"}` at 06:53:49 — an OPERATOR PAIRING principal, 65 s before the decision, not an agent or API principal. `result_bytes.predecessorGoalRef` is null. `GoalExecutionEnabled` payload decodes to `truthClass HUMAN_APPROVED`. Screenshot `approved.png` (09:53 local) sits in the lane dir.\n3. PARALLELISM AND THE GATE, FROM EVENTS NOT LOG TEXT. Timeline by `global_position`:\n    06:58:21.879 WorkClaimed n1   06:58:22 AgentStaffingAdmitted \"node.deliver@n1…\"\n    06:58:26.254 WorkClaimed n2   06:58:26 AgentStaffingAdmitted \"node.deliver@n2…\"\n    07:00:11 ReviewOutputAccepted n1 | 07:00:16 n2\n    07:01:26 WorkClaimed n3 | 07:01:54 WorkClaimed n4   (BOTH after n1/n2 accepted)\n    07:03:28 accepted n4 | 07:03:57 accepted n3 | 07:04:41 WorkClaimed n5 | 07:06:48 accepted n5\n   n1 and n2 were both staffed before either was accepted; NO dependent node was claimed early. task-1d7b9df2's gate works on a real project.\n4. TWO LANDINGS ON ONE GOAL, decoded verbatim:\n    LandingCommitted landing:n4-source-anchors 07:03:34.894Z {\"outcome\":\"COMMITTED\",\"sha\":\"cbca86a49438b6a8f7c1832890750f2d956aeb28\"}\n    LandingCommitted landing:n5-immutable-record-seal 07:06:54.787Z {\"outcome\":\"COMMITTED\",\"sha\":\"85b26310c2e68af1227731fb5a73809a6d8b343d\"}\n   Both shas resolve in `D:/projexts/UnAI` on branch master (`git cat-file -t` = commit), top two of `git log`, author Moe, 739 and 52 insertions under `src/kernel/`. Real code, not empty commits.\n5. ONE GOAL, NO SUCCESSOR. Events matching Successor or Replan across the WHOLE store: 0 rows. All 5 `ReviewOutputAccepted` are on this goal. The 3 `LandingRefused` the row discloses are exactly the 3 in the store — nothing hidden.\n\nGATES, ALL RE-RUN BY ME THIS SESSION, foreground, standalone:\n    npx vitest run tests/e2e            EXIT 0  Test Files 16 passed | 1 skipped (17) / Tests 155 passed\n    pnpm --filter @moe/daemon test      EXIT 0  Test Files 416 passed (416) / Tests 8315 passed\n    pnpm --filter @moe/control-room test EXIT 0 Test Files 142 passed (142) / Tests 1792 passed\n    pnpm typecheck                      EXIT 0  \"apps/daemon typecheck: Done\"\n    pnpm test                           EXIT 1  4 failed | 422 passed | 2 skipped (428)  — SAME FOUR FILES as at cef5804f\n    npx tsc -p tests/e2e/foundation/tsconfig.json  EXIT 1, one error\nForeign-red attribution re-measured by me, not accepted on the record: `node_modules/@moe/{core,contracts,daemon,import,jetbrains-adapter,mcp,runner}` are symlinks into `/tmp/moe-glance-to-main` dated Sep 5 02:23; `grep -c rejectRun node_modules/@moe/core/src/index.ts` = 0 vs `packages/core/src/index.ts` = 1; `pnpm typecheck` EXIT 0 on that same file is the positive control. `release-version-surfaces` prints its 5 unclassified extras and ALL FIVE are `apps/daemon/src/bootstrap/activation-receipts.*` / `apps/daemon/src/http/activation-read.*`; added README lines carrying a version literal = 0. HEAD-minus-merge-base intersected with owned paths (README.md, tests/e2e/foundation/*) is EMPTY.\n\nSCOPE FENCE HONOURED: `git diff --stat cef5804f 1729e2f5 -- tests/e2e/foundation apps packages adapters` is EMPTY. The whole round is README.md +12/-6 plus the row JSON. `git grep -n \"one node at a time\" -- README.md docs/` exit 1, 0 hits. The new README paragraph discloses the NOTHING_TO_COMMIT attribution defect and says the coverage close is proven only offline — it does not overclaim in a section whose purpose is honesty.\n\nTHE DISCLOSED FLAKE: I could not reproduce it. 9 runs of `multi-node-graph.e2e.test.ts` — 3 quiet, 3 under 8 spinning node processes, 3 immediately after the 416-file daemon suite — all `Test Files 1 passed / Tests 3 passed`. I am approving anyway on the ANALYSIS, not on my failure to reproduce: line 159 `expect(claimedWorkItems(scratch)).toEqual([workItemFor(ALPHA), workItemFor(BETA)])` is OVER-strict, so a phantom third entry makes it RED, never green — a false-red risk, never a false pass. I confirmed the named cause exists in production: `affordance-read.ts:56` `DEFAULT_RUN_SUBJECT = \"run-live-1\"` and `:63` `\"plan.propose\": DEFAULT_RUN_SUBJECT`. And the load-bearing DoD 1 clauses do NOT ride on that line — parallelism is line 155 `watcher.observedTogether(...)`, the gate is 136-141 `depends:` tokens plus 160 `not.toContain(OMEGA)` and 180/183. Follow-ups D and M stay open; my own scope fence is what stopped this row fixing the arm, and task rail 1 forbids patching `affordance-read.ts` from a proof row.",
+      "timestamp": "2026-09-05T07:59:28.831Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:24:20.796Z",
-  "updatedAt": "2026-09-05T07:39:39.628Z",
+  "updatedAt": "2026-09-05T08:00:29.871Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:51:42.637Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-05T08:00:29.871Z",
+    "wallClockMs": 36527234
   },
   "stepsCompleted": [
     "step-1",
@@ -256,7 +264,8 @@
     "tests/e2e/foundation/multi-node-journey.ts",
     "tests/e2e/foundation/multi-node-reads.ts",
     "tests/e2e/foundation/multi-node-graph.e2e.test.ts",
-    "README.md"
+    "README.md",
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json"
   ],
   "completionSummary": "DoD 4 — THE LIVE DRIVE — IS DONE. QA was right: both blockers I named last pass were false, and doing the thing proved it. Evidence in comment-eed48db1 (facts/ids/shas), comment-15a9eccb (seat transcript + the defect that beat attempt 1), comment-81b6123f (costs and disclosures), comment-4208e22c (gate ledger + a flake in my own arm).\n\nTHE DRIVE, on the REAL store D:/projexts/UnAI/.moe-next/store.sqlite, workspace D:/projexts/UnAI, branch master, seats = the DEFAULT `claude`:\n- goal-78e1288b-c6d0-4275-ba38-fa2f0e93fc31, created IN THE BROWSER from PRD.md (sha e1033b0d…).\n- A REAL claude planning seat sealed a FIVE-node DAG: n1, n2 independent; n3<-{n1,n2}; n4<-n1; n5(completion)<-{n3,n4}. Graph body graph-body-48f21d7220bcb65e…, MOE-GRAPH-CONTENT/3.\n- APPROVED IN THE BROWSER: approval.decide_intent 97dd7277-8d76-4621-86e2-3eedd5bc6930 at 06:54:54.599Z; GoalExecutionEnabled truthClass HUMAN_APPROVED, lifecycle EXECUTION_ENABLED, predecessorGoalRef null. Pairing was operator-confirmed through the rebuilt stdin pipe, not bypassed.\n- PARALLEL, LIVE: node.deliver@n1 and node.deliver@n2 SPAWNED on the SAME pass; n3/n4/n5 withheld until their parents were ACCEPTED.\n- TWO NODES LANDED ON ONE GOAL: n4 sha cbca86a49438b6a8f7c1832890750f2d956aeb28, n5 sha 85b26310c2e68af1227731fb5a73809a6d8b343d.\n- All FIVE nodes ACCEPTED on that one goal; Successor/Replan events in the whole store: 0. UnAI `pnpm test` at the landed HEAD: 3 files / 29 tests passing (22 before).\n\nNOT HIDDEN: three of five landings refused NOTHING_TO_COMMIT — all nodes of a goal share ONE MOE_NODE_WORKSPACE, so a later node's commit sweeps an earlier node's uncommitted paths. The code lands; the attribution does not. README now says exactly that.\n\nDoD 1/2/3/5/6/7 were VERIFIED BY QA at cef5804f and were NOT redone (their instruction). `git diff --stat cef5804f -- tests/e2e/foundation` is EMPTY. The only repo change this pass is README.md +12/-6, one paragraph, honouring QA's fence; `git grep -n \"one node at a ti",
   "commits": [
@@ -320,16 +329,38 @@
       "treeId": "a97e2f1eefbe457bf8c6337d7add927001c55ec5",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "1729e2f5756f417be29421d8b15f49388412d307",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T05:50:53Z",
+      "paths": [
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+        "README.md"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T07:39:49.061Z",
+      "treeId": "00c2245255c7ef7bafe92feb853e8f79729805cc",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-3fd61a21@2026-09-05T05:40:43Z",
-    "at": "2026-09-05T05:51:58.863Z"
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-05T05:50:53Z",
+    "at": "2026-09-05T07:39:49.061Z"
   },
-  "reviewCompletedAt": "2026-09-05T05:50:49.285Z",
+  "reviewCompletedAt": "2026-09-05T08:00:29.871Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 4 — LIVE DRIVE on the lane (UnAI at D:/projexts/UnAI, goal-c9d9850b or a fresh goal): a multi-node graph proposed by a real planning seat, approved in the BROWSER, and at least two nodes landed on the same goal. Record in a row comment: the transcript, the store path, and the landing shas."
@@ -386,5 +417,18 @@
         }
       ]
     }
-  ]
+  ],
+  "touchedFiles": [
+    "tests/e2e/foundation/multi-node-world.ts",
+    "tests/e2e/foundation/fake-agent.mjs",
+    "tests/e2e/foundation/multi-node-graph-harness.ts",
+    "tests/e2e/foundation/multi-node-journey.ts",
+    "tests/e2e/foundation/multi-node-reads.ts",
+    "tests/e2e/foundation/multi-node-wire.ts",
+    "README.md",
+    "tests/e2e/foundation/multi-node-graph.e2e.test.ts",
+    "tests/e2e/foundation/j1-loop-harness.ts"
+  ],
+  "completedAt": "2026-09-05T08:00:29.871Z",
+  "reviewSummary": "APPROVED. Full ledger: comment-31f2a607. DoD 4 (my round-1 rejection) I re-measured MYSELF read-only against D:/projexts/UnAI/.moe-next/store.sqlite, not from the transcript. GRAPH_BODY_RECORDED 06:35:29.854Z, author sess-wrap-c97792d8, FIVE nodes: n1<-[], n2<-[], n3<-{n1,n2}, n4<-{n1}, n5<-{n3,n4}. approval.decide_intent 97dd7277 EFFECTS_COMMITTED 06:54:54.599Z, principal 936b73ac = HUMAN operator-pairing-profile:v1 minted 65 s earlier (browser, not API), predecessorGoalRef null, GoalExecutionEnabled HUMAN_APPROVED. n1+n2 both claimed/staffed 06:58:21 and 06:58:26 BEFORE either accepted (07:00:11/07:00:16); n3/n4 held to 07:01:26/07:01:54, n5 to 07:04:41. LandingCommitted sha cbca86a4 (n4), 85b26310 (n5) — real commits on UnAI master, 739 and 52 insertions under src/kernel/. Successor/Replan events store-wide: 0. The 3 LandingRefused are exactly the 3 disclosed.\n\nGATES re-run by me, foreground standalone: npx vitest run tests/e2e EXIT 0, Test Files 16 passed | 1 skipped (17) / 155 passed; @moe/daemon EXIT 0, 416 (416) / 8315; @moe/control-room EXIT 0, 142 (142) / 1792; pnpm typecheck EXIT 0; pnpm test EXIT 1, 4 failed | 422 passed | 2 skipped (428) — same four as cef5804f; rail 18 holds. e2e tsc leg's TS2305 rejectRun re-attributed by me to node_modules/@moe/* symlinked to /tmp/moe-glance-to-main (Sep 5 02:23), grep 0 vs 1 in packages/core. release-version-surfaces' 5 extras all peer apps/daemon paths; README version literals added = 0. HEAD-minus-base within owned paths: EMPTY.\n\nFence honoured: cef5804f..1729e2f5 over tests/e2e/foundation, apps, packages, adapters is EMPTY. grep \"one node at a time\" = 0 hits. Completion commit 1729e2f5.\n\nFLAKE approved knowingly: 9 runs of the multi-node arm, no repro. Line 159 toEqual is OVER-strict, false-RED only, never false-pass; DoD 1 rides on 155/160/180/183. Cause affordance-read.ts:56/63, barred by task rail 1. Follow-ups D and M open."
 }
