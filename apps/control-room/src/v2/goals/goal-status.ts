@@ -2,6 +2,7 @@ import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { pauseResetWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
+import { DEPENDS_TOKEN_PREFIX } from "./work-labels.js";
 
 /**
  * WHERE A GOAL STANDS, in one line, and THE ONE THING TO DO NEXT. Derived from two daemon
@@ -33,6 +34,10 @@ export interface GoalNext {
 export interface GoalStatus {
   readonly agents: {
     readonly accepted: number; readonly blocked: number; readonly replanned: number; readonly total: number;
+    /** Nodes the daemon is holding until a dependency is accepted; never idle, never claimed. */
+    readonly waiting: number;
+    /** The distinct nodes they are held behind, in the order the surface listed them. */
+    readonly waitingOn: readonly string[];
     readonly working: number;
   } | null;
   readonly headline: string;
@@ -71,15 +76,64 @@ function nodeKeysOf(coverage: DocumentCoverageOutcome | null): ReadonlySet<strin
   return keys;
 }
 
+/**
+ * The nodes this one is held behind. The daemon spells the token `depends:<nodeKey>`, so it is
+ * read by PREFIX - an exact match on the bare word would never fire and the count would be a
+ * permanent zero. A prefix carrying no key names no node and is left to the raw-token path.
+ */
+function blockersOf(step: SurfaceStep): readonly string[] {
+  if (step.status !== "BLOCKED") return [];
+  return step.missing
+    .filter((token) => token.startsWith(DEPENDS_TOKEN_PREFIX))
+    .map((token) => token.slice(DEPENDS_TOKEN_PREFIX.length))
+    .filter((nodeKey) => nodeKey.length > 0);
+}
+
 function agentsOf(steps: readonly SurfaceStep[]): GoalStatus["agents"] {
   if (steps.length === 0) return null;
+  // Folded once per step, so the count of waiting NODES and the list of blocking NODES can never
+  // disagree about which steps are held: a node waiting on two parents is ONE waiting node, and
+  // two nodes behind one parent name that parent once.
+  const blockers = steps.map(blockersOf);
   return Object.freeze({
     accepted: steps.filter((step) => step.status === "COMMITTED").length,
     blocked: steps.filter((step) => step.status === "BLOCKED" && step.missing.includes("escalation")).length,
     replanned: steps.filter((step) => step.status === "BLOCKED" && step.missing.includes("replan")).length,
     total: steps.length,
+    waiting: blockers.filter((held) => held.length > 0).length,
+    waitingOn: Object.freeze([...new Set(blockers.flat())]),
     working: steps.filter((step) => step.status !== "COMMITTED" && step.claim !== null).length,
   });
+}
+
+/**
+ * A node list an operator reads aloud: "n1", "n1 and n2", "n1, n2 and n3". A wide graph is
+ * summarised rather than recited - "n1, n2, n3 and 4 more" - because a sentence naming twelve
+ * node keys is a sentence nobody finishes, and the board below carries the full build order.
+ */
+const NAMED_BLOCKERS = 3;
+
+function nodeWords(keys: readonly string[]): string {
+  const named = keys.slice(0, NAMED_BLOCKERS);
+  const rest = keys.length - named.length;
+  const tail = rest > 0 ? `${String(rest)} more` : named[named.length - 1] ?? "";
+  const lead = rest > 0 ? named : named.slice(0, -1);
+  if (lead.length === 0) return tail;
+  return `${lead.join(", ")} and ${tail}`;
+}
+
+/**
+ * What the board is doing, for a goal that is neither waiting on a person nor finished. Nodes
+ * held behind build order are NOT idle, so they are named before the claimed count - otherwise
+ * a three-node goal with two nodes queued reads as "0 nodes are claimed right now", which an
+ * operator can only read as a stalled goal.
+ */
+function workingDetail(agents: NonNullable<GoalStatus["agents"]>): string {
+  if (agents.total - agents.accepted === 0) return "Every node is accepted; the verifier's last acceptance is on the board.";
+  const claimed = `${String(agents.working)} ${agents.working === 1 ? "node is" : "nodes are"} claimed right now.`;
+  if (agents.waiting === 0) return `${claimed} Nothing needs you until a review is exhausted.`;
+  const queued = `${String(agents.waiting)} ${agents.waiting === 1 ? "node is" : "nodes are"} waiting for ${nodeWords(agents.waitingOn)} to be accepted first`;
+  return `${queued}; ${claimed[0]?.toLowerCase() ?? ""}${claimed.slice(1)} Nothing needs you until a review is exhausted.`;
 }
 
 function status(stage: GoalStage, headline: string, next: GoalNext, extra: {
@@ -169,12 +223,9 @@ export function deriveGoalStatus(input: {
     }, { agents, progress });
   }
   if (agents !== null) {
-    const remaining = agents.total - agents.accepted;
     return status("WORKING", `Agents are working: ${String(agents.accepted)} of ${String(agents.total)} nodes accepted.`, paused !== null ? pausedNext(paused) : {
       anchor: "board",
-      detail: remaining === 0
-        ? "Every node is accepted; the verifier's last acceptance is on the board."
-        : `${String(agents.working)} ${agents.working === 1 ? "node is" : "nodes are"} claimed right now. Nothing needs you until a review is exhausted.`,
+      detail: workingDetail(agents),
       label: "Watch the board",
     }, { agents, progress });
   }
