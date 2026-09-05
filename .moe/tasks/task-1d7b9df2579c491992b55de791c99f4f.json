@@ -133,7 +133,7 @@
       "completedAt": "2026-09-04T23:34:29.996Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -164,11 +164,17 @@
       "author": "qa-3fd61a21",
       "content": "FROM QA (grading task-8145137c) — YOUR `dependsOn` CHANGE SHIPPED IN TWO COMMITS, AND FOR A WHILE ONLY HALF OF IT WAS IN HISTORY. Resolved now; recording it so the interval is not mistaken for someone else's regression later.\n\nWHAT HAPPENED. Your surface-side gate in `apps/daemon/src/http/affordance-read.ts` (the `acceptedByRef`/`isAccepted` memo and the `spec.dependsOn.filter(...)` unmet-dependency branch, now ~:369-380 and :429-441) was swept into commit 09fa59ef — a task-8145137c checkpoint that owned the same FILE for its own +6 lines, so the wrapper's pathspec commit could not exclude your hunk. The wrapper's trailer mis-attributed it: `Moe-Contested: apps/daemon/src/http/affordance-read.ts (task-138fab3075884df98c3c220e74c1a3e9)`. It is yours, not task-138fab30's — I posted the same measurement there before the ownership was clear; disregard it on that row.\n\nYour `NodeSpec.dependsOn` half in `apps/daemon/src/http/affordance-contract.ts` stayed uncommitted until 9d0ed510. Between 09fa59ef and 9d0ed510 the branch did not typecheck standalone. Measured in a clean worktree at 416ecc6b (node tsc, node vitest — never `pnpm` in a worktree, it tries to purge node_modules):\n- `tsc --project apps/daemon/tsconfig.json` EXIT 1, exactly 3 errors, all yours:\n  src/http/affordance-read.ts(429,28): error TS2339: Property 'dependsOn' does not exist on type 'NodeSpec'.\n  src/http/affordance-read.ts(429,46): error TS7006: Parameter 'nodeRef' implicitly has an 'any' type.\n  src/http/affordance-read.ts(430,17): error TS7006: Parameter 'nodeRef' implicitly has an 'any' type.\n- daemon suite: Test Files 412 passed | 1 failed (413); Tests 8207 passed | 4 failed (8211). Sole red file `src/http/affordance-read.test.ts` (19 tests | 4 failed), every one `TypeError: Cannot read properties of undefined (reading 'filter')` — `spec.dependsOn` undefined at runtime. Arms: \"code node steps > offers only agent-authored review submission for an approved, unaccepted node\" (:382), \"> blocks a clean submitted node on daemon verification\" (:410), \"> names only the daemon's verification once both standing verifier slices are installed\" (:426), \"a node whose review is exhausted waits on a human escalation > returns the node to READY with review.submit offered once a human escalates\" (:677).\n- Bisect: 19/19 green at 293c4c17, at b61cbc78 and at 414eb699; 4-failed at 09fa59ef, whose only code change is that hunk.\n\n`git grep -c dependsOn HEAD -- apps/daemon/src/http/affordance-contract.ts` = 2 at 9d0ed510, so the standalone break is closed. I did NOT re-measure the suite after your landing: by then a third peer's uncommitted activation-ingress work (`ACTIVATION_WITNESS_CALLER_SUPPLIED` in `bootstrap-services.ts`, absent at every commit) had reddened ~35 arms across http/ and activation/ in the shared checkout, so the working tree is no longer a usable anchor for your row either. Verify yours in a clean worktree at a named SHA, not in `D:\\projexts\\moe-next`.\n\nTAKEAWAY FOR THIS ROW: when a type field and its consumer live in two files, land both in one commit — a consumer committed alone is green in your dirty tree and red for everyone else.",
       "timestamp": "2026-09-04T23:43:17.745Z"
+    },
+    {
+      "id": "comment-f04f53a0fba34506bd7a60d4979d4987",
+      "author": "worker-56ac23da",
+      "content": "FINAL GATES — RE-RUN FRESH BY worker-56ac23da (resume session), 2026-09-05, branch moe/work-2026-09-04, HEAD 74142850.\n\nWHY A RESUME. The prior session (worker-75411639) implemented all 7 steps but its step-7 gate run was RED on a PEER's uncommitted change: apps/daemon/src/bootstrap/bootstrap-services.ts began refusing ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS (task-4b9c394debe94b41a80e2b46c6d55ab8), and the pre-existing inline `project.activate` sender in affordance-read.test.ts was an un-migrated caller whose setup threw and took all 17 arms in the file down. That row is now DONE and LANDED (c0a154a2 + 72d52104 + 74142850), and its owner migrated the sender: affordance-read.test.ts:230 now reads `commitBootstrap(\"project.activate\", // NO WITNESS: the daemon mints it from its own measured receipts.` The foreign red is GONE, not waived.\n\nDELIVERED BYTES ARE ON THE BRANCH. `git status --porcelain` over all nine owned paths returns EMPTY — the prior session's wrapper checkpoint 9d0ed510 (`wip(task-1d7b9df2…) [status=BLOCKED role=worker]`) carries them, so the worktree the gates ran against IS HEAD content. Confirmed by reading HEAD blobs, not the worktree:\n  git show HEAD:apps/daemon/src/http/affordance-read.ts        -> :387 `const isAccepted = (nodeRef: string): boolean =>`; :442-443 `const unmet = spec.dependsOn.filter((nodeRef) => !isAccepted(nodeRef)).map((nodeRef) => \\`depends:${nodeRef}\\`);`\n  git show HEAD:apps/daemon/src/http/affordance-contract.ts    -> :39 `readonly dependsOn: readonly string[];` (REQUIRED, with the :32 rationale comment)\n  git show HEAD:apps/daemon/src/orchestrator/compiled-node-source.ts -> :134 `edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)` (the runs-read.ts:103-104 derivation, not a second walk); :186 `dependsOn: Object.freeze([...node.dependsOn])`\n  git show HEAD:apps/control-room/src/v2/goals/work-labels.ts  -> :127 `export const DEPENDS_TOKEN_PREFIX = \"depends:\";` :131 prefix branch; :91 the `replan` label the bidirectional roster check found missing\n\nTHREE GATES, EACH STANDALONE AND FOREGROUND, COUNT LINES VERBATIM (global rail 8 — an exit-0 leg with no count line is vacuous):\n  $ pnpm --filter @moe/daemon test        -> `$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src`\n                                             Test Files  416 passed (416)\n                                                  Tests  8304 passed (8304)     EXIT 0  (397.20s)\n  $ pnpm --filter @moe/control-room test  -> Test Files  139 passed (139)\n                                                  Tests  1748 passed (1748)     EXIT 0\n  $ pnpm typecheck                        -> EXIT 0; `$ tsc --project tsconfig.json` echo + `Done` for all 16 packages INCLUDING `apps/daemon typecheck: Done` and `apps/control-room typecheck: Done`\nPer global rail 18, `pnpm test` was NOT used as evidence for either app package — the root vitest include has no apps/**.\n\nCOUNT DELTA vs the step-1 merge-base measurement (HEAD 034a0eb5: daemon 413 files/8211 tests; control-room 135 files/1659 tests): daemon +3 files/+93 tests and control-room +4 files/+89 tests. My row's share is +1 daemon file (compiled-node-source.test.ts pre-existed; the new arms are in-file) and ZERO new control-room files — `git show 9d0ed510 --stat` names my nine paths. The remaining new files are peer rows landed between the two measurements (task-4b9c394deb, task-138fab30, task-f6f33a39, task-ac71a55e). No leg is red, so there is no foreign red to attribute under global rail 3.\n\nNOT RE-RUN THIS SESSION, and stated plainly: the two mutation drills. They were executed by the prior session with SHA256-proven restores recorded in step 7's note (gate ignores dependencies -> 5 arms RED incl. the token and transitive arms, affordance-read.ts restored to 8300563097F7E182…; compiled-node-source yields [] always -> the mapping arm RED with `expected [ [], [], [] ] to deeply equal [ [], [ 'node-a' ], [ 'node-b' ] ]`, restored to 05CCFE8DC0F16DC4…). The restores are re-proven transitively here: those two files are byte-clean against HEAD and the full suite is green, so no mutant rode in.\n\nFOLLOW-UP, unchanged: affordance-read.ts is 468 lines at HEAD (428 before this row; over the 400 split threshold). Recommend the epic-final hardening row split it along the surface / node-lifecycle seam. Also: daemon-store-foundation-composition.ts's file-authored NodeSpecs get `dependsOn: []` because the on-disk spec format parses only nodeRef/title — whoever next touches that loader should add `dependsOn?: string[]` or those nodes stay ungated.",
+      "timestamp": "2026-09-05T02:34:44.749Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-05T02:25:44.908Z",
+  "updatedAt": "2026-09-05T02:35:08.690Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:47:41.465Z",
     "plannedStepCount": 7,
@@ -203,7 +209,8 @@
   },
   "planApprovedAt": "2026-09-04T21:49:30.225Z",
   "contextFetchedBy": [
-    "worker-75411639"
+    "worker-75411639",
+    "worker-56ac23da"
   ],
   "workStartedAt": "2026-09-04T22:38:15.197Z",
   "declaredFiles": [
@@ -259,16 +266,15 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
-    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
-    "apps/control-room/src/v2/goals/work-labels.test.ts",
-    "apps/control-room/src/v2/goals/work-labels.ts",
-    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/http/affordance-read.ts",
     "apps/daemon/src/http/affordance-contract.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
     "apps/daemon/src/http/affordance-read.test.ts",
     "apps/daemon/src/http/affordance-read-planning.test.ts",
-    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
-    "apps/daemon/src/orchestrator/compiled-node-source.ts"
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts"
   ],
   "touchedFiles": [
     ".moe-scratch-labels-arms.ts",
@@ -295,5 +301,13 @@
     "kind": "checkpoint",
     "sessionId": "worker-75411639@2026-09-04T22:37:59Z",
     "at": "2026-09-04T23:38:45.581Z"
-  }
+  },
+  "reviewStartedAt": "2026-09-05T02:35:08.690Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n\n Test Files  416 passed (416)\n      Tests  8304 passed (8304)\n   Start at  05:26:50\n   Duration  397.20s (transform 32.34s, setup 0ms, import 295.61s, tests 1201.75s, environment 29ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-05T02:35:08.690Z"
+  },
+  "completionSummary": "A node.deliver step is now READY only when every hard dependency is ACCEPTED; otherwise BLOCKED with missing containing `depends:<nodeKey>` per unmet dependency. Evidence detail in comment-f04f53a0.\n\nWHAT SHIPPED (9 paths, all byte-clean vs HEAD; carried by checkpoint 9d0ed510).\n- affordance-contract.ts: NodeSpec gains REQUIRED `readonly dependsOn: readonly string[]`. Required deliberately — an optional member defaulting to [] is exactly how this gate goes vacuous, and the compiler is what enumerated the construction sites.\n- compiled-node-source.ts: populates it with the SAME derivation runs-read.ts:103-104 uses — `edges.filter(e => e.consumerNodeKey === definition.nodeKey)` — inside the per-graph loop (this file keeps a `listed` Set that would otherwise pair a definition with another graph's edges).\n- affordance-read.ts (428 -> 468): `isAccepted` memoised per read, in the FINAL branch only. replan/escalation keep their early `continue`, so their tokens are unchanged. PRECEDENCE, pinned by an arm: dependencies first, then verification -> [\"depends:node-c\",\"verification\"]. OFFER ASYMMETRY, deliberate and asserted: verification-blocked still offers review.submit (pre-existing); dependency-blocked offers nothing. ACCEPTED = `review.accepted !== undefined`, the same fact the loop already uses for COMMITTED (task rail 1) — no second notion of doneness.\n- work-labels.ts: DEPENDS_TOKEN_PREFIX + a prefix branch in labelForMissing; the three render sites needed no edit.\n- Tests: +7 arms in affordance-read.test.ts (direct block on the literal `depends:a`, offer withheld, release on acceptance, transitive a->b->c with only a accepted asserting b READY and c BLOCKED in ONE test, zero-dependency regression, precedence, dangling producer key), +1 3-node-chain mapping arm in compiled-node-source.test.ts, +7 it() in work-labels.test.ts.\n\nTWO THINGS THE PLAN DID NOT NAME, both found and fixed:\n1. A SEVENTH, PRODUCTION NodeSpec site — daemon-store-foundation-composition.ts:293 merge"
 }
