@@ -100,7 +100,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:32.672Z",
-  "updatedAt": "2026-09-05T17:53:07.994Z",
+  "updatedAt": "2026-09-05T17:53:30.458Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:30:41.029Z",
     "plannedStepCount": 6,
@@ -225,27 +225,46 @@
       "treeId": "fa955845f2e2ac9f0e3f4a52e1e938efec31e6bc",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "af2fb7541e1714d5f4747995fc95853d58df7b88",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T16:45:56Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T17:53:30.458Z",
+      "treeId": "0736efbe779b8c93dcbe8e9654960ea61d16bd14",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
     ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
     ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
-    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json"
+    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/orchestrator/node-lander.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T15:09:31Z",
-    "at": "2026-09-05T15:09:39.856Z"
+    "sessionId": "worker-2739fee7@2026-09-05T16:45:56Z",
+    "at": "2026-09-05T17:53:30.458Z"
   },
   "blockedReason": "Step 1(d) triage fired: STOP AND REPORT per that step's own text and global rail 18. Needs an architect amendment/split; I have NOT made the design call. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) + comment-a9a48879212b474782cb453e073c98f8 (collision). Control/treatment pair at fixed HEAD e6d02867, not inferred.\n\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, NONE among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated, restore-test-harness.ts:182 seedReadyProject (445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). bootstrap-test-fixtures.ts was rightly verified as ordered - just not the only seeder. 4 files need real edits (9 arms): activation-command-entry.test.ts:108, affordance-read.test.ts:125, admission-gate-resolver.test.ts:753/775/967/981, daemon-foundation-command.test.ts:113/143/232. Minimum roster = 12 paths, past the plan's 10-file ceiling.\n\n2. THE BLOCKER, outranking the file count: option (a) MAKES THIS ROW'S PROTECTED REFUSAL UNREACHABLE - the admission gate answers before the receipt layer. Verbatim at activation-command-entry.test.ts:108: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'. Contradicts task rail 1 and DoD-3 verbatim; the second-refusal-layer hazard of global rail 1. Re-pointing that arm is not available - its comment says it separates a live override from a defaulted one.\n\nRULING NEEDED: (a) keep the table change, then amend rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths; (b) policy.install into ACTIVATION_CHAIN_KINDS alone - 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green; (c) land (b) now, file the table fix as its own row. My read: (b) or (c).\n\nTREE CLEAN. See mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T17:53:07.994Z"
+  "blockedAt": "2026-09-05T17:53:07.994Z",
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts"
+  ]
 }
