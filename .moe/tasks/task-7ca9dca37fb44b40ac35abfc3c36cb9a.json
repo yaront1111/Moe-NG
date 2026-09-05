@@ -108,7 +108,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-f2906c26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:26:42.930Z",
-  "updatedAt": "2026-09-05T15:08:09.361Z",
+  "updatedAt": "2026-09-05T15:08:35.543Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:45.951Z",
     "plannedStepCount": 5,
@@ -164,7 +164,8 @@
   },
   "planApprovedAt": "2026-09-05T14:30:57.199Z",
   "contextFetchedBy": [
-    "worker-b33940f5"
+    "worker-b33940f5",
+    "qa-f2906c26"
   ],
   "workStartedAt": "2026-09-05T14:34:08.889Z",
   "reviewStartedAt": "2026-09-05T15:08:09.361Z",
@@ -184,5 +185,49 @@
     "apps/daemon/src/http/design-read.js",
     "apps/daemon/src/http/http-listener.ts"
   ],
-  "completionSummary": "POST /design/read: handleDesignReadRequest, JSON_ROUTES, POST-only guard, serveDesign else-if above unconditional dossier. Auth first; GOAL cap → DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200; no port → LISTENER_DESIGN_UNAVAILABLE@CONTROL_ROOM_LISTENER/503; extra/missing/non-string/payload-projectId → LISTENER_DESIGN_REQUEST_INVALID@CONTROL_ROOM_LISTENER/400; store answers 200 with DesignReadResult (DESIGN_REVISION_ABSENT@LEDGER). projectId from principal. UNCONSUMED+UNPROXIED record /design/read (UI/proxy = task-e9cb2442). No factory (task-eb2bb09d).\nOwned: Test Files 2 passed (2), Tests 19 passed (19). Named full daemon suite Test Files 13 failed | 420 passed (433) — foreign (foundation timeouts, compile-dispatcher, peer-dirty affordance-read-planning); owned-path intersection empty. Typecheck reds in document-coverage-read.ts:232 and scheduler budget-reservation.ts:132 — not owned. Drills in comment-29f11b61."
+  "completionSummary": "POST /design/read: handleDesignReadRequest, JSON_ROUTES, POST-only guard, serveDesign else-if above unconditional dossier. Auth first; GOAL cap → DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200; no port → LISTENER_DESIGN_UNAVAILABLE@CONTROL_ROOM_LISTENER/503; extra/missing/non-string/payload-projectId → LISTENER_DESIGN_REQUEST_INVALID@CONTROL_ROOM_LISTENER/400; store answers 200 with DesignReadResult (DESIGN_REVISION_ABSENT@LEDGER). projectId from principal. UNCONSUMED+UNPROXIED record /design/read (UI/proxy = task-e9cb2442). No factory (task-eb2bb09d).\nOwned: Test Files 2 passed (2), Tests 19 passed (19). Named full daemon suite Test Files 13 failed | 420 passed (433) — foreign (foundation timeouts, compile-dispatcher, peer-dirty affordance-read-planning); owned-path intersection empty. Typecheck reds in document-coverage-read.ts:232 and scheduler budget-reservation.ts:132 — not owned. Drills in comment-29f11b61.",
+  "commits": [
+    {
+      "sha": "e2aa3fb109c4de1e698326430148496ddc5c0ea2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T14:33:24Z",
+      "paths": [
+        "apps/daemon/src/http/design-read.js",
+        "apps/daemon/src/http/design-read.test.ts",
+        "apps/daemon/src/http/design-read.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:08:20.259Z",
+      "treeId": "c86a8d7aef25df88ddb403c08654d66e03bacaab",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/http-listener.ts",
+          "taskId": "task-eb2bb09d4efa4691803a519901eb2f97"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-bc4617d6f84f4213a00c9b1786622577"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-b33940f5@2026-09-05T14:33:24Z",
+    "at": "2026-09-05T15:08:20.259Z"
+  }
 }
