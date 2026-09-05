@@ -242,7 +242,9 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
     // later REJECT: the run flipped to REJECTED with a REVISION successor while the goal stayed
     // EXECUTION_ENABLED on the rejected run's graph — a durable split with no repair path. The
     // goal's own durable fact, the one readApprovedPlan trusts, decides reviewability here.
-    const goal = stateOf(ledger, sources.goalRef);
+    const state = stateOf(ledger, sources.goalRef);
+    const goal: JsonObject | null = typeof state === "object" && state !== null && !Array.isArray(state)
+      ? (state as JsonObject) : null;
     const lifecycle = goal === null ? null : payloadRef(goal, "lifecycle");
     const active = goal === null ? null : payloadRef(goal, "activeGraphRevisionRef");
     const enabled = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" || lifecycle === "COMPLETED";
