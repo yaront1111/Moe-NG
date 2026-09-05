@@ -427,6 +427,38 @@ describe("the compiler ladder on a source-bound goal", () => {
       expect(HUMAN_ONLY_STEPS.has(kind), `${kind} wrongly human-only`).toBe(false);
     }
   });
+
+  /**
+   * task-5f883e4e: the must-be-human-only direction, spelled as an EXPLICIT ROSTER.
+   *
+   * The arm above at `every offered approval kind is one the wrapper refuses to staff` reads
+   * its subjects from `offers.filter(kind => kind.startsWith("approval."))`, so it can only
+   * ever see `approval.*` members. Every non-approval kind in the set — `goal.close`,
+   * `repository.publish`, the environment pair, `preview.decide` — satisfies it VACUOUSLY,
+   * because the filter never yields them. That makes this file look like bidirectional
+   * coverage while one direction is blind to most of what it guards.
+   *
+   * The kinds are named here rather than derived from the set: derivation would make the
+   * assertion `set.has(x) for x in set`, which is a tautology. This roster is the independent
+   * side, so a deletion from `HUMAN_ONLY_STEPS` reddens.
+   *
+   * This is MEMBERSHIP only. The behavioural proof — that `runOnce()` actually skips the kind
+   * when the surface offers it READY — lives in `agent-wrapper.test.ts`, against the one
+   * production consumer (`agent-wrapper.ts:353`). Both are wanted: a test that read
+   * `HUMAN_ONLY_STEPS.has()` alone would restate the constant instead of proving the wrapper
+   * obeys it, and the wrapper arm alone would not say WHICH kinds the roster is required
+   * to carry.
+   */
+  it("names every non-approval kind that must be human-only, which the filtered arm cannot see", () => {
+    for (const kind of [
+      "environment.set_variable", "environment.unset_variable",
+      "goal.close", "goal.create", "goal.create_with_source",
+      "preview.decide",
+      "repository.publish",
+    ]) {
+      expect(HUMAN_ONLY_STEPS.has(kind), `${kind} missing from HUMAN_ONLY_STEPS`).toBe(true);
+    }
+  });
 });
 
 /**

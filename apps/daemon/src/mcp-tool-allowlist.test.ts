@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { allowlistedToolEntries } from "@moe/mcp";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { STDIO_TOOL_INDEX, allowlistedToolEntries, toolLabelForKind } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -352,5 +353,91 @@ describe("task-4dd05f0c served/advertised parity", () => {
     const after = decisionsIn();
     expect(after.filter((item) => item.commandKind === "events.resume")).toEqual([]);
     expect(after.length).toBe(before.length);
+  });
+});
+
+/**
+ * task-5f883e4e: `preview.decide` NAMED, not merely counted.
+ *
+ * The arms above are set arithmetic over whole rosters, so `preview.decide` is only ever
+ * visible in them through a moving count literal a sibling kind-publishing row bumps. These
+ * three name it, and each closes a different way the fence could be hollow:
+ *
+ *  - membership in BOTH directions (excluded AND unadvertised), so deleting it from
+ *    `OPERATOR_PRINCIPAL_KINDS` reddens here by name rather than as `expected 10 to be 11`;
+ *  - the tool label is GENERATED, which is the discriminator between the two refusal
+ *    branches: `http-tool-bridge.ts:195` answers a KNOWN-but-omitted label with
+ *    CAPABILITY_DENIED, `:193` answers an UNKNOWN one with INPUT_INVALID. A kind that
+ *    vanished from the generated surface would also be "not advertised" — and would refuse
+ *    for the wrong reason, which is not the fence this row is claiming;
+ *  - the daemon's OWN seam still SERVES it under the operator credential, reaching the
+ *    handler's refusal rather than an authorization one. That is what makes the exclusion
+ *    load-bearing: the MCP port dispatches as the operator bootstrap credential
+ *    (`mcp-dispatch-port.ts:343`, `mcp-main.ts:112-127`), so a capability gate would fence
+ *    nothing and only omission from the advertisement refuses the caller.
+ */
+describe("task-5f883e4e preview.decide is fenced to the operator", () => {
+  const PREVIEW_DECIDE = "preview.decide";
+
+  it("is excluded from the MCP advertisement, in both directions, BY NAME", () => {
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(PREVIEW_DECIDE);
+    expect(wiredMcpToolKinds()).not.toContain(PREVIEW_DECIDE);
+    // The roster is DERIVED from the vocabulary's operator-only class, so this is the
+    // upstream fact the exclusion is computed from — not a second hand-kept list. Widened to
+    // a string Set rather than cast at the call: `OPERATOR_PRINCIPAL_KINDS` is typed by the
+    // closed command-kind union, and a cast would make a kind that LEFT the union a silent
+    // pass instead of the compile error it should be.
+    const operatorOnly: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    expect(operatorOnly.has(PREVIEW_DECIDE)).toBe(true);
+    // A surviving control: a staffable kind of the same shape stays advertised, so
+    // "advertises nothing" cannot pass this arm.
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+  });
+
+  it("is GENERATED but omitted, so the transport refuses CAPABILITY_DENIED, not INPUT_INVALID", () => {
+    const label = toolLabelForKind(PREVIEW_DECIDE);
+    // Derived through the production helper: a hand-spelled name would be UNKNOWN and would
+    // green this arm on the INPUT_INVALID branch instead.
+    expect(STDIO_TOOL_INDEX.get(label)).toBeDefined();
+    const advertised = new Set(allowlistedToolEntries(wiredMcpToolKinds())
+      .map((entry) => entry.tool.name));
+    expect({ advertised: advertised.has(label), label })
+      .toEqual({ advertised: false, label });
+    expect(advertised.has(toolLabelForKind("goal.create"))).toBe(true);
+  });
+
+  it("still reaches the HANDLER on the daemon's own seam under the operator credential", async () => {
+    const before = decisionsIn();
+    const bytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-preview-decide-allowlist",
+      commandKind: PREVIEW_DECIDE,
+      correlationId: "corr-preview-decide-allowlist",
+      expectedVersion: 0,
+      // EMPTY on purpose: the preview decoder refuses the missing decision at REQUEST, which
+      // is a HANDLER refusal. An authorization refusal (OPERATOR_PRINCIPAL_REQUIRED at
+      // DAEMON_AUTHORIZATION) would mean the seam never reached the handler at all, and the
+      // exclusion in the roster above would not be what is fencing the MCP caller.
+      payload: {},
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-preview-decide-allowlist",
+    })));
+    const frame = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
+    const refusal = frame["refusal"] as { code?: string; layer?: string } | undefined;
+
+    // Code AND layer together: the code alone cannot say WHICH layer refused.
+    expect({ code: refusal?.code, layer: refusal?.layer })
+      .toEqual({ code: "PREVIEW_DECISION_INVALID", layer: "REQUEST" });
+    // The STAGE is the discriminator this arm turns on. `DISPATCH` means the seam ran the
+    // command; an operator-principal refusal would answer earlier and never reach it, which
+    // is exactly the outcome an MCP caller gets — and why the roster, not a capability, is
+    // what fences that caller.
+    expect(frame["stage"]).toBe("DISPATCH");
+    expect(frame["outcome"]).toBe("PORT_REFUSED");
+    expect(frame["ok"]).toBe(false);
+    // A refused decision commits nothing, so the exclusion cannot be read as "harmless
+    // because the command is inert" — it is a real seam that would have run.
+    expect(decisionsIn().length).toBe(before.length);
   });
 });

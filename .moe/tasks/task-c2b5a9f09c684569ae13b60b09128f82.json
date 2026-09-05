@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:23:11.533Z",
-  "updatedAt": "2026-09-05T22:00:52.971Z",
+  "updatedAt": "2026-09-05T22:02:30.915Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:13:59.687Z",
     "plannedStepCount": 6,
@@ -249,6 +249,33 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "1a570b32bdb7f4d3dae20196c3c947b158b5a036",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T20:18:58Z",
+      "paths": [
+        ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T22:02:30.915Z",
+      "treeId": "026dc0c6c51ba551b1812e2517fdf8da74a3731f",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/data/data-adapter.test.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -257,63 +284,19 @@
     "packages/control-room-client/src/generated/generated-client.ts",
     "packages/control-room-client/src/generated-coverage.test.ts",
     "apps/control-room/src/data/data-adapter.test.ts",
-    "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-2739fee7@2026-09-05T20:18:58Z",
-    "at": "2026-09-05T20:19:44.505Z"
+    "at": "2026-09-05T22:02:30.915Z"
   },
   "unattributedPaths": [
-    "apps/control-room/src/live/live-ops.test.ts",
-    "apps/control-room/src/live/live-ops.ts",
-    "apps/control-room/src/live/live-repository-reservation.ts",
-    "apps/control-room/src/live/live-runs.test.ts",
-    "apps/control-room/src/live/live-runs.ts",
-    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
-    "apps/control-room/src/v2/board/board-columns.test.ts",
-    "apps/control-room/src/v2/board/board-screen.test.tsx",
-    "apps/control-room/src/v2/board/board-screen.tsx",
-    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
-    "apps/control-room/src/v2/ops/ops-screens.test.tsx",
-    "apps/control-room/src/v2/ops/repository-reservation-card.tsx",
-    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
-    "apps/control-room/src/v2/runs/live-runs.test.tsx",
-    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
     "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
-    "apps/daemon/src/http/activity-read.test.ts",
-    "apps/daemon/src/http/document-coverage-read.test.ts",
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/http/health-read.test.ts",
-    "apps/daemon/src/http/runs-read.test.ts",
-    "apps/daemon/src/http/runs-read.ts",
-    "apps/daemon/src/http/runs-read-contract.ts",
-    "apps/daemon/src/orchestrator/compiled-execution-ref.js",
-    "apps/daemon/src/orchestrator/compiled-execution-ref.ts",
-    "apps/daemon/src/orchestrator/compiled-node-identity.test.ts",
-    "apps/daemon/src/orchestrator/compiled-node-identity.ts",
-    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
-    "apps/daemon/src/orchestrator/compiled-node-source.ts",
-    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
-    "apps/daemon/src/orchestrator/node-spec-listing.ts",
-    "apps/daemon/src/preview/preview-command-resolution.test.ts",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
-    "apps/daemon/src/preview/preview-test-fixtures.ts",
-    "apps/daemon/src/repository/goal-landing-facts.test.ts",
-    "apps/daemon/src/repository/goal-landing-facts.ts",
-    "apps/daemon/src/repository/repository-execution-concurrency.test.ts",
-    "apps/daemon/src/repository/repository-execution-contracts.js",
-    "apps/daemon/src/repository/repository-execution-contracts.ts",
-    "apps/daemon/src/repository/repository-execution-identity.js",
-    "apps/daemon/src/repository/repository-execution-identity.ts",
-    "apps/daemon/src/repository/repository-execution-persistence.js",
-    "apps/daemon/src/repository/repository-execution-persistence.ts",
-    "apps/daemon/src/repository/repository-execution-port.js",
-    "apps/daemon/src/repository/repository-execution-port.test.ts",
-    "apps/daemon/src/repository/repository-execution-port.ts",
-    "apps/daemon/src/repository/repository-execution-record.js",
-    "apps/daemon/src/repository/repository-execution-record.ts"
+    "apps/daemon/src/preview/preview-ledger.test.ts"
   ],
   "declaredFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
@@ -330,5 +313,13 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  25 passed (25)\n      Tests  605 passed (605)\n   Start at  01:00:06\n   Duration  16.12s (transform 10.68s, setup 0ms, import 33.46s, tests 6.28s, environment 2ms)\n\nEXIT=0",
     "reportedAt": "2026-09-05T22:00:52.971Z"
   },
-  "completionSummary": "`repository.bootstrap` is published in RUNTIME_COMMAND_KINDS at its sorted position (before `repository.publish`), hand-transcribed into EXPECTED_COMMAND_KINDS, and the client is REGENERATED, never hand-edited.\n\nGENERATOR: `pnpm --filter @moe/control-room-client generate`. OLD digest ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076 -> NEW f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd (read from generated-client.ts, not copied from the plan).\n\nDIGEST CENSUS at HEAD, all file types: `git grep -n GENERATED_CONTRACT_DIGEST -- . ':!.moe'` = 13 refs / 7 files, all but generated-client.ts:919 IMPORT it. Value census = FOUR literal mirrors, all rotated: generated-client.ts:919, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255. Zero files carry the old value. `GENERATED_FILE_SHA256` also rotated (427ad92d -> 9a4bed62).\n\nCOUNT: the plan's \"104 -> 105\" was stale on arrival. Peers landed 5 kinds concurrently, so the literal at runtime-contract.test.ts:108 is 110, its comment says 110, and the stale \"Literal 102\" comment is fixed. My checkpoint c4143694 also SWEPT four peer kinds (deployment.deploy/set_target, environment.set/unset_variable, release.decide) - fully disclosed in comment-1a03135e with the Moe-Contested trailers and proof it is not the dirty-tree-only hazard.\n\nNO DAEMON EDIT: vocabulary, registry and mcp-tool-allowlist are clean; the one dirty daemon file (agent-spawn-contract.ts) is a peer adding `preview.decide` to HUMAN_ONLY_STEPS.\n\nGATES: root `pnpm test` `Test Files 18 failed | 410 passed | 2 skipped (430)`; `pnpm typecheck` 18/19 Done, only apps/daemon Failed on two UNTRACKED peer files; `pnpm --filter @moe/control-room test` 154/155 then GREEN `155 passed (155)` / `1983 passed (1983)` at --maxWorkers=2 (identical denominator). Every leg needed `--config.verify-deps-before-run=false` (peer manifest dirt). All 18 root-lane reds and both typecheck reds are OUTSIDE my owned paths AND grep-proven"
+  "completionSummary": "`repository.bootstrap` is published in RUNTIME_COMMAND_KINDS at its sorted position (before `repository.publish`), hand-transcribed into EXPECTED_COMMAND_KINDS, and the client is REGENERATED, never hand-edited.\n\nGENERATOR: `pnpm --filter @moe/control-room-client generate`. OLD digest ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076 -> NEW f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd (read from generated-client.ts, not copied from the plan).\n\nDIGEST CENSUS at HEAD, all file types: `git grep -n GENERATED_CONTRACT_DIGEST -- . ':!.moe'` = 13 refs / 7 files, all but generated-client.ts:919 IMPORT it. Value census = FOUR literal mirrors, all rotated: generated-client.ts:919, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255. Zero files carry the old value. `GENERATED_FILE_SHA256` also rotated (427ad92d -> 9a4bed62).\n\nCOUNT: the plan's \"104 -> 105\" was stale on arrival. Peers landed 5 kinds concurrently, so the literal at runtime-contract.test.ts:108 is 110, its comment says 110, and the stale \"Literal 102\" comment is fixed. My checkpoint c4143694 also SWEPT four peer kinds (deployment.deploy/set_target, environment.set/unset_variable, release.decide) - fully disclosed in comment-1a03135e with the Moe-Contested trailers and proof it is not the dirty-tree-only hazard.\n\nNO DAEMON EDIT: vocabulary, registry and mcp-tool-allowlist are clean; the one dirty daemon file (agent-spawn-contract.ts) is a peer adding `preview.decide` to HUMAN_ONLY_STEPS.\n\nGATES: root `pnpm test` `Test Files 18 failed | 410 passed | 2 skipped (430)`; `pnpm typecheck` 18/19 Done, only apps/daemon Failed on two UNTRACKED peer files; `pnpm --filter @moe/control-room test` 154/155 then GREEN `155 passed (155)` / `1983 passed (1983)` at --maxWorkers=2 (identical denominator). Every leg needed `--config.verify-deps-before-run=false` (peer manifest dirt). All 18 root-lane reds and both typecheck reds are OUTSIDE my owned paths AND grep-proven",
+  "touchedFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    "packages/control-room-client/src/generated/generated-client.ts"
+  ]
 }

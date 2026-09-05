@@ -216,6 +216,16 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // an agent reaching the kind over a transport, this one stops the wrapper minting a
   // session to take it.
   "environment.set_variable", "environment.unset_variable",
+  // Deciding a product preview is the operator LOOKING AT THE THING and saying yes or no. An
+  // agent pressing APPROVE would be staffing the human gate itself, and the verdict the daemon
+  // then records would be indistinguishable from a human's. This is the WRAPPER's half of the
+  // fence; `mcp-tool-allowlist.ts` holds the other. Different actors, so both are wanted: that
+  // one stops an agent REACHING the kind over a transport, this one stops the wrapper minting a
+  // session to take it as staffed work. Belt-and-braces beside `agentCapabilitiesFor`, which
+  // already returns null for this kind — that gate refuses one step later, after the work item
+  // is reported as UNWIRED_KIND, and it is a capability fact rather than a staffing decision,
+  // so it would stop applying the moment the kind gained any agent capability at all.
+  "preview.decide",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */

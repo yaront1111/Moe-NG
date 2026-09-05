@@ -7,7 +7,7 @@ import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
-import type { AffordancePort } from "../http/affordance-contract.js";
+import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
@@ -238,6 +238,53 @@ describe("createAgentWrapper", () => {
   });
 
   it("never staffs the human approval, goal-closure or environment-variable actions", async () => {
+    // Hoisted out of the stub so the vacuity controls below read the SAME steps the wrapper
+    // was handed. Inlined, "the surface offered it" could only be re-asserted by restating
+    // the literal, which proves nothing about what `readSurface()` actually returned.
+    const humanOnlySteps: readonly ChainStep[] = [
+      {
+        aggregateId: "plan-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "approval.decide",
+        missing: [], status: "READY", version: 1,
+      },
+      {
+        aggregateId: "goal-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "goal.close",
+        missing: [], status: "READY", version: 2,
+      },
+      // task-d0d1cb5c: the environment kinds are fenced in HUMAN_ONLY_STEPS BEFORE they
+      // exist as vocabulary, so until task-a2409cba lands them no other arm can see the
+      // membership — the offer surface's test only holds `approval.*` against the set.
+      // Asserted HERE, through runOnce()'s own loop, because that is the production
+      // consumer: a test that read HUMAN_ONLY_STEPS.has() directly would restate the
+      // constant instead of proving the wrapper obeys it.
+      {
+        aggregateId: "env-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "environment.set_variable",
+        missing: [], status: "READY", version: 3,
+      },
+      {
+        aggregateId: "env-human-2", claim: null, claimAggregateVersion: 0,
+        kind: "environment.unset_variable",
+        missing: [], status: "READY", version: 4,
+      },
+      // task-5f883e4e: deciding a product preview is the operator's own act, and the MCP
+      // exclusion cannot help here because the wrapper never crosses a transport.
+      // MEASURED, not assumed: with the kind removed from HUMAN_ONLY_STEPS this pass
+      // reports `{kind: "preview.decide", outcome: "UNWIRED_KIND", refusal: null,
+      // sessionId: null, workItemId: "preview.decide@preview-human-1"}` — it does NOT
+      // reach `spawnAgent`, because `agentCapabilitiesFor` returns null for this kind
+      // (daemon-command-vocabulary.ts:206) and refuses one gate later. So the entry in
+      // HUMAN_ONLY_STEPS is defence in depth, not the only thing standing between the
+      // surface and a seat. It is still load-bearing: the capability gate is a fact about
+      // what an agent MAY do, and it would stop applying the moment this kind gained any
+      // agent capability, whereas the roster states that it must never be STAFFED.
+      {
+        aggregateId: "preview-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "preview.decide",
+        missing: [], status: "READY", version: 5,
+      },
+    ];
     const forbidden = createAgentWrapper({
       affordances: {
         boundProjectId: "proj-human-actions",
@@ -248,34 +295,7 @@ describe("createAgentWrapper", () => {
           planningAuthorityByRun: {},
           planningGoalRefs: {},
           planningGoalRef: null,
-          steps: [
-            {
-              aggregateId: "plan-human-1", claim: null, claimAggregateVersion: 0,
-              kind: "approval.decide",
-              missing: [], status: "READY", version: 1,
-            },
-            {
-              aggregateId: "goal-human-1", claim: null, claimAggregateVersion: 0,
-              kind: "goal.close",
-              missing: [], status: "READY", version: 2,
-            },
-            // task-d0d1cb5c: the environment kinds are fenced in HUMAN_ONLY_STEPS BEFORE they
-            // exist as vocabulary, so until task-a2409cba lands them no other arm can see the
-            // membership — the offer surface's test only holds `approval.*` against the set.
-            // Asserted HERE, through runOnce()'s own loop, because that is the production
-            // consumer: a test that read HUMAN_ONLY_STEPS.has() directly would restate the
-            // constant instead of proving the wrapper obeys it.
-            {
-              aggregateId: "env-human-1", claim: null, claimAggregateVersion: 0,
-              kind: "environment.set_variable",
-              missing: [], status: "READY", version: 3,
-            },
-            {
-              aggregateId: "env-human-2", claim: null, claimAggregateVersion: 0,
-              kind: "environment.unset_variable",
-              missing: [], status: "READY", version: 4,
-            },
-          ],
+          steps: humanOnlySteps,
         }),
       },
       claimTtlMs: 60_000,
@@ -289,11 +309,24 @@ describe("createAgentWrapper", () => {
       spawnAgent: () => { throw new Error("human-only steps must never spawn"); },
     });
 
-    expect(await forbidden.runOnce()).toEqual({
-      active: 0,
-      spawned: [],
-      surfaceOutcome: "SURFACE",
-    });
+    const report = await forbidden.runOnce();
+
+    expect(report).toEqual({ active: 0, spawned: [], surfaceOutcome: "SURFACE" });
+    // task-5f883e4e, BY WORK-ITEM ID rather than by count. `spawned: []` above is the strong
+    // claim, but it is a whole-pass claim: it would be satisfied identically by a surface that
+    // never offered `preview.decide` at all, and a later edit that drops the step from the stub
+    // would keep it green while deleting the coverage. Naming the id ties the empty result to
+    // THIS work item. `workItemIdFor()` is `${kind}@${aggregateId ?? "-"}` (agent-wrapper.ts),
+    // and it is computed INSIDE the loop AFTER the HUMAN_ONLY_STEPS check — so if the fence
+    // ever stopped skipping this kind, the id would appear here rather than nowhere.
+    expect(report.spawned.map((entry) => entry.workItemId))
+      .not.toContain("preview.decide@preview-human-1");
+    // THE VACUITY CONTROL. The surface really did present `preview.decide` as READY and
+    // UNCLAIMED, so "no seat was spawned for it" is a fence result and not the trivial
+    // consequence of an absent offer.
+    expect(humanOnlySteps.filter((step) =>
+      step.kind === "preview.decide" && step.status === "READY" && step.claim === null))
+      .toHaveLength(1);
   });
 
   it("revokes the scoped session as soon as its agent exits", async () => {
