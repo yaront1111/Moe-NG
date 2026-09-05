@@ -40,6 +40,11 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "provider.probe",
   "goal.close",
   "repository.publish",
+  // APPENDED for the same reason `goal.close` is: existing suites assert against this array in
+  // order. Bootstrap membership is what gives the kind the durable replay fence and the
+  // prerequisite table below; its EFFECTS are asynchronous, so the registry serves it from an
+  // async entry that admits through this surface first (daemon-command-registry.js).
+  "repository.bootstrap",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];

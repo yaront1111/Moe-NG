@@ -34,6 +34,12 @@ export const COMMAND_PREREQUISITES = Object.freeze({
     "provider.probe",
   ]),
   "project.bind_repository": Object.freeze(["project.register"]),
+  // THE SAME PREREQUISITE AS THE BIND IT COMPOSES, and derived rather than picked: bootstrap ends
+  // by routing its new repository through the EXISTING `project.bind_repository` handler, which
+  // refuses without a committed `project.register`. A looser requirement here would let bootstrap
+  // create a real repository on disk and then fail to bind it; a stricter one (naming the bind
+  // itself) would be unsatisfiable, since there is nothing to bind until this command runs.
+  "repository.bootstrap": Object.freeze(["project.register"]),
   "project.register": Object.freeze([]),
   "provider.probe": Object.freeze(["project.register"]),
 } as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>);
@@ -132,6 +138,12 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
       return request.projectId;
     case "provider.probe":
       return `${request.projectId}-provider`;
+    // ITS OWN STREAM, for the reason the doc comment above gives: the bootstrap receipt is
+    // committed AFTER the command has already routed its repository through
+    // `project.bind_repository`, which bumps the PROJECT aggregate. Sharing that stream would
+    // make the receipt's expected version stale by exactly one every time the bind succeeded.
+    case "repository.bootstrap":
+      return `${request.projectId}-bootstrap`;
     case "policy.install":
     case "policy.validate":
       return policyAggregateId(request.projectId);
