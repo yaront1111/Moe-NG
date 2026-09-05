@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import { SQLITE_APPLICATION_ID } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,6 +54,7 @@ import type { ActivationReceiptPorts } from "./activation-receipts-ports.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
+import { readApprovedNodeScope } from "../goals/goal-close-prerequisite.js";
 import { scanGlobalEvents, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 
@@ -636,15 +638,33 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
       .toEqual(["goal.create"]);
   });
 
+  /**
+   * THE TWO SIDES MEASURE AGAINST DIFFERENT ROSTERS, AND THAT IS THE POINT — do not "tidy" them
+   * back into one (task-ebbcbdb4).
+   *
+   * KEY side: `BOOTSTRAP_COMMAND_KINDS`. A prerequisite always IS a bootstrap kind, because the
+   * keys of this table only ever name entries of `COMMAND_PREREQUISITES`. Widening this side
+   * would admit a key nothing could ever consult, and lose a real check.
+   *
+   * ALTERNATIVE side: `RUNTIME_COMMAND_KINDS`. An alternative is tested against the set
+   * `readDurableLedger` builds, which holds EVERY committed decision kind — bootstrap or not.
+   * `approval.decide_intent` is served by the runtime registry rather than this pipeline, so the
+   * narrower roster would reject a legitimate widening. The guard's own rationale survives
+   * intact: a kind NO dispatch anywhere serves still could never appear in a committed set, and
+   * `RUNTIME_COMMAND_KINDS` is exactly the roster of kinds that can. `BOOTSTRAP_COMMAND_KINDS` is
+   * declared `as const satisfies readonly RuntimeCommandKind[]` (bootstrap-contracts.ts:43), so
+   * bootstrap kinds stay a strict subset and nothing that passed before starts failing.
+   */
   it("names only real command kinds on both sides of the alternatives table", () => {
-    const roster: readonly string[] = BOOTSTRAP_COMMAND_KINDS;
+    const prerequisiteRoster: readonly string[] = BOOTSTRAP_COMMAND_KINDS;
+    const alternativeRoster: readonly string[] = RUNTIME_COMMAND_KINDS;
     const entries = Object.entries(PREREQUISITE_ALTERNATIVES);
 
     // A sweep that generates zero checks passes while testing nothing.
     expect(entries.length).toBeGreaterThan(0);
     let checked = 0;
     for (const [prerequisite, alternatives] of entries) {
-      expect({ kind: prerequisite, real: roster.includes(prerequisite) })
+      expect({ kind: prerequisite, real: prerequisiteRoster.includes(prerequisite) })
         .toEqual({ kind: prerequisite, real: true });
       // A widening is only ever explicit and only ever a NAMED kind: an empty list would admit
       // nothing, and a kind no dispatch serves could never appear in a committed set — but it
@@ -652,7 +672,7 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
       expect(alternatives?.length ?? 0).toBeGreaterThan(0);
       for (const alternative of alternatives ?? []) {
         checked += 1;
-        expect({ alternative, of: prerequisite, real: roster.includes(alternative) })
+        expect({ alternative, of: prerequisite, real: alternativeRoster.includes(alternative) })
           .toEqual({ alternative, of: prerequisite, real: true });
       }
     }
@@ -678,6 +698,9 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
 describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
   const INTENT_OPERATOR = "principal-1";
   const REJECT_REASON = "the plan does not close the goal";
+
+  const label = (outcome: ServiceOutcome): string =>
+    outcome.ok ? "ACCEPTED" : `${outcome.code}@${outcome.refusedBy}`;
 
   /** The browser's approve wire, driven at its own production seam against a real store. */
   function decideIntent(
@@ -725,15 +748,33 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     return store;
   }
 
-  it("accepts goal.close on a goal approved through approval.decide_intent", () => {
+  /**
+   * `goal.close` REACHES THE GOAL'S OWN AUTHORITY, which is the whole of what this row owns.
+   *
+   * Before the fix this dispatch died at the SEQUENCE gate with a code that names nothing about
+   * goals — the live UnAI symptom. After it, the sequence gate has nothing left to report and the
+   * refusal that answers is the goal's own, from the closure vocabulary an operator can act on.
+   *
+   * It is NOT accepted in THIS world, and the reason is measured rather than shrugged at: the
+   * intent seam mints `approvedNodeScope: Object.freeze([])` (approval-intent-sources.ts:137,
+   * deliberately — "an initial-graph approval approves the sealed revision, and there is no
+   * durable per-node selection for it to restate"), and `readApprovedNodeScope` answers null for
+   * an empty scope (goal-close-prerequisite.ts:87). So the browser-approved goal is still short
+   * one fence, one layer deeper than the one this row corrects. That gap is filed, not hidden;
+   * this arm pins it, so whoever closes it has to come here and say so.
+   */
+  it("lets goal.close past the sequence gate, where the GOAL's own authority answers", () => {
     const store = intentApprovedWorld();
     seedReviewAcceptance(store);
+    // The sequence gate is SATISFIED — asserted on the production reader, not inferred from the
+    // refusal, because the fence below reuses this same code and layer for its own reasons.
+    expect(missingPrerequisites(readDurableLedger(store, PROJECT_ID), "goal.close")).toEqual([]);
 
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(closed.ok, closed.ok ? "" : `${closed.code}@${closed.refusedBy}`).toBe(true);
-    expect(readDurableLedger(store, PROJECT_ID).kinds.has("goal.close")).toBe(true);
+    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(readApprovedNodeScope(store, GOAL_ID)).toBeNull();
   });
 
   it("accepts repository.publish on a goal approved through approval.decide_intent", () => {
@@ -766,6 +807,17 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     expect(decisionCount(store)).toBe(before);
   });
 
+  /**
+   * THE PUBLISH FAIL-CLOSED ARM NEEDS A DISCRIMINATOR, and this is not a hypothetical.
+   *
+   * Neutering `unmetPrerequisites` to report nothing missing left this arm GREEN when it was
+   * first written to read the code alone (drill, worker-2739fee7): `publishRepository`
+   * (publish-services.ts:86 and :89) answers BOOTSTRAP_PREREQUISITE_MISSING at
+   * DAEMON_PREREQUISITE for a goal whose lifecycle is not publishable — the SAME code, the SAME
+   * layer. One added layer answered first and the arm stopped testing its subject while staying
+   * green. The `missingPrerequisites` assertion below is what makes it bite: it names the
+   * SEQUENCE gate as the authority with something to say.
+   */
   it("still refuses repository.publish at DAEMON_PREREQUISITE when NEITHER kind is committed", () => {
     const store = unapprovedWorld();
     const before = decisionCount(store);
@@ -777,6 +829,8 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
 
     expect(published.ok).toBe(false);
     if (published.ok) throw new Error("expected refusal");
+    expect(missingPrerequisites(readDurableLedger(store, PROJECT_ID), "repository.publish"))
+      .toEqual(["approval.decide"]);
     expect(published.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
     expect(published.refusedBy).toBe("DAEMON_PREREQUISITE");
     expect(decisionCount(store)).toBe(before);
@@ -804,25 +858,40 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
    * satisfy this project-wide sequence gate.
    *
    * That is safe only because the sequence gate was never the per-goal authority: it asks whether
-   * the project has been through an approval at all, and the goal's OWN authority then answers.
-   * This arm pins that second answer, so a future change that removed it would redden here
-   * instead of shipping a closeable rejected goal.
+   * the project has been through an approval at all, and each command's OWN fence then answers.
+   * This arm pins BOTH answers, so a future change that dropped either would redden here instead
+   * of shipping a rejected plan that can be published.
+   *
+   * THE DISCRIMINATOR IS `missingPrerequisites`, NOT THE REFUSAL CODE. `publishRepository`
+   * (publish-services.ts:86 and :89) refuses BOOTSTRAP_PREREQUISITE_MISSING at
+   * DAEMON_PREREQUISITE too — the same code and the same layer the sequence gate uses — so an arm
+   * that read the code alone could not tell which authority answered, and would stay green if the
+   * widening silently stopped working. Asserting the gate reports NOTHING missing is what makes
+   * the refusals below provably the second fence's.
    */
-  it("lets a REJECTED approval.decide_intent past the sequence gate and no further", () => {
+  it("admits a REJECTED approval.decide_intent at the sequence gate, and no further", () => {
     const store = unapprovedWorld();
     const rejected = decideIntent(store, "cmd-intent-reject-close", "REJECT");
     expect(rejected.ok, rejected.ok ? "" : `${rejected.code}@${rejected.refusedBy}`).toBe(true);
-    expect(readDurableLedger(store, PROJECT_ID).kinds.has("approval.decide_intent")).toBe(true);
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    expect(ledger.kinds.has("approval.decide_intent")).toBe(true);
+    // The widening admits a KIND, not a verdict: a rejection satisfies this gate exactly as an
+    // approval does. Everything that keeps a rejected plan unpublishable is downstream of here.
+    expect(missingPrerequisites(ledger, "goal.close")).toEqual([]);
+    expect(missingPrerequisites(ledger, "repository.publish")).toEqual([]);
 
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
+    const published = send(store, envelope(
+      "repository.publish", 0,
+      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+    ));
 
-    expect(closed.ok).toBe(false);
-    if (closed.ok) throw new Error("expected refusal");
-    // NOT the sequence gate — a rejected run gets past it, exactly as an approved one does — and
-    // NOT accepted either: the goal's own authority is what refuses.
-    expect(closed.refusedBy).not.toBe("DAEMON_PREREQUISITE");
-    expect(closed.code).not.toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    // Neither is accepted. The rejection enabled no execution, so the goal never reached a
+    // publishable lifecycle and no acceptance names an approved node.
+    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(label(published)).toBe("BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE");
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("repository.publish")).toBe(false);
   });
 });
 

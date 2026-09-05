@@ -46,6 +46,27 @@ export const COMMAND_PREREQUISITES = Object.freeze({
  * it is as ready to be planned as any other. Without this, `plan.propose` refuses
  * BOOTSTRAP_PREREQUISITE_MISSING and a source-created goal can never continue the journey.
  *
+ * `approval.decide_intent` is the browser's approval. A paired session approves through the
+ * daemon-owned intent seam (`approval-intent.ts`), which mints the approval record and activates
+ * the graph without ever committing an `approval.decide` — so a goal approved IN THE BROWSER had
+ * no way to satisfy the `goal.close` (:22) and `repository.publish` (:25) prerequisite, and no
+ * operator act existed that could ever supply one. Not a theory: measured on the live UnAI
+ * project, where a goal at 10/10 criteria VERIFIED and an APPROVED contract answered
+ * BOOTSTRAP_PREREQUISITE_MISSING in 212 ms while `/affordances/read` went on offering its
+ * operator a Close button. `affordance-read.ts:366` already reads
+ * `kinds.has("approval.decide") || kinds.has("approval.decide_intent")` off this very set, so
+ * this entry does not invent a rule — it makes the prerequisite agree with one the read surface
+ * has enforced for longer, ending a split where two authorities answered differently about the
+ * same command on the same frame.
+ *
+ * THE VALUE TYPE IS `readonly string[]`, NOT `readonly BootstrapCommandKind[]`, because an
+ * alternative need not be one of the twelve kinds this pipeline serves: `approval.decide_intent`
+ * is served by the runtime registry. That is sound rather than lax, because an alternative is
+ * only ever TESTED, with `committed.has(alternative)` below, against the set `readDurableLedger`
+ * builds — a `Set<string>` over every committed decision kind, bootstrap or not. The KEY type
+ * stays `BootstrapCommandKind`: a prerequisite always is one, since the keys come from
+ * `COMMAND_PREREQUISITES`.
+ *
  * WHY A SECOND TABLE RATHER THAN NESTED GROUPS INSIDE `COMMAND_PREREQUISITES`. Nesting changes
  * the map's VALUE TYPE, and that type is read by two suites this row does not own:
  * `daemon-command-registry.test.ts:1071` casts the whole map and `demo-seed-plan.test.ts:56`
@@ -60,8 +81,11 @@ export const COMMAND_PREREQUISITES = Object.freeze({
  * in the committed set. Widening is therefore always explicit and always one named kind.
  */
 export const PREREQUISITE_ALTERNATIVES:
-  Readonly<Partial<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>> =
+  Readonly<Partial<Record<BootstrapCommandKind, readonly string[]>>> =
   Object.freeze({
+    // ONE entry, TWO kinds fixed: `goal.close` and `repository.publish` both name
+    // `approval.decide` as their prerequisite, so widening the requirement widens both.
+    "approval.decide": Object.freeze(["approval.decide_intent"] as const),
     "goal.create": Object.freeze(["goal.create_with_source"] as const),
   });
 
