@@ -5,6 +5,8 @@ import "./cordum-fonts.js";
 import type { SurfaceFrame } from "../live/live-board-feed.js";
 import { readDocumentCoverage } from "../live/live-document-coverage.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
+import { readProductContractGate1 } from "../live/live-product-contract-gate-1.js";
+import type { ProductContractRevisionRefInput } from "../live/live-product-contract-gate-1.js";
 import {
   LiveRefusalNotice, NoOperatorChannel, useLiveHandshake,
 } from "./cordum-handshake.js";
@@ -17,6 +19,8 @@ import { Gate1Card } from "./goals/gate1-card.js";
 import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-v1-approval.js";
 import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
+import { LiveContractDossier } from "./goals/contract-dossier.js";
+import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
@@ -37,6 +41,7 @@ import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
 import { HEALTH_FAILURE, LiveHealth, LivePolicy, useOpsRead } from "./ops/live-ops.js";
+import { LiveResources } from "./resources/live-resources.js";
 import { LiveActivate } from "./ops/activation-screen.js";
 import { readHealth } from "../live/live-ops.js";
 import type { HealthOutcome } from "../live/live-ops.js";
@@ -115,7 +120,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const [open, setOpen] = useState<BoardRoute | null>(null);
   // Which home the operator is on when no board is open: the goals list or the Needs-you
   // queue. Both are routes from the shell's source of truth; a board opens over either.
-  const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "runs">("goals");
+  const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "resources" | "runs">("goals");
   const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [answeredAtMs, setAnsweredAtMs] = useState<number | null>(null);
@@ -154,7 +159,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
 
   const title = open !== null ? open.title
     : view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
-      : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals";
+      : view === "policy" ? "Policy" : view === "health" ? "Health"
+        : view === "resources" ? "Resources" : "Goals";
 
   // Only an attached operator session carries the authenticated header set the
   // plan-review read requires; unattached (fixtures / pending / refused) the open
@@ -208,6 +214,19 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const readCoverage = useMemo<((goalId: string) => ReturnType<typeof readDocumentCoverage>) | null>(
     () => (attached === null
       ? null : (goalId: string) => readDocumentCoverage(attached.headers, goalId)),
+    [attached],
+  );
+  /**
+   * The DURABLE Gate 1 verdict for one revision triple. Plane-independent on purpose: the
+   * route derives its answer from the stored human grant, so it is the same question whether
+   * the revision was proposed on the `/1` writer or the `/2` family, and a refusal is the
+   * honest answer rather than a reason to withhold the read.
+   */
+  const readGate = useMemo<Gate1Reader | null>(
+    () => (attached === null
+      ? null
+      : (ref: ProductContractRevisionRefInput) =>
+        readProductContractGate1(attached.headers, ref)),
     [attached],
   );
   const plane = attached === null ? null : attached.commandAuthorityPlane;
@@ -271,6 +290,15 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
               <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
             ) : null}
+            {/* What the approved contract asks for and how far it is covered, with the
+                daemon's DURABLE Gate 1 verdict per revision beside it. */}
+            {readCoverage === null ? null : (
+              <LiveContractDossier
+                goalId={open.goalId}
+                readCoverage={readCoverage}
+                readGate={readGate ?? undefined}
+              />
+            )}
           </div>
           {/* The plan stays in the open while it waits for a decision; once decided (or not
               yet proposed) it folds, so the board and the decisions come first. */}
@@ -345,6 +373,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} setup={live.setup} />
       : view === "health" && live.setup.ok
       ? <LiveHealth headers={live.setup.headers} onConnection={reportConnection} />
+      : view === "resources" && live.setup.ok
+      ? <LiveResources headers={live.setup.headers} />
       : view === "approvals" && live.setup.ok
       ? (
         <LiveNeedsYou
@@ -402,7 +432,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         activeNav={view}
         answeredAtMs={answeredAtMs}
         backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
-          : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals"}
+          : view === "policy" ? "Policy" : view === "health" ? "Health"
+            : view === "resources" ? "Resources" : "Goals"}
         connection={shellConnection}
         eyebrow={eyebrow}
         initialConnection={fixtures ? "CONNECTED" : null}

@@ -24,6 +24,7 @@ import {
 import {
   CORDUM_ROUTE_KINDS, NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
 } from "./shell/shell-routes.js";
+import type { NavDestination } from "./shell/shell-routes.js";
 
 /**
  * The v2 entry's LIVE PATH wiring: it must acquire its credential at RUNTIME
@@ -606,11 +607,21 @@ describe("CordumApp renders the daemon-stated no-terminal truth", () => {
  * mutation can red, which is exactly what DoD-4's "no fixed goal/run ids" forbids.
  */
 
+/**
+ * A roster in which EVERY destination is unbuilt. The rail takes `destinations` as a
+ * prop, so the disabled/SOON arm is driven from this rather than from the live roster:
+ * `resolveNavDestinations()` now reports nothing unbuilt, and an arm read off it would
+ * iterate zero entries and pass while asserting nothing.
+ */
+const UNBUILT_ROSTER: readonly NavDestination[] = Object.freeze(NAV_IDS.map((id) => Object.freeze({
+  id, reason: "NAV_DESTINATION_NOT_BUILT" as const, route: null,
+})));
+
 describe("Cordum navigation drives one typed route source of truth", () => {
   it("pins the route roster and the nav destination roster to exact nonzero counts", () => {
     expect(Object.isFrozen(CORDUM_ROUTE_KINDS)).toBe(true);
     expect(CORDUM_ROUTE_KINDS.length).toBeGreaterThan(0);
-    expect(CORDUM_ROUTE_KINDS).toHaveLength(6);
+    expect(CORDUM_ROUTE_KINDS).toHaveLength(7);
 
     const destinations = resolveNavDestinations();
     // One destination per nav id, in the rail's order, and nothing else claimed.
@@ -619,19 +630,54 @@ describe("Cordum navigation drives one typed route source of truth", () => {
 
     const reachable = destinations.filter((destination) => destination.reason === null);
     const unavailable = destinations.filter((destination) => destination.reason !== null);
-    // Both partitions are NONZERO: a roster with nothing unavailable would make the
-    // disabled arm below vacuous, and one with nothing reachable would make the
-    // navigation arm vacuous.
-    expect(reachable.length).toBeGreaterThan(0);
-    expect(unavailable.length).toBeGreaterThan(0);
-    expect(reachable).toHaveLength(5);
-    expect(unavailable).toHaveLength(NAV_IDS.length - 5);
-    // A reachable destination carries a route; an unavailable one carries none and
-    // states a reason drawn from the stable roster.
-    for (const destination of reachable) expect(destination.route).not.toBeNull();
-    for (const destination of unavailable) {
+    // EVERY nav destination this build advertises is now REACHABLE - `resources` was
+    // the last one on the NAV_DESTINATION_NOT_BUILT branch. The partition is asserted
+    // by SET EQUALITY against NAV_IDS rather than by a count, so a destination added
+    // to the rail without a route reds here instead of quietly shrinking `reachable`.
+    expect(reachable.map((destination) => destination.id)).toEqual([...NAV_IDS]);
+    expect(unavailable).toHaveLength(0);
+    // A reachable destination carries a route whose kind is on the stable roster.
+    for (const destination of reachable) {
+      expect(destination.route, destination.id).not.toBeNull();
+      expect(CORDUM_ROUTE_KINDS, destination.id).toContain(destination.route?.kind);
+    }
+    // The unreachable ARM ITSELF is still exercised, against an injected roster rather
+    // than the live one: with nothing unbuilt today, reading the disabled behaviour off
+    // `resolveNavDestinations()` would loop zero times and assert nothing. The machinery
+    // stays covered because the next unbuilt destination will depend on it.
+    for (const destination of UNBUILT_ROSTER) {
       expect(destination.route, destination.id).toBeNull();
       expect(NAV_UNAVAILABLE_REASONS, destination.id).toContain(destination.reason);
+    }
+  });
+
+  it("gives Resources a real route, so its SOON chip no longer renders", async () => {
+    const onNavigate = vi.fn();
+    render(<CordumShell onNavigate={onNavigate} />);
+
+    const button = screen.getByTestId("cr.nav.resources");
+    // The chip is the marker the rail actually renders for an unreachable
+    // destination; its ABSENCE is what "no longer frozen" means on screen.
+    expect(screen.queryByTestId("cr.nav.resources.unavailable")).toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(button.getAttribute("aria-describedby")).toBeNull();
+    expect(button.getAttribute("data-unavailable-reason")).toBeNull();
+
+    await userEvent.click(button);
+    // The emitted route is the one the source of truth supplies, read from the
+    // roster rather than rebuilt beside the assertion.
+    const resources = resolveNavDestinations().find((d) => d.id === "resources");
+    expect(resources?.reason).toBeNull();
+    expect(onNavigate).toHaveBeenCalledWith(resources?.route);
+  });
+
+  it("still renders SOON, disabled and described, for a destination with no route", () => {
+    render(<CordumShell navDestinations={UNBUILT_ROSTER} />);
+
+    for (const destination of UNBUILT_ROSTER) {
+      const button = screen.getByTestId(`cr.nav.${destination.id}`);
+      expect((button as HTMLButtonElement).disabled, destination.id).toBe(true);
+      expect(screen.getByTestId(`cr.nav.${destination.id}.unavailable`).textContent).toBe("SOON");
     }
   });
 
@@ -640,9 +686,12 @@ describe("Cordum navigation drives one typed route source of truth", () => {
     // The navigator IS supplied. Availability is a property of the ROUTE, not of
     // whether a handler happened to be passed: a rail that reads
     // `onNavigate === undefined` would enable every destination here.
-    render(<CordumShell onNavigate={onNavigate} />);
+    // The roster is INJECTED: every live destination is reachable now that `resources`
+    // has a route, so reading this arm off `resolveNavDestinations()` would iterate
+    // zero entries and assert nothing while the machinery it guards still ships.
+    render(<CordumShell navDestinations={UNBUILT_ROSTER} onNavigate={onNavigate} />);
 
-    const unavailable = resolveNavDestinations().filter((d) => d.reason !== null);
+    const unavailable = UNBUILT_ROSTER.filter((d) => d.reason !== null);
     expect(unavailable.length).toBeGreaterThan(0);
     for (const destination of unavailable) {
       const button = screen.getByTestId(`cr.nav.${destination.id}`);

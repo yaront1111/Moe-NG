@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:10:46.383Z",
-  "updatedAt": "2026-09-05T08:45:59.253Z",
+  "updatedAt": "2026-09-05T08:47:15.148Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T16:55:10.482Z",
     "plannedStepCount": 5,
@@ -223,18 +223,53 @@
       "treeId": "ec198b169c6b8cf4e91f150ca991c4f29c79ecea",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "2e26cb29e1f2d078df299b76e4c62850780dddc9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T08:27:58Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+        ".moe/tasks/task-9ae492b373fa4e7aa6b1e91585f6e612.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
+        ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T08:47:15.148Z",
+      "treeId": "dba9656f43b5468873441a079427e9fcfdb37702",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json",
-    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json"
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+    ".moe/tasks/task-9ae492b373fa4e7aa6b1e91585f6e612.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
+    ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/resources/live-resources.tsx",
+    "apps/control-room/src/v2/resources/resources-credential.ts",
+    "apps/control-room/src/v2/resources/resources-model.ts",
+    "apps/daemon/src/design/design-contracts.js",
+    "apps/daemon/src/release/release-dossier-fixtures.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-cceb207f@2026-09-05T08:00:40Z",
-    "at": "2026-09-05T08:28:56.429Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T08:27:58Z",
+    "at": "2026-09-05T08:47:15.148Z"
   },
   "workStartedAt": "2026-09-05T08:01:06.672Z",
   "reviewStartedAt": "2026-09-05T08:27:35.751Z",

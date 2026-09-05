@@ -22,7 +22,7 @@ import type { NavId } from "./shell-model.js";
  * discriminants from this roster, so a kind removed here fails to typecheck at
  * the union rather than silently shrinking the surface.
  */
-export const CORDUM_ROUTE_KINDS = Object.freeze(["approvals", "board", "goals", "health", "policy", "runs"] as const);
+export const CORDUM_ROUTE_KINDS = Object.freeze(["approvals", "board", "goals", "health", "policy", "resources", "runs"] as const);
 
 export type CordumRouteKind = (typeof CORDUM_ROUTE_KINDS)[number];
 
@@ -39,6 +39,7 @@ export type CordumRoute =
   | { readonly kind: Extract<CordumRouteKind, "runs"> }
   | { readonly kind: Extract<CordumRouteKind, "policy"> }
   | { readonly kind: Extract<CordumRouteKind, "health"> }
+  | { readonly kind: Extract<CordumRouteKind, "resources"> }
   | {
     readonly goalId: string;
     readonly kind: Extract<CordumRouteKind, "board">;
@@ -90,6 +91,7 @@ const BUILT_NAV_ROUTES: Partial<Readonly<Record<NavId, CordumRoute>>> = Object.f
   runs: Object.freeze({ kind: "runs" }),
   policy: Object.freeze({ kind: "policy" }),
   health: Object.freeze({ kind: "health" }),
+  resources: Object.freeze({ kind: "resources" }),
 });
 
 /** One destination per nav id, in the rail's declared order. */
