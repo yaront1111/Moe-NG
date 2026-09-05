@@ -29,6 +29,7 @@ import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createNodeLander } from "./node-lander.js";
 import { createNodePublisher } from "./node-publisher.js";
+import { listNodeSpecs } from "./node-spec-listing.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import {
   createWrapperStopSignal,
@@ -182,14 +183,11 @@ async function main(): Promise<void> {
       const specs: { nodeRef: string }[] = [];
       const dir = config.nodeSpecsDir;
       if (dir !== undefined) {
-        try {
-          specs.push(...readdirSync(dir).filter((name) => name.endsWith(".json"))
-            .map((name) => {
-              const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
-                { nodeRef?: unknown };
-              return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
-            }).filter((entry): entry is { nodeRef: string } => entry !== null));
-        } catch { /* an unreadable dir contributes nothing */ }
+        // Per file (node-spec-listing.ts): one unparsable spec used to drop EVERY spec-dir
+        // node from the verifier and the lander, silently. A skipped file is named.
+        const listing = listNodeSpecs(dir);
+        specs.push(...listing.nodes);
+        for (const entry of listing.skipped) process.stderr.write(`[wrapper] node spec skipped: ${entry}\n`);
       }
       const listed = new Set(specs.map((spec) => spec.nodeRef));
       for (const node of compiledSource()?.nodes() ?? []) {
