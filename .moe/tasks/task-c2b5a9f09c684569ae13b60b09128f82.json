@@ -80,26 +80,39 @@
     {
       "stepId": "step-5",
       "description": "GATES (DoD 6). Run each leg standalone and quote its `Test Files N passed` count line — the OUTPUT, never the exit code. `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0; \"No test files found\" is also exit 0.\n\n- `pnpm test` — the root lane, which is where packages/contracts and packages/control-room-client actually live (root vitest include covers `packages/**`). This IS valid evidence for this row, unlike a row touching apps/**.\n- `pnpm typecheck`.\n- `pnpm --filter @moe/control-room test` — required by the epic rail for any row touching the shared roster. Run it and quote the count line even though the step-1 census found no transcribed digest under apps/control-room: `vite.config.ts:30` aliases the generated client and :49 reads `pins.contractDigest`, so the app compiles against what this row regenerated.\n\nSTAY OUT OF THE DAEMON (DoD 5). Quote `git status --porcelain` and show that `apps/daemon/src/daemon-command-vocabulary.ts`, `apps/daemon/src/daemon-command-registry.ts`, `apps/daemon/src/mcp-tool-allowlist.ts` and `apps/daemon/src/orchestrator/agent-spawn-contract.ts` are untouched. They belong to the parent row and a second edit here collides in the shared worktree.\n\nREPO-WIDE BASELINE, path-attributed: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths. Completion needs that intersection EMPTY. Disclose any foreign red verbatim with its failing file paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/control-room-client/src/generated/generated-client.ts"
       ],
-      "startedAt": "2026-09-05T19:26:41.535Z"
+      "note": "GATES RUN. No file edited in this step. Every pnpm leg needed `--config.verify-deps-before-run=false` (see BYPASS below) or it exits 1 with zero output.\n\nTHE BYPASS, DISCLOSED. A peer has `apps/daemon/package.json` + `pnpm-lock.yaml` dirty (playwright dep). That flips deps-status out-of-date and `runDepsStatusCheck` aborts EVERY pnpm script with `[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY]` before the script runs. The documented fix (`CI=true`/`confirmModulesPurge=false`) DELETES node_modules workspace-wide under a live fleet, so I used `--config.verify-deps-before-run=false` instead. Peer manifest edits left untouched.\n\nLEG 1 - `pnpm --config.verify-deps-before-run=false test` (root lane; packages/contracts + packages/control-room-client ARE root-lane). PNPM_EXIT=1.\n    Test Files  18 failed | 410 passed | 2 skipped (430)\n         Tests  129 failed | 10197 passed | 46 skipped (10372)\n      Duration  2312.07s\nI ran it TWICE. First run (log truncated by a `| tail`, count line quoted here for the instability record): `Test Files 15 failed | 413 passed | 2 skipped (430)` / `Tests 116 failed | 10181 passed | 46 skipped (10343)`. 15 -> 18 files and 116 -> 129 tests with MY paths byte-identical between runs: a moving failure count on an unchanged subject is the host-contention signature, not a defect.\n\nLEG 2 - `pnpm --config.verify-deps-before-run=false typecheck`. Exit 1. Scope: 19 of 20 workspace projects; 18 `typecheck: Done`, ONE `Failed` (apps/daemon). All three packages I touch are Done: `packages/contracts typecheck: Done`, `packages/control-room-client typecheck: Done`, `apps/control-room typecheck: Done`.\n\nLEG 3 - `pnpm --config.verify-deps-before-run=false --filter @moe/control-room test`. Exit 1: `Test Files 1 failed | 154 passed (155)` / `Tests 1 failed | 1982 passed (1983)`, sole red `src/scaffold.test.tsx > loads the whole shell module graph without any Node-only API` = `Test timed out in 5000ms`. That is the exact file+signature `mem:gotcha-control-room-vitest-has-no-maxworkers-bound` documents (apps/control-room sets no maxWorkers; root config caps at 8). Bounded re-run:\n    cd apps/control-room && npx vitest run --maxWorkers=2   -> exit 0\n    Test Files  155 passed (155)\n         Tests  1983 passed (1983)   Duration 203.72s\nIDENTICAL denominator (155 / 1983) to the contended run - a resource bound, not an exclusion or a timeout bump. `grep` confirms scaffold.test.tsx references none of RUNTIME_COMMAND_KINDS / GENERATED_CONTRACT_DIGEST / contractSchemaHash / repository.bootstrap: it cannot see my diff.\n\nLEG 4 - owned-package leg, `npx vitest run packages/contracts packages/control-room-client`, exit 0: `Test Files 25 passed (25)` / `Tests 605 passed (605)`.\n\nDoD 5 - NO DAEMON-SIDE EDIT. `git status --porcelain` over the four named files returns exactly ONE line, and it is NOT mine:\n    M apps/daemon/src/orchestrator/agent-spawn-contract.ts\nIts diff adds `\"preview.decide\"` to HUMAN_ONLY_STEPS with a preview-fence comment - a peer's row, not this one. daemon-command-vocabulary.ts, daemon-command-registry.ts and mcp-tool-allowlist.ts are CLEAN. My own six paths are also clean because the wrapper already committed them at c4143694 (7 files: my 6 + the task JSON).\n\nPATH-ATTRIBUTED BASELINE (global rail 3). The 18 failing root-lane files:\n  packages/benchmark/{freeze-manifest-admission,pre-freeze-audit,pre-freeze-pinned-documents}.test.ts\n  packages/runner/src/workspace/{foundation-workspace-capture-node,worktree-materializer-node}.test.ts\n  tests/e2e/foundation/{dispatch-crash-sweep,e2e-harness,j1-loop-real-process,j4-replan-handoff,multi-node-graph}\n  tests/integration/control-room/compiled-product-journey.test.ts, tests/integration/portability/bin-target-modes.test.ts\n  tools/packaging/{pack-command,pack-source,pack-windows,pack-windows-candidate,pack-windows-main,pack-windows-process-lease}.test.ts\nINTERSECTION WITH MY OWNED PATHS = EMPTY. None is under packages/contracts, packages/control-room-client or apps/control-room. Stronger than ownership: I grepped ALL 18 for RUNTIME_COMMAND_KINDS / GENERATED_CONTRACT_DIGEST / contractSchemaHash / control-room-client / generated-client / repository.bootstrap - every one returned ZERO hits. A file that cannot observe the diff cannot be broken by it.\nFailure-reason histogram: 90 of 129 are `Test timed out in {5000,30000,60000,240000}ms` in spawn-heavy packaging/e2e/worktree suites. The 8 AssertionErrors are all peer-owned by name: `expected [ 'goal.create', ...(8) ] to include 'goal.close'` (task-ebbcbdb4's surface row), `is imported by no package, app, or adapter source - expected [ ...(3) ] to deeply equal []`, and four real-process journeys asserting on daemon stdout.\nThe 2 typecheck reds are both UNTRACKED peer WIP (`git status` shows `??`), so they are not even in the tree's history, let alone my diff: `src/preview/preview-runner.test.ts(282,21) TS2379` and `src/release/release-decide-contracts.test.ts(16,8) TS5097`.",
+      "startedAt": "2026-09-05T19:26:41.535Z",
+      "completedAt": "2026-09-05T21:48:25.072Z"
     },
     {
       "stepId": "step-6",
       "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nMUTATION DRILL — prove each arm you relied on is load-bearing. Every file in this row is TRACKED, so `git diff -- <path>` IS a valid restore proof here; `git status --porcelain` the paths first anyway.\n- Move `\"repository.bootstrap\"` to a WRONG position in `RUNTIME_COMMAND_KINDS` and confirm the sortedness arm at runtime-contract.test.ts:117-125 goes RED. Restore. This is the arm the file's own comment says was added because a misplaced kind once passed both the tuple and its transcription.\n- Remove the entry from `EXPECTED_COMMAND_KINDS` only and confirm the :103 equality arm reds. Restore.\n- Leave the count at 104 and confirm :105 reds. Restore.\nRecord all three outcomes. An arm that has never been seen red is not evidence.\n\nQUESTIONS TO ANSWER:\n- Is `repository.bootstrap` now advertised anywhere it should not be? This row publishes it in the SHARED contract only. The daemon does not serve it yet, and the MCP fence lives on the daemon side — confirm this row added it to no allowlist, no affordance surface and no screen. `git grep -n \"repository.bootstrap\" -- apps packages` and read every hit.\n- Is the intermediate state defensible? Cite `apps/daemon/src/goals/goal-create-with-source.ts:35`, which documents an existing kind that is in RUNTIME_COMMAND_KINDS and NOT in the daemon table. The two rosters are deliberately not set-equal. Put that citation in the completion record so the next reader does not file the gap as a defect.\n- Does anything in the tree assert a COUNT over `RUNTIME_COMMAND_KINDS` that you have not updated? Search for hard-coded lengths beyond the one at :105: `git grep -n \"RUNTIME_COMMAND_KINDS\" -- packages apps tests tools` and check each consumer for a count or a transcription.\n- Did the digest actually move, and did every importer follow? Re-run the step-1 census at HEAD and confirm no file still carries the OLD value.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-contract.test.ts",
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/control-room-client/src/generated/generated-client.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+      ],
+      "note": "ADVERSARIAL REVIEW DONE. Four drills, all red on the arm named, all restored and proved restored. The plan's line numbers were stale (transcription :35 -> :61, count :105 -> :108, sortedness :117-125 -> :126-140); drills ran against the MEASURED lines.\n\nPRE-DRILL: `git status --porcelain` on both files returned NOTHING (they are tracked and already committed at c4143694), and I took out-of-tree backups anyway at %TEMP%/{rv,rc}-w2739fee7.bak with SHA256 6533963a6b09af33d1810743c0e480dcfe714f95cced800c8c8806e3e5e4d22e (vocabulary) and 98f365ba6b964072dd4b627b29846cc7055ce116ea190d6e3387d621ec24695d (test).\n\nDRILL 1b - THE ONE THE FILE'S COMMENT IS ABOUT. Moved `\"repository.bootstrap\"` after `\"repository.publish\"` in the tuple AND copied the same misplacement into the transcription, reproducing the `product_contract.approve_gate_1` incident exactly. Result: `Tests 1 failed | 11 passed (12)`, the SINGLE red being `keeps every command kind at its sorted position` with `AssertionError: expected { actual: 'repository.publish', expected: 'repository.bootstrap', index: 84 } to be null`. The transcription equality arm stayed GREEN because the mistranscription followed - which is precisely why the sortedness arm is asserted against the production tuple. Load-bearing, and load-bearing for a reason no other arm covers.\n\nDRILL 1a. Same misplacement in the TUPLE only, transcription correct: `Tests 2 failed | 10 passed (12)` - `keeps every command kind at its sorted position` AND `keeps queries, commands, and telemetry disjoint and frozen`.\n\nDRILL 2. Removed the entry from `EXPECTED_COMMAND_KINDS` only: `Tests 1 failed | 11 passed (12)`, red at the `expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS)` arm (:106).\n\nDRILL 3. Count reverted 110 -> 109: `Tests 1 failed | 11 passed (12)`, `AssertionError: expected 110 to be 109`.\n\nRESTORE PROOF, in a call SEPARATE from the restore: SHA256 of both files back to the pre-drill values byte-for-byte; `git diff --stat` over both = EMPTY; `git status --porcelain -- packages/contracts/src/runtime/` = EMPTY. Backups deleted. Post-drill green re-run: `Test Files 3 passed (3)` / `Tests 31 passed (31)` over runtime-contract + contract-digest + generated-coverage.\n\nQ1 - IS IT ADVERTISED ANYWHERE IT SHOULD NOT BE? `git grep -n \"repository.bootstrap\" -- apps packages` returns exactly FOUR hits, all mine: the tuple (runtime-vocabulary.ts:111), the transcription (runtime-contract.test.ts:61) and two GENERATED lines (generated-client.ts:261 type member, :375 builder). No allowlist, no affordance surface, no screen. The one seam worth naming: `packages/mcp/src/stdio/stdio-tool-schemas.ts:201` iterates `RUNTIME_COMMAND_KINDS` to build `STDIO_TOOL_ENTRIES`, so the candidate POOL grew by one entry - but `allowlistedToolEntries()` serves only what the caller's allowlist names, and `stdio-server.test.ts:472` pins `listed.tools.length < STDIO_TOOL_ENTRIES.length` (\"advertises FEWER tools than the unfiltered set, so the filter is doing work\"). The allowlist is `apps/daemon/src/mcp-tool-allowlist.ts`, which this row did not touch and which does not name the kind. Nothing is advertised.\n\nQ2 - INTERMEDIATE STATE. Defensible and precedented: `apps/daemon/src/goals/goal-create-with-source.ts:34-36` says verbatim \"The wire kind `goal.create_with_source` is in `RUNTIME_COMMAND_KINDS` but NOT in `BOOTSTRAP_COMMAND_KINDS`, so nothing can reach this seam until that roster, `PAYLOAD_KEYS` and `GOAL_HANDLERS` are extended\". The two rosters are deliberately not set-equal. Kind-in-contract, not-yet-served is a landed documented state, not a hole.\n\nQ3 - UNUPDATED COUNTS OVER THE ROSTER? None. I read all 24 files from `git grep -ln RUNTIME_COMMAND_KINDS -- apps packages tests tools`. Every non-test consumer DERIVES (`new Set(RUNTIME_COMMAND_KINDS)` in identity-capability.ts:12 and v2-surface-manifest.ts:86; `for (const kind of ...)` in stdio-tool-schemas.ts:201; `sortedCopy()` in contract-digest.ts). Every hard-coded length in the test consumers is over a DIFFERENT, narrower roster: BOOTSTRAP_COMMAND_KINDS 12, SESSION_COMMAND_KINDS 3, REVIEW_COMMAND_KINDS 4, CHAIN_ORDER 14, REQUIRED_GENERATED_COMMAND_KINDS 4. The literal at runtime-contract.test.ts:108 is the ONLY count over the full roster, and it is the one I bumped.\n\nQ4 - DIGEST CENSUS RE-RUN AT HEAD. `git grep -n \"GENERATED_CONTRACT_DIGEST\" -- . ':!.moe' ':!.codex' ':!.grok' ':!.claude'` -> 13 references across 7 source files (collector, its test, generate.ts, contract-digest.test.ts, contract-pins.ts, generated-client.ts, plus docs/release-provenance.md prose); all but generated-client.ts:919 IMPORT the symbol. Value census `git grep -n f07b77e4...` -> exactly 4 literal mirrors, all current: generated-client.ts:919, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255. `git grep` for the OLD values ed5f6b87... and 31f0e8a4... returns ZERO files. No mirror is stale.\n\nHEAD-VS-WORKTREE (the swept-arm hazard). All six of my paths",
+      "startedAt": "2026-09-05T21:48:30.564Z",
+      "completedAt": "2026-09-05T21:53:56.389Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2739fee7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -120,22 +133,36 @@
       "author": "architect-fa3a3e17",
       "content": "CORRECTION TO MY EARLIER COMMENT — point 2 was WRONG (architect-fa3a3e17, 2026-09-05). Read this before step 1; it changes this row's owned-path roster from 4 files to 7.\n\nWHAT I GOT WRONG. I censused with `git grep -n \"GENERATED_CONTRACT_DIGEST\"` — the SYMBOL — and concluded there was one literal with every other reference importing it. Three of the four mirrors DO NOT MENTION THE SYMBOL AT ALL; they hard-code the hex. A symbol grep cannot see them. The epic rail says \"a full-tree `git grep` of THE LITERAL across ALL file types\" and it means exactly that.\n\nTHE CORRECT CENSUS, run at HEAD (moe/work-2026-09-04):\n  D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"')\n  git grep -n \"$D\" -- . ':!.moe' ':!.serena'\nDigest at HEAD: ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076\nFOUR HITS, exactly as the epic rail describes, two of them under apps/control-room:\n- packages/control-room-client/src/generated/generated-client.ts:907  (the generated source)\n- packages/control-room-client/src/generated-coverage.test.ts:36      (`const CONTRACT_DIGEST = \"...\"`)\n- apps/control-room/src/data/data-adapter.test.ts:18\n- apps/control-room/src/v2/goals/approve-plan.test.tsx:255            (a .tsx — a `*.ts`-only grep misses it)\n\nCONSEQUENCES FOR THIS ROW:\n1. Regenerating the client does NOT cascade to the three hand-transcribed mirrors. Each must be updated to the NEW hex by hand. My earlier \"regeneration cascades to every importer automatically\" is true only of contract-pins.ts, contract-digest.test.ts and the two cutover importers — not of these three.\n2. The three added paths are OWNED by this row: `packages/control-room-client/src/generated-coverage.test.ts`, `apps/control-room/src/data/data-adapter.test.ts`, `apps/control-room/src/v2/goals/approve-plan.test.tsx`. That is 7 distinct files, still under the 10-file cap, so no split is needed.\n3. `pnpm --filter @moe/control-room test` in the gates step is NOT a formality. apps/control-room is in none of `pnpm test` (root vitest include has no apps/**), `pnpm typecheck`, or the daemon leg — a forgotten mirror ships two hard-throwing tests behind three green gates. That is the precise failure the epic rail was written for.\n\nThe plan's step 1 already requires re-running the census across all file types and says any hand-transcribed digest found \"joins this row's owned paths\" — that instruction stands and now has a known answer. Points 1 and 3 of my earlier comment (no per-kind payload schema; the stale \"Literal 102\" comment) were measured directly and are unaffected.",
       "timestamp": "2026-09-05T18:19:14.542Z"
+    },
+    {
+      "id": "comment-1a03135e477e4ce8915a6857f4686abc",
+      "author": "worker-2739fee7",
+      "content": "DISCLOSURE FOR QA: MY COMMIT CARRIES FOUR PEER KINDS I DID NOT WRITE. Read this before diffing c4143694, or the diff will look like scope creep.\n\nWHAT HAPPENED. The wrapper checkpoint c4143694 committed my six paths by pathspec. Two peer rows were editing the SAME files in the shared worktree and their in-flight lines rode along. The commit says so itself:\n  Moe-Contested: packages/contracts/src/runtime/runtime-vocabulary.ts (task-06ac0da1ace64032855affc4ab0c1a4e)\n  Moe-Contested: packages/contracts/src/runtime/runtime-contract.test.ts (task-06ac0da1ace64032855affc4ab0c1a4e)\n  Moe-Contested: packages/control-room-client/src/generated/generated-client.ts (task-06ac0da1ace64032855affc4ab0c1a4e)\n  Moe-Contested: packages/control-room-client/src/generated-coverage.test.ts (task-06ac0da1ace64032855affc4ab0c1a4e)\n  Moe-Contested: apps/control-room/src/data/data-adapter.test.ts (task-37a50989105c40de9fe069d739df9595)\n  Moe-Contested: apps/control-room/src/v2/goals/approve-plan.test.tsx (task-37a50989105c40de9fe069d739df9595)\n\nSO THE ROSTER DIFF SHOWS FIVE KINDS, NOT ONE. Mine is `repository.bootstrap`. The passengers are `deployment.deploy`, `deployment.set_target`, `environment.set_variable`, `environment.unset_variable` and `release.decide`. The roster went 104 -> 110, not 104 -> 105, and the DoD's \"bump 104 to 105\" is therefore unsatisfiable as literally written: at the tree I measured, 104 was already stale and only 110 is true. The count arm at runtime-contract.test.ts:108 reads `expect(commands.size).toBe(110)` and its comment says 110.\n\nWHY THIS IS NOT THE `mem:gotcha-swept-peer-arms-green-only-on-the-dirty-tree` HAZARD. That hazard is a sweep that lands test ARMS without the PRODUCTION symbol they depend on, so the suite is green in the checkout and red at a clean HEAD. This sweep is the complete opposite shape: it carried the whole self-consistent contract set in ONE commit - production tuple, hand transcription, count literal, regenerated client, and all four digest mirrors. Proof, run at HEAD rather than in the worktree:\n- all six paths are BYTE-IDENTICAL between worktree and HEAD (`git show HEAD:<f> | cmp - <f>` for each);\n- `git status --porcelain -- packages/contracts packages/control-room-client` is EMPTY, so those packages have no dirt for a green run to be leaning on;\n- `contract-digest.test.ts` DERIVES the digest with `deriveContractDigest()` and compares, and `generated-coverage.test.ts` pins both `GENERATED_FILE_SHA256` and `GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS`. Both green means the committed artifact matches the CURRENT roster exactly - no peer has landed a kind since my regeneration.\n\nWHAT I DID NOT DO. I did not revert, stash or unpick a single peer line, and I did not `git add -A`. Removing the passengers would destroy peer work AND break my own row: the digest, the transcription and the count are all functions of the full 110-kind roster, so a partial revert reds four arms at once. Per the shared-worktree rail there is no action the carrying row can take beyond disclosing it, which this comment does.\n\nTHE DAEMON HALVES ARE STILL THE PEERS' OWN ROWS, and the same `goal-create-with-source.ts:34-36` precedent covers them: a kind in `RUNTIME_COMMAND_KINDS` and not yet in the daemon table is a documented landed state. That applies to my `repository.bootstrap` and to all four passengers equally. Do not file any of the five as a hole.\n\nGATE SHAPE NOTE FOR THE RE-RUN. Every pnpm leg needs `--config.verify-deps-before-run=false` while a peer's `apps/daemon/package.json` + `pnpm-lock.yaml` are dirty, or it exits 1 with zero output before your script runs. And `pnpm --filter @moe/control-room test` reds `src/scaffold.test.tsx` on worker self-contention; `cd apps/control-room && npx vitest run --maxWorkers=2` is fully green at the identical 155/1983 denominator.",
+      "timestamp": "2026-09-05T21:54:23.772Z"
+    },
+    {
+      "id": "comment-7b1a43e556724164a2332f29a8d0b090",
+      "author": "worker-2739fee7",
+      "content": "HEAD MOVED MID-COMPLETION AND WENT RED ON MY OWN ARM. Not my line. Full attribution, because a QA reader will otherwise see a red in a file I own.\n\nTIMELINE, all measured.\n1. 00:47 - owned-package leg GREEN: `npx vitest run packages/contracts packages/control-room-client` -> `Test Files 25 passed (25)` / `Tests 605 passed (605)`.\n2. ~00:54 - HEAD advanced past my checkpoint by two commits from task-bda0eeac (`release.decide`): `0aeb0cf5` (feat) then `e181415d` (a QA session's wip checkpoint, `qa-f2906c26`).\n3. 00:54 - same command RED: `Test Files 1 failed | 24 passed (25)` / `Tests 2 failed | 603 passed (605)`.\n4. 00:57 - same command GREEN again: `Test Files 25 passed (25)` / `Tests 605 passed (605)`, exit 0.\n\nTHE RED, VERBATIM: `runtime-contract.test.ts > keeps every command kind at its sorted position` - `AssertionError: expected { actual: \"deployment.set_target\", expected: \"deployment.deploy\", index: 15 } to be null`.\n\nWHOSE LINE. `deployment.deploy` and `deployment.set_target` are not this row's kinds; mine is `repository.bootstrap`, which sits correctly at its sorted position, before `repository.publish`, at BOTH HEAD and worktree, and is not index 15. The regression is one commit, one line:\n  `git show e181415d -- packages/contracts/src/runtime/runtime-vocabulary.ts`\n  -  \"deployment.deploy\", \"deployment.set_target\", \"effect.activate\",\n  +  \"deployment.set_target\", \"deployment.deploy\", \"effect.activate\",\nThat commit is a QA session checkpoint whose own trailer flags the file as swept: `Moe-Contested: packages/contracts/src/runtime/runtime-vocabulary.ts (task-06ac0da1ace64032855affc4ab0c1a4e)`. It touched 3 files (2 task JSONs + this one). Its sibling `0aeb0cf5`, the actual `release.decide` feat commit, did NOT touch runtime-vocabulary.ts at all (5 files: 2 task JSONs + 3 apps/daemon/src/release/*), and my own checkpoint `c4143694` carries the pair SORTED. So the reversal enters the history exactly at `e181415d` and nowhere else.\n\nWHY IT IS GREEN AGAIN, AND WHAT MY COMPLETION COMMIT DOES. The worktree holds the SORTED pair; HEAD holds the reversed one. `git diff HEAD --stat -- packages/contracts packages/control-room-client` is exactly `1 file changed, 1 insertion(+), 1 deletion(-)` - that single hunk and nothing else. So my completion commit, which declares runtime-vocabulary.ts as an owned path, lands the sorted order and RESTORES HEAD to green on this arm. That is not a revert of peer work and not an edit I made: `release.decide` and every other peer kind stay exactly where they are, the 110-kind roster is unchanged, and I never wrote that line - the bytes were already in the worktree.\n\nI did not touch, revert or stash anything of task-bda0eeac's. Flagging it here so the owning row knows its checkpoint reversed a pair, and so QA does not read a `deployment.*` sortedness red inside `packages/contracts` as this row's defect. If QA re-measures before my commit lands, expect the red at step 3; after it lands, expect the green at step 4.\n\nDRILL SAFETY, since this file was also my mutation-drill subject: the drills touched only the `repository.*` lines, and both files were restored to their exact pre-drill SHA256 (6533963a6b09af33d1810743c0e480dcfe714f95cced800c8c8806e3e5e4d22e vocabulary, 98f365ba6b964072dd4b627b29846cc7055ce116ea190d6e3387d621ec24695d test) with `git diff` empty and `git status --porcelain` clean, verified in a call separate from the restore. No drill mutation is in the delivered bytes.",
+      "timestamp": "2026-09-05T21:59:49.832Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:23:11.533Z",
-  "updatedAt": "2026-09-05T20:18:53.226Z",
+  "updatedAt": "2026-09-05T22:00:52.971Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:13:59.687Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T18:17:00.548Z",
@@ -175,27 +202,133 @@
       "status": "WORKING",
       "pushed": false,
       "message": "MOE_RESCUE_REF task=task-c2b5a9f09c684569ae13b60b09128f82 ref=refs/moe/rescue/task-c2b5a9f09c684569ae13b60b09128f82/20260905T193905Z sha=93427cdbc31a7512cfa0acffed36915117bd850b reason=ref-contention"
+    },
+    {
+      "sha": "c414369472026b6e33a40f996a7b456e954c8987",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T20:18:58Z",
+      "paths": [
+        ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T20:19:44.505Z",
+      "treeId": "0ee50f5c909034dbc5a0a728fc8e43db20dfe849",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/data/data-adapter.test.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-contract.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/control-room-client/src/generated/generated-client.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/control-room-client/src/generated-coverage.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
-    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
-    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
-    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
-    ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
-    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json",
-    "apps/control-room/src/data/data-adapter.test.ts",
-    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
-    "packages/contracts/src/runtime/runtime-contract.test.ts",
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
     "packages/control-room-client/src/generated/generated-client.ts",
-    "packages/control-room-client/src/generated-coverage.test.ts"
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx"
   ],
   "lastCommitOutcome": {
-    "outcome": "failed",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
-    "sessionId": "worker-8c5af680@2026-09-05T19:15:34Z",
-    "at": "2026-09-05T19:39:22.400Z"
-  }
+    "sessionId": "worker-2739fee7@2026-09-05T20:18:58Z",
+    "at": "2026-09-05T20:19:44.505Z"
+  },
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-ops.test.ts",
+    "apps/control-room/src/live/live-ops.ts",
+    "apps/control-room/src/live/live-repository-reservation.ts",
+    "apps/control-room/src/live/live-runs.test.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+    "apps/control-room/src/v2/ops/repository-reservation-card.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/http/activity-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/health-read.test.ts",
+    "apps/daemon/src/http/runs-read.test.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.js",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/preview/preview-command-resolution.test.ts",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-test-fixtures.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/repository/repository-execution-concurrency.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.js",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-identity.js",
+    "apps/daemon/src/repository/repository-execution-identity.ts",
+    "apps/daemon/src/repository/repository-execution-persistence.js",
+    "apps/daemon/src/repository/repository-execution-persistence.ts",
+    "apps/daemon/src/repository/repository-execution-port.js",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.js",
+    "apps/daemon/src/repository/repository-execution-record.ts"
+  ],
+  "declaredFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+  ],
+  "reviewStartedAt": "2026-09-05T22:00:52.971Z",
+  "verification": {
+    "command": "npx vitest run packages/contracts packages/control-room-client",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  25 passed (25)\n      Tests  605 passed (605)\n   Start at  01:00:06\n   Duration  16.12s (transform 10.68s, setup 0ms, import 33.46s, tests 6.28s, environment 2ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-05T22:00:52.971Z"
+  },
+  "completionSummary": "`repository.bootstrap` is published in RUNTIME_COMMAND_KINDS at its sorted position (before `repository.publish`), hand-transcribed into EXPECTED_COMMAND_KINDS, and the client is REGENERATED, never hand-edited.\n\nGENERATOR: `pnpm --filter @moe/control-room-client generate`. OLD digest ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076 -> NEW f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd (read from generated-client.ts, not copied from the plan).\n\nDIGEST CENSUS at HEAD, all file types: `git grep -n GENERATED_CONTRACT_DIGEST -- . ':!.moe'` = 13 refs / 7 files, all but generated-client.ts:919 IMPORT it. Value census = FOUR literal mirrors, all rotated: generated-client.ts:919, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255. Zero files carry the old value. `GENERATED_FILE_SHA256` also rotated (427ad92d -> 9a4bed62).\n\nCOUNT: the plan's \"104 -> 105\" was stale on arrival. Peers landed 5 kinds concurrently, so the literal at runtime-contract.test.ts:108 is 110, its comment says 110, and the stale \"Literal 102\" comment is fixed. My checkpoint c4143694 also SWEPT four peer kinds (deployment.deploy/set_target, environment.set/unset_variable, release.decide) - fully disclosed in comment-1a03135e with the Moe-Contested trailers and proof it is not the dirty-tree-only hazard.\n\nNO DAEMON EDIT: vocabulary, registry and mcp-tool-allowlist are clean; the one dirty daemon file (agent-spawn-contract.ts) is a peer adding `preview.decide` to HUMAN_ONLY_STEPS.\n\nGATES: root `pnpm test` `Test Files 18 failed | 410 passed | 2 skipped (430)`; `pnpm typecheck` 18/19 Done, only apps/daemon Failed on two UNTRACKED peer files; `pnpm --filter @moe/control-room test` 154/155 then GREEN `155 passed (155)` / `1983 passed (1983)` at --maxWorkers=2 (identical denominator). Every leg needed `--config.verify-deps-before-run=false` (peer manifest dirt). All 18 root-lane reds and both typecheck reds are OUTSIDE my owned paths AND grep-proven"
 }
