@@ -189,7 +189,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:59:32.724Z",
-  "updatedAt": "2026-09-05T23:27:13.299Z",
+  "updatedAt": "2026-09-05T23:28:00.471Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:09:42.913Z",
     "plannedStepCount": 8,
@@ -349,6 +349,21 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "MOE_RESCUE_REF task=task-f5a74c23f8754665ab9d36cba386e1d0 ref=refs/moe/rescue/task-f5a74c23f8754665ab9d36cba386e1d0/20260905T232710Z sha=7664e85f58ae84219c6d6c16271476d40fc3da45 reason=ref-contention"
+    },
+    {
+      "sha": "c8f832dbf1bceaebf2da6bdb723dc5da37187bc8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T23:27:48Z",
+      "paths": [
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T23:28:00.471Z",
+      "treeId": "fef60bcf027c9d21e6b8148f8b97fbd82f1bbdc1",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -380,18 +395,46 @@
     "apps/daemon/src/preview/preview-ledger.test.ts"
   ],
   "unattributedPaths": [
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
+    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+    "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-workflows.test.ts",
     "apps/daemon/src/planning/compiled-contract-binding.test.ts",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publish-services.ts",
     "apps/daemon/src/repository/repository-execution-workflows.test.ts",
-    "docs/plans/2026-09-06-product-evidence-and-recovery.md"
+    "apps/daemon/src/repository/repository-landing-attempt.ts",
+    "apps/daemon/src/repository/repository-recovery-git.test.ts",
+    "apps/daemon/src/repository/repository-recovery-native.test.ts",
+    "docs/plans/2026-09-06-product-evidence-and-recovery.md",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary.test.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
+    "packages/runner/src/platform/windows/windows-status.ts",
+    "packages/runner/src/verification/criterion-check-executor.test.ts",
+    "packages/runner/src/verification/criterion-check-executor.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
+    "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "failed",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
-    "sessionId": "qa-4f771bb8@2026-09-05T23:12:27Z",
-    "at": "2026-09-05T23:27:13.299Z"
+    "sessionId": "qa-4f771bb8@2026-09-05T23:27:48Z",
+    "at": "2026-09-05T23:28:00.471Z"
   }
 }
