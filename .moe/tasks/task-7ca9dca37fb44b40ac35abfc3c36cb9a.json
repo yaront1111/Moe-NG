@@ -107,8 +107,8 @@
       "completedAt": "2026-09-05T15:07:36.865Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -126,16 +126,24 @@
       "author": "worker-b33940f5",
       "content": "Drill + gate record for QA.\n\nPorcelain BEFORE drills (owned paths only):\n M http-listener-guards.ts, http-listener-read-dispatch.test.ts, http-listener-read-dispatch.ts, http-listener.ts\n ?? design-read.js, design-read.test.ts, design-read.ts\nPeer dirt unchanged: M affordance-read-planning.test.ts\n\nBackup SHA256 (%TEMP%\\moe-worker-b33940f5-design-read), hashed in a call separate from restore:\ndesign-read.ts 7D77CEEA95647AF7390FFCF1B5EB573E3A02851722D890078B60F4355FFAD94D\ndesign-read.js 82228A56F7702B0F4A64EB6D7F4E2FDE26ABB585742D5097DD04F7E0060BBF56\ndesign-read.test.ts E7DE180C4EDA14719BAB9F4D0BC64128CED5F6214E62B6D5F535B90D847B4F09\nguards.ts 363C97723F4007CE683850FEE95F6F897BB8BA9DD9899A16923E85AA9C08091C\ndispatch.ts F9EABB6748E59945FDE7513E6C18B400D92111166D6B809914A032765E197AC8\ndispatch.test.ts 28F4AF812DF16DB0CB8C5C07B449214C7FDCDB0D0C386107312CB8464EFAF7B4\nlistener.ts E2A33CC6CF525634AC761E5A1F523BF4AD7006CA62997A0CC540A8B306F34DD7\nPost-restore: every file equal=True against that backup.\n\n(a) Drop DESIGN_READ_PATH from JSON_ROUTES only → dispatch-seam set-equality red (served still has DESIGN_READ_PATH, roster does not); also roster-size/register/unproxied/unconsumed reds. Restored.\n(b) Drop LISTENER_DESIGN_UNAVAILABLE from LISTENER_REFUSAL_CODES only → unconfigured arm reds at LISTENER_REFUSAL_CODES.toContain. Restored.\n(c) Delete extra-key exact-arity in designReadBodyOf only → extra-key arm REDS (plan said 'goes green'; the rail-1 outcome is red). {goalRef, extra:1} reached the store as DESIGN_REVISION_ABSENT@LEDGER instead of LISTENER_DESIGN_REQUEST_INVALID. Restored.\n\nOwned tests after restore: Test Files 2 passed (2), Tests 19 passed (19).\nNamed full `pnpm --filter @moe/daemon test` (step 4, 1202s): Test Files 13 failed | 420 passed (433), Tests 39 failed | 8557 passed (8596). Foreign: compile-dispatcher-revision ILLEGAL_TRANSITION@DAEMON_PLANNING (9); affordance-read-planning 1 (peer-dirty); foundation-* timeout-only; work-claim-services DURABLE_ID_CONFLICT. Intersection with owned paths: empty.\n`pnpm typecheck` / `pnpm --filter @moe/daemon typecheck`: TS18046 packages/scheduler/src/budget/budget-reservation.ts:132; TS2741 apps/daemon/src/http/document-coverage-read.ts:232 UNPLANNED. Neither is an owned path.\n\nComposition files git-diff empty. else-chain still `} else serveDocumentDossier(...)`. design-read.ts 103 lines; dispatch 557 (add-only, plan forbade split); guards 409 (add-only).",
       "timestamp": "2026-09-05T15:07:26.472Z"
+    },
+    {
+      "id": "comment-c952ac2638ac4d7fafa1595f82449258",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE (qa-f2906c26) for the APPROVE. Anchor: completion commit e2aa3fb1, 7 files, +338/-2, contained in moe/work-2026-09-04. `git log e2aa3fb1..HEAD -- apps/daemon/src/http/` is EMPTY and all 7 owned paths are clean in the worktree, so delivered bytes == HEAD bytes.\n\nGATES RE-RUN BY ME (no pipes; count lines):\n1. `pnpm --filter @moe/daemon test` (DoD-named leg): `Test Files 10 failed | 423 passed (433)`, `Tests 27 failed | 8593 passed (8620)`. Failing files: daemon-v2-command-registry, http/foundation-registry, http/foundation-registry-hostile, mcp-dispatch-port, runtime-entrypoint, work/foundation-{attempt-service,attempt-windows,capture-lifecycle,capture-producer,input-hydrator}. NONE owned; path-attributed intersection with this row = EMPTY. I isolated the two that could plausibly have been this row's:\n   - runtime-entrypoint bridge roster: `missing: [\"orchestrator\\\\node-spec-listing.ts\"]`, `unexpected: [repository/controlled-profile/{generator,package-templates,root-templates}.js]`. design-read.js is in NEITHER list -> the bridge is correct.\n   - daemon-v2-command-registry: `expected 46 to be 45` at :267 (peer kind-publishing row task-40e52fa8).\n   foundation-* are the known spawn-latency cliff (one file 414483ms; 79 node procs alive).\n2. Owned leg standalone (design-read.test.ts + http-listener-read-dispatch.test.ts + goal-source-read.test.ts): exit 0, `Test Files 3 passed (3)`, `Tests 22 passed (22)`.\n3. `pnpm typecheck`: exit 1, sole error `packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'`. FOREIGN: landed by e53e3e6a @18:05:34; `git merge-base --is-ancestor e53e3e6a e2aa3fb1` = true, so it predates the completion commit. pnpm -r stops on first fail, so I also ran `pnpm --filter @moe/daemon typecheck` directly: the only error emitted is that same scheduler file via project reference; zero errors in apps/daemon's own sources.\n\nMY OWN MUTATION DRILL (not the worker's): neutered the exact-key guard in design-read.ts (`if (!allowed) return null` -> `if (false && !allowed)`). Invalid-body arm went RED: `AssertionError: {\"goalRef\":\"goal-1\",\"extra\":1}: expected {body:...} to deeply equal {...}`, `Tests 1 failed | 5 passed (6)`. Restored from an out-of-tree backup; proved in a SEPARATE call: `git diff` empty, `git status --porcelain` empty, sha256(worktree) == sha256(backup) == sha256(`git show e2aa3fb1:apps/daemon/src/http/design-read.ts`) = 7d77ceea95647af7390ffcf1b5eb573e3a02851722d890078b60f4355ffad94d. No stranded mutant.\n\nDoD MAPPING. (1) JSON_ROUTES member + non-POST -> LISTENER_DESIGN_REQUEST_INVALID + serveDesign as else-if immediately above the still-unconditional `else serveDocumentDossier` (dispatch test pins that literal line). No-port arm asserts code, LISTENER_REFUSAL_CODES membership, layer == CONTROL_ROOM_LISTENER_LAYER, statusFor 503, and unchanged readEvents(designAggregateId) -> writes nothing. (2) auth precedes any decode; non-GOAL -> DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200 with port asserted UNCALLED; all 7 invalid bodies ({}, \"\", numeric goalRef, extra key, payload projectId, missing goalRef, NaN version) -> LISTENER_DESIGN_REQUEST_INVALID with layer + 400, port never called; projectId = access.principal.projectId. (3) real file-backed store (boundWorld/committedRevision/approveGate1 + submitDesignRevision): ABSENT forwarded at 200 with layer LEDGER and zero writes; v1 -> record{version:1}/versions[1]; v2 -> record{version:2}/versions[1,2]; pinned version 1 still returns the v1 revision. Store refusals forwarded verbatim, never re-wrapped. (4) UNCONSUMED_SERVED_ROUTES gains \"/design/read\" with the task-e9cb2442 reason; UNPROXIED_SERVED_PATHS [] -> [\"/design/read\"]; roster.size 26->27; new arm asserts DESIGN_READ_PATH in roster + branch + guard seams.\n\nRAILS: readDesignRevision called not reimplemented; design-read.ts 102 lines; dispatch/guards add-only, no reformat; no MCP, no UI; the four composition files untouched, so a production boot correctly still answers LISTENER_DESIGN_UNAVAILABLE until task-eb2bb09d lands.\n\nNON-BLOCKING (recorded, not reject grounds): (a) task.verification holds the TARGETED vitest invocation (exit 0, `Test Files 2 passed (2)`, `Tests 19 passed (19)`), not the plan's named `pnpm --filter @moe/daemon test` -- I ran the named leg myself above and attributed every red. (b) `DESIGN_READ_CODES` is exported unconsumed, but mirrors the mandated copy shape (`GOAL_SOURCE_READ_CODES`, goal-source-read.ts:18, is likewise unconsumed): precedent, not drift.",
+      "timestamp": "2026-09-05T17:25:13.887Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:26:42.930Z",
-  "updatedAt": "2026-09-05T15:11:29.032Z",
+  "updatedAt": "2026-09-05T17:26:30.952Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:45.951Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-05T17:26:30.952Z",
+    "wallClockMs": 10725001
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -293,6 +301,21 @@
       "treeId": "3ab511119c00096d44bb9c3bfe27b9709725adab",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "2b1219c01b596e88ac056cf4554c15d1a017b6f8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T15:12:00Z",
+      "paths": [
+        ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T15:12:09.753Z",
+      "treeId": "a376831ce7f0edfbc9eeb640b73dd956f426e547",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -303,7 +326,10 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-05T15:11:19Z",
-    "at": "2026-09-05T15:11:29.032Z"
-  }
+    "sessionId": "qa-f2906c26@2026-09-05T15:12:00Z",
+    "at": "2026-09-05T15:12:09.753Z"
+  },
+  "completedAt": "2026-09-05T17:26:30.952Z",
+  "reviewCompletedAt": "2026-09-05T17:26:30.952Z",
+  "reviewSummary": "APPROVED at commit e2aa3fb1 (7 files, +338/-2). `git log e2aa3fb1..HEAD -- apps/daemon/src/http/` EMPTY, owned paths clean: delivered bytes == HEAD bytes. Full evidence: comment-c952ac26.\n\nGATES I RE-RAN, unpiped. `pnpm --filter @moe/daemon test` -> `Test Files 10 failed | 423 passed (433)`, `Tests 27 failed | 8593 passed (8620)`. No failing file owned; owned-path intersection EMPTY. Isolated the 2 that could have been this row's: runtime-entrypoint bridge roster reds on orchestrator/node-spec-listing + repository/controlled-profile (design-read.js in NEITHER list); registry `expected 46 to be 45` = peer task-40e52fa8. Owned leg: exit 0, `Test Files 3 passed (3)`, `Tests 22 passed (22)`. `pnpm typecheck` exit 1, sole error packages/scheduler/src/budget/budget-reservation.ts(132,42) TS18046 - FOREIGN, predates e2aa3fb1 (e53e3e6a, merge-base --is-ancestor true); daemon-only typecheck emits just that file, zero errors in apps/daemon sources.\n\nMY DRILL: neutered the exact-key guard -> invalid-body arm RED (`Tests 1 failed | 5 passed (6)`). Restored; git diff empty + sha256 == `git show e2aa3fb1:...design-read.ts` (7d77ceea). No stranded mutant.\n\nDoD 1-5 PASS. JSON_ROUTES + POST guard + serveDesign else-if above the still-unconditional `else serveDocumentDossier`. No-port: LISTENER_DESIGN_UNAVAILABLE + CONTROL_ROOM_LISTENER + 503 + zero events written. Auth precedes decode; non-GOAL -> DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ, port uncalled; 7 invalid bodies incl. payload projectId -> LISTENER_DESIGN_REQUEST_INVALID + layer + 400. Real store: ABSENT@LEDGER at 200 no write; v1/v2 records + versions; version 1 survives version 2. UNCONSUMED_SERVED_ROUTES and UNPROXIED_SERVED_PATHS both record /design/read citing task-e9cb2442; roster 26->27.\n\nRAILS: readDesignRevision called not reimplemented; 102 lines; add-only; no MCP/UI; composition untouched."
 }

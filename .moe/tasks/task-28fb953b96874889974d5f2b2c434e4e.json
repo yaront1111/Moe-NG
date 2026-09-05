@@ -1,0 +1,42 @@
+{
+  "id": "task-28fb953b96874889974d5f2b2c434e4e",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The bootstrap engine: directory guard, git init, scaffold write, first commit, the gh port and the receipt",
+  "description": "SPIDR child of task-facff1d1e7ce44a6b1101490524890a9 (architect-fa3a3e17, 2026-09-05), which measured over the file cap. dependsOn task-4a0f706437a042059789be2ebdb98bc0 for the scaffold tree it writes.\n\nWHY THIS ROW EXISTS. The parent owns `repository.bootstrap` end to end. Publishing ONE command kind on this board costs 13 forced edits on its own (measured below), so the parent cannot also carry the engine, the ports and the receipt inside a 10-file plan. This row is the dependency LEAF: the whole bootstrap sequence as a pure, injectable, offline-testable service, plus the handler entry point the parent will register. NO command kind, NO vocabulary edit, NO registry edit, NO MCP roster edit - all of that is the parent.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-fa3a3e17:\n- `git grep -rc 'repo create' apps/ tools/` = 0. No GitHub repository creation path exists.\n- `apps/daemon/src/repository/git-landing-port.ts:68` already exports an injectable `GitRunner` type and `nodeGitRunner` (spawn-based, 243 lines). It handles add/commit/push but NOT `init`. REUSE the `GitRunner` seam; do not write a second process launcher.\n- `apps/daemon/src/repository/landing-receipt-contracts.ts` (236 lines) is the receipt shape to mirror.\n- `project.bind_repository` is real and is handled at `apps/daemon/src/bootstrap/bootstrap-services.ts:227` (`bindRepository`), with `apps/daemon/src/bootstrap/bootstrap-sequence.ts:36` requiring `project.register` FIRST. That ordering is a real constraint on this row's sequence.\n- The \"manager catalog\" the parent's DoD names is `apps/daemon/src/projects/project-catalog.ts` - it exists.\n- Every new `.ts` under apps/daemon needs a tracked one-line `.js` bridge (`export * from \"./x.ts\";`). Budget two files per module.\n\nGITHUB IS OPTIONAL AND THAT IS LOAD-BEARING. A local-only bootstrap SUCCEEDS and says so: `gh` absent refuses BOOTSTRAP_GH_UNAVAILABLE for the GitHub half ONLY, while the local repository still exists, is committed and is bound, and the receipt records remoteUrl: null. Failing the whole bootstrap because `gh` is missing would make the feature unusable on most machines.\n\nTHE DIRECTORY GUARD IS THE SAFETY PROPERTY. This command writes a whole tree at an operator-supplied path. BOOTSTRAP_DIR_NOT_EMPTY must refuse BEFORE anything is written.",
+  "definitionOfDone": [
+    "The four refusal codes are defined here with their layer and are each asserted with CODE AND LAYER, never merely `ok:false`: BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE, BOOTSTRAP_PROFILE_VERSION_UNKNOWN (the last one re-exported from child 1's generator, not redefined). Reuse an already-rostered layer literal; introduce no new `*_LAYER` constant.",
+    "BOOTSTRAP_DIR_NOT_EMPTY is asserted against a real temp directory containing exactly ONE file, and the test asserts NOTHING WAS WRITTEN - read the directory back and assert its entries are unchanged. Also assert a non-existent directory IS created and an EMPTY existing one IS accepted. This is the safety property of the row, so mutate the guard and confirm the arm goes red.",
+    "A local-only bootstrap through the service SUCCEEDS with the gh port reporting absent: the temp directory is a git repository, `git log --oneline` is exactly ONE line reading `chore: scaffold by Moe`, and the result carries BOOTSTRAPPED with remoteUrl: null plus the code BOOTSTRAP_GH_UNAVAILABLE for the GitHub half. Assert all of it.",
+    "GitHub creation is tested OFFLINE through an injectable port that captures argv, asserting the `gh` argv BYTE-FOR-BYTE as `[\"repo\",\"create\",\"<owner>/<name>\",\"--<visibility>\",\"--source\",\".\",\"--push\"]`. No network call in any test, no stored token, no REST fallback.",
+    "`moe-bootstrap-receipt/1` is defined mirroring apps/daemon/src/repository/landing-receipt-contracts.ts and records {dir, sha, remoteUrl|null, BOOTSTRAPPED|REFUSED(code)}; a REFUSED receipt carries its code and NO sha, and that is asserted as its own arm.",
+    "The service reuses the EXISTING `GitRunner` seam from apps/daemon/src/repository/git-landing-port.ts and the EXISTING bind path (`bindRepository` in apps/daemon/src/bootstrap/bootstrap-services.ts, after `project.register` per bootstrap-sequence.ts:36). A second process launcher or a second binding path is a rejection. Name the reuse with a grep -n in the completion record.",
+    "EVERY temp directory and child process the tests create is removed on EVERY exit path including the throwing one (epic rail 4) - teardown in a `finally`, not after the assertions. Invoke `git`/`gh` as bare executables under shell:false with argv arrays; never a hard-coded `.cmd`, never a shell string, never a chain.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` does NOT cover apps/**, so the daemon leg is the only apps/** evidence - say so rather than quoting a bare root count line."
+  ],
+  "taskRails": [
+    "NO COMMAND KIND. No edit to daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, agent-spawn-contract.ts, or packages/contracts - every one of those belongs to the parent task-facff1d1e7ce44a6b1101490524890a9 and touching them here collides in the shared worktree.",
+    "NEVER WRITE INTO A NON-EMPTY DIRECTORY. The guard refuses before the first byte is written, not after.",
+    "A LOCAL-ONLY BOOTSTRAP IS A SUCCESS. `gh` absent refuses only the GitHub half.",
+    "REUSE the GitRunner seam and the existing bind path. A second launcher or a second binding path defeats the row.",
+    "`gh` CLI ONLY, matching the Gate 3 decision (task-f961dc89): no stored token, no REST fallback.",
+    "OFFLINE TESTS ONLY. Every port is injectable; no test may reach the network."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-facff1d1e7ce44a6b1101490524890a9",
+  "dependsOn": [
+    "task-4a0f706437a042059789be2ebdb98bc0"
+  ],
+  "priority": "HIGH",
+  "order": 81.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T17:22:49.335Z",
+  "updatedAt": "2026-09-05T17:22:49.335Z"
+}

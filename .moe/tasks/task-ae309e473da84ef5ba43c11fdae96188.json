@@ -1,0 +1,39 @@
+{
+  "id": "task-ae309e473da84ef5ba43c11fdae96188",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A scripted codex double drives the real MCP wire to verifier ACCEPTED and lander COMMITTED",
+  "description": "SPIDR grandchild B of task-df64aa204d6f4c35810376226980e4b7 (architect-aa54e231, 2026-09-05). dependsOn grandchild A task-48932becda314704aad652b49a8d2209, which lands the codex tool-roster and result-size parity this journey exercises. This row is the OFFLINE PROOF.\n\nWHAT THIS ROW OWNS: a codex-shaped scripted double plus one e2e journey that drives it over the REAL MCP wire to a durable ACCEPTED and COMMITTED.\n\nTHE MODEL TO COPY EXISTS. Measured at HEAD (branch moe/work-2026-09-04): tests/e2e/foundation/fake-agent.mjs (315 lines) is already a real-wire double - it opens an MCP session over HTTP with the scoped bearer, calls work_get_context, review_submit and work_release as real JSON-RPC tools/call frames, and never touches the store directly. tests/e2e/foundation/j1-loop-harness.ts:320 writeAgentShim writes the shim and hands it to the wrapper as MOE_AGENT_COMMAND (:360); tests/e2e/foundation/j1-ledger-view.ts reads every verdict off the durable ledger after the processes are dead. Copy that shape.\n\nTHREE MEASURED CONSTRAINTS THE PLAN MUST RESPECT.\n\n(1) THE SHIM MUST BE NAMED EXACTLY `codex.cmd` / `codex.sh`. The codex path is selected by the basename regex at apps/daemon/src/orchestrator/agent-spawner.ts:~80, `/(?:^|[\\\\/])codex(?:\\.[a-z]+)?$/iu`. The existing writeAgentShim emits `agent-<arm>.cmd`, and `agent-codex.cmd` does NOT match that regex - the character before \"codex\" is a hyphen, not a path separator or the start of the string. A shim named the existing way silently runs the CLAUDE branch and the journey proves nothing about codex.\n\n(2) THE DOUBLE READS ITS CREDENTIAL DIFFERENTLY FROM fake-agent.mjs. A claude seat gets a JSON file at `--mcp-config`; a codex seat gets NEITHER. The bearer arrives in the child's own environment under MOE_AGENT_MCP_BEARER (agent-spawner.ts:37 CODEX_BEARER_VARIABLE, injected at :156 after the agentEnvironment spread, pinned by agent-spawner.test.ts:291) and the origin arrives as the argv pair `-c mcp_servers.moe-next.url=<origin>`. So the codex double parses its origin off argv and reads its bearer from env - the exact inverse of fake-agent.mjs, which deliberately treats argv flags as non-evidence.\n\n(3) `planning.submit_decomposition` IS WITHHELD FROM THE V2 REGISTRY. apps/daemon/src/daemon-v2-command-registry.ts:211 puts it in a `withheld` set \"until its `/2` service consumes the authority-safe compiler\", deliberately preferring a visible roster failure to a v1 fallback. The journey therefore must dispatch it through a daemon that is NOT running the v2 marker, or assert the exact roster refusal instead. Determine which before writing the arm.\n\nTHIS ROW DOES NOT NEED THE DURABLE PROVIDER SETTING. Because the codex branch is selected by the shim's NAME, the offline proof does not depend on task-8e793ae3c63f41189bcc05f6d7c15605 or its grandchildren. Do not add that dependency.\n\nNOT IN SCOPE: the real `codex exec` run and the Seats provider disclosure (child 3, task-c090faae9fbe438b959e76a08b7dcfdb, explicitly allowed to block on quota); the spawn-surface parity itself (grandchild A); no UI.\n\nVERIFY: `pnpm test:e2e`.",
+  "definitionOfDone": [
+    "A scripted codex double drives the REAL MCP wire end to end offline against a real daemon: the planning reads, then `planning.submit_decomposition` accepted, then a `node.deliver` reaching verifier ACCEPTED and lander COMMITTED. The double opens its own MCP session with the scoped bearer and calls real tools/call frames - it NEVER writes to the store directly, or the journey proves the fixture instead of the product.",
+    "Every verdict is asserted from the DURABLE STORE after the processes are dead - the sealed run, the verifier receipt, and the landing sha - never from the double's own exit code or its stdout. A double that exits 0 without landing must fail this journey; add that negative arm the way fake-agent.mjs's `skip-review` arm does.",
+    "The work_get_context / work_release path completes for a codex seat: the double claims, reads its own item, and RELEASES ON THE FIRST TRY, reusing the observed-version disclosure that task-f99cec0b landed at apps/daemon/src/bootstrap/bootstrap-conflict-error.ts (`conflictError(decision)`, :53). Assert the release decision is EFFECTS_COMMITTED - not merely that the call returned, and not merely that it did not throw.",
+    "The shim the journey writes is named so the spawner's codex regex actually selects the codex branch, and an arm PROVES the codex branch ran (assert on the codex-shaped argv or the bearer-in-env path, not on the shim's filename) - otherwise a rename silently reverts this journey to testing the claude seat.",
+    "`pnpm test:e2e` count line quoted with the new test named in the output. Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e`."
+  ],
+  "taskRails": [
+    "OFFLINE PROOF ONLY. The real `codex exec` run is child 3's live drive; the Codex quota was exhausted until 2026-09-08 and this row must not depend on it.",
+    "THE DOUBLE GOES THROUGH THE REAL MCP WIRE with the scoped bearer and NEVER writes to the store directly - otherwise the journey proves the fixture, not the product.",
+    "NEVER WEAKEN THE CODEX SPAWN SURFACE to make the journey pass: `--ignore-user-config`, the bearer through the env var name, the closed env allowlist and the quote-free `-c` values are deliberate. If one blocks the journey, report it rather than relaxing it.",
+    "The double must be plain `.mjs` runnable under bare `node` - node builtins only, no TypeScript, no dependency, deliberately outside the e2e tsconfig - for the same reason fake-agent.mjs is (see its header comment). Do not add it to tests/e2e/foundation/tsconfig.json.",
+    "DO NOT EDIT fake-agent.mjs to serve both providers. It documents at length that it treats argv flags as non-evidence and learns everything from the spawner; the codex double inverts exactly that (bearer from env, origin from argv). Fold the two together and both stop proving what they were written to prove.",
+    "`pnpm test:e2e` runs `tsc -p tests/e2e/foundation/tsconfig.json` FIRST, so a type error in the harness fails the leg before a single test runs. Read the output for the `Test Files N passed` count line; a tsc failure is not a test result."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-df64aa204d6f4c35810376226980e4b7",
+  "dependsOn": [
+    "task-48932becda314704aad652b49a8d2209"
+  ],
+  "priority": "HIGH",
+  "order": 72.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T17:25:56.708Z",
+  "updatedAt": "2026-09-05T17:25:56.708Z"
+}

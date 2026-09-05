@@ -1,0 +1,40 @@
+{
+  "id": "task-48932becda314704aad652b49a8d2209",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A codex seat's tool roster and MCP result size reach measured parity with a claude seat",
+  "description": "SPIDR grandchild A of task-df64aa204d6f4c35810376226980e4b7 (architect-aa54e231, 2026-09-05), which was split because the parity work and the e2e journey together measured over ten files and four production seams. This row is the LEAF: the production parity. Grandchild B (the scripted-double journey) dependsOn this row.\n\ndependsOn task-3a0478f57eec44579269b2ed27c91d92 because BOTH rows edit apps/daemon/src/orchestrator/agent-spawner.ts, and that row adds the provider-aware spawn branch this row's codex roster/result-size work sits inside. Landing this first would make the merge a conflict and would put a codex branch under a spawn path that does not yet know its provider.\n\nWHAT THIS ROW OWNS: two MEASURED parity gaps on the codex spawn surface, plus the mission-parity assertion.\n\nGAP 1 - TOOL ROSTER. Measured at HEAD (branch moe/work-2026-09-04): the codex argv at apps/daemon/src/orchestrator/agent-spawner.ts:85-95 carries NO tool roster flags at all - only `--sandbox workspace-write|read-only`. The claude argv at :107-109 passes `--tools CODING_BUILTIN_TOOLS` and `--allowedTools CODING_TOOLS|CHAIN_TOOLS` from agent-spawn-environment.ts:10-12. So a codex seat's roster is not equal to a claude seat's, in either direction, and the parent's DoD 4 is currently FALSE. Also measured: apps/daemon/src/work/launch-template-producer.ts:106-107 `composeArgv` is hard claude-shaped (`[\"-p\", \"--allowedTools\", ...]`, CLAUDE_LAUNCH_SELECTION_FLAGS) with no codex branch.\n\nGAP 2 - RESULT SIZE. agent-spawn-environment.ts:71 sets MAX_MCP_OUTPUT_TOKENS unconditionally for EVERY seat, and its own comment names it as Claude's variable (\"Claude's default (25000 tokens) spills a PRD-sized answer to disk\"). Codex does not read it. A codex seat therefore has NO result-size control at all. MEASURE what codex does with an oversized MCP result BEFORE choosing the fix - a seat that silently truncates plans against a partial contract, and the failure surfaces later as a bad plan rather than an error.\n\nALREADY CLOSED, DO NOT REBUILD: the mission text is provider-agnostic. apps/daemon/src/orchestrator/agent-mission-text.ts exports codeMission/compilerMission/mission with NO provider parameter and no codex branch (grep for \"codex|provider\" in that file returns nothing), and agent-wrapper.ts:13 is the single consumer. The parent's DoD 5 is true by construction; this row proves it with an assertion arm, not with production work.\n\nNOT IN SCOPE: the scripted codex double, the e2e journey, work_get_context/work_release (all grandchild B); the real `codex exec` live drive and Seats disclosure (child 3, task-c090faae9fbe438b959e76a08b7dcfdb); no UI.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "MCP RESULT-SIZE BEHAVIOUR IS MEASURED AND RECORDED, not assumed. Drive an oversized MCP result through the codex path and record what codex does with it, with the measurement (command and observed output) written into the completion record or a row comment. Then land the fix that measurement implies: if codex truncates where claude pages, this row closes that gap; if it does not, this row records the measurement that shows so. 'It worked on a small read' is not parity and is not an acceptable record.",
+    "The tool roster a codex seat is launched with equals the roster a claude seat is launched with for the same step kind, asserted BIDIRECTIONALLY: every tool a claude seat is granted is granted to a codex seat AND every tool a codex seat is granted is granted to a claude seat. Enumerate the served set from the argv the spawner actually composes, not only from the CHAIN_TOOLS/CODING_TOOLS constants, and assert set-equality rather than subset - a roster test that iterates only the constant stays green while a seat silently loses a tool.",
+    "apps/daemon/src/work/launch-template-producer.ts composeArgv produces a codex-shaped argv for a codex seat and the existing claude-shaped argv for a claude seat, with an arm asserting each. The claude argv is unchanged byte for byte - assert that explicitly, because this file is consumed by foundation-context-prelaunch.test.ts:274.",
+    "The mission text a codex seat receives contains the same load-bearing sentences as the claude one for the same step, asserted against the produced mission. Because agent-mission-text.ts has no provider branch this arm should pass on first write; if it does NOT, stop and report rather than adding a provider branch, since that would mean the mission surface changed under this row.",
+    "The codex spawn surface is NOT weakened to make any arm pass: `--ignore-user-config`, the bearer-through-env-var-name (never argv, never a file), the closed CODEX_/OPENAI_ env allowlist and the quote-free `-c` values all survive. Assert each in a test arm so a later diff that relaxes one goes RED.",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "NEVER WEAKEN THE CODEX SPAWN SURFACE to make a test pass: `--ignore-user-config`, the bearer through `bearer_token_env_var` (never argv, never a file), the closed CODEX_/OPENAI_ env allowlist and the quote-free `-c` values are deliberate and were measured against a specific codex-cli version. If one blocks a test, report it rather than relaxing it.",
+    "MEASURE RESULT-SIZE BEHAVIOUR BEFORE CLAIMING PARITY, and record the measurement (command plus observed output) in the completion record or a row comment. A parity claim with no recorded measurement is the defect this row exists to prevent.",
+    "DO NOT ADD A PROVIDER BRANCH TO agent-mission-text.ts. It is provider-agnostic today and the parent's mission-parity criterion is true by construction; this row asserts that, it does not rebuild it.",
+    "The codex-cli version is stated in TWO places and they DISAGREE at HEAD: agent-spawner.ts:~74 says 0.151.0, agent-spawn-environment.ts:~22 says 0.147.0. Do not silently pick one. Record which version your measurement actually ran against and reconcile the comments to it.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work. This row is parity, not hardening.",
+    "agent-spawner.ts is 438+ lines and shared with task-3a0478f5. Target <=250 lines per production file; do not grow it here - put a new codex branch in agent-spawn-environment.ts or a new focused module with a one-line .js bridge."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-df64aa204d6f4c35810376226980e4b7",
+  "dependsOn": [
+    "task-3a0478f57eec44579269b2ed27c91d92"
+  ],
+  "priority": "HIGH",
+  "order": 72.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T17:24:27.654Z",
+  "updatedAt": "2026-09-05T17:24:27.654Z"
+}

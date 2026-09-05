@@ -1,0 +1,36 @@
+{
+  "id": "task-c2b5a9f09c684569ae13b60b09128f82",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Publish repository.bootstrap in the shared runtime contract and regenerate the client",
+  "description": "SPIDR child of task-facff1d1e7ce44a6b1101490524890a9 (architect-fa3a3e17, 2026-09-05), which measured over the file cap. Independent of the engine child - no dependsOn.\n\nWHY THIS ROW EXISTS AND WHY IT DETACHES CLEANLY. Publishing one command kind on this board costs 13 forced edits, five of them invisible to a grep for the kind literal. This row takes the SHARED-CONTRACT half only: `RUNTIME_COMMAND_KINDS` in packages/contracts plus the regenerated control-room client and its digest pins. The daemon-side half (vocabulary, registry, MCP fence, HUMAN_ONLY_STEPS) stays in the parent.\n\nTHE SPLIT IS SAFE AND PRECEDENTED: apps/daemon/src/goals/goal-create-with-source.ts:35 documents that `goal.create_with_source` IS in RUNTIME_COMMAND_KINDS but NOT in the daemon table. The shared contract and the daemon roster are deliberately NOT set-equal, so an intermediate HEAD where the kind is in the contract but not yet served is a landed, documented state - not a hole. Cite that file when anyone calls it one.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-fa3a3e17 - these are the exact literals that must move, and they are the reason this is its own row:\n- `packages/contracts/src/runtime/runtime-vocabulary.ts` (157 lines) holds RUNTIME_COMMAND_KINDS.\n- `packages/contracts/src/runtime/runtime-contract.test.ts:35` holds a HAND-TRANSCRIBED `EXPECTED_COMMAND_KINDS` array, asserted at :103, and a literal `expect(commands.size).toBe(104)` at :105. The file's own header explains a derived expectation would be vacuous, so the transcription must STAY transcribed - add the entry by hand, in sorted position, and bump 104 to 105.\n- `git grep -ln GENERATED_CONTRACT_DIGEST` over source returns exactly six files: apps/daemon/src/cutover/v2-readiness-evidence-collector.ts, apps/daemon/src/cutover/v2-readiness-evidence-producers.test.ts, packages/control-room-client/generator/generate.ts, packages/control-room-client/src/contract-digest.test.ts, packages/control-room-client/src/contract-pins.ts, packages/control-room-client/src/generated/generated-client.ts. Re-census that grep yourself at HEAD before editing - the epic rail requires it across ALL file types, and two mirrors are invisible to `pnpm test`, `pnpm typecheck` and the daemon leg.\n\nNEVER HAND-EDIT the generated client. Run the generator and quote the OLD and the NEW GENERATED_CONTRACT_DIGEST in the completion record.",
+  "definitionOfDone": [
+    "`repository.bootstrap` is added to RUNTIME_COMMAND_KINDS in packages/contracts/src/runtime/runtime-vocabulary.ts with its payload shape (dir, productName, profileVersion, and the optional GitHub half: owner, name, visibility).",
+    "packages/contracts/src/runtime/runtime-contract.test.ts is updated BY HAND: the entry is inserted in sorted position in the transcribed EXPECTED_COMMAND_KINDS at :35 and the literal count at :105 goes 104 -> 105. Do not replace the transcription with a derived expectation - the file's header explains why that would be vacuous.",
+    "The control-room client is REGENERATED, never hand-edited. Quote the exact generator command, and the OLD and NEW GENERATED_CONTRACT_DIGEST values, in the completion record.",
+    "The four GENERATED_CONTRACT_DIGEST mirrors are re-censused at HEAD with a full-tree `git grep -n GENERATED_CONTRACT_DIGEST` across ALL file types (not just *.ts), the command and its file list are quoted, and every mirror carrying the old digest is updated. A mirror left stale is a rejection.",
+    "No daemon-side edit: daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts and agent-spawn-contract.ts are UNTOUCHED by this row - `git status --porcelain` proves it in the completion record.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm test` (packages/contracts and the generated client are root-lane), `pnpm typecheck`, and `pnpm --filter @moe/control-room test` - two digest mirrors live under apps/control-room and are invisible to the root lane and to the daemon leg."
+  ],
+  "taskRails": [
+    "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST.",
+    "THE TRANSCRIBED ROSTER STAYS TRANSCRIBED. runtime-contract.test.ts:35 is hand-written on purpose; a derived expectation is vacuous. Edit it by hand and bump the literal count.",
+    "NO DAEMON-SIDE EDIT. Vocabulary, registry, MCP allowlist and HUMAN_ONLY_STEPS belong to parent task-facff1d1e7ce44a6b1101490524890a9. Touching them here collides in the shared worktree.",
+    "RE-CENSUS THE DIGEST MIRRORS YOURSELF with a full-tree git grep across all file types; epicSiblings will not show you the rows that hold the precedent.",
+    "An intermediate HEAD where the kind is in the shared contract but not yet served by the daemon is a DOCUMENTED, landed state - see apps/daemon/src/goals/goal-create-with-source.ts:35. It is not a hole."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-facff1d1e7ce44a6b1101490524890a9",
+  "priority": "HIGH",
+  "order": 81.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T17:23:11.533Z",
+  "updatedAt": "2026-09-05T17:23:11.533Z"
+}

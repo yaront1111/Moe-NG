@@ -18,8 +18,93 @@
     "`gh` CLI ONLY, matching the Gate 3 decision (task-f961dc89): no stored token, no REST fallback.",
     "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP. This row's two producers are children filed at plan time; `dependsOn` gates the WORKING claim, but verify on disk anyway so the chain fails closed if the field is ever cleared.\n\nRun and record the output of all three:\n- `git grep -n \"repository.bootstrap\" -- packages/contracts/src/runtime/runtime-vocabulary.ts` — must hit (child task-c2b5a9f09c684569ae13b60b09128f82).\n- `git grep -rn \"BOOTSTRAP_DIR_NOT_EMPTY\" -- apps/daemon/src` — must hit the engine module (child task-28fb953b96874889974d5f2b2c434e4e).\n- `git grep -rn \"CONTROLLED_PROFILE_VERSION\" -- apps/daemon/src` — must hit (task-4a0f706437a042059789be2ebdb98bc0).\n\nIf ANY is absent, STOP and `moe.report_blocked` with `blockedOnTaskIds` naming the missing rows. Do NOT re-implement the missing surface here and do NOT narrow the DoD — a second engine or a second contract entry is a silent duplicate that collides with its owner in the shared worktree.\n\nAlso re-measure, and record, the five hard counts this row will move: `grep -n \"toHaveLength(47)\\|size).toBe(47)\\|toHaveLength(12)\" apps/daemon/src/daemon-command-registry.test.ts` and `grep -n \"toHaveLength(11)\" apps/daemon/src/daemon-command-registry-human-approver.test.ts`. Peers land rows continuously; the numbers in this plan were measured at plan time and may have moved.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "VOCABULARY: the kind, operator-only, and the automatic MCP fence. Edit `apps/daemon/src/daemon-command-vocabulary.ts` (386 lines at plan time — see the size guard below):\n\n1. A `REPOSITORY_BOOTSTRAP_COMMAND_KIND = \"repository.bootstrap\" as const` constant beside the existing kind constants.\n2. Add it to the `WiredCommandKind` union.\n3. Add it to the EXISTING `BOOTSTRAP_FAMILY` table with the same capability `project.bind_repository` demands (CAPABILITIES.ADMIN, vocabulary.ts:79). `BOOTSTRAP_FAMILY` is already in `FAMILY_TABLES` at :189 — do NOT create a new family table, and do NOT touch `FAMILY_TABLES`.\n4. Add its `PAYLOAD_KEYS` entry, matching the payload child task-c2b5a9f09c684569ae13b60b09128f82 published in the shared contract (dir, productName, profileVersion, plus the optional owner/name/visibility). Read the contract entry and mirror it — do not invent a second shape.\n5. Add it to `OPERATOR_PRINCIPAL_KINDS`.\n\nSTEP 5 IS THE MCP FENCE AND IT IS AUTOMATIC. `mcp-tool-allowlist.ts:78` derives `MCP_EXCLUDED_COMMAND_KINDS` as `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind))`, and its comment states the contract explicitly: a kind that becomes operator-only leaves the MCP roster with no edit there. So `mcp-tool-allowlist.ts` gets NO source edit — only its counts move, in step 5. Because the fence and the payload entry are in the SAME file and the same commit, there is no landed HEAD at which the kind is MCP-advertised.\n\nSIZE GUARD: `wc -l apps/daemon/src/daemon-command-vocabulary.ts` after the edit. It was 386 and the hard cap is 400. If it crosses, move the `BOOTSTRAP_FAMILY` table into the EXISTING `apps/daemon/src/daemon-command-families.ts` (which the vocabulary's own comment at :186 says already reads the same list) rather than adding a new module. Do not leave it over 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-families.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "REGISTER THE HANDLER IN THE BOOTSTRAP FAMILY — not in the registry.\n\n`apps/daemon/src/daemon-command-registry.ts:194` already spreads `...BOOTSTRAP_HANDLERS`. That file is 449 lines and ALREADY past the 400 hard cap before this row starts: add nothing to it.\n\n1. `apps/daemon/src/bootstrap/bootstrap-contracts.ts` — add `\"repository.bootstrap\"` to the bootstrap command-kind list at :38 alongside `\"project.bind_repository\"`.\n2. `apps/daemon/src/bootstrap/bootstrap-sequence.ts` — declare its prerequisites. `project.bind_repository` requires `project.register` first (:36); `repository.bootstrap` must land in the same ordering and the sequence's switch at :106 must handle it. State the chosen ordering in the step note.\n3. `apps/daemon/src/bootstrap/bootstrap-services.ts` — add ONE entry to `BOOTSTRAP_HANDLERS` (:223) pointing at a thin adapter that: validates the payload, calls child task-28fb953b96874889974d5f2b2c434e4e's bootstrap service with the host ports, then on success routes the binding through the EXISTING `bindRepository` (:227) and registers the project in `apps/daemon/src/projects/project-catalog.ts`. The adapter is an ADAPTER — no git, no gh, no filesystem walk, no second binding path. If you find yourself writing process-spawn code here, it belongs in child A and you should stop and report.\n\nDO NOT EDIT `apps/daemon/src/daemon-store-dependencies.test.ts`. Its assertion at :238 (`registry.keys()` set-equal to `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`) needs no change when this is done right — it is the tripwire that reds if step 2 added the payload key while this step did not register the handler. If it reds, the wiring is half-done; fix the wiring, never the assertion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "HUMAN_ONLY_STEPS. Add `\"repository.bootstrap\"` to the set at `apps/daemon/src/orchestrator/agent-spawn-contract.ts:195`, beside the existing `\"repository.publish\"` entry and under a comment in the same voice: creating a product repository at an operator-supplied path is the operator's decision; the wrapper performs it as an effect of that decision, never as staffed work.\n\nThis is a plain addition — no count guard and no membership guard reads `HUMAN_ONLY_STEPS`, unlike the MCP exclusion roster. Confirm that by grepping for a length assertion over it before assuming: `git grep -n \"HUMAN_ONLY_STEPS\" -- apps/daemon` (three source files at plan time: agent-spawn-contract.ts, agent-wrapper.ts, http/affordance-planning-offers.test.ts). If any of them asserts a size, that count moves in step 5 too.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ROSTER COUNT BACKFILL. Every one of these is invisible to a grep for the kind literal, which is exactly why they are enumerated here rather than left for discovery. Use the numbers you RE-MEASURED in step 1, not the plan-time ones, and move each by exactly one:\n\n- `apps/daemon/src/daemon-command-registry.test.ts` — :862 `ROWS).toHaveLength(47)`, :863 `deps.registry.size).toBe(47)`, :870 `REGISTRATION_ORDER).toHaveLength(47)` -> 48; :1040 `OPERATOR_ONLY).toHaveLength(12)` -> 13. If `REGISTRATION_ORDER` or `ROWS` also transcribes the kinds by hand, insert the entry in the position the file's own ordering demands.\n- `apps/daemon/src/daemon-command-registry-human-approver.test.ts` — :325 `expectedExclusions).toHaveLength(11)` and :326 `MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(11)` -> 12. Both, and check whether `expectedExclusions` is a transcribed list that also needs the entry.\n- `apps/daemon/src/daemon-command-vocabulary.test.ts` — add or update whatever arms pin the family table, the payload keys and the operator-only set.\n\nA count bumped without the corresponding roster entry, or an entry added without the count, is a half-done job that the step-3 weld will catch. Run `pnpm --filter @moe/daemon test` after this step and read the OUTPUT, not the exit code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "BIDIRECTIONAL ROSTER TEST (DoD 1). Add an arm to `apps/daemon/src/daemon-command-registry.test.ts`, next to the existing served-origin roster arm at :795-812 which is the pattern to follow.\n\nThe arm must assert SET EQUALITY, not a subset, between:\n- the ADVERTISED set — the roster constant; and\n- the SERVED set — enumerated from the IMPLEMENTATION SEAM (the dispatch port's handled kinds / the composed registry's keys), NOT from the roster constant.\n\nWhy the direction matters: a test that iterates the roster can only see one direction. Deleting an entry shrinks its own iteration and stays green while a served capability silently vanishes from the advertised surface. Enumerating the served side from the seam is what makes the second direction observable.\n\nVERIFY BOTH DIRECTIONS BY MUTATION, and record both results in the step note: delete `repository.bootstrap` from the roster constant, confirm RED; restore. Delete it from the served side (the `BOOTSTRAP_HANDLERS` entry), confirm RED; restore. An arm that only reds one way has not been shown to hold. Prove each restore before moving on — these are TRACKED files, so `git diff -- <path>` is a valid restore proof here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE JOURNEY (DoD 2, 3, 4, 5) — one new test file, `apps/daemon/src/repository/repository-bootstrap-journey.test.ts`, exercising the REGISTERED command through the dispatch seam rather than calling the engine directly. Child A unit-proves these behaviours; this proves they survive the wiring.\n\nArms:\n(a) DIRECTORY GUARD, the safety property: dispatch against a real temp directory containing exactly ONE file. Assert the refusal CODE `BOOTSTRAP_DIR_NOT_EMPTY` AND its layer — never merely that it failed. Then read the directory back and assert its entries are UNCHANGED: this command writes a whole tree, and proving nothing was written is the point of the arm. Also assert a non-existent directory IS created and an EMPTY existing one IS accepted.\n(b) LOCAL-ONLY SUCCESS with the gh port reporting absent: the directory is a git repository; `git log --oneline` is EXACTLY ONE line reading `chore: scaffold by Moe` (assert the line count as well as the text); the repository is bound through the EXISTING `project.bind_repository` path (assert the bind event, not a re-implementation); the project is present in `apps/daemon/src/projects/project-catalog.ts`'s catalog; the result is BOOTSTRAPPED with remoteUrl: null AND carries `BOOTSTRAP_GH_UNAVAILABLE` for the GitHub half. A bootstrap that fails wholesale without `gh` is unusable on most machines — this arm is what stops that regression.\n(c) GITHUB ARGV, OFFLINE: through the injectable port, assert the captured `gh` argv BYTE-FOR-BYTE. No network in any arm.\n(d) `BOOTSTRAP_GIT_UNAVAILABLE` and `BOOTSTRAP_PROFILE_VERSION_UNKNOWN` each assert CODE AND LAYER. For the profile-version code, note in the record that child 1 defines it and this row is the call site that raises it — that is the composition the DoD asks for, not a manufactured one.\n(e) RECEIPT READ-BACK from a REAL store (not a fixture double): `moe-bootstrap-receipt/1` with every member — dir, sha, remoteUrl|null, BOOTSTRAPPED. And a REFUSED receipt carrying its code and NO sha.\n\nTEARDOWN IS MANDATORY (epic rail 4): every temp directory and store handle is removed in a `finally`, not after the assertions — a throwing arm must not leak. A test that leaks a directory or a handle makes every later gate on this board inadmissible.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-journey.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES (DoD 6). Run each leg standalone and quote its OUTPUT — the `Test Files N passed` count line — never its exit code. `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0; \"No test files found\" also exits 0.\n\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon — resolve by PACKAGE NAME).\n- `pnpm typecheck`.\n- `pnpm test` — the DoD names it because packages/contracts and the generated client are root-lane. State explicitly that the root include has NO `apps/**`, so this leg is NOT evidence for anything under apps/daemon; the daemon leg above is.\n- `pnpm --filter @moe/control-room test` — run it and quote the count line. The epic rail requires it for any row touching the shared roster, and two contract-digest mirrors live under apps/control-room where `pnpm test`, `pnpm typecheck` and the daemon leg cannot see them. If child task-c2b5a9f09c684569ae13b60b09128f82 already moved the mirrors, say so and quote the leg anyway.\n\nREPO-WIDE BASELINE, path-attributed: record repo-wide failures at the merge-base and at HEAD, subtract, intersect with this row's owned paths. Completion needs that intersection EMPTY and the owned legs exit 0. Disclose any foreign red verbatim with its failing file paths — never hide it, never fabricate a green.\n\nPRE-EXISTING BREACH TO DISCLOSE, NOT FIX: `apps/daemon/src/daemon-command-registry.ts` is 449 lines, past the 400 cap, at the merge-base and untouched by this row. Record that measurement in the completion record so it is attributed correctly, and file it as a follow-up comment rather than a new row.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW. Read the diff as an attacker before `moe.complete_task`.\n\nSECURITY-SHAPED QUESTIONS, answered with a command each:\n- Is there any landed state in this commit at which `repository.bootstrap` is MCP-ADVERTISED? Compute `wiredMcpToolKinds()` at HEAD and assert the kind is absent. The MCP port authenticates with the operator bootstrap credential, so an advertised operator kind means an agent arrives AS THE OPERATOR.\n- Is it actually operator-only? Dispatch it as a non-operator principal and assert the refusal code and layer.\n- Is it in `HUMAN_ONLY_STEPS`, so no wrapper can staff it?\n- Does the directory guard refuse BEFORE the first byte is written, or after? Point the command at a directory holding a file whose bytes you hash first, and assert the hash afterwards. This is the worst-outcome path in the row.\n- Does the payload validate the operator-supplied `dir`? A path that escapes, a UNC path, an empty string, and a path that is a FILE rather than a directory each need a defined answer.\n\nCORRECTNESS QUESTIONS:\n- What happens if the command runs TWICE against the same directory? The second run must hit `BOOTSTRAP_DIR_NOT_EMPTY`, not append a second commit — assert it.\n- What happens if `git init` succeeds and the commit fails? Is the receipt REFUSED with no sha, and is the directory left in a state a retry can describe? Say which, in the record.\n- Does any error path put a token, a remote URL credential, or an operator path into a log line or a receipt? Epic rail 3: a secret never surfaces in plaintext, including on the error path.\n\nMUTATION DRILL: `git status --porcelain` the exact paths first. The journey test file is NEW (untracked), so `git diff -- <path>` certifies NOTHING for it — back it up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore. The vocabulary and roster files are TRACKED, so `git diff` is a valid restore proof for those.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-journey.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,12 +113,34 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
   "dependsOn": [
-    "task-4a0f706437a042059789be2ebdb98bc0"
+    "task-4a0f706437a042059789be2ebdb98bc0",
+    "task-28fb953b96874889974d5f2b2c434e4e",
+    "task-c2b5a9f09c684569ae13b60b09128f82"
   ],
   "priority": "HIGH",
   "order": 82,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-05T00:42:35.381Z"
+  "updatedAt": "2026-09-05T17:26:38.679Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T17:19:02.537Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 10
+  },
+  "contextFetchedBy": [
+    "architect-fa3a3e17"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T17:26:36.493Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING THIS ROW. Not optional -- measured, not felt. The DoD wants the kind published (13 edits), the engine (ports, git, gh, receipt), and the journey. Two children were filed before this plan:\n- task-28fb953b96874889974d5f2b2c434e4e -- the bootstrap ENGINE leaf (dir guard, git init, scaffold write, first commit, gh port, `moe-bootstrap-receipt/1`), dependsOn the scaffold row task-4a0f7064.\n- task-c2b5a9f09c684569ae13b60b09128f82 -- the SHARED-CONTRACT publication (RUNTIME_COMMAND_KINDS, the hand-transcribed roster at runtime-contract.test.ts:35, the regenerated client and the six GENERATED_CONTRACT_DIGEST mirrors).\nThis row's dependsOn was set to all three via moe.set_task_dependencies (confirmed: previousDependsOn had one id, now three).\n\nWHY THE CONTRACT HALF DETACHES. apps/daemon/src/goals/goal-create-with-source.ts:35 documents a kind that IS in RUNTIME_COMMAND_KINDS and NOT in the daemon table. The two rosters are deliberately not set-equal, so the intermediate HEAD is a landed documented state, not a hole.\n\nWHY THE MCP FENCE AND THE REGISTRATION STAY IN ONE ROW. Registering a kind before fencing it advertises it over MCP, and the MCP port authenticates with the operator bootstrap credential -- an agent would arrive AS THE OPERATOR for the duration of a row. Here the fence is derived from OPERATOR_PRINCIPAL_KINDS in the same file as PAYLOAD_KEYS, so both land in the same commit by construction and no advertisement window exists at any landed HEAD.\n\nWHERE THE DoD's BEHAVIOURAL CLAUSES ARE PROVEN. Items 2-5 (dir guard, local-only success, gh argv, receipt) are unit-proven in child A and RE-PROVEN here end-to-end through the registered command in one journey test. That is stronger evidence than repeating the unit arms: it exercises the dispatch seam, the bind through the existing `project.bind_repository`, the catalog entry and the receipt read-back from a real store in one pass. It is not a narrowed DoD -- every clause is asserted, once through the real seam.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. This row was SPLIT before planning because publishing one command kind here costs 13 forced edits before any bootstrap logic is written. What is left in this row is the daemon-side wiring plus the end-to-end proof.\n\nTHE HARD COUNTS THAT MUST MOVE (grep-measured, all invisible to a grep for the kind literal):\n- daemon-command-registry.test.ts:862 `ROWS).toHaveLength(47)`, :863 `deps.registry.size).toBe(47)`, :870 `REGISTRATION_ORDER).toHaveLength(47)` -> 48 each.\n- daemon-command-registry.test.ts:1040 `OPERATOR_ONLY).toHaveLength(12)` -> 13.\n- daemon-command-registry-human-approver.test.ts:325 `expectedExclusions).toHaveLength(11)` and :326 `MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(11)` -> 12 each.\n\nTWO MEASUREMENTS THAT SHRANK THIS ROW SUBSTANTIALLY:\n(1) `mcp-tool-allowlist.ts:78` computes MCP_EXCLUDED_COMMAND_KINDS by DERIVATION: `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()`. Its own comment states the contract: \"a kind that becomes operator-only leaves the MCP roster with no edit here.\" So mcp-tool-allowlist.ts needs NO SOURCE EDIT -- adding the kind to OPERATOR_PRINCIPAL_KINDS in the vocabulary fences it automatically. Only the two hard counts move.\n(2) `daemon-command-registry.ts:194` spreads `...BOOTSTRAP_HANDLERS` from bootstrap-services.ts. Registering this kind is ONE entry in `BOOTSTRAP_HANDLERS` (bootstrap-services.ts:223), NOT an edit to daemon-command-registry.ts -- which is 449 lines and already past the 400 hard cap before this row starts. Do not add lines to it.\n\nFAMILY: `BOOTSTRAP_FAMILY` is already a member of `FAMILY_TABLES` (daemon-command-vocabulary.ts:189, eight tables). `repository.bootstrap` joins the EXISTING table -- no new family table, so no FAMILY_TABLES edit and none of the \"a new family table is dead unless added to FAMILY_TABLES\" hazard.\n\nREUSE PATHS, all confirmed on disk:\n- `project.bind_repository` is real: handled at bootstrap-services.ts:227 (`bindRepository`), and bootstrap-sequence.ts:36 requires `project.register` BEFORE it. That ordering constrains the handler.\n- The \"manager catalog\" the DoD names is apps/daemon/src/projects/project-catalog.ts -- it exists.\n- apps/daemon/src/repository/git-landing-port.ts:68 exports an injectable `GitRunner` + `nodeGitRunner`; child A owns using it.\n\nTHE WELD -- apps/daemon/src/daemon-store-dependencies.test.ts:238 asserts `[...v2.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`. It needs NO edit when this row is done right; it is the tripwire that reds if PAYLOAD_KEYS gains the kind while BOOTSTRAP_HANDLERS does not. Do not 'fix' it -- if it reds, the wiring is half-done.\n\nHUMAN_ONLY_STEPS lives at agent-spawn-contract.ts:195 and already carries `\"repository.publish\"` with a comment explaining why an operator repository action is never staffed work. Add `\"repository.bootstrap\"` beside it. No count or membership guard reads this set, so it is a plain addition.\n\nFile sizes at HEAD: daemon-command-vocabulary.ts 386, daemon-command-registry.ts 449 (pre-existing breach), mcp-tool-allowlist.ts 95, bootstrap-services.ts 271, bootstrap-contracts.ts 207, bootstrap-sequence.ts 134, agent-spawn-contract.ts 229."
+  },
+  "planApprovedAt": "2026-09-05T17:26:38.679Z"
 }
