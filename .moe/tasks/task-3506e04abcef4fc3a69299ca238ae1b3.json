@@ -151,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:50:26.826Z",
-  "updatedAt": "2026-09-05T02:54:43.678Z",
+  "updatedAt": "2026-09-05T02:54:54.438Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -209,7 +209,55 @@
     "apps/control-room/src/v2/ops/activation-screen.test.tsx",
     "apps/control-room/src/live/live-activation.test.ts",
     "apps/control-room/src/v2/cordum-app.tsx",
-    "apps/control-room/src/v2/cordum-app.test.tsx"
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json"
   ],
-  "completionSummary": "THE ACTIVATE CARD: the browser drives register -> bind -> probe -> activate from one button, and shows the daemon's six receipts before anything is clicked.\n\nEIGHT OWNED PATHS. New production: live-activation.ts (250), v2/ops/activation-port.ts (133), v2/ops/activation-screen.tsx (216) — each <= 250. New tests for each. Edited cordum-app.tsx (+10) and cordum-app.test.tsx (+2 arms). ops-screens.tsx NOT grown (236, empty diff).\n\nSCOPE GREW BY ONE MODULE, MEASURED NOT ASSUMED. Child C (task-0a5d7212) shipped the daemon route and the dev-proxy entry but NO browser reader: `grep -rn \"activation\" apps/control-room/src` found only the proxy allowlist. live-activation.ts is that reader, mirroring live-repository-remote.ts (exact-key at every level, POST exactly \"{}\", 15 s timeout, four refusal shapes).\n\nDoD, clause by clause:\n1. PORT re-reads the surface before EVERY step (arm counts 4 reader calls AND asserts expectedVersion advances 0,1,2,3), finds each offer by commandKind, stops at the FIRST refusal keeping the daemon's {code, layer} unrewritten, and records an absent offer as its own code. Drills A/B/C/D each red.\n2. Own module pair; every production file <= 250 (wc -l quoted above). Each receipt renders measured/missing with the daemon's `reason` asserted by `toBe(...)`, exact bytes.\n3. Signing renders OUTSIDE the receipt list with data-measured=\"false\" and data-trust-boundary=\"false\", is absent from the count, and carries no receipt testid. Drill F red.\n4. Testids all under the free cr.activate.* namespace. The button is disabled in flight AND guarded by a synchronous useRef, so two clicks in one React batch start one chain. That arm was VACUOUS as first written (a jsdom click on an already-disabled button is a no-op) — the drill caught it, it was rewritten to fire both clicks while the button is still enabled, and drills I and I2 are now red.\n5. Mounted on GOALS beside the blocked New goal via cordum-app.tsx; NO nav id taken (shell-model.ts untouched). Two arms rend"
+  "completionSummary": "THE ACTIVATE CARD: the browser drives register -> bind -> probe -> activate from one button, and shows the daemon's six receipts before anything is clicked.\n\nEIGHT OWNED PATHS. New production: live-activation.ts (250), v2/ops/activation-port.ts (133), v2/ops/activation-screen.tsx (216) — each <= 250. New tests for each. Edited cordum-app.tsx (+10) and cordum-app.test.tsx (+2 arms). ops-screens.tsx NOT grown (236, empty diff).\n\nSCOPE GREW BY ONE MODULE, MEASURED NOT ASSUMED. Child C (task-0a5d7212) shipped the daemon route and the dev-proxy entry but NO browser reader: `grep -rn \"activation\" apps/control-room/src` found only the proxy allowlist. live-activation.ts is that reader, mirroring live-repository-remote.ts (exact-key at every level, POST exactly \"{}\", 15 s timeout, four refusal shapes).\n\nDoD, clause by clause:\n1. PORT re-reads the surface before EVERY step (arm counts 4 reader calls AND asserts expectedVersion advances 0,1,2,3), finds each offer by commandKind, stops at the FIRST refusal keeping the daemon's {code, layer} unrewritten, and records an absent offer as its own code. Drills A/B/C/D each red.\n2. Own module pair; every production file <= 250 (wc -l quoted above). Each receipt renders measured/missing with the daemon's `reason` asserted by `toBe(...)`, exact bytes.\n3. Signing renders OUTSIDE the receipt list with data-measured=\"false\" and data-trust-boundary=\"false\", is absent from the count, and carries no receipt testid. Drill F red.\n4. Testids all under the free cr.activate.* namespace. The button is disabled in flight AND guarded by a synchronous useRef, so two clicks in one React batch start one chain. That arm was VACUOUS as first written (a jsdom click on an already-disabled button is a no-op) — the drill caught it, it was rewritten to fire both clicks while the button is still enabled, and drills I and I2 are now red.\n5. Mounted on GOALS beside the blocked New goal via cordum-app.tsx; NO nav id taken (shell-model.ts untouched). Two arms rend",
+  "commits": [
+    {
+      "sha": "13e1282ca3beafac7ea9b496240d25e96a46c40c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-05T02:26:14Z",
+      "paths": [
+        ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+        ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+        "apps/control-room/src/live/live-activation.test.ts",
+        "apps/control-room/src/live/live-activation.ts",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/ops/activation-port.test.ts",
+        "apps/control-room/src/v2/ops/activation-port.ts",
+        "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+        "apps/control-room/src/v2/ops/activation-screen.tsx"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-05T02:54:54.437Z",
+      "treeId": "8ae722073999c5c6e81e6b229a167fb79fbf2635",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/live/live-activation.ts",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/ops/activation-screen.tsx",
+    "apps/control-room/src/live/live-activation.test.ts"
+  ],
+  "unattributedPaths": [
+    "$LOG",
+    "apps/daemon/src/orchestrator/w12c76c19-live-probe.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-cceb207f@2026-09-05T02:26:14Z",
+    "at": "2026-09-05T02:54:54.437Z"
+  }
 }
