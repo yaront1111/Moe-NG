@@ -22,11 +22,14 @@
     {
       "stepId": "step-1",
       "description": "MEASURE, NO EDITS. Both prerequisites must be DONE before this row is claimable; confirm what they landed so you do not redo or contradict it. (a) `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts` - BOTH kinds must already be present in MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS (task-d0d1cb5c). If absent, STOP and report_blocked on task-d0d1cb5c rather than doing its work here: registering these kinds before the fence exists advertises an operator-only command to every agent over MCP. (b) `grep -n 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` - both kinds must be in RUNTIME_COMMAND_KINDS (task-b3888068). Then re-measure this row's own seams, since the plan's line numbers are from f3b94eaa and rail 6 makes them stale: `sed -n '178,186p' apps/daemon/src/daemon-command-vocabulary.ts` (FAMILY_TABLES and its member list), `grep -n 'toHaveLength(46)\\|registry.size).toBe(46)' apps/daemon/src/daemon-command-registry.test.ts` (the three counts), `sed -n '236,240p' apps/daemon/src/daemon-store-dependencies.test.ts` (the weld). Record every command and its result in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "note": "MEASURE, NO EDITS — zero files written. Both prerequisites are ABSENT AT HEAD; step 1's own hard-stop clause fires.\n\n(a) FENCE — `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts`\nWORKING TREE hits: mcp-tool-allowlist.ts:89,90 and agent-spawn-contract.ts:215.\nAT HEAD both files are CLEAN of the kinds: `git show HEAD:apps/daemon/src/mcp-tool-allowlist.ts | grep -n 'environment\\.'` -> no output; same for agent-spawn-contract.ts. `git status --porcelain` shows ` M` on BOTH. `git log --grep='Moe-Task: task-d0d1cb5c'` -> zero commits.\ntask-d0d1cb5c is status WORKING, assignedWorkerId `worker-caece97b`, commits []. Those two dirty files are LIVE FOREIGN WIP, not a landed prerequisite. Not touched, not reverted, not stashed.\n\n(b) CONTRACT ROSTER — `grep -n 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` -> EXIT 1, ZERO MATCHES, both in the tree and at HEAD. RUNTIME_COMMAND_KINDS is defined at runtime-vocabulary.ts:85 (not merely re-exported). task-b3888068 is status PLANNING, unassigned, commits [] — never started.\n\nTHE PLAN'S \"NOT WELDED\" PREMISE IS INVERTED FOR THIS DIRECTION. planningNotes cite goal-create-with-source.ts:35 as precedent for contract-and-daemon being deliberately not set-equal. Read verbatim, that line says `goal.create_with_source` is in RUNTIME_COMMAND_KINDS but NOT in BOOTSTRAP_COMMAND_KINDS — and it IS in daemon PAYLOAD_KEYS (daemon-command-vocabulary.ts:296) and the daemon family table (:73). The precedent is contract-WITHOUT-a-bootstrap-family. It does not license daemon-WITHOUT-contract, which is welded twice:\n- RUNTIME: runtime-envelope.ts:142 `if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput());` on the decode path every command envelope crosses. isCommandKind (runtime-vocabulary.ts:134-135) tests COMMAND_KIND_SET = new Set(RUNTIME_COMMAND_KINDS) (:131). Absent from that tuple, both kinds are refused at DECODE and no handler is reachable.\n- TYPE: http-contract.ts:215 `CommandRegistry = ReadonlyMap<RuntimeCommandKind, CommandRegistryEntry>`; daemon-command-vocabulary.ts:110 `] as const satisfies readonly RuntimeCommandKind[]`; daemon-command-registry.test.ts:286 `REGISTRATION_ORDER: readonly RuntimeCommandKind[]`, :312 OPERATOR_ONLY, :75/:371/:391. Registering the kinds does not typecheck.\n\nOWN SEAMS RE-MEASURED (line numbers current at this HEAD, for whoever resumes):\n- daemon-command-vocabulary.ts is 372 lines. WiredCommandKind union ends :160-175; FAMILY_TABLES :180-183 lists SEVEN tables, not five as its own comment says (APPROVAL_INTENT, BOOTSTRAP, COMPILER, GRAPH, REVIEW, SESSION, WORK); familyCapabilityOf :186-192 walks only that array; PAYLOAD_KEYS :256; OPERATOR_PRINCIPAL_KINDS :344.\n- THE THREE HARD COUNTS ARE SIX. Plan names daemon-command-registry.test.ts:818, :819, :826. `grep -n 'registry.size).toBe(46)'` also returns :1678 (ports), :1700 (supplied), :1732 (snapshotPorts). All six go 46 -> 48. Same file, already in the roster — extra edits, not extra scope.\n- THE WELD, unchanged and needing no edit: daemon-store-dependencies.test.ts:238-239 `expect([...v2.registry.keys()].sort()).toEqual(Object.keys(PAYLOAD_KEYS).filter((kind) => kind !== \"planning.submit_decomposition\").sort())`.\n- daemon-command-registry.ts 436 lines (already past the 400 split), daemon-command-families.ts 163, daemon-command-vocabulary.test.ts 336 (payload table rows at :168-184), daemon-command-registry.test.ts 2012.\n\nDONE prereq task-d0c63cd8 CONFIRMED AT HEAD: environment-store.ts:64-65 ENVIRONMENT_COMMAND_KIND_SET/_UNSET, :117 setEnvironmentVariable, :146 unsetEnvironmentVariable.\n\ndependsOn on this row is ['task-d0c63cd8848a4da18ad3fbb8eb1d95c3'] ONLY — neither new leaf was ever added, which is why the row was offered. Reporting blocked on both.\n\nShared checkout: 16+ foreign dirty paths noted, none touched.",
+      "startedAt": "2026-09-05T14:16:09.442Z",
+      "completedAt": "2026-09-05T14:19:40.683Z"
     },
     {
       "stepId": "step-2",
@@ -107,7 +110,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-2739fee7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,20 +125,24 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T14:11:35.911Z",
+  "updatedAt": "2026-09-05T14:19:40.683Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "worker-caece97b"
+    "worker-caece97b",
+    "worker-2739fee7"
   ],
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:11:33.649Z",
   "planningNotes": {
@@ -150,5 +157,6 @@
       "apps/daemon/src/environment/environment-canary.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:11:35.911Z"
+  "planApprovedAt": "2026-09-05T14:11:35.911Z",
+  "workStartedAt": "2026-09-05T14:16:09.442Z"
 }

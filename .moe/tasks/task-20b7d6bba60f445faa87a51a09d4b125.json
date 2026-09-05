@@ -49,12 +49,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T13:39:19.570Z",
-  "updatedAt": "2026-09-05T13:41:35.226Z",
+  "updatedAt": "2026-09-05T14:19:17.336Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:39:41.917Z"
   },
   "contextFetchedBy": [
-    "worker-d6e44333"
+    "worker-d6e44333",
+    "architect-2e480458"
   ],
   "blockedReason": "SUBJECT KIND NOT SERVED + CONCURRENT EDIT ON THE SAME LITERALS. Re-measured at HEAD f3b94eaa 13:41Z; evidence in comment-b3a39465.\n\n`grep -rn \"release\\.decide\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => 0.\n\nDoD 1 says \"The kind remains SERVED by the command registry\" — absent, not served. DoD 2 requires bidirectional SET EQUALITY between the served seam (registry.keys(), servedMcpQueryKinds()) and the advertised roster. Adding release.decide to MCP_EXCLUDED_COMMAND_KINDS while the registry does not serve it puts an advertised entry in the roster the served set lacks — exactly the direction global rail 9 wrote that test to catch. It reds on my own edit, and the only greens are weakening set-equality to subset (guts the row) or stubbing the kind into daemon-command-registry.ts (task rail 1 forbids; that file is task-54b74b80's). No honest slice, so delivery bias does not apply.\n\nSECOND, INDEPENDENT: task-5f883e4e (WORKING) makes this same edit for preview.decide — same two roster files, same four MCP count pins DoD 4 wants reconciled in ONE commit. preview.decide sits at ONE production site (preview/preview-contracts.ts:43) and in NEITHER fence roster, so that half has not landed. Task rail 4 says reconcile to the PRINTED expected-vs-received, unmeasurable until that edit is on the branch. Two rows bumping the same literals concurrently = guaranteed conflict.\n\nMEASURED, DO NOT RE-DERIVE:\n- MCP_EXCLUDED_COMMAND_KINDS: mcp-tool-allowlist.ts:59, Object.freeze. Members: approval.decide, approval.decide_intent, product_contract.answer_clarification, the one-way GA activation kind. Header :55-58 carries the standing either/or ruling (comment-4d026de3).\n- HUMAN_ONLY_STEPS: orchestrator/agent-spawn-contract.ts:195, new Set. Members: approval.decide/.decide_intent, goal.close/.create/.create_with_source, repository.publish. Consumed agent-wrapper.ts:353, re-exported :24.",
   "blockedOnTaskIds": [
