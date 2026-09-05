@@ -277,7 +277,7 @@ const ROWS: readonly Row[] = [
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
   { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.start",
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "label"] },
-  { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", kind: "repository.recover", httpStatus: 403, asyncOnly: true,
+  { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
     nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
     layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",

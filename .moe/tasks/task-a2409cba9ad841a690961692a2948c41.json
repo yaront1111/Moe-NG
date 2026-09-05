@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T23:21:09.086Z",
+  "updatedAt": "2026-09-05T23:22:11.060Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -273,6 +273,21 @@
       "treeId": "bb2f6fe12928025a881d1c0531435f6d4f0b2018",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "ea9b1f913781a10cec3f2f1bea7fe899513e7b04",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:21:41Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:22:11.059Z",
+      "treeId": "f06db5ed7d946864fded20ff92d7bb7fb14441b2",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -290,6 +305,7 @@
     "apps/control-room/src/live/live-effect-read.test.ts",
     "apps/control-room/src/live/live-effect-read.ts",
     "apps/control-room/src/v2/goals/publish-port.ts",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
@@ -306,6 +322,7 @@
     "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
     "apps/daemon/src/repository/git-publication-native.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
     "apps/daemon/src/repository/publication-effect-ledger.ts",
@@ -349,8 +366,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T23:20:52Z",
-    "at": "2026-09-05T23:21:09.086Z"
+    "sessionId": "worker-caece97b@2026-09-05T23:21:41Z",
+    "at": "2026-09-05T23:22:11.059Z"
   },
   "blockedReason": null,
   "blockedOnTaskIds": null,
