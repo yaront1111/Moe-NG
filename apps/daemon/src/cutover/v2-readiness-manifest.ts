@@ -52,7 +52,8 @@ export interface V2ReadinessManifest {
   readonly securityEvidenceSha256: string;
   readonly sourceCommit: string;
   readonly storeMigrationEvidenceSha256: string;
-  readonly storeSchemaVersion: typeof SQLITE_SCHEMA_MANIFEST_VERSION;
+  /** The store schema the evidence was written for — the running build's under CURRENT pins. */
+  readonly storeSchemaVersion: string;
   readonly surfaceManifestSha256: string;
   readonly windowsPackagingEvidenceSha256: string;
 }
@@ -67,12 +68,14 @@ export interface V2ReadinessManifestPresent {
   readonly digest: string;
   readonly manifest: V2ReadinessManifest;
   readonly ok: true;
+  /** Whether the recorded static pins are the running build's. Always true under CURRENT pins. */
+  readonly pinsMatch: boolean;
   /** The exact aggregate version observed with these bytes and fenced by cutover.activate. */
   readonly version: number;
 }
 
 export type V2ReadinessManifestDecodeResult =
-  | { readonly manifest: V2ReadinessManifest; readonly ok: true }
+  | { readonly manifest: V2ReadinessManifest; readonly ok: true; readonly pinsMatch: boolean }
   | V2ReadinessManifestRefused;
 export type V2ReadinessManifestReadResult =
   | V2ReadinessManifestPresent
@@ -130,7 +133,23 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
-export function decodeV2ReadinessManifest(bytes: unknown): V2ReadinessManifestDecodeResult {
+/**
+ * Which static pins a decode holds the bytes to.
+ *
+ * `CURRENT` (the default) requires the running build's store schema and v2 surface: the
+ * writer and cutover.activate must never bind a marker to evidence for another build.
+ * `RECORDED` accepts the pins the manifest was written with and reports whether they match the
+ * running build. It exists for ONE reader, the post-activation marker binding: after a build
+ * pin bump every readiness read used to refuse STATIC_PIN_MISMATCH, the marker no longer bound,
+ * v2 answered "not active" and v1 answered "status unknown" — an activated project locked out
+ * of both authority planes with no in-band re-cutover. The marker still binds the manifest's
+ * digest, source commit and four generations, so what it proves is unchanged.
+ */
+export type V2ReadinessPinPolicy = "CURRENT" | "RECORDED";
+
+export function decodeV2ReadinessManifest(
+  bytes: unknown, pins: V2ReadinessPinPolicy = "CURRENT",
+): V2ReadinessManifestDecodeResult {
   const decoded = decodeBoundedJsonBytes(bytes);
   if (!decoded.ok || !exactKeys(decoded.value, V2_READINESS_MANIFEST_KEYS)) {
     return refuse("V2_READINESS_MANIFEST_INVALID");
@@ -138,11 +157,13 @@ export function decodeV2ReadinessManifest(bytes: unknown): V2ReadinessManifestDe
   const value = decoded.value;
   if (value["schemaVersion"] !== V2_READINESS_MANIFEST_SCHEMA_VERSION
     || typeof value["sourceCommit"] !== "string" || !COMMIT40.test(value["sourceCommit"])
+    || typeof value["storeSchemaVersion"] !== "string" || value["storeSchemaVersion"] === ""
     || !DIGEST_KEYS.every((key) => typeof value[key] === "string" && HEX64.test(value[key]))) {
     return refuse("V2_READINESS_MANIFEST_INVALID");
   }
-  if (value["storeSchemaVersion"] !== SQLITE_SCHEMA_MANIFEST_VERSION
-    || value["surfaceManifestSha256"] !== V2_SURFACE_MANIFEST_SHA256) {
+  const pinsMatch = value["storeSchemaVersion"] === SQLITE_SCHEMA_MANIFEST_VERSION
+    && value["surfaceManifestSha256"] === V2_SURFACE_MANIFEST_SHA256;
+  if (pins === "CURRENT" && !pinsMatch) {
     return refuse("V2_READINESS_MANIFEST_STATIC_PIN_MISMATCH");
   }
   const manifest: V2ReadinessManifest = Object.freeze({
@@ -160,14 +181,16 @@ export function decodeV2ReadinessManifest(bytes: unknown): V2ReadinessManifestDe
     securityEvidenceSha256: value["securityEvidenceSha256"] as string,
     sourceCommit: value["sourceCommit"],
     storeMigrationEvidenceSha256: value["storeMigrationEvidenceSha256"] as string,
-    storeSchemaVersion: SQLITE_SCHEMA_MANIFEST_VERSION,
-    surfaceManifestSha256: V2_SURFACE_MANIFEST_SHA256,
+    // The RECORDED pins: under CURRENT they equal the running build's (checked above), so the
+    // canonical-bytes comparison below still holds the bytes to exactly what was written.
+    storeSchemaVersion: value["storeSchemaVersion"],
+    surfaceManifestSha256: value["surfaceManifestSha256"] as string,
     windowsPackagingEvidenceSha256: value["windowsPackagingEvidenceSha256"] as string,
   });
   if (!(bytes instanceof Uint8Array) || !sameBytes(bytes, encodeV2ReadinessManifest(manifest))) {
     return refuse("V2_READINESS_MANIFEST_NONCANONICAL");
   }
-  return Object.freeze({ manifest, ok: true as const });
+  return Object.freeze({ manifest, ok: true as const, pinsMatch });
 }
 
 const READINESS_AGGREGATE_NAMESPACE = "v2-readiness-manifest.v1|aggregate|";
@@ -187,7 +210,7 @@ export function deriveV2ReadinessManifestAggregateId(projectId: string): string 
  */
 export function readV2ReadinessManifest(
   store: V2ReadinessManifestStore,
-  input: Readonly<{ projectId: string }>,
+  input: Readonly<{ projectId: string; pins?: V2ReadinessPinPolicy }>,
 ): V2ReadinessManifestReadResult {
   let events: readonly StoredEvent[];
   try {
@@ -200,12 +223,13 @@ export function readV2ReadinessManifest(
   const event = events[0];
   if (event === undefined || event.eventType !== V2_READINESS_MANIFEST_EVENT_TYPE
     || event.aggregateSequence !== 1) return refuse("V2_READINESS_MANIFEST_INVALID");
-  const decoded = decodeV2ReadinessManifest(event.payload);
+  const decoded = decodeV2ReadinessManifest(event.payload, input.pins ?? "CURRENT");
   if (!decoded.ok) return decoded;
   return Object.freeze({
     digest: digestV2ReadinessManifest(decoded.manifest),
     manifest: decoded.manifest,
     ok: true as const,
+    pinsMatch: decoded.pinsMatch,
     version: event.aggregateSequence,
   });
 }
