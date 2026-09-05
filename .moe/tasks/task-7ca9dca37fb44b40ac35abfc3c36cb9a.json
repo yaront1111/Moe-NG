@@ -136,7 +136,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:26:42.930Z",
-  "updatedAt": "2026-09-05T17:26:30.952Z",
+  "updatedAt": "2026-09-05T17:28:13.729Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:45.951Z",
     "plannedStepCount": 5,
@@ -192,7 +192,15 @@
     "apps/daemon/src/http/design-read.ts",
     "apps/daemon/src/http/design-read.js",
     "apps/daemon/src/http/http-listener.ts",
-    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json"
+    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-6cbcf5ff05084f3ea2a2e3ea89c3fb54.json",
+    ".moe/tasks/task-99f364e3a6104ee993b6820c580a52fb.json",
+    ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+    ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
   ],
   "completionSummary": "POST /design/read: handleDesignReadRequest, JSON_ROUTES, POST-only guard, serveDesign else-if above unconditional dossier. Auth first; GOAL cap → DESIGN_READ_CAPABILITY_DENIED@DESIGN_READ/200; no port → LISTENER_DESIGN_UNAVAILABLE@CONTROL_ROOM_LISTENER/503; extra/missing/non-string/payload-projectId → LISTENER_DESIGN_REQUEST_INVALID@CONTROL_ROOM_LISTENER/400; store answers 200 with DesignReadResult (DESIGN_REVISION_ABSENT@LEDGER). projectId from principal. UNCONSUMED+UNPROXIED record /design/read (UI/proxy = task-e9cb2442). No factory (task-eb2bb09d).\nOwned: Test Files 2 passed (2), Tests 19 passed (19). Named full daemon suite Test Files 13 failed | 420 passed (433) — foreign (foundation timeouts, compile-dispatcher, peer-dirty affordance-read-planning); owned-path intersection empty. Typecheck reds in document-coverage-read.ts:232 and scheduler budget-reservation.ts:132 — not owned. Drills in comment-29f11b61.",
   "commits": [
@@ -316,18 +324,40 @@
       "treeId": "a376831ce7f0edfbc9eeb640b73dd956f426e547",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "eba63429b5ab9293eedf716307bd8db1e37209f8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T16:45:56Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-6cbcf5ff05084f3ea2a2e3ea89c3fb54.json",
+        ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+        ".moe/tasks/task-99f364e3a6104ee993b6820c580a52fb.json",
+        ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+        ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T17:28:13.729Z",
+      "treeId": "8b42975efe930a05a488a1f5ee0e60f5da24de5e",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/orchestrator/node-lander.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts"
+    "apps/daemon/src/planning/approval-intent.test.ts",
+    "apps/daemon/src/planning/approval-intent.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-05T15:12:00Z",
-    "at": "2026-09-05T15:12:09.753Z"
+    "sessionId": "qa-f2906c26@2026-09-05T16:45:56Z",
+    "at": "2026-09-05T17:28:13.729Z"
   },
   "completedAt": "2026-09-05T17:26:30.952Z",
   "reviewCompletedAt": "2026-09-05T17:26:30.952Z",

@@ -78,13 +78,22 @@
     {
       "stepId": "step-5",
       "description": "DRILLS, GATES, SELF-REVIEW. (a) MUTATION DRILLS, recorded in the step note. `git status --porcelain` the exact mutated paths FIRST; every file in this plan is TRACKED, so an empty `git diff -- <path>` is a valid restore proof for each - state EXPLICITLY that no untracked path was mutated and therefore no out-of-tree SHA256 backup was required, and prove each restore in a call SEPARATE from the restore. Three drills, restore and prove after each: (i) drop the `skipped === true` check so `{skipped: false, reason}` decodes as a skip - the DoD-3 arm must go RED naming DESIGN_SHAPE_INVALID, not merely \"threw\"; (ii) replace `exactDesignRecord(value, DESIGN_SKIP_KEYS)` with a subset check so an 8-key half-skipped value is admitted - the half-skipped arm must go RED (this is the drill that proves exact arity is doing the work, per global rail 1); (iii) move the discrimination AFTER the six-key arity check so a skip never reaches its own path - the skip round-trip arm must go RED. Do NOT drill the pre-existing six-key path; task-5e90317e already drilled it with SHA256-proved restores and its arms are not this row's to re-grade. (b) GATES - standalone foreground runs, one command per call, no pipes and no `;` chains, quoting the `Test Files N passed` count line for each; an exit-0 leg with NO count line ran nothing and is not evidence: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/design`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` is NOT evidence for this row and must not be quoted as such - vitest.config.ts:32 includes adapters/**, packages/**, tests/** and tools/**, no `apps/**`, so it runs zero tests against these files. Attribute any red by failing paths at HEAD minus failing paths at the step-1 merge-base baseline, intersected with apps/daemon/src/design/; that intersection must be EMPTY. Disclose foreign red verbatim with its failing lines; never fabricate green. Named complete_task verification command: the `src/design` vitest leg above. (c) ADVERSARIAL PASS on this diff only: a value carrying `skipped` inherited from a prototype rather than as an own key (`exactDesignRecord`:150 already rejects a non-`Object.prototype` prototype - confirm the discriminator uses `Reflect.ownKeys`, not `in`, or it inherits the hole); `skipped` present with a non-boolean value; a `reason` that is a String OBJECT rather than a primitive; two concurrent skip submissions at the same expectedVersion (the store fences with DESIGN_REVISION_CONFLICT - confirm, do not assume); a skip whose bytes are re-read through `decodeDesignRevisionBytes` and must come back as a skip, not as DESIGN_RECORD_MALFORMED. (d) COMPLETION RECORD must state: the arity rule chosen (TWO ADMITTED ARITIES, discriminated on `skipped`) and that the six-key path is provably unchanged, quoting that arm; that NO new refusal code was added and `DESIGN_SHAPE_INVALID` @ REQUEST was reused deliberately; the file roster you actually touched, with the note that this row's DESCRIPTION said four and the measured union of the key-roster grep and the `DesignRevision` type grep is five (six if design-store.ts needed a type annotation); and that the surface reading this marker is task-217f40b7 and the compiler mission stating it is task-de059823 - neither is this row's.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-05T15:04:14.120Z"
+      "modifiedFiles": [
+        "apps/daemon/src/design/design-contracts.ts",
+        "apps/daemon/src/design/design-records.ts",
+        "apps/daemon/src/design/design-contracts.test.ts",
+        "apps/daemon/src/design/design-store.test.ts",
+        "apps/daemon/src/design/design-test-fixtures.ts"
+      ],
+      "note": "DRILLS, GATES, SELF-REVIEW. Step 5 nets ZERO byte changes — all three mutations restored and proved. Paths listed are the task's cumulative roster (landed at b7a0de8b), re-declared for attribution.\n\n(a) MUTATION DRILLS. `git status --porcelain -- apps/daemon/src/design/design-contracts.ts` run FIRST = EMPTY, so the sole mutated path is TRACKED. NO UNTRACKED PATH WAS MUTATED, therefore no out-of-tree SHA256 backup was required (global rail 13 addressed explicitly, not by omission); `git diff -- <path>` is a valid restore proof here and each restore was proved in a call SEPARATE from the restore. Baseline before drilling: `Test Files 2 passed (2)` / `Tests 72 passed (72)`.\n (i) DROPPED `item[\"skipped\"] !== true` in decodeSkip. RED, 5 arms, code named not merely \"threw\": `× refuses DESIGN_SHAPE_INVALID at REQUEST for an un-skipped marker carrying no sections`, plus the truthy-not-true and non-boolean arms and `× adds no refusal code: the skip reuses the closed map's DESIGN_SHAPE_INVALID`. The store arm's line is the rail-1 evidence that the arm pins WHICH LAYER answered: `AssertionError: expected 'DESIGN_CONTRACT_NOT_APPROVED' to be 'DESIGN_SHAPE_INVALID'` — a second refusal layer standing in is caught, not absorbed. `Tests 5 failed | 67 passed (72)`.\n (ii) REPLACED `exactDesignRecord(value, DESIGN_SKIP_KEYS)` with a subset check. RED on exactly the half-skipped arms: `× refuses DESIGN_SHAPE_INVALID at REQUEST for a skip that still carries all six sections`, `× ... for a skip that carries one section`, and the store's `× refuses a skip that still carries all six sections DESIGN_SHAPE_INVALID at REQUEST and appends nothing` (again `expected 'DESIGN_CONTRACT_NOT_APPROVED' to be 'DESIGN_SHAPE_INVALID'`). Proves EXACT ARITY is what refuses the half-skipped shape. `Tests 3 failed | 69 passed (72)`.\n (iii) MOVED the discrimination after the six-key arity check. FIRST ATTEMPT WAS A NO-OP AND I CAUGHT IT: hoisting the `exactDesignRecord` CALL changes nothing because it is pure and the `item === null` refusal still ran last — suite stayed green. Recorded as `mem:gotcha-a-reordering-drill-can-be-a-no-op-mutation`, because a no-op drill reads as a vacuous arm and would have sent me to weaken a correct test. The REAL mutation moves the REFUSAL ahead of the discriminator; then RED on 8 arms including `× admits the two-key skip and narrows it with isDesignSkip`, `× survives the DURABLE round trip as a skip, not as a malformed record`, and five store arms. `Tests 8 failed | 64 passed (72)`.\n RESTORE PROOF after each: `git diff -- apps/daemon/src/design/design-contracts.ts` EMPTY and `grep -c DRILL` = 0; final `git status --porcelain -- apps/daemon/src/design/` = EMPTY.\n\n(b) GATES, standalone foreground, one command per call, no pipes into exit codes, no `;` chains.\n 1. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/design` -> EXIT 0, `Test Files 2 passed (2)` / `Tests 72 passed (72)`. Run fresh AFTER the last restore. This is the named complete_task verification command.\n 2. `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 15 failed | 420 passed (435)` / `Tests 47 failed | 8596 passed (8643)`, 1373.98s. FOREIGN AND DISCLOSED, never fabricated green. ZERO of the 15 failing files is under src/design (grep for a failing `src/design/*.test.ts` line = 0 hits). Full failing roster and per-file attribution in the row comment.\n 3. `pnpm typecheck` -> EXIT 1 at `packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.` It FAILS FAST and never reached apps/daemon, so I ran the owned leg explicitly: `pnpm --filter @moe/daemon typecheck` -> EXIT 1 with exactly three errors, NONE under src/design (tsc is not fail-fast per file, so that absence is positive proof my files compile). Both reds attributed in the comment. Recorded as `mem:gotcha-pnpm-typecheck-fails-fast-and-hides-your-own-package`.\n Root `pnpm test` NOT run and NOT quoted — vitest.config.ts:32 includes no `apps/**`.\n ATTRIBUTION (global rail 3): step-1 merge-base baseline was typecheck EXIT 0 and daemon test `7 failed | 425 passed`. (HEAD failing paths) minus (baseline failing paths), intersected with apps/daemon/src/design/ = EMPTY.\n\n(c) ADVERSARIAL PASS — all five hazards have arms, verified present, not assumed. Prototype-carried `skipped` uses `Object.create` with own descriptors (design-contracts.test.ts:249) and the discriminator `carriesSkipMarker` uses `Reflect.ownKeys(...).includes`, never `in`; `isDesignSkip` uses `Object.hasOwn` + `=== true`, so neither re-opens the hole `exactDesignRecord` closes. Non-boolean and truthy-not-true `skipped` (:218). Boxed `new String(\"boxed\")` reason (:223). Second skip at the same expectedVersion -> DESIGN_REVISION_CONFLICT @ LEDGER (design-store.test.ts:331) — confirmed by reading the arm, not assumed. Durable byte round trip returns a skip, not DESIGN_RECORD_MALFORMED (:258). DoD-3 layer check: layer string lit",
+      "startedAt": "2026-09-05T15:04:14.120Z",
+      "completedAt": "2026-09-05T17:47:23.977Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-d6e44333",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f2906c26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,16 +111,22 @@
       "author": "architect-b63fabf3",
       "content": "TWO CORRECTIONS TO MY OWN DESCRIPTION, both made before planning. architect-b63fabf3, 2026-09-05, HEAD f3b94eaa. The plan (5 steps, 6 files) is built on the corrected facts; where description and plan disagree, THE PLAN IS AUTHORITY.\n\n## 1. The description says \"exactly FOUR files\". It is FIVE, maybe six.\n\nI filed it after running `git grep -ln 'DESIGN_REVISION_KEYS|DESIGN_SECTION_KEYS|openDecisions'` — a grep of the KEY ROSTERS, not of the TYPE. `git grep -n 'DesignRevision\\b'` additionally names:\n\n    apps/daemon/src/design/design-records.ts:11   import { type DesignRevision }\n    apps/daemon/src/design/design-records.ts:45   readonly revision: DesignRevision;\n\nMeasured union, all under `apps/daemon/src/design/`: design-contracts.ts, design-records.ts, design-contracts.test.ts, design-store.test.ts, design-test-fixtures.ts. design-store.ts is a maybe-sixth — `readDesignRevision`:189 returns `DesignReadResult` so the widened type should flow, and the plan tells the worker to settle that by typecheck rather than by editing it speculatively.\n\nThis is global rail 18 in miniature — grep the SHAPE, not the symbol — and it is recorded rather than quietly fixed so the next census does both greps. A file outside `apps/daemon/src/design/` remains a stop-and-report.\n\n## 2. The description implies a seventh key. The plan chooses TWO ARITIES instead.\n\nThe description's hazard paragraph frames the choice as \"either the new key is required on every revision, or the decode admits both arities\" and leaves it open. Leaving the one architectural question in the row to the worker was my error; DoD-2 asks them to *state* the rule, not to *pick* it. **The rule is: two admitted arities, discriminated on the presence of `skipped`.**\n\n    DESIGN_SKIP_KEYS = [\"reason\", \"skipped\"]        // skipped is the LITERAL true\n    DesignRevisionOrSkip = DesignRevision | DesignSkip\n    decodeDesignRevision: Reflect.ownKeys has \"skipped\"\n                            ? exact arity over DESIGN_SKIP_KEYS\n                            : the existing six-key path, UNCHANGED\n\nWhy, so it is not re-litigated: a seventh required key would make every existing six-key payload refuse (both fixtures plus every arm task-5e90317e shipped), force every REAL design submission to carry `skipped: false` as permanent wire noise, and make the design seat's brief teach a model to declare it is *not* skipping. Two arities break nothing, and the half-skipped refusal then falls out of exact arity rather than needing a bespoke consistency check — `{skipped:true, reason, ...six sections}` is 8 keys and fails both rosters.\n\n`skipped` is the literal `true`, not a boolean: `skipped: false` would otherwise be a lawful revision carrying no design at all, which is the exact state DoD-3 requires be refused. A non-skip is expressed by submitting a design.\n\n**No new refusal code.** `DESIGN_SHAPE_INVALID` @ REQUEST already reads \"the exact-key section roster refused the submitted revision\" and covers every case here. A new code means a new entry in the closed `DESIGN_CODE_LAYERS` map plus a boundary-roster backfill, for no diagnostic gain.\n\n## One thing the composition gives free, and the plan pins it\n\n`submitDesignRevision` (design-store.ts:130) decodes FIRST and calls `readApprovedDesignContract` SECOND — so a SKIP is subject to the same Gate-1-approved fence as a real design. You cannot skip the design for a goal whose contract was never approved, which is exactly the window task-217f40b7's surface offers the step in. Step 4 asserts it (`DESIGN_CONTRACT_NOT_APPROVED` @ `CONTRACT_AUTHORITY`) so a later refactor cannot quietly drop it.\n\n`isDesignSkip` is EXPORTED on purpose: task-217f40b7 (surface) and task-de059823 (compiler mission) both narrow with it. Inlining the check would have each consumer re-implement the discriminator and drift.",
       "timestamp": "2026-09-05T14:30:10.354Z"
+    },
+    {
+      "id": "comment-1b4f3d72504a4b04afd57dc165fbbed3",
+      "author": "worker-caece97b",
+      "content": "FOREIGN-RED ATTRIBUTION FOR THE GATE LEGS (worker-caece97b, step 5). Anchor: DELIVERED TREE, branch moe/work-2026-09-04, task work landed at b7a0de8b. Owned paths = apps/daemon/src/design/** only. Every red below is disclosed verbatim; none is fabricated green.\n\n=== LEG 2: `pnpm --filter @moe/daemon test` ===\nRUN TWICE. First run was NOT admissible as a standalone leg (I had typecheck running concurrently): `Test Files 16 failed | 417 passed (433)` / `Tests 71 failed | 8549 passed (8620)`, 1914.23s. RE-RUN STANDALONE, nothing else executing, full output captured to %TEMP%\\leg2-head-caece97b.txt: `Test Files 15 failed | 420 passed (435)` / `Tests 47 failed | 8596 passed (8643)`, EXIT 1, 1373.98s. The 71-vs-47 swing between two runs of the SAME tree is itself the evidence that this red is a contention class, not a diff.\n\nALL 15 FAILING FILES AT HEAD (none under src/design):\n  src/bootstrap/bootstrap-replay-bytes.test.ts (6 tests | 1 failed)\n  src/bootstrap/bootstrap-services.test.ts (67 tests | 2 failed)\n  src/daemon-store-dependencies.test.ts (27 tests | 1 failed)\n  src/daemon-v2-command-registry.test.ts (8 tests | 1 failed)\n  src/http/foundation-registry-hostile.test.ts (8 tests | 1 failed)\n  src/http/foundation-registry.test.ts (4 tests | 2 failed)\n  src/mcp-dispatch-port.test.ts (25 tests | 2 failed)\n  src/planning/approval-intent.test.ts (93 tests | 1 failed)\n  src/runtime-entrypoint.test.ts (5 tests | 1 failed)\n  src/work/foundation-attempt-service.test.ts (107 tests | 6 failed)\n  src/work/foundation-attempt-windows.test.ts (8 tests | 1 failed)\n  src/work/foundation-capture-lifecycle.test.ts (31 tests | 7 failed)\n  src/work/foundation-capture-producer.test.ts (26 tests | 19 failed)\n  src/work/foundation-input-hydrator-residue.test.ts (3 tests | 1 failed)\n  src/work/foundation-input-hydrator.test.ts (11 tests | 1 failed)\nA grep for a FAILING `src/design/*.test.ts` line over that capture returns 0 hits.\n\nFAILURE-SIGNATURE CENSUS over the same capture (denominator 47 failing tests):\n  31 x `Error: Test timed out in 30000ms.`   <- the known foundation contention class\n   1 x `Error: Test timed out in 60000ms.`\n   2 x `TypeError: admitBootstrapCommand is not a function`  <- peer bootstrap WIP\n   1 x `Error: EPERM, Permission denied: \\\\?\\C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-foundation-seam-listener-ACaSJJ`\n   remainder: assorted AssertionErrors in the files above.\n\nTWO FAILURES LOOKED DESIGN-ADJACENT AND WERE RUN DOWN INDIVIDUALLY RATHER THAN WAVED THROUGH:\n 1. `src/daemon-store-dependencies.test.ts > createStoreDependencies > provides a design read port that answers ABSENT from the bound store without writing`. It NAMES a design read port, so I re-ran it ISOLATED at HEAD: `Test Files 1 passed` — the arm is GREEN in isolation. Its whole-package failure is the timeout/contention class, NOT my diff. (My widening cannot reach it anyway: the ABSENT path returns a refusal and never constructs a revision.)\n 2. `src/runtime-entrypoint.test.ts > has an exact .js bridge for every runtime module and none for test-tier ones`. This one FAILS RELIABLY in isolation, and its message names the culprit exactly:\n      AssertionError: expected { …(3) } to deeply equal { missing: [], unexpected: [], …(1) }\n      +   \"missing\": [ \"orchestrator\\\\node-spec-listing.ts\" ],\n    `apps/daemon/src/orchestrator/node-spec-listing.ts` is TRACKED and CLEAN in the worktree, added by PEER commit d0fd615d (\"fix(daemon): one malformed node spec no longer hides every spec-dir node from the wrapper\") WITHOUT its .js bridge. My row added NO new module — `git status --porcelain -- apps/daemon/src/design/` is EMPTY, so there is no unbridged file of mine and I structurally could not have tripped this guard. NOT MINE, and it will red every daemon row until d0fd615d's owner adds the bridge.\n\n=== LEG 3: typecheck ===\n`pnpm typecheck` -> EXIT 1, dying at `packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.` with `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @moe/scheduler`. IT FAILS FAST: apps/daemon is ordered after scheduler and NEVER RAN, so this leg alone says nothing about my package either way. I therefore ran the owned leg explicitly.\n`pnpm --filter @moe/daemon typecheck` -> EXIT 1, exactly three errors:\n  src/mcp-tool-allowlist.test.ts(146,64): error TS2304: Cannot find name 'OPERATOR_PRINCIPAL_KINDS'.\n  src/mcp-tool-allowlist.test.ts(147,24): error TS2304: Cannot find name 'OPERATOR_PRINCIPAL_KINDS'.\n  ../../packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\nNONE under src/design. tsc reports every error in the project (it is not fail-fast per file), so that absence is POSITIVE proof my files compile, not an inference from exit code.\nATTRIBUTION OF THE TWO:\n - `apps/daemon/src/mcp-tool-allowlist.test.ts` is ` M` — UNCOMMITTED peer WIP in the shared checkout (a peer added `OPERATOR_PRINCIPAL_KINDS` uses without its import; the symbol is defined in daemon-command-vocabulary.ts and friends). `git log -1` on that path names an unrelated older commit and would MISATTRIBUTE it — porcelain is the authority here.\n - `packages/scheduler/src/budget/budget-reservation.ts` is CLEAN in the worktree, from peer commit e53e3e6a (\"fix(scheduler): a reservation view with a duplicated meter is malformed\"), which added the failing `new Set(value.meters.map((entry) => entry.meter))` line at :132. Nothing in packages/scheduler imports apps/daemon (dependency flows package->app), so my diff cannot reach it.\n\n=== RAIL-3 DELTA ===\nStep-1 merge-base baseline (recorded before any edit of mine): `pnpm typecheck` EXIT 0 with every project Done; `pnpm --filter @moe/daemon test` EXIT 1 with `Test Files 7 failed | 425 passed (432)` / `Tests 22 failed | 8548 passed (8570)`; `src/design` leg EXIT 0 at 48/48.\n(HEAD failing paths) minus (merge-base failing paths), INTERSECTED WITH apps/daemon/src/design/ = EMPTY. The owned-package leg for this row's paths is EXIT 0 at `Test Files 2 passed (2)` / `Tests 72 passed (72)`.\nTest-count growth 8570 -> 8643 (+73) is consistent: +24 arms are mine (48 -> 72 on src/design), the rest are peer rows landing in the shared checkout; file count 432 -> 435 tracks peer additions including http/design-read.test.ts.",
+      "timestamp": "2026-09-05T17:48:00.637Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:22:42.105Z",
-  "updatedAt": "2026-09-05T15:09:46.397Z",
+  "updatedAt": "2026-09-05T17:48:45.624Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:04.808Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -120,7 +135,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:29:46.280Z",
@@ -139,7 +155,9 @@
   },
   "planApprovedAt": "2026-09-05T14:29:48.450Z",
   "contextFetchedBy": [
-    "worker-d6e44333"
+    "worker-d6e44333",
+    "worker-caece97b",
+    "qa-f2906c26"
   ],
   "workStartedAt": "2026-09-05T14:32:46.267Z",
   "commits": [
@@ -295,88 +313,29 @@
       "treeId": "b3278dc5c883b1de176a3692829a981dc9753aa9",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "441b0a49d4a03803426670b3f9c2defd4d504a9f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T15:10:19Z",
+      "paths": [
+        ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T15:10:28.711Z",
+      "treeId": "fec8db1225c503e8cfa6aa4e7e00ff33d0c9032d",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/epics/epic-3f9b9556a1364262a9d812e5fd1ea34e.json",
-    ".moe/epics/epic-af14d73585e14c0da0264d48c37587c3.json",
-    ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
-    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
-    ".moe/tasks/task-166d375f8ce9492aaf50587233545992.json",
-    ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
-    ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
-    ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
-    ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
-    ".moe/tasks/task-278faf81c10845ffa571716105aa19e3.json",
-    ".moe/tasks/task-2a345b2e97d94599b4688af1923056e5.json",
-    ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
-    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
-    ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
-    ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
-    ".moe/tasks/task-38ca5f66c8d146df97ed6a99b35edfbd.json",
-    ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
-    ".moe/tasks/task-3a0478f57eec44579269b2ed27c91d92.json",
-    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
-    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
-    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
-    ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
-    ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
-    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
-    ".moe/tasks/task-5d30948435524c6fa2789e1c033aafe7.json",
-    ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
-    ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json",
-    ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
-    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
-    ".moe/tasks/task-66dc48690fd94b07905a2aa6ffb9568d.json",
-    ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
-    ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json",
-    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
-    ".moe/tasks/task-756d81f117fb4ef6aeca2c676f433c91.json",
-    ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
-    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
-    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
-    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
-    ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
-    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
-    ".moe/tasks/task-84cd2e55aae942cf8d56657308215fde.json",
-    ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
-    ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json",
-    ".moe/tasks/task-8f86e10504c74e248ccfa6f427b41a15.json",
-    ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
-    ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
-    ".moe/tasks/task-9ae492b373fa4e7aa6b1e91585f6e612.json",
-    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
-    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
-    ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
-    ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
-    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
-    ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
-    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
-    ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
-    ".moe/tasks/task-c422b106af2945b1a1ad4ed49556bf66.json",
-    ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json",
-    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
-    ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
-    ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
-    ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
-    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
-    ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json",
-    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
-    ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
-    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
-    ".moe/tasks/task-f008f29a38d54ae7a10e97cad1c4443d.json",
-    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
-    ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
-    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
-    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json",
-    ".moe/tasks/task-f99cec0b7654450ca36d3864a4db5b5a.json",
-    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
-    ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json",
-    "apps/daemon/src/design/design-contracts.test.ts",
     "apps/daemon/src/design/design-contracts.ts",
     "apps/daemon/src/design/design-records.ts",
-    "apps/daemon/src/design/design-store.test.ts",
-    "apps/daemon/src/design/design-test-fixtures.ts"
+    "apps/daemon/src/design/design-test-fixtures.ts",
+    "apps/daemon/src/design/design-contracts.test.ts",
+    "apps/daemon/src/design/design-store.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/design/design-contracts.ts",
@@ -394,7 +353,15 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T15:09:37Z",
-    "at": "2026-09-05T15:09:46.397Z"
-  }
+    "sessionId": "worker-d6e44333@2026-09-05T15:10:19Z",
+    "at": "2026-09-05T15:10:28.711Z"
+  },
+  "reviewStartedAt": "2026-09-05T17:48:36.256Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/design",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  2 passed (2)\n      Tests  72 passed (72)\n   Start at  20:48:06\n   Duration  7.45s (transform 5.19s, setup 0ms, import 6.35s, tests 889ms, environment 0ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-05T17:48:36.256Z"
+  },
+  "completionSummary": "A design revision can now be SKIPPED on design:<goalId>; designRead answers it; a half-skipped revision is refused with a stable code and its layer.\n\nARITY RULE CHOSEN: TWO ADMITTED ARITIES, discriminated on the presence of an OWN `skipped` marker. A skip is the 2-key {reason, skipped:true}; the design stays the unchanged 6-key record. A seventh REQUIRED key was rejected because it would make every existing 6-key payload refuse, force every real design to carry `skipped:false` as wire noise, and break task-5e90317e's fixtures and arms. THE SIX-KEY PATH IS PROVABLY UNCHANGED — its logic was not touched, and the arm \"admits the complete revision and returns every section\" (design-contracts.test.ts:89) asserts the six-key outcome BY NAME: it round-trips, `isDesignSkip` narrows it FALSE, and every section compares by value. That narrowing assertion is load-bearing, not decoration: without it a skip returned on that path would compare six undefineds against six undefineds and pass.\n\nNO NEW REFUSAL CODE. `DESIGN_SHAPE_INVALID` @ REQUEST was reused deliberately — it already means \"the exact-key roster refused the submitted revision\". A new code would mean a new entry in the closed DESIGN_CODE_LAYERS map plus a boundary-roster backfill for zero diagnostic gain. Every refusal goes through `designRefusal(<code>)`, code only; layer literals appear ONLY in the closed roster and map, ZERO at any throw site.\n\nTHE HALF-SKIPPED REFUSAL FALLS OUT OF EXACT ARITY rather than a bespoke check: `decodeSkip` re-applies `exactDesignRecord(value, DESIGN_SKIP_KEYS)`, so skipped-with-sections (8 keys) and bare {skipped:true} (1 key) both fail the roster; `skipped:false` fails the literal-`true` guard. Discriminator uses `Reflect.ownKeys`, and `isDesignSkip` uses `Object.hasOwn` + `=== true`, so neither re-opens the prototype hole exactDesignRecord closes.\n\nFILE ROSTER ACTUALLY TOUCHED — FIVE: design-contracts.ts, design-records.ts, design-contracts.test.ts, design-store.test.ts, design-test-f"
 }
