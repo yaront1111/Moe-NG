@@ -139,7 +139,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T01:23:28.234Z",
-  "updatedAt": "2026-09-05T20:17:07.313Z",
+  "updatedAt": "2026-09-05T20:17:49.694Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T09:28:31.317Z",
     "plannedStepCount": 7,
@@ -195,7 +195,94 @@
     "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
     "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
     "apps/daemon/src/http/affordance-read.ts",
-    "apps/daemon/src/http/affordance-read.test.ts"
+    "apps/daemon/src/http/affordance-read.test.ts",
+    ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+    ".moe/tasks/task-a5a6abccc4ce4f859851d8e8d7215cdd.json",
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
   ],
-  "completionSummary": "SHIPPED THE OWNER DECISION, NOT THE TITLE. comment-5a8278d76aa24b44989a906caaef589b superseded DoD 1/3: do NOT withhold the offer, CORRECT the prerequisite. The offer gate (affordance-planning-offers.ts) and the command gate (bootstrap-services.ts) are BOTH untouched — `git status --porcelain` on each is empty.\n\nTHE FIX, two lines in bootstrap-sequence.ts: the PREREQUISITE_ALTERNATIVES value type widens to `readonly string[]` and gains ONE entry, `\"approval.decide\": [\"approval.decide_intent\"]`. COMMAND_PREREQUISITES is BYTE-IDENTICAL (whole-file diff = 25 insertions, 1 deletion, and the deletion is the type line). One entry fixed BOTH `goal.close` (:22) and `repository.publish` (:25) — both asserted, and drill 1 reds both off that one removed line.\n\nWHAT THE PRODUCT GAINED. `repository.publish` after a browser approval is now FULLY ACCEPTED (ok true, durable). `goal.close` now gets past the sequence gate and answers an actionable goal-shaped code instead of a generic bootstrap one. The frame-level split the row was filed for is closed: ONE `/affordances/read` frame now carries `steps[goal.close] = {missing: [], status: READY}` AND a live offer, asserted together, with the dispatch built from that offer's own commandId/expectedVersion/targetAggregateId.\n\nTHE SWEEP WAS CORRECTED, NOT DELETED. bootstrap-durability.test.ts's alternatives guard now measures the KEY side against BOOTSTRAP_COMMAND_KINDS (a prerequisite always is one) and the ALTERNATIVE side against RUNTIME_COMMAND_KINDS (the honest roster of kinds that can appear in a committed set). Both zero-yield guards kept. Drill 3 proves it still bites.\n\nDRILL 4 FOUND A VACUITY IN MY OWN ARM AND I FIXED IT: neutering the gate left the publish fail-closed arm GREEN, because publishRepository refuses with the SAME code at the SAME layer. The arm now asserts `missingPrerequisites` first, and reds under that mutation.\n\nSTILL BROKEN, MEASURED AND FILED: a browser-approved goal cannot yet CLOSE — the intent seam mints an "
+  "completionSummary": "SHIPPED THE OWNER DECISION, NOT THE TITLE. comment-5a8278d76aa24b44989a906caaef589b superseded DoD 1/3: do NOT withhold the offer, CORRECT the prerequisite. The offer gate (affordance-planning-offers.ts) and the command gate (bootstrap-services.ts) are BOTH untouched — `git status --porcelain` on each is empty.\n\nTHE FIX, two lines in bootstrap-sequence.ts: the PREREQUISITE_ALTERNATIVES value type widens to `readonly string[]` and gains ONE entry, `\"approval.decide\": [\"approval.decide_intent\"]`. COMMAND_PREREQUISITES is BYTE-IDENTICAL (whole-file diff = 25 insertions, 1 deletion, and the deletion is the type line). One entry fixed BOTH `goal.close` (:22) and `repository.publish` (:25) — both asserted, and drill 1 reds both off that one removed line.\n\nWHAT THE PRODUCT GAINED. `repository.publish` after a browser approval is now FULLY ACCEPTED (ok true, durable). `goal.close` now gets past the sequence gate and answers an actionable goal-shaped code instead of a generic bootstrap one. The frame-level split the row was filed for is closed: ONE `/affordances/read` frame now carries `steps[goal.close] = {missing: [], status: READY}` AND a live offer, asserted together, with the dispatch built from that offer's own commandId/expectedVersion/targetAggregateId.\n\nTHE SWEEP WAS CORRECTED, NOT DELETED. bootstrap-durability.test.ts's alternatives guard now measures the KEY side against BOOTSTRAP_COMMAND_KINDS (a prerequisite always is one) and the ALTERNATIVE side against RUNTIME_COMMAND_KINDS (the honest roster of kinds that can appear in a committed set). Both zero-yield guards kept. Drill 3 proves it still bites.\n\nDRILL 4 FOUND A VACUITY IN MY OWN ARM AND I FIXED IT: neutering the gate left the publish fail-closed arm GREEN, because publishRepository refuses with the SAME code at the SAME layer. The arm now asserts `missingPrerequisites` first, and reds under that mutation.\n\nSTILL BROKEN, MEASURED AND FILED: a browser-approved goal cannot yet CLOSE — the intent seam mints an ",
+  "commits": [
+    {
+      "sha": "a30978752f12c1978bd0ebbb98854ddda0385a73",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T20:17:12Z",
+      "paths": [
+        ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+        ".moe/tasks/task-a5a6abccc4ce4f859851d8e8d7215cdd.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T20:17:49.694Z",
+      "treeId": "f0efcf19572dd27290ddb4543f16cb68f39a36a3",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-ops.test.ts",
+    "apps/control-room/src/live/live-ops.ts",
+    "apps/control-room/src/live/live-repository-reservation.ts",
+    "apps/control-room/src/live/live-runs.test.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+    "apps/control-room/src/v2/ops/repository-reservation-card.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/health-read.test.ts",
+    "apps/daemon/src/http/runs-read.test.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.js",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/preview/preview-command-resolution.test.ts",
+    "apps/daemon/src/preview/scratch-probe.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/repository/repository-execution-concurrency.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.js",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-identity.js",
+    "apps/daemon/src/repository/repository-execution-identity.ts",
+    "apps/daemon/src/repository/repository-execution-persistence.js",
+    "apps/daemon/src/repository/repository-execution-persistence.ts",
+    "apps/daemon/src/repository/repository-execution-port.js",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.js",
+    "apps/daemon/src/repository/repository-execution-record.ts",
+    "Moe-NG_Deep_Review_2026-09-05.md"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-05T20:17:12Z",
+    "at": "2026-09-05T20:17:49.694Z"
+  }
 }
