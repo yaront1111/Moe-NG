@@ -13,6 +13,7 @@
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 
 /**
@@ -33,7 +34,7 @@ type Store = Parameters<typeof activeCompiledGraphs>[0];
  * (document-coverage-read.ts:90-96): the snapshot's execution-bearing nodes joined with the node
  * authority's definitions. Both rosters are taken because a landing attests the work of a node,
  * and these are the only durable statements of which nodes belong to which goal. A key carried
- * by two graphs maps to both — a landing on it is a landing for each.
+ * by distinct goal/run pairs cannot be attributed and credits neither goal.
  */
 function nodeOwners(store: Store, projectId: string, ledger: DurableLedger): ReadonlyMap<string, string[]> {
   const owners = new Map<string, string[]>();
@@ -42,12 +43,14 @@ function nodeOwners(store: Store, projectId: string, ledger: DurableLedger): Rea
     if (goals === undefined) owners.set(nodeKey, [goalRef]);
     else if (!goals.includes(goalRef)) goals.push(goalRef);
   };
-  for (const graph of activeCompiledGraphs(store, projectId, LANDABLE_LIFECYCLES, ledger)) {
+  const graphs = activeCompiledGraphs(store, projectId, LANDABLE_LIFECYCLES, ledger);
+  const ambiguous = ambiguousCompiledNodeKeys(store, projectId, graphs, ledger);
+  for (const graph of graphs) {
     for (const node of graph.content.snapshot.nodes) {
-      if (node.executionBearing) own(node.nodeKey, graph.goalRef);
+      if (node.executionBearing && !ambiguous.has(node.nodeKey)) own(node.nodeKey, graph.goalRef);
     }
     for (const definition of graph.content.nodeAuthority.definitions) {
-      own(definition.nodeKey, graph.goalRef);
+      if (!ambiguous.has(definition.nodeKey)) own(definition.nodeKey, graph.goalRef);
     }
   }
   return owners;

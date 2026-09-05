@@ -27,6 +27,7 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
 import { readProductContractGate1Approval } from "../product-contract/product-contract-gate-1-reader.js";
 import { PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE } from "../product-contract/product-contract-v2-event-contract.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
@@ -216,7 +217,9 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
     const bound = allGoals.filter((goal) => goal.sha === sha);
     const goalIds = new Set(bound.map((goal) => goal.goalId));
     // Every activated plan, not only this document's: a shared key is shared with ANY plan.
-    const allNodes = sealedNodesOf(readActive(store, projectId, ledger));
+    const graphs = readActive(store, projectId, ledger);
+    const allNodes = sealedNodesOf(graphs);
+    const ambiguous = ambiguousCompiledNodeKeys(store, projectId, graphs, ledger);
     const counts = new Map<string, number>();
     for (const node of allNodes) counts.set(node.nodeKey, (counts.get(node.nodeKey) ?? 0) + 1);
     const nodes = allNodes.filter((node) => goalIds.has(node.goalRef));
@@ -232,7 +235,8 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
     const rank: Record<CriterionCoverageStatus, number> = { PLANNED: 0, UNATTRIBUTABLE: 2, UNPLANNED: -1, VERIFIED: 1 };
     for (const node of nodes) {
       const facts = reviews.get(node.nodeKey);
-      const status: CriterionCoverageStatus = (counts.get(node.nodeKey) ?? 0) > 1 || facts?.unreadable === true
+      const status: CriterionCoverageStatus = ambiguous.has(node.nodeKey)
+        || (counts.get(node.nodeKey) ?? 0) > 1 || facts?.unreadable === true
         ? "UNATTRIBUTABLE" : facts?.accepted !== undefined ? "VERIFIED" : "PLANNED";
       for (const criterionId of node.criterionIds) {
         const current = carried.get(criterionId);

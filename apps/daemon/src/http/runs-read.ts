@@ -18,6 +18,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import type { GoalPublishState } from "../repository/publish-ledger.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
@@ -234,8 +235,9 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
         goals = [one];
       }
       // Every activated plan, not only the selected goals': a shared key is shared with ANY plan.
-      const allNodes = sealedNodesOf(readActive(store, projectId));
-      const shared = sharedKeysOf(allNodes);
+      const graphs = readActive(store, projectId);
+      const allNodes = sealedNodesOf(graphs);
+      const shared = new Set([...sharedKeysOf(allNodes), ...ambiguousCompiledNodeKeys(store, projectId, graphs)]);
       const goalIds = new Set(goals.map((goal) => goal.goalId));
       const nodes = allNodes.filter((node) => goalIds.has(node.goalRef));
       const nodeKeys = new Set(nodes.map((node) => node.nodeKey));

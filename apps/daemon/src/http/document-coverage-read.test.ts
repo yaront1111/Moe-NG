@@ -6,7 +6,7 @@
  * the PRODUCTION `integration.accept_output` over the daemon's own verifier receipt. The
  * default readers (active graphs, review ledgers) run in every arm that has no injection.
  */
-import { decodeGraphContent } from "@moe/scheduler";
+import { decodeGraphContent, encodeGraphContent } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -22,6 +22,7 @@ import { createSessionAuthority } from "../identity/session-authority.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { recordHistoricalCompiledGraph } from "../orchestrator/compiled-node-identity-test-fixtures.js";
 import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 import { runSubmitDecomposition } from "../planning/compile-dispatcher.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
@@ -298,6 +299,22 @@ describe("createDocumentCoverageReadPort", () => {
     }).readCoverage({ contentSha256: sha }));
     expect(statusOf(unique)["crit-1"]).toEqual(["VERIFIED", "implement"]);
     expect(unique.totals).toMatchObject({ unattributable: 0, verified: 1 });
+  });
+
+  it.each(["old-goal", GOAL_ID])("keeps historical owner %s unattributable despite an accepted current node", (goalRef) => {
+    const { sha, store } = boundWorld();
+    proposeRevision(store, sha);
+    rawAcceptance(store, "implement");
+    const old = graphFor(goalRef, "implement");
+    const encoded = encodeGraphContent(old.content);
+    if (!encoded.ok) throw new Error("historical graph failed to encode");
+    recordHistoricalCompiledGraph(store, { encoded: encoded.value, goalRef: old.goalRef, planningRunRef: "old-run" });
+    const view = coverage(portFor(store, {
+      readActive: () => [{ ...graphFor(GOAL_ID, "implement"), planningRunRef: "current-run" }],
+    })
+      .readCoverage({ goalRef: GOAL_ID }));
+    expect(statusOf(view)["crit-1"]).toEqual(["UNATTRIBUTABLE", "implement"]);
+    expect(view.totals).toMatchObject({ unattributable: 1, verified: 0 });
   });
 
   it("folds a criterion carried by a shared key and a verified node the same way in either definition order", () => {

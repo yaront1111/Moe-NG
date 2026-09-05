@@ -31,6 +31,7 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
+import { ambiguousCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -47,6 +48,8 @@ export interface CompiledNodeMission {
 export interface ActiveCompiledGraph {
   readonly content: GraphRevisionContent;
   readonly goalRef: string;
+  /** Present on durable reads; fixtures may supply only the sealed graph. */
+  readonly planningRunRef?: string;
 }
 
 export interface CompiledNodeSource {
@@ -103,7 +106,7 @@ export function activeCompiledGraphs(
     if (typeof graphContentHash !== "string" || !HEX_64.test(graphContentHash)) continue;
     const body = readGraphBody(store, projectId, graphContentHash);
     if (!body.ok) continue;
-    active.push(Object.freeze({ content: body.content, goalRef: aggregateId }));
+    active.push(Object.freeze({ content: body.content, goalRef: aggregateId, planningRunRef }));
   }
   return active;
 }
@@ -176,7 +179,10 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
   const readActive = options.readActive ?? activeCompiledGraphs;
   const sealed = (): readonly SealedNode[] => {
     try {
-      return sealedNodesOf(readActive(options.store, options.projectId));
+      const graphs = readActive(options.store, options.projectId);
+      const ambiguous = ambiguousCompiledNodeKeys(options.store, options.projectId, graphs);
+      const blocked = nodesBlockedByIdentity(graphs, ambiguous);
+      return sealedNodesOf(graphs).filter((node) => !blocked.has(node.nodeKey));
     } catch {
       // A degraded read lists nothing rather than throwing the surface down.
       return [];
