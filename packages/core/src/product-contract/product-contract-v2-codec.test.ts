@@ -444,3 +444,163 @@ describe("ProductContractRevision /2", () => {
     });
   });
 });
+
+const NAME_LIMIT = PRODUCT_CONTRACT_V2_LIMITS.maxEnvironmentVariableNameBytes;
+const LIST_LIMIT = PRODUCT_CONTRACT_V2_LIMITS.maxEnvironmentVariableNames;
+const LONE_SURROGATE = String.fromCharCode(0xd800);
+const NUL = String.fromCharCode(0);
+
+const INVALID = {
+  code: "PRODUCT_CONTRACT_V2_PROVENANCE_INVALID",
+  layer: "PRODUCT_CONTRACT_V2_PROVENANCE",
+  ok: false,
+} as const;
+const EXCEEDED = {
+  code: "PRODUCT_CONTRACT_V2_LIMIT_EXCEEDED",
+  layer: "PRODUCT_CONTRACT_V2_PROVENANCE",
+  ok: false,
+} as const;
+
+/** The section's sole requirement, with the names carrier set to whatever is under test. */
+function withDeploymentNames(value: unknown): Record<string, unknown> {
+  const revision = draft();
+  revision["deploymentRequirements"] = [{
+    ...requirement("deployment-loopback", ["technology-runtime"]),
+    environmentVariableNames: value,
+  }];
+  return revision;
+}
+
+/** `count` grammar-valid, strictly ascending names: V0000, V0001, ... */
+const variableNames = (count: number): readonly string[] => Array.from(
+  { length: count }, (_unused, index) => `V${String(index).padStart(4, "0")}`,
+);
+
+/** The admitted deployment requirement, or a throw naming the refusal that stopped it. */
+function admittedDeployment(value: unknown = draft()) {
+  const first = created(value).deploymentRequirements[0];
+  if (first === undefined) throw new Error("deploymentRequirements was empty");
+  return first;
+}
+
+describe("deployment requirement environment variable names", () => {
+  it("keeps a contract with the names field ABSENT valid, and does not invent the key", () => {
+    // DoD 2 (a): the overwhelmingly common case, and the arm a required field would break.
+    const admitted = admittedDeployment();
+    expect(Object.hasOwn(admitted, "environmentVariableNames")).toBe(false);
+    expect(Object.keys(admitted).sort()).toEqual([
+      "dependsOnRequirementIds", "priority", "requirementId", "statement",
+      "supersedesRequirementId",
+    ]);
+  });
+
+  it("round-trips a contract with the names field ABSENT unchanged", () => {
+    // DoD 2 at the codec layer: bytes and digest must not move for contracts written before.
+    const revision = created();
+    const encoded = encodeProductContractRevisionV2(revision);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) return;
+    const decoded = decodeProductContractRevisionV2Bytes(encoded.bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.revision).toEqual(revision);
+    expect(deriveProductContractRevisionV2Digest(revision)).toEqual({
+      ok: true, revisionDigest: revision.revisionDigest,
+    });
+  });
+
+  it("accepts an EMPTY names list, which is a different state from absence", () => {
+    // DoD 2 (b).
+    expect(admittedDeployment(withDeploymentNames([])))
+      .toMatchObject({ environmentVariableNames: [] });
+  });
+
+  it("accepts a deployment requirement that NAMES the variables it needs", () => {
+    // DoD 1, acceptance half.
+    expect(admittedDeployment(withDeploymentNames(["APP_PORT", "DATABASE_URL", "_LEGACY"])))
+      .toMatchObject({ environmentVariableNames: ["APP_PORT", "DATABASE_URL", "_LEGACY"] });
+  });
+
+  it("round-trips the names and binds them into the revision digest", () => {
+    const revision = created(withDeploymentNames(["DATABASE_URL"]));
+    const encoded = encodeProductContractRevisionV2(revision);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) return;
+    const decoded = decodeProductContractRevisionV2Bytes(encoded.bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.revision.deploymentRequirements[0]?.environmentVariableNames)
+      .toEqual(["DATABASE_URL"]);
+    // The carrier is in the digest source, so naming a variable moves the revision digest.
+    expect(decoded.revision.revisionDigest).not.toBe(created().revisionDigest);
+  });
+
+  it.each([
+    // NAMES ONLY. Every value-shaped entry is refused; the values are obviously fake.
+    ["an assignment-shaped entry", ["DB_PASSWORD=REDACTED_FAKE"]],
+    ["a colon-shaped entry", ["DB_PASSWORD: REDACTED_FAKE"]],
+    ["a space-separated entry", ["DB_PASSWORD REDACTED_FAKE"]],
+    ["a lowercase name", ["database_url"]],
+    ["a name starting with a digit", ["1DATABASE_URL"]],
+    ["a name with a hyphen", ["DATABASE-URL"]],
+    ["a name with a quote", ["DATABASE_\"URL"]],
+    ["a name with a newline", ["DATABASE_\nURL"]],
+    ["a name with a NUL", [`DATABASE_${NUL}URL`]],
+    ["a name with a leading space", [" DATABASE_URL"]],
+    ["an empty name", [""]],
+    ["a non-string name", [42]],
+    ["a duplicated name", ["DATABASE_URL", "DATABASE_URL"]],
+    ["an unsorted list", ["DATABASE_URL", "APP_PORT"]],
+    ["a bare string instead of a list", "DATABASE_URL"],
+    ["null instead of a list", null],
+    ["an object instead of a list", {}],
+    // Adversarial shapes a hostile caller reaches for, not shapes a person types.
+    ["a lone surrogate, which is not well-formed", [`A${LONE_SURROGATE}B`]],
+    ["a non-ASCII name that cannot be an environment variable", ["DATABASE_\u00DCRL"]],
+    ["a trailing space", ["DATABASE_URL "]],
+    ["an undefined entry", [undefined, "DATABASE_URL"]],
+  ])("refuses %s as PROVENANCE_INVALID", (_label, value) => {
+    expect(createProductContractRevisionV2(withDeploymentNames(value))).toEqual(INVALID);
+  });
+
+  it("never executes an accessor smuggled into the names list", () => {
+    // `exact` refuses accessor properties on the requirement itself; the list reader must
+    // not become the one place a getter runs. Assert BOTH: no throw, and a coded refusal.
+    const hostile: unknown[] = [];
+    Object.defineProperty(hostile, "0", {
+      configurable: true,
+      enumerable: true,
+      get: () => { throw new Error("accessor must never execute"); },
+    });
+    Object.defineProperty(hostile, "length", { value: 1, writable: true });
+    const value = withDeploymentNames(hostile);
+    expect(() => createProductContractRevisionV2(value)).not.toThrow();
+    expect(createProductContractRevisionV2(value)).toEqual(INVALID);
+  });
+
+  it("bounds the name length: accepts exactly the limit, refuses one byte past it", () => {
+    const longest = `V${"X".repeat(NAME_LIMIT - 1)}`;
+    expect(admittedDeployment(withDeploymentNames([longest])))
+      .toMatchObject({ environmentVariableNames: [longest] });
+    expect(createProductContractRevisionV2(withDeploymentNames([`${longest}X`])))
+      .toEqual(EXCEEDED);
+  });
+
+  it("bounds the list length: accepts exactly the limit, refuses one past it", () => {
+    const admitted = admittedDeployment(withDeploymentNames(variableNames(LIST_LIMIT)));
+    expect(admitted.environmentVariableNames).toHaveLength(LIST_LIMIT);
+    expect(createProductContractRevisionV2(withDeploymentNames(variableNames(LIST_LIMIT + 1))))
+      .toEqual(EXCEEDED);
+  });
+
+  it.each([
+    "functionalRequirements", "nonFunctionalRequirements", "securityPrivacyRequirements",
+    "technologyRequirements", "uxAccessibilityRequirements",
+  ])("refuses the names key on %s: it is a deployment-requirement field", (section) => {
+    // Proves the change stayed scoped to one section instead of widening the shared shape.
+    const revision = draft();
+    const existing = revision[section] as readonly Record<string, unknown>[];
+    revision[section] = existing.map((item) => ({ ...item, environmentVariableNames: [] }));
+    expect(createProductContractRevisionV2(revision)).toEqual(INVALID);
+  });
+});

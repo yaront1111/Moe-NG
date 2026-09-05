@@ -13,6 +13,7 @@ import {
   type ProductContractV2Budget,
   type ProductContractV2Criterion,
   type ProductContractV2DecisionOption,
+  type ProductContractV2DeploymentRequirement,
   type ProductContractV2DraftAdmission,
   type ProductContractV2Journey,
   type ProductContractV2Lineage,
@@ -50,6 +51,12 @@ const REQUIREMENT_KEYS = Object.freeze([
   "dependsOnRequirementIds", "priority", "requirementId", "statement",
   "supersedesRequirementId",
 ]);
+const DEPLOYMENT_REQUIREMENT_KEYS = Object.freeze([
+  "dependsOnRequirementIds", "environmentVariableNames", "priority", "requirementId",
+  "statement", "supersedesRequirementId",
+]);
+/** POSIX portable environment-variable name. Names only: a value cannot match this. */
+const ENVIRONMENT_VARIABLE_NAME = /^[A-Z_][A-Z0-9_]*$/;
 const CRITERION_KEYS = Object.freeze([
   "criterionId", "requirementId", "statement", "supersedesCriterionId", "verification",
 ]);
@@ -203,6 +210,35 @@ function readRequirement(value: unknown): ReadResult<ProductContractV2Requiremen
     statement: statement.value,
     supersedesRequirementId: supersedes.value,
   } as ProductContractV2Requirement));
+}
+
+/** Names only. A value-shaped entry (`NAME=secret`) cannot match the name grammar. */
+function readEnvironmentVariableNames(value: unknown): ReadResult<readonly string[]> {
+  if (!Array.isArray(value)) return invalid();
+  if (value.length > PRODUCT_CONTRACT_V2_LIMITS.maxEnvironmentVariableNames) return exceeded();
+  const result: string[] = [];
+  for (const candidate of value) {
+    const name = readText(candidate, PRODUCT_CONTRACT_V2_LIMITS.maxEnvironmentVariableNameBytes);
+    if (!name.ok) return name;
+    if (!ENVIRONMENT_VARIABLE_NAME.test(name.value)) return invalid();
+    if (result.at(-1) !== undefined && result.at(-1)! >= name.value) return invalid();
+    result.push(name.value);
+  }
+  return success(Object.freeze(result));
+}
+
+/** Accepts a deployment requirement with OR without the optional names carrier. */
+function readDeploymentRequirement(
+  value: unknown,
+): ReadResult<ProductContractV2DeploymentRequirement> {
+  if (!exact(value, DEPLOYMENT_REQUIREMENT_KEYS)) return readRequirement(value);
+  const { environmentVariableNames, ...rest } = value;
+  const requirement = readRequirement(rest);
+  if (!requirement.ok) return requirement;
+  const names = readEnvironmentVariableNames(environmentVariableNames);
+  return names.ok
+    ? success(Object.freeze({ ...requirement.value, environmentVariableNames: names.value }))
+    : names;
 }
 
 function readCriterion(value: unknown): ReadResult<ProductContractV2Criterion> {
@@ -457,7 +493,8 @@ function parseRevision(value: unknown, full: boolean): ReadResult<ParsedRevision
   const technology = readSortedItems(record["technologyRequirements"], false,
     PRODUCT_CONTRACT_V2_LIMITS.maxItemsPerSection, readRequirement, (item) => item.requirementId);
   const deployment = readSortedItems(record["deploymentRequirements"], false,
-    PRODUCT_CONTRACT_V2_LIMITS.maxItemsPerSection, readRequirement, (item) => item.requirementId);
+    PRODUCT_CONTRACT_V2_LIMITS.maxItemsPerSection, readDeploymentRequirement,
+    (item) => item.requirementId);
   const criteria = readSortedItems(record["criteria"], false,
     PRODUCT_CONTRACT_V2_LIMITS.maxCriteria, readCriterion, (item) => item.criterionId);
   const negativeScope = readSortedItems(record["negativeScope"], false,

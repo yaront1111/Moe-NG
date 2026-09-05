@@ -7,6 +7,8 @@ import {
 const MAX_ID = 512;
 const MAX_STATEMENT = 32_768;
 const MAX_ITEMS = 512;
+const MAX_ENVIRONMENT_VARIABLE_NAME = 128;
+const MAX_ENVIRONMENT_VARIABLE_NAMES = 256;
 const encoder = new TextEncoder();
 
 const REVISION_KEYS = Object.freeze([
@@ -22,6 +24,12 @@ const REQUIREMENT_KEYS = Object.freeze([
   "dependsOnRequirementIds", "priority", "requirementId", "statement",
   "supersedesRequirementId",
 ]);
+const DEPLOYMENT_REQUIREMENT_KEYS = Object.freeze([
+  "dependsOnRequirementIds", "environmentVariableNames", "priority", "requirementId",
+  "statement", "supersedesRequirementId",
+]);
+/** POSIX portable environment-variable name. Names only: a value cannot match this. */
+const ENVIRONMENT_VARIABLE_NAME = /^[A-Z_][A-Z0-9_]*$/;
 
 function text(value: unknown, maximum: number = MAX_ID): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maximum
@@ -85,6 +93,22 @@ function requirement(value: unknown): boolean {
   return (supersedes === null || text(supersedes))
     && supersedes !== row["requirementId"]
     && !row["dependsOnRequirementIds"].includes(row["requirementId"] as string);
+}
+
+/** Names only. A value-shaped entry (`NAME=secret`) cannot match the name grammar. */
+function environmentVariableName(value: unknown): value is string {
+  return text(value, MAX_ENVIRONMENT_VARIABLE_NAME) && ENVIRONMENT_VARIABLE_NAME.test(value);
+}
+
+/** Accepts a deployment requirement with OR without the optional names carrier. */
+function deploymentRequirement(value: unknown): boolean {
+  const row = exactGate1Row(value, DEPLOYMENT_REQUIREMENT_KEYS);
+  if (row === null) return requirement(value);
+  const { environmentVariableNames, ...rest } = row;
+  return requirement(rest)
+    && sortedTexts(
+      environmentVariableNames, true, MAX_ENVIRONMENT_VARIABLE_NAMES, environmentVariableName,
+    );
 }
 
 function criterion(value: unknown): boolean {
@@ -169,7 +193,7 @@ export function validGate1RevisionShape(value: unknown): value is ProductContrac
     && section(row, "securityPrivacyRequirements", "requirementId", requirement)
     && section(row, "technologyRequirements", "requirementId", requirement)
     && section(row, "uxAccessibilityRequirements", "requirementId", requirement)
-    && section(row, "deploymentRequirements", "requirementId", requirement)
+    && section(row, "deploymentRequirements", "requirementId", deploymentRequirement)
     && section(row, "criteria", "criterionId", criterion, false, 1_024)
     && section(row, "negativeScope", "scopeId", (item) => statement(item, "scopeId"))
     && section(row, "assumptions", "assumptionId", assumption, true)
