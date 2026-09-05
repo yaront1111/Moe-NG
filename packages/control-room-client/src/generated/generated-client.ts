@@ -190,7 +190,11 @@ export interface GeneratedCommandBuilders {
   readonly ["cutover.quiesce"]: CommandBuilder<"cutover.quiesce">;
   readonly ["dependency.challenge"]: CommandBuilder<"dependency.challenge">;
   readonly ["deployment.deploy"]: CommandBuilder<"deployment.deploy">;
+  readonly ["deployment.migrate_down"]: CommandBuilder<"deployment.migrate_down">;
+  readonly ["deployment.rollback"]: CommandBuilder<"deployment.rollback">;
   readonly ["deployment.set_target"]: CommandBuilder<"deployment.set_target">;
+  readonly ["design.read"]: CommandBuilder<"design.read">;
+  readonly ["design.submit"]: CommandBuilder<"design.submit">;
   readonly ["effect.activate"]: CommandBuilder<"effect.activate">;
   readonly ["effect.adopt_result"]: CommandBuilder<"effect.adopt_result">;
   readonly ["effect.confirm_absent"]: CommandBuilder<"effect.confirm_absent">;
@@ -245,6 +249,7 @@ export interface GeneratedCommandBuilders {
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
   readonly ["project.register"]: CommandBuilder<"project.register">;
+  readonly ["project.set_agent_provider"]: CommandBuilder<"project.set_agent_provider">;
   readonly ["provider.probe"]: CommandBuilder<"provider.probe">;
   readonly ["qualification.cancel"]: CommandBuilder<"qualification.cancel">;
   readonly ["qualification.recover"]: CommandBuilder<"qualification.recover">;
@@ -304,7 +309,11 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["cutover.quiesce"]: commandBuilderFor("cutover.quiesce"),
     ["dependency.challenge"]: commandBuilderFor("dependency.challenge"),
     ["deployment.deploy"]: commandBuilderFor("deployment.deploy"),
+    ["deployment.migrate_down"]: commandBuilderFor("deployment.migrate_down"),
+    ["deployment.rollback"]: commandBuilderFor("deployment.rollback"),
     ["deployment.set_target"]: commandBuilderFor("deployment.set_target"),
+    ["design.read"]: commandBuilderFor("design.read"),
+    ["design.submit"]: commandBuilderFor("design.submit"),
     ["effect.activate"]: commandBuilderFor("effect.activate"),
     ["effect.adopt_result"]: commandBuilderFor("effect.adopt_result"),
     ["effect.confirm_absent"]: commandBuilderFor("effect.confirm_absent"),
@@ -359,6 +368,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
     ["project.register"]: commandBuilderFor("project.register"),
+    ["project.set_agent_provider"]: commandBuilderFor("project.set_agent_provider"),
     ["provider.probe"]: commandBuilderFor("provider.probe"),
     ["qualification.cancel"]: commandBuilderFor("qualification.cancel"),
     ["qualification.recover"]: commandBuilderFor("qualification.recover"),
@@ -916,7 +926,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd";
+export const GENERATED_CONTRACT_DIGEST = "05eef58c496aa7473050da67a224118caeb3ee6de6f9b2fe5c4dfc467d17ec0a";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

@@ -109,7 +109,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T18:23:43.729Z",
+  "updatedAt": "2026-09-05T22:48:37.297Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -222,12 +222,9 @@
     "sessionId": "worker-2739fee7@2026-09-05T14:20:38Z",
     "at": "2026-09-05T14:24:26.305Z"
   },
-  "blockedReason": "Step 1's own hard-stop clause fires: BOTH carved-out prerequisites are absent at HEAD, so registering these kinds now would MCP-advertise an operator-only command. Zero production bytes written. Full transcript in comment-1e2ff9ea.\n\nMEASURED (tree AND HEAD, fresh session 2026-09-05):\n- `git grep -n 'environment.set_variable' HEAD -- apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts` -> no output. Neither kind is in `MCP_EXCLUDED_COMMAND_KINDS` (mcp-tool-allowlist.ts:59) at HEAD or in the tree. `agent-spawn-contract.ts:215` does carry both in HUMAN_ONLY_STEPS, but only as worker-caece97b's uncommitted in-flight edit for task-d0d1cb5c (WORKING) — foreign WIP, untouched by me, not a landed prerequisite.\n- `grep -c 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` -> 0. RUNTIME_COMMAND_KINDS (:85) has neither kind; task-b3888068 is still PLANNING.\n\nWHY BLOCK, NOT PARTIAL-LAND (security): mcp-tool-allowlist.ts:84-90 serves Object.keys(PAYLOAD_KEYS) MINUS MCP_EXCLUDED_COMMAND_KINDS. Step 2 adds both kinds to PAYLOAD_KEYS — with the exclusion unlanded they are MCP-advertised immediately, and the MCP port authenticates with the operator bootstrap credential (mcp-main.ts:112-127), so an agent holding it arrives AS the operator and can set a variable the deploy delivers to production. Step 1 and taskRail 1 both name this stop. Independently, daemon-store-dependencies.test.ts:238 welds PAYLOAD_KEYS to the v2 registry, so a partial land of steps 2-3 reds a shared arm for everyone in this checkout.\n\nBOARD DEFECT: this row's dependsOn is ['task-d0c63cd8...'] (DONE) only — the two leaves split out of it on 2026-09-05 were never added, which is why it was offered early. Please add both ids above to dependsOn (worker seats get [NOT_ALLOWED] on set_task_dependencies).\n\nNo plan change needed — step 1's clause worked as designed. Resume at step 2 unchanged once both prerequisites are DONE.",
-  "blockedOnTaskIds": [
-    "task-d0d1cb5c3f034d50bd84b7ed56b7e812",
-    "task-b3888068c0e2481cb1463524ee7f2895"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T14:23:21.940Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
