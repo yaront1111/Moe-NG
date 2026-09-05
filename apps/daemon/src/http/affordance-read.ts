@@ -179,6 +179,35 @@ function soleLegacyPlanningSubject(
   return hasLegacyOffer ? Object.freeze({ goalId, runId }) : null;
 }
 
+/**
+ * The prerequisite roster the SURFACE reports, which is the admission table's roster plus one
+ * fact the table deliberately does not carry: `project.activate` also needs a committed
+ * `policy.install`.
+ *
+ * That fact belongs to the MEASURED RECEIPTS, not to `COMMAND_PREREQUISITES`. With no policy
+ * installed, `measurePolicy` answers `unmeasuredReceipt("policy", "no policy slices installed")`
+ * (bootstrap/activation-receipts-measure.ts:237) and the command refuses
+ * ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS. Adding the kind to the admission
+ * table instead does NOT add a prerequisite - it moves which layer answers, so the admission
+ * gate replies BOOTSTRAP_PREREQUISITE_MISSING first and that receipt refusal stops being
+ * reachable. Measured, 39 daemon files red (task-a5a6abcc). Do not tidy this into the table.
+ *
+ * The surface reads the COMMITTED fact rather than the receipt because the measurement is async
+ * and copies the store to disk, and this is a hot read path. One case therefore stays invisible
+ * here by design: a policy committed while the daemon's `installedPolicySliceRefs` is unwired
+ * (it defaults to `[]`, bootstrap/activation-receipts-ports.ts:200) still reads READY, and the
+ * receipt layer remains its only authority. That is the live-override-versus-defaulted
+ * distinction bootstrap/activation-command-entry.test.ts exists to preserve.
+ *
+ * COMPOSED, never substituted: an operator on a fresh store is told the table's primaries AND
+ * the policy in one roster instead of being walked through one refusal at a time.
+ */
+function surfaceMissing(ledger: DurableLedger, kind: BootstrapCommandKind): readonly string[] {
+  const missing = missingPrerequisites(ledger, kind);
+  if (kind !== "project.activate" || ledger.kinds.has("policy.install")) return missing;
+  return Object.freeze([...missing, "policy.install"]);
+}
+
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
@@ -236,7 +265,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           version: versionOf(ledger, aggregateId),
         });
       }
-      const missing = missingPrerequisites(ledger, kind);
+      const missing = surfaceMissing(ledger, kind);
       if (missing.length > 0) {
         return Object.freeze({
           aggregateId: null, ...claimFields(claims, kind, null, now), kind,

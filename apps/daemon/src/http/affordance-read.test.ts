@@ -6,7 +6,9 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
-import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import {
+  humanReviewWitness, missingPrerequisites, readDurableLedger,
+} from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
   CLASSIFYING_POLICY_SLICE,
@@ -15,6 +17,14 @@ import {
   fixtureBudgetCommitmentFor,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  PROJECT_ID as BOOTSTRAP_PROJECT,
+  RUN_ID as BOOTSTRAP_RUN_ID,
+  closeStores as closeBootstrapStores,
+  driveThrough,
+  openStore as openBootstrapStore,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -122,8 +132,13 @@ describe("createAffordancePort", () => {
   it("offers only the chain roots on a fresh ledger, blocking the rest by name", () => {
     expect(step("project.register")).toMatchObject({ status: "READY", version: 0 });
     expect(step("policy.install")).toMatchObject({ status: "READY" });
+    // The roster is COMPOSED: the admission table's three primaries, then the policy fact the
+    // table deliberately does not carry (task-a5a6abcc). Kept a literal set-equality pin rather
+    // than softened to toContain — the literal is what makes it a guard.
     expect(step("project.activate")).toMatchObject({
-      missing: ["project.register", "project.bind_repository", "provider.probe"],
+      missing: [
+        "project.register", "project.bind_repository", "provider.probe", "policy.install",
+      ],
       status: "BLOCKED",
     });
     expect(step("goal.create")).toMatchObject({
@@ -924,5 +939,294 @@ describe("a node waits on its hard dependencies", () => {
     // The dependency block is the stronger one: a node that cannot start is not
     // offered a submission, even though a verification-only block still is.
     expect(offeredKindsFor(gated, "node-dep-both")).toEqual([]);
+  });
+});
+
+/**
+ * task-a5a6abcc: the offer surface withholds `project.activate` while no `policy.install`
+ * is committed. The policy fact lives in the MEASURED RECEIPTS, not in the admission table,
+ * so these arms drive the PRODUCTION surface rather than a re-derived roster.
+ *
+ * Each world opens its OWN store. The suite above shares one accumulating ledger that has
+ * `policy.install` committed by its second describe, so a world that must observe "no policy
+ * installed" cannot be a late arm on the shared store — it would depend on suite order.
+ */
+describe("project.activate is withheld until a policy is installed (task-a5a6abcc)", () => {
+  const worlds: { close: () => void }[] = [];
+
+  function policyWorld() {
+    const root = mkdtempSync(join(tmpdir(), "moe-afford-policy-"));
+    const worldStore = SqliteEventStore.openForProject(join(root, "store.db"), PROJECT);
+    installTestRecoveryBinding(worldStore);
+    let ids = 0;
+    const worldPort = createAffordancePort({
+      mintId: () => `afford-policy-${String(ids += 1)}`,
+      projectId: PROJECT,
+      store: worldStore,
+    });
+    const world = {
+      close: () => {
+        worldStore.close();
+        rmSync(root, { force: true, recursive: true });
+      },
+      commit: (kind: string, payload: Record<string, unknown>, expectedVersion = 0): void => {
+        const outcome = runBootstrapCommand(worldStore, encoder.encode(JSON.stringify({
+          commandId: `cmd-${kind}-${String(ids += 1)}`,
+          correlationId: "corr-policy-gate",
+          decidedAt: "2026-09-05T12:00:00.000Z",
+          expectedVersion,
+          kind,
+          payload,
+          principalId: "operator-local",
+          projectId: PROJECT,
+          schemaVersion: "moe-bootstrap-command/1",
+        })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+        FIXTURE_ACTIVATION_RECEIPTS);
+        if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+      },
+      offeredKinds: (): string[] => {
+        const result = worldPort.readSurface();
+        if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+        return result.nextAllowedCommands.map((command) => command.commandKind);
+      },
+      step: (kind: string) => {
+        const result = worldPort.readSurface();
+        if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+        const found = result.steps.find((entry) => entry.kind === kind);
+        if (found === undefined) throw new Error(`no step for ${kind}`);
+        return found;
+      },
+    };
+    worlds.push(world);
+    return world;
+  }
+
+  /** The three table prerequisites, in the order `COMMAND_PREREQUISITES` lists them. */
+  function commitTablePrerequisites(world: ReturnType<typeof policyWorld>): void {
+    world.commit("project.register", { owner: "operator-local" });
+    world.commit("provider.probe", { observation: PROVIDER_OBSERVATION });
+    world.commit("project.bind_repository", {
+      observation: {
+        baseRevisionHash: "b".repeat(64), repositoryRef: "repo-1",
+        scopeRef: "scope-1", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 1);
+  }
+
+  afterAll(() => {
+    for (const world of worlds) world.close();
+  });
+
+  it("BLOCKS the step and WITHHOLDS the offer when every table prerequisite is met but no policy is", () => {
+    const world = policyWorld();
+    commitTablePrerequisites(world);
+
+    // The defect this row owns: the admission table is satisfied, so the surface used to
+    // advertise READY while `measurePolicy` would refuse ACTIVATION_POLICY_UNMEASURED at
+    // DAEMON_ACTIVATION_RECEIPTS. Set equality, not toContain: a roster that later grew a
+    // bogus member has to red here.
+    expect(world.step("project.activate")).toMatchObject({
+      missing: ["policy.install"], status: "BLOCKED",
+    });
+    // The step status and the offer roster are asserted on ONE frame. A BLOCKED step beside
+    // a live offer is exactly the split this row closes, and two tests could never see it.
+    expect(world.offeredKinds()).not.toContain("project.activate");
+    // The gate is scoped to this one kind: every other kind still reads the table alone.
+    expect(world.step("goal.create")).toMatchObject({
+      missing: ["project.activate"], status: "BLOCKED",
+    });
+
+    // THE CONVERSE, so the gate is not simply always-off.
+    world.commit("policy.install", { slice: POLICY_SLICE });
+    expect(world.step("project.activate")).toMatchObject({ missing: [], status: "READY" });
+    expect(world.offeredKinds()).toContain("project.activate");
+  });
+
+  it("COMPOSES with the table roster instead of replacing it: primaries first, policy last", () => {
+    const world = policyWorld();
+    world.commit("project.register", { owner: "operator-local" });
+
+    // An operator part-way through the chain is told EVERYTHING that is outstanding, not
+    // walked through one refusal at a time.
+    expect(world.step("project.activate")).toMatchObject({
+      missing: ["project.bind_repository", "provider.probe", "policy.install"],
+      status: "BLOCKED",
+    });
+  });
+
+  it("tests committed-ness, never position: a policy installed FIRST still reaches READY", () => {
+    const world = policyWorld();
+    // `COMMAND_PREREQUISITES["policy.install"]` is `[]`, so the install can land at any point
+    // in the chain. A gate keyed on chain position rather than the committed fact reds here.
+    world.commit("policy.install", { slice: POLICY_SLICE });
+    commitTablePrerequisites(world);
+
+    expect(world.step("project.activate")).toMatchObject({ missing: [], status: "READY" });
+    expect(world.offeredKinds()).toContain("project.activate");
+  });
+
+  it("reads presence, not count: one installed slice is as good as three", () => {
+    const world = policyWorld();
+    commitTablePrerequisites(world);
+    world.commit("policy.install", { slice: POLICY_SLICE });
+    expect(world.step("project.activate")).toMatchObject({ missing: [], status: "READY" });
+
+    // `policy.install` is REPEATABLE — a second slice lands on the same aggregate at version 1.
+    // `ledger.kinds.has` is presence, so the verdict must not move.
+    world.commit("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
+    expect(world.step("policy.install")).toMatchObject({ status: "COMMITTED" });
+    expect(world.step("project.activate")).toMatchObject({ missing: [], status: "READY" });
+    expect(world.offeredKinds()).toContain("project.activate");
+  });
+});
+
+
+/**
+ * THE TWO AUTHORITIES AGREE ON ONE FRAME (task-ebbcbdb4).
+ *
+ * THE DEFECT, measured live on UnAI: ONE `/affordances/read` frame carried BOTH
+ * `steps[goal.close].status === "BLOCKED"` and a live `goal.close` entry in
+ * `nextAllowedCommands`, for the same goal at the same instant. The step projection reads
+ * `missingPrerequisites` (affordance-read.ts:206, :235) while the offer ladder reads
+ * `closeReadiness` (affordance-planning-offers.ts:192), and the two disagreed by construction on
+ * every project approved in the BROWSER — which is every project the browser can approve, since
+ * `approval.decide_intent` is the only approval wire it has.
+ *
+ * The fix corrected the PREREQUISITE rather than withholding the offer (owner decision,
+ * comment-5a8278d7). This arm is what proves the two agree afterwards, and it reads BOTH answers
+ * off the SAME frame — two arms on two worlds could both be right about different worlds and
+ * still let the split reopen.
+ *
+ * The world is the shipped bootstrap journey driven to its approval and then approved the way
+ * the browser approves, through `runApprovalIntentCommand`. Nothing here re-derives ledger
+ * state: the frame comes from the production port over a real store.
+ */
+describe("the offer roster and the step projection agree on a browser-approved goal (task-ebbcbdb4)", () => {
+  let intentMints = 0;
+
+  afterAll(closeBootstrapStores);
+
+  /** The shipped journey up to its approval, then the BROWSER's approval and nothing else. */
+  function browserApprovedStore(): SqliteEventStore {
+    const worldStore = openBootstrapStore();
+    driveThrough(worldStore, "approval.decide");
+    const commandId = "cmd-intent-approve-affordance";
+    const approved = runApprovalIntentCommand({
+      commandId,
+      correlationId: "corr-affordance-intent",
+      decidedAt: "2026-09-05T12:00:00.000Z",
+      expectedVersion: worldStore.getAggregateVersion(BOOTSTRAP_RUN_ID),
+      humanReview: humanReviewWitness("principal-1", commandId),
+      payload: {
+        decision: "APPROVE",
+        decisionReason: "the plan is sound",
+        dependencyChanges: { additions: [], challenges: [], removals: [] },
+        runId: BOOTSTRAP_RUN_ID,
+      },
+      principalId: "principal-1",
+      projectId: BOOTSTRAP_PROJECT,
+      store: worldStore,
+      targetAggregateId: BOOTSTRAP_RUN_ID,
+    });
+    expect(approved.ok, approved.ok ? "" : `${approved.code}@${approved.refusedBy}`).toBe(true);
+
+    const ledger = readDurableLedger(worldStore, BOOTSTRAP_PROJECT);
+    // The divergence the arm rests on: the SEEDED approval kind is absent, so the frame below is
+    // answering about a goal only the browser's wire ever approved.
+    expect(ledger.kinds.has("approval.decide_intent")).toBe(true);
+    expect(ledger.kinds.has("approval.decide")).toBe(false);
+    return worldStore;
+  }
+
+  function frameOf(worldStore: SqliteEventStore) {
+    const worldPort = createAffordancePort({
+      mintId: (kind: string) => `afford-intent-${kind}-${String(intentMints += 1)}`,
+      projectId: BOOTSTRAP_PROJECT,
+      store: worldStore,
+    });
+    const result = worldPort.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`surface refused: ${result.code}`);
+    return result;
+  }
+
+  it("offers goal.close on the same frame whose step projection calls it unblocked", () => {
+    const worldStore = browserApprovedStore();
+
+    const frame = frameOf(worldStore);
+    const step = frame.steps.find((entry) => entry.kind === "goal.close");
+    const offers = frame.nextAllowedCommands.filter(
+      (command) => command.commandKind === "goal.close");
+
+    // (a) THE OFFER IS STILL MADE. The fix does not withhold it — withholding would have left a
+    // browser-approved goal advertising nothing an operator could ever do.
+    expect(offers).toHaveLength(1);
+    // (b) AND THE PROJECTION AGREES, on this same frame. `missing: []` is the load-bearing half:
+    // BLOCKED with `missing: ["approval.decide"]` is exactly what the live frame carried.
+    expect(step).toMatchObject({ missing: [], status: "READY" });
+  });
+
+  /**
+   * `repository.publish` SHOWED THE IDENTICAL SPLIT and is corrected by the same table entry.
+   *
+   * Its step is asserted here rather than its dispatch: the publish OFFER is withheld on this
+   * world for a different and correct reason — `affordance-planning-offers.ts:178` requires a
+   * landed commit, and this fixture journey lands none — so there is no offer to dispatch from
+   * the frame. That the widened prerequisite genuinely ACCEPTS a `repository.publish` after a
+   * browser approval is proven where a real dispatch is reachable, at the durable level in
+   * `bootstrap/bootstrap-durability.test.ts`. What this frame can prove, and what the live UnAI
+   * frame got wrong, is that the STEP no longer says BLOCKED on an approval the browser cannot
+   * perform.
+   */
+  it("stops calling the repository.publish step BLOCKED on an approval the browser cannot make", () => {
+    const worldStore = browserApprovedStore();
+
+    const frame = frameOf(worldStore);
+    const step = frame.steps.find((entry) => entry.kind === "repository.publish");
+
+    expect(step).toMatchObject({ missing: [], status: "READY" });
+    // The publish offer is absent, and NOT because this row withheld it: no node of this goal is
+    // landed as a commit, which is the landing gate's own answer.
+    expect(frame.nextAllowedCommands.filter(
+      (command) => command.commandKind === "repository.publish")).toEqual([]);
+  });
+
+  /**
+   * `goal.close` DISPATCHED FROM ITS OWN OFFER — the honest half.
+   *
+   * The sequence gate no longer answers: it reports nothing missing, which is the whole of what
+   * this row corrects. The refusal that remains is the GOAL's own, from the closure vocabulary,
+   * and it is there because `approval-intent-sources.ts:137` mints an EMPTY `approvedNodeScope`
+   * for an initial-graph approval while `goal-close-prerequisite.ts:87` reads an empty scope as
+   * "no approval names an approved node scope". That is a SECOND instance of this same defect
+   * class one fence deeper, in a module this row does not own; it is filed rather than papered
+   * over, and this arm pins the current answer so closing it has to be deliberate.
+   */
+  it("dispatches the goal.close offer past the sequence gate to the goal's own authority", () => {
+    const worldStore = browserApprovedStore();
+    const frame = frameOf(worldStore);
+    const offered = frame.nextAllowedCommands.find(
+      (command) => command.commandKind === "goal.close");
+    if (offered === undefined) throw new Error("no goal.close offer on the frame");
+
+    const dispatched = runBootstrapCommand(worldStore, encoder.encode(JSON.stringify({
+      commandId: offered.commandId,
+      correlationId: "corr-affordance-close",
+      decidedAt: "2026-09-05T12:00:00.000Z",
+      expectedVersion: offered.expectedVersion,
+      kind: offered.commandKind,
+      payload: { goalId: offered.targetAggregateId },
+      principalId: "operator-local",
+      projectId: BOOTSTRAP_PROJECT,
+      schemaVersion: offered.inputSchemaVersion,
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+    FIXTURE_ACTIVATION_RECEIPTS);
+
+    expect(dispatched.ok).toBe(false);
+    if (dispatched.ok) throw new Error("expected the closure fence to answer");
+    // NOT the sequence gate, and asserted on the production reader rather than on the code —
+    // `publishRepository` proves two authorities can share one code and one layer here.
+    expect(missingPrerequisites(readDurableLedger(worldStore, BOOTSTRAP_PROJECT), "goal.close"))
+      .toEqual([]);
+    expect(dispatched.code).not.toBe("BOOTSTRAP_PREREQUISITE_MISSING");
   });
 });
