@@ -93,16 +93,28 @@
     {
       "stepId": "step-5",
       "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review). git status --porcelain the exact paths first. New files are untracked: copy to %TEMP% suffixed by worker id BEFORE mutating; restore; prove SHA256 equality in a SEPARATE call. Tracked files: empty git diff.\n\n(a) Delete the extra-key arm's expected key from exactDataRecord for the success frame -> extra-key test goes green (that is the red you want on the decoder). Restore.\n(b) Remove `/design/read` from DEV_PROXY_PATHS only -> live-document-proxy.test.ts and/or UNPROXIED arm reds.\n(c) Remove the DESIGN_REVISION_ABSENT copy from the card -> cr.design.none arm reds or the card is blank. Restore each.\n\nGATES standalone foreground, quote Test Files N passed: `pnpm --filter @moe/control-room test` (complete_task verification command), `pnpm --filter @moe/daemon test` (UNCONSUMED/UNPROXIED pins), `pnpm typecheck`. Path-attributed baseline for foreign red.\n\nAdversarial: extra key never renders as a design; no-design copy is words not emptiness; payload cannot include projectId; cordum-app still under a split-later 400 (add-only); no daemon import. Report every path including new files.\n\nNamed verification command: `pnpm --filter @moe/control-room test`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-design.ts",
         "apps/control-room/src/live/dev-proxy-paths.ts",
         "apps/control-room/src/v2/goals/design-card.tsx"
       ],
-      "startedAt": "2026-09-05T19:37:01.472Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-design.ts",
+        "apps/control-room/src/live/live-design.test.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/v2/goals/design-card.tsx",
+        "apps/control-room/src/v2/goals/design-card.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "Final adversarial review + three mutation reds complete; restores SHA256-proven in separate calls (comment-88fc22469d024a8289440654f400c080). Named verification pnpm --filter @moe/control-room test ran fresh after restores with VITEST_MAX_WORKERS=2: exit0, Test Files153 passed(153), Tests1903 passed(1903),184.93s. No exclusions/timeouts changed. Focused daemon HTTP/route census:2 files20 tests PASS; CR typecheck exit0. Real durable HTTP frame decode proof1 test PASS, full source comment-e829916205b94643a2c51ec18d967817. Gate limitations disclosed in comment-e0e2140e6bf94a8baa43db3045423d2e: full daemon >20min foreign timeouts then runtime-reset exit-1/no final count, INCOMPLETE never green; root typecheck TS7053 only generated-coverage.test.ts(92,19), foreign vocabulary. Broad gate failures not attributed to this add-only browser slice. Two shared integration files clean after peer checkpoint4653ed18 includes our mount/census edits. All eight touched paths declared; six remain for wrapper completion. No processes left running. No clean-checkout/broad-daemon-green claim. Second review confirms no writes/commands, descriptors+copies freeze wire data, session/goal identity fences late reads, visible words for absence/skip/error, React-escaped text, exact goalRef-only request, no daemon import. Existing oversized cordum-app adds two lines only.",
+      "startedAt": "2026-09-05T19:37:01.472Z",
+      "completedAt": "2026-09-05T19:46:59.251Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -121,16 +133,34 @@
       "author": "worker-f72a1438",
       "content": "REAL PRODUCER FRAME, anchored to production-at-verification (HEAD 4c3880cb plus this row's live-design.ts). No daemon imports in browser source. Temporary Vitest source below is complete and recreatable; place outside tree and execute: pnpm --filter @moe/daemon exec vitest run --root <temporary-directory> --config D:/projexts/moe-next/apps/daemon/package.json --maxWorkers=1 design-frame.test.ts. Fresh output: Test Files 1 passed (1), Tests 1 passed (1), exit 0 (6.68s). Real durable submit, real readDesignRevision, real handleDesignReadRequest, JSON wire round-trip, then production mapDesignAnswer. Named entity Order/version 1 arrives; extra key refuses at the browser decoder.\n\nimport { afterEach, expect, it } from \"D:/projexts/moe-next/node_modules/vitest/dist/index.js\";\nimport { GOAL_ID, PROJECT_ID, closeStores } from \"D:/projexts/moe-next/apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts\";\nimport { approveGate1, boundWorld, committedRevision } from \"D:/projexts/moe-next/apps/daemon/src/planning/plan-reject-test-fixtures.ts\";\nimport { designRevisionFixture } from \"D:/projexts/moe-next/apps/daemon/src/design/design-test-fixtures.ts\";\nimport { readDesignRevision, submitDesignRevision } from \"D:/projexts/moe-next/apps/daemon/src/design/design-store.ts\";\nimport { handleDesignReadRequest } from \"D:/projexts/moe-next/apps/daemon/src/http/design-read.ts\";\nimport { CAPABILITIES } from \"D:/projexts/moe-next/apps/daemon/src/daemon-command-vocabulary.ts\";\nimport { WIRE_PROTOCOL_VERSION } from \"D:/projexts/moe-next/apps/daemon/src/http/http-contract.ts\";\nimport { mapDesignAnswer } from \"D:/projexts/moe-next/apps/control-room/src/live/live-design.ts\";\nafterEach(closeStores);\nit(\"decodes an Order from the real committed design through the real HTTP handler\", () => {\n  const store = boundWorld();\n  const contractRef = committedRevision(store);\n  approveGate1(store, contractRef);\n  const revision = { ...designRevisionFixture(), dataModel: [{ entity: \"Order\", fields: [\"id\"], relations: [] }] };\n  expect(submitDesignRevision(store, { commandId: \"cmd-design-browser\", contractRef,\n    correlationId: \"corr-design-browser\", decidedAt: \"2026-09-05T09:00:00.000Z\", expectedVersion: 0,\n    goalRef: GOAL_ID, principalId: \"designer\", projectId: PROJECT_ID, revision }).ok).toBe(true);\n  const answer = handleDesignReadRequest({\n    authenticator: { authenticate: () => ({ verdict: \"AUTHENTICATED\", principal: {\n      principalId: \"operator\", projectId: PROJECT_ID, capabilities: [CAPABILITIES.GOAL] } }) },\n    designReads: { read: (input) => readDesignRevision(store, input) },\n  }, { body: new TextEncoder().encode(JSON.stringify({ goalRef: GOAL_ID })), credential: \"fixture\",\n    protocolVersion: WIRE_PROTOCOL_VERSION });\n  expect(answer.kind).toBe(\"REPLY\");\n  if (answer.kind !== \"REPLY\") throw new Error(\"No HTTP answer\");\n  expect(answer.httpStatus).toBe(200);\n  const wire = JSON.parse(JSON.stringify(answer.body));\n  expect(mapDesignAnswer(answer.httpStatus, wire)).toMatchObject({ status: \"DESIGN\",\n    record: { version: 1, goalRef: GOAL_ID, revision: { dataModel: [{ entity: \"Order\", fields: [\"id\"], relations: [] }] } } });\n  expect(mapDesignAnswer(200, { ...wire, extra: true })).toEqual({ status: \"ERROR\",\n    code: \"DESIGN_RESPONSE_INVALID\", layer: \"CONTROL_ROOM_LIVE_DESIGN\" });\n  console.log(\"REAL_HTTP_DESIGN Order version=1; extra-key ERROR DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN\");\n});",
       "timestamp": "2026-09-05T19:35:16.463Z"
+    },
+    {
+      "id": "comment-88fc22469d024a8289440654f400c080",
+      "author": "worker-f72a1438",
+      "content": "DRILLS (current owned bytes, all expected failing exits 1; restore proof separate from restore). Corrected step-5(a)'s contradictory 'test goes green' wording to the intended mutation-red: relax exact arity/extra-string-key rejection -> live-design extra-key arm RED, received DESIGN instead of ERROR DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN; 4 failed/3 passed tests. Delete only DEV_PROXY_PATHS /design/read -> proxy pin RED, 1 failed. Delete absence sentence -> card RED, received empty text vs 'This goal has no design yet.', 1 failed/6 passed. Every mutation was restored in finally, guarded against concurrent path changes. Before mutation status: decoder/card ??, proxy M. Separate Get-FileHash equality against out-of-tree backup proved all three restores: live-design F45A90F68056F984D626A6AC6D9FF6CB5EE37710569F3663B6CC435251A9FA30; card B88BC4DB2B92F974014855D31795A56462C5865F41BE91F06C1C9687CFB1C9F2; proxy FDDE69E2503FAFAB67C13C9887694F493C699675E833DAE121082CFA434D4511. No empty git-diff claim for untracked files.\n\nREVIEW: no writes/commands; duplicate reads have no effects. Current goal + headers + reader identity fences stale UI frames; cancellation suppresses late completion after unmount. Timeout/JSON errors explicit. All nested objects/arrays are copied and frozen, descriptors not getters, extra/missing/symbol/non-enumerable/prototype fields rejected. Empty sections have words; text is escaped by React; no daemon imports. Request body contains only goalRef (test asserts exact serialization). UI borrows existing ops-panel typography/section treatment; no unrelated CSS or approval-gate edits. cordum-app was already over 400 at claim; this row adds two lines only and does not claim the pre-existing size meets 400. Full real-frame probe source/evidence is in comment-e829916205b94643a2c51ec18d967817.",
+      "timestamp": "2026-09-05T19:42:21.827Z"
+    },
+    {
+      "id": "comment-e0e2140e6bf94a8baa43db3045423d2e",
+      "author": "worker-f72a1438",
+      "content": "FINAL GATES AND LIMITS, current shared tree (not a clean-checkout claim).\n1. Named verification pnpm --filter @moe/control-room test: exit 0, Test Files 153 passed (153), Tests 1903 passed (1903), 184.93s. VITEST_MAX_WORKERS=2 was set in the shell; local installed Vitest coverage.DM_a_rWm.js explicitly reads this env var into resolved.maxWorkers. No test exclusions, timeout changes, or assertion changes. The unrestricted run earlier exited 1 (2 failed/151 passed files, 4 failed/1899 passed tests): scaffold.test.tsx:620 timed out at 5000ms; entry-project-manager.test.tsx timed out then failed manager-root assertions at 103/136. These two suites reran isolated: 2 files/45 tests PASS, exit 0. Pre-edit baseline was 2 failed/149 passed files, 4 failed/1879 passed tests: scaffold timeout + foreign cordum-shell-layout.test.tsx strip/template assertions (subsequently fixed by peer, not me).\n2. Daemon OWNED legs: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=2 src/http/http-listener-read-dispatch.test.ts src/http/design-read.test.ts -> exit 0, Test Files 2 passed (2), Tests 20 passed (20), 8.77s. Root pnpm test excludes apps/** and is NOT evidence for this row.\n3. Full pnpm --filter @moe/daemon test ran >20min and ended exec -1 during the runtime/worker reset, WITHOUT a final suite count. INCOMPLETE, not green. Partial output: src/work/foundation-capture-lifecycle.test.ts (31 tests | 9 failed) 725255ms; src/evidence/foundation-verification-service.test.ts (43 tests | 8 failed) 861046ms. Known host contention notice directed no rerun of foreign timeout failures. I did not touch those paths. An attempted exact-PID cleanup found the owned process already gone and stopped nothing.\n4. pnpm typecheck before/after: exit 1 at packages/control-room-client/src/generated-coverage.test.ts(92,19) TS7053. Before: Property 'repository.bootstrap' does not exist on type GeneratedCommandBuilders. After: Property 'deployment.deploy' does not exist on type GeneratedCommandBuilders. Same foreign path, changing peer vocabulary WIP; no owned-path delta. pnpm --filter @moe/control-room typecheck ran twice, both exit 0 with tsc echo.\n5. Diff check passed; all drill restores SHA256 verified separately. Actual new production lengths decoder183/card103; eight task-touched paths reported. The two shared integration files were checkpointed by peer in 4653ed182581b8014a80a5cee3630279e1167ec0, are now clean, and contain our LiveDesign mount plus /design/read census retirement. No peer bytes reverted or staged by me. Six remaining paths are this row's decoder/card/tests/proxy changes. I make no broad-daemon-green or clean-tree claim. Delivery is the owned browser slice and passing focused served-route pins.",
+      "timestamp": "2026-09-05T19:46:16.034Z"
+    },
+    {
+      "id": "comment-46156f3afa954512a97dd187c1c3e2ca",
+      "author": "worker-f72a1438",
+      "content": "Final measurement correction: [IO.File]::ReadAllLines reports live-design.ts 183 physical lines, design-card.tsx 98 (earlier note said103); both ASCII. 'No processes left running' in step5 means all of my foreground verification sessions have returned completion, not a census claim about the host or another worker's processes. Authored browser tests/probe launch no daemon service; probe closes stores in afterEach. No source changed after the green153/1903 gate. Exact final owned diff check is clean.",
+      "timestamp": "2026-09-05T19:47:48.559Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:27:06.954Z",
-  "updatedAt": "2026-09-05T19:39:18.405Z",
+  "updatedAt": "2026-09-05T19:47:52.325Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:36:26.414Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-2e480458",
@@ -143,7 +173,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:39:20.196Z",
@@ -164,5 +195,34 @@
     ]
   },
   "planApprovedAt": "2026-09-05T14:39:22.375Z",
-  "workStartedAt": "2026-09-05T19:20:55.417Z"
+  "workStartedAt": "2026-09-05T19:20:55.417Z",
+  "declaredFiles": [
+    "apps/control-room/src/live/live-design.ts",
+    "apps/control-room/src/live/live-design.test.ts",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/v2/goals/design-card.tsx",
+    "apps/control-room/src/v2/goals/design-card.test.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-05T19:47:52.325Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "VITEST_MAX_WORKERS=2 (parallelism only; no exclusions or timeout changes)\n$ vitest run\nRUN v4.1.10 D:/projexts/moe-next/apps/control-room\nTest Files 153 passed (153)\nTests 1903 passed (1903)\nStart at 22:41:10\nDuration 184.93s\nFINAL_BOUNDED_CR_EXIT=0",
+    "reportedAt": "2026-09-05T19:47:52.325Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/live/live-goal-source.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/live/live-design.test.ts",
+    "apps/control-room/src/v2/goals/design-card.test.tsx",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/live-design.ts",
+    "apps/control-room/src/v2/goals/design-card.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/live/dev-proxy-paths.ts"
+  ],
+  "completionSummary": "Opened-goal Design card now reads POST /design/read with session headers and exactly {goalRef}. Exact-key frozen decoder validates all nested sections/records, retains refusal code+layer, rejects unknown shapes/schema, and supports the landed declared skip. UI shows five sections, open decisions and stored version; absence/skip/error have words. Proxy pin and both daemon route census exemptions updated. Eight paths reported; no daemon imports or new dependency.\nFresh full control-room gate PASS:153 files/1903 tests (VITEST_MAX_WORKERS=2), CR typecheck exit0. Owned daemon HTTP suites PASS:2 files/20 tests. Real durable submit->HTTP frame->browser decode PASS:1 test; recreatable full probe in comment-e829916205b94643a2c51ec18d967817. Three mutation reds and separate SHA256 restore proof in comment-88fc22469d024a8289440654f400c080.\nLIMITS: full daemon suite was interrupted after >20min foreign timeout arms, exec -1/no final count; INCOMPLETE, NOT green. Root typecheck TS7053 at packages/control-room-client/src/generated-coverage.test.ts(92,19), missing peer-generated repository.bootstrap/deployment.deploy builders before/after; no owned failing-path delta. Full attribution and rerun counts in comment-e0e2140e6bf94a8baa43db3045423d2e. No broad-daemon-green or clean-checkout claim.\nShared cordum-app mount and daemon census retirement already checkpointed by peer in4653ed18 and are clean; six remaining files ready for wrapper. New production files183/98 lines. Version provenance on plan approval remains outside this row as planned."
 }

@@ -132,12 +132,12 @@
       "completedAt": "2026-09-05T19:23:21.522Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor restore to blockedFromStatus (WORKING), operator-approved 19:47Z (\"flipped both\"). All 8/8 steps delivered by worker-caece97b; owned paths green (2 files, 12 passed | 1 skipped, exit 0); typecheck clean on owned paths, proven non-vacuous with a planted error and sha256-restored; DoD 1/2/4/5 met, DoD 3 honestly host-unprovable (no docker daemon; the arm refuses loudly with DEPLOY_DOCKER_UNAVAILABLE). DoD 6's daemon gate red was foreign only: every readable failure 'Test timed out in 30000ms' in src/work/foundation-capture-producer.test.ts, which this row neither owns nor imports; delta ∩ owned paths is EMPTY. Completable under global rail 3 (path-attributed baseline) as written — the next worker completes on the recorded evidence in comment-a5a70fb1 and comment-36f9a38d with DoD 3 disclosed. Activity log shows the operator's flip never reached this daemon (no TASK_UNBLOCKED after the 19:26 TASK_BLOCKED), so this is the effective flip.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-5d30948435524c6fa2789e1c033aafe7",
   "priority": "HIGH",
@@ -158,7 +158,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:50:36.331Z",
-  "updatedAt": "2026-09-05T19:26:56.863Z",
+  "updatedAt": "2026-09-05T19:49:49.797Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:16:00.386Z",
     "plannedStepCount": 8,
@@ -208,8 +208,10 @@
     "apps/daemon/src/repository/deployment/deployment-docker-probe.js",
     "apps/daemon/src/repository/deployment/deployment-image-build.test.ts"
   ],
-  "blockedReason": "ALL 8 STEPS DELIVERED AND GREEN IN SCOPE. Blocked only on DoD 6's gate, for a host-wide cause that is not this diff. No re-plan needed. FULL RECORD IN comment-a5a70fb1.\n\nUNBLOCK CONDITION, measurable: `mtkbtsvc` (pid 24208) returns to a normal handle count, then `pnpm --filter @moe/daemon test` reaches a `Test Files N passed` line whose failures do not include `apps/daemon/src/repository/deployment/**`. Any seat that gets that may complete this row.\n\nWHY NOT COMPLETED: completion needs exit 0 on a fresh gate. The daemon leg gave `Test Files 10 failed | 431 passed`, `Tests 27 failed | 8669 passed`, wall 1489 s — every readable red `Test timed out in 30000ms` in `src/work/foundation-capture-producer.test.ts`, which this row neither owns nor imports. Applied the standing warning, re-ran that file ALONE: 26 tests, 600 s, 4 still timed out. Root cause measured: `mtkbtsvc` at 1,115,309 handles and CLIMBING, total 1,391,148, CPU 8% — handle-table bound, not load; plus 46 concurrent vitest/playwright processes including two other full daemon suites. I did not re-run the gate again deliberately: another 4-worker run degrades every other seat's gate. Fabricating a green was the alternative and is not one.\n\nWHAT HOLDS: owned paths -> 2 files, 12 passed | 1 skipped, exit 0. `tsc --project` reports nothing in those paths, proven non-vacuous by a planted error, restored with sha256 proof. The three typecheck reds are foreign: two tracked-and-clean at HEAD, one another seat's untracked file. Delta ∩ owned paths is EMPTY.\n\nDoD 1, 2, 4, 5 met (5 recorded as comment-36f9a38d). 3 NOT PROVEN — THE IMAGE HAS NEVER BEEN BUILT; no docker daemon here, and the arm refuses loudly with DEPLOY_DOCKER_UNAVAILABLE rather than skipping. 6 blocked.\n\nON A DOCKER HOST, DoD 3 needs one command from apps/daemon: `MOE_DEPLOY_IMAGE_BUILD=1 npx vitest run --root . --config package.json src/repository/deployment/deployment-image-build.test.ts`.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T19:26:56.863Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "ALL 8 STEPS DELIVERED AND GREEN IN SCOPE. Blocked only on DoD 6's gate, for a host-wide cause that is not this diff. No re-plan needed. FULL RECORD IN comment-a5a70fb1.\n\nUNBLOCK CONDITION, measurable: `mtkbtsvc` (pid 24208) returns to a normal handle count, then `pnpm --filter @moe/daemon test` reaches a `Test Files N passed` line whose failures do not include `apps/daemon/src/repository/deployment/**`. Any seat that gets that may complete this row.\n\nWHY NOT COMPLETED: completion needs exit 0 on a fresh gate. The daemon leg gave `Test Files 10 failed | 431 passed`, `Tests 27 failed | 8669 passed`, wall 1489 s — every readable red `Test timed out in 30000ms` in `src/work/foundation-capture-producer.test.ts`, which this row neither owns nor imports. Applied the standing warning, re-ran that file ALONE: 26 tests, 600 s, 4 still timed out. Root cause measured: `mtkbtsvc` at 1,115,309 handles and CLIMBING, total 1,391,148, CPU 8% — handle-table bound, not load; plus 46 concurrent vitest/playwright processes including two other full daemon suites. I did not re-run the gate again deliberately: another 4-worker run degrades every other seat's gate. Fabricating a green was the alternative and is not one.\n\nWHAT HOLDS: owned paths -> 2 files, 12 passed | 1 skipped, exit 0. `tsc --project` reports nothing in those paths, proven non-vacuous by a planted error, restored with sha256 proof. The three typecheck reds are foreign: two tracked-and-clean at HEAD, one another seat's untracked file. Delta ∩ owned paths is EMPTY.\n\nDoD 1, 2, 4, 5 met (5 recorded as comment-36f9a38d). 3 NOT PROVEN — THE IMAGE HAS NEVER BEEN BUILT; no docker daemon here, and the arm refuses loudly with DEPLOY_DOCKER_UNAVAILABLE rather than skipping. 6 blocked.\n\nON A DOCKER HOST, DoD 3 needs one command from apps/daemon: `MOE_DEPLOY_IMAGE_BUILD=1 npx vitest run --root . --config package.json src/repository/deployment/deployment-image-build.test.ts`.",
+  "blockedOnTaskIds": null
 }

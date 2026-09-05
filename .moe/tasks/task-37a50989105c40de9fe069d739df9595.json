@@ -1,0 +1,35 @@
+{
+  "id": "task-37a50989105c40de9fe069d739df9595",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "deployment.rollback reaches the shared runtime contract and all four digest mirrors",
+  "description": "SPIDR prerequisite of task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4, cut by architect-b63fabf3 on 2026-09-05 on the INTERFACE axis. That row asked for scheduled backups, a NEW human-only command kind with \"the full roster backfill and a bidirectional set-equality roster test\", AND the rollback effect - three deliverables of which the middle one is, on this board, a measured multi-row job on its own.\n\nMEASURED AT HEAD f3b94eaa (branch moe/work-2026-09-04) by architect-b63fabf3:\n- `git grep -c \"deployment\\.rollback\" -- apps packages` = ZERO. Brand new kind, nothing to duplicate.\n- `deployment.deploy` and `deployment.set_target` ARE already on the roster (runtime-vocabulary.ts:91), landed by task-04b3ce7e's contract half - so this row follows a trail its sibling just cut, and should read that row's completionSummary before starting.\n\nWHAT THIS ROW OWNS: the string `deployment.rollback` published on RUNTIME_COMMAND_KINDS, the hand-transcribed EXPECTED_COMMAND_KINDS and size literal in runtime-contract.test.ts moved with it, the client REGENERATED, and all four GENERATED_CONTRACT_DIGEST mirrors rotated. Six files, no more.\n\nWHY THIS IS ITS OWN ROW AND NOT A CLAUSE: adding ANY kind to RUNTIME_COMMAND_KINDS rotates the contract digest by construction - contract-digest.ts puts `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)` inside canonicalContractSurface(), which deriveContractDigest() SHA256s. There are FOUR mirrors and two of them live under apps/control-room, invisible to `pnpm test` (the root vitest include has no apps/**), `pnpm typecheck` and `pnpm --filter @moe/daemon test`. A forgotten mirror ships two hard-throwing tests behind three green gates. That trap has already blocked one row on this board.\n\nCENSUS THE MIRRORS YOURSELF with a full-tree `git grep` of the digest literal across ALL file types - the set has moved twice and a `--include=*.ts` grep misses the .tsx one.\n\nNOT IN SCOPE: the daemon vocabulary, families, registry, roster tests, the MCP fence and HUMAN_ONLY_STEPS - all the successor row. The backups and the rollback effect - task-95e68a8d and its successor.\n\nVERIFY: `pnpm --filter @moe/control-room test` (the only leg that sees mirrors 3 and 4); also run `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm typecheck` and root `pnpm test`, quoting every count line.",
+  "definitionOfDone": [
+    "`deployment.rollback` is a member of RUNTIME_COMMAND_KINDS in packages/contracts/src/runtime/runtime-vocabulary.ts in SORTED position, and packages/contracts/src/runtime/runtime-contract.test.ts agrees in BOTH coupled assertions: the hand-transcribed EXPECTED_COMMAND_KINDS list and the `commands.size` literal. Do NOT derive the expected list from the tuple - that file's own comment forbids it and a derived list asserts nothing. Do NOT freeze the count from this description: run the leg and reconcile against the PRINTED expected/received, because sibling rows move the same literal.",
+    "The generated client was REGENERATED, never hand-edited - `pnpm --filter @moe/control-room-client generate` - with the OLD and NEW GENERATED_CONTRACT_DIGEST both quoted in the completion record. An UNCHANGED digest means the generator did not see the new kind: that is a stop, not a pass. contract-digest.test.ts DERIVES the digest rather than pinning it, so it must go green WITHOUT being edited.",
+    "The mirror set was CENSUSED rather than quoted from this row: `git grep -n <old digest> -- . ':!.moe' ':!pnpm-lock.yaml'` run BEFORE the change (expect four hits) and AFTER (expect zero), across ALL file types. Every hit carries the new hex, including GENERATED_FILE_SHA256 beside CONTRACT_DIGEST in generated-coverage.test.ts. A fifth hit, or a hit in a file type a *.ts grep would miss, is a stop-and-report.",
+    "MUTATION DRILL, quoted with its failing line: revert ONLY the apps/control-room mirror and confirm `pnpm --filter @moe/control-room test` goes RED with the compat gate's own refusal message. That drill is this row's most valuable artifact - it is the only proof the two apps/control-room mirrors are covered by any gate at all.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test` (MANDATORY), `pnpm typecheck`, and root `pnpm test` - stating plainly that the root lane covers NO apps/** file.",
+    "The diff touches exactly six files and no seventh, and ZERO files under apps/daemon/. Prove it with `git status --porcelain -- apps/ packages/` in the completion record."
+  ],
+  "taskRails": [
+    "CONTRACT SURFACE ONLY. This row publishes a string on a roster and carries through the digest consequences. It wires no daemon command, defines no refusal code, fences no principal and renders no UI.",
+    "NEVER hand-edit the generated client. It is generator output; the only legal way to change it is `pnpm --filter @moe/control-room-client generate`.",
+    "THE DIGEST MIRROR SET MOVES. Census it with a full-tree `git grep` of the LITERAL across all file types before trusting any list, including this row's.",
+    "`pnpm --filter @moe/control-room test` IS MANDATORY: two mirrors live under apps/control-room and no other gate sees them."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 121.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:50:20.683Z",
+  "updatedAt": "2026-09-05T19:50:20.683Z"
+}

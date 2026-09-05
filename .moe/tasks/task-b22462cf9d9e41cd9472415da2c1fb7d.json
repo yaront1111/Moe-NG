@@ -1,0 +1,39 @@
+{
+  "id": "task-b22462cf9d9e41cd9472415da2c1fb7d",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "deployment.rollback is wired in the daemon, fenced human-only and MCP-excluded, refusing fail-closed",
+  "description": "SPIDR prerequisite of task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4, cut by architect-b63fabf3 on 2026-09-05. dependsOn the contract row task-37a50989 because `ROWS.kind` in the daemon roster tests is typed `RuntimeCommandKind` - this row cannot even TYPECHECK before that lands.\n\nWHAT THIS ROW OWNS: the daemon half of `deployment.rollback` - the family table, the WiredCommandKind union, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS, a registry entry refusing FAIL-CLOSED until the effect lands, the three hand-written roster tests and their count pins, plus the operator fence: MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS with their own count pins.\n\nROLLING BACK A PRODUCTION ENVIRONMENT IS NEVER AN AGENT'S DECISION. That is why the fence is in this row rather than deferred: the kind must be unreachable over MCP from the moment the registry serves it, not from the moment the effect works. The MCP port authenticates with the operator bootstrap credential, so an MCP caller would arrive AS the operator - exclusion is the fence, and a capability gate is not.\n\nTWO MEASURED FACTS TO SAVE A REDISCOVERY:\n- The bidirectional set-equality DoD-4 of the parent asked for ALREADY EXISTS at daemon-command-registry.test.ts - it compares `[...deps.registry.keys()].sort()` (the dispatch seam) against ROWS with BOTH directions spelled out. Do NOT write a parallel arm; move its count pins and let the existing assertion do its job. Same for the per-transport MCP unreachability sweeps in mcp-main.test.ts and mcp-http-host.test.ts, which `.map` over MCP_EXCLUDED_COMMAND_KINDS and generate their cases automatically.\n- HUMAN_ONLY_STEPS is ONE Set at orchestrator/agent-spawn-contract.ts, re-exported by agent-wrapper.ts. Several task descriptions on this board still claim it is duplicated byte-for-byte; that is STALE. Verify before planning against it.\n\nCOUNT PINS ARE THE ACTUAL WORK. Publishing a kind moves ~10 literals across four test files, including a DERIVED one (`EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT`) that reads as an unrelated fact and is the likeliest omission. `git grep -n 'toBe(N)|toHaveLength(N)'` before and after; take every number from the PRINTED expected-vs-received, never from arithmetic, because sibling kind-publishing rows move the same literals.\n\nNOT IN SCOPE: the rollback EFFECT (redeploying the previous image, the DB restore, the health probe) - its successor row. The backups - task-95e68a8d. The contract roster - task-37a50989.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "`deployment.rollback` is wired across the daemon roster: the family table, the WiredCommandKind union, PAYLOAD_KEYS (whose key ORDER is the served order), OPERATOR_PRINCIPAL_KINDS, and a registry entry. `agentCapabilitiesFor` returns null for it - never staffable, whatever its family capability says.",
+    "IT IS OPERATOR-ONLY AND MCP-EXCLUDED: the kind is in MCP_EXCLUDED_COMMAND_KINDS and in HUMAN_ONLY_STEPS, and a test asserts an agent-authenticated dispatch is refused while an operator-authenticated one reaches the handler - asserting the specific reason CODE and the LAYER that refused, never merely that it failed.",
+    "The registry entry REFUSES FAIL-CLOSED until the effect lands: a well-formed payload gets a stable refusal code with its layer read from a closed code->layer map, never a literal. Say in the completion record that this is a deliberate stub and name the successor row that replaces it - do not write a test arm whose only purpose is to reach the stub.",
+    "EVERY COUNT PIN MOVED, enumerated by file:line in the completion record. Run `git grep -n 'toBe(<old>)|toHaveLength(<old>)' -- apps/daemon/src` before and after and show the after-count is zero. The derived arithmetic pin in mcp-main.test.ts moves too - it is the likeliest omission because its literal is not the number being changed.",
+    "The EXISTING bidirectional set-equality assertion (daemon-command-registry.test.ts, registry.keys() vs ROWS) and the existing per-transport MCP sweeps stay green with their pins moved, and NO parallel arm is added - they already generate this kind's cases. Prove both directions with a mutation drill: delete the PAYLOAD_KEYS entry and delete the ROWS entry, each on its own, and quote both reds.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` is NOT evidence for this row - vitest.config.ts has no apps/** in its include."
+  ],
+  "taskRails": [
+    "ROLLBACK IS HUMAN-ONLY. Operator-principal, MCP-excluded, in HUMAN_ONLY_STEPS, and never staffable. Rolling back a production environment is not an agent's decision, and the fence lands with the registry entry rather than after it.",
+    "REFUSE FAIL-CLOSED until the effect lands. A well-formed payload gets a stable code with its layer from a closed map - never a literal, never a fifth invented code, and never a test arm whose only job is to reach the stub.",
+    "DO NOT WRITE A PARALLEL ROSTER TEST. The bidirectional set-equality and the per-transport MCP sweeps already exist and auto-generate this kind's cases. Move their count pins; adding an arm is duplicate coverage.",
+    "NO COUNT LITERAL IS TRUSTWORTHY. Sibling rows publish kinds concurrently. Take every number from the PRINTED expected-vs-received at the moment of the final gate.",
+    "NO EFFECT, NO BACKUPS, NO UI, NO CONTRACT ROSTER: each belongs to a named sibling."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-37a50989105c40de9fe069d739df9595"
+  ],
+  "priority": "HIGH",
+  "order": 121.7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:50:56.488Z",
+  "updatedAt": "2026-09-05T19:50:56.488Z"
+}

@@ -171,7 +171,7 @@
       "startedAt": "2026-09-05T19:22:02.800Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -221,11 +221,17 @@
       "author": "worker-d6e44333",
       "content": "DESIGN PASS (DoD 4), REDONE FROM THE LIVE LANE. Supersedes comment-18d86d09, which QA correctly rejected for capturing only \"after\" shots from a static ?fixtures=1 bundle.\n\nSKILLS USED: apple-design-skill (HIG-derived review process; loaded layout + hierarchy lenses) and the frontend-design lens over the built artifact. Reviewed against real screenshots, not source reading - which is exactly why the finding below was found at all.\n\nLANE: real daemon (apps/daemon/src/daemon-main.ts --operator-stdin) against the REAL UnAI store D:/projexts/UnAI/.moe-next/store.sqlite, projectId unai, hosting apps/control-room/dist. Headless chromium pairs by reading the confirmation label and feeding it to the daemon's operator stdin. Scripts: D:/projexts/UnAI/.moe-next/live-drive-wd6e44333/{lane.mjs,shoot.mjs}. Bundle built with the VITE_MOE_LIVE_* vars UNSET; `grep -c VITE_MOE_LIVE dist/assets/*.js` = 0 each time.\n\nBEFORE (before-live-open.png, sha256 5f86abbf06f6b2169c472cff80a651791db2ddfe2217e2c2cf9643e9e0bf6d38). Built from `git show HEAD:` cordum-app.tsx with advanced-frames.ts moved out of the tree - i.e. the exact bytes QA reviewed. Panel opened on a CONNECTED daemon and shows, permanently: \"Reading the active graph...\" (cr.advanced.graph.pending) and \"Reading event frames...\" (cr.advanced.events.pending). That is QA's rejection reproduced photographically.\n\nAFTER, FIRST CAPTURE (after-live-open.png, sha256 b9c77799ae3a33a46da93c68c85883fbf875e315ce0d45dac365d99f2223006d). The reads now execute and the panel renders the daemon's OWN answers with their codes: cr.advanced.graph.refusal \"ACTIVE_GRAPH_ABSENT @ ACTIVE_GRAPH...\" and cr.advanced.events.refusal \"EVENT_STREAM_SUBSCRIBER_MISMATCH\". No placeholder. This capture is what exposed the real design defect.\n\nFINDING 1 - HIGH, FIXED. THE DIAGNOSTIC PANEL WAS SITTING ON TOP OF THE OPERATOR'S WORK. In after-live-open.png the toggle and panel render ABOVE the project card and the goals list, pushing 8 goals down the page. Cause, measured: `.cr2-panel` is `display: grid` with `grid-template-rows: auto auto minmax(0,1fr) auto` and EVERY child names its row explicitly (cordum-shell.css:334-348) - the comment there records that auto-placement had already broken this layout once. AdvancedView was mounted with NO stated row, so it was auto-placed into the first free cell, above the stage. HIG layout: primary content leads; diagnostics are subordinate.\nFIX: wrapped the view in `<div className=\"cr2-advancedslot\">` and gave it a stated `grid-row: 4`, moving the status strip to row 5 and extending grid-template-rows to five. Verified live in after-live-fixed.png: goals list starts at the top, panel sits directly above the status strip.\n\nFINDING 2 - MEDIUM, FIXED. With the panel moved down it butted straight onto the last goal card, so the toggle read as part of that card, and an open panel full of frames (the feed carries up to 250 rows) could push the status strip off a short window. FIX: hairline `border-top: 1px solid var(--cr-line)`, `padding: 10px 20px 12px` matching the status strip's 20px inline rhythm, and `overflow-y: auto; max-height: 40vh` so the panel scrolls INSIDE its own row. Final state: after-live-final.png, sha256 f53d749ca3f88cb36f876c6660ca0a57c55b17994b541dc6cc8bf73b88f34c14.\n\nFINDING 3 - NOT FIXED, DELIBERATE, and worth a row. `EVENT_STREAM_SUBSCRIBER_MISMATCH @ DAEMON_AUTHORIZATION` is a REAL pre-existing wiring gap, not a fault of this panel. The browser hardcodes `LIVE_SUBSCRIBER = \"control-room-1\"` (live-config.ts:18) while the daemon MINTS the id per principal: createEventStreamSubscriberResolver (http/event-stream-access.ts:76-104) returns the configured operatorSubscriberId only for the legacy session slot and `reader:${session.sessionId}` for any later reader session, then refuses at http-listener-command-stream-routes.ts:165 when the two differ. A fresh pairing is therefore a later session and always mismatches. Closing it needs either new daemon bytes (the handshake stating the subscriber id) or the browser being given its sessionId - both forbidden here by task rail 1, which says this row proves and does not build. The panel does the right thing meanwhile: it renders the daemon's code verbatim rather than an empty list.\n`ACTIVE_GRAPH_ABSENT` is a data state, not a defect - the UnAI store has no active sealed graph at capture time, and an empty-body /graph/get names no project by design.\n\nWHAT ACTUALLY CHANGED, in one line each: the Advanced panel stopped covering the operator's work (grid row now stated); it gained a hairline and its own scroll so it cannot shove the status strip off screen; and it stopped showing a load that never finishes, because cordum-app now actually fetches the two raw reads.\nGate after the design edits: `npx vitest run src/v2/shell/ src/v2/cordum-app.test.tsx` -> Test Files 7 passed (7), Tests 98 passed (98).",
       "timestamp": "2026-09-05T19:21:42.598Z"
+    },
+    {
+      "id": "comment-ce3ad42af23c4ab89bc9be95df395b0a",
+      "author": "worker-f72a1438",
+      "content": "Resume audit after automatic next-task claim; no new edits or live drive performed on this row. Read QA rejection + handoff. Runtime has steps1-9 COMPLETED, step10 IN_PROGRESS from worker-d6e44333; checkpoint4653ed18 contains the Advanced reader wiring/value-graph walk and also the two Design-card integration lines added by task-e9cb2442 during the shared session. The old Serena handoff claiming permanent pending/null props is stale; use current step notes/QA-round2 comment-8f17ea48.\n\nPRODUCTION-AT-CLAIM BLOCKER: checkpointed cordum-app now imports ./goals/design-card.js, but the owning task-e9cb2442a9a44408bea35cfce6a1897b has just moved to REVIEW with commits=[] and six files still awaiting its completion landing. git cat-file -e HEAD:apps/control-room/src/live/live-design.ts and HEAD:apps/control-room/src/v2/goals/design-card.tsx both exit128 ('exists on disk, but not in HEAD'); both are ?? while cordum-app is clean. Therefore this proof row cannot claim a delivered-tree live/bundle gate yet without importing the child task's unlanded bytes. This is not stopping on generic peer dirt: it is a concrete clean-checkout missing-import hole in this row's owned production composition. Let the child's completion land/QA finish, then resume step10; do not recreate its decoder/card or sweep them into this row. Full child gate is fresh153 files/1903 tests PASS with VITEST_MAX_WORKERS=2; no claim those uncommitted bytes are delivered. Child comments carry gate and drill evidence.",
+      "timestamp": "2026-09-05T19:51:27.020Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:58.974Z",
-  "updatedAt": "2026-09-05T19:39:55.313Z",
+  "updatedAt": "2026-09-05T19:51:27.361Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:29:26.800Z",
     "plannedStepCount": 10,
@@ -236,7 +242,8 @@
   },
   "contextFetchedBy": [
     "worker-b33940f5",
-    "worker-d6e44333"
+    "worker-d6e44333",
+    "worker-f72a1438"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -554,5 +561,12 @@
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
     "apps/control-room/src/v2/styles/cordum-shell.css",
     "apps/control-room/src/v2/shell/advanced-frames.test.ts"
-  ]
+  ],
+  "blockedReason": "Concrete delivered-tree missing-import hole, not generic peer dirt: checkpoint4653ed18 contains this proof row's cordum-app plus task-e9cb2442 LiveDesign import/mount, but Design card/decoder are still untracked and absent from HEAD (git cat-file exact paths exits128). Owning task-e9cb2442 is REVIEW with commits=[] and awaits completion landing; its153-file/1903-test shared-tree green cannot certify this parent at delivered bytes. Preserve completed steps1-9; resume step10 after child lands. No source edits made during this resumed parent claim; do not absorb child files or fabricate live-lane completion.",
+  "blockedOnTaskIds": [
+    "task-e9cb2442a9a44408bea35cfce6a1897b"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T19:51:27.361Z"
 }

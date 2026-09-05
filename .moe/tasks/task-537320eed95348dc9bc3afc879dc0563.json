@@ -20,8 +20,83 @@
     "CENSUS THE CONTRACT DIGEST BY ITS HEX, NEVER BY ITS SYMBOL - three of four mirrors never mention the symbol and one is a .tsx.",
     "NO UI, NO PLAYWRIGHT, NO LIVE DRIVE, NO DOCS - all belong to the parent task-78eedd8ebc2b43c581ac21ea28648a9a."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP, then re-measure the counts.\n\nPREREQUISITES — both are dependsOn rows; verify on disk so the chain fails closed if the field is ever cleared:\n- `git grep -n \"deployment.migrate_down\" -- packages/contracts/src/runtime/runtime-vocabulary.ts` must HIT (task-5a8c3166b98b4614952068242993bf2b, the contract half).\n- `git grep -rn \"moe-migration-receipt\\|MIGRATION_BACKUP_FAILED\" -- apps/daemon/src` must HIT (task-0a56ecee17b740a3abb7f850e5250c99, the engine whose receipt records the revert).\nIf either is absent, STOP and `moe.report_blocked` with `blockedOnTaskIds`. Do NOT publish the kind here and do NOT reimplement the migration engine.\n\nAlso confirm `git grep -n \"deployment.migrate_down\" -- apps/daemon/src/daemon-command-vocabulary.ts` returns NOTHING — if a peer already wired it, stop rather than landing a duplicate.\n\nRE-MEASURE THE COUNTS. Every number in this plan is a plan-time reading and a sibling kind-publishing row may have moved it first; this epic's rails forbid freezing a count in a gate:\n  `grep -n \"toHaveLength(4[0-9])\\|registry.size).toBe(4[0-9])\\|OPERATOR_ONLY).toHaveLength\" apps/daemon/src/daemon-command-registry.test.ts`\n  `grep -n \"toHaveLength(1[0-9])\" apps/daemon/src/daemon-command-registry-human-approver.test.ts`\nWhen an arm reds, the PRINTED expected-vs-received is authoritative — not this plan.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "VOCABULARY: the kind, operator-only, and the automatic MCP fence. Edit `apps/daemon/src/daemon-command-vocabulary.ts`, mirroring `repository.publish` at every site:\n1. A kind constant for `deployment.migrate_down`.\n2. Added to the `WiredCommandKind` union.\n3. In the EXISTING goal family table with `CAPABILITIES.GOAL`, exactly as `repository.publish` at :75. Do NOT create a new family table — a new table is dead unless also added to `FAMILY_TABLES`, because `familyCapabilityOf` walks only that array, and this kind is goal-scoped anyway.\n4. Its `PAYLOAD_KEYS` entry beside :334, matching the payload the contract row published. Read that entry and mirror it — do not invent a second shape.\n5. In `OPERATOR_PRINCIPAL_KINDS` (:376 area).\n\nSTEP 5 IS THE MCP FENCE AND IT NEEDS NO OTHER EDIT. mcp-tool-allowlist.ts:78 derives the exclusion from `OPERATOR_PRINCIPAL_KINDS`, so no allowlist source changes. Because the fence and the payload entry land in the SAME file and commit, no landed HEAD advertises this kind over MCP — which matters, because the MCP port authenticates with the operator bootstrap credential and reverting a production schema is never an agent's decision.\n\nSIZE GUARD: the file was 386 lines against a 400 hard cap. `wc -l` after editing. If it crosses, PACK entries onto shared lines as the file already does at :79. Do not add a module and do not move a table into daemon-command-families.ts, which imports these tables and would invert the dependency.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "REGISTER THE HANDLER IN GOAL_HANDLERS — not in the registry.\n\n`apps/daemon/src/daemon-command-registry.ts:194` already composes its table by spreading `...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS`, so a GOAL_HANDLERS entry is served with no registry line. That file is 449 lines and ALREADY past the 400 hard cap at the merge-base: add nothing to it, and disclose the pre-existing breach in the completion record so it is attributed to the merge-base rather than to this row.\n\n1. `apps/daemon/src/goals/goal-services.ts` — one entry in `GOAL_HANDLERS` (:199) beside `\"repository.publish\": publishRepository` (:203). It is a THIN ADAPTER: validate the payload, call the engine from task-0a56ecee with the host ports, return its result. If you find yourself writing `pg_dump`, `psql` or migration-tool invocation here, it belongs in the engine — stop and report rather than taking the extra path.\n2. `apps/daemon/src/bootstrap/bootstrap-contracts.ts` — add the kind to the list at :42 where `\"repository.publish\"` sits.\n3. `apps/daemon/src/bootstrap/bootstrap-sequence.ts` — declare prerequisites beside :25 (`\"repository.publish\": [\"approval.decide\"]`). Decide deliberately what a schema revert requires before it can run, and STATE the choice and its reason in the step note — this is the ordering an operator will feel during an incident.\n\nDO NOT EDIT `apps/daemon/src/daemon-store-dependencies.test.ts`. Its :238 assertion needs no change when this is done right; it is the tripwire that reds if step 2 added the payload key while this step did not register the handler. If it reds, fix the wiring, never the assertion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "HUMAN_ONLY_STEPS. Add `\"deployment.migrate_down\"` to the set at `apps/daemon/src/orchestrator/agent-spawn-contract.ts:195`, beside the existing `\"repository.publish\"` entry and under a comment in the same voice: reverting a production schema is the operator's decision; the wrapper performs it as an effect of that decision, never as staffed work.\n\nThis is a plain addition — no count guard and no membership guard reads `HUMAN_ONLY_STEPS`, unlike the MCP exclusion roster. Confirm that rather than assuming it: `git grep -n \"HUMAN_ONLY_STEPS\" -- apps packages tests tools` returned three source files at plan time (agent-spawn-contract.ts, agent-wrapper.ts, http/affordance-planning-offers.test.ts). If any asserts a size, that count moves in step 5 too.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ROSTER COUNT BACKFILL — each of these is invisible to a grep for the kind literal, which is why they are enumerated here rather than left for discovery. Move each by ONE, using the numbers you re-measured in step 1, not the ones written here:\n\n- `apps/daemon/src/daemon-command-registry.test.ts` — :862 `ROWS).toHaveLength(N)`, :863 `deps.registry.size).toBe(N)`, :870 `REGISTRATION_ORDER).toHaveLength(N)`; and :1040 `OPERATOR_ONLY).toHaveLength(M)`. If `ROWS` or `REGISTRATION_ORDER` transcribes the kinds by hand, insert the entry at the position the file's own ordering demands.\n- `apps/daemon/src/daemon-command-registry-human-approver.test.ts` — :325 `expectedExclusions).toHaveLength(K)` and :326 `MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(K)`. Both; and check whether `expectedExclusions` is a transcribed list that also needs the entry.\n- `apps/daemon/src/daemon-command-vocabulary.test.ts` — add or update the arms pinning the family table, the payload keys and the operator-only set.\n\nA count bumped without its roster entry, or an entry added without the count, is a half-done job the step-3 weld catches. Run `pnpm --filter @moe/daemon test` after this step and read the OUTPUT, not the exit code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE THREE-AXIS FENCE AND THE BIDIRECTIONAL ROSTER TEST (DoD 3 and 4). Add arms to `apps/daemon/src/daemon-command-registry.test.ts`, following the served-origin roster arm already at :795-812.\n\nTHE FENCE, all three axes asserted TOGETHER for this kind, reporting WHICH axis failed rather than merely that one did:\n1. present in `OPERATOR_PRINCIPAL_KINDS`;\n2. ABSENT from `wiredMcpToolKinds()` (mcp-tool-allowlist.ts:81);\n3. present in `HUMAN_ONLY_STEPS`.\nASSERT AXIS 2 AGAINST `wiredMcpToolKinds()`, NOT against `MCP_EXCLUDED_COMMAND_KINDS`. The exclusion roster is DERIVED from `OPERATOR_PRINCIPAL_KINDS` (mcp-tool-allowlist.ts:78), so asserting it alongside axis 1 asserts one fact twice and stays green with the fence broken. This is the single most likely way this row ships something that looks tested and is not.\n\nTHE BIDIRECTIONAL ROSTER TEST: assert SET EQUALITY — not a subset — between the ADVERTISED roster and the SERVED set enumerated from the IMPLEMENTATION SEAM (the composed registry's keys), never from the roster constant. A test that iterates the roster shrinks its own iteration when an entry is deleted and stays green while a served capability vanishes from the advertised surface.\n\nDERIVE, DO NOT FREEZE: no count literal and no transcribed kind list in these arms, so a sibling row bumping a roster cannot red them spuriously.\n\nDoD 4 REQUIRES BOTH DELETIONS TO RED, so run the matrix and record both outcomes: delete the kind from the ADVERTISED side, confirm RED, restore; delete it from the SERVED side (its GOAL_HANDLERS entry), confirm RED, restore. These are TRACKED files, so `git diff -- <path>` is a valid restore proof; `git status --porcelain` them first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "IT ACTUALLY REVERTS (DoD 5) — a new test, `apps/daemon/src/goals/migrate-down-journey.test.ts`, exercising the REGISTERED kind through the dispatch seam.\n\nASSERT THE SCHEMA CHANGED BACK, not that the command returned. Read the schema before and after and compare — DoD 5 says so explicitly, and a command that returns a success shape while the schema stands is exactly the failure that wording exists to catch. Use the engine's ports so the arm runs offline unless the disposable-PostgreSQL lifecycle from task-ff41c5c9 is available; if it is, prefer a real revert and say which you used.\n\nAssert it reverts the LAST BATCH — not one migration, not all of them. Apply two batches, revert, and assert the first batch survives. A revert that unwinds everything is a different and much more dangerous command than the one this row is publishing.\n\nAssert the receipt RECORDS the revert, reading it back from a real store, with the reverted migrations named.\n\nAssert an AGENT-authenticated dispatch is REFUSED with its specific code AND the layer that refused — never merely that it failed. A test asserting only \"refused\" is one added layer away from vacuous.\n\nTEARDOWN in a `finally`: every disposable database, temp directory and store handle released on the throwing path too (epic rail 4). This row's neighbours are already blocked on exactly that class of failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/migrate-down-journey.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/migrate-down-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW (DoD 7).\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING, and `pnpm --filter <pkg> <script>` exits 0 with \"No projects matched the filters\" when the name is wrong:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon — resolve by PACKAGE NAME).\n- `pnpm typecheck`.\n- `pnpm test` — state that the root include has NO `apps/**`, so it is not evidence for anything this row owns.\n- `pnpm --filter @moe/control-room test` — required by this epic's rail for any row in the kind-publishing chain; if the contract row task-5a8c3166b9 already moved the digest mirrors, say so and quote the leg anyway.\n\nEXPECT FOREIGN RED: the governor's 19:26Z and 19:30Z logs record `mtkbtsvc` handle exhaustion timing out unowned files at 30 s. Path-attributed baseline — merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when that intersection is EMPTY. Disclose foreign red verbatim with paths; do not re-run a full suite repeatedly, which degrades every other seat's gate.\n\nSIZE: `wc -l` daemon-command-vocabulary.ts and quote it — it must be at or under 400. Disclose that daemon-command-registry.ts is 449 at the merge-base and untouched here.\n\nADVERSARIAL PASS:\n- Is the kind MCP-ADVERTISED at this HEAD? Compute `wiredMcpToolKinds()` and assert absence — an advertised operator kind means an agent arrives as the operator.\n- Can a non-operator principal dispatch it? Assert the refusal code and layer.\n- `deployment.migrate_down` with NO prior migration applied — defined answer, or a crash?\n- TWO concurrent reverts against the same environment — does the second queue, refuse, or race the first into a half-reverted schema? Assert which; this is the interleaving that loses data.\n- Does any refusal detail or log line carry a connection string or DATABASE_URL (epic rail 3)?\n\nMUTATION DRILL: `git status --porcelain` the exact paths first. The journey test is NEW (untracked), so `git diff` certifies nothing for it — back it up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore. The vocabulary, goal-services and roster files are TRACKED, so `git diff` is valid there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/migrate-down-journey.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,12 +105,29 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
   "dependsOn": [
-    "task-0a56ecee17b740a3abb7f850e5250c99"
+    "task-0a56ecee17b740a3abb7f850e5250c99",
+    "task-5a8c3166b98b4614952068242993bf2b"
   ],
   "priority": "HIGH",
   "order": 112.6,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:35:08.019Z",
-  "updatedAt": "2026-09-05T19:35:08.019Z"
+  "updatedAt": "2026-09-05T19:44:57.448Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:42:41.167Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:44:55.258Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING, AFTER FILING. I filed this row as a single unit covering both the shared contract and the daemon wiring, then measured it against numbers I already had: the contract half is 6 files (runtime-vocabulary, the transcribed roster test, the regenerated client, and three hand-transcribed digest mirrors) and the daemon half is 8 plus the revert proof — 15 against a 10-file cap. That was a filing error on my part, corrected before planning rather than left for the worker to hit at step 5.\n\ntask-5a8c3166b98b4614952068242993bf2b (order 112.55) now owns the shared-contract half, and this row's dependsOn names it alongside the engine row. The intermediate HEAD it leaves — kind advertised, not yet served — is documented at apps/daemon/src/goals/goal-create-with-source.ts:35, where an existing kind sits in exactly that state.\n\nA NEW HANDLER TABLE OR FAMILY TABLE. Rejected on measurement: `repository.publish` registers in GOAL_HANDLERS, which the registry already spreads, so a new table would force an edit to the 449-line daemon-command-registry.ts for no benefit. A new family table carries its own hazard — it is dead unless also added to FAMILY_TABLES, because `familyCapabilityOf` walks only that array.\n\nWHERE THE REVERT PROOF LIVES. Kept here rather than in the engine row: `deployment.migrate_down` is the command whose whole purpose is reverting, and proving it through the registered dispatch seam is stronger than proving the engine function in isolation. The engine row task-0a56ecee owns backup ordering and the restore round trip; this row owns \"the command reverts the schema\".",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. This row was SPLIT after filing (see approachesConsidered); what remains is the DAEMON WIRING, the three-axis fence, the bidirectional roster test and the revert proof.\n\nTHE CHEAP PATH — following `repository.publish` means this row touches NEITHER the registry NOR the allowlist:\n- apps/daemon/src/goals/goal-services.ts:203 registers `\"repository.publish\": publishRepository` inside GOAL_HANDLERS (:199), and apps/daemon/src/daemon-command-registry.ts:194 composes its table by spreading `...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS`. A GOAL_HANDLERS entry is SERVED WITH ZERO REGISTRY LINES. That matters: daemon-command-registry.ts is 449 lines, already past the 400 hard cap AT THE MERGE-BASE and untouched by this row — disclose it, do not add to it, do not fix it here.\n- apps/daemon/src/mcp-tool-allowlist.ts:78 DERIVES MCP_EXCLUDED_COMMAND_KINDS as `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()`. Its comment states the contract: a kind that becomes operator-only leaves the MCP roster with no edit there. So the fence is automatic AND lands in the same file and commit as PAYLOAD_KEYS — there is no landed HEAD at which the kind is MCP-advertised. That window is not academic: the MCP port authenticates with the operator bootstrap credential, so an advertised operator kind means an agent arrives AS THE OPERATOR.\n- THE CIRCULARITY TRAP, and it is why DoD 3 is worded as it is: MCP_EXCLUDED_COMMAND_KINDS is DERIVED FROM OPERATOR_PRINCIPAL_KINDS. Asserting \"operator-only\" and \"MCP-excluded\" against those two constants is asserting one fact twice — it passes with the fence broken. Assert exclusion against `wiredMcpToolKinds()` (mcp-tool-allowlist.ts:81), the computed served-over-MCP surface.\n\nTHE SITES TO MIRROR, all from `repository.publish`: daemon-command-vocabulary.ts:75 (family capability, CAPABILITIES.GOAL), :334 (PAYLOAD_KEYS `[\"goalId\",\"remoteUrl\"]`), :376 (OPERATOR_PRINCIPAL_KINDS); bootstrap-contracts.ts:42 (kind list); bootstrap-sequence.ts:25 (prerequisites, `[\"approval.decide\"]`); agent-spawn-contract.ts:195 (HUMAN_ONLY_STEPS, which already carries `\"repository.publish\"` with a comment on why an operator repository action is never staffed work).\n\nSIZE GUARD: daemon-command-vocabulary.ts is 386 lines against a 400 hard cap. One kind adds roughly seven. If it crosses, PACK entries onto shared lines the way the file already does at :79 (`\"project.activate\": CAPABILITIES.ADMIN, \"project.bind_repository\": CAPABILITIES.ADMIN,`). Do NOT add a module, and do NOT move a table into daemon-command-families.ts (171 lines) — that file IMPORTS the tables to compute CommandFamilyFacts and moving one would invert the dependency.\n\nTHE WELD: daemon-store-dependencies.test.ts:238 asserts `[...v2.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`. It needs NO edit when this is done right; it is the tripwire that reds if PAYLOAD_KEYS gains a kind whose handler is unregistered. If it reds, the wiring is half-done — fix the wiring, never the assertion.\n\nCOUNTS THAT MOVE (2026-09-05 readings — RE-MEASURE): daemon-command-registry.test.ts:862/:863/:870 (47) and :1040 OPERATOR_ONLY (12); daemon-command-registry-human-approver.test.ts:325,:326 (11). Every one is invisible to a grep for the kind literal, which is why they are enumerated rather than left for discovery."
+  },
+  "planApprovedAt": "2026-09-05T19:44:57.448Z"
 }
