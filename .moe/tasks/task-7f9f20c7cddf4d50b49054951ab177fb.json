@@ -1,0 +1,37 @@
+{
+  "id": "task-7f9f20c7cddf4d50b49054951ab177fb",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "design.read is served over MCP next to product_contract.read",
+  "description": "SPIDR child 1c of task-8a6d6660c31c4e119f962d13e6f1505d, split from task-06ac0da1ace64032855affc4ab0c1a4e (architect-3c27f2ab, 2026-09-05) when the publish row measured 12 files against the 10-file cap. Cut along the INTERFACE axis: 06ac0da1 publishes the two kinds on the daemon roster + shared contract + generated client; THIS row makes design.read REACHABLE over MCP.\n\ndependsOn task-06ac0da1 — the query kind must exist on RUNTIME_QUERY_KINDS before the port can serve it.\n\nWHAT THIS ROW OWNS: MCP advertisement + dispatch for design.read, and the behavioural agent-authenticated arms for BOTH kinds (submit is auto-advertised once PAYLOAD_KEYS has it and it is not in MCP_EXCLUDED_COMMAND_KINDS; read must be added).\n\nMEASURED: MCP_SERVED_QUERY_KINDS at apps/daemon/src/mcp-tool-allowlist.ts:27-34 is HAND-KEPT. QUERY_HANDLERS at mcp-dispatch-port.ts:297-304 is the SERVED set; servedMcpQueryKinds() reads Object.keys of that table. product_contract.read is the shape to copy (answerProductContractRead at :302). The allowlist test already proves exact set-equality both ways between the two enumerations.\n\nNOT this row: daemon command vocabulary, families, registry, contracts runtime lists, generated client. Those are 06ac0da1.",
+  "definitionOfDone": [
+    "`design.read` is in MCP_SERVED_QUERY_KINDS (mcp-tool-allowlist.ts:27) AND in QUERY_HANDLERS (mcp-dispatch-port.ts:297). The allowlist's existing exact-set-equality test (roster vs servedMcpQueryKinds, both directions) is green. Verify by deleting the entry from each side in turn and confirming both go red.",
+    "An agent-authenticated `design.read` over the MCP port RETURNS the design-store answer (latest revision, or DESIGN_REVISION_ABSENT with code AND layer). A query advertised without a handler is an unserved capability.",
+    "An agent-authenticated `design.submit` over the MCP port REACHES the handler (the kind is a command, so it is served by NOT being in MCP_EXCLUDED_COMMAND_KINDS). Assert it is absent from that exclusion roster and from HUMAN_ONLY_STEPS. Copying the human-only pattern here would make the design step unstaffable.",
+    "The handler calls the existing `readDesignRevision` from apps/daemon/src/design/design-store.ts — it does not reimplement the aggregate. Payload is `{goalRef}` plus optional `version`, matching DesignReadInput.",
+    "Gates quoted with Test Files N passed: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "A SERVED QUERY NEEDS BOTH a roster entry and a dispatch handler. One without the other is an advertised capability the port cannot serve.",
+    "Call readDesignRevision. Do not reimplement the aggregate. No vocabulary, registry, or generated-client edits — those are task-06ac0da1.",
+    "SEAT KINDS, NOT HUMAN GATES. Do not add design.submit or design.read to MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS.",
+    "FEATURES ONLY (inherited)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-06ac0da1ace64032855affc4ab0c1a4e"
+  ],
+  "priority": "HIGH",
+  "order": 61.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T11:30:16.693Z",
+  "updatedAt": "2026-09-05T11:30:16.693Z"
+}

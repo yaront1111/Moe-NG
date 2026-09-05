@@ -1,0 +1,38 @@
+{
+  "id": "task-bda0eeac02544c1992c6738c2db83178",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "release.decide is on the shared runtime contract, with its three refusal codes and their closed layer map",
+  "description": "SPIDR child A of task-f961dc899a13488da8f119abdc37631f (architect-71b9a4e9, 2026-09-05). The parent row measured at 21 distinct files (roster backfill 13 + PR/receipt behaviour 8) against the 10-file hard cap, so it is split three ways: A = this row (shared contract + refusal vocabulary), B = the daemon wiring and operator fence, C = task-f961dc89 keeps the gh PR port, the receipt and the service.\n\nTHIS IS THE LEAF. `apps/daemon` imports `RuntimeCommandKind` from `@moe/contracts`, so the daemon roster cannot name `release.decide` until this row lands.\n\nMEASURED AT HEAD (architect-71b9a4e9, 2026-09-05, branch moe/work-2026-09-04):\n- `git grep -n \"release\\.decide\" -- apps packages adapters` => EXIT 1, ZERO hits. The kind does not exist anywhere. Nothing to re-implement.\n- `packages/contracts/src/runtime/runtime-vocabulary.ts:85` `RUNTIME_COMMAND_KINDS`, sorted; `escalation.decide` sits at :92, `repository.publish` at :109. Insert `release.decide` in SORTED position.\n- `packages/contracts/src/runtime/runtime-contract.test.ts:35` `EXPECTED_COMMAND_KINDS` (hand list, `:103` `toEqual`) and `:105` `expect(commands.size).toBe(103)`. BOTH move. Do NOT trust the literal 103 in this description - task-40e52fa8 bumps it first; read the printed value and reconcile.\n- `packages/control-room-client/src/contract-pins.ts` is a bare RE-EXPORT and `src/contract-digest.test.ts` DERIVES the digest (`:21 expect(deriveContractDigest()).toBe(GENERATED_CONTRACT_DIGEST)`). Neither is hand-edited. `generator/generate.ts:299` writes exactly ONE file: `src/generated/generated-client.ts`.\n\nCOLLISION HAZARD, and why dependsOn is set: task-40e52fa8 (WORKING) is landing `preview.decide` through the SAME lines - runtime-vocabulary.ts, EXPECTED_COMMAND_KINDS, the `commands.size` literal and the generated client. Two rows bumping the same count literal concurrently is a guaranteed conflict. This row waits.\n\nThe three refusal codes and their closed code->layer map are HERE, not in the service row, so the service row consumes a contract it cannot disagree with: the factory takes NO layer argument, so a call site is structurally unable to mint a disagreeing (code, layer) pair.",
+  "definitionOfDone": [
+    "`release.decide` is a member of `RUNTIME_COMMAND_KINDS` in packages/contracts/src/runtime/runtime-vocabulary.ts, in SORTED position, and `runtime-contract.test.ts` agrees in both of its coupled assertions: the `EXPECTED_COMMAND_KINDS` hand list (`toEqual`) and the `commands.size` literal. Do NOT freeze a count from the task description - run the leg, take the PRINTED expected/received values as authoritative, and reconcile the literal to them.",
+    "The generated client is REGENERATED, never hand-edited: run `pnpm --filter @moe/control-room-client generate` and quote the OLD and the NEW `GENERATED_CONTRACT_DIGEST` in the completion record. `packages/control-room-client/src/contract-digest.test.ts` derives the digest rather than pinning it, so it must go green WITHOUT being edited - if it needs an edit, the generate step was skipped.",
+    "A new `apps/daemon/src/release/release-decide-contracts.ts` declares exactly three refusal codes - RELEASE_REMOTE_MISSING, RELEASE_EVIDENCE_INCOMPLETE, RELEASE_PR_FAILED - and ONE frozen code->layer map covering all three. The refusal factory takes the CODE only and reads the layer from that map: it accepts no layer argument, so no call site can mint a disagreeing pair. A test asserts, per code, both the code AND the layer it resolves to.",
+    "The layer names reuse EXISTING rostered layer constants or add a properly rostered one - a bare string literal at the throw site is unenumerable by tests/security/boundary-roster.security.ts (see `daemon-command-registry.ts:206` for the existing instance of that hole). If a new `*_LAYER` constant is exported, run `pnpm test:security` and reconcile the roster, its size constant, EXPECTED_DISTRIBUTION, the axis partition and the sibling per-axis pins in ONE commit.",
+    "Mutation drill, both arms, quoted: (a) delete `release.decide` from RUNTIME_COMMAND_KINDS -> runtime-contract.test.ts goes RED; (b) change one code's entry in the code->layer map -> the per-code layer assertion goes RED. Restore proof per global rail 13: `git status --porcelain` the mutated paths first, and for any UNTRACKED path prove restoration by SHA256 against an out-of-tree backup in a call SEPARATE from the restore.",
+    "Gates quoted WITH their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm test` (packages/contracts and the generated client are root-lane), `pnpm typecheck`. A leg with no count line RAN NOTHING and is not evidence."
+  ],
+  "taskRails": [
+    "NEVER HAND-EDIT `packages/control-room-client/src/generated/generated-client.ts`. Run the generator. A hand-typed entry passes every grep and fails the runtime compat check at client-compat.ts:169.",
+    "Do NOT touch apps/daemon/src/daemon-command-vocabulary.ts, daemon-command-families.ts, daemon-command-registry.ts, daemon-command-async-entries.ts, mcp-tool-allowlist.ts or agent-spawn-contract.ts - the daemon wiring is child B's row and editing it here collides in the shared worktree.",
+    "No count literal from the task description is trustworthy: task-40e52fa8 moves the same numbers first. Read the assertion's printed expected-vs-received and reconcile to that.",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-40e52fa8a85a4921b97bee933b00403f"
+  ],
+  "priority": "HIGH",
+  "order": 41.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T11:32:00.337Z",
+  "updatedAt": "2026-09-05T11:32:00.337Z"
+}

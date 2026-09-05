@@ -21,8 +21,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY, NO EDITS. Steps 1-3 of the previous plan already delivered apps/daemon/src/preview/preview-contracts.ts + .js bridge + preview-contracts.test.ts (30 tests). Do not recreate or edit them. (a) Confirm PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_DECIDE_PAYLOAD_KEYS, decodePreviewDecidePayload, previewRefusal, PREVIEW_CODE_LAYERS still export from that module. (b) Confirm the cycle is still real: grep -c preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts is 0. (c) Confirm the two out-of-plan files from the block: runtime-contract.test.ts EXPECTED_COMMAND_KINDS (hand-transcribed, size literal 103) and daemon-store-dependencies.test.ts:746 registryKinds (46 kinds, sorted). (d) If this re-measure names a file outside the ten in planningNotes.keyFiles, STOP and report — there is no headroom (10-file cap). (e) Note foreign dirt: daemon-store-dependencies.test.ts is already Modified in the shared checkout; preserve those hunks later. MCP exclusion and HUMAN_ONLY_STEPS are task-5f883e4e's; do not touch them.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-05T11:22:57.700Z"
     },
     {
       "stepId": "step-2",
@@ -73,8 +74,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-fa42c94f",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -101,11 +102,17 @@
       "author": "architect-3c27f2ab",
       "content": "RE-PLAN (architect-3c27f2ab, 2026-09-05). Governor handoff: widen this row and give RUNTIME_COMMAND_KINDS one owner.\n\nKEPT: steps 1-3 of the previous plan (preview-contracts.ts/.js/.test.ts, 30 tests). Do not redo.\n\nADDED to this row (measured, not guessed):\n- packages/contracts/src/runtime/runtime-vocabulary.ts (the cycle breaker: envelope refuses unknown kinds INPUT_INVALID at runtime-envelope.ts:142 before the registry)\n- packages/contracts/src/runtime/runtime-contract.test.ts EXPECTED_COMMAND_KINDS + size 103→104 (rail 19 shape consumer; invisible to a kind-literal grep of production source)\n- packages/control-room-client generate + generated-coverage.test.ts digest/SHA pins (without this, typecheck indexes GENERATED_COMMAND_BUILDERS[preview.decide] and goes red)\n- apps/daemon/src/daemon-store-dependencies.test.ts:746 hand-written registryKinds (comment: \"A new command writes its own kind here\")\n\nNOT this row (stay on task-5f883e4e): MCP exclusion, HUMAN_ONLY_STEPS, wrapper staffing test.\n\n10 distinct files, at the cap. An 11th touchpoint is stop-and-report.",
       "timestamp": "2026-09-05T11:21:32.398Z"
+    },
+    {
+      "id": "comment-7fcbd8418b674a3d970d41f91acaf73a",
+      "author": "worker-fa42c94f",
+      "content": "STEP-1 CLAUSE (d) FIRED — 2 unnamed consumers, roster must go 10 -> 12. worker-fa42c94f, 2026-09-05, worktree at HEAD 23100f74 (branch moe/work-2026-09-04).\n\nSTEP 1 (a)(b)(c)(e) ALL PASS — nothing to redo:\n(a) preview-contracts.ts still exports PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66, PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. Bridge preview-contracts.js = `export * from \"./preview-contracts.ts\";`.\n(b) Cycle still real: `grep -c preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts` = 0.\n(c) runtime-contract.test.ts:35 EXPECTED_COMMAND_KINDS hand-transcribed, size literal `expect(commands.size).toBe(103)` at :105. daemon-store-dependencies.test.ts:746 registryKinds present, sorted, comment at :745 \"A new command writes its own kind here.\"\n(e) NO foreign dirt: `git status --porcelain -- apps/ packages/` is EMPTY. The store-deps dirt named in planningNotes.risks has since been committed by its peer.\n\nTHE BLOCKER — the digest-mirror census is STALE in the plan. Memory `generated-contract-digest-has-four-mirrors` and the precedent row task-ad61563a both name the four as {generated-client.ts, generated-coverage.test.ts, data-adapter.test.ts, scripts/release/release-subject.mjs}. That set has MOVED. Measured now with `git grep -n ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28 -- . ':!.moe'` — still exactly four, but not the same four:\n  1. packages/control-room-client/src/generated/generated-client.ts:905  <- IN roster\n  2. packages/control-room-client/src/generated-coverage.test.ts:36     <- IN roster\n  3. apps/control-room/src/data/data-adapter.test.ts:18                 <- NOT IN ROSTER\n  4. apps/control-room/src/v2/goals/approve-plan.test.tsx:255           <- NOT IN ROSTER (a NEW mirror; did not exist at task-ad61563a)\nscripts/release/release-subject.mjs is NO LONGER a mirror — :59 is `contractSchemaHash: deriveContractDigest()` (task-a9c6d4a5 landed). So the plan's roster swapped out the retired mirror but never picked up approve-plan.test.tsx.\n\nWHY REGENERATION IS NOT OPTIONAL, so this cannot be planned around:\n- packages/control-room-client/src/contract-digest.ts:38 puts `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)` inside canonicalContractSurface(), which deriveContractDigest() SHA256s. Adding preview.decide changes the digest by construction.\n- contract-digest.test.ts:21 `expect(deriveContractDigest()).toBe(GENERATED_CONTRACT_DIGEST)` reds unless the pin rotates.\n- generated-coverage.test.ts:89 asserts GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS.\n\nWHY THE TWO OUT-OF-ROSTER FILES GO RED (read-only chain, not a guess):\nclient-compat.ts:168 `if (report[\"contractSchemaHash\"] !== GENERATED_CONTRACT_PINS.contractDigest) return refuse();` and generated-client.ts:909 sets that pin to GENERATED_CONTRACT_DIGEST. Both out-of-roster files feed the OLD literal into createCompatGate and then hard-throw on refusal — data-adapter.test.ts:20 `throw new Error(\"compat gate refused the matching report\")`, approve-plan.test.tsx:257 `throw new Error(\"the compat gate refused its own matching report\")`. task-ad61563a's own step-6 drill names that exact string as the expected red, so this is the documented behaviour, not a surprise.\n\nBASELINE (rail 3 — the red would be 100% mine): `pnpm --filter @moe/control-room test` at HEAD, standalone foreground: `Test Files 147 passed (147) / Tests 1843 passed (1843)`. Clean green before my diff. Note `--` did NOT filter (whole package ran) — memory pnpm-filter-test-double-dash-does-not-filter.\n\nNOT DISCLOSABLE AS FOREIGN RED, and not hideable behind gate scope: apps/control-room is in none of DoD-6's three gates (root `pnpm test` has no apps/** — rail 18), so all three named gates would be GREEN while two tests are actually broken on the branch. That is exactly the false-green rail 8/rail 3 forbid.\n\nASK — amend, do not split. Add these two paths to step-2 and to planningNotes.keyFiles (10 -> 12), with the fix being a one-line hex swap in each to the NEW digest, plus a restore-proof drill (revert one mirror -> its compat-gate arm reds by the message above) and `pnpm --filter @moe/control-room test` added to step-6's gate list and to DoD-6. Everything else in the plan re-measures CLEAN; steps 2-6 are otherwise executable as written. No dependency exists to wait on — task-ad61563a is DONE on a different epic and owns none of this. Blocking with no blockedOnTaskIds because the only thing needed is this amendment.",
+      "timestamp": "2026-09-05T11:30:25.015Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T11:21:52.824Z",
+  "updatedAt": "2026-09-05T11:31:57.174Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -144,10 +151,10 @@
     "worker-fa42c94f"
   ],
   "workStartedAt": "2026-09-04T23:14:51.216Z",
-  "blockedReason": null,
+  "blockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T11:31:57.173Z",
   "declaredFiles": [
     "apps/daemon/src/preview/preview-contracts.ts",
     "apps/daemon/src/preview/preview-contracts.js",
@@ -205,6 +212,24 @@
         "scripts/watch.ps1"
       ],
       "pushed": true
+    },
+    {
+      "sha": "23100f74ed8897919e09c32cfa8ac3e97035a6ba",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-fa42c94f",
+      "recordedAt": "2026-09-05T11:22:16.085Z",
+      "treeId": "4a83d3f8bbe9f1d1779e576e5ee666facfcb390f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -214,7 +239,10 @@
     "apps/daemon/src/daemon-command-vocabulary.ts",
     "apps/daemon/src/preview/preview-contracts.js",
     "apps/daemon/src/preview/preview-contracts.test.ts",
-    "apps/daemon/src/preview/preview-contracts.ts"
+    "apps/daemon/src/preview/preview-contracts.ts",
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/preview/preview-contracts.js",
@@ -225,8 +253,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "architect-3c27f2ab@2026-09-05T11:04:38Z",
-    "at": "2026-09-05T11:04:48.521Z"
+    "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
+    "at": "2026-09-05T11:22:16.085Z"
   },
   "priorBlockedReason": "STEP 1 CLAUSE (c) STOP-AND-REPORT FIRED. Amended text (activeAmendmentId=amend-1, global rail 10): \"If the trace names a file outside this plan's seven, STOP and report - there is no headroom.\" It names TWO. Verbatim evidence: comment-6093ee6b869d4383bf6dec53c9334b02.\n\n1. apps/daemon/src/daemon-store-dependencies.test.ts - unnamed, hard red. :670 `registryKinds: [...deps.registry.keys()].sort()` vs a hand-written 46-kind roster at :745 (\"A new command writes its own kind here\"). registry.ts:392 DERIVES the served set from Object.keys(PAYLOAD_KEYS), so step 4's entry alone reds it. Invisible to a kind-literal grep in production source.\n\n2. packages/contracts/src/runtime/runtime-vocabulary.ts - moved OUT by amend-1, needed twice.\n(i) TYPECHECK: RUNTIME_COMMAND_KINDS lacks \"preview.decide\"; registry.test.ts types Row.kind (:75), REGISTRATION_ORDER (:280), OPERATOR_ONLY (:306) as RuntimeCommandKind, with set-equality sweeps at :814/:820-821 forbidding omission. Probe: `TS2322: Type '\"preview.decide\"' is not assignable to type '\"approval.decide\" | ... 95 more ... | \"work.resume\"'`.\n(ii) REACHABILITY, decisive: http-command-ingress.ts:152 -> runtime-envelope.ts:142 `if (!isCommandKind(...)) return commandFailure(invalidInput())`. preview.decide is refused INPUT_INVALID at the envelope BEFORE the registry and the operator fence, so step 4's \"MUST BE SERVED, NOT ONLY ADVERTISED\" and DoD-2's \"reaches the handler\" are unreachable here.\n\nNot taking the file: task-5f883e4e12c34842b3cb6c2f218e4256 is WORKING and its DoD-2 owns that line plus the four digest mirrors. It dependsOn THIS row, so blockedOnTaskIds would close a cycle - omitted deliberately.\n\nDELIVERED GREEN (DoD 4, 5): apps/daemon/src/preview/preview-contracts.ts (249 lines) + .js bridge + test. Tests 30 passed (30), exit 0. Three mutation drills RED, SHA256-restored.\n\nFIX: give this row one RUNTIME_COMMAND_KINDS line + daemon-store-dependencies.test.ts; strike DoD-2 from task-5f883e4e.",
   "blockedOnTaskIds": null,

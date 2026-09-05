@@ -19,8 +19,63 @@
     "NEVER HAND-EDIT the generated client; run the generator and quote both digests.",
     "FEATURES ONLY (inherited): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY, NO EDITS. (a) Confirm the producer: apps/daemon/src/design/design-store.ts exports submitDesignRevision and readDesignRevision; design-contracts.ts has DESIGN_CODE_LAYERS / designRefusal taking no layer argument. (b) Confirm the gap: grep design.submit / design.read in daemon-command-vocabulary.ts, runtime-vocabulary.ts, PAYLOAD_KEYS — ZERO roster hits (the store file's commandKind string does not count). (c) Re-measure the LIVE counts this row increments: ROWS.toHaveLength(N) in vocabulary.test.ts:243 and registry.test.ts:818, REGISTRATION_ORDER length, OPERATOR_ONLY length (must NOT increment — this kind is not operator-only), store-deps registryKinds length, RUNTIME_COMMAND_KINDS size literal in runtime-contract.test.ts:105, RUNTIME_QUERY_KINDS array at :93. preview.decide (task-40e52fa8) may already have bumped 46→47; write the measured N in the step note and increment from THAT, not from this plan's memory of 46. (d) Confirm dependsOn task-40e52fa8 is DONE before editing the shared roster; if still WORKING, you should not have been claimed — report_blocked with blockedOnTaskIds naming it. (e) If a file outside planningNotes.keyFiles appears, STOP. MCP allowlist and mcp-dispatch-port.ts are task-7f9f20c7.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "LEAF FIRST — shared runtime roster + generated client. (1) packages/contracts/src/runtime/runtime-vocabulary.ts: insert \"design.submit\" in RUNTIME_COMMAND_KINDS sorted (after dependency.challenge, before effect.activate) and \"design.read\" in RUNTIME_QUERY_KINDS sorted (after dependency.explain, before doctor.get). They must stay disjoint. (2) packages/contracts/src/runtime/runtime-contract.test.ts: the same inserts in EXPECTED_COMMAND_KINDS and the inline RUNTIME_QUERY_KINDS expectation at :93; bump the command size literal at :105 by one from the measured N. Do NOT derive EXPECTED_COMMAND_KINDS from the tuple. (3) Record OLD GENERATED_CONTRACT_DIGEST from generated-client.ts:905. Run `pnpm --filter @moe/control-room-client generate`. NEVER hand-edit generated-client.ts. (4) Update GENERATED_FILE_SHA256 and CONTRACT_DIGEST in generated-coverage.test.ts. Quote OLD and NEW digest; unchanged means generate did not see the kinds. contract-pins.ts only re-exports — do not edit it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "WIRE design.submit INTO THE DAEMON VOCABULARY. apps/daemon/src/daemon-command-vocabulary.ts only. Add \"design.submit\" to WiredCommandKind. Add DESIGN_FAMILY = { \"design.submit\": CAPABILITIES.PLANNING } and put it in FAMILY_TABLES. PAYLOAD_KEYS[\"design.submit\"] = [\"contractRef\",\"expectedVersion\",\"goalRef\",\"revision\"] (sorted; caller intent only — commandId/correlationId/decidedAt/principalId/projectId are server facts). Put the key in the literal at the position REGISTRATION_ORDER will transcribe. agentCapabilitiesFor returns [PLANNING, WORK] like planning.submit_decomposition. Do NOT add it to OPERATOR_PRINCIPAL_KINDS, HUMAN_ONLY_STEPS, MCP_EXCLUDED_COMMAND_KINDS, REVIEW_FAMILY, or COMPILER_FAMILY. Do not edit design-contracts.ts (259 lines, owned by task-5e90317e). Stay under 400 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "SERVE design.submit. (1) daemon-command-families.ts: add design: boolean to CommandFamilyFacts and membershipOf (design: kind === \"design.submit\"). requiredCapabilityOf: if member.design return CAPABILITIES.PLANNING. schemaVersion stays on the BOOTSTRAP default. Do not set compilerDecompose or review. (2) daemon-command-registry.ts: file is already 436 lines — keep this tiny, do NOT add daemon-command-edges.ts. Destructure design from commandFamilyFacts. Before the compilerDecompose branch: if (design) { assemble DesignSubmitInput from envelope + principal (goalRef, contractRef, revision, expectedVersion from payload; commandId/correlationId from envelope; decidedAt from clock(); principalId/projectId from auth); if expectedVersion is not a finite number throw DomainRefusal(\"DESIGN_SHAPE_INVALID\", \"REQUEST\", ...); const result = submitDesignRevision(store, input); if (!result.ok) throw new DomainRefusal(result.code, result.layer, result.code); return { commandId, disposition: \"DECIDED\", effectId: designAggregateId(goalRef), resultCode: \"DESIGN_REVISION_COMMITTED\" }. } Layer MUST come from the DesignRefusal, never a literal. Do not call decisionOf — DesignSubmitResult is not in that union.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ROSTER TESTS. Re-measure N from step 1; every 46-or-47 below means N, N+1 after this row. (1) daemon-command-vocabulary.test.ts ROWS: agent [PLANNING, WORK], capability PLANNING, family STANDALONE (or DESIGN if you add the label — STANDALONE is already used and FAMILY_NAMES does not include it, matching cutover), kind design.submit, payloadKeys [\"contractRef\",\"expectedVersion\",\"goalRef\",\"revision\"]. Length N→N+1. OPERATOR_ONLY length MUST stay the same; assert HUMAN_ONLY_STEPS.has(\"design.submit\") === false and MCP_EXCLUDED_COMMAND_KINDS does not contain it (import those from their modules into this already-owned test file). (2) daemon-command-registry.test.ts ROWS: empty payload → DESIGN_SHAPE_INVALID @ REQUEST; REGISTRATION_ORDER transcribes PAYLOAD_KEYS key order, length N→N+1. Existing :818-821 is the bidirectional served-vs-advertised check. (3) daemon-store-dependencies.test.ts registryKinds: insert \"design.submit\" sorted. File may be dirty from peers; preserve foreign hunks. design.read is a QUERY — it does not belong in these command tables.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DRILLS, GATES, SELF-REVIEW. (a) git status --porcelain the exact paths first. Tracked files restore with empty git diff. (i) Remove design.submit from RUNTIME_COMMAND_KINDS only — contract test and registry typecheck/set-equality go red. (ii) Remove it from PAYLOAD_KEYS only — registry.keys() vs ROWS goes red. (iii) Add it to OPERATOR_PRINCIPAL_KINDS or MCP_EXCLUDED_COMMAND_KINDS only — the absence asserts from step 5 go red. Restore after each. (b) GATES, standalone foreground, quote Test Files N passed: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm typecheck`. Root `pnpm test` is real evidence (contracts + client). Attribute foreign daemon red by merge-base/HEAD ∩ owned paths. Named complete_task command: `pnpm --filter @moe/daemon test`. (c) Adversarial: agent principal reaches the handler; operator-only/MCP-excluded absences hold; empty payload is DESIGN_SHAPE_INVALID @ REQUEST not a bootstrap code; generated digest changed; no 11th file. Completion record: design.read is on RUNTIME_QUERY_KINDS and the generated client but is NOT MCP-served until task-7f9f20c7; design.submit is MCP-served by derivation from PAYLOAD_KEYS.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,12 +84,49 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
   "dependsOn": [
-    "task-5e90317e80ac4b86a9704b6b8ba8874a"
+    "task-5e90317e80ac4b86a9704b6b8ba8874a",
+    "task-40e52fa8a85a4921b97bee933b00403f"
   ],
   "priority": "HIGH",
   "order": 61.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-9fc668721d9745beaad2fc89362b285a",
+      "author": "architect-3c27f2ab",
+      "content": "PLAN NOTE (architect-3c27f2ab). DoD-2 (MCP behavioural read) and DoD-4 (MCP_SERVED_QUERY_KINDS + dispatch handler) moved to sibling task-7f9f20c7cddf4d50b49054951ab177fb so this row stays at 10 files. This row still: publishes both kinds on the shared contract + generated client, wires design.submit into the daemon command roster, asserts it is NOT MCP-excluded and NOT human-only.\n\ndependsOn now includes task-40e52fa8 (in-flight on the same roster files). WORKING stays gated until that lands. Re-measure ROWS length before incrementing — do not assume 46.\n\nQA: grade DoD-2 read-half and DoD-4 as owned by task-7f9f20c7.",
+      "timestamp": "2026-09-05T11:31:15.219Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:40:28.076Z",
-  "updatedAt": "2026-09-05T08:40:28.076Z"
+  "updatedAt": "2026-09-05T11:31:17.223Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T11:26:39.278Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T11:31:15.045Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, publishing both kinds plus MCP query dispatch in this row: that is 12 files (the 10 below plus mcp-tool-allowlist.ts and mcp-dispatch-port.ts) against the 10-file cap. Split along INTERFACE: this row publishes; task-7f9f20c7 owns MCP advertisement+dispatch for design.read. REJECTED, omitting RUNTIME_COMMAND_KINDS / RUNTIME_QUERY_KINDS: preview.decide (task-40e52fa8) already proved the daemon-local vs shared-surface split is a cycle — runtime-envelope.ts:142 refuses unknown kinds INPUT_INVALID, and daemon-command-registry.test.ts types ROWS as RuntimeCommandKind. REJECTED, omitting generate: generated-coverage.test.ts:89 indexes GENERATED_COMMAND_BUILDERS[kind] for every RuntimeCommandKind. REJECTED, putting design.submit in COMPILER_FAMILY/compilerDecompose: that flag dispatches runSubmitDecompositionEdge. REJECTED, using decisionOf() for the submit result: it only accepts the existing outcome union; map DesignRefusal through DomainRefusal and return a DurableDecision like runSubmitDecompositionEdge. REJECTED, planning this while preview.decide is in-flight on the same roster files: declared dependsOn task-40e52fa8 so WORKING waits.",
+    "codebaseInsights": "RE-MEASURED 2026-09-05. Prerequisite task-5e90317e DONE (landing 34baaf52 / 1c464208 chain): apps/daemon/src/design/ has design-contracts.ts, design-store.ts (submitDesignRevision :130, readDesignRevision :189), bridges. commandKind \"design.submit\" is already a free-form string on the store commit at design-store.ts:155 — the roster is what this row adds. grep design.submit in vocabulary/registry/runtime-vocabulary = no roster hits. MCP commands are DERIVED from PAYLOAD_KEYS minus MCP_EXCLUDED_COMMAND_KINDS (mcp-tool-allowlist.ts:84-88), so design.submit is MCP-served by NOT adding it to the exclusion list; design.read is a QUERY and must be hand-added (sibling). Seat pattern is planning.submit_decomposition: COMPILER family is the wrong dispatch flag; add DESIGN_FAMILY + a design: boolean on CommandFamilyFacts. PAYLOAD_KEYS for submit, caller intent only: [\"contractRef\",\"expectedVersion\",\"goalRef\",\"revision\"] (server facts stay off the allow-list). Insert design.submit in RUNTIME_COMMAND_KINDS sorted after dependency.challenge, before effect.activate. Insert design.read in RUNTIME_QUERY_KINDS after dependency.explain, before doctor.get. DEPENDENCY EDGE: apps/daemon/package.json:22 and control-room-client/package.json:13 already declare @moe/contracts workspace:*. registry.ts is 436 lines (pre-existing over 400) — keep the design branch ~15 lines, do not add daemon-command-edges.ts (11th file). Re-measure ROWS length at step 1: preview.decide may already have moved 46→47; this row increments whatever is there by one.",
+    "risks": "BIGGEST: colliding with task-40e52fa8 on the same ten files. dependsOn gates WORKING; if you are claimed anyway, STOP rather than merge-fight. SECOND: adding design.submit to REVIEW_FAMILY or COMPILER compilerDecompose flag sends it to the wrong handler. THIRD: adding it to MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS makes the design step unstaffable while looking correct. FOURTH: daemon-store-dependencies.test.ts is dirty in the shared checkout — preserve foreign hunks; only add the kind to registryKinds (sorted). FIFTH: generated-coverage.test.ts SHA256+CONTRACT_DIGEST must be updated after generate or that test stays red. SIXTH: an 11th file is stop-and-report.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-contract.test.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/control-room-client/src/generated-coverage.test.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-families.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T11:31:17.223Z"
 }

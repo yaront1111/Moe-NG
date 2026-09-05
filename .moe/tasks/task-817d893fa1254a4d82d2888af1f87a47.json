@@ -37,5 +37,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-05T00:31:45.397Z"
+  "updatedAt": "2026-09-05T11:26:18.168Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T11:25:19.038Z"
+  },
+  "contextFetchedBy": [
+    "architect-3c27f2ab"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Claimed, measured. Child 1 task-70a7ccd3 is DONE (dossier at apps/daemon/src/release/, landing 1c464208). Child 2 task-f961dc89 is PLANNING with no plan. grep -n release.decide --include=*.ts apps/ packages/ = 0 hits. PUBLISH card, spendOffer, NEEDS_YOU_KINDS exist as composition patterns.",
+      "whatRemains": "Plan and land task-f961dc89 (release.decide kind + proof-carrying PR) first. Then re-claim this proof row and plan the browser card/journey against measured production, not a missing kind.",
+      "pitfalls": "Do not plan a mock-backed release.decide in the control-room to green the journey. Do not fold UNKNOWN into covered on the card. Child 2 currently has dependsOn [] — if its PR needs the dossier, set dependsOn to task-70a7ccd3 when planning it.",
+      "openQuestions": "None. The gap is measured.",
+      "releasedAt": "2026-09-05T11:26:18.165Z",
+      "releasedBy": "architect-3c27f2ab",
+      "reason": "PLAN IN BUILD ORDER (rail 16). This is a proof/consumer row. Its producer task-f961dc89 (release.decide) is still PLANNING and grep release.decide over apps/ packages/ is ZERO hits. Planning the browser journey first would ship a mock-backed proof (rail 4 clause 2). Releasing so the leaf can be planned first; dependsOn already gates WORKING."
+    }
+  ]
 }
