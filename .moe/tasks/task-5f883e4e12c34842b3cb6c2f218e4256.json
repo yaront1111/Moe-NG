@@ -166,7 +166,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T23:24:56.764Z",
+  "updatedAt": "2026-09-05T23:26:02.420Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -331,6 +331,21 @@
       "treeId": "5782960a39178e674dbe9e7abea98a3f0e2a2893",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "561af37372908f58592ac2b3ee796df0043631e4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T23:25:30Z",
+      "paths": [
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T23:26:02.420Z",
+      "treeId": "62d6166a222d29e8ae694abcf63018fa2a44084c",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -394,12 +409,13 @@
     "packages/runner/src/platform/windows/windows-status.ts",
     "packages/runner/src/verification/criterion-check-executor.test.ts",
     "packages/runner/src/verification/criterion-check-executor.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
     "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-05T23:24:01Z",
-    "at": "2026-09-05T23:24:56.764Z"
+    "sessionId": "qa-f2906c26@2026-09-05T23:25:30Z",
+    "at": "2026-09-05T23:26:02.420Z"
   }
 }
