@@ -189,11 +189,15 @@ export interface GeneratedCommandBuilders {
   readonly ["cutover.preview"]: CommandBuilder<"cutover.preview">;
   readonly ["cutover.quiesce"]: CommandBuilder<"cutover.quiesce">;
   readonly ["dependency.challenge"]: CommandBuilder<"dependency.challenge">;
+  readonly ["deployment.deploy"]: CommandBuilder<"deployment.deploy">;
+  readonly ["deployment.set_target"]: CommandBuilder<"deployment.set_target">;
   readonly ["effect.activate"]: CommandBuilder<"effect.activate">;
   readonly ["effect.adopt_result"]: CommandBuilder<"effect.adopt_result">;
   readonly ["effect.confirm_absent"]: CommandBuilder<"effect.confirm_absent">;
   readonly ["effect.observe"]: CommandBuilder<"effect.observe">;
   readonly ["effect.reconcile"]: CommandBuilder<"effect.reconcile">;
+  readonly ["environment.set_variable"]: CommandBuilder<"environment.set_variable">;
+  readonly ["environment.unset_variable"]: CommandBuilder<"environment.unset_variable">;
   readonly ["escalation.decide"]: CommandBuilder<"escalation.decide">;
   readonly ["events.resume"]: CommandBuilder<"events.resume">;
   readonly ["evidence.rerun"]: CommandBuilder<"evidence.rerun">;
@@ -252,7 +256,9 @@ export interface GeneratedCommandBuilders {
   readonly ["recovery.complete"]: CommandBuilder<"recovery.complete">;
   readonly ["recovery.inspect_external"]: CommandBuilder<"recovery.inspect_external">;
   readonly ["recovery.reconcile_external"]: CommandBuilder<"recovery.reconcile_external">;
+  readonly ["release.decide"]: CommandBuilder<"release.decide">;
   readonly ["replan.propose_unblock"]: CommandBuilder<"replan.propose_unblock">;
+  readonly ["repository.bootstrap"]: CommandBuilder<"repository.bootstrap">;
   readonly ["repository.publish"]: CommandBuilder<"repository.publish">;
   readonly ["resource.confirm_released"]: CommandBuilder<"resource.confirm_released">;
   readonly ["resource.reconcile"]: CommandBuilder<"resource.reconcile">;
@@ -297,11 +303,15 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["cutover.preview"]: commandBuilderFor("cutover.preview"),
     ["cutover.quiesce"]: commandBuilderFor("cutover.quiesce"),
     ["dependency.challenge"]: commandBuilderFor("dependency.challenge"),
+    ["deployment.deploy"]: commandBuilderFor("deployment.deploy"),
+    ["deployment.set_target"]: commandBuilderFor("deployment.set_target"),
     ["effect.activate"]: commandBuilderFor("effect.activate"),
     ["effect.adopt_result"]: commandBuilderFor("effect.adopt_result"),
     ["effect.confirm_absent"]: commandBuilderFor("effect.confirm_absent"),
     ["effect.observe"]: commandBuilderFor("effect.observe"),
     ["effect.reconcile"]: commandBuilderFor("effect.reconcile"),
+    ["environment.set_variable"]: commandBuilderFor("environment.set_variable"),
+    ["environment.unset_variable"]: commandBuilderFor("environment.unset_variable"),
     ["escalation.decide"]: commandBuilderFor("escalation.decide"),
     ["events.resume"]: commandBuilderFor("events.resume"),
     ["evidence.rerun"]: commandBuilderFor("evidence.rerun"),
@@ -360,7 +370,9 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["recovery.complete"]: commandBuilderFor("recovery.complete"),
     ["recovery.inspect_external"]: commandBuilderFor("recovery.inspect_external"),
     ["recovery.reconcile_external"]: commandBuilderFor("recovery.reconcile_external"),
+    ["release.decide"]: commandBuilderFor("release.decide"),
     ["replan.propose_unblock"]: commandBuilderFor("replan.propose_unblock"),
+    ["repository.bootstrap"]: commandBuilderFor("repository.bootstrap"),
     ["repository.publish"]: commandBuilderFor("repository.publish"),
     ["resource.confirm_released"]: commandBuilderFor("resource.confirm_released"),
     ["resource.reconcile"]: commandBuilderFor("resource.reconcile"),
@@ -904,7 +916,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076";
+export const GENERATED_CONTRACT_DIGEST = "f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

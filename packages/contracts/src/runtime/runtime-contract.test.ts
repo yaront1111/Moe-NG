@@ -37,8 +37,10 @@ const EXPECTED_COMMAND_KINDS = [
   "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
-  "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
+  "cutover.preview", "cutover.quiesce", "dependency.challenge",
+  "deployment.deploy", "deployment.set_target", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
+  "environment.set_variable", "environment.unset_variable",
   "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
   "goal.cancel", "goal.close", "goal.create", "goal.create_with_source", "goal.pause",
@@ -56,7 +58,8 @@ const EXPECTED_COMMAND_KINDS = [
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
-  "recovery.reconcile_external", "replan.propose_unblock", "repository.publish", "resource.confirm_released",
+  "recovery.reconcile_external", "release.decide", "replan.propose_unblock", "repository.bootstrap",
+  "repository.publish", "resource.confirm_released",
   "resource.reconcile", "resource.release", "resource.renew", "resource.request",
   "review.release", "review.start", "review.submit", "safe_boundary.observe",
   "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",
@@ -101,8 +104,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 102, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(104);
+    // Literal 110, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(110);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
