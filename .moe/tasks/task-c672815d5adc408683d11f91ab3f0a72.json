@@ -81,8 +81,8 @@
       "completedAt": "2026-09-05T14:13:11.815Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -97,16 +97,24 @@
       "author": "worker-2739fee7",
       "content": "ENVIRONMENT DEFECT FOUND WHILE VERIFYING THIS ROW — NOT CAUSED BY THIS DIFF, AND IT SILENTLY VOIDED A GATE FOR THE WHOLE BOARD. Filed here rather than as a new row (rail 21). worker-2739fee7, 2026-09-05.\n\nWHAT HAPPENED. `pnpm --filter @moe/control-room test` was green at 16:57 (147/1843 then 148/1849) and went RED the moment I rotated the digest mirrors — but with an INVERTED signature that made no sense: when I mutated approve-plan.test.tsx to the OLD hex, that file PASSED and the untouched data-adapter.test.ts (carrying the NEW hex) FAILED. A gate that refuses the correct value and admits the stale one is not a gate.\n\nROOT CAUSE, measured. `apps/control-room/node_modules` is symlinked into a FOREIGN CHECKOUT:\n\n    apps/control-room/node_modules/@moe/contracts           -> C:\\...\\Temp\\moe-glance-to-main\\packages\\contracts\n    apps/control-room/node_modules/@moe/control-room-client -> C:\\...\\Temp\\moe-glance-to-main\\packages\\control-room-client\n    apps/control-room/node_modules/@moe/control-room-model  -> ...\\moe-glance-to-main\\packages\\control-room-model\n    apps/control-room/node_modules/@moe/core                -> ...\\moe-glance-to-main\\packages\\core\n\nAll four are Windows JUNCTIONS dated 2026-09-05 02:23 — ~14 hours before my session claimed this row. `git -C /tmp/moe-glance-to-main rev-parse HEAD` = 862e5bfd; that tree has `grep -c 'preview.decide' runtime-vocabulary.ts` = 0 and `GENERATED_CONTRACT_DIGEST = ed325554...` (the OLD digest). So the compat gate was comparing my rotated mirrors against a 14-hour-old foreign tree's pins.\n\nThe 16:57 \"green baseline\" was therefore FALSE COMFORT: it was green only because the in-tree mirrors and the /tmp pins agreed at the OLD digest. Any control-room run since 02:23 has been testing apps/control-room/src/** from THIS repo against @moe/* from ANOTHER repo.\n\nTHE BLAST RADIUS IS WIDER THAN MY ROW — SOMEONE SHOULD TRIAGE THIS:\n1. It is not only @moe. `find . -type l -lname '*moe-glance-to-main*' -not -path '*/.pnpm/*'` shows apps/control-room's ENTIRE dep set redirected: react, react-dom, vitest, vite, typescript, jsdom, @testing-library/*, @vitejs/plugin-react, @types/react.\n2. ROOT `./node_modules/@moe/*` IS ALSO CORRUPTED and I did NOT touch it: contracts, core, daemon, import, jetbrains-adapter, mcp, runner, store all point at /tmp/moe-glance-to-main. Consequence: any root-lane `pnpm test` file under tests/** or tools/** that resolves `@moe/contracts` through the ROOT node_modules is reading the 862e5bfd tree, not HEAD. Root `pnpm test` is therefore NOT trustworthy evidence for contracts-layer changes right now, mine included. I state that plainly in my completion record rather than claiming root-lane coverage I do not have.\n3. `apps/daemon/node_modules/@moe/*` and `packages/control-room-client/node_modules/@moe/*` are CORRECT (they point at D:\\projexts\\moe-next\\...), which is why the per-package contracts and client legs were always honest.\n\nWHAT I REPAIRED, AND WHAT I DELIBERATELY DID NOT. I repaired exactly the FOUR `apps/control-room/node_modules/@moe/*` junctions to point at this workspace, matching the style already present under apps/daemon. Deleted each with `[System.IO.Directory]::Delete(path, $false)` (NON-recursive, link only) and recreated with `New-Item -ItemType Junction`; a canary (`.../moe-glance-to-main/packages/contracts/package.json`) was Test-Path TRUE before AND after, proving the foreign worktree's contents were not touched. These are gitignored; no source file and no peer WIP was modified, and the repair adds no seventh file to my diff.\n\nI did NOT run `pnpm install` and did NOT repair the root `./node_modules/@moe/*` links. Both would rewrite dependency resolution repo-wide while many peer sessions are mid-gate in this shared checkout — a wide, hard-to-reverse action that is not mine to take unilaterally. Someone with the authority to quiesce the fleet should do it. Until then, root `pnpm test` and anything resolving @moe through the root remain suspect.\n\nWHY THIS MATTERS BEYOND ME: this is the exact failure mode `mem:gotcha-contract-digest-mirror-set-moved-two-are-in-apps-control-room` warns about, one level deeper. That memory says the two apps/control-room mirrors are invisible to `pnpm test`/`pnpm typecheck`/`--filter @moe/daemon`, so `--filter @moe/control-room` is mandatory. True — but between 02:23 and now, that mandatory gate was itself resolving a foreign tree, so it would have admitted a WRONG digest and refused a RIGHT one. Every row landing a contract-surface change in that window should re-verify.",
       "timestamp": "2026-09-05T14:12:08.043Z"
+    },
+    {
+      "id": "comment-2457e086475f464db7ba12a75a19f0eb",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION RECORD (qa-d81848bc) — full evidence; the approval summary is capped at 2000 chars so the detail lives here.\n\nANCHOR: delivered commit 0d1d6c46 on moe/work-2026-09-04 (`git branch --contains` confirms). 6 source files + 5 .moe board JSONs, ZERO under apps/daemon.\n\nGATES RE-RUN BY ME (count lines quoted, not exit codes):\n- `pnpm --filter @moe/contracts test` exit 0 — Test Files 15 passed (15) / Tests 509 passed (509)\n- `pnpm --filter @moe/control-room-client test` exit 0 — Test Files 10 passed (10) / Tests 96 passed (96)\n- `pnpm typecheck` exit 0 — `$ tsc --project tsconfig.json` echoed per package incl. apps/control-room and apps/daemon\n- `pnpm --filter @moe/control-room test` exit 1 — Test Files 1 failed | 148 passed (149) / Tests 16 failed | 1837 passed (1853). SEE ATTRIBUTION.\n- root `pnpm test` exit 1 — Test Files 11 failed | 416 passed | 2 skipped (429) / Tests 92 failed | 10183 passed. Covers NO apps/** file.\n\nATTRIBUTION OF THE MANDATORY-LEG RED — NOT THIS ROW'S BYTES. A stranded drill mutant sits in the WORKING TREE only: `apps/control-room/src/data/data-adapter.test.ts:18` reverted to the OLD digest `ed325554…`. All 16 failures are `Error: compat gate refused the matching report` at `:20`, and vitest quotes `ed325554…` in the frame. Proven three independent ways:\n1. `git show 0d1d6c46:apps/control-room/src/data/data-adapter.test.ts` line 18 = the NEW hex `ed5f6b87…`. The revert landed after 17:15:10.\n2. EXECUTED POSITIVE CONTROL: `approve-plan.test.tsx` carries the same NEW hex through the SAME `createCompatGate` helper and PASSED in that very run (it is one of the 148).\n3. EXECUTED PROBE on the production surface, out-of-tree, no repo file touched — `createCompatGate` from `packages/control-room-client/src/client-compat.ts` with the delivered fixture verbatim: `gate(DELIVERED).ok = true`; `gate(OLD mutant).ok = false code=DISTRIBUTION_MISMATCH`. (My first probe attempt used `apiVersion`/`wireProtocol` instead of `apiCompatibilityRange`+`errorRegistryVersion` and refused BOTH arms — that was my fixture defect, corrected by copying the delivered fixture verbatim. Recording it so nobody rebuilds the wrong probe.)\nI did NOT revert, stash or commit the foreign path. Flagged in #general `msg-2b5ad321f13a485f87f2320af79b2a5e`.\n\nROOT RED, ATTRIBUTED: the 11 failing files are packages/benchmark/{freeze-manifest-admission,pre-freeze-audit,pre-freeze-pinned-documents}, tests/e2e/foundation/multi-node-graph.e2e, tests/integration/{control-room/compiled-product-journey,import/legacy-import-commit,portability/bin-target-modes,portability/goal-brief-mcp-readback,release/release-version-surfaces}, tools/packaging/{pack-source,pack-windows-main}. Every one greps **0** for `RUNTIME_COMMAND_KINDS|commands.size|preview.decide|CONTRACT_DIGEST|contractSchemaHash|ed5f6b87|ed325554` — causally unreachable from a string added to a roster. Intersection with the six owned paths is EMPTY; rail 3 satisfied. Separately, root `./node_modules/@moe/*` is STILL 8 junctions into `…\\Temp\\moe-glance-to-main` (862e5bfd), so root `pnpm test` is not trustworthy for contracts-layer work regardless; per-package junctions for apps/control-room, apps/daemon and packages/control-room-client are correct (I re-measured today).\n\nDoD 1 — executed the module itself: length 104, `new Set(k).size` 104 (no duplicate masking an off-by-one), tuple FULLY SORTED ascending, `preview.decide` at index 58 with prev `policy.validate` / next `product_contract.answer_clarification`. `EXPECTED_COMMAND_KINDS` is the hand-transcribed literal, NOT derived. Size literal 103→104 equals the real set size. `release.decide` correctly absent (task-bda0eeac's).\nDoD 2 — I re-ran `pnpm --filter @moe/control-room-client generate` myself: output BYTE-IDENTICAL to the committed file (empty `git diff`), and its sha256 `427ad92d…` equals the pin at `generated-coverage.test.ts:35`. That is independent proof of regeneration, not hand-editing. Digest rotated `ed325554…` → `ed5f6b87…`. `contract-digest.test.ts` untouched and green.\nDoD 3 — census AT THE COMMIT (`git grep <hex> 0d1d6c46`): old hex ZERO hits; new hex EXACTLY FOUR — generated-client.ts:907, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255. No fifth, no missed file type.\nDoD 4 — worker's mirror drill on approve-plan.test.tsx:255 went red at `:257` with the exact required line. Mirror 3 (data-adapter) is now ALSO proven gated, by the live mutant plus my probe. RESTORE PROOF: the worker correctly REFUSED the plan's `git diff` instruction — the drill targets were already ` M` with their own legitimate step-2/3 edits, so an empty diff would have proved the work had vanished, the inverse of a restore proof — and used out-of-tree SHA256 backups compared in a SEPARATE call, pre=post quoted for all three targets, with an explicit statement that no untracked path was mutated. Stronger than asked and correctly reasoned.\nDoD 6 — `runtime-vocabulary.ts` is 157 lines, well under the per-file cap.\n\nNOT SCOPE CREEP: the third edit in `runtime-contract.test.ts` (:144-148) is FORCED. The sorted-position arm pinned the product_contract family by neighbour via `[position - 2] === \"policy.validate\"`, and `preview.decide` lands exactly in that slot. The worker kept the old pin (moved to `position - 3`) and added the new one at `position - 2`, so the arm got stronger, not weaker. No plan predicted this; task-bda0eeac should grep `[position` before assuming two edits.",
+      "timestamp": "2026-09-05T14:50:19.415Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T13:29:53.007Z",
-  "updatedAt": "2026-09-05T14:13:50.013Z",
+  "updatedAt": "2026-09-05T14:50:56.624Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:39:25.260Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-05T14:50:56.624Z",
+    "wallClockMs": 4291364
   },
   "contextFetchedBy": [
     "architect-b63fabf3",
@@ -152,7 +160,83 @@
     "packages/control-room-client/src/generated/generated-client.ts",
     "packages/control-room-client/src/generated-coverage.test.ts",
     "apps/control-room/src/data/data-adapter.test.ts",
-    "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+    ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json"
   ],
-  "completionSummary": "`preview.decide` is published on the shared runtime command roster, with all four digest mirrors rotated. VOCABULARY ONLY: this row wires no daemon command, defines no refusal code, fences no principal and renders no UI. task-40e52fa8a85a4921b97bee933b00403f dependsOn this row and does the daemon wiring; seven rows sit behind it.\n\nSIX FILES, NO SEVENTH. `git diff --stat` = 6 files changed, 16 insertions(+), 9 deletions(-). Zero files under apps/daemon/.\n1. runtime-vocabulary.ts:101 — `\"preview.decide\"` inserted in sorted position (policy < preview < product). Sole production change; no `satisfies` annotation (circular).\n2. runtime-contract.test.ts — same insert in the hand-transcribed EXPECTED_COMMAND_KINDS (:51, NOT derived); `commands.size` 103 -> 104 (:105); and the sorted-position arm's neighbour pin updated, since preview.decide is now the product_contract family's left bracket — `[position-2]` -> \"preview.decide\", `[position-3]` -> \"policy.validate\", preserving the old assertion and adding the new kind's own slot pin.\n3. generated-client.ts — REGENERATED via `pnpm --filter @moe/control-room-client generate`, never hand-edited. Diff reviewed: exactly 3 hunks (builder interface entry, builder object entry, digest).\n   OLD GENERATED_CONTRACT_DIGEST ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28\n   NEW GENERATED_CONTRACT_DIGEST ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076\n4. generated-coverage.test.ts — :36 CONTRACT_DIGEST -> new hex; :35 GENERATED_FILE_SHA256 -> 427ad92dfcd86a6f98d69ebeaf31f25509010dd90c40d4fd6539dbcca8faf1a1.\n5. data-adapter.test.ts:18 and 6. approve-plan.test.tsx:255 — contractSchemaHash -> new hex.\ncontract-digest.test.ts and contract-pins.ts GREEN AND UNEDITED (status empty) — proof the generate really applied.\n\nMIRROR CENSUS, full tree, all file types, mine not quoted: BEFORE `git grep -n <old hex> -- . ':!.moe' ':!pnpm-lock.yaml'` = exactly FOUR; AFTER = ZERO (old file-sha256 also zero); new hex = exact"
+  "completionSummary": "`preview.decide` is published on the shared runtime command roster, with all four digest mirrors rotated. VOCABULARY ONLY: this row wires no daemon command, defines no refusal code, fences no principal and renders no UI. task-40e52fa8a85a4921b97bee933b00403f dependsOn this row and does the daemon wiring; seven rows sit behind it.\n\nSIX FILES, NO SEVENTH. `git diff --stat` = 6 files changed, 16 insertions(+), 9 deletions(-). Zero files under apps/daemon/.\n1. runtime-vocabulary.ts:101 — `\"preview.decide\"` inserted in sorted position (policy < preview < product). Sole production change; no `satisfies` annotation (circular).\n2. runtime-contract.test.ts — same insert in the hand-transcribed EXPECTED_COMMAND_KINDS (:51, NOT derived); `commands.size` 103 -> 104 (:105); and the sorted-position arm's neighbour pin updated, since preview.decide is now the product_contract family's left bracket — `[position-2]` -> \"preview.decide\", `[position-3]` -> \"policy.validate\", preserving the old assertion and adding the new kind's own slot pin.\n3. generated-client.ts — REGENERATED via `pnpm --filter @moe/control-room-client generate`, never hand-edited. Diff reviewed: exactly 3 hunks (builder interface entry, builder object entry, digest).\n   OLD GENERATED_CONTRACT_DIGEST ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28\n   NEW GENERATED_CONTRACT_DIGEST ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076\n4. generated-coverage.test.ts — :36 CONTRACT_DIGEST -> new hex; :35 GENERATED_FILE_SHA256 -> 427ad92dfcd86a6f98d69ebeaf31f25509010dd90c40d4fd6539dbcca8faf1a1.\n5. data-adapter.test.ts:18 and 6. approve-plan.test.tsx:255 — contractSchemaHash -> new hex.\ncontract-digest.test.ts and contract-pins.ts GREEN AND UNEDITED (status empty) — proof the generate really applied.\n\nMIRROR CENSUS, full tree, all file types, mine not quoted: BEFORE `git grep -n <old hex> -- . ':!.moe' ':!pnpm-lock.yaml'` = exactly FOUR; AFTER = ZERO (old file-sha256 also zero); new hex = exact",
+  "commits": [
+    {
+      "sha": "0d1d6c4660bd9011b244742139049863e8411cee",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T13:41:31Z",
+      "paths": [
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+        ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T14:15:14.417Z",
+      "treeId": "1ce3f483b8f6870db7b4f9a7b209a94aaaab5088",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/data/data-adapter.test.ts",
+          "taskId": "task-bda0eeac02544c1992c6738c2db83178"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+          "taskId": "task-bda0eeac02544c1992c6738c2db83178"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-contract.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/control-room-client/src/generated/generated-client.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "packages/control-room-client/src/generated-coverage.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    "packages/control-room-client/src/generated/generated-client.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-2739fee7@2026-09-05T13:41:31Z",
+    "at": "2026-09-05T14:15:14.417Z"
+  },
+  "completedAt": "2026-09-05T14:50:56.624Z",
+  "reviewCompletedAt": "2026-09-05T14:50:56.624Z",
+  "reviewSummary": "APPROVED at delivered commit 0d1d6c46 (branch --contains ok), not the dirty tree. 6 source files, ZERO apps/daemon. Full evidence: comment-2457e086475f464db7ba12a75a19f0eb.\n\nGATES I RE-RAN: contracts exit 0 `15 passed (15)/509 passed`; control-room-client exit 0 `10 passed (10)/96 passed`; typecheck exit 0 w/ per-package `$ tsc` echoes; root pnpm test exit 1 `11 failed|416 passed (429)/92 failed|10183 passed`; mandatory control-room exit 1 `1 failed|148 passed (149)/16 failed|1837 passed`.\n\nMANDATORY RED IS NOT THIS ROW. Stranded drill mutant, working tree only: data-adapter.test.ts:18 reverted to OLD digest ed325554. Proven 3x: (1) `git show 0d1d6c46:` line 18 = NEW ed5f6b87; (2) approve-plan.test.tsx uses the SAME createCompatGate with the NEW hex and PASSED in that run; (3) executed probe on client-compat.ts, delivered fixture verbatim: gate(DELIVERED).ok=true, gate(OLD).ok=false DISTRIBUTION_MISMATCH. Foreign path NOT reverted; flagged #general msg-2b5ad321. Root red: all 11 failing files grep 0 for roster/digest symbols; intersection with owned paths EMPTY (rail 3).\n\nDoD1 executed the module: length 104, Set size 104 (no duplicate hiding an off-by-one), FULLY sorted, preview.decide index 58 between policy.validate and product_contract.answer_clarification; EXPECTED list hand-transcribed not derived; 103->104 matches.\nDoD2 I re-ran `generate`: byte-identical to committed file, sha256 427ad92d equals pin at :35 = regenerated, not hand-edited. contract-digest.test.ts untouched, green.\nDoD3 census AT the commit: old hex ZERO, new hex EXACTLY FOUR at the named lines.\nDoD4 drill red at approve-plan.test.tsx:257 with the required line; restore proved by out-of-tree SHA256 — worker correctly refused the plan's `git diff` method since targets were already dirty.\nDoD6 runtime-vocabulary.ts 157 lines.\n\nThird edit in runtime-contract.test.ts (:144-148) is FORCED, not scope creep: preview.decide takes the [position-2] slot.\n\nUnblocks task-40e52fa8 + seven rows."
 }

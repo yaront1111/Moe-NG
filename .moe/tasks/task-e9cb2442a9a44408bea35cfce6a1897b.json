@@ -17,8 +17,62 @@
     "Do not edit approve-plan.tsx (263 lines, over ceiling; task-a988ca1c owns it). Put plan-card version provenance in approve-plan-gate.tsx (78 lines) if this row carries it; otherwise leave it to a comment on task-f3409f9a.",
     "FEATURES ONLY."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ORIENT, no production edits. (a) Confirm producers: grep DESIGN_READ_PATH in apps/daemon/src/http and designReads in daemon-entry.ts. If either is absent, STOP and report_blocked on task-7ca9dca3 / task-eb2bb09d. (b) Read the landed HTTP success and refusal JSON from design-read.ts / its test — those key sets ARE the decoder roster. (c) Read live-goal-source.ts and live-goal-source.test.ts (copy shape). (d) Read DEV_PROXY_PATHS, live-document-proxy.test.ts hard list, UNCONSUMED_SERVED_ROUTES and UNPROXIED_SERVED_PATHS. (e) Confirm cr.design.* is free. (f) git status --porcelain apps/control-room apps/daemon/src/http. Record the landed frame keys in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-goal-source.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST (skill test-driven-development).\n\n(1) live-design.test.ts modelled on live-goal-source.test.ts: mapDesignAnswer maps an exact success frame (keys from step 1) including a dataModel entity named e.g. Order; extra key -> ERROR DESIGN_RESPONSE_INVALID; missing key -> same; DESIGN_REVISION_ABSENT {code, layer} or {code, layer, outcome:REFUSED} -> REFUSED with that code AND layer; listener {code:LISTENER_DESIGN_UNAVAILABLE, layer:CONTROL_ROOM_LISTENER} -> REFUSED. readDesign posts exactly JSON.stringify({ goalRef }) to /design/read.\n\n(2) design-card.test.tsx: success renders version and the entity name Order (DoD 2/3); DESIGN_REVISION_ABSENT renders words that there is no design (not a blank card); other refusals use OutcomeNote with code and layer; loading copy while null. Apostrophe-free JSX.\n\n(3) live-document-proxy.test.ts: add `/design/read` to the hard-coded list in the SAME place as DEV_PROXY_PATHS will get it (after `/goals/source/read`).\n\nRun `pnpm --filter @moe/control-room test` and quote the reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-document-proxy.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-design.test.ts",
+        "apps/control-room/src/v2/goals/design-card.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "DECODER + FETCH. New apps/control-room/src/live/live-design.ts copying live-goal-source.ts.\n- POST /design/read with `{ goalRef }`, headers from the session, 15s timeout, injectable post.\n- exactDataRecord (own enumerable, exact key set, no prototype, no accessors).\n- Success: exact-key the landed HTTP success frame, then exact-key record (DESIGN_RECORD_KEYS) and revision (DESIGN_REVISION_KEYS). Recurse dataModel entities on DESIGN_ENTITY_KEYS so a dropped entity field names itself. Copy those key lists as frozen constants; do not import apps/daemon.\n- DESIGN_REVISION_ABSENT and other DesignRefusal/listener frames -> status REFUSED with code AND layer.\n- Extra/missing key -> ERROR DESIGN_RESPONSE_INVALID at CONTROL_ROOM_LIVE_DESIGN.\nStay under 250 lines. ASCII only.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/control-room/src/live/live-design.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "CARD, MOUNT, PROXY PIN.\n\n(1) New apps/control-room/src/v2/goals/design-card.tsx copying contract-dossier / prd-panel: DesignCard presentational + LiveDesign that reads on mount (injectable read). data-testid cr.design.card / .version / .body / .none / .refusal / .loading. Five sections visible when DESIGN; version in the kicker; DESIGN_REVISION_ABSENT -> cr.design.none words \"This goal has no design yet.\" (never an empty section); other refusals OutcomeNote. No apostrophes. Under 250 lines.\n\n(2) cordum-app.tsx (454 lines — add only): import LiveDesign, mount it on the opened-goal body next to LiveContractDossier, passing open.goalId and attached.headers. Do not reformat.\n\n(3) dev-proxy-paths.ts: insert `/design/read` after `/goals/source/read`.\n\n(4) http-listener-read-dispatch.test.ts: remove `/design/read` from UNCONSUMED_SERVED_ROUTES and from UNPROXIED_SERVED_PATHS if present. The live-design.ts path literal is the consumer the scan wants. Keep every remaining UNCONSUMED path mentioned in that file's comments (positive control :337).\n\nDo not edit approve-plan.tsx or approve-plan-gate.tsx.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/design-card.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review). git status --porcelain the exact paths first. New files are untracked: copy to %TEMP% suffixed by worker id BEFORE mutating; restore; prove SHA256 equality in a SEPARATE call. Tracked files: empty git diff.\n\n(a) Delete the extra-key arm's expected key from exactDataRecord for the success frame -> extra-key test goes green (that is the red you want on the decoder). Restore.\n(b) Remove `/design/read` from DEV_PROXY_PATHS only -> live-document-proxy.test.ts and/or UNPROXIED arm reds.\n(c) Remove the DESIGN_REVISION_ABSENT copy from the card -> cr.design.none arm reds or the card is blank. Restore each.\n\nGATES standalone foreground, quote Test Files N passed: `pnpm --filter @moe/control-room test` (complete_task verification command), `pnpm --filter @moe/daemon test` (UNCONSUMED/UNPROXIED pins), `pnpm typecheck`. Path-attributed baseline for foreign red.\n\nAdversarial: extra key never renders as a design; no-design copy is words not emptiness; payload cannot include projectId; cordum-app still under a split-later 400 (add-only); no daemon import. Report every path including new files.\n\nNamed verification command: `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-design.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/v2/goals/design-card.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,5 +88,36 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:27:06.954Z",
-  "updatedAt": "2026-09-05T14:28:57.147Z"
+  "updatedAt": "2026-09-05T14:39:22.375Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:36:26.414Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 9
+  },
+  "contextFetchedBy": [
+    "architect-2e480458"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:39:20.196Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Mount by adding a GOAL_SECTION_IDS.design key and strip link. Rejected: that also edits goal-status.ts / strip tests and blows the file cap; the page already shows cards without strip anchors (PRD). 2) Put plan-approval version provenance in this row (DoD 4). Parked: approve-plan.tsx is 263 and owned by task-a988ca1c; DoD 4 is optional. Proof row task-f3409f9a keeps that. 3) Import DesignRecord from apps/daemon. Rejected: control-room must not import the daemon package. Copy the exact-key rosters (DESIGN_RECORD_KEYS, DESIGN_REVISION_KEYS, DESIGN_ENTITY_KEYS) into live-design.ts with a comment naming design-records.ts. 4) Combine decoder and card in one file. Rejected: live-goal-source.ts is already the decoder; prd-panel.tsx is the card. Same split.",
+    "codebaseInsights": "MEASURED 2026-09-05. HTTP /design/read not on disk yet (task-7ca9dca3 WORKING); this row dependsOn task-eb2bb09d which dependsOn that. Closest browser analogue: live-goal-source.ts (POST {goalRef}, exactDataRecord, listener {code,layer} and {code,layer,outcome:REFUSED}, map*Answer, injectable post). Success frame to plan against until step 1 greps the landed handler: DesignReadResult {ok:true, record, versions} with DesignRecord keys contractRef, goalRef, profile, projectId, revision, schemaVersion, submittedAt, version; revision keys apiSurface, componentList, dataModel, nonFunctional, openDecisions, screens; dataModel entities use entity/fields/relations. DESIGN_REVISION_ABSENT layer LEDGER. DEV_PROXY_PATHS at live/dev-proxy-paths.ts:5-40 is hand-copied in live-document-proxy.test.ts:6-38. consumedPaths() in http-listener-read-dispatch.test.ts:310-313 scans control-room src for path strings — a `/design/read` literal in live-design.ts retires UNCONSUMED. cordum-app.tsx is 454 lines (over 400): mount LiveDesign next to LiveContractDossier (~296) using attached.headers like LivePrd at :344. No cr.design.* testids yet. @moe/control-room already depends on @moe/contracts. ASCII, apostrophe-free JSX.",
+    "risks": "Step 1 MUST read the landed HTTP success/refusal JSON (task-7ca9dca3) and reconcile decoder keys to that frame, not this plan. If HTTP wrapped with outcome:DESIGN, decode that; if it forwarded raw DesignReadResult, decode ok/record/versions. Extra-key and missing-key arms must go red. Do not edit approve-plan.tsx. Do not import from apps/daemon. cordum-app.tsx add-only. New modules are untracked — drill restore is SHA256 vs %TEMP%, not git diff. UNCONSUMED comment list must stay in sync with the array (positive control at :337). live-document-proxy.test.ts list must match DEV_PROXY_PATHS exactly.",
+    "keyFiles": [
+      "apps/control-room/src/live/live-goal-source.ts",
+      "apps/control-room/src/live/live-goal-source.test.ts",
+      "apps/control-room/src/v2/goals/prd-panel.tsx",
+      "apps/control-room/src/v2/goals/contract-dossier.tsx",
+      "apps/control-room/src/v2/cordum-app.tsx",
+      "apps/control-room/src/live/dev-proxy-paths.ts",
+      "apps/control-room/src/live/live-document-proxy.test.ts",
+      "apps/daemon/src/design/design-records.ts",
+      "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:39:22.375Z"
 }

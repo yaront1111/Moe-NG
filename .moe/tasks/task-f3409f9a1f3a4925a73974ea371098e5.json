@@ -19,8 +19,48 @@
     "THE NO-DESIGN CASE IS RENDERED IN WORDS, never as an empty tab. A blank design tab reads as 'the design is empty', which is a different and false claim.",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ORIENT AND RE-MEASURE PRODUCERS, no production edits. For each dependsOn id, read get_context.epicSiblings landing.merged (or git log --grep Moe-Task). Then grep on disk: DESIGN_READ_PATH /design/read handler; designReads in daemon-entry; cr.design.card and live-design.ts extra-key refusal; DEV_PROXY_PATHS has /design/read. If any producer surface is missing, STOP and report_blocked with blockedOnTaskIds naming that row — do not rebuild it. Measure approve-plan.tsx line count (must stay untouched). Read ApprovePlan/ApproveGate and the gate1-v1-approval e2e harness. Record producer SHAs and greps in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "VERSION NOTE ON THE PLAN FOLD (DoD 2, 3). Do not edit approve-plan.tsx.\n\nNew apps/control-room/src/v2/goals/design-version-note.tsx: reads via the sibling live-design reader (injectable). Renders data-testid cr.approve.design-version. When a design exists, words include the version number (e.g. Design version 2). When DESIGN_REVISION_ABSENT (or sibling skip status), words say this plan was compiled with no design — never a blank, never a zero. Other refusals OutcomeNote with code AND layer. Apostrophe-free. Under 250 lines.\n\nTests in design-version-note.test.tsx for those three states.\n\ncordum-app.tsx (454 lines — add only): import LiveDesignVersionNote, render it immediately after <ApprovePlan ... /> inside the plan fold, passing open.goalId and attached.headers.\n\nDoD 3 older-version readability: e2e in step 3 POSTs /design/read {goalRef, version:1} after v2 exists; no version picker UI.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/design-version-note.tsx",
+        "apps/control-room/src/v2/goals/design-version-note.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PLAYWRIGHT JOURNEY (DoD 1, 3, 4, 5). New tests/e2e/control-room/design-operator.spec.ts copying the real-daemon harness from resources-and-contract.spec.ts / gate1-v1-approval.spec.ts (vite build, daemon-main with store-deps, demo-seed, pairing).\n\nDrive: (1) operator pairs; (2) scripted seat = POST design.submit on /command with PLANNING+WORK (same pattern gate1 uses to propose a revision as an agent) with a revision whose dataModel names a distinct entity; (3) browser opens the goal; (4) assert cr.design.card shows the version and that entity (DoD 1) — if the card is missing, that is a producer gap, report_blocked, do not rebuild the card; (5) submit a second revision; card shows version 2; POST /design/read {goalRef, version:1} still returns version 1 (DoD 3); (6) a goal with no design shows cr.design.none or cr.approve.design-version skip words, not a blank (DoD 4).\n\nCapture the success JSON frame from the live POST as a committed fixture next to the spec if DoD 5 requires fixtures; otherwise the spec itself is the surviving command. Quote `pnpm test:e2e:browser` Test Files / passed count. Do not edit journey-coverage.ts unless that matrix gains a new COVERED row you can honestly flip — default is leave it.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/e2e/control-room/design-operator.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DOCS + LIVE DRIVE + GATES (DoD 6, 7) + adversarial self-review.\n\ndocs/VISION.md: mark item 4 UX and architecture as running, with today's date (2026-09-05), without turning the rest of the list into a changelog.\nREADME.md What runs today: one short bullet that the design step (UX and architecture) is running as of that date, pointing at VISION.md item 4. Do not rewrite the Gate 1 paragraph.\n\nLIVE DRIVE: on UnAI or a fresh project, a REAL seat (not the e2e double) submits a design. Put transcript + design ref in a row comment under ~4500 chars. If the seat cannot produce a valid design, quote DESIGN_SHAPE_INVALID (code AND layer) verbatim — that is a finding, not a workaround.\n\nGATES standalone foreground, each count line quoted: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane only, apps/** not covered by it — say so), `pnpm test:e2e:browser`. Path-attributed baseline for foreign red.\n\nAdversarial: no rebuild of sibling files; approve-plan.tsx line count unchanged; skip copy is words; extra-key decoder still in sibling tests. Report every path in complete_step.modifiedFiles.\n\nNamed verification command: `pnpm test:e2e:browser`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/VISION.md",
+        "README.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -49,9 +89,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:37:41.269Z",
-  "updatedAt": "2026-09-05T14:28:57.462Z",
+  "updatedAt": "2026-09-05T14:43:48.766Z",
   "metrics": {
-    "firstClaimAt": "2026-09-05T14:19:17.986Z"
+    "firstClaimAt": "2026-09-05T14:19:17.986Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 7
   },
   "contextFetchedBy": [
     "architect-2e480458"
@@ -66,5 +108,26 @@
       "releasedBy": "architect-2e480458",
       "reason": "Build-order: HTTP /design/read is absent on disk; releasing the proof row to plan the producer leaf task-7ca9dca3 first."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:43:46.634Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Rebuild /design/read, the decoder, and the Design card in this row. Rejected: producers already filed (7ca9dca3, eb2bb09d, e9cb2442); rail THIS ROW PROVES, IT DOES NOT REBUILD. 2) Add the version line inside approve-plan.tsx. Rejected: 263 lines, task-a988ca1c still WORKING. 3) Add designVersion onto ApproveGate and thread it through ApprovePlan. Same 263-line hit. Instead a sibling DesignVersionNote mounted in cordum-app.tsx next to ApprovePlan (cordum-app is 454 — add only). 4) Drive design.submit via the wrapper seat-double in wrapper-lane.ts. That double exits 1 without posting a command. E2e instead POSTs design.submit on the command seam the way gate1-v1-approval.spec.ts proposes a revision (operator/agent credential, real daemon) — that is the scripted seat. Child 2 owns wrapper staffing.",
+    "codebaseInsights": "Handoff comment-b6cb0340 and priorHandoffs: HTTP/tab/composition are other rows. ApproveGate is 78 lines with no tests file. ApprovePlan renders ApproveGate at approve-plan.tsx:252-257 inside cr.approve.screen. Mount DesignVersionNote immediately after ApprovePlan in cordum-app.tsx:316-323 (plan fold). live-design.ts readDesign (sibling) is the reader. E2e analogue: tests/e2e/control-room/resources-and-contract.spec.ts and gate1-v1-approval.spec.ts (vite build, daemon-main, demo-seed, pairing). VISION.md:30 is `4. UX and architecture` with no running marker. README What runs today :17-49 does not mention the design step. test:e2e:browser is root package.json:22. testids cr.design.versionnote / cr.approve.design-version. DoD 1 and 4 are discharged by grep of sibling surfaces plus e2e against cr.design.card — do not re-edit live-design.ts.",
+    "risks": "WORKING claim waits on 6 unmet deps; step 1 greps them and report_blocked if a producer is missing. Do not edit approve-plan.tsx, live-design.ts, design-read.ts, or daemon composition files. cordum-app.tsx add-only. LIVE DRIVE (DoD 6) is a row comment, not a file; if a real seat cannot produce a valid design, quote DESIGN_SHAPE_INVALID verbatim. Playwright prints passed counts — that is the discriminator, not exit 0. Fixtures must be frames captured from the e2e daemon, not invented. ASCII, apostrophe-free JSX.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+      "apps/control-room/src/v2/goals/approve-plan.tsx",
+      "apps/control-room/src/v2/cordum-app.tsx",
+      "tests/e2e/control-room/resources-and-contract.spec.ts",
+      "tests/e2e/control-room/gate1-v1-approval.spec.ts",
+      "docs/VISION.md",
+      "README.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:43:48.766Z"
 }

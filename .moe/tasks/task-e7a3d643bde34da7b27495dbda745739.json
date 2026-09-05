@@ -38,7 +38,7 @@
       "completedAt": "2026-09-04T09:50:15.067Z"
     }
   ],
-  "status": "DONE",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -76,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T08:49:42.457Z",
-  "updatedAt": "2026-09-04T10:01:30.587Z",
+  "updatedAt": "2026-09-05T14:51:40.317Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T08:49:53.375Z",
     "plannedStepCount": 3,
