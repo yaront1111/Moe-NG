@@ -34,19 +34,28 @@
     {
       "stepId": "step-2",
       "description": "THE DAEMON VOCABULARY. In apps/daemon/src/daemon-command-vocabulary.ts: (a) declare the two kind constants following the file's existing `*_COMMAND_KIND` convention; (b) add both to the `WiredCommandKind` union at :160; (c) add an ENVIRONMENT_FAMILY table mapping both to a capability and ADD IT TO `FAMILY_TABLES` at :180 - familyCapabilityOf walks only that array, so a table not listed there is dead and the capability resolves null; (d) add both to PAYLOAD_KEYS with ORDERED allow-lists, [\"environment\", \"name\", \"value\"] for set and [\"environment\", \"name\"] for unset, sorted as the neighbouring entries are because the registry asserts ORDER not just membership; (e) add both to OPERATOR_PRINCIPAL_KINDS at :344 with a comment in the file's convention saying why - an agent that could set a variable could set one the deploy then delivers to a production process. CAPABILITY CHOICE, stated so it is not re-derived: use CAPABILITIES.ADMIN. ADMIN fences REACH; the human-only fence is OPERATOR_PRINCIPAL_KINDS plus the MCP exclusion, exactly as the file's own comment at :341-343 says of `resource.confirm_released`. Watch the line count: the file is at 372 against a 400 hard split.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-payload-keys.js"
+      ],
+      "note": "THE DAEMON VOCABULARY — done, plus the 400-line split the step's own risk clause instructed.\n\nPREREQUISITES RE-MEASURED AT HEAD (both were ABSENT when step 1 ran; both have since LANDED):\n- `git log --grep='Moe-Task: task-d0d1cb5c'` -> 4c3880cb (DONE). `git show HEAD:apps/daemon/src/orchestrator/agent-spawn-contract.ts | grep -n 'environment\\.'` -> `218:  \"environment.set_variable\", \"environment.unset_variable\",` in HUMAN_ONLY_STEPS.\n- `git log --grep='Moe-Task: task-b3888068'` -> 4f6bfbf0 (DONE). `git show HEAD:packages/contracts/src/runtime/runtime-vocabulary.ts | grep -n environment` -> `94:  \"environment.set_variable\", \"environment.unset_variable\",` in RUNTIME_COMMAND_KINDS.\n\nTHE FENCE IS NOW DERIVED, NOT A HAND LIST — supersedes the row description's `mcp-tool-allowlist.ts:87-89` reading. `git show HEAD:apps/daemon/src/mcp-tool-allowlist.ts | grep -n 'environment\\.'` returns NOTHING, and that is CORRECT: task-d0d1cb5c rewrote MCP_EXCLUDED_COMMAND_KINDS as `[...OPERATOR_PRINCIPAL_KINDS].filter((k) => !MCP_REACHABLE_OPERATOR_KINDS.has(k)).sort()`, with MCP_REACHABLE_OPERATOR_KINDS = {\"session.open\"}. So adding the two kinds to OPERATOR_PRINCIPAL_KINDS (done below) MCP-excludes them by construction — one edit, no second roster, no window where PAYLOAD_KEYS has them and the exclusion does not. Do not \"backfill\" mcp-tool-allowlist.ts; a hand entry there would be dead code.\n\n(a) KIND CONSTANTS — NOT redeclared. They already exist: `environment-store.ts:64-65` ENVIRONMENT_COMMAND_KIND_SET/_UNSET, landed by task-d0c63cd8. Rail 6 (gap-claimed-present-actually-closed): imported, not reinvented.\n(b) WiredCommandKind union: `| typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET` (:182).\n(c) ENVIRONMENT_FAMILY (:166-169) both -> CAPABILITIES.ADMIN, AND ADDED TO FAMILY_TABLES (:198) — familyCapabilityOf walks only that array. Also removed the stale count word from that comment: it said \"The eight capability tables\" over a list of TEN (peers added CRITERION_FAMILY and REPOSITORY_RECOVERY_FAMILY without touching it); it now says \"The capability tables ... no count in this sentence, because the number rotted twice\" and states that an unlisted table is dead.\n(d) PAYLOAD_KEYS: `[\"environment\",\"name\",\"value\"]` / `[\"environment\",\"name\"]`, ORDERED as neighbours are.\n(e) OPERATOR_PRINCIPAL_KINDS (:311-316) with the reason at the site: an agent that could write a variable could write one the deploy delivers to a production process; the MCP exclusion derives from this set and IS the fence, ADMIN only fences reach.\n\nCAPABILITY: ADMIN as the step directed. agentCapabilitiesFor deliberately NOT special-cased — it falls through to [ADMIN, WORK], matching resource.confirm_released / goal.close / graph.approve. Returning null there is the convention for the two DURABLE-HUMAN-WIDENED kinds only, and `affordance-planning-offers.test.ts:353` treats non-null as expected for operator kinds. The fences are OPERATOR_PRINCIPAL_KINDS (dispatch) + HUMAN_ONLY_STEPS (spawn) + the derived MCP exclusion (transport) — three, none of them the capability.\n\nTHE 400-LINE SPLIT, forced and executed as the step's risk clause instructed (\"split by responsibility (kind constants vs payload table) rather than by line count\"). Measured: daemon-command-vocabulary.ts was 386 at HEAD and 397 in the shared worktree (peer dirt), and my additions land it over 400. It also GREW 397 -> 400 MID-STEP under a peer's write, which killed a hardcoded-index script — re-run with dynamic anchors. NEW FILE apps/daemon/src/daemon-command-payload-keys.ts (163 lines) + its one-line `.js` bridge holds PAYLOAD_KEYS whole; daemon-command-vocabulary.ts (329 lines, down from 397) RE-EXPORTS it, so ZERO consumer import paths change — verified the 8 consuming modules all import it from \"./daemon-command-vocabulary.js\". No runtime cycle: the new module's only vocabulary import is `import type { WiredCommandKind }`, which is erased.\n\nGATE: `pnpm --filter @moe/daemon exec tsc --noEmit -p tsconfig.json` -> 2 errors, BOTH FOREIGN, zero in my paths. Verbatim:\n  src/bootstrap/bootstrap-sequence.ts(39,12): error TS2741: Property '\"repository.bootstrap\"' is missing in type ...\n  src/bootstrap/bootstrap-sequence.ts(103,10): error TS7053: Element implicitly has an 'any' type ... Property 'repository.bootstrap' does not exist ...\nATTRIBUTION (rail 3): `git status --porcelain` shows ` M apps/daemon/src/bootstrap/bootstrap-contracts.ts` and bootstrap-sequence.ts CLEAN; `git show HEAD:.../bootstrap-contracts.ts | grep -n repository.bootstrap` -> rc=1, NO MATCH, while the worktree has it at :47. A peer added the kind to BOOTSTRAP_COMMAND_KINDS uncommitted and has not yet added its sequence row. Not touched, not reverted, not stashed. My first run ALSO showed 22 TS6133 unused-import errors in daemon-command-vocabulary.ts — those were MINE, from the split, and are fixed (imports of the moved *_PAYLOAD_KEYS constants now live in the new module).\n\nEXPECTED RED FROM HERE UNTIL STEP",
+      "startedAt": "2026-09-05T23:06:37.356Z",
+      "completedAt": "2026-09-05T23:15:03.203Z"
     },
     {
       "stepId": "step-3",
       "description": "THE FAMILY WIRING AND THE FIRST PAYLOAD TEST TABLE. Add the environment family to apps/daemon/src/daemon-command-families.ts following the shape of its neighbours, so an entry's demanded capability and an agent's granted set keep coming from one list. Then add both kinds' rows to the payload-key table in apps/daemon/src/daemon-command-vocabulary.test.ts (~:170-182) - that table is invisible to a grep for the kind literal in production source, which is why the row description calls it out. Gate this step alone: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts`, quoting the `Test Files N passed` count line. EXPECT daemon-store-dependencies.test.ts:238 TO BE RED from here until step 5 registers the handlers - that is the weld doing its job. Say so in the step note; do NOT 'fix' it by editing that file.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-families.ts",
         "apps/daemon/src/daemon-command-vocabulary.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T23:15:05.842Z"
     },
     {
       "stepId": "step-4",
@@ -110,7 +119,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-caece97b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -140,12 +149,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T22:48:37.297Z",
+  "updatedAt": "2026-09-05T23:15:05.842Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "worker-caece97b",
@@ -156,7 +165,8 @@
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:11:33.649Z",
