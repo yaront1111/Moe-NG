@@ -60,9 +60,21 @@ export function probeProcessAlive(
   }
 }
 
+/** The line a supervisor writes on the wrapper's stdin to ask for the same stop as Ctrl-C. */
+export const WRAPPER_STDIN_STOP_TOKEN = "stop" as const;
+
+/** The piped-stdin shape the stop signal reads; a TTY is never read. */
+export interface WrapperStopInput {
+  readonly isTTY?: boolean | undefined;
+  on(event: "data", listener: (chunk: Buffer | string) => void): unknown;
+  removeListener(event: "data", listener: (chunk: Buffer | string) => void): unknown;
+  unref?(): unknown;
+}
+
 interface WrapperSignalSource {
   on(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
   removeListener(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+  readonly stdin?: WrapperStopInput | null | undefined;
 }
 
 export interface WrapperStopSignal {
@@ -72,7 +84,15 @@ export interface WrapperStopSignal {
   readonly wait: () => Promise<void>;
 }
 
-/** One idempotent stop latch shared by both operator signals and fatal child ownership. */
+/**
+ * One idempotent stop latch shared by the operator signals, fatal child ownership, and — when
+ * the wrapper is supervised over a pipe — its stdin. A console Ctrl-C cannot reach a child
+ * spawned without a window, and `child.kill()` on Windows is TerminateProcess, which skips the
+ * exit path that retires the seats. So a supervisor asks first: a `stop` line on the pipe
+ * requests the same stop Ctrl-C does. Only the explicit line counts — a closed or absent stdin
+ * (a service manager, a redirect from nothing) is not a request. A TTY stdin is left alone, and
+ * the pipe is unref'd so a single-pass wrapper can still exit on its own.
+ */
 export function createWrapperStopSignal(
   source: WrapperSignalSource,
   onRequest: () => void,
@@ -90,10 +110,28 @@ export function createWrapperStopSignal(
   // teardown must not fall through to Node's default hard-exit behavior.
   source.on("SIGINT", request);
   source.on("SIGTERM", request);
+  const input = source.stdin;
+  const piped = input !== null && input !== undefined && input.isTTY !== true;
+  let pending = "";
+  const onData = (chunk: Buffer | string): void => {
+    pending += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    let newline = pending.indexOf("\n");
+    while (newline >= 0) {
+      const line = pending.slice(0, newline).replace(/\r$/u, "").trim();
+      pending = pending.slice(newline + 1);
+      if (line === WRAPPER_STDIN_STOP_TOKEN) request();
+      newline = pending.indexOf("\n");
+    }
+  };
+  if (piped) {
+    input.on("data", onData);
+    input.unref?.();
+  }
   return Object.freeze({
     close: (): void => {
       source.removeListener("SIGINT", request);
       source.removeListener("SIGTERM", request);
+      if (piped) input.removeListener("data", onData);
     },
     request,
     requested: (): boolean => stopping,

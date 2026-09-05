@@ -120,6 +120,40 @@ describe("agent wrapper process lifecycle", () => {
       expect(source.listenerCount("SIGTERM")).toBe(0);
     },
   );
+
+  it("a `stop` line on a piped stdin requests the same shutdown, once, and nothing else does", async () => {
+    // `moe up` cannot deliver Ctrl-C to a windowless child and its kill() is TerminateProcess,
+    // which skips the exit path that retires the seats; the supervisor asks over the pipe.
+    const stdin = new EventEmitter() as EventEmitter & { isTTY?: boolean; unref: () => void };
+    const unref = vi.fn();
+    stdin.unref = unref;
+    const source = Object.assign(new EventEmitter(), { stdin });
+    const onRequest = vi.fn();
+    const stop = createWrapperStopSignal(source, onRequest);
+    expect(unref).toHaveBeenCalledTimes(1);
+
+    stdin.emit("data", Buffer.from("status\n"));
+    stdin.emit("data", "sto");
+    expect(stop.requested()).toBe(false);
+    stdin.emit("data", "p\r\n");
+    await expect(stop.wait()).resolves.toBeUndefined();
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    stdin.emit("data", "stop\n");
+    expect(onRequest).toHaveBeenCalledTimes(1);
+
+    stop.close();
+    expect(stdin.listenerCount("data")).toBe(0);
+  });
+
+  it("leaves a TTY stdin and a missing stdin alone", () => {
+    const tty = Object.assign(new EventEmitter(), { isTTY: true, unref: vi.fn() });
+    const withTty = Object.assign(new EventEmitter(), { stdin: tty });
+    createWrapperStopSignal(withTty, vi.fn());
+    expect(tty.listenerCount("data")).toBe(0);
+    expect(tty.unref).not.toHaveBeenCalled();
+    const bare = Object.assign(new EventEmitter(), { stdin: null });
+    expect(createWrapperStopSignal(bare, vi.fn()).requested()).toBe(false);
+  });
 });
 
 /**
@@ -183,6 +217,28 @@ describe("wrapper binary staffing wiring", () => {
     expect(() =>
       expect(wrapperCall(unwired)).toContain("providerPause: createProviderPauseGate({"))
       .toThrow();
+  });
+
+  it("composes the operator's rejection reason into compilerInstructions", () => {
+    // The composer is unit-tested to death next door, but "the composer works" and "the binary
+    // calls it" are separate claims. Before this pin, `compilerInstructions` answered the goal's
+    // catalog brief and nothing else, so a re-staffed compiler seat received a mission byte-
+    // identical to the one whose plan had just been rejected.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("compilerInstructions: (goalId) =>");
+    // EXACTLY ONCE: two call sites would mean one of them is dead, and a `toContain` cannot tell.
+    expect(call.split("composeCompilerInstructions(brief, latestRejectionReason(").length - 1)
+      .toBe(1);
+    // Pins the ARGUMENTS, not merely the call: `latestRejectionReason(store, projectId, <the
+    // GOAL id>)` would walk an aggregate that has no run history and answer null forever, while
+    // every assertion that only looked for the call name stayed green.
+    expect(call).toContain("laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,");
+  });
+
+  it("scans a compilerInstructions slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace("composeCompilerInstructions(brief, latestRejectionReason(", "");
+    expect(() => expect(wrapperCall(unwired))
+      .toContain("composeCompilerInstructions(brief, latestRejectionReason(")).toThrow();
   });
 
   it("tells the operator which provider is paused and until when", () => {

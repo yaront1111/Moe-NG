@@ -9,6 +9,7 @@ import {
   NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchEntryPaths, LaunchSpawn } from "./moe-up-spawn.js";
+import { WRAPPER_STDIN_STOP_TOKEN } from "./process-runner-lifecycle.js";
 import { consumePairingOperatorLines } from "../http/pairing-operator-channel.js";
 import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
 
@@ -23,8 +24,11 @@ import type { CancellablePairingOperatorInput } from "../http/pairing-operator-c
  * a teardown trigger this launcher can rely on. The two triggers that DO fire on
  * Windows are console Ctrl-C (delivered as SIGINT to the whole console process
  * group) and a child exiting; both cascade into `stopEverything` below. Killing
- * the wrapper is enough for its `claude` grandchildren because the wrapper's own
- * spawn broker owns them through a Job object.
+ * the wrapper is NOT enough for its `claude` grandchildren: libuv's implicit job
+ * covers only the `cmd.exe` shim, and the seat process breaks away from it. The
+ * wrapper's own exit path (`shutdownWrapperRuntime` -> `taskkill /T` per seat
+ * tree) is what retires them, so the launcher asks the wrapper to stop over its
+ * stdin first and terminates it only after a grace.
  */
 
 export const MOE_UP_DAEMON_EXITED_BEFORE_LISTENING
@@ -67,6 +71,8 @@ export interface MoeUpOptions {
   readonly randomHex?: (bytes: number) => string;
   readonly repoRoot: string;
   readonly spawn: LaunchSpawn;
+  /** How long the wrapper gets to retire its seats after the stop line before it is killed. */
+  readonly wrapperStopGraceMs?: number;
 }
 
 /** Mirrors a child's output onto ours, and offers each line to a watcher. */
@@ -140,21 +146,38 @@ function watchForOrigin(): OriginWatch {
   return { settle, signals };
 }
 
+/** The line the wrapper reads on its stdin as "stop": its stop signal treats it like Ctrl-C. */
+export const WRAPPER_STOP_TOKEN = WRAPPER_STDIN_STOP_TOKEN;
+/** How long a wrapper gets to retire its seats before the launcher hard-kills it. */
+export const WRAPPER_STOP_GRACE_MS = 10_000;
+
+interface TrackOptions {
+  /** Written to the child's stdin on stop; the kill follows only after the grace. */
+  readonly stopToken?: string;
+}
+
 interface Fleet {
   /** Did a child exit? Distinguishes a crashed daemon from a merely silent one. */
   readonly childExited: () => boolean;
   readonly firstFailure: () => number | null;
   readonly stopEverything: () => void;
-  readonly track: (child: LaunchChildProcess) => Promise<void>;
+  readonly track: (child: LaunchChildProcess, options?: TrackOptions) => Promise<void>;
 }
 
 /**
  * The teardown cascade. One latch for every trigger: a second Ctrl-C during an
  * in-flight stop must not double-kill, and a child that is already gone must not
  * be signalled again.
+ *
+ * A child tracked with a `stopToken` is asked first and killed later: `child.kill()` on
+ * Windows is TerminateProcess, which gives the wrapper no chance to run its exit path
+ * (`shutdownWrapperRuntime` -> `agentSpawner.close()` -> `taskkill /T` per seat tree). Killing
+ * it outright left every `claude` seat alive with its claim and session, fencing its item at the
+ * next boot. The token reaches the wrapper's own stop signal; only a wrapper that has not
+ * exited within the grace is terminated. The daemon carries no token and is killed as before.
  */
-function createFleet(onStop: () => void): Fleet {
-  const alive = new Set<LaunchChildProcess>();
+function createFleet(onStop: () => void, graceMs: number = WRAPPER_STOP_GRACE_MS): Fleet {
+  const alive = new Map<LaunchChildProcess, TrackOptions>();
   let failure: number | null = null;
   let exited = false;
   let stopping = false;
@@ -163,11 +186,28 @@ function createFleet(onStop: () => void): Fleet {
     if (stopping) return;
     stopping = true;
     onStop();
-    for (const child of alive) child.kill();
+    for (const [child, options] of alive) {
+      const token = options.stopToken;
+      let asked = false;
+      if (token !== undefined && child.stdin !== null && child.stdin !== undefined) {
+        try {
+          child.stdin.write(`${token}\n`);
+          asked = true;
+        } catch { /* a closed pipe: fall back to the kill below */ }
+      }
+      if (!asked) {
+        child.kill();
+        continue;
+      }
+      const timer = setTimeout(() => {
+        if (alive.has(child)) child.kill();
+      }, graceMs);
+      timer.unref();
+    }
   };
 
-  const track = async (child: LaunchChildProcess): Promise<void> => {
-    alive.add(child);
+  const track = async (child: LaunchChildProcess, options: TrackOptions = {}): Promise<void> => {
+    alive.set(child, options);
     await new Promise<void>((resolve) => {
       child.once("exit", (code) => {
         alive.delete(child);
@@ -279,7 +319,7 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   const fleet = createFleet(() => {
     operatorAbort.abort();
     watch.settle(null);
-  });
+  }, options.wrapperStopGraceMs);
   options.onSignal(() => { fleet.stopEverything(); });
 
   const daemonChild = startDaemonChild(options, paths, childEnv, watch, assetRoot);
@@ -337,7 +377,9 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
     return fleet.firstFailure() ?? 1;
   }
   pipeOutput(wrapper, "wrapper", options.log);
-  await Promise.all([daemonExit, fleet.track(wrapper)]);
+  // A closed wrapper stdin is a refused stop request, not a launcher fault; the grace kill follows.
+  wrapper.stdin?.on?.("error", () => undefined);
+  await Promise.all([daemonExit, fleet.track(wrapper, { stopToken: WRAPPER_STOP_TOKEN })]);
   await operatorConsumption;
   return fleet.firstFailure() ?? 0;
 }
