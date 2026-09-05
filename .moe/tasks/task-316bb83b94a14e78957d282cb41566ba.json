@@ -104,15 +104,17 @@
     {
       "stepId": "step-7",
       "description": "DRILL AND GATES. (a) DRILL (global rail 1): remove `activation` from the listener spread — the step-2 boot-seam test must go RED and the step-4 probe must return to HTTP 503 LISTENER_ACTIVATION_UNAVAILABLE. That drill is worth more than usual here: it reproduces the exact defect this row fixes, so a green suite afterwards proves the test would have caught it. Restore and prove with `git diff -- apps/daemon/src/daemon-entry.ts` showing empty (tracked file). (b) GATES with the `Test Files N passed` count line quoted VERBATIM, never the exit code (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, and `pnpm test` LABELLED 'root lane only, apps/** not covered' (global rail 18). Grade repo-wide legs as a path-attributed baseline: record failures at the merge-base, at HEAD, and the delta intersected with this row's owned paths (global rail 3); disclose foreign red verbatim. Named verification command: `pnpm --filter @moe/daemon test`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-entry.ts"
       ],
-      "startedAt": "2026-09-05T09:54:52.027Z"
+      "note": "DRILL AND GATES. No net file changes (spread mutated then restored).\n\n(a) DRILL. porcelain empty before (TRACKED). Backup SHA256 13630F32F214164C8B10D15190FFD2AE41ACEEB5A96AEE60677A7EB67BE63869 to %TEMP%\\moe-drill-worker-61579b07-daemon-entry.ts. Removed the listener spread `...(resolved.activation === undefined ? {} : { activation: resolved.activation })`.\nBoot-seam RED: Test Files 1 failed (1); Tests 1 failed | 1 passed (2). First arm received HTTP 503 {code:LISTENER_ACTIVATION_UNAVAILABLE, layer:CONTROL_ROOM_LISTENER} instead of TEST_READER/200. Control arm still 503. Real-boot probe: HTTP 503 {\"code\":\"LISTENER_ACTIVATION_UNAVAILABLE\",\"layer\":\"CONTROL_ROOM_LISTENER\"} — the exact pre-fix defect.\nRESTORE from backup. SEPARATE proof: FILE_HASH=BAK_HASH=13630F32…, git diff -- apps/daemon/src/daemon-entry.ts empty, porcelain empty, spread line back at :282. Post-restore boot-seam 2 passed; probe HTTP 200 outcome ACTIVATION, backup ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ.\n\n(b) GATES. Owned-scope exit 0: Test Files 4 passed (4); Tests 35 passed (35). Named `pnpm --filter @moe/daemon test` (contended) Test Files 7 failed | 422 passed (429); Tests 17 failed | 8514 passed (8531) — OUR three activation files GREEN in that run; remainder is 30s timeouts in src/work/foundation-* plus peer-dirty compiled-authority-bodies extra export COMPILED_NODE_KEY_MAX_CHARS (porcelain M on apps/daemon/src/planning/compiled-authority-bodies.ts, pickaxe empty). Isolated control-room: Test Files 147 passed (147); Tests 1843 passed (1843). typecheck exit 0, apps/daemon typecheck: Done. pnpm test root lane only (apps/** not covered): Test Files 13 failed | 415 passed | 1 skipped (429), none of the failing paths owned. Rail 3: merge-base 68eb1c5d not re-executed (no sibling worktrees); HEAD-minus-merge-base intersect owned paths EMPTY. Production createActivationReadPort call site still at daemon-store-foundation-composition.ts:359.",
+      "startedAt": "2026-09-05T09:54:52.027Z",
+      "completedAt": "2026-09-05T11:58:24.246Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-61579b07",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,16 +129,22 @@
       "author": "worker-12c76c19",
       "content": "PROBE SOURCE, FULL AND VERBATIM (global rail 12b) — the standalone production-boot probe behind step 4 / step 5. Run from `apps/daemon` as `node <file>` (add `PROBE_COMMIT=1` for the committed-repo variant). Not committed; the DURABLE discharge of DoD 1 and DoD 3 is the committed arm `apps/daemon/src/daemon-main-activation-boot.test.ts`, and this is here so a grader can recreate and re-run the exact transcript quoted in the step notes.\n\n```js\n// Standalone production-boot probe for /activation/read. Runs with cwd = apps/daemon.\nimport { spawn } from \"node:child_process\";\nimport { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from \"node:fs\";\nimport { execFileSync } from \"node:child_process\";\nimport { request as httpRequest } from \"node:http\";\nimport { tmpdir } from \"node:os\";\nimport { join, resolve } from \"node:path\";\nimport { pathToFileURL } from \"node:url\";\n\nconst ROOT = process.cwd();\nconst { WIRE_PROTOCOL_VERSION } =\n  await import(pathToFileURL(resolve(ROOT, \"src/http/http-contract.ts\")).href);\n\nconst CSRF = \"probe-csrf\";\nconst CREDENTIAL = \"probe-operator-credential\";\nconst scratch = realpathSync(mkdtempSync(join(tmpdir(), \"moe-activation-probe-\")));\nconst projectRoot = join(scratch, \"project\");\n// A REAL, EXISTING project root: execFile(\"git\", ...) ENOENTs on a MISSING cwd, which would\n// leave repository/distribution unmeasured for a reason unrelated to the wiring under test.\nconst override = process.argv[2];\nif (override === undefined) {\n  mkdirSync(projectRoot, { recursive: true });\n  execFileSync(\"git\", [\"init\", \"--quiet\"], { cwd: projectRoot, stdio: \"ignore\" });\n  if (process.env.PROBE_COMMIT === \"1\") {\n    const g = (...a) => execFileSync(\"git\", a, { cwd: projectRoot, stdio: \"ignore\" });\n    g(\"config\", \"user.email\", \"probe@example.invalid\");\n    g(\"config\", \"user.name\", \"probe\");\n    writeFileSync(join(projectRoot, \"README.md\"), \"probe\");\n    g(\"add\", \"README.md\");\n    g(\"commit\", \"--quiet\", \"-m\", \"probe\");\n  }\n}\nconst effectiveRoot = override ?? projectRoot;\n\nconst child = spawn(process.execPath, [\n  resolve(ROOT, \"src/daemon-main.ts\"),\n  \"--dependencies=./src/daemon-store-dependencies.ts\",\n  \"--port=0\",\n  `--csrf-token=${CSRF}`,\n], {\n  cwd: ROOT,\n  env: {\n    ...process.env,\n    MOE_DAEMON_CREDENTIAL: CREDENTIAL,\n    MOE_PROJECT_ID: \"proj-activation-probe\",\n    MOE_PROJECT_ROOT: effectiveRoot,\n    MOE_STORE_PATH: join(scratch, \"store.db\"),\n  },\n  shell: false,\n  windowsHide: true,\n});\n\nconst where = await new Promise((res, rej) => {\n  let transcript = \"\";\n  child.stdout.setEncoding(\"utf8\");\n  child.stdout.on(\"data\", (c) => {\n    transcript += c;\n    const m = /listening on (http:\\/\\/127\\.0\\.0\\.1:(\\d+))/u.exec(transcript);\n    if (m) res({ origin: m[1], port: Number(m[2]) });\n  });\n  child.stderr.setEncoding(\"utf8\");\n  child.stderr.on(\"data\", (c) => { transcript += c; });\n  child.on(\"exit\", (code) => rej(new Error(`exited ${code}\\n${transcript}`)));\n});\n\nfunction post(path, payload, credential = CREDENTIAL) {\n  return new Promise((res, rej) => {\n    const req = httpRequest({\n      headers: {\n        \"content-length\": Buffer.byteLength(payload), \"content-type\": \"application/json\",\n        host: `127.0.0.1:${where.port}`, origin: where.origin,\n        \"x-moe-csrf\": CSRF, \"x-moe-protocol-version\": WIRE_PROTOCOL_VERSION,\n        \"x-moe-session-credential\": credential,\n      },\n      host: \"127.0.0.1\", method: \"POST\", path, port: where.port, setHost: false,\n    }, (r) => {\n      const chunks = [];\n      r.on(\"data\", (c) => chunks.push(c));\n      r.on(\"end\", () => res({\n        status: r.statusCode, body: JSON.parse(Buffer.concat(chunks).toString(\"utf8\")),\n      }));\n    });\n    req.on(\"error\", rej);\n    req.end(payload);\n  });\n}\n\nconst backups = join(effectiveRoot, \".moe-next\", \"backups\");\nconsole.log(\"origin:\", where.origin);\nconsole.log(\"projectRoot:\", effectiveRoot);\nconsole.log(\"backupsDirBeforeReads:\", existsSync(backups));\n\nconst first = await post(\"/activation/read\", \"{}\");\nconsole.log(\"=== POST /activation/read (read 1 of 3) ===\");\nconsole.log(\"HTTP\", first.status);\nconsole.log(JSON.stringify(first.body, null, 2));\n\nawait post(\"/activation/read\", \"{}\");\nawait post(\"/activation/read\", \"{}\");\nconsole.log(\"=== after 3 reads ===\");\nconsole.log(\"backupsDirAfter3Reads:\", existsSync(backups));\nconsole.log(\"projectRootExists:\", existsSync(effectiveRoot));\nconsole.log(\"moeNextDirExists:\", existsSync(join(effectiveRoot, \".moe-next\")));\n\nchild.kill();\n```",
       "timestamp": "2026-09-05T09:49:31.894Z"
+    },
+    {
+      "id": "comment-fabaec400eb24d659ba6317273fd351c",
+      "author": "worker-61579b07",
+      "content": "Step 7 drill + gates evidence (global rails 1, 3, 8, 12, 13).\n\nDRILL (tracked apps/daemon/src/daemon-entry.ts).\nporcelain BEFORE: empty. Out-of-tree backup %TEMP%\\moe-drill-worker-61579b07-daemon-entry.ts SHA256 13630F32F214164C8B10D15190FFD2AE41ACEEB5A96AEE60677A7EB67BE63869 (src=bak).\nMutation: deleted the listener spread `...(resolved.activation === undefined ? {} : { activation: resolved.activation })`.\nStep-2 boot-seam: Test Files 1 failed (1); Tests 1 failed | 1 passed (2). Received {body:{code:LISTENER_ACTIVATION_UNAVAILABLE, layer:CONTROL_ROOM_LISTENER}, status:503} vs expected TEST_READER/200. Control arm (no reader) still 503.\nStep-4 real-boot probe (daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=0): HTTP 503 {\"code\":\"LISTENER_ACTIVATION_UNAVAILABLE\",\"layer\":\"CONTROL_ROOM_LISTENER\"}.\nRestore Copy-Item from backup. SEPARATE proof: FILE_HASH=BAK_HASH=13630F32…; git diff empty; porcelain empty; spread present at :282.\nPost-restore: boot-seam Test Files 1 passed (1) Tests 2 passed (2). Probe HTTP 200 outcome ACTIVATION, backup code ACTIVATION_READ_BACKUP_DEFERRED layer ACTIVATION_READ, signing.trustBoundary false.\n\nGATES (count lines, never the exit code).\n1. Owned-scope (exit 0): pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000 src/daemon-entry-activation.test.ts src/daemon-main-activation-boot.test.ts src/daemon-entry-activation-refusals.test.ts src/daemon-store-dependencies.test.ts -> Test Files 4 passed (4); Tests 35 passed (35).\n2. Named pnpm --filter @moe/daemon test (contended with root lane): Test Files 7 failed | 422 passed (429); Tests 17 failed | 8514 passed (8531). Owned files GREEN in that run: daemon-entry-activation.test.ts (2), daemon-entry-activation-refusals.test.ts (5), daemon-main-activation-boot.test.ts (2). Foreign failing files: src/http/foundation-registry-hostile.test.ts, src/http/foundation-registry.test.ts, src/planning/compiled-authority-bodies.test.ts (extra export COMPILED_NODE_KEY_MAX_CHARS from DIRTY peer apps/daemon/src/planning/compiled-authority-bodies.ts; git log -S empty), src/work/foundation-attempt-service.test.ts, foundation-capture-lifecycle.test.ts, foundation-capture-producer.test.ts, foundation-input-hydrator.test.ts (30s default timeouts).\n3. Isolated pnpm --filter @moe/control-room test: Test Files 147 passed (147); Tests 1843 passed (1843). (First parallel run: scaffold.test.tsx 5s timeout; isolated green.)\n4. pnpm typecheck exit 0; apps/daemon typecheck$ tsc --project tsconfig.json then apps/daemon typecheck: Done.\n5. pnpm test LABEL root lane only, apps/** not covered: Test Files 13 failed | 415 passed | 1 skipped (429). Foreign: tests/integration/import/legacy-import-commit.test.ts, tests/integration/release/release-version-surfaces.test.ts (v0.1 hits in activation-read.ts / activation-receipts.ts, not this row), tests/integration/control-room/compiled-product-journey.test.ts, tests/integration/portability/bin-target-modes.test.ts (timeouts), portability-historical-receipt.test.ts (ANSI vs regex), packages/runner/.../foundation-workspace-capture-node.test.ts (timeout).\n\nRail 3: merge-base 68eb1c5d not re-executed (shared checkout, no sibling worktrees). HEAD-failures minus merge-base, intersect owned paths = EMPTY. DoD 2 production call site: daemon-store-foundation-composition.ts:359 (plus definition activation-read.ts:182).",
+      "timestamp": "2026-09-05T11:58:24.499Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T03:29:37.065Z",
-  "updatedAt": "2026-09-05T11:05:44.095Z",
+  "updatedAt": "2026-09-05T11:59:12.895Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T09:27:21.166Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "stepsCompleted": [
     "step-1",
@@ -144,7 +152,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T09:28:26.324Z",
@@ -165,5 +174,59 @@
     "worker-12c76c19",
     "worker-61579b07"
   ],
-  "workStartedAt": "2026-09-05T09:29:24.416Z"
+  "workStartedAt": "2026-09-05T09:29:24.416Z",
+  "commits": [
+    {
+      "sha": "711c62ddf9273c79a95ab89430acbabb625cd377",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-61579b07@2026-09-05T11:05:46Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
+        ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-entry-activation.test.ts",
+        "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-main-activation-boot.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "recordedBy": "worker-61579b07",
+      "recordedAt": "2026-09-05T11:06:04.362Z",
+      "treeId": "8f273caaae57044b380110cbeae3e7c76b133696",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/http/activation-read.ts",
+    "apps/daemon/src/daemon-entry-activation.test.ts",
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-main-activation-boot.test.ts",
+    "apps/daemon/src/daemon-entry-activation-refusals.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-61579b07@2026-09-05T11:05:46Z",
+    "at": "2026-09-05T11:06:04.362Z"
+  },
+  "reviewStartedAt": "2026-09-05T11:59:12.894Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000 src/daemon-entry-activation.test.ts src/daemon-main-activation-boot.test.ts src/daemon-entry-activation-refusals.test.ts src/daemon-store-dependencies.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n ✓ src/daemon-entry-activation.test.ts (2 tests) 75ms\n ✓ src/daemon-entry-activation-refusals.test.ts (5 tests) 82ms\n ✓ src/daemon-store-dependencies.test.ts (26 tests) 1717ms\n   ✓ serves the default provider and its registry bridge under plain Node  1341ms\n ✓ src/daemon-main-activation-boot.test.ts (2 tests) 6529ms\n   ✓ answers the activation receipts read from a real production boot  1952ms\n   ✓ reads repeatedly without ever writing a store backup  2509ms\n\n Test Files  4 passed (4)\n      Tests  35 passed (35)\n   Start at  14:35:05\n   Duration  12.38s (transform 20.61s, setup 0ms, import 26.07s, tests 8.40s, environment 0ms)",
+    "reportedAt": "2026-09-05T11:59:12.894Z"
+  },
+  "completionSummary": "Wired POST /activation/read into the production daemon. createActivationReadPort is constructed once in daemon-store-foundation-composition.ts from activationReceiptInput (per-request measure, no result cache), exposed on daemon-store-dependencies, resolved in daemon-entry-port-resolution, and spread into startControlRoomListener. activation-read.ts untouched. Committed arms: boot-seam pin, real daemon-main.ts boot (HTTP 200 outcome ACTIVATION, six members, signing.trustBoundary false), no-write (ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ after N>=3), refusals+credential canary at the wired seam. Drill: removing the spread returns 503 LISTENER_ACTIVATION_UNAVAILABLE @ CONTROL_ROOM_LISTENER; restore SHA256+empty git diff. Named daemon suite foreign-red (foundation timeouts + peer-dirty compiled-authority-bodies); owned-path intersection empty. Isolated control-room 147 passed. typecheck exit 0."
 }

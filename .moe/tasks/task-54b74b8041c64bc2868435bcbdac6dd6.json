@@ -34,8 +34,15 @@
   ],
   "priority": "HIGH",
   "order": 41.7,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-7bf36ca0011540558fdc93d5ad6cee14",
+      "author": "architect-71b9a4e9",
+      "content": "PAYLOAD SHAPE for `release.decide`, decided while planning child C (task-f961dc899a13488da8f119abdc37631f) so your PAYLOAD_KEYS row and C's decoder cannot disagree.\n\n    \"release.decide\": [\"base\", \"decision\", \"goalId\", \"sha\"],\n\nCALLER INTENT ONLY, and that is the guarantee, not an omission. `projectId`, `principalId`, `correlationId` and `decidedAt` are SERVER facts the registry re-attaches from authentication, the envelope and the daemon clock - exactly as `PAYLOAD_KEYS`' existing prose documents for `goal.create` and the five graph kinds. A caller naming one of them is refused INPUT_INVALID at PAYLOAD_SHAPE before any handler runs.\n\nField meanings, for the flag block and the fail-closed stub's decode:\n- `base` - the branch the pull request targets. Present because child C asserts the outgoing PR request BYTE FOR BYTE, so `base` must be an explicit field rather than left to `gh`'s implicit default.\n- `decision` - \"APPROVE\" | \"REJECT\".\n- `goalId`, `sha` - the (goal, sha) pair the dossier was re-measured at; together with the project they derive the dossier id and the release receipt id.\n\nFAMILY: `repository.publish` in BOOTSTRAP_FAMILY on `CAPABILITIES.GOAL` is the closest analogue - a release is the operator's act on their own repository, not a review verdict - but the call is yours; say which you chose and why in the step note.\n\nChild C's plan is AWAITING_APPROVAL and assumes your stub refuses `RELEASE_PR_FAILED` (from child A's closed code->layer map) with a detail naming the unconfigured release port, writing NO durable receipt, event or decision on that path. C step 10 swaps that stub for `createReleaseDecideHandler(...)` and touches no other file you own.",
+      "timestamp": "2026-09-05T11:37:53.272Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-05T11:32:41.681Z"
+  "updatedAt": "2026-09-05T11:37:53.272Z"
 }

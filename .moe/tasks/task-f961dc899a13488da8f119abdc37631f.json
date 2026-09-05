@@ -19,8 +19,114 @@
     "The PR body IS child 1's stored dossier bytes, not a fresh rendering. If they can differ, the PR stops being proof-carrying.",
     "FEATURES ONLY (inherited): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE THE DELIVERED TREE. READ-ONLY - this step writes nothing, so it declares no affected files. (a) Confirm children A and B landed the vocabulary this row consumes: `git grep -n 'release\\.decide' -- apps packages` must now hit, and `grep -n 'RELEASE_REMOTE_MISSING\\|RELEASE_EVIDENCE_INCOMPLETE\\|RELEASE_PR_FAILED' apps/daemon/src/release/release-decide-contracts.ts` must show all three codes plus the frozen code->layer map and the code-only refusal factory. If any is absent, moe.report_blocked with blockedOnTaskIds naming task-bda0eeac02544c1992c6738c2db83178 / task-54b74b8041c64bc2868435bcbdac6dd6 - do NOT re-declare the codes here, a second declaration is exactly the disagreeing pair the closed map exists to prevent. (b) Read the surfaces this row composes, all measured present at plan time: `readReleaseDossier(store, projectId, dossierId)` and `releaseDossierId(projectId, goalId, sha)` (release-dossier-ledger.ts:70 / release-dossier-contracts.ts:153); `readProjectRemote(store, projectId): ProjectRemote | null` (repository/publish-ledger.ts:135); `readPublishLedger` (:84) and `PublishReceiptV1 {branch, sha, remoteUrl, url, outcome}` (repository/publish-receipt-contracts.ts:41); `createNodePublisher({clock, git, projectId, store, workspace}).publishOnce()` (orchestrator/node-publisher.ts:35); `createVerifierProcessRunner` and its RUNTIME_ENVIRONMENT_KEYS allow-list posture (orchestrator/verifier-process-runner.ts:31) as the reference for spawning a child process with a timeout. (c) Run `grep -rn 'release-dossier' apps/daemon/src/index-surface.test.ts apps/daemon/src/index.ts` to learn whether adding an export to release-dossier.ts moves a barrel or export-count roster; if it does, STOP and report it rather than taking the extra path - the architect amends. Record every command and its result in the step note.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "ONE DERIVATION OF THE GAPS, exported. `ReleaseDossierV1` stores ONLY `{dossierId, goalId, markdown, projectId, sha, version}` (measured, release-dossier-contracts.ts:98) - the criterion rows are NOT in the record, so RELEASE_EVIDENCE_INCOMPLETE cannot name the missing criteria by reading the stored bytes, and re-parsing the markdown back into rows would be authority reimplemented against a document. Instead extract the EXISTING private row pipeline in release-dossier.ts (`rowOf` over sorted `input.criteria`, memoized ancestry) into a new exported `releaseDossierGaps(input: DossierInput, sha: string, ancestry: AncestryPredicate): readonly DossierGap[]`, and have `renderReleaseDossier` CALL it so exactly one derivation exists - a second copy is how the PR body and the refusal come to disagree about what is missing. Pure and sync: do NOT make it async (child 1's QA settled that `AncestryPredicate` is sync on purpose so the core stays byte-deterministic and fakeable). Re-run child 1's suite unchanged - `npx vitest run --root . --config package.json src/release` from apps/daemon - and quote its `Test Files N passed` line: the 30 existing tests must stay green with no edit to release-dossier.test.ts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-dossier.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE RELEASE RECEIPT, contract half. New `release-receipt-contracts.ts`, mirroring repository/landing-receipt-contracts.ts (its `exact()` key-roster decode, null-prototype object guard and sha256 id derivation) and release-dossier-contracts.ts. Declare `RELEASE_RECEIPT_VERSION = 'moe-release-receipt/1'`, `RELEASE_RECEIPT_COMMAND_KIND = 'internal.release.receipt'`, `RELEASE_RECEIPT_PRINCIPAL_ID = 'daemon:release'`, `ReleaseReceiptV1 {dossierSha256, goalId, outcome: 'RELEASED'|'REFUSED', prUrl: string|null, projectId, receiptId, refusalCode: ReleaseRefusalCode|null, sha, version}` and `decodeReleaseReceiptBytes`. THE TWO STRUCTURAL INVARIANTS, enforced in the decoder rather than by convention: a RELEASED receipt has a non-null `prUrl` and a null `refusalCode`; a REFUSED receipt has a null `prUrl` and a non-null `refusalCode` drawn from the closed code set in release-decide-contracts.ts. `dossierSha256` is the sha256 of the STORED markdown bytes (the same bytes that become the PR body), so a reader can bind a receipt to the exact evidence document. Reuse `releaseDossierAggregateId(goalId)` - the receipt lands on the goal's release aggregate beside the dossier, never on the goal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-receipt-contracts.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-receipt-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE RELEASE RECEIPT, durable half. New `release-receipt-ledger.ts`, mirroring release-dossier-ledger.ts line for line: `recordReleaseReceipt(store, input)` writes through `commitExpectedVersionDecision` under RELEASE_RECEIPT_PRINCIPAL_ID with a replay-on-existing path (same id => `{ok:true, replayed:true}`, never a second append), and `readReleaseReceipt(store, projectId, receiptId)` re-validates the decision against the bytes it carries and answers `{code:'RELEASE_RECEIPT_NOT_FOUND'|'RELEASE_RECEIPT_INVALID', ok:false}`. Same `ownDecision` try/catch shape - a store read that throws answers INVALID rather than escaping. Keep the file under 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-receipt-ledger.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-receipt-ledger.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "RECEIPT TESTS against a REAL store, not a fake. New `release-receipt-ledger.test.ts` using the same in-repo SqliteEventStore fixture release-dossier-ledger.test.ts uses. Arms: (1) record a RELEASED receipt, READ IT BACK and assert EVERY member individually - goalId, sha, dossierSha256, prUrl, outcome, refusalCode null, version - not a single toStrictEqual against an object built from the same literals; (2) record a REFUSED receipt per code and assert `refusalCode` is that exact code AND `prUrl` is null; (3) the decoder REFUSES a forged RELEASED-with-null-prUrl and a forged REFUSED-with-a-prUrl, asserted by the returned code, and refuses an unknown refusalCode not in the closed set; (4) re-recording the same id replays with `replayed:true` and appends no second event (assert the event count on the aggregate before and after). Mutation drill on the decoder's RELEASED/REFUSED invariant, quoted red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-receipt-ledger.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-receipt-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE gh PR PORT, injectable and tested OFFLINE. New `release-pr-port.ts` exporting `interface ReleasePrRequest {base, body, head, title}`, `type ReleasePrResult = {ok:true, prUrl} | {ok:false, stderrLastLine, spawnErrorCode: string|null}`, `interface ReleasePrPort { open(request): Promise<ReleasePrResult> }` and `createGhReleasePrPort({cwd, spawn?, timeoutMs?})`. gh CLI ONLY - no token path, no REST fallback (task rail 1). MECHANICS, all decided here so they are not re-derived: argv array with `shell:false` (`['pr','create','--base',base,'--head',head,'--title',title,'--body-file',<temp path>]`); executable is the bare name `gh` - Windows CreateProcess appends `.exe` for an extension-less name, so do NOT hard-code `gh.exe` or `gh.cmd`, and do NOT set shell:true. The BODY GOES IN A TEMP FILE, never in argv: a dossier is multi-kilobyte markdown and Windows caps a command line at 32767 chars, so an argv body would truncate the evidence silently. The temp file is removed in a `finally` on EVERY exit path including timeout and spawn error. stdout is trimmed to its last non-empty line as `prUrl`; stderr is retained tail-bounded and reduced to its LAST NON-EMPTY line. A spawn that never starts (gh absent => ENOENT) has NO stderr: answer `{ok:false, stderrLastLine:'', spawnErrorCode:'ENOENT'}` so the caller can still say something true. A timeout kills the child and answers ok:false. Non-zero exit (unauthenticated gh) answers ok:false with the real last stderr line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-pr-port.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-pr-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "PR PORT TESTS, fully offline via the injected `spawn`. New `release-pr-port.test.ts`. Arms: (1) HAPPY - assert the spawned argv BYTE FOR BYTE (exact array equality, including flag order) and assert the file named by `--body-file` contains EXACTLY the body string passed in, byte for byte, read inside the fake spawn before it resolves; assert prUrl is the last stdout line. (2) gh ABSENT - the fake spawn emits an `error` event with `code:'ENOENT'`; assert `{ok:false, spawnErrorCode:'ENOENT'}`. (3) gh UNAUTHENTICATED - exit 1 with multi-line stderr; assert `stderrLastLine` is the LAST NON-EMPTY line verbatim, not the first and not the whole blob. (4) TIMEOUT - assert the child is killed and the call settles ok:false. (5) CLEANUP - after every one of the four arms above, assert the temp body file NO LONGER EXISTS. Assert cross-platform argv: the recipe must be identical on win32 and posix (drive the port with an injected platform if the implementation reads one).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-pr-port.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-pr-port.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE DECIDE SERVICE. New `release-decide-service.ts` exporting `createReleaseDecideHandler({clock, dossierFacts, prPort, projectId, publisher, store})` where `publisher` is exactly `createNodePublisher(...)`'s return shape `{publishOnce}` - REUSE THE EXISTING PUBLISHER, never a second push path (task rail 3). ORDER IS LOAD-BEARING, and each refusal returns a code from the closed map with NO layer argument: (1) `readProjectRemote(store, projectId)` === null => RELEASE_REMOTE_MISSING, refused BEFORE anything is pushed and before any receipt is written. (2) `releaseDossierGaps(...)` non-empty => RELEASE_EVIDENCE_INCOMPLETE whose detail NAMES THE CRITERION IDS (sorted, joined) - 'evidence incomplete' without naming what is missing sends the operator hunting. (3) `readReleaseDossier(store, projectId, releaseDossierId(projectId, goalId, sha))` not ok => RELEASE_EVIDENCE_INCOMPLETE naming the absent dossier record. (4) `await publisher.publishOnce()`, then read the goal's PublishReceiptV1 from `readPublishLedger`; no PUSHED receipt => RELEASE_PR_FAILED carrying the publisher's refusal detail (the PR cannot be opened because the head was never pushed - this stays inside the closed three-code set rather than minting a fourth). (5) `prPort.open({base, body: <the STORED dossier.markdown bytes, verbatim>, head: receipt.branch, title})` - the body is the stored bytes, NEVER a fresh render (task rail 4). (6) On ok: record a RELEASED receipt with prUrl and `dossierSha256` over the stored markdown. On !ok: RELEASE_PR_FAILED carrying `stderrLastLine` verbatim (or the spawn error code when there was no stderr) and record a REFUSED receipt with that code and NO prUrl. A REJECT decision records a REFUSED receipt and never pushes and never opens a PR. The payload this handler decodes is caller INTENT ONLY - {base, decision, goalId, sha}; projectId, principalId, correlationId and decidedAt are SERVER facts the registry re-attaches. Keep the file under 250 physical lines; split if it grows.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-decide-service.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-decide-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "SERVICE TESTS, offline, against a real store with fake prPort/publisher. New `release-decide-service.test.ts`. Every refusal arm asserts the CODE AND the LAYER the closed map resolves - never merely that it did not succeed. Arms: (1) unbound remote => RELEASE_REMOTE_MISSING, and assert `publisher.publishOnce` was called ZERO times and `prPort.open` zero times - refused BEFORE anything is pushed. (2) a criterion with a gap => RELEASE_EVIDENCE_INCOMPLETE whose detail CONTAINS each missing criterion id (assert the ids, not the sentence). (3) HAPPY => `prPort.open` received a request whose `body` is IDENTICAL (===, not merely equal-looking) to the markdown read back out of the store by `readReleaseDossier`, asserted against the store read and not against a literal; and the whole request {base, head, title, body} asserted byte for byte. (4) gh ABSENT / UNAUTHENTICATED / FAILING => RELEASE_PR_FAILED carrying the stderr last line verbatim, AND read the store back and assert it holds NO receipt whose outcome is RELEASED for that goal - a refused release that recorded success is the worst outcome here, so assert the absence positively rather than trusting the return value. (5) push refused => RELEASE_PR_FAILED, `prPort.open` never called. (6) assert `publisher.publishOnce` was called EXACTLY once on the approve path, and grep the service source for git-port imports to prove no second push path exists. MUTATION DRILLS, each quoted red: swap the order of the remote check and the push (arm 1 must red); change one code's entry in the closed map (the code-AND-layer arms must red); return a freshly rendered markdown instead of the stored bytes (arm 3 must red). Restore proof per global rail 13: `git status --porcelain` the mutated paths BEFORE drilling, and because every module in this row is UNTRACKED (`??`), prove each restore by SHA256 equality against an out-of-tree backup under %TEMP% suffixed by worker id, in a call SEPARATE from the restore - `git diff` is blind to untracked paths and certifies nothing here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/release/release-decide-service.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/release/release-decide-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "WIRE THE HANDLER, replacing child B's fail-closed stub. In `daemon-command-async-entries.ts`, swap the `release.decide` stub for `createReleaseDecideHandler(...)`, composing `prPort` as `createGhReleasePrPort(...)` and `publisher` as the existing `createNodePublisher(...)`. Follow the file's established posture exactly: HOST-SCOPED config is read once at the composition root and passed down RAW, absent optional keys are SPREAD not assigned (`...(x === undefined ? {} : {key: x})`) because exactOptionalPropertyTypes makes an explicit undefined a different thing from an absent key, and an unconfigured daemon REFUSES under the producer's own code rather than substituting a default. The workspace is the same one node-publisher takes; a null workspace must refuse, never push. Do not touch daemon-command-vocabulary.ts, daemon-command-families.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts or agent-spawn-contract.ts - child B owns all five and they are already correct at this point.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "VERIFY, then ADVERSARIAL SELF-REVIEW. Run and QUOTE the `Test Files N passed` count line for each - an exit code alone is not evidence, and a `--filter` leg that matched no package prints no count line and still exits 0: `pnpm --filter @moe/daemon test` (budget ~320s, measured by child 1's QA), `pnpm typecheck`, and `pnpm test` (root lane; note explicitly that it covers NO apps/** so it is evidence only for packages, per the epic rail). Attribute any red per the path-attributed-baseline rail: record repo-wide failures at the merge-base, at HEAD, and the delta intersected with this row's owned paths - report foreign red verbatim with its failing file and lines, never hidden and never fabricated green. Then invoke Skill(adversarial-self-review) and read the diff as an attacker: what if `publishOnce` resolves but the receipt read races a concurrent publish; what if the dossier markdown is empty or megabytes; what if `gh` writes the PR url to stderr instead of stdout; what if the temp body file survives a crash between spawn and finally; what if two operators dispatch release.decide for the same goal and sha concurrently (the receipt id is derived, so assert the second replays rather than double-opening a PR); what if `receipt.branch` is null on a PUSHED receipt. Fix or file each finding as a row comment before moe.complete_task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,12 +135,46 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-2a345b2e97d94599b4688af1923056e5",
   "dependsOn": [
-    "task-70a7ccd3293f465fbc9c1888ae540f5d"
+    "task-70a7ccd3293f465fbc9c1888ae540f5d",
+    "task-bda0eeac02544c1992c6738c2db83178",
+    "task-54b74b8041c64bc2868435bcbdac6dd6"
   ],
   "priority": "HIGH",
   "order": 42,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:14.023Z",
-  "updatedAt": "2026-09-05T00:31:14.023Z"
+  "updatedAt": "2026-09-05T11:37:41.393Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T11:23:57.854Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
+  },
+  "contextFetchedBy": [
+    "architect-71b9a4e9"
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T11:37:39.197Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLIT DECISION, and why it is not negotiable. Planned footprint measured at 21 distinct files against the daemon's 10-file HARD reject: roster backfill 13 (7 production + 6 hand-written test pins) plus 8 for the PR/receipt behaviour. Two rows cannot hold 21 either. So the row was SPIDR-split three ways and this row keeps the behaviour: child A task-bda0eeac02544c1992c6738c2db83178 (shared runtime contract, generated client, the three refusal codes and their closed code->layer map), child B task-54b74b8041c64bc2868435bcbdac6dd6 (daemon wiring, operator fence, MCP exclusion, fail-closed async entry), child C = this row. dependsOn now names both children plus task-70a7ccd3 for the dossier bytes.\n\nGAPS DERIVATION: considered re-parsing the stored markdown back into criterion rows so nothing outside this row changes - rejected, that is authority reimplemented against a document, and it would let the PR body and the refusal disagree about what is missing. Considered passing the gap list in from the caller - rejected, same reason. Chose extracting ONE exported derivation from child 1's existing private row pipeline, with renderReleaseDossier calling it, so there is exactly one answer to 'what is missing'.\n\nPUSH-FAILURE CODE: considered a fourth refusal code for 'pushed nothing' - rejected, the DoD names exactly three and the closed map is the point. A failed push maps to RELEASE_PR_FAILED carrying the publisher's detail: the PR genuinely cannot be opened because the head was never pushed.\n\nPR BODY TRANSPORT: considered passing the dossier as a `--body` argv value - rejected, Windows caps a command line at 32767 chars and a multi-kilobyte dossier would truncate the evidence SILENTLY. Temp file plus `--body-file`, removed in a finally on every exit path.\n\ngh vs a REST token: settled by the parent row, not re-litigated. gh CLI only.",
+    "codebaseInsights": "MEASURED AT HEAD (architect-71b9a4e9, 2026-09-05, branch moe/work-2026-09-04). `git grep -n 'release\\\\.decide' -- apps packages adapters` => EXIT 1, ZERO hits: the kind does not exist anywhere, so nothing here re-implements a landed surface.\n\nChild 1 (task-70a7ccd3) IS on disk and DONE: apps/daemon/src/release/ holds release-dossier{,-contracts,-ledger,-sections,-fixtures}.ts. `ReleaseDossierV1` (release-dossier-contracts.ts:98) stores ONLY {dossierId, goalId, markdown, projectId, sha, version} - the criterion rows are NOT in the record. That single fact drives step 2.\n\nPublisher chain: `readProjectRemote(store, projectId): ProjectRemote | null` at repository/publish-ledger.ts:135 is the RELEASE_REMOTE_MISSING oracle. `createNodePublisher` (orchestrator/node-publisher.ts:35) is LEDGER-DRIVEN - `publishOnce()` walks `readPublishLedger` for requests with no receipt and pushes via `GitPublishPort`. `PublishReceiptV1` (repository/publish-receipt-contracts.ts:41) carries {branch, sha, remoteUrl, url, outcome}; `branch` is the PR head.\n\nProcess-spawn precedent: orchestrator/verifier-process-runner.ts already spawns with an env allow-list (RUNTIME_ENVIRONMENT_KEYS at :31), a default 120s timeout, a kill grace and process-group cleanup. gh needs no new mechanism.\n\nDurable-record precedent to mirror: repository/landing-receipt-contracts.ts (exact key-roster decode, null-prototype guard, sha256 id) and release-dossier-ledger.ts (commitExpectedVersionDecision under a reserved principal, replay-on-existing, re-validate on read).\n\nPAYLOAD SHAPE for release.decide, decided here and posted as a comment on child B so its PAYLOAD_KEYS row matches: [\"base\", \"decision\", \"goalId\", \"sha\"] - caller INTENT only; projectId, principalId, correlationId and decidedAt are SERVER facts the registry re-attaches, exactly as every other roster entry documents.\n\nAsync-entry composition rules read off daemon-command-async-entries.ts:43: host-scoped config read once at the root and passed RAW; absent optional keys SPREAD not assigned (exactOptionalPropertyTypes makes explicit undefined different from absent); an unconfigured daemon refuses under the producer's own code rather than substituting a default.",
+    "risks": "1. CHILDREN A AND B MAY NOT HAVE LANDED. dependsOn gates the WORKING claim, but step 1 re-verifies on disk anyway: if release-decide-contracts.ts is missing, BLOCK - do NOT declare the three codes a second time, because two declarations is precisely the disagreeing (code, layer) pair the closed map exists to prevent.\n\n2. THE PR BODY CAN SILENTLY BECOME A SECOND RENDERING. The service must read the markdown out of the store and pass that exact string. Step 9 arm 3 asserts identity against the STORE READ, not against a literal - a literal would pass under a re-render too.\n\n3. A REFUSED RELEASE THAT RECORDS SUCCESS is the worst outcome on this row. Assert the ABSENCE of a RELEASED receipt positively by reading the store back on every failure arm; trusting the return value proves nothing about what was written.\n\n4. UNTRACKED-PATH DRILL RESTORES. Every module this row creates is untracked (`??`), so `git diff -- <file>` is EMPTY before, during and after a mutation and certifies NOTHING. Use `git status --porcelain` first and prove each restore by SHA256 against an out-of-tree backup, in a call SEPARATE from the restore (a PowerShell copy can silently no-op).\n\n5. WINDOWS SPAWN. Bare `gh` with shell:false resolves to gh.exe via CreateProcess; hard-coding `gh.cmd` is the EINVAL trap the global rail records for pnpm launchers. Keep shell:false, argv arrays, no piping - a piped run reports the wrong exit status.\n\n6. TEMP-FILE LEAK. The body file must be removed on timeout and on spawn error, not only on the happy path; step 7 asserts non-existence after all four arms.\n\n7. CONCURRENCY. Two operators dispatching the same (goal, sha) must not open two PRs: the receipt id is derived, so the second must replay. Named explicitly in the adversarial step.\n\n8. GATE SHAPE. `pnpm test` covers NO apps/** - it is evidence for packages only. The daemon leg is `pnpm --filter @moe/daemon test` and takes ~320s (measured by child 1's QA). A leg with no `Test Files N passed` count line ran nothing, whatever its exit code.",
+    "keyFiles": [
+      "apps/daemon/src/release/release-dossier-ledger.ts",
+      "apps/daemon/src/release/release-dossier-contracts.ts",
+      "apps/daemon/src/release/release-dossier.ts",
+      "apps/daemon/src/repository/publish-ledger.ts",
+      "apps/daemon/src/repository/publish-receipt-contracts.ts",
+      "apps/daemon/src/orchestrator/node-publisher.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/daemon/src/daemon-command-async-entries.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T11:37:41.393Z"
 }
