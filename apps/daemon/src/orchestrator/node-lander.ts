@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { SqliteEventStore } from "@moe/store";
 
 import type { GitLandingPort } from "../repository/git-landing-port.js";
@@ -8,6 +11,7 @@ import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { untrackedImports } from "./landing-imports.js";
 
 /**
  * THE LANDER: once the daemon has accepted a node (a verifier receipt consumed
@@ -35,6 +39,8 @@ export interface NodeLanderConfig {
   readonly projectId: string;
   /** INJECTED in tests; production reads the node's review ledger. */
   readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;
+  /** A root-relative path's current text, or null; production reads the workspace. */
+  readonly readText?: (root: string, path: string) => string | null;
   readonly store: SqliteEventStore;
 }
 
@@ -75,8 +81,17 @@ export function landingMessage(
   ].join("\n");
 }
 
+function readWorkspaceText(root: string, path: string): string | null {
+  try {
+    return readFileSync(join(root, path), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export function createNodeLander(config: NodeLanderConfig) {
   const clock = config.clock ?? ((): string => new Date().toISOString());
+  const readText = config.readText ?? readWorkspaceText;
   const readAccepted = config.readAccepted ?? ((nodeRef: string) => {
     const ledger = readReviewLedger(config.store, config.projectId, nodeRef);
     return ledger.accepted === undefined
@@ -144,12 +159,19 @@ export function createNodeLander(config: NodeLanderConfig) {
       // A git failure that is not structural is reported, not recorded: the next pass retries.
       return { detail: observed.detail, nodeRef, outcome: observed.code };
     }
-    const paths = deliveredPaths(before.entries, observed.observation.entries);
-    if (paths.length === 0) {
+    const delivered = deliveredPaths(before.entries, observed.observation.entries);
+    if (delivered.length === 0) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
       });
     }
+    // Untracked modules the delivered code imports ride the same commit — see landing-imports.ts.
+    // The verifier ran with them present, so the state it accepted is the state HEAD gets.
+    const { root } = observed.observation;
+    const carried = untrackedImports(
+      delivered, new Set(observed.observation.untracked ?? []), (path) => readText(root, path),
+    );
+    const paths = [...delivered, ...carried];
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
     const committed = await config.git.commit(brief.workspace, paths, message);
     if (!committed.ok) {
@@ -170,8 +192,9 @@ export function createNodeLander(config: NodeLanderConfig) {
       workspace: brief.workspace,
     });
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
+    const imports = carried.length === 0 ? "" : `, ${String(carried.length)} imported untracked file(s) carried`;
     return {
-      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)`,
+      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)${imports}`,
       nodeRef,
       outcome: "COMMITTED",
     };

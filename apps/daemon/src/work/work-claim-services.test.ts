@@ -192,6 +192,24 @@ describe("runWorkClaimCommand", () => {
     });
   });
 
+  it("keeps two seats' identical command ids apart: distinct decisions, distinct event ids", () => {
+    // Seats choose their own work.* command ids; two sessions on one goal chose the same one.
+    // The decision key already told them apart; the event id must too, or the second dies
+    // DURABLE_ID_CONFLICT in the store's global event namespace (measured 2026-09-05).
+    const projectId = "proj-shared-command-ids";
+    const target = seatStore(projectId);
+    const on = (kind: string, principal: string, payload: Record<string, unknown>, version: number, commandId: string) =>
+      runOn(target, projectId, kind, principal, payload, version, "2026-08-09T12:00:00.000Z", commandId);
+    expect(on("work.claim", "agent-a", { expiresAt: LATER, workItemId: ITEM }, 0, "claim-1"))
+      .toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(on("work.release", "agent-a", { workItemId: ITEM }, 1, "release-1"))
+      .toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(on("work.claim", "agent-b", { expiresAt: LATER, workItemId: ITEM }, 2, "claim-1"))
+      .toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(on("work.release", "agent-b", { workItemId: ITEM }, 3, "release-1"))
+      .toMatchObject({ disposition: "DECIDED", ok: true });
+  });
+
   it("renews only for the claimant, then releases, then the fence lifts", () => {
     const renewed = run("work.renew", "agent-a", {
       expiresAt: "2026-08-09T14:00:00.000Z", workItemId: ITEM,

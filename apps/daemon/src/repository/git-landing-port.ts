@@ -21,6 +21,9 @@ import type { LandingBaselineEntry } from "./landing-receipt-contracts.js";
 export interface GitObservation {
   readonly entries: readonly LandingBaselineEntry[];
   readonly root: string;
+  /** The subset of `entries` git does not track (`??`), so a landing can carry an import
+   *  HEAD would otherwise lack. Optional: a fake that omits it reads as "none untracked". */
+  readonly untracked?: readonly string[];
 }
 
 export type GitObserveResult =
@@ -107,14 +110,16 @@ function isMoeMetadata(path: string): boolean {
 }
 
 /** `git status --porcelain=v1 -z --no-renames`: `XY path\0` records, root-relative. */
-function parseStatus(output: string): readonly { readonly deleted: boolean; readonly path: string }[] {
-  const entries: { deleted: boolean; path: string }[] = [];
+function parseStatus(
+  output: string,
+): readonly { readonly deleted: boolean; readonly path: string; readonly untracked: boolean }[] {
+  const entries: { deleted: boolean; path: string; untracked: boolean }[] = [];
   for (const record of output.split("\0")) {
     if (record.length < 4) continue;
     const status = record.slice(0, 2);
     const path = record.slice(3);
     if (path === "" || isMoeMetadata(path)) continue;
-    entries.push({ deleted: status.includes("D"), path });
+    entries.push({ deleted: status.includes("D"), path, untracked: status === "??" });
   }
   return entries;
 }
@@ -167,7 +172,14 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
         blobId: entry.deleted ? DELETED_BLOB : (blobs.get(entry.path) as string), path: entry.path,
       }))
       .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-    return { observation: Object.freeze({ entries: Object.freeze(entries), root: top }), ok: true };
+    const untracked = dirty.filter((entry) => entry.untracked).map((entry) => entry.path)
+      .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return {
+      observation: Object.freeze({
+        entries: Object.freeze(entries), root: top, untracked: Object.freeze(untracked),
+      }),
+      ok: true,
+    };
   };
 
   const commit = async (

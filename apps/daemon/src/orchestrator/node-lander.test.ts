@@ -134,6 +134,47 @@ describe("createNodeLander", () => {
     expect(git.commits).toHaveLength(1);
   });
 
+  it("carries the untracked modules the landed code imports, so HEAD still builds", async () => {
+    // identities.ts was untracked BEFORE the seat (dirt to the baseline); the seat's evidence.ts
+    // imports it. Without this, evidence.ts landed alone and HEAD did not build (UnAI cbca86a).
+    const identities = { blobId: BLOB_A, path: "src/kernel/identities.ts" };
+    const operator = { blobId: BLOB_A, path: "src/operator-notes.ts" };
+    const git = fakeGit(observation([identities, operator]));
+    const texts = new Map<string, string>([
+      ["src/kernel/evidence.ts", 'import { uuidV7 } from "./identities.ts";\nimport { x } from "../operator-notes.js";\n'],
+      ["src/kernel/identities.ts", 'import { now } from "./clock";\n'],
+      ["src/kernel/clock.ts", "export const now = () => 1;\n"],
+    ]);
+    const store = openStore();
+    const made = createNodeLander({
+      clock: () => "2026-09-03T12:00:00.000Z", git, nodeMission: () => brief,
+      nodes: () => [{ nodeRef: NODE }], projectId: PROJECT_ID,
+      readAccepted: () => ({ verifierReceiptId: VERIFIER_RECEIPT }),
+      readText: (_root, path) => texts.get(path) ?? null, store,
+    });
+    await made.baseline(NODE);
+    const clock = { blobId: BLOB_C, path: "src/kernel/clock.ts" };
+    git.observations = [{
+      observation: {
+        entries: [clock, { blobId: BLOB_B, path: "src/kernel/evidence.ts" }, identities, operator],
+        root: WORKSPACE,
+        // operator-notes.ts is tracked-but-modified: imported, yet NOT carried.
+        untracked: ["src/kernel/clock.ts", "src/kernel/identities.ts"],
+      },
+      ok: true,
+    }];
+    const reports = await made.landOnce();
+    expect(reports[0]?.outcome).toBe("COMMITTED");
+    expect(reports[0]?.detail).toContain("3 file(s), 1 imported untracked file(s) carried");
+    // clock.ts is delivered on its own merits (new since the baseline); identities.ts is carried
+    // through the import; operator-notes.ts stays the operator's.
+    expect(git.commits[0]?.paths).toEqual([
+      "src/kernel/clock.ts", "src/kernel/evidence.ts", "src/kernel/identities.ts",
+    ]);
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.commit?.files).toEqual(git.commits[0]?.paths);
+  });
+
   it("refuses durably, with its code, when no baseline was recorded for the node", async () => {
     const git = fakeGit(observation([{ blobId: BLOB_B, path: "src/new.ts" }]));
     const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });

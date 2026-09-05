@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { JsonValue, RuntimeError } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionKey, CommandDecisionRecord, SqliteEventStore } from "@moe/store";
@@ -79,6 +81,19 @@ function decisionKey(request: WorkClaimRequest): CommandDecisionKey {
 const encoder = new TextEncoder();
 
 /**
+ * The event id carries the PRINCIPAL as well as the command id. Seats choose their own
+ * work.* command ids (the brief hands them no minted one), and two seats on one goal chose
+ * the same readable id across sessions: distinct decisions (the key includes the principal),
+ * but `${commandId}-${eventType}` collided in the store's global event namespace and the
+ * second release died DURABLE_ID_CONFLICT (measured 2026-09-05). The principal's digest keeps
+ * the id short and free of a session id's characters.
+ */
+function eventIdFor(request: WorkClaimRequest, eventType: string): string {
+  const principal = createHash("sha256").update(request.principalId, "utf8").digest("hex").slice(0, 16);
+  return `${request.commandId}-${eventType}-${principal}`;
+}
+
+/**
  * The canonical request bytes of a command: the exact preimage `commitAccepted`
  * writes and the exact preimage the replay proof re-derives. ONE function on
  * purpose — two copies of a byte construction drift silently, and a drifted
@@ -102,7 +117,7 @@ function commitAccepted(
     correlationId: request.correlationId,
     decidedAt: request.decidedAt,
     events: [{
-      eventId: `${request.commandId}-${eventType}`,
+      eventId: eventIdFor(request, eventType),
       eventType,
       payload: encoder.encode(JSON.stringify(result)),
     }],
