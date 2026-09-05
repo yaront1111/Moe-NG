@@ -46,10 +46,15 @@ For a newly created directory, this makes the project list, daemon controls,
 switching, and isolated setup board usable immediately. It does **not** fabricate
 activation. **New Goal** remains disabled until the project ledger contains
 legitimate durable repository, provider, distribution, backup, credential, and
-store receipts. The current fresh-project browser flow has no production writer
-for that complete receipt set, so the project activation and goal cards remain
-blocked with their exact missing-authority reasons. Development fixtures cannot
-clear those gates in a production build.
+store receipts. What has changed is who writes them: the **Activate project** card
+on the Goals screen reads `POST /activation/read` and drives `project.register`,
+`project.bind_repository`, `provider.probe` and `project.activate` from a single
+button, so the browser alone takes an empty store to a created goal. The daemon
+mints each receipt from a MEASURED fact -- the repository row carries the real
+HEAD sha of the bound checkout -- and a receipt it cannot measure is rendered
+`UNKNOWN` with its code and layer rather than filled in, so the cards still block
+with their exact missing-authority reasons when a prerequisite genuinely fails.
+Development fixtures cannot clear those gates in a production build.
 
 The manager stores non-secret catalog metadata in
 `%LOCALAPPDATA%\Moe\projects.json` and supervises one contained runtime per

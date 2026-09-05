@@ -26,6 +26,13 @@ not a release or security-boundary claim; see
 [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
 entry points, environment, and knobs.
 
+- **Fresh start, from the browser alone**: the Activate project card reads the
+  daemon's measured activation receipts and drives `project.register`,
+  `project.bind_repository`, `provider.probe` and `project.activate` from one
+  button, after which New goal is enabled. No seed script and no wrapper pass are
+  needed to take an empty store to a created goal. Unmeasurable receipts stay
+  `UNKNOWN` with their code and layer; the card never fabricates one.
+
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with
   requirements and falsifiable criteria, asking the human only material
@@ -113,10 +120,8 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
 ## What this is not
 
-Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-03,
-these are still missing or manual: a fresh project cannot be started from the
-browser alone (goal creation waits on the project activation chain, which the
-seed script or the wrapper drives); a multi-node goal was driven on a live
+Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-05,
+these are still missing or manual: a multi-node goal was driven on a live
 project on 2026-09-05 — a real `claude` planning seat sealed a five-node DAG,
 a human approved it in the browser, the two independent nodes were staffed on
 one pass while the rest waited on their dependencies, and two nodes landed as
