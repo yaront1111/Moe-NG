@@ -180,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-05T03:13:48.103Z",
+  "updatedAt": "2026-09-05T03:13:56.354Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:47:41.465Z",
     "plannedStepCount": 7,
@@ -287,6 +287,22 @@
       "treeId": "a4f7df73ae50a308e8ad8e589fe9cd6c5ee91466",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "a8b671522f7beb00827a0dfaf3c13ad54e75c454",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T02:45:16Z",
+      "paths": [
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T03:13:56.354Z",
+      "treeId": "bf68ecf0d8e1e8cd6720fe110d324926b43196f4",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -299,7 +315,8 @@
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/control-room/src/v2/goals/work-labels.ts",
     "apps/control-room/src/v2/goals/work-labels.test.ts",
-    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json"
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json"
   ],
   "touchedFiles": [
     ".moe-scratch-labels-arms.ts",
@@ -314,14 +331,12 @@
     "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
     ".moe-scratch-depends-arms.ts"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-activation.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-05T02:26:03Z",
-    "at": "2026-09-05T02:36:18.270Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T02:45:16Z",
+    "at": "2026-09-05T03:13:56.354Z"
   },
   "reviewStartedAt": "2026-09-05T02:35:08.690Z",
   "verification": {
