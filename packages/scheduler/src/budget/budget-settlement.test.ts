@@ -88,6 +88,25 @@ it("is duplicate-safe: a byte-identical replay returns the prior record itself a
   expect(replay.view).toBe(before);
   expectConserved(before, replay.view, []);
 });
+it("is duplicate-safe by STRUCTURE: an equal prior with its keys in another order is the same settlement", () => {
+  // A prior that round-tripped through a store or a JSON layer comes back key-sorted; the old
+  // JSON.stringify equality refused it ALREADY_SETTLED and a settled reservation could not replay.
+  const before = mkView(), evidence = { measurements: [mkMeasurement("COMPLETE", 70, 3)] };
+  const first = must(settleReservation(before, mkActivated(), evidence, SETTLE));
+  const sorted = (value: unknown): unknown => Array.isArray(value) ? value.map(sorted)
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map((k) => [k, sorted((value as Record<string, unknown>)[k])]))
+      : value;
+  const reordered = sorted(first.settlement) as SettlementRecord;
+  expect(JSON.stringify(reordered)).not.toBe(JSON.stringify(first.settlement));
+  const replay = settleReservation(before, mkActivated(), evidence, { ...SETTLE, prior: reordered });
+  expect(replay.ok).toBe(true);
+  expect(replay.settlement).toBe(reordered);
+  expect(replay.view).toBe(before);
+  // A prior that is not a settlement at all is malformed, never merely "different".
+  const junk = settleReservation(before, mkActivated(), evidence, { ...SETTLE, prior: { ...first.settlement, lines: "nope" } as unknown as SettlementRecord });
+  expect(junk.ok ? [] : junk.issues.map((issue) => issue.code)).toEqual(["BUDGET_SETTLEMENT_MALFORMED"]);
+});
 it("records measured excess as explicit overrun and OVERDRAWN, never funded from a sibling meter", () => {
   const before = mkView(), sibling = bucketOf(before, AT);
   const { settlement, view } = must(settleReservation(before, mkActivated(),
