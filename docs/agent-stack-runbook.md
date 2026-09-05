@@ -377,6 +377,56 @@ agent exits, and the directory goes when the wrapper process does. The wrapper
 also closes the durable scoped session after the child exits; expiry is the
 fallback if cleanup cannot reach the daemon.
 
+### Provider limits
+
+A seat that exits NONZERO is classified from its OWN output: the last 40 lines are
+scanned newest-first against a frozen roster of provider limit sentences
+(`seat-exit-classifier.ts`). A match is read `PROVIDER_LIMIT` - the staffing attempt is
+REFUNDED (the provider refused, not the item), the provider is parked until its reset,
+and the claim is released and the scoped session closed exactly as for any other exit.
+Anything else nonzero is `FAILED`; exit 0 is `COMPLETED` whatever it printed on the way.
+
+| Provider | Sample line | Reset in the line | Captured from |
+| --- | --- | --- | --- |
+| claude | `You've hit your session limit · resets 12:10am Asia/Jerusalem` | yes: wall clock + zone, resolved to the NEXT such instant | live seat exit 1, 2026-09-03 |
+| claude | `You've hit your usage limit · resets 12:10am (Asia/Jerusalem)` | yes: wall clock + zone | claude.exe 2.1.260 composer |
+| claude | `You've hit your weekly limit · resets Sep 8, 10:46am (Asia/Jerusalem)` | yes: dated, not rolled forward | claude.exe 2.1.260 composer |
+| claude | `Fast limit reached and temporarily disabled · resets in 5m` | NO - it carries a DURATION | claude.exe 2.1.260 `SDo()` |
+| codex | `ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 8th, 2026 10:46 AM.` | yes: host-local clock, no zone | live `codex exec`, codex-cli 0.152.0 |
+
+The separator in the claude samples is U+00B7 MIDDLE DOT, which is what the CLI composes
+with - not a hyphen. When a line carries no readable instant, or one already past, the
+pause is bounded by `DEFAULT_PROVIDER_PAUSE_MS` = 30 minutes. A second limit exit DURING a
+live pause REUSES that pause's reset and never slides it forward, so a busy fleet cannot
+park itself indefinitely.
+
+Three lines say it, on the wrapper's own stdout:
+
+```
+[wrapper] provider limit: <provider> paused until <resetAt> (<seat's last line>)
+[wrapper] provider limit: <provider> paused until <resetAt> (DEFAULT_PROVIDER_PAUSE_MS) (<seat's last line>)
+[wrapper] provider paused: <provider> until <resetAt> (active N)
+[wrapper] seat exit not recorded: <code>
+```
+
+The `(DEFAULT_PROVIDER_PAUSE_MS)` form appears only when the reset was bounded rather than
+parsed. `provider paused:` is printed once per DISTINCT idle state, not once per pass.
+
+In the browser the same pause shows in four places: the shell strip (`Agents paused:
+<provider> limit, resumes <time>`), Seats (that sentence plus `- last line from the seat:
+<line>`, or `(no output)`), Health (the `Agents` fact, `paused: <provider> limit, resumes
+<time>`), and an opened goal's next step while it is WORKING (`Waiting for the provider
+limit to reset at <time>`). `/health/read` carries it raw at `agents.paused`.
+
+WHICH provider is parked comes from `MOE_AGENT_COMMAND`: `providerFor()` matches the
+extension-stripped basename, and a command it does not recognise reads as `claude`.
+
+The pause is a durable record on aggregate `provider-pause:<projectId>:<provider>`. NO
+browser control clears it. The supported early clear is `clearProviderPause`
+(`apps/daemon/src/orchestrator/provider-pause-ledger.ts`) run against the store: it writes a
+pause whose reset is NOW - one event type and one read rule, not a second path - and the
+wrapper staffs again on its next pass.
+
 ### Reclaim after a restart
 
 A seat claims under its OWN credential and that secret dies with the wrapper's
