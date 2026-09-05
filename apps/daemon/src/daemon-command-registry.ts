@@ -2,7 +2,9 @@ import type { SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
-import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
+import {
+  BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand,
+} from "./bootstrap/bootstrap-services.js";
 import { activateCutover } from "./cutover/cutover-activate-service.js";
 import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
@@ -18,6 +20,8 @@ import { PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND }
   from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
+import { decodePreviewDecidePayload, previewRefusal }
+  from "./preview/preview-contracts.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
@@ -208,16 +212,27 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
    */
   const measureActivation = createActivationReceiptMeasurer({ projectId, store });
   const activateFacts = commandFamilyFacts("project.activate");
-  const activateAsyncHandler: AsyncCommandHandler = async ({ envelope, principal }) =>
-    decisionOf(runBootstrapCommand(
+  const activateAsyncHandler: AsyncCommandHandler = async ({ envelope, principal }) => {
+    const bytes = requestOf(
+      "project.activate", activateFacts.schemaVersion, envelope, principal.principalId,
+    );
+    // Admit FIRST, measure second. Measuring takes a full store backup under
+    // .moe-next/backups, and every attempt used to take one — replays and refused ones
+    // included — so a retried or resubmitted activate grew the directory without bound. The
+    // gates that answer before any handler (decode, replay, kind, prerequisites) cost nothing
+    // and decide the same way with or without receipts, so a command they answer never measures.
+    const admitted = admitBootstrapCommand(store, bytes, bootstrapTable);
+    if ("outcome" in admitted) return decisionOf(admitted.outcome);
+    return decisionOf(runBootstrapCommand(
       store,
-      requestOf("project.activate", activateFacts.schemaVersion, envelope, principal.principalId),
+      bytes,
       bootstrapTable,
       // No human-review witness: activation authority is MEASURED, never reviewed, so passing
       // one here would imply an approval seam this command does not have.
       undefined,
       await measureActivation(),
     ));
+  };
   const activateEntry: CommandRegistryEntry = Object.freeze({
     asyncHandler: activateAsyncHandler,
     handler: foundationSyncHandler,
@@ -251,8 +266,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
       confirmReleased, continuation, cutover, eventResume,
-      graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
-      schemaVersion, session, step, work } = commandFamilyFacts(kind);
+      graph, journal, preview, productContractGate1, reconcile, recovery, requiredCapability,
+      review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
       commandAuthority.assert();
@@ -380,6 +395,17 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         if (eventResume) return runEventResumeEdge(context);
         if (reconcile) return runResourceReconcileEdge(context);
         return runResourceConfirmReleasedEdge(context);
+      }
+      // Answered BEFORE `requestOf`: preview has no codec, so the assembler would refuse with
+      // the wrong code entirely. Every layer here comes from PREVIEW_CODE_LAYERS through the
+      // contract, never a literal. The second throw is the FAIL-CLOSED stub the runner replaces.
+      if (preview) {
+        const decoded = decodePreviewDecidePayload(envelope.payload);
+        if (!decoded.ok) {
+          throw new DomainRefusal(decoded.code, decoded.layer, "preview.decide payload refused");
+        }
+        const stub = previewRefusal("PREVIEW_GOAL_NOT_LANDED");
+        throw new DomainRefusal(stub.code, stub.layer, "preview runner is not landed");
       }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));

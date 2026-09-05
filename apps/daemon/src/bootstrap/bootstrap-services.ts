@@ -241,23 +241,9 @@ export function runBootstrapCommand(
   humanReview?: HumanReviewWitness,
   receipts?: ActivationReceipts,
 ): ServiceOutcome {
-  const decoded = decodeBootstrapRequestBytes(input);
-  if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
-
-  const request: BootstrapRequest = decoded.request;
-  const replay = replayOf(store, request);
-  if (replay !== null) return replay;
-
-  const handler = handlers[request.kind];
-  if (handler === undefined) {
-    return refuse(request.kind, "BOOTSTRAP_COMMAND_UNKNOWN", "DAEMON_INGRESS");
-  }
-
-  const ledger = readDurableLedger(store, request.projectId);
-  const missing = missingPrerequisites(ledger, request.kind);
-  if (missing.length > 0) {
-    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
-  }
+  const admitted = admitBootstrapCommand(store, input, handlers);
+  if ("outcome" in admitted) return admitted.outcome;
+  const { handler, ledger, request } = admitted;
   // BOTH witnesses travel only from this call's own arguments — never off the decoded
   // bytes — so a payload can present neither the human review (see HumanReviewWitness)
   // nor the activation receipts the daemon measured for itself.
@@ -268,4 +254,44 @@ export function runBootstrapCommand(
     ...(humanReview === undefined ? {} : { humanReview }),
     ...(receipts === undefined ? {} : { receipts }),
   }));
+}
+
+export type BootstrapAdmission =
+  | { readonly outcome: ServiceOutcome }
+  | {
+    readonly handler: CommandHandler;
+    readonly ledger: HandlerContext["ledger"];
+    readonly request: BootstrapRequest;
+  };
+
+/**
+ * The gates that answer BEFORE any handler: ingress decode, the replay fence, a known kind and
+ * the durable prerequisites. Exposed on its own so a caller whose witness is EXPENSIVE to make
+ * (project.activate measures receipts, which takes a full store backup) can ask "would this
+ * command reach its handler at all?" first and skip the measurement for a replay or a refusal —
+ * every activate attempt used to take a backup, replays and payload-refused ones included.
+ */
+export function admitBootstrapCommand(
+  store: SqliteEventStore,
+  input: unknown,
+  handlers: HandlerTable = BOOTSTRAP_HANDLERS,
+): BootstrapAdmission {
+  const decoded = decodeBootstrapRequestBytes(input);
+  if (!decoded.ok) return { outcome: refuse(null, decoded.code, "DAEMON_INGRESS") };
+
+  const request: BootstrapRequest = decoded.request;
+  const replay = replayOf(store, request);
+  if (replay !== null) return { outcome: replay };
+
+  const handler = handlers[request.kind];
+  if (handler === undefined) {
+    return { outcome: refuse(request.kind, "BOOTSTRAP_COMMAND_UNKNOWN", "DAEMON_INGRESS") };
+  }
+
+  const ledger = readDurableLedger(store, request.projectId);
+  const missing = missingPrerequisites(ledger, request.kind);
+  if (missing.length > 0) {
+    return { outcome: refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE") };
+  }
+  return { handler, ledger, request };
 }

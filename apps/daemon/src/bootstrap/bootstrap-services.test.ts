@@ -13,6 +13,7 @@ import {
   BOOTSTRAP_SCHEMA_VERSION,
   decodeBootstrapRequestBytes,
 } from "./bootstrap-contracts.js";
+import { admitBootstrapCommand } from "./bootstrap-services.js";
 import {
   OBSERVATION,
   PROJECT_ID,
@@ -1418,5 +1419,34 @@ describe("policy.validate - consumes verified durable waivers (task-5d462855)", 
       "evaluationTimeSource", "evaluatorVersionSource", "policySliceDigestVersion",
       "waiverResolutionStatus",
     ]);
+  });
+});
+
+describe("admitBootstrapCommand answers the pre-handler gates without running a handler", () => {
+  afterEach(closeStores);
+
+  it("admits a fresh command with its handler, ledger and request", () => {
+    const store = openStore();
+    const admitted = admitBootstrapCommand(store, bytes(validEnvelope()));
+    if ("outcome" in admitted) throw new Error(`expected admission, got ${admitted.outcome.ok ? "ok" : admitted.outcome.code}`);
+    expect(admitted.request.kind).toBe("project.register");
+    expect(typeof admitted.handler).toBe("function");
+    expect(admitted.ledger.decisionCount).toBe(0);
+  });
+
+  it("answers a replay, an ingress refusal and a missing prerequisite as outcomes", () => {
+    const store = openStore();
+    const registered = send(store, envelope("project.register", 0, { owner: "owner-1" }, "cmd-admit-1"));
+    if (!registered.ok) throw new Error(`fixture register refused: ${registered.code}`);
+
+    const replay = admitBootstrapCommand(store, bytes(envelope("project.register", 0, { owner: "owner-1" }, "cmd-admit-1")));
+    expect("outcome" in replay && replay.outcome.ok && replay.outcome.disposition).toBe("REPLAYED");
+
+    const malformed = admitBootstrapCommand(store, encoder.encode("{not json"));
+    expect("outcome" in malformed && !malformed.outcome.ok && malformed.outcome.refusedBy).toBe("DAEMON_INGRESS");
+
+    // project.activate before its prerequisites: refused at the prerequisite gate, no handler.
+    const premature = admitBootstrapCommand(store, bytes(envelope("project.activate", 1, {}, "cmd-admit-activate")));
+    expect("outcome" in premature && !premature.outcome.ok && premature.outcome.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
   });
 });
