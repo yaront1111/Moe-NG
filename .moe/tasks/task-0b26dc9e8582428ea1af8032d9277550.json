@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:41.200Z",
-  "updatedAt": "2026-09-05T03:28:19.034Z",
+  "updatedAt": "2026-09-05T03:28:28.827Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:01:24.426Z",
     "plannedStepCount": 5,
@@ -154,7 +154,46 @@
   "filesModified": [
     "apps/control-room/src/v2/goals/goal-status-strip.tsx",
     "apps/control-room/src/v2/goals/goal-status.ts",
+    "apps/control-room/src/v2/goals/goal-status.test.tsx",
+    ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+    ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json"
+  ],
+  "completionSummary": "The strip now reads a multi-node build. TWO files, both apps/control-room: goal-status.ts (184 -> 235 lines) and goal-status.test.tsx (+10 it(), 191 -> 362).\n\nDoD 1' (per comment-4de0a900, which SUPERSEDES DoD 1): `agentsOf` gained `waiting` — nodes held behind an unmet dependency — folded by `blockersOf(step)`: BLOCKED status, `missing` filtered on `DEPENDS_TOKEN_PREFIX` IMPORTED from ./work-labels.js (never re-spelled, so the daemon's token has one spelling in the control-room), sliced, keyless prefixes dropped. PREFIX not exact match: the token carries a nodeKey suffix. DoD 1 as written is discharged by shipped code — goal-status-strip.tsx:45 has printed \"N of M criteria verified\" as a fact chip on every stage since before this row; I re-verified and did NOT re-add it.\n\nDoD 2: `workingDetail()` leads with the queued clause — \"2 nodes are waiting for n1 and n2 to be accepted first; 0 nodes are claimed right now. Nothing needs you until a review is exhausted.\" Before this, a 3-node goal with two nodes queued read \"0 nodes are claimed right now\", i.e. idle. Asserted as a rendered DOM string through GoalStatusStrip, plus derivation arms for the a->b->c chain (names both blockers), the fan-out (names the shared parent ONCE), singular/singular, and a wide graph summarised as \"p0, p1, p2 and 2 more\". `blocked`/`replanned` are byte-identical — they key on the escalation and replan tokens and route to different decisions. No new GoalStage, no STAGE_WORDS change.\n\nDoD 3: (7,6) -> stage \"WORKING\", (7,7) -> \"READY_TO_CLOSE\", asserted as stage VALUES; then the same pair WITH two nodes queued, proving the new fold perturbs the gate from neither side.\n\nDoD 4: coverage null -> UNKNOWN, REFUSED GOAL_UNBOUND -> NO_PRD, `totals.criteria === 0` -> progress null and the unchanged sentence. Literal headline/detail asserted for each; the rendered arm shows the facts paragraph is ABSENT entirely, so no NaN, no \"undefined\", no \"0 of 0\". Plus: no node steps -> agents null; a foreign goal'",
+  "commits": [
+    {
+      "sha": "67c96bd8824221f1df444876dbe7a9f0ab2fa9a1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-05T03:14:02Z",
+      "paths": [
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-3506e04abcef4fc3a69299ca238ae1b3.json",
+        "apps/control-room/src/v2/goals/goal-status.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-05T03:28:28.826Z",
+      "treeId": "f2d702124347bc9362c0b70054edc2d42e01e71c",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/goals/goal-status.ts",
+          "taskId": "task-33ceae56edc348e9864bc592430fa1d0"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/goals/goal-status.ts",
     "apps/control-room/src/v2/goals/goal-status.test.tsx"
   ],
-  "completionSummary": "The strip now reads a multi-node build. TWO files, both apps/control-room: goal-status.ts (184 -> 235 lines) and goal-status.test.tsx (+10 it(), 191 -> 362).\n\nDoD 1' (per comment-4de0a900, which SUPERSEDES DoD 1): `agentsOf` gained `waiting` — nodes held behind an unmet dependency — folded by `blockersOf(step)`: BLOCKED status, `missing` filtered on `DEPENDS_TOKEN_PREFIX` IMPORTED from ./work-labels.js (never re-spelled, so the daemon's token has one spelling in the control-room), sliced, keyless prefixes dropped. PREFIX not exact match: the token carries a nodeKey suffix. DoD 1 as written is discharged by shipped code — goal-status-strip.tsx:45 has printed \"N of M criteria verified\" as a fact chip on every stage since before this row; I re-verified and did NOT re-add it.\n\nDoD 2: `workingDetail()` leads with the queued clause — \"2 nodes are waiting for n1 and n2 to be accepted first; 0 nodes are claimed right now. Nothing needs you until a review is exhausted.\" Before this, a 3-node goal with two nodes queued read \"0 nodes are claimed right now\", i.e. idle. Asserted as a rendered DOM string through GoalStatusStrip, plus derivation arms for the a->b->c chain (names both blockers), the fan-out (names the shared parent ONCE), singular/singular, and a wide graph summarised as \"p0, p1, p2 and 2 more\". `blocked`/`replanned` are byte-identical — they key on the escalation and replan tokens and route to different decisions. No new GoalStage, no STAGE_WORDS change.\n\nDoD 3: (7,6) -> stage \"WORKING\", (7,7) -> \"READY_TO_CLOSE\", asserted as stage VALUES; then the same pair WITH two nodes queued, proving the new fold perturbs the gate from neither side.\n\nDoD 4: coverage null -> UNKNOWN, REFUSED GOAL_UNBOUND -> NO_PRD, `totals.criteria === 0` -> progress null and the unchanged sentence. Literal headline/detail asserted for each; the rendered arm shows the facts paragraph is ABSENT entirely, so no NaN, no \"undefined\", no \"0 of 0\". Plus: no node steps -> agents null; a foreign goal'"
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-cceb207f@2026-09-05T03:14:02Z",
+    "at": "2026-09-05T03:28:28.826Z"
+  }
 }
