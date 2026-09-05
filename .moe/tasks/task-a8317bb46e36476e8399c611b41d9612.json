@@ -84,7 +84,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:41:53.294Z",
-  "updatedAt": "2026-09-05T04:17:56.499Z",
+  "updatedAt": "2026-09-05T04:18:47.264Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:33:53.477Z",
     "plannedStepCount": 3,
@@ -134,6 +134,34 @@
     "outputTail": " Test Files  416 passed (416)\n      Tests  8315 passed (8315)\n  Start at  ...\n  Duration  ...\nEXIT=0",
     "reportedAt": "2026-09-05T04:17:56.499Z"
   },
-  "filesModified": [],
-  "completionSummary": "VERIFICATION-ONLY PARENT. 0 files created or modified — the feature was delivered by its SPIDR children, all DONE with completion commits on moe/work-2026-09-04: task-19d2329c25934099b2ff10086987d1c5 (bind-on-publish + `remote:<projectId>`, `47141db5`), task-f6f33a3925bf4856b42cf84a37bb0f9e (publish offered only with a COMMITTED landing, `ebca5210`), task-e6000b57fd374f78ba074b9f0f0f2c67 (one Publish control, Health Repository card, docs, e2e, `e5f8477f`). A FOURTH row the plan did not name landed the read route: task-9d55341928f04110ba7b286a985f8fa0 (`POST /repository/remote/read`, `094d1903`). Zero on `main` for all four is expected — this epic lands on the fleet branch and reaches main by PR.\n\nSTEP 1 GATE: one plan anchor was wrong and is corrected. `grep -n \"remote/read\" http-listener-read-dispatch.ts` = 0 because that file references the path by CONSTANT; the literal lives once at `repository-remote-read.ts:26`. Wiring measured at dispatch :34/:90/:460/:516-517 (`grep -n REPOSITORY_REMOTE_READ_PATH` = 4).\n\nSTEP 2 LIVE ROWS, RE-READ READ-ONLY, NOT FABRICATED. The step's premise (two publishes, two PUSHED receipts) is FALSE; child 3 recorded the UNBOUND state and I re-measured it at a fresher store. Copied store.sqlite + -wal + -shm to %TEMP%, ran the daemon's own production modules against the COPY; live mtimes unchanged. `readProjectRemote(store,\"unai\")` = **null**; frame `{\"boundAt\":null,\"boundBy\":null,\"outcome\":\"REMOTE\",\"readAt\":\"...\",\"remoteUrl\":null}`; `repository.publish` decisions = **0**; `RepositoryRemoteBound` events = **0**; no `remote:<projectId>` aggregate. 3 activated goals, 3 landing receipts ALL REFUSED verbatim — 2x `LANDING_BASELINE_MISSING`, 1x `NOTHING_TO_COMMIT`; `hasLandedCommit` false for all three, so the shipped card correctly renders nothing. `git -C D:/projexts/UnAI ls-remote origin` -> `fatal: 'origin' does not appear to be a git repository`, exit 128; zero remotes, one commit. The live push waits on the OWNER (name a remote; land one"
+  "filesModified": [
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json"
+  ],
+  "completionSummary": "VERIFICATION-ONLY PARENT. 0 files created or modified — the feature was delivered by its SPIDR children, all DONE with completion commits on moe/work-2026-09-04: task-19d2329c25934099b2ff10086987d1c5 (bind-on-publish + `remote:<projectId>`, `47141db5`), task-f6f33a3925bf4856b42cf84a37bb0f9e (publish offered only with a COMMITTED landing, `ebca5210`), task-e6000b57fd374f78ba074b9f0f0f2c67 (one Publish control, Health Repository card, docs, e2e, `e5f8477f`). A FOURTH row the plan did not name landed the read route: task-9d55341928f04110ba7b286a985f8fa0 (`POST /repository/remote/read`, `094d1903`). Zero on `main` for all four is expected — this epic lands on the fleet branch and reaches main by PR.\n\nSTEP 1 GATE: one plan anchor was wrong and is corrected. `grep -n \"remote/read\" http-listener-read-dispatch.ts` = 0 because that file references the path by CONSTANT; the literal lives once at `repository-remote-read.ts:26`. Wiring measured at dispatch :34/:90/:460/:516-517 (`grep -n REPOSITORY_REMOTE_READ_PATH` = 4).\n\nSTEP 2 LIVE ROWS, RE-READ READ-ONLY, NOT FABRICATED. The step's premise (two publishes, two PUSHED receipts) is FALSE; child 3 recorded the UNBOUND state and I re-measured it at a fresher store. Copied store.sqlite + -wal + -shm to %TEMP%, ran the daemon's own production modules against the COPY; live mtimes unchanged. `readProjectRemote(store,\"unai\")` = **null**; frame `{\"boundAt\":null,\"boundBy\":null,\"outcome\":\"REMOTE\",\"readAt\":\"...\",\"remoteUrl\":null}`; `repository.publish` decisions = **0**; `RepositoryRemoteBound` events = **0**; no `remote:<projectId>` aggregate. 3 activated goals, 3 landing receipts ALL REFUSED verbatim — 2x `LANDING_BASELINE_MISSING`, 1x `NOTHING_TO_COMMIT`; `hasLandedCommit` false for all three, so the shipped card correctly renders nothing. `git -C D:/projexts/UnAI ls-remote origin` -> `fatal: 'origin' does not appear to be a git repository`, exit 128; zero remotes, one commit. The live push waits on the OWNER (name a remote; land one",
+  "commits": [
+    {
+      "sha": "2cf187fbebb6e735156b0743b9e1e283e2cef8dd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T03:40:36Z",
+      "paths": [
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T04:18:47.264Z",
+      "treeId": "a0a89537194e80132cf4ee0ad545fff623302d48",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-05T03:40:36Z",
+    "at": "2026-09-05T04:18:47.264Z"
+  }
 }
