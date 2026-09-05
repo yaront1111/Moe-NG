@@ -133,7 +133,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-05T23:24:45.587Z",
+  "updatedAt": "2026-09-05T23:25:24.230Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,
@@ -256,6 +256,21 @@
       "status": "WORKING",
       "pushed": false,
       "message": "MOE_RESCUE_REF task=task-facff1d1e7ce44a6b1101490524890a9 ref=refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232440Z sha=63299f6d5d19aa2d1271dc66eeaf6b0e9e2bcf25 reason=ref-contention"
+    },
+    {
+      "sha": "8ac6e4502ed1c406d1b9f6d37dc32ca994e5a47f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:24:02Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:25:24.230Z",
+      "treeId": "390703ae36c3845afaf55b33fae974c908a2429a",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -277,7 +292,9 @@
   "unattributedPaths": [
     "apps/control-room/src/live/live-effect-read.test.ts",
     "apps/control-room/src/live/live-effect-read.ts",
+    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
     "apps/control-room/src/v2/goals/publish-port.ts",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
@@ -297,6 +314,7 @@
     "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
     "apps/daemon/src/repository/git-publication-native.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
     "apps/daemon/src/repository/publication-effect-ledger.ts",
@@ -335,13 +353,13 @@
     "packages/runner/src/platform/windows/windows-process-contract.ts",
     "packages/runner/src/platform/windows/windows-status.ts",
     "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts"
+    "packages/runner/src/verification/criterion-check-executor.ts",
+    "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "failed",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
     "sessionId": "worker-d6e44333@2026-09-05T23:24:02Z",
-    "at": "2026-09-05T23:24:45.587Z"
+    "at": "2026-09-05T23:25:24.230Z"
   }
 }
