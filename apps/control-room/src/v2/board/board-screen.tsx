@@ -80,7 +80,7 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
   const fold = goal === null || goal.nodes.length === 0
     ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
   const statements = criterionStatements(coverage);
-  const objectives = new Map<string, string>((goal?.nodes ?? []).map((node) => [node.nodeKey, node.objective]));
+  const objectives = new Map<string, string>((goal?.nodes ?? []).map((node) => [node.nodeRef, node.objective]));
   const offered = publishOffer(surface, goalId) !== null;
   // The publish card is the pipeline's LAST step: it appears only once the daemon offers it or
   // a publish was already decided, never above work that has not landed.

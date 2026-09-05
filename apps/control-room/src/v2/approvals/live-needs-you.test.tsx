@@ -87,7 +87,7 @@ describe("LiveNeedsYou", () => {
     }));
     const runs: RunsOutcome = {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
-        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
+        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
         status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
@@ -115,7 +115,7 @@ describe("LiveNeedsYou", () => {
     }));
     const runs: RunsOutcome = {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
-        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", objective: "o",
+        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
         status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
@@ -144,7 +144,7 @@ describe("LiveNeedsYou", () => {
     }));
     const verified: DocumentCoverageOutcome = {
       ...gatePending,
-      contracts: [{ ...gatePending.contracts[0]!, gate1: "APPROVED", plane: "V1", requirements: [{ criteria: [{ criterionId: "c", nodeKey: "n", statement: "s", status: "VERIFIED" }], requirementId: "r", statement: "r" }] }],
+      contracts: [{ ...gatePending.contracts[0]!, gate1: "APPROVED", plane: "V1", requirements: [{ criteria: [{ criterionId: "c", nodeKey: "n", nodeTestStatus: null, statement: "s", status: "VERIFIED" }], requirementId: "r", statement: "r" }] }],
       goals: [{ goalId: "goal-gate", lastActivityAt: null, lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-gate", title: "Gate me" }],
       totals: { contracts: 1, criteria: 1, goals: 1, planned: 0, requirements: 1, unattributable: 0, verified: 1 },
     };

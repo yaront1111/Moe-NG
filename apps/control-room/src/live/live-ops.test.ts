@@ -23,12 +23,36 @@ const PAUSED = Object.freeze({
   workItemId: "node.deliver@node-1",
 });
 const HEALTH = Object.freeze({
-  agents: { paused: null },
+  agents: { paused: null, repository: { code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN" } },
   daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:30:00.000Z" },
   outcome: "HEALTH", readAt: "2026-09-02T20:00:00.000Z", verifier: { calibration: true, policy: false },
 });
 const response = (status: number, body: unknown): Response => ({ json: async () => body, status } as unknown as Response);
+
+describe("repository reservation frames", () => {
+  const held = { code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "VERIFYING", status: "HELD" };
+  const map = (repository: unknown) => mapHealthAnswer(200, { ...HEALTH, agents: { paused: null, repository } });
+  const invalid = { code: "OPS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_OPS", status: "ERROR" };
+
+  it("carries held, idle and unknown repository states without inventing ownership", () => {
+    for (const repository of [held,
+      { code: null, owner: null, phase: null, status: "IDLE" },
+      { code: "REPOSITORY_EXECUTION_UNREADABLE", owner: null, phase: null, status: "UNKNOWN" },
+    ]) expect(map(repository)).toMatchObject({ agents: { repository }, status: "HEALTH" });
+  });
+
+  it("refuses missing, contradictory and authority-bearing reservation frames", () => {
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: null } })).toEqual(invalid);
+    for (const repository of [undefined, null, {}, { ...held, token: "secret" },
+      { ...held, owner: { ...held.owner, token: "secret" } }, { ...held, owner: null },
+      { ...held, owner: { ...held.owner, nodeRef: "" } }, { ...held, phase: null },
+      { ...held, status: "IDLE" }, { ...held, code: "FAILURE" },
+      { code: null, owner: null, phase: null, status: "UNKNOWN" },
+      { code: null, owner: null, phase: "RUNNING", status: "IDLE" },
+    ]) expect(map(repository)).toEqual(invalid);
+  });
+});
 
 describe("mapPolicyAnswer / mapHealthAnswer", () => {
   it("map exact frames verbatim", () => {
@@ -39,8 +63,8 @@ describe("mapPolicyAnswer / mapHealthAnswer", () => {
     expect(mapHealthAnswer(200, HEALTH)).toStrictEqual({
       agents: HEALTH.agents, daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt, status: "HEALTH", verifier: HEALTH.verifier,
     });
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: PAUSED } })).toStrictEqual({
-      agents: { paused: PAUSED }, daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt,
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, paused: PAUSED } })).toStrictEqual({
+      agents: { ...HEALTH.agents, paused: PAUSED }, daemon: HEALTH.daemon, ledger: HEALTH.ledger, readAt: HEALTH.readAt,
       status: "HEALTH", verifier: HEALTH.verifier,
     });
   });
@@ -63,13 +87,13 @@ describe("mapPolicyAnswer / mapHealthAnswer", () => {
     const { agents: _dropped, ...withoutAgents } = HEALTH;
     expect(mapHealthAnswer(200, withoutAgents)).toStrictEqual(invalid);
     expect(mapHealthAnswer(200, { ...HEALTH, agents: undefined })).toStrictEqual(invalid);
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: null, extra: 1 } })).toStrictEqual(invalid);
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, extra: 1 } } })).toStrictEqual(invalid);
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, resetAt: 5 } } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, extra: 1 } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, paused: { ...PAUSED, extra: 1 } } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, paused: { ...PAUSED, resetAt: 5 } } })).toStrictEqual(invalid);
     const { workItemId: _gone, ...missingKey } = PAUSED;
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: missingKey } })).toStrictEqual(invalid);
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, paused: missingKey } })).toStrictEqual(invalid);
     // An empty last line is REAL (a pause whose cause never named one); it must not be refused.
-    expect(mapHealthAnswer(200, { ...HEALTH, agents: { paused: { ...PAUSED, lastLine: "" } } }))
+    expect(mapHealthAnswer(200, { ...HEALTH, agents: { ...HEALTH.agents, paused: { ...PAUSED, lastLine: "" } } }))
       .toMatchObject({ agents: { paused: { lastLine: "" } }, status: "HEALTH" });
   });
 });

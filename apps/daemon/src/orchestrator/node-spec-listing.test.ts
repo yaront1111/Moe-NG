@@ -20,6 +20,10 @@ function specDir(files: Readonly<Record<string, string>>): string {
 }
 
 describe("listNodeSpecs", () => {
+  it("cannot claim the compiled execution namespace from an operator spec", () => {
+    const dir = specDir({ "forged.json": JSON.stringify({ nodeRef: `node:v1:${"a".repeat(64)}` }) });
+    expect(listNodeSpecs(dir).nodes).toEqual([]);
+  });
   it("keeps every well-formed spec when one file is malformed, and names the skipped one", () => {
     // One broken spec used to drop EVERY spec-dir node from the verifier and the lander.
     const dir = specDir({

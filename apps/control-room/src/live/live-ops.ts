@@ -4,6 +4,9 @@
  * ONLY, exact-key snapshots at every level (the discipline of live-planning-run.ts).
  */
 
+import { repositoryReservationOf } from "./live-repository-reservation.js";
+import type { RepositoryReservationView } from "./live-repository-reservation.js";
+
 const LIVE_OPS_LAYER = "CONTROL_ROOM_LIVE_OPS";
 const INVALID_RESPONSE_CODE = "OPS_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -60,7 +63,7 @@ export interface ProviderPauseView {
 export type HealthOutcome =
   | {
     readonly status: "HEALTH";
-    readonly agents: { readonly paused: ProviderPauseView | null };
+    readonly agents: { readonly paused: ProviderPauseView | null; readonly repository: RepositoryReservationView };
     readonly daemon: {
       readonly commandAuthorityPlane: string;
       readonly nodeSpecsDir: string | null;
@@ -217,7 +220,7 @@ export function mapPolicyAnswer(status: number, response: unknown): PolicyOutcom
 // The stated pause, null, or `false` for a frame this build may not read. `false` is NOT "no
 // pause": a missing or drifted `agents` is refused, never rendered as calm; an empty line is real.
 function pausedOf(value: unknown): ProviderPauseView | false | null {
-  const agents = exactDataRecord(value, ["paused"]);
+  const agents = exactDataRecord(value, ["paused", "repository"]);
   if (agents === null) return false;
   if (agents.paused === null) return null;
   const at = exactDataRecord(agents.paused, ["lastLine", "provider", "resetAt", "since", "workItemId"]);
@@ -238,7 +241,9 @@ export function mapHealthAnswer(status: number, response: unknown): HealthOutcom
   const ledger = exactDataRecord(record.ledger, ["aggregates", "commandKinds", "decisionCount", "goals", "lastDecidedAt"]);
   const verifier = verifierOf(record.verifier);
   const paused = pausedOf(record.agents);
-  if (daemon === null || ledger === null || verifier === null || paused === false
+  const agents = exactDataRecord(record.agents, ["paused", "repository"]);
+  const repository = repositoryReservationOf(agents?.repository);
+  if (daemon === null || ledger === null || verifier === null || paused === false || repository === null
     || !nonEmptyString(daemon.commandAuthorityPlane) || !nullableString(daemon.nodeSpecsDir) || !count(daemon.pid)
     || !nonEmptyString(daemon.projectId) || !nonEmptyString(daemon.protocolVersion) || !nonEmptyString(daemon.startedAt)
     || typeof daemon.storePath !== "string" || !count(ledger.aggregates) || !count(ledger.commandKinds)
@@ -246,7 +251,7 @@ export function mapHealthAnswer(status: number, response: unknown): HealthOutcom
     return invalidResponse();
   }
   return Object.freeze({
-    agents: Object.freeze({ paused }),
+    agents: Object.freeze({ paused, repository }),
     daemon: Object.freeze({
       commandAuthorityPlane: daemon.commandAuthorityPlane, nodeSpecsDir: daemon.nodeSpecsDir, pid: daemon.pid,
       projectId: daemon.projectId, protocolVersion: daemon.protocolVersion, startedAt: daemon.startedAt,

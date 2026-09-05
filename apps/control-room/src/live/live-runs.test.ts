@@ -12,9 +12,9 @@ const NODE = Object.freeze({
   accepted: { verifierReceiptId: "receipt-a" },
   claim: { active: false, claimedBy: "sess-wrap-1", expiresAt: "2026-09-02T21:00:00.000Z", status: "RELEASED" },
   criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: "2026-09-02T19:00:00.000Z",
-  nodeKey: "node-a", objective: "Keep fields.",
+  nodeKey: "node-a", nodeRef: "execution-node-a", objective: "Keep fields.",
   landing: null,
-  receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
+  receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", testedTreeSha: null, workspace: "D:/unai" },
   review: { escalated: false, findings: [{ detail: "Fine.", round: 1, ruleId: "rule-1", severity: "MINOR", subject: "NODE node-a" }], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 3 },
   sharedKey: false,
   status: "ACCEPTED",
@@ -32,6 +32,12 @@ const RUNS = Object.freeze({ goals: [GOAL], outcome: "RUNS", totals: TOTALS });
 const response = (status: number, body: unknown): Response => ({ json: async () => body, status } as unknown as Response);
 
 describe("mapRunsAnswer", () => {
+  it("preserves a valid tested tree and refuses malformed tree identity", () => {
+    const frame = (testedTreeSha: unknown) => ({ ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE,
+      receipt: { ...NODE.receipt, testedTreeSha } }] }] });
+    expect(mapRunsAnswer(200, frame("a".repeat(40)))).toMatchObject({ status: "RUNS", goals: [{ nodes: [{ receipt: { testedTreeSha: "a".repeat(40) } }] }] });
+    for (const value of [undefined, "HEAD", "a".repeat(39), 42]) expect(mapRunsAnswer(200, frame(value))).toMatchObject({ status: "ERROR", code: "RUNS_RESPONSE_INVALID" });
+  });
   it("maps a full RUNS frame with every node fact intact", () => {
     expect(mapRunsAnswer(200, RUNS)).toStrictEqual({ goals: [GOAL], status: "RUNS", totals: TOTALS });
   });
@@ -64,6 +70,7 @@ describe("mapRunsAnswer", () => {
     const invalid = { code: "RUNS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_RUNS", status: "ERROR" };
     expect(mapRunsAnswer(500, { unexpected: true })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, outcome: "RUN" })).toStrictEqual(invalid);
+    expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, nodeRef: "" }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, status: "DONE" }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, claim: { active: true } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, receipt: { exitCode: 0 } }] }] })).toStrictEqual(invalid);

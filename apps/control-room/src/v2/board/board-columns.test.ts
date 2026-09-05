@@ -11,7 +11,7 @@ const NOW = Date.parse("2026-09-04T08:00:00.000Z");
 function node(status: RunNodeStatus, extra: Partial<RunNodeView> = {}): RunNodeView {
   return {
     accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null,
-    nodeKey: `node-${status.toLowerCase()}`, objective: `Objective for ${status}`, receipt: null,
+    nodeKey: `node-${status.toLowerCase()}`, nodeRef: `execution-${status.toLowerCase()}`, objective: `Objective for ${status}`, receipt: null,
     review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
     sharedKey: false, status, ...extra,
   };

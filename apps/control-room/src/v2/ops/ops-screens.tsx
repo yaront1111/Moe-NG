@@ -7,6 +7,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { RepositoryCard } from "./repository-card.js";
+import { RepositoryReservationCard } from "./repository-reservation-card.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -230,6 +231,7 @@ export function HealthScreen({ nowMs, outcome, remote }: {
         <Fact label="Agents" testId="cr.health.agents" value={agentsWords(outcome.agents.paused)} />
       </dl>
       <RepositoryCard outcome={remote ?? null} />
+      <RepositoryReservationCard reservation={outcome.agents.repository} />
       <p className="cr2-approve-banner" data-testid="cr.health.verifier">{verifierWords(outcome.verifier)}</p>
     </section>
   );

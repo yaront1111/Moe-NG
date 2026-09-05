@@ -1,14 +1,16 @@
+import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import { encodeGraphContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
+import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
+import { landingAggregateId } from "../repository/landing-receipt-contracts.js";
 import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 
-/** Temporary quarantine while durable execution subjects still use a bare graph-local key. */
+/** Historical authority and legacy execution must be readable before new work is staffed. */
 export const COMPILED_NODE_IDENTITY_UNREADABLE = "COMPILED_NODE_IDENTITY_UNREADABLE";
 const EXECUTED = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 
@@ -53,38 +55,26 @@ function historicalGraphs(
 }
 
 /**
- * The same key in distinct goal/run pairs has no attributable legacy review subject.
- * Current injected graphs without a run ref are matched to the historical graph bytes;
- * production always supplies the run ref, including when identical bytes are re-approved.
- * An unreadable historical graph throws so callers withhold authority, never forget owners.
+ * A bare-key execution has no sealed owner to migrate. Keep all of its possible
+ * owners quarantined, including finished claims and retired children: neither
+ * expiry nor cleanup attributes previously edited bytes or accepted output.
+ * A shared local key alone is harmless once every execution subject is scoped.
  */
-export function ambiguousCompiledNodeKeys(
+export function legacyCompiledNodeKeys(
   store: SqliteEventStore, projectId: string, current: readonly ActiveCompiledGraph[], folded?: DurableLedger,
 ): ReadonlySet<string> {
-  const historical = historicalGraphs(store, projectId, folded ?? readDurableLedger(store, projectId));
-  const owners = new Map<string, Set<string>>();
-  const add = (graph: ActiveCompiledGraph, owner: string): void => {
-    for (const node of graph.content.snapshot.nodes) {
-      if (!node.executionBearing) continue;
-      const subjects = owners.get(node.nodeKey) ?? new Set<string>();
-      subjects.add(owner);
-      owners.set(node.nodeKey, subjects);
-    }
-  };
-  for (const graph of historical) add(graph, JSON.stringify([graph.goalRef, graph.planningRunRef]));
-  for (const graph of current) {
-    if (graph.planningRunRef !== undefined) {
-      add(graph, JSON.stringify([graph.goalRef, graph.planningRunRef]));
-      continue;
-    }
-    const encoded = encodeGraphContent(graph.content);
-    if (!encoded.ok) throw new Error(COMPILED_NODE_IDENTITY_UNREADABLE);
-    const known = historical.filter((old) => old.goalRef === graph.goalRef
-      && old.graphContentHash === encoded.value.graphContentHash);
-    if (known.length === 0) add(graph, JSON.stringify([graph.goalRef, encoded.value.graphContentHash]));
-    else for (const old of known) add(graph, JSON.stringify([old.goalRef, old.planningRunRef]));
+  historicalGraphs(store, projectId, folded ?? readDurableLedger(store, projectId));
+  const claims = readWorkClaimLedger(store, projectId);
+  if (claims.unreadable) throw new Error(COMPILED_NODE_IDENTITY_UNREADABLE);
+  const keys = new Set(current.flatMap((graph) => graph.content.snapshot.nodes.map((node) => node.nodeKey)));
+  const legacy = new Set<string>();
+  for (const key of keys) {
+    const workItemId = `node.deliver@${key}`;
+    const staffing = `wrapper-staffing/${createHash("sha256").update(workItemId, "utf8").digest("hex")}`;
+    if (store.getAggregateVersion(key) > 0 || store.getAggregateVersion(landingAggregateId(key)) > 0
+      || store.getAggregateVersion(staffing) > 0 || claims.claims.has(workItemId)) legacy.add(key);
   }
-  return new Set([...owners].filter(([, subjects]) => subjects.size > 1).map(([key]) => key));
+  return legacy;
 }
 
 /** A legacy acceptance of an ambiguous producer cannot make its downstream work staffable. */

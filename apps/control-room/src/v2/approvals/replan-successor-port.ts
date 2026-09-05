@@ -31,8 +31,9 @@ export interface ReplanSuccessorPort {
 /** The operator instructions a successor goal is minted with: what failed, and what to change. */
 export function replanInstructions(item: NeedsYouItem, runs: RunsOutcome | null): string {
   const nodeKey = item.escalation?.nodeKey ?? "?";
+  const nodeRef = item.escalation?.affordance["targetAggregateId"];
   const node = runs?.status === "RUNS"
-    ? runs.goals.flatMap((goal) => goal.nodes).find((row) => row.nodeKey === nodeKey) : undefined;
+    ? runs.goals.find((goal) => goal.goalId === item.goalId)?.nodes.find((row) => row.nodeRef === nodeRef) : undefined;
   const rounds = node?.review.unsuccessfulRounds ?? item.escalation?.unsuccessfulRounds ?? null;
   const lines = [
     `REPLAN of goal ${item.goalId}: node ${nodeKey} failed review`

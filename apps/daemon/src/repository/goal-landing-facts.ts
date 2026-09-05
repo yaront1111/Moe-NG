@@ -6,14 +6,14 @@
  * so `offersForGoal` stays pure over `PlanningOfferInput` and the walk below happens only for a
  * goal that could actually be offered a publish.
  *
- * GOAL SCOPE is the whole point. The review read model keys landings by BARE node key across the
- * project, so a project-wide read would let one goal's commit unlock every other goal's PUBLISH
- * card. The nodes are therefore taken from THIS goal's own activated graph.
+ * GOAL SCOPE is the whole point. Landing subjects bind project, goal, run and sealed graph
+ * content as well as the local node key. Bare legacy facts never unlock a scoped PUBLISH.
  */
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
-import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
+import { legacyCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 
 /**
@@ -33,8 +33,8 @@ type Store = Parameters<typeof activeCompiledGraphs>[0];
  * Which goals own each node key, read exactly as the coverage read builds its sealed-node rows
  * (document-coverage-read.ts:90-96): the snapshot's execution-bearing nodes joined with the node
  * authority's definitions. Both rosters are taken because a landing attests the work of a node,
- * and these are the only durable statements of which nodes belong to which goal. A key carried
- * by distinct goal/run pairs cannot be attributed and credits neither goal.
+ * and these are the durable statements of which nodes belong to which goal. Execution refs
+ * distinguish reused local keys; unresolved bare legacy records credit no goal.
  */
 function nodeOwners(store: Store, projectId: string, ledger: DurableLedger): ReadonlyMap<string, string[]> {
   const owners = new Map<string, string[]>();
@@ -44,13 +44,13 @@ function nodeOwners(store: Store, projectId: string, ledger: DurableLedger): Rea
     else if (!goals.includes(goalRef)) goals.push(goalRef);
   };
   const graphs = activeCompiledGraphs(store, projectId, LANDABLE_LIFECYCLES, ledger);
-  const ambiguous = ambiguousCompiledNodeKeys(store, projectId, graphs, ledger);
+  const ambiguous = legacyCompiledNodeKeys(store, projectId, graphs, ledger);
   for (const graph of graphs) {
     for (const node of graph.content.snapshot.nodes) {
-      if (node.executionBearing && !ambiguous.has(node.nodeKey)) own(node.nodeKey, graph.goalRef);
+      if (node.executionBearing && !ambiguous.has(node.nodeKey)) own(compiledExecutionRef(projectId, graph, node.nodeKey), graph.goalRef);
     }
     for (const definition of graph.content.nodeAuthority.definitions) {
-      if (!ambiguous.has(definition.nodeKey)) own(definition.nodeKey, graph.goalRef);
+      if (!ambiguous.has(definition.nodeKey)) own(compiledExecutionRef(projectId, graph, definition.nodeKey), graph.goalRef);
     }
   }
   return owners;

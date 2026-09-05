@@ -38,11 +38,13 @@ function ago(iso: string | null, nowMs: number): string | null {
 export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[] {
   const lines: string[] = [];
   if (node.sharedKey) {
-    lines.push("another activated plan carries this work, so its review cannot be attributed to this goal");
+    lines.push("earlier execution has no scoped identity, so its evidence cannot be attributed to this goal");
   }
   if (node.accepted !== null) lines.push("accepted by the daemon");
   if (node.receipt !== null) {
     lines.push(`verifier ran ${node.receipt.test}, exit ${String(node.receipt.exitCode)}`);
+    lines.push(node.receipt.testedTreeSha === null ? "tested Git tree not recorded"
+      : `tested Git tree ${node.receipt.testedTreeSha.slice(0, 12)}`);
   }
   if (node.landing !== null) {
     lines.push(node.landing.outcome === "COMMITTED"

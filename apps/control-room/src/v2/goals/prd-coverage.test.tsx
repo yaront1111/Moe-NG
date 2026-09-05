@@ -20,9 +20,9 @@ function coverage(overrides: Partial<Coverage> = {}): Coverage {
       contractId: "contract-1", gate1: "APPROVED", plane: "V1",
       requirements: [{
         criteria: [
-          { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep fields.", status: "VERIFIED" },
-          { criterionId: "crit-2", nodeKey: "node-b", statement: "No edits.", status: "PLANNED" },
-          { criterionId: "crit-3", nodeKey: null, statement: "Anchors resolve.", status: "UNPLANNED" },
+          { criterionId: "crit-1", nodeKey: "node-a", nodeTestStatus: null, statement: "Rows keep fields.", status: "VERIFIED" },
+          { criterionId: "crit-2", nodeKey: "node-b", nodeTestStatus: null, statement: "No edits.", status: "PLANNED" },
+          { criterionId: "crit-3", nodeKey: null, nodeTestStatus: null, statement: "Anchors resolve.", status: "UNPLANNED" },
         ],
         requirementId: "req-evidence", statement: "Evidence is immutable.",
       }],
@@ -45,8 +45,8 @@ const complete = (): Coverage => coverage({
     contractId: "contract-1", gate1: "APPROVED", plane: "V1",
     requirements: [{
       criteria: [
-        { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep fields.", status: "VERIFIED" },
-        { criterionId: "crit-2", nodeKey: "node-b", statement: "No edits.", status: "VERIFIED" },
+        { criterionId: "crit-1", nodeKey: "node-a", nodeTestStatus: null, statement: "Rows keep fields.", status: "VERIFIED" },
+        { criterionId: "crit-2", nodeKey: "node-b", nodeTestStatus: null, statement: "No edits.", status: "VERIFIED" },
       ],
       requirementId: "req-evidence", statement: "Evidence is immutable.",
     }],
@@ -82,6 +82,26 @@ describe("coverageComplete", () => {
 });
 
 describe("the PRD coverage card", () => {
+  it("shows a passing node test with criterion evidence still required and no completed claim", async () => {
+    const current = coverage();
+    const evidence: Coverage = { ...current, contracts: current.contracts.map((contract) => ({
+      ...contract, requirements: contract.requirements.map((requirement) => ({ ...requirement,
+        criteria: requirement.criteria.map((criterion) => ({ ...criterion,
+          nodeTestStatus: "NODE_TEST_PASSED", status: "EVIDENCE_REQUIRED",
+        })),
+      })),
+    })), totals: { ...current.totals, planned: 0, verified: 0 } };
+    render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={async () => evidence} />);
+    const banner = await screen.findByTestId("cr.coverage.banner");
+    expect(banner.getAttribute("data-complete")).toBe("false");
+    expect(banner.textContent).toContain("0 of 3 acceptance criteria verified");
+    expect(banner.textContent).toContain("3 evidence required");
+    expect(banner.textContent).toContain("0 unplanned");
+    expect(screen.getByTestId("cr.coverage.criterion.crit-1").textContent).toContain("Node test passed");
+    expect(screen.getByTestId("cr.coverage.criterion.crit-1").textContent).toContain("Evidence required");
+    expect(screen.getByTestId("cr.coverage.bar").getAttribute("aria-valuenow")).toBe("0");
+  });
+
   it("renders the daemon's coverage: banner, bar, each criterion with its status and node", async () => {
     const read = vi.fn(async () => coverage());
     render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={read} />);

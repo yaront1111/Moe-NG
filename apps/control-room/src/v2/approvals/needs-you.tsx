@@ -56,7 +56,11 @@ interface InlineDecision {
 
 /** The key a decision's result is kept under: the node for an escalation, else the goal. */
 export function decisionKeyOf(item: NeedsYouItem): string {
-  return item.escalation?.nodeKey ?? item.goalId;
+  const escalation = item.escalation;
+  if (escalation === undefined) return item.goalId;
+  const nodeRef = escalation.affordance["targetAggregateId"];
+  return typeof nodeRef === "string" && nodeRef.length > 0
+    ? nodeRef : JSON.stringify([item.goalId, escalation.nodeKey]);
 }
 
 function decisionOf(item: NeedsYouItem): InlineDecision | null {
@@ -67,7 +71,7 @@ function decisionOf(item: NeedsYouItem): InlineDecision | null {
       buttonLabel: "Allow more attempts",
       doneLabel: "Allowed",
       doneLine: "Allowed. Agents may submit new review rounds for this node.",
-      testId: `cr.needsyou.escalate.${item.escalation.nodeKey}`,
+      testId: `cr.needsyou.escalate.${decisionKeyOf(item)}`,
     };
   }
   if (item.close !== undefined) {
@@ -140,7 +144,7 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
             ariaLabel={`Replan ${replan.nodeKey} from its findings`}
             disabled={result?.busy === true || done}
             onClick={(): void => { setArmed(false); onDecide(item, "REPLAN"); }}
-            testId={`cr.needsyou.replan.${replan.nodeKey}`}
+            testId={`cr.needsyou.replan.${key}`}
             variant="secondary"
           >
             Replan from the findings

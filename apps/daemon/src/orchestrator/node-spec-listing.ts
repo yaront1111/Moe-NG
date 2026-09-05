@@ -9,6 +9,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { COMPILED_EXECUTION_REF_PREFIX } from "./compiled-execution-ref.js";
 
 export interface NodeSpecListing {
   readonly nodes: readonly { readonly nodeRef: string }[];
@@ -31,7 +32,9 @@ export function listNodeSpecs(dir: string): NodeSpecListing {
       const nodeRef = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
         ? (parsed as { nodeRef?: unknown }).nodeRef
         : undefined;
-      if (typeof nodeRef === "string" && nodeRef.length > 0) nodes.push({ nodeRef });
+      if (typeof nodeRef === "string" && nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)) {
+        skipped.push(`${name}: COMPILED_EXECUTION_REF_RESERVED`);
+      } else if (typeof nodeRef === "string" && nodeRef.length > 0) nodes.push({ nodeRef });
     } catch (error) {
       skipped.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -142,10 +142,11 @@ function escalationItems(
   const items: NeedsYouItem[] = [];
   for (const offer of surface.offers) {
     if (offer["commandKind"] !== "escalation.decide" || typeof offer["targetAggregateId"] !== "string") continue;
-    const nodeKey = offer["targetAggregateId"];
+    const nodeRef = offer["targetAggregateId"];
     const goal = runs?.status === "RUNS"
-      ? runs.goals.find((row) => row.nodes.some((node) => node.nodeKey === nodeKey)) : undefined;
-    const node = goal?.nodes.find((row) => row.nodeKey === nodeKey);
+      ? runs.goals.find((row) => row.nodes.some((node) => node.nodeRef === nodeRef)) : undefined;
+    const node = goal?.nodes.find((row) => row.nodeRef === nodeRef);
+    const nodeKey = node?.nodeKey ?? nodeRef;
     const entry = goal === undefined ? undefined : catalog.goals.find((row) => row.goalId === goal.goalId);
     const rounds = node?.review.unsuccessfulRounds ?? null;
     const route = node?.review.latestRoute ?? null;

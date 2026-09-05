@@ -27,7 +27,7 @@ function coverage(overrides: {
   return {
     contracts: Array.from({ length: contracts }, (_, index) => ({
       contractId: `c-${String(index)}`, gate1: overrides.gate1 ?? "APPROVED", plane: "V1", requirements: [{
-        criteria: nodeKeys.map((nodeKey) => ({ criterionId: `crit-${nodeKey}`, nodeKey, statement: "s", status: "PLANNED" as const })),
+        criteria: nodeKeys.map((nodeKey) => ({ criterionId: `crit-${nodeKey}`, nodeKey, nodeTestStatus: null, statement: "s", status: "PLANNED" as const })),
         requirementId: "req-1", statement: "r",
       }], revisionDigest: "d", revisionId: "r",
     })),

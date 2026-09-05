@@ -13,7 +13,7 @@ const RUNS: RunsOutcome = {
   goals: [{
     goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
     nodes: [{
-      accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-a",
+      accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-a", nodeRef: "node-a",
       objective: "Keep fields.", landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
       status: "READY",
     }],

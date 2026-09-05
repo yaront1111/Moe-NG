@@ -2,7 +2,9 @@
  * GOAL CLOSE READINESS — one derived fact, read fresh, never stored.
  *
  * A goal is ready to close only when every approved criterion of its Product Contract is
- * VERIFIED. Both consumers of that sentence read it here, so the closure precondition
+ * VERIFIED by criterion-specific evidence. A generic NODE_TEST_PASSED leaves criterion
+ * coverage EVIDENCE_REQUIRED and cannot satisfy this gate. Both consumers read it here,
+ * so the closure precondition
  * (`goal-services.ts`) and the `/affordances/read` offer ladder cannot drift apart and start
  * disagreeing about the same goal — the surface offering a close the command would refuse is
  * exactly the defect this module exists to make impossible.

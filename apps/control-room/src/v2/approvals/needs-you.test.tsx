@@ -28,6 +28,19 @@ const DATA: NeedsYouData = {
 };
 
 describe("the Needs-you queue", () => {
+  it("keeps results independent for two goals with the same local node name", () => {
+    const items = ["a", "b"].map((suffix) => ({
+      actionLabel: "Open the goal", detail: "Needs review", goalId: `goal-${suffix}`,
+      headline: "Review exhausted", kind: "ESCALATION" as const, planningRunRef: `run-${suffix}`, title: suffix,
+      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: `execution-${suffix}` },
+        latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
+    }));
+    render(<NeedsYou data={{ countLabel: "2", items, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()}
+      decisionResults={new Map([["execution-a", { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
+    const buttons = screen.getAllByRole("button", { name: "Allow more attempts on api" });
+    expect((buttons[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((buttons[1] as HTMLButtonElement).disabled).toBe(false);
+  });
   it("renders one card per decision with its goal, headline, detail and one action", async () => {
     const onOpenBoard = vi.fn();
     render(<NeedsYou data={DATA} onOpenBoard={onOpenBoard} />);
@@ -47,7 +60,7 @@ describe("the Needs-you queue", () => {
     const onEscalate = vi.fn();
     const item = {
       actionLabel: "Open the goal", detail: "node-x failed review 3 times.",
-      escalation: { affordance: { commandKind: "escalation.decide" }, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
+      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: "node-x" }, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
       goalId: "goal-1", headline: "A node's review is exhausted", kind: "ESCALATION" as const, planningRunRef: "run-1", title: "Alpha",
     };
     const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };

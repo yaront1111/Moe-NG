@@ -29,13 +29,14 @@ export interface EscalationPort {
 export function createEscalationPort(wire: EscalationWire): EscalationPort {
   return Object.freeze({
     submit: (
-      affordance: Readonly<Record<string, unknown>>, nodeKey: string, decision: EscalationDecision,
+      affordance: Readonly<Record<string, unknown>>, _nodeKey: string, decision: EscalationDecision,
     ): Promise<EscalationOutcome> => {
       const version = affordance["expectedVersion"];
+      const subjectRef = affordance["targetAggregateId"];
       const payload = {
         decision,
-        escalationRef: `ui-escalation-${nodeKey}-v${typeof version === "number" ? String(version) : "unknown"}`,
-        subjectRef: nodeKey,
+        escalationRef: `ui-escalation-${String(subjectRef)}-v${typeof version === "number" ? String(version) : "unknown"}`,
+        subjectRef,
       };
       return spendOffer(wire, ESCALATION_COMMAND_KIND, affordance, payload, "ui-escalate", ESCALATION_LAYER);
     },

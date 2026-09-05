@@ -7,6 +7,7 @@ import {
 } from "./verifier-receipt-ledger.js";
 import {
   VERIFIER_RECEIPT_COMMAND_KIND,
+  decodeVerifierReceiptBytes,
   verifierReceiptId,
 } from "./verifier-receipt-contracts.js";
 import { readReviewLedger } from "./review-read-model.js";
@@ -52,6 +53,32 @@ function sourceFor(store: ReturnType<typeof openStore>) {
 }
 
 describe("durable verifier receipts", () => {
+  it("binds the receipt to the immutable tested workspace and rejects altered binding bytes", () => {
+    const store = openStore();
+    seedCleanRound(store);
+    const workspaceBinding = {
+      branchRef: "refs/heads/main", dirtySha256: "d".repeat(64), headSha: "1".repeat(40), root: "/workspace",
+      treeSha: "2".repeat(40), version: "moe-verified-workspace/1" as const,
+    };
+    const input = {
+      authority: authority(), decidedAt: "2026-08-16T00:00:00.000Z",
+      execution: { byteCount: 12, outputSha256: "a".repeat(64), test: "pnpm test", workspace: "/workspace", workspaceBinding },
+      projectId: PROJECT_ID, source: sourceFor(store), subjectRef: SUBJECT_REF,
+    };
+    const recorded = recordVerifierReceipt(store, input);
+    expect(recorded.ok, recorded.ok ? "" : recorded.code).toBe(true);
+    if (!recorded.ok) throw new Error(recorded.code);
+    expect(recorded.receipt.execution.workspaceBinding).toEqual(workspaceBinding);
+    for (const corrupt of [null, { ...workspaceBinding, treeSha: "3".repeat(40) }, { ...workspaceBinding, extra: 1 }]) {
+      expect(decodeVerifierReceiptBytes(new TextEncoder().encode(JSON.stringify({
+        ...recorded.receipt, execution: { ...recorded.receipt.execution, workspaceBinding: corrupt },
+      })))).toEqual({ code: "VERIFIER_RECEIPT_INVALID", ok: false });
+    }
+    expect(recordVerifierReceipt(store, { ...input, execution: {
+      ...input.execution, workspaceBinding: { ...workspaceBinding, treeSha: "3".repeat(40) },
+    } })).toEqual({ code: "VERIFIER_RECEIPT_STALE", ok: false });
+  });
+
   it("records the receipt immediately after the clean source round and reads it exactly", () => {
     const store = openStore();
     seedCleanRound(store);

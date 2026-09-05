@@ -31,7 +31,8 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
-import { ambiguousCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
+import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
+import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -101,7 +102,9 @@ export function activeCompiledGraphs(
     const planningRunRef = goal["planningRunRef"];
     if (typeof planningRunRef !== "string") continue;
     const run = dataRecord(stateOf(ledger, planningRunRef));
-    const sealed = dataRecord(dataRecord(run?.["state"])?.["sealedHashes"]);
+    const runState = dataRecord(run?.["state"]);
+    if (runState?.["goalRef"] !== aggregateId) continue;
+    const sealed = dataRecord(runState?.["sealedHashes"]);
     const graphContentHash = sealed?.["graphContentHash"];
     if (typeof graphContentHash !== "string" || !HEX_64.test(graphContentHash)) continue;
     const body = readGraphBody(store, projectId, graphContentHash);
@@ -116,10 +119,11 @@ interface SealedNode {
   readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
+  readonly nodeRef: string;
   readonly objective: string;
 }
 
-function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
+function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
   const nodes: SealedNode[] = [];
   const listed = new Set<string>();
   for (const graph of graphs) {
@@ -127,17 +131,19 @@ function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedN
     const bearing = new Set(snapshotNodes
       .filter((node) => node.executionBearing).map((node) => node.nodeKey));
     for (const definition of graph.content.nodeAuthority.definitions) {
-      if (!bearing.has(definition.nodeKey) || listed.has(definition.nodeKey)) continue;
-      listed.add(definition.nodeKey);
+      const nodeRef = compiledExecutionRef(projectId, graph, definition.nodeKey);
+      if (!bearing.has(definition.nodeKey) || listed.has(nodeRef)) continue;
+      listed.add(nodeRef);
       nodes.push(Object.freeze({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
         // The SAME derivation the runs projection uses (runs-read.ts), read off
-        // the graph that won the dedupe: two spellings of build order are how
+        // this node's sealed graph: two spellings of build order are how
         // the board and the affordance surface come to disagree about it.
         dependsOn: edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)
-          .map((edge) => edge.producerNodeKey),
+          .map((edge) => compiledExecutionRef(projectId, graph, edge.producerNodeKey)),
         goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
+        nodeRef,
         objective: definition.objective,
       }));
     }
@@ -180,20 +186,20 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
   const sealed = (): readonly SealedNode[] => {
     try {
       const graphs = readActive(options.store, options.projectId);
-      const ambiguous = ambiguousCompiledNodeKeys(options.store, options.projectId, graphs);
+      const ambiguous = legacyCompiledNodeKeys(options.store, options.projectId, graphs);
       const blocked = nodesBlockedByIdentity(graphs, ambiguous);
-      return sealedNodesOf(graphs).filter((node) => !blocked.has(node.nodeKey));
+      return sealedNodesOf(options.projectId, graphs).filter((node) => !blocked.has(node.nodeKey));
     } catch {
       // A degraded read lists nothing rather than throwing the surface down.
       return [];
     }
   };
   const nodes = (): readonly NodeSpec[] => sealed().map((node) => Object.freeze({
-    dependsOn: Object.freeze([...node.dependsOn]), nodeRef: node.nodeKey, title: node.objective,
+    dependsOn: Object.freeze([...node.dependsOn]), nodeRef: node.nodeRef, title: node.objective,
   }));
   const mission = (nodeRef: string): CompiledNodeMission | null => {
     if (options.workspace === null || options.testCommand === null) return null;
-    const node = sealed().find((candidate) => candidate.nodeKey === nodeRef);
+    const node = sealed().find((candidate) => candidate.nodeRef === nodeRef);
     if (node === undefined) return null;
     let statements: readonly string[];
     try {

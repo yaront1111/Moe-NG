@@ -22,6 +22,7 @@ function record(store: SqliteEventStore, aggregateId: string, value: object): vo
 export function recordHistoricalCompiledGraph(
   store: SqliteEventStore, plan: { readonly encoded: GraphContent; readonly goalRef: string; readonly planningRunRef: string },
   missingBody = false,
+  finalLifecycle: "CANCELLED" | "EXECUTION_ENABLED" = "CANCELLED",
 ): void {
   if (!missingBody && !putGraphBody(store, PROJECT_ID, plan.encoded).ok) throw new Error("history graph refused");
   record(store, plan.planningRunRef, { state: {
@@ -30,5 +31,5 @@ export function recordHistoricalCompiledGraph(
   } });
   const goal = { goalId: plan.goalRef, planningRunRef: plan.planningRunRef, projectId: PROJECT_ID };
   record(store, plan.goalRef, { ...goal, lifecycle: "EXECUTION_ENABLED" });
-  record(store, plan.goalRef, { ...goal, lifecycle: "CANCELLED" });
+  record(store, plan.goalRef, { ...goal, lifecycle: finalLifecycle });
 }

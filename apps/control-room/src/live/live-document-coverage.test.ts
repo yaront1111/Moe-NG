@@ -14,10 +14,10 @@ import { mapDocumentCoverageAnswer, readDocumentCoverage } from "./live-document
 const SHA = "b".repeat(64);
 
 const CRITERION = Object.freeze({
-  criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep their fields.", status: "VERIFIED",
+  criterionId: "crit-1", nodeKey: "node-a", nodeTestStatus: null, statement: "Rows keep their fields.", status: "VERIFIED",
 });
 const REQUIREMENT = Object.freeze({
-  criteria: [CRITERION, { criterionId: "crit-2", nodeKey: null, statement: "No edits.", status: "UNPLANNED" }],
+  criteria: [CRITERION, { criterionId: "crit-2", nodeKey: null, nodeTestStatus: null, statement: "No edits.", status: "UNPLANNED" }],
   requirementId: "req-evidence",
   statement: "Evidence is immutable (PRD 11).",
 });
@@ -42,14 +42,38 @@ function response(status: number, body: unknown): Response {
 }
 
 describe("mapDocumentCoverageAnswer shapes the coverage route's answer", () => {
+  it("carries node test success separately from criterion evidence required", () => {
+    const criterion = { ...CRITERION, nodeTestStatus: "NODE_TEST_PASSED", status: "EVIDENCE_REQUIRED" };
+    const frame = { ...COVERAGE, contracts: [{ ...CONTRACT, requirements: [{ ...REQUIREMENT, criteria: [criterion] }] }],
+      totals: { ...COVERAGE.totals, criteria: 1, verified: 0 } };
+    const answer = mapDocumentCoverageAnswer(200, frame);
+    expect(answer.status).toBe("COVERAGE");
+    if (answer.status !== "COVERAGE") throw new Error("coverage refused");
+    expect(answer.contracts[0]?.requirements[0]?.criteria).toEqual([criterion]);
+    expect(answer.totals.verified).toBe(0);
+    for (const nodeTestStatus of ["VERIFIED", undefined, "PASS"]) {
+      expect(mapDocumentCoverageAnswer(200, { ...frame, contracts: [{ ...CONTRACT,
+        requirements: [{ ...REQUIREMENT, criteria: [{ ...criterion, nodeTestStatus }] }],
+      }] }).status).toBe("ERROR");
+    }
+    for (const malformed of [
+      { ...criterion, nodeTestStatus: null }, { ...criterion, nodeKey: null },
+      { ...criterion, status: "UNATTRIBUTABLE" }, { ...criterion, status: "PLANNED" },
+    ]) {
+      expect(mapDocumentCoverageAnswer(200, { ...frame, contracts: [{ ...CONTRACT,
+        requirements: [{ ...REQUIREMENT, criteria: [malformed] }],
+      }] }).status).toBe("ERROR");
+    }
+  });
+
   it("maps a full COVERAGE frame, carrying the advisory section map", () => {
     expect(mapDocumentCoverageAnswer(200, COVERAGE)).toStrictEqual({
       contracts: [{
         contractId: "contract-1", gate1: "APPROVED", plane: "V1",
         requirements: [{
           criteria: [
-            { criterionId: "crit-1", nodeKey: "node-a", statement: "Rows keep their fields.", status: "VERIFIED" },
-            { criterionId: "crit-2", nodeKey: null, statement: "No edits.", status: "UNPLANNED" },
+            { criterionId: "crit-1", nodeKey: "node-a", nodeTestStatus: null, statement: "Rows keep their fields.", status: "VERIFIED" },
+            { criterionId: "crit-2", nodeKey: null, nodeTestStatus: null, statement: "No edits.", status: "UNPLANNED" },
           ],
           requirementId: "req-evidence", statement: "Evidence is immutable (PRD 11).",
         }],

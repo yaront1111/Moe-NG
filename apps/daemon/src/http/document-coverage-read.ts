@@ -8,10 +8,9 @@
  *  - the sealed nodes of the bound goals' activated plans (widened to COMPLETED goals so
  *    closed work keeps counting), whose `criterionBindings` say which criteria a node
  *    delivers;
- *  - ONE review-ledger walk for those nodes: `accepted` is the ONLY thing that makes a
- *    criterion VERIFIED. A node key carried by another activated plan too, or a ledger that
- *    does not read, is UNATTRIBUTABLE: the review ledger is keyed by bare node key, so no
- *    durable fact says whose acceptance it holds;
+ *  - ONE review-ledger walk for those nodes: `accepted` proves NODE_TEST_PASSED only.
+ *    Criterion evidence remains EVIDENCE_REQUIRED. Legacy bare-key execution or an unreadable
+ *    scoped ledger is UNATTRIBUTABLE. Reused local keys do not join distinct scoped subjects;
  *  - each goal's last activity from the decision ledger.
  *
  * The section map is prose-derived and advisory; the document text comes through the goal
@@ -20,6 +19,7 @@
 import {
   admitProductContractRevisionRef, decodeProductContractRevisionV2Bytes, deriveProductContractRevisionDigest,
 } from "@moe/core";
+import { encodeGraphContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
@@ -27,7 +27,9 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
-import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
+import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/compiled-node-identity.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { locateSealedAuthority } from "../planning/planning-authority-reader-seal.js";
 import { readProductContractGate1Approval } from "../product-contract/product-contract-gate-1-reader.js";
 import { PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE } from "../product-contract/product-contract-v2-event-contract.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
@@ -72,8 +74,8 @@ const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>> : null;
 
-interface SealedNode { readonly criterionIds: readonly string[]; readonly goalRef: string; readonly nodeKey: string }
-interface Carrier { readonly nodeKey: string; readonly status: CriterionCoverageStatus }
+interface SealedNode { readonly criterionIds: readonly string[]; readonly goalRef: string; readonly nodeKey: string; readonly nodeRef: string }
+interface Carrier { readonly criterionId: string; readonly goalRef: string; readonly nodeKey: string; readonly status: CriterionCoverageStatus }
 interface StatementRow { readonly id: string; readonly statement: string }
 interface Candidate {
   readonly contractId: string;
@@ -84,8 +86,14 @@ interface Candidate {
   readonly revisionId: string;
 }
 type CandidateOutcome = { readonly candidate: Candidate } | { readonly code: string; readonly layer: string } | null;
+const RANK: Record<CriterionCoverageStatus, number> = { EVIDENCE_REQUIRED: 1, PLANNED: 0, UNATTRIBUTABLE: 3, UNPLANNED: -1, VERIFIED: 2 };
+const candidateKey = (candidate: Candidate): string => JSON.stringify([
+  candidate.plane, candidate.contractId, candidate.revisionId, candidate.revisionDigest,
+]);
+const criterionContent = (rows: readonly { readonly criterionId: string; readonly statement: string }[]): string =>
+  JSON.stringify(rows.map((row) => [row.criterionId, row.statement]).sort((left, right) => left[0]! < right[0]! ? -1 : left[0]! > right[0]! ? 1 : 0));
 
-function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): SealedNode[] {
+function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]): SealedNode[] {
   const nodes: SealedNode[] = [];
   for (const graph of graphs) {
     const bearing = new Set(graph.content.snapshot.nodes
@@ -95,6 +103,7 @@ function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): SealedNode[] {
       nodes.push({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
         goalRef: graph.goalRef, nodeKey: definition.nodeKey,
+        nodeRef: compiledExecutionRef(projectId, graph, definition.nodeKey),
       });
     }
   }
@@ -165,7 +174,7 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
   };
 
   /** One revision per contract citing the document, or the first refusal met. */
-  const contractsOf = (ledger: DurableLedger, sha: string, carried: ReadonlyMap<string, Carrier>): ContractCoverage[] | { readonly code: string; readonly layer: string } => {
+  const contractsOf = (ledger: DurableLedger, sha: string, carried: ReadonlyMap<string, Carrier>, graphs: readonly ActiveCompiledGraph[]): ContractCoverage[] | { readonly code: string; readonly layer: string } => {
     const byContract = new Map<string, { approved: Candidate[]; pending: Candidate[] }>();
     for (const [aggregateId] of ledger.aggregates) {
       let outcome: CandidateOutcome = null;
@@ -183,6 +192,33 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
       (gate ? bucket.approved : bucket.pending).push(outcome.candidate);
       byContract.set(outcome.candidate.contractId, bucket);
     }
+    // V1 did not persist the full Product Contract ref on its run. Re-prove the
+    // goal/run/graph seal and exact criterion content; only one compatible approved
+    // revision may carry a node fact. Prefixes and the current Gate 1 selection are
+    // not provenance. Ambiguous or absent associations remain unattributable.
+    const candidates = [...byContract.values()].flatMap((bucket) => bucket.approved);
+    const associations = new Map<string, string>();
+    for (const graph of graphs) {
+      const sealed = locateSealedAuthority(store, projectId, graph.goalRef);
+      if ("ok" in sealed || sealed.runId !== graph.planningRunRef) continue;
+      const encoded = encodeGraphContent(graph.content);
+      if (!encoded.ok || sealed.revision.graphBinding.graphContentHash !== encoded.value.graphContentHash) continue;
+      const content = criterionContent(sealed.contract.obligations);
+      const compatible = candidates.filter((candidate) => candidate.plane === "V1"
+        && criterionContent(candidate.criteria.map((row) => ({ criterionId: row.id, statement: row.statement }))) === content);
+      if (compatible.length === 1) associations.set(graph.goalRef, candidateKey(compatible[0]!));
+    }
+    const carrierFor = (candidate: Candidate, criterionId: string): Carrier | undefined => {
+      let selected: Carrier | undefined;
+      for (const carrier of carried.values()) {
+        if (carrier.criterionId !== criterionId) continue;
+        const association = associations.get(carrier.goalRef);
+        if (association !== undefined && association !== candidateKey(candidate)) continue;
+        const next: Carrier = association === undefined ? { ...carrier, status: "UNATTRIBUTABLE" } : carrier;
+        if (selected === undefined || RANK[next.status] > RANK[selected.status]) selected = next;
+      }
+      return selected;
+    };
     const sortKey = (row: Candidate): string => `${row.contractId} ${row.revisionId}`;
     const contracts: ContractCoverage[] = [];
     for (const [contractId, bucket] of byContract) {
@@ -197,9 +233,10 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
         requirements: Object.freeze(chosen.requirements.map((requirement): RequirementCoverage => Object.freeze({
           criteria: Object.freeze(chosen.criteria.filter((criterion) => criterion.requirementId === requirement.id)
             .map((criterion): CriterionCoverage => {
-              const carrier = carried.get(criterion.id);
+              const carrier = carrierFor(chosen, criterion.id);
               return Object.freeze({
                 criterionId: criterion.id, nodeKey: carrier?.nodeKey ?? null,
+                nodeTestStatus: carrier?.status === "EVIDENCE_REQUIRED" ? "NODE_TEST_PASSED" : null,
                 statement: criterion.statement, status: carrier?.status ?? "UNPLANNED",
               });
             })),
@@ -213,46 +250,43 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
     return contracts.sort((left, right) => left.contractId.localeCompare(right.contractId));
   };
 
-  const coverageOf = (sha: string, allGoals: readonly BoundGoalRow[], ledger: DurableLedger): DocumentCoverageReadResult => {
+  const coverageOf = (sha: string, allGoals: readonly BoundGoalRow[], ledger: DurableLedger, selectedGoal?: string): DocumentCoverageReadResult => {
     const bound = allGoals.filter((goal) => goal.sha === sha);
     const goalIds = new Set(bound.map((goal) => goal.goalId));
     // Every activated plan, not only this document's: a shared key is shared with ANY plan.
     const graphs = readActive(store, projectId, ledger);
-    const allNodes = sealedNodesOf(graphs);
-    const ambiguous = ambiguousCompiledNodeKeys(store, projectId, graphs, ledger);
-    const counts = new Map<string, number>();
-    for (const node of allNodes) counts.set(node.nodeKey, (counts.get(node.nodeKey) ?? 0) + 1);
+    const allNodes = sealedNodesOf(projectId, graphs);
+    const ambiguous = nodesBlockedByIdentity(graphs, legacyCompiledNodeKeys(store, projectId, graphs, ledger));
     const nodes = allNodes.filter((node) => goalIds.has(node.goalRef));
-    const nodeKeys = new Set(nodes.map((node) => node.nodeKey));
+    const nodeKeys = new Set(nodes.map((node) => node.nodeRef));
     const reviews = readReviews(store, projectId, nodeKeys);
     const carried = new Map<string, Carrier>();
     // A criterion carried by several nodes folds by a TOTAL order, so the answer cannot depend
-    // on definition order: UNATTRIBUTABLE outranks VERIFIED outranks PLANNED. A shared or
-    // unreadable carrier taints the criterion however another carrier reads — that verification
-    // is exactly the evidence the criterion cannot be attributed on — and the goal.close offer is
-    // gated on every criterion VERIFIED, so it must not appear or vanish on a re-ordered graph.
+    // on definition order: UNATTRIBUTABLE outranks EVIDENCE_REQUIRED outranks PLANNED.
+    // An unattributable carrier withholds the node-test assertion for the whole criterion.
     // Ties keep the first carrier, so the reported nodeKey stays stable.
-    const rank: Record<CriterionCoverageStatus, number> = { PLANNED: 0, UNATTRIBUTABLE: 2, UNPLANNED: -1, VERIFIED: 1 };
     for (const node of nodes) {
-      const facts = reviews.get(node.nodeKey);
+      if (selectedGoal !== undefined && node.goalRef !== selectedGoal) continue;
+      const facts = reviews.get(node.nodeRef);
       const status: CriterionCoverageStatus = ambiguous.has(node.nodeKey)
-        || (counts.get(node.nodeKey) ?? 0) > 1 || facts?.unreadable === true
-        ? "UNATTRIBUTABLE" : facts?.accepted !== undefined ? "VERIFIED" : "PLANNED";
+        || facts?.unreadable === true
+        ? "UNATTRIBUTABLE" : facts?.accepted !== undefined ? "EVIDENCE_REQUIRED" : "PLANNED";
       for (const criterionId of node.criterionIds) {
-        const current = carried.get(criterionId);
-        if (current === undefined || rank[status] > rank[current.status]) {
-          carried.set(criterionId, { nodeKey: node.nodeKey, status });
+        const key = JSON.stringify([node.goalRef, criterionId]);
+        const current = carried.get(key);
+        if (current === undefined || RANK[status] > RANK[current.status]) {
+          carried.set(key, { criterionId, goalRef: node.goalRef, nodeKey: node.nodeKey, status });
         }
       }
     }
-    const contracts = contractsOf(ledger, sha, carried);
+    const contracts = contractsOf(ledger, sha, carried, graphs.filter((graph) => goalIds.has(graph.goalRef)));
     if (!Array.isArray(contracts)) return refused(contracts.code, contracts.layer);
     const latest = lastDecidedAt(store, projectId, new Set([
       ...bound.flatMap((goal) => [goal.goalId, ...(goal.planningRunRef === null ? [] : [goal.planningRunRef])]),
       ...nodeKeys,
     ]));
     const goals: GoalCoverage[] = bound.map((goal) => {
-      const own = [goal.goalId, goal.planningRunRef ?? "", ...nodes.filter((node) => node.goalRef === goal.goalId).map((node) => node.nodeKey)];
+      const own = [goal.goalId, goal.planningRunRef ?? "", ...nodes.filter((node) => node.goalRef === goal.goalId).map((node) => node.nodeRef)];
       let last: string | null = null;
       for (const id of own) { const at = latest.get(id); if (at !== undefined && (last === null || at > last)) last = at; }
       return Object.freeze({ goalId: goal.goalId, lastActivityAt: last, lifecycle: goal.lifecycle, planningRunRef: goal.planningRunRef, title: goal.title });
@@ -289,7 +323,7 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
       if ("goalRef" in selector) {
         const bound = allGoals.find((goal) => goal.goalId === selector.goalRef);
         if (bound === undefined) return refused("DOCUMENT_COVERAGE_READ_GOAL_UNBOUND");
-        return coverageOf(bound.sha, allGoals, ledger);
+        return coverageOf(bound.sha, allGoals, ledger, selector.goalRef);
       }
       if (!LOWER_HEX_64.test(selector.contentSha256)) return refused("DOCUMENT_COVERAGE_READ_MALFORMED");
       return coverageOf(selector.contentSha256, allGoals, ledger);

@@ -1,30 +1,11 @@
 /**
  * GOAL CLOSE READINESS: is every approved criterion of this goal's Product Contract verified?
  *
- * Two layers of arm here, deliberately.
- *
- * The UNIT arms drive `readGoalCloseReadiness` over a hand-built port whose answers are the
- * REAL frames `document-coverage-read.test.ts` pins on the production port (its empty-totals,
- * pending-contract, planned and verified expectations), so the shapes cannot drift from what the
- * production read actually answers while staying green here.
- *
- * The REAL-STORE arms drive `goalCloseReadinessFor` over the production composition against a
- * world built by the shipped writers only — `goal.create_with_source`, the `/1` revision
- * proposer, the Gate 1 command over a real paired operator session, the production compiler, the
- * production approval intent and `integration.accept_output` over the daemon's own verifier
- * receipt. Nothing is planted.
- *
- * THE COMPILER FENCES THE REACHABLE STATES, and they are not the ones a naive plan assumes:
- * `runSubmitDecomposition` admits N nodes — an INITIAL run seals the WHOLE graph — but the
- * compiled-plan producer still refuses a graph that leaves any contract criterion bound by no
- * node (COMPILED_PLAN_CRITERION_UNBOUND). COVERAGE, not node count, is the fence, so a contract
- * can never be PLANNED into partial coverage: whatever its node count, every one of its approved
- * criteria is bound somewhere in the sealed graph. The strict 0 < verified < criteria asserted
- * below is reached the way a real product reaches it — with a SECOND contract citing the same
- * document whose criterion ids are DISTINCT, which is exactly the "another Product Contract is
- * still pending Gate 1" state. (A multi-node graph can of course sit part-verified mid-build,
- * as its nodes are accepted one at a time; that is a different state from the one these arms
- * pin, and no arm here depends on it being unreachable.)
+ * Unit arms exercise readiness arithmetic with explicit injected coverage, including reserved
+ * VERIFIED states. Production has no criterion-specific evidence writer yet. The real-store
+ * arms use shipped contract, approval, compiler and review writers with test verifier/landing
+ * receipts: generic node acceptance stays EVIDENCE_REQUIRED and blocks both the close command
+ * and its offered action. No injected criterion evidence grants authority to the real-store arms.
  */
 import type { JsonObject } from "@moe/contracts";
 import { SqliteEventStore } from "@moe/store";
@@ -45,6 +26,9 @@ import { createSessionAuthority } from "../identity/session-authority.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { createAffordancePort } from "../http/affordance-read.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { createDocumentCoverageReadPort } from "../http/document-coverage-read.js";
 import { coverageRefused } from "../http/document-coverage-contract.js";
 import type {
   DocumentCoverageReadPort, DocumentCoverageReadResult,
@@ -237,7 +221,8 @@ function sealAndActivate(
 }
 
 /** The PRODUCTION acceptance over the daemon's own verifier receipt. */
-function acceptNode(store: SqliteEventStore, nodeKey: string): void {
+function acceptNode(store: SqliteEventStore, nodeKey: string): string {
+  nodeKey = compiledExecutionRef(PROJECT_ID, activeCompiledGraphs(store, PROJECT_ID)[0]!, nodeKey);
   const seeded = seedVerifierReceipt(store, nodeKey, PROJECT_ID);
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
     commandId: `cmd-accept-${nodeKey}`, correlationId: "corr-accept",
@@ -247,6 +232,7 @@ function acceptNode(store: SqliteEventStore, nodeKey: string): void {
     principalId: "operator-local", projectId: PROJECT_ID, schemaVersion: "moe-review-command/1",
   })));
   if (!outcome.ok) throw new Error(`acceptance refused: ${outcome.code}`);
+  return nodeKey;
 }
 
 /** A contract-bearing goal whose approved contract carries `ids`, sealed and activated. */
@@ -329,7 +315,7 @@ describe("goalCloseReadinessFor over a real store", () => {
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID)).toEqual({ kind: "NO_CONTRACT" });
   }, 30_000);
 
-  it("goes NOT_READY -> READY as the sealed node's acceptance lands", () => {
+  it("stays NOT_READY when the sealed node test is accepted without criterion evidence", () => {
     const ids = ["crit-1", "crit-2", "crit-3"];
     const { store } = contractBearingWorld(ids);
 
@@ -340,22 +326,21 @@ describe("goalCloseReadinessFor over a real store", () => {
     acceptNode(store, "node-slice");
 
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID))
-      .toEqual({ criteria: 3, kind: "READY" });
+      .toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
   }, 30_000);
 
   it("stays NOT_READY while a SECOND contract's criteria are still unverified", () => {
-    // The state a real product sits in: one contract shipped, another still awaiting Gate 1.
-    // Its criterion ids are DISTINCT, so the sealed node does not carry them and the goal is
-    // not ready however complete the first contract is.
+    // A new contract increases the missing evidence count; the earlier node test remains
+    // accepted but cannot verify either contract's criteria.
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
     acceptNode(store, "node-slice");
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID))
-      .toEqual({ criteria: 3, kind: "READY" });
+      .toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
 
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);
 
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID))
-      .toEqual({ criteria: 5, kind: "NOT_READY", verified: 3 });
+      .toEqual({ criteria: 5, kind: "NOT_READY", verified: 0 });
   }, 30_000);
 });
 
@@ -415,31 +400,31 @@ describe("goal.close refuses until every approved criterion is verified", () => 
       { lifecycle?: string } | undefined)?.lifecycle).toBe("EXECUTION_ENABLED");
   }, 30_000);
 
-  it("stops refusing on THIS gate once every criterion is verified, handing off to the node legs", () => {
-    // FALL-THROUGH, PINNED POSITIVELY. Asserting merely "not refused with the new code" would
-    // stay green if the gate started refusing under any other code, so the arm names the code
-    // the NEXT gate answers with. `qualifyGoalClosure` is the LIVE leg (task-ae6fd9ac): it
-    // refuses this world REVIEW_ACCEPTANCE_REQUIRED because the compiled journey's activation
-    // records an EMPTY `approvedNodeScope` (see the note on this row) — a different gate, at
-    // the same layer, reached only because readiness let the command through.
+  it("refuses closure after a real node test acceptance and landing without criterion evidence", () => {
     const { store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
-    acceptNode(store, "node-slice");
-    expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID)).toEqual({ criteria: 3, kind: "READY" });
-
+    const nodeRef = acceptNode(store, "node-slice");
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    const before = decisionCount(store);
     const outcome = closeAttempt(store);
-
     expect(outcome).toMatchObject({
-      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+      code: "GOAL_CLOSE_CRITERIA_UNVERIFIED", ok: false, refusedBy: "DAEMON_PREREQUISITE",
     });
-    expect(outcome.ok ? "" : outcome.code).not.toBe("GOAL_CLOSE_CRITERIA_UNVERIFIED");
+    const coverage = createDocumentCoverageReadPort({ projectId: PROJECT_ID, store }).readCoverage({ goalRef: GOAL_ID });
+    expect(coverage.outcome).toBe("COVERAGE");
+    if (coverage.outcome !== "COVERAGE") throw new Error("fixture coverage refused");
+    expect(coverage.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria)))
+      .toHaveLength(3);
+    expect(coverage.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria)))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ nodeTestStatus: "NODE_TEST_PASSED", status: "EVIDENCE_REQUIRED" })]));
+    expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID)).toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents(GOAL_ID).filter((event) => event.eventType === "GoalCompleted")).toHaveLength(0);
   }, 30_000);
 
-  it("refuses again the moment a NEW contract adds an unverified criterion", () => {
-    // Readiness is READ, never stored: a contract proposed after the work was accepted takes
-    // the goal back out of closeable without anything invalidating a cache.
+  it("keeps refusing when a new contract adds more criteria without evidence", () => {
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
     acceptNode(store, "node-slice");
-    expect(closeAttempt(store)).toMatchObject({ code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED" });
+    expect(closeAttempt(store)).toMatchObject({ code: "GOAL_CLOSE_CRITERIA_UNVERIFIED" });
 
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);
 
@@ -494,34 +479,28 @@ describe("/affordances/read withholds goal.close until the product is verified",
       .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
   };
 
-  it("withholds the offer while a criterion is unverified and adds it on the last acceptance", () => {
+  it("withholds close after node test acceptance and landing while retaining the publish offer", () => {
     const { store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
 
-    // Set-equality, never `not.toContain`: the arm has to show the REST of the surface is
-    // unchanged. This world has landed no commit, so `repository.publish` is absent throughout
-    // by task-f6f33a39's gate (owned by goal-landing-facts.test.ts) — the final assertion lands
-    // one, which both restores the "rest of the surface" witness and shows the two gates are
-    // independent: the close turns on verification, the publish on a commit.
+    // A publishable commit proves landing, while criterion evidence still gates close.
     expect(goalOffers(store)).toEqual([]);
 
-    acceptNode(store, "node-slice");
+    const nodeRef = acceptNode(store, "node-slice");
 
-    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual([]);
 
-    seedLandingReceipt(store, "node-slice", "COMMITTED");
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
 
     expect(goalOffers(store)).toEqual([
-      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+      `repository.publish@publish:${GOAL_ID}`,
     ]);
   }, 30_000);
 
-  it("takes the offer away again when a new contract adds an unverified criterion", () => {
+  it("keeps close withheld and publish available when a new contract adds criteria", () => {
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
-    acceptNode(store, "node-slice");
-    // Landed here so the roster below is NON-EMPTY: the arm must show the close alone was
-    // withdrawn, not that the whole per-goal ladder went dark.
-    seedLandingReceipt(store, "node-slice", "COMMITTED");
-    expect(goalOffers(store)).toContain(`goal.close@${GOAL_ID}`);
+    const nodeRef = acceptNode(store, "node-slice");
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    expect(goalOffers(store)).toEqual([`repository.publish@publish:${GOAL_ID}`]);
 
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);
 

@@ -22,6 +22,7 @@ import {
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
+import { COMPILED_EXECUTION_REF_PREFIX } from "./orchestrator/compiled-execution-ref.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -49,6 +50,7 @@ import { createPolicyReadPort } from "./http/policy-read.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
 import { createHealthReadPort } from "./http/health-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
+import { createRepositoryExecutionPort } from "./repository/repository-execution-port.js";
 import { createActivityReadPort } from "./http/activity-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import { createSessionsReadPort } from "./http/sessions-read.js";
@@ -126,6 +128,7 @@ function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
           nodeRef?: unknown; title?: unknown;
         };
         if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
+          && !parsed.nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)
           && typeof parsed.title === "string") {
           // A file-authored spec carries no sealed build order — this format has
           // no dependency field to read — so it declares none rather than
@@ -381,6 +384,10 @@ export function createStoreDependencies(
   });
   /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
   const composedAt = (config.clock ?? (() => new Date().toISOString()))();
+  // This is the wrapper's configured compiled-workspace binding, captured for this daemon.
+  // No CWD fallback: an unconfigured or spec-only workspace remains UNKNOWN on Health.
+  const repositoryWorkspace = process.env["MOE_NODE_WORKSPACE"];
+  const repositoryExecution = createRepositoryExecutionPort();
   const health = (): HealthReadPort => createHealthReadPort({
     // The SAME clock every authority decision reads, so a provider pause and the decisions the
     // daemon takes while it holds agree on what "now" is.
@@ -388,6 +395,8 @@ export function createStoreDependencies(
     nodeSpecsDir: config.nodeSpecsDir ?? null,
     projectId: config.projectId,
     readPlane: () => commandAuthorityPlane().readPlane(),
+    readRepository: repositoryWorkspace === undefined || repositoryWorkspace === ""
+      ? undefined : () => repositoryExecution.inspect(repositoryWorkspace),
     startedAt: composedAt,
     store,
     storePath: config.storePath,

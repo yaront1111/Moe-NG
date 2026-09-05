@@ -23,7 +23,7 @@ const RUN = "run-1";
 
 function node(nodeKey: string, status: RunNodeView["status"], extra: Partial<RunNodeView> = {}): RunNodeView {
   return {
-    accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null, nodeKey,
+    accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null, nodeKey, nodeRef: `execution-${nodeKey}`,
     objective: `Objective of ${nodeKey}`, receipt: null,
     review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
     sharedKey: false, status, ...extra,
@@ -50,8 +50,8 @@ const COVERAGE: DocumentCoverageOutcome = {
   contracts: [{
     contractId: "contract-1", gate1: "APPROVED", plane: "V1", requirements: [{
       criteria: [
-        { criterionId: "crit-1", nodeKey: "n-done", statement: "Ingest persists before extraction", status: "VERIFIED" },
-        { criterionId: "crit-2", nodeKey: "n-work", statement: "Evidence survives a throwing extractor", status: "PLANNED" },
+        { criterionId: "crit-1", nodeKey: "n-done", nodeTestStatus: null, statement: "Ingest persists before extraction", status: "VERIFIED" },
+        { criterionId: "crit-2", nodeKey: "n-work", nodeTestStatus: null, statement: "Evidence survives a throwing extractor", status: "PLANNED" },
       ],
       requirementId: "req-1", statement: "The ledger is durable",
     }], revisionDigest: "d".repeat(64), revisionId: "rev-1",
@@ -73,7 +73,7 @@ const SURFACE: SurfaceFrame = {
 
 const ACTIVITY: ActivityOutcome = {
   entries: [
-    { commandKind: "review.submit", decidedAt: "2026-09-04T08:25:00.000Z", disposition: "COMMITTED", principalId: "daemon:node-verifier", targetAggregateId: "n-rework", verdict: "REJECT_IMPLEMENTATION", version: 5 },
+    { commandKind: "review.submit", decidedAt: "2026-09-04T08:25:00.000Z", disposition: "COMMITTED", principalId: "daemon:node-verifier", targetAggregateId: "execution-n-rework", verdict: "REJECT_IMPLEMENTATION", version: 5 },
     { commandKind: "approval.decide_intent", decidedAt: "2026-09-04T08:18:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: RUN, verdict: null, version: 2 },
     { commandKind: "planning.submit_decomposition", decidedAt: "2026-09-04T08:08:00.000Z", disposition: "COMMITTED", principalId: "sess-wrap-0", targetAggregateId: GOAL, verdict: null, version: 1 },
     { commandKind: "OPEN_SESSION", decidedAt: "2026-09-04T08:00:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: "moe.session-authority.v1/session/s-1", verdict: null, version: 1 },

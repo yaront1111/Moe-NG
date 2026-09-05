@@ -10,7 +10,7 @@ export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.free
   IN_PROGRESS: "In progress",
   READY: "Ready for an agent",
   REPLANNED: "Replanned into a successor goal",
-  UNATTRIBUTABLE: "Shared key, not attributable",
+  UNATTRIBUTABLE: "Legacy execution needs attribution",
 });
 
 export const GOAL_WORDS: Readonly<Record<string, string>> = Object.freeze({

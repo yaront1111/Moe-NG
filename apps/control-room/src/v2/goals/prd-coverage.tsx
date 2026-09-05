@@ -13,8 +13,8 @@ import { readFailedSaid } from "../outcome-words.js";
  *
  * Every number here is the daemon's own join over its durable ledger - contracts citing the
  * document, the criteria their requirements carry, the sealed node each criterion is bound
- * to, and the acceptance the node's review ledger holds. VERIFIED is the daemon's verifier
- * receipt consumed by `integration.accept_output`, nothing softer. The card never computes
+ * to, and the acceptance the node's review ledger holds. A passing node test is distinct
+ * from criterion-specific evidence. The card never computes
  * a verdict of its own: "complete" is spelled out as exactly the facts that make it so, and
  * closing the goal stays the operator's decision.
  *
@@ -52,13 +52,17 @@ export function coverageBanner(coverage: Coverage): string {
       : "The contract carries no acceptance criteria yet.";
   }
   if (coverageComplete(coverage)) {
-    return `All ${criteria} acceptance criteria verified by the daemon's verifier`
+    return `All ${criteria} acceptance criteria verified with criterion-specific evidence`
       + ` ${MIDDOT} ${contracts} contract${contracts === 1 ? "" : "s"} approved.`
       + " The PRD is built as far as its contract states it. Closing the goal is your call.";
   }
-  const unplanned = criteria - verified - planned;
+  const rows = coverage.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria));
+  const unplanned = rows.filter((row) => row.status === "UNPLANNED").length;
+  const evidenceRequired = rows.filter((row) => row.status === "EVIDENCE_REQUIRED").length;
   return `${verified} of ${criteria} acceptance criteria verified ${MIDDOT} ${planned} planned`
+    + ` ${MIDDOT} ${evidenceRequired} evidence required`
     + ` ${MIDDOT} ${unplanned} unplanned`
+    + (coverage.totals.unattributable > 0 ? ` ${MIDDOT} ${coverage.totals.unattributable} unattributable` : "")
     + (coverage.contracts.some((contract) => contract.gate1 === "PENDING")
       ? ` ${MIDDOT} a contract still awaits Gate 1` : "");
 }
@@ -70,11 +74,12 @@ function CriterionRow({ criterion }: { readonly criterion: CoverageCriterionView
       data-status={criterion.status}
       data-testid={`cr.coverage.criterion.${criterion.criterionId}`}
     >
-      <span className="cr2-coverage-status">{criterion.status}</span>
+      <span className="cr2-coverage-status">{criterion.status === "EVIDENCE_REQUIRED" ? "Evidence required" : criterion.status}</span>
       <span className="cr2-approve-mono">{criterion.criterionId}</span>
       <span className="cr2-approve-step-body">
         {criterion.statement}
         {criterion.nodeKey === null ? "" : ` ${MIDDOT} ${criterion.nodeKey}`}
+        {criterion.nodeTestStatus === "NODE_TEST_PASSED" ? ` ${MIDDOT} Node test passed` : ""}
       </span>
     </li>
   );

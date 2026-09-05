@@ -65,7 +65,7 @@ function coverage(
       contractId: `contract-${goalId}`, gate1, plane: "V1",
       requirements: [{
         criteria: Array.from({ length: criteria }, (_, i) => ({
-          criterionId: `crit-${String(i)}`, nodeKey: null, statement: "s",
+          criterionId: `crit-${String(i)}`, nodeKey: null, nodeTestStatus: null, statement: "s",
           status: i < verified ? "VERIFIED" as const : "PLANNED" as const,
         })),
         requirementId: "req-1", statement: "r",
@@ -216,13 +216,13 @@ describe("deriveNeedsYou", () => {
   it("lists an escalation per escalation.decide offer, named through the runs read", () => {
     const offer = {
       commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-esc-1", commandKind: "escalation.decide",
-      expectedVersion: 4, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x",
+      expectedVersion: 4, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "execution-node-x",
     };
     const runs: RunsOutcome = {
       goals: [{
         goalId: "goal-a", lifecycle: "EXECUTION_ENABLED",
         nodes: [{
-          accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x",
+          accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "execution-node-x",
           objective: "o", landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
           status: "ESCALATION_REQUIRED",
         }],
@@ -240,7 +240,7 @@ describe("deriveNeedsYou", () => {
     expect(data.items[0]?.detail).toBe("o failed review 3 times (last: rejected: same finding again). Allow more attempts, or replan the work into a successor goal that carries these findings.");
     // Without the runs read the node is still listed, named by itself, with no goal to open.
     const bare = deriveNeedsYou({ catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(), surface: surface([offer]) });
-    expect(bare.items[0]).toMatchObject({ goalId: "", planningRunRef: "", title: "node node-x" });
+    expect(bare.items[0]).toMatchObject({ goalId: "", planningRunRef: "", title: "node execution-node-x" });
     expect(bare.items[0]?.detail).toContain("three or more times");
   });
 

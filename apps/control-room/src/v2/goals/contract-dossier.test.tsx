@@ -37,12 +37,12 @@ const COVERAGE_WIRE = Object.freeze({
     requirements: [{
       criteria: [
         {
-          criterionId: "crit-sso-1", nodeKey: "node-sign-in",
+          criterionId: "crit-sso-1", nodeKey: "node-sign-in", nodeTestStatus: "NODE_TEST_PASSED",
           statement: "A returning operator reaches the board without retyping a password.",
-          status: "VERIFIED",
+          status: "EVIDENCE_REQUIRED",
         },
         {
-          criterionId: "crit-sso-2", nodeKey: null,
+          criterionId: "crit-sso-2", nodeKey: null, nodeTestStatus: null,
           statement: "A revoked credential is refused with its own code.",
           status: "UNPLANNED",
         },
@@ -62,7 +62,7 @@ const COVERAGE_WIRE = Object.freeze({
   sections: null,
   totals: {
     contracts: 1, criteria: 2, goals: 1, planned: 0, requirements: 1, unattributable: 0,
-    verified: 1,
+    verified: 0,
   },
 });
 
@@ -92,8 +92,9 @@ describe("ContractDossier", () => {
   it("carries a NAMED criterion's coverage state into its own row", () => {
     render(<ContractDossier coverage={decodedCoverage()} gates={gateMap()} />);
     const verified = screen.getByTestId("cr.contract.criterion.crit-sso-1");
-    expect(verified.getAttribute("data-status")).toBe("VERIFIED");
-    expect(verified.textContent).toContain("VERIFIED");
+    expect(verified.getAttribute("data-status")).toBe("EVIDENCE_REQUIRED");
+    expect(verified.textContent).toContain("Evidence required");
+    expect(verified.textContent).toContain("Node test passed");
     expect(verified.textContent).toContain("crit-sso-1");
     expect(verified.textContent).toContain("node-sign-in");
     // The SECOND criterion of the SAME requirement carries a DIFFERENT state, so a card that
@@ -149,7 +150,7 @@ describe("LiveContractDossier", () => {
       revisionId: REAL_GATE_1_REF.revisionId,
     }]);
     expect(screen.getByTestId("cr.contract.criterion.crit-sso-1").getAttribute("data-status"))
-      .toBe("VERIFIED");
+      .toBe("EVIDENCE_REQUIRED");
   });
 });
 
@@ -196,7 +197,7 @@ describe("ContractDossier refusals and absence", () => {
     expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}`)).toBeNull();
     // INDEPENDENCE: one read refusing does not blank the other's answer.
     expect(screen.getByTestId("cr.contract.criterion.crit-sso-1").getAttribute("data-status"))
-      .toBe("VERIFIED");
+      .toBe("EVIDENCE_REQUIRED");
     expect(screen.getByTestId(`cr.contract.counts.${REAL_GATE_1_REF.contractId}`).textContent)
       .toContain("1 requirements");
   });

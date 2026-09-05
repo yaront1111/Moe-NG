@@ -12,6 +12,7 @@ import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
@@ -21,6 +22,7 @@ import type { NodeReviewFacts, NodeReviews, RunsReadOptions } from "./runs-read.
 
 const PRD = "# Run me\n\n## 11. Evidence\nRows are immutable.\n";
 const NOW = "2026-09-02T20:00:00.000Z";
+const ref = (key: string): string => compiledExecutionRef(PROJECT_ID, activeGraphFor(GOAL_ID), key);
 
 afterEach(closeStores);
 
@@ -68,14 +70,17 @@ const quiet: NodeReviewFacts = Object.freeze({
 const round = (route: string, number = 1): NodeReviewFacts["rounds"][number] =>
   ({ round: number, routing: { route } } as unknown as NodeReviewFacts["rounds"][number]);
 const claim = (nodeKey: string, expiresAt: string, status: "OPEN" | "RELEASED" = "OPEN"): [string, WorkClaimRecord] =>
-  [`node.deliver@${nodeKey}`, { claimedBy: "sess-wrap-1", expiresAt, status, version: 1, workItemId: `node.deliver@${nodeKey}` }];
+  [`node.deliver@${ref(nodeKey)}`, { claimedBy: "sess-wrap-1", expiresAt, status, version: 1, workItemId: `node.deliver@${ref(nodeKey)}` }];
 const reviewsOf = (
   facts: Record<string, NodeReviewFacts>, receipts: NodeReviews["receipts"] = new Map(),
   landings: NodeReviews["landings"] = new Map(),
 ) =>
-  (_s: unknown, _p: unknown, keys: ReadonlySet<string>): NodeReviews => ({
-    landings, ledgers: new Map([...keys].map((key) => [key, facts[key] ?? quiet])), receipts,
-  });
+  (_s: unknown, _p: unknown, keys: ReadonlySet<string>): NodeReviews => {
+    const scoped = new Map(Object.entries(facts).map(([key, value]) => [ref(key), value]));
+    return { landings: new Map([...landings].map(([key, value]) => [ref(key), value])),
+      ledgers: new Map([...keys].map((key) => [key, scoped.get(key) ?? quiet])),
+      receipts: new Map([...receipts].map(([key, value]) => [ref(key), value])) };
+  };
 
 function portFor(store: SqliteEventStore, overrides: Partial<RunsReadOptions> = {}) {
   return createRunsReadPort({
@@ -99,6 +104,16 @@ function runs(result: ReturnType<ReturnType<typeof portFor>["readRuns"]>): RunsV
 }
 
 describe("createRunsReadPort", () => {
+  it("carries the receipt's tested tree identity without exposing its internal binding", () => {
+    const store = boundWorld();
+    const receipt = { byteCount: 2, evidenceSha256: "e".repeat(64), exitCode: 0 as const,
+      outputSha256: "a".repeat(64), test: "node check.mjs", workspace: "/project",
+      workspaceBinding: { version: "moe-verified-workspace/1" as const, root: "/project", branchRef: "refs/heads/main",
+        headSha: "a".repeat(40), treeSha: "b".repeat(40), dirtySha256: "c".repeat(64) } };
+    const view = runs(portFor(store, { readReviews: reviewsOf({}, new Map([["node-a", receipt]])) }).readRuns({}));
+    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: "a".repeat(64),
+      test: "node check.mjs", testedTreeSha: "b".repeat(40), workspace: "/project" });
+  });
   it("walks the real ledgers for a plain bound goal: no plan, no nodes, honest run", () => {
     const store = boundWorld();
     const view = runs(createRunsReadPort({ projectId: PROJECT_ID, store }).readRuns({}));
@@ -143,7 +158,7 @@ describe("createRunsReadPort", () => {
       ["node-a", "ACCEPTED", { verifierReceiptId: "receipt-a" }, "ACCEPT"],
       ["node-b", "DELIVERED", null, "ACCEPT"],
     ]);
-    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" });
+    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", testedTreeSha: null, workspace: "D:/unai" });
     const rejected: NodeReviewFacts = {
       ...quiet, lineage: {
         records: [
@@ -184,7 +199,7 @@ describe("createRunsReadPort", () => {
     expect(view.totals).toMatchObject({ BLOCKED: 2, READY: 0 });
   });
 
-  it("refuses to attribute a node key that another activated plan also carries", () => {
+  it("attributes scoped facts when another activated plan carries the same local key", () => {
     const store = boundWorld();
     const accepted: NodeReviewFacts = {
       ...quiet, accepted: { policyDecision: "ALLOW", reviewInputDigest: "r", reviewerCalibrationDigest: "c", verifierReceiptId: "receipt-a", verifierReceiptSha256: "s" },
@@ -197,10 +212,10 @@ describe("createRunsReadPort", () => {
       readReviews: reviewsOf({ "node-a": accepted }),
     }).readRuns({ goalRef: GOAL_ID }));
     expect(view.goals[0]?.nodes.map((node) => [node.nodeKey, node.status, node.sharedKey, node.accepted !== null])).toEqual([
-      ["node-a", "UNATTRIBUTABLE", true, true],
+      ["node-a", "ACCEPTED", false, true],
       ["node-b", "READY", false, false],
     ]);
-    expect(view.totals).toMatchObject({ ACCEPTED: 0, UNATTRIBUTABLE: 1, nodes: 2 });
+    expect(view.totals).toMatchObject({ ACCEPTED: 1, UNATTRIBUTABLE: 0, nodes: 2 });
     // Control: the same acceptance with a unique key IS this goal's.
     const unique = runs(portFor(store, { readReviews: reviewsOf({ "node-a": accepted }) }).readRuns({ goalRef: GOAL_ID }));
     expect(unique.goals[0]?.nodes[0]?.status).toBe("ACCEPTED");
@@ -209,7 +224,7 @@ describe("createRunsReadPort", () => {
   it("carries the verifier's real receipt and a clean round through the default review reader", () => {
     const store = boundWorld();
     // The daemon's own receipt production: a clean round, then the receipt decision on the node.
-    seedVerifierReceipt(store, "node-a", PROJECT_ID);
+    seedVerifierReceipt(store, ref("node-a"), PROJECT_ID);
     const view = runs(createRunsReadPort({
       clock: () => NOW, projectId: PROJECT_ID, readActive: () => [activeGraphFor(GOAL_ID)], readClaims: () => new Map(),
       readRun: (_s, _p, runId) => ({ acceptance: null, approval: "BOUND", authority: null, lifecycle: "ACTIVATED", outcome: "RUN", plan: null, reviewable: false, runId, submissionHash: "h" }),
@@ -218,7 +233,7 @@ describe("createRunsReadPort", () => {
     const node = view.goals[0]?.nodes[0];
     expect(node?.status).toBe("DELIVERED");
     expect(node?.review).toMatchObject({ findings: [], latestRoute: "ACCEPT", rounds: 1 });
-    expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", workspace: "/fixture-workspace" });
+    expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", testedTreeSha: null, workspace: "/fixture-workspace" });
     expect(node?.landing).toBeNull();
   });
 

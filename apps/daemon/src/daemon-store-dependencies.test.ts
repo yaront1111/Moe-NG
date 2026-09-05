@@ -959,6 +959,9 @@ describe("the composed affordance port carries planning authority (task-ed89967f
       JSON.stringify({ nodeRef: NODE_REF, title: "The composed node" }),
       "utf8",
     );
+    writeFileSync(join(nodeSpecsDir, "forged-compiled.json"), JSON.stringify({
+      nodeRef: `node:v1:${"a".repeat(64)}`, title: "An operator spec cannot override compiled work",
+    }), "utf8");
     const store = SqliteEventStore.openForProject(authorityStorePath, AUTHORITY_PROJECT);
     installTestRecoveryBinding(store);
     let minted = 0;

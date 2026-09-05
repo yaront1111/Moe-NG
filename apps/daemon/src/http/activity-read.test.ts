@@ -12,6 +12,9 @@ import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord, verdictOf } from "./activity-read.js";
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
 import type { SqliteEventStore } from "@moe/store";
 import {
@@ -28,6 +31,24 @@ function activity(result: ReturnType<ActivityReadPort["readActivity"]>): Activit
 }
 
 describe("createActivityReadPort", () => {
+  it("attributes node activity by scoped execution subject and excludes bare and sibling records", () => {
+    const store = boundWorld();
+    const contract = committedRevision(store);
+    approveGate1(store, contract);
+    const sealed = submit(store, contract);
+    if (!sealed.ok) throw new Error(sealed.code);
+    approvePlan(store, sealed.runId);
+    const graph = activeCompiledGraphs(store, PROJECT_ID)[0]!;
+    const key = graph.content.snapshot.nodes[0]!.nodeKey;
+    const own = compiledExecutionRef(PROJECT_ID, graph, key);
+    const sibling = compiledExecutionRef(PROJECT_ID, { ...graph, goalRef: "another-goal" }, key);
+    seedVerifierReceipt(store, own, PROJECT_ID);
+    seedVerifierReceipt(store, sibling, PROJECT_ID);
+    seedVerifierReceipt(store, key, PROJECT_ID);
+    const view = activity(createActivityReadPort({ projectId: PROJECT_ID, store }).readActivity({ goalRef: GOAL_ID }));
+    const reviews = view.entries.filter((row) => row.commandKind === "review.submit");
+    expect(reviews.map((row) => row.targetAggregateId)).toEqual([own]);
+  });
   it("lists the project's committed decisions latest first with the record's own facts", () => {
     const store = openStore();
     driveThrough(store, "goal.create");

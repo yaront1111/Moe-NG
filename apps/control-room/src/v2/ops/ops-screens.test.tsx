@@ -35,7 +35,7 @@ const PAUSED = {
   workItemId: "node.deliver@node-1",
 };
 const HEALTH: HealthOutcome = {
-  agents: { paused: null },
+  agents: { paused: null, repository: { code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN" } },
   daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:35:00.000Z" },
   readAt: "2026-09-02T20:00:00.000Z", status: "HEALTH", verifier: { calibration: true, policy: true },
@@ -117,6 +117,43 @@ describe("PolicyScreen", () => {
 });
 
 describe("HealthScreen", () => {
+  it("shows the repository holder through verification without claiming a live child", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: {
+        code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "VERIFYING", status: "HELD",
+      },
+    } }} />);
+    const card = screen.getByTestId("cr.health.reservation");
+    expect(card.textContent).toContain("Repository held by node-2");
+    expect(card.textContent).toContain("other-project");
+    expect(card.textContent).toContain("Verifying the work");
+    expect(card.textContent).toContain("Other nodes wait until this work is landed");
+    expect(card.textContent).not.toContain("agent is running");
+    expect(card.querySelector("button")).toBeNull();
+  });
+
+  it("distinguishes unknown repository ownership from an inspected idle repository", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: { code: "REPOSITORY_EXECUTION_UNREADABLE", owner: null, phase: null, status: "UNKNOWN" },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("Repository ownership is unknown");
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("REPOSITORY_EXECUTION_UNREADABLE");
+    cleanup();
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: { code: null, owner: null, phase: null, status: "IDLE" },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("No repository reservation is held");
+  });
+
+  it("renders an unrecognized daemon phase verbatim", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: {
+        code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "constructor", status: "HELD",
+      },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("constructor");
+  });
+
   it("states the process and ledger facts in a person's words", () => {
     render(<HealthScreen nowMs={NOW} outcome={HEALTH} />);
     expect(screen.getByTestId("cr.health.banner").textContent).toBe("The daemon answered just now · up for 1 h · last decision 25 min ago");
@@ -130,13 +167,13 @@ describe("HealthScreen", () => {
   });
 
   it("names the paused provider and when it resumes, in the reader's own locale", () => {
-    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { paused: PAUSED } }} />);
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { ...HEALTH.agents, paused: PAUSED } }} />);
     expect(screen.getByTestId("cr.health.agents").textContent)
       .toBe(`paused: claude limit, resumes ${new Date("2026-09-02T20:30:00.000Z").toLocaleString()}`);
   });
 
   it("still names the pause when the reset instant is one this browser cannot read", () => {
-    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { paused: { ...PAUSED, resetAt: "whenever" } } }} />);
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { ...HEALTH.agents, paused: { ...PAUSED, resetAt: "whenever" } } }} />);
     expect(screen.getByTestId("cr.health.agents").textContent).toBe("paused: claude limit, resumes whenever");
   });
 });

@@ -11,6 +11,8 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
+import { REPOSITORY_DELIVERY_REFUSAL_CODES } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 import type { SPAWN_INVOCATION_LAYER, SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -85,6 +87,7 @@ export interface AgentSpawner {
  * was created, never the readiness of the `claude` command inside it.
  */
 export type AgentSpawnStartResult =
+  | RepositoryDeliveryRefusal
   | {
     readonly ok: false;
     readonly code: SpawnInvocationRefusalCode;
@@ -116,7 +119,7 @@ export interface AgentSpawnStarter {
 
 /** Either the coded refusal, or a live attempt whose two facts stay separate. */
 export type SpawnAttempt =
-  | Extract<AgentSpawnStartResult, { readonly ok: false }>
+  | Extract<AgentSpawnStartResult, { readonly ok: false; readonly layer: typeof SPAWN_INVOCATION_LAYER }>
   | {
     readonly admitted: Promise<void>;
     readonly done: Promise<SeatExitReport | void>;
@@ -226,4 +229,4 @@ export const COMPILER_STEPS: ReadonlySet<string> = new Set([
  * (a live predecessor, a held claim, a record the fence cannot read) clears
  * on its own time, not the wrapper's.
  */
-export const GATE_REFUSALS: ReadonlySet<string> = new Set(AGENT_STAFFING_REFUSAL_CODES);
+export const GATE_REFUSALS: ReadonlySet<string> = new Set([...AGENT_STAFFING_REFUSAL_CODES, ...REPOSITORY_DELIVERY_REFUSAL_CODES]);

@@ -99,7 +99,7 @@ export const ACTIVATION_BODY = {
 };
 
 const HEALTH_BODY = {
-  agents: { paused: null },
+  agents: { paused: null, repository: { code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN" } },
   daemon: {
     commandAuthorityPlane: "V2", nodeSpecsDir: null, pid: 54_924, projectId: "proj-dd087108",
     protocolVersion: "moe-daemon/1", startedAt: "2026-09-05T04:00:00.000Z", storePath: STORE_PATH,

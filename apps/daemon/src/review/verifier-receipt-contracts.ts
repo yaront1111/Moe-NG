@@ -6,6 +6,8 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import { buildReviewPackage } from "@moe/review";
 import type { ReviewPackageItemInput, ReviewerCalibration } from "@moe/review";
+import { decodeVerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
+import type { VerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
 
 /** The service identity is reserved from session ids by daemon composition. */
 export const NODE_VERIFIER_PRINCIPAL_ID = "daemon:node-verifier" as const;
@@ -20,6 +22,8 @@ export interface VerifierAuthorityFacts {
 }
 
 export interface VerifierExecutionInput {
+  /** Absent only on legacy receipts; absence never authorizes production landing. */
+  readonly workspaceBinding?: VerifiedWorkspaceBinding;
   readonly byteCount: number;
   readonly outputSha256: string;
   readonly test: string;
@@ -117,6 +121,10 @@ export function verifierExecutionDigest(
     execution.outputSha256,
     execution.byteCount,
     0,
+    ...(execution.workspaceBinding === undefined ? [] : [
+      [execution.workspaceBinding.version, execution.workspaceBinding.root, execution.workspaceBinding.headSha,
+        execution.workspaceBinding.branchRef, execution.workspaceBinding.treeSha, execution.workspaceBinding.dirtySha256],
+    ]),
   ]);
 }
 
@@ -140,7 +148,11 @@ function parseSource(value: JsonValue | undefined): VerifierReceiptSource | null
 }
 
 function parseExecution(value: JsonValue | undefined): VerifierExecutionEvidence | null {
-  if (!isObject(value) || !exact(value, EXECUTION_KEYS)) return null;
+  if (!isObject(value)) return null;
+  const bound = Object.hasOwn(value, "workspaceBinding");
+  if (!exact(value, bound ? [...EXECUTION_KEYS, "workspaceBinding"] : EXECUTION_KEYS)) return null;
+  const workspaceBinding = bound ? decodeVerifiedWorkspaceBinding(value["workspaceBinding"]) : undefined;
+  if (workspaceBinding === null) return null;
   const byteCount = value["byteCount"];
   if (!Number.isSafeInteger(byteCount) || (byteCount as number) < 0) return null;
   if (value["exitCode"] !== 0 || !hex64(value["outputSha256"])
@@ -148,6 +160,7 @@ function parseExecution(value: JsonValue | undefined): VerifierExecutionEvidence
     return null;
   }
   return {
+    ...(workspaceBinding === undefined ? {} : { workspaceBinding }),
     byteCount: byteCount as number,
     evidenceSha256: value["evidenceSha256"],
     exitCode: 0,

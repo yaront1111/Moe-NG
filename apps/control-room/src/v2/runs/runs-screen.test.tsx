@@ -13,12 +13,17 @@ afterEach(cleanup);
 const NOW = Date.parse("2026-09-02T20:00:00.000Z");
 const node = (overrides: Partial<RunNodeView> = {}): RunNodeView => ({
   accepted: null, claim: null, criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: null,
-  nodeKey: "node-a", objective: "Keep fields.",
+  nodeKey: "node-a", nodeRef: "node-a", objective: "Keep fields.",
   landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
   status: "READY", ...overrides,
 });
 
 describe("nodeEvidence", () => {
+  it("shows the exact tested Git tree separately from the later landing commit", () => {
+    expect(nodeEvidence(node({ receipt: { byteCount: 2, exitCode: 0, outputSha256: "a".repeat(64),
+      test: "node check.mjs", testedTreeSha: "b".repeat(40), workspace: "D:/project" } }), NOW))
+      .toContain("tested Git tree bbbbbbbbbbbb");
+  });
   it("speaks only the facts the daemon stated, in a person's words", () => {
     expect(nodeEvidence(node(), NOW)).toEqual([]);
     expect(nodeEvidence(node({
@@ -42,8 +47,8 @@ describe("nodeEvidence", () => {
       claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T20:04:00.000Z", status: "OPEN" }, status: "IN_PROGRESS",
     }), NOW)).toEqual(["an agent seat · lease ends in 4 min"]);
     expect(nodeEvidence(node({
-      receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" },
-    }), NOW)).toEqual(["verifier ran pnpm test, exit 0"]);
+      receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", testedTreeSha: null, workspace: "D:/unai" },
+    }), NOW)).toEqual(["verifier ran pnpm test, exit 0", "tested Git tree not recorded"]);
     expect(nodeEvidence(node({ sharedKey: true, status: "UNATTRIBUTABLE" }), NOW)[0]).toContain("cannot be attributed");
     expect(nodeEvidence(node({
       landing: { branch: "main", code: null, files: ["src/a.ts", "src/a.test.ts"], outcome: "COMMITTED", sha: "0123456789abcdef0123456789abcdef01234567" },

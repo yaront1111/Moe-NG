@@ -32,6 +32,7 @@ export interface RunNodeFindingView {
   readonly subject: string;
 }
 export interface RunNodeReceiptView {
+  readonly testedTreeSha: string | null;
   readonly byteCount: number;
   readonly exitCode: number;
   readonly outputSha256: string;
@@ -63,6 +64,7 @@ export interface RunNodeView {
   readonly landing: RunNodeLandingView | null;
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
+  readonly nodeRef: string;
   readonly objective: string;
   readonly receipt: RunNodeReceiptView | null;
   readonly review: RunNodeReviewView;
@@ -189,10 +191,12 @@ function findingOf(value: unknown): RunNodeFindingView | null {
 }
 
 function receiptOf(value: unknown): RunNodeReceiptView | null {
-  const record = exactDataRecord(value, ["byteCount", "exitCode", "outputSha256", "test", "workspace"]);
+  const record = exactDataRecord(value, ["byteCount", "exitCode", "outputSha256", "test", "workspace", "testedTreeSha"]);
   if (record === null || !count(record.byteCount) || !count(record.exitCode) || !nonEmptyString(record.outputSha256)
-    || typeof record.test !== "string" || typeof record.workspace !== "string") return null;
-  return Object.freeze({ byteCount: record.byteCount, exitCode: record.exitCode, outputSha256: record.outputSha256, test: record.test, workspace: record.workspace });
+    || typeof record.test !== "string" || typeof record.workspace !== "string"
+    || (record.testedTreeSha !== null && (typeof record.testedTreeSha !== "string" || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(record.testedTreeSha)))) return null;
+  return Object.freeze({ byteCount: record.byteCount, exitCode: record.exitCode, outputSha256: record.outputSha256,
+    test: record.test, workspace: record.workspace, testedTreeSha: record.testedTreeSha });
 }
 
 function landingOf(value: unknown): RunNodeLandingView | null {
@@ -219,10 +223,10 @@ function reviewOf(value: unknown): RunNodeReviewView | null {
 
 function nodeOf(value: unknown): RunNodeView | null {
   const record = exactDataRecord(value, [
-    "accepted", "claim", "criterionIds", "dependsOn", "landing", "lastActivityAt", "nodeKey", "objective", "receipt",
+    "accepted", "claim", "criterionIds", "dependsOn", "landing", "lastActivityAt", "nodeKey", "nodeRef", "objective", "receipt",
     "review", "sharedKey", "status",
   ]);
-  if (record === null || !nonEmptyString(record.nodeKey) || typeof record.objective !== "string"
+  if (record === null || !nonEmptyString(record.nodeKey) || !nonEmptyString(record.nodeRef) || typeof record.objective !== "string"
     || !nullableString(record.lastActivityAt) || typeof record.status !== "string"
     || typeof record.sharedKey !== "boolean"
     || !(RUN_NODE_STATUSES as readonly string[]).includes(record.status)) return null;
@@ -253,7 +257,7 @@ function nodeOf(value: unknown): RunNodeView | null {
   }
   return Object.freeze({
     accepted, claim, criterionIds, dependsOn, landing, lastActivityAt: record.lastActivityAt,
-    nodeKey: record.nodeKey, objective: record.objective, receipt, review, sharedKey: record.sharedKey,
+    nodeKey: record.nodeKey, nodeRef: record.nodeRef, objective: record.objective, receipt, review, sharedKey: record.sharedKey,
     status: record.status as RunNodeStatus,
   });
 }

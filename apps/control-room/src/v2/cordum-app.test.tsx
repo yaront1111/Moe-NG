@@ -1289,9 +1289,11 @@ const APP_PAUSE = Object.freeze({
 });
 
 /** The daemon's exact six-key HEALTH frame; the decoder refuses anything else. */
-function healthFrame(agents: unknown): unknown {
+function healthFrame(agents: Readonly<Record<string, unknown>>): unknown {
   return {
-    agents,
+    agents: { ...agents, repository: {
+      code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN",
+    } },
     daemon: {
       commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242,
       projectId: "project-live", protocolVersion: WIRE,
@@ -1308,7 +1310,7 @@ function healthFrame(agents: unknown): unknown {
 }
 
 /** Every health read the app made, with the headers it carried. */
-function renderPausedApp(agents: unknown): RequestInit[] {
+function renderPausedApp(agents: Readonly<Record<string, unknown>>): RequestInit[] {
   const healthReads: RequestInit[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
     if (input === "/health/read") {

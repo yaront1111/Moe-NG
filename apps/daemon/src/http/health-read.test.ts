@@ -3,19 +3,26 @@
  * the ledger numbers are counted from the store the bootstrap sequence wrote, and the
  * verifier standing is carried from its reader. The route gates like every other read.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SqliteEventStore } from "@moe/store";
 
 import { PROJECT_ID, closeStores, driveThrough, openStore } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { recordProviderPause } from "../orchestrator/provider-pause-ledger.js";
+import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { createHealthReadPort, handleHealthReadRequest } from "./health-read.js";
 import type { HealthReadPort, HealthView } from "./health-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
 
 afterEach(closeStores);
+afterEach(() => vi.unstubAllEnvs());
 const encoder = new TextEncoder();
 
 function health(result: ReturnType<HealthReadPort["readHealth"]>): HealthView {
@@ -55,6 +62,87 @@ describe("createHealthReadPort", () => {
     expect(view.ledger).toEqual({ aggregates: 0, commandKinds: 0, decisionCount: 0, goals: 0, lastDecidedAt: null });
     expect(view.daemon.pid).toBe(process.pid);
     expect(view.daemon.nodeSpecsDir).toBeNull();
+  });
+});
+
+describe("createHealthReadPort repository reservation", () => {
+    const reservation = {
+    baselineId: "baseline-private", identity: { gitDirectory: "D:/private/.git", root: "D:/private" },
+    nodeRef: "node-2", phase: "VERIFYING" as const, pid: 4444, projectId: "other-project",
+    revision: 3, sessionId: "private-session", storeId: "private-store", token: "private-token",
+    controllerId: "private-controller", controllerPid: 5555,
+  };
+  function read(readRepository?: () => unknown): HealthView {
+    return health(createHealthReadPort({
+      nodeSpecsDir: null, projectId: PROJECT_ID, readPlane: () => "V1",
+      readRepository,
+      readVerifier: () => ({ calibration: true, policy: true }),
+      startedAt: "2026-09-02T19:00:00.000Z", store: openStore(), storePath: ":memory:",
+    }).readHealth());
+  }
+
+  it("states the actual holder from another project without exposing reservation authority", () => {
+    const view = read(() => ({ ok: true, reservation }));
+    expect(view.agents.repository).toEqual({
+      code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "VERIFYING", status: "HELD",
+    });
+    const serialized = JSON.stringify(view.agents.repository);
+    for (const secret of ["private-token", "private-store", "private-session", "private-controller", "D:/private", "4444", "5555", "baseline-private"])
+      expect(serialized).not.toContain(secret);
+    expect(Object.isFrozen(view.agents.repository)).toBe(true);
+    expect(Object.isFrozen(view.agents.repository.owner)).toBe(true);
+  });
+
+  it("reports idle only after the bound repository was inspected", () => {
+    expect(read(() => ({ ok: true, reservation: null })).agents.repository).toEqual({
+      code: null, owner: null, phase: null, status: "IDLE",
+    });
+    expect(read().agents.repository).toEqual({
+      code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN",
+    });
+  });
+
+  it("preserves an inspection refusal code while withholding its private detail", () => {
+    const view = read(() => ({ code: "REPOSITORY_EXECUTION_UNREADABLE", detail: "D:/private", ok: false }));
+    expect(view.agents.repository).toEqual({
+      code: "REPOSITORY_EXECUTION_UNREADABLE", owner: null, phase: null, status: "UNKNOWN",
+    });
+    expect(JSON.stringify(view.agents.repository)).not.toContain("D:/private");
+  });
+
+  it("keeps health readable when repository inspection throws", () => {
+    expect(read(() => { throw new Error("private exception"); }).agents.repository).toEqual({
+      code: "REPOSITORY_EXECUTION_READ_FAILED", owner: null, phase: null, status: "UNKNOWN",
+    });
+  });
+});
+
+describe("production repository health binding", () => {
+  it("inspects the configured workspace and retains that binding across reads", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-health-reservation-"));
+    const workspace = join(directory, "repository");
+    mkdirSync(workspace);
+    execFileSync("git", ["init", "--quiet"], { cwd: workspace, shell: false, windowsHide: true });
+    const execution = createRepositoryExecutionPort();
+    expect(execution.acquire(workspace, {
+      nodeRef: "node-held", ownershipToken: "a".repeat(64), projectId: "owner-project", storeId: "private-store",
+    }, { controllerId: "b".repeat(64), controllerPid: process.pid }).ok).toBe(true);
+    vi.stubEnv("MOE_NODE_WORKSPACE", workspace);
+    const provider = createStoreDependencies({
+      credential: "test-health-operator", principalId: "operator-local", projectId: "reader-project", storePath: join(directory, "store.db"),
+    });
+    try {
+      vi.stubEnv("MOE_NODE_WORKSPACE", directory);
+      const port = provider.health?.();
+      if (port === undefined) throw new Error("production health port missing");
+      expect(health(port.readHealth()).agents.repository).toEqual({
+        code: null, owner: { nodeRef: "node-held", projectId: "owner-project" }, phase: "RESERVED", status: "HELD",
+      });
+      expect(execution.inspect(workspace)).toMatchObject({ ok: true, reservation: { revision: 1 } });
+    } finally {
+      provider.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });
 
@@ -112,7 +200,10 @@ describe("createHealthReadPort agents.paused", () => {
   it("says no provider is paused while the ledger holds no pause", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
-    expect(readAt(store, "2026-09-02T20:10:00.000Z").agents).toEqual({ paused: null });
+    expect(readAt(store, "2026-09-02T20:10:00.000Z").agents).toEqual({
+      paused: null,
+      repository: { code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN" },
+    });
   });
 
   it("carries the live claude pause with exactly the five keys the browser decodes", () => {

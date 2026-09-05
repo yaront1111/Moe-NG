@@ -84,7 +84,7 @@ function CardDetails({ card, criterionStatement, nowMs }: {
         <Field label="Verifier" value={receiptWords(node)} />
         <Field label="Accepted" value={node.accepted === null ? null : "the daemon accepted this work"} />
         <Field label="Landing" value={landingWords(node)} />
-        <Field label="Shared key" value={node.sharedKey ? "another activated plan carries this work" : null} />
+        <Field label="Legacy execution" value={node.sharedKey ? "earlier execution has no scoped identity" : null} />
       </dl>
       {criteria.length === 0 ? null : (
         <div className="cr2-kanban-criteria">

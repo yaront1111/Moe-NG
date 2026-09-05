@@ -13,15 +13,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import { productContractGate1Authority } from "@moe/core";
 import type { ProductContractRevisionRef } from "@moe/core";
 import {
-  GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, RUN_ID, closeStores, driveThrough, envelope, openStore, send,
+  GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { humanReviewWitness } from "../bootstrap/bootstrap-ledger.js";
 import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
+import { refsOfGoal } from "../goals/goal-identity.js";
 import { createSessionAuthority } from "../identity/session-authority.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { recordHistoricalCompiledGraph } from "../orchestrator/compiled-node-identity-test-fixtures.js";
 import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 import { runSubmitDecomposition } from "../planning/compile-dispatcher.js";
@@ -118,12 +121,14 @@ function approveGate1(store: SqliteEventStore, ref: ProductContractRevisionRef, 
 }
 
 /** The PRODUCTION compiler seals one node carrying every criterion, then the PRODUCTION approval intent activates it. */
-function sealAndActivate(store: SqliteEventStore, ref: ProductContractRevisionRef): void {
+function sealAndActivate(store: SqliteEventStore, ref: ProductContractRevisionRef, goalRef = GOAL_ID): void {
+  const runId = refsOfGoal(goalRef).planningRunRef;
+  const commandId = `cmd-intent-approve-${goalRef}`;
   const submitted = runSubmitDecomposition(store, {
     correlationId: "corr-submit", decidedAt: "2026-09-02T12:01:00.000Z",
     payload: {
       gateRef: { contractId: ref.contractId, revisionDigest: ref.revisionDigest, revisionId: ref.revisionId },
-      goalRef: GOAL_ID,
+      goalRef,
       structure: { completionNodeKey: "node-slice", nodes: [{
         capability: "capability-implement", criterionIds: ["crit-1", "crit-2", "crit-3"], dependsOn: [],
         nodeKey: "node-slice", objective: "Land the evidence ledger.", readScopes: ["services/api/src"],
@@ -134,16 +139,17 @@ function sealAndActivate(store: SqliteEventStore, ref: ProductContractRevisionRe
   });
   if (!submitted.ok) throw new Error(`decomposition refused: ${submitted.code}`);
   const approved = runApprovalIntentCommand({
-    commandId: "cmd-intent-approve", correlationId: "corr-intent", decidedAt: "2026-09-02T12:02:00.000Z",
-    expectedVersion: store.getAggregateVersion(RUN_ID), humanReview: humanReviewWitness(OPERATOR, "cmd-intent-approve"),
-    payload: { decision: "APPROVE", decisionReason: null, dependencyChanges: { additions: [], challenges: [], removals: [] }, runId: RUN_ID },
-    principalId: OPERATOR, projectId: PROJECT_ID, store, targetAggregateId: RUN_ID,
+    commandId, correlationId: "corr-intent", decidedAt: "2026-09-02T12:02:00.000Z",
+    expectedVersion: store.getAggregateVersion(runId), humanReview: humanReviewWitness(OPERATOR, commandId),
+    payload: { decision: "APPROVE", decisionReason: null, dependencyChanges: { additions: [], challenges: [], removals: [] }, runId },
+    principalId: OPERATOR, projectId: PROJECT_ID, store, targetAggregateId: runId,
   });
   if (!approved.ok) throw new Error(`approval intent refused: ${approved.code}`);
 }
 
 /** The PRODUCTION acceptance over the daemon's own verifier receipt. */
 function acceptNode(store: SqliteEventStore, nodeKey: string): void {
+  nodeKey = compiledExecutionRef(PROJECT_ID, activeCompiledGraphs(store, PROJECT_ID)[0]!, nodeKey);
   const seeded = seedVerifierReceipt(store, nodeKey, PROJECT_ID);
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
     commandId: `cmd-accept-${nodeKey}`, correlationId: "corr-accept", decidedAt: "2026-09-02T12:05:00.000Z",
@@ -255,7 +261,7 @@ describe("createDocumentCoverageReadPort", () => {
     expect(view.totals).toEqual({ contracts: 1, criteria: 3, goals: 1, planned: 0, requirements: 2, unattributable: 0, verified: 0 });
   });
 
-  it("runs the production join: sealed plan, approval intent, verifier receipt, acceptance", () => {
+  it("keeps accepted node tests separate from missing criterion evidence in the production join", () => {
     const { sha, store } = boundWorld();
     const ref = proposeRevision(store, sha);
     approveGate1(store, ref, "cmd-gate1-join");
@@ -267,16 +273,73 @@ describe("createDocumentCoverageReadPort", () => {
     expect(planned.contracts[0]?.gate1).toBe("APPROVED");
     expect(statusOf(planned)).toEqual({ "crit-1": ["PLANNED", "node-slice"], "crit-2": ["PLANNED", "node-slice"], "crit-3": ["PLANNED", "node-slice"] });
     expect(planned.totals).toMatchObject({ planned: 3, unattributable: 0, verified: 0 });
+    expect(planned.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria))
+      .map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
     acceptNode(store, "node-slice");
     const verified = coverage(portFor(store).readCoverage({ goalRef: GOAL_ID }));
-    expect(statusOf(verified)).toEqual({ "crit-1": ["VERIFIED", "node-slice"], "crit-2": ["VERIFIED", "node-slice"], "crit-3": ["VERIFIED", "node-slice"] });
-    expect(verified.totals).toEqual({ contracts: 1, criteria: 3, goals: 1, planned: 0, requirements: 2, unattributable: 0, verified: 3 });
+    expect(statusOf(verified)).toEqual({ "crit-1": ["EVIDENCE_REQUIRED", "node-slice"], "crit-2": ["EVIDENCE_REQUIRED", "node-slice"], "crit-3": ["EVIDENCE_REQUIRED", "node-slice"] });
+    expect(verified.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria))
+      .map((row) => row.nodeTestStatus)).toEqual(["NODE_TEST_PASSED", "NODE_TEST_PASSED", "NODE_TEST_PASSED"]);
+    expect(verified.totals).toEqual({ contracts: 1, criteria: 3, goals: 1, planned: 0, requirements: 2, unattributable: 0, verified: 0 });
     expect(verified.sections?.entries).toEqual([
       { cited: 0, criteria: 0, heading: "Cover me", number: null, verified: 0 },
-      { cited: 1, criteria: 2, heading: "11. Evidence", number: "11", verified: 2 },
-      { cited: 1, criteria: 1, heading: "12. Anchors", number: "12", verified: 1 },
+      { cited: 1, criteria: 2, heading: "11. Evidence", number: "11", verified: 0 },
+      { cited: 1, criteria: 1, heading: "12. Anchors", number: "12", verified: 0 },
     ]);
     expect(verified.goals[0]?.lastActivityAt).toBe("2026-09-02T12:05:00.000Z");
+  });
+
+  it("does not attach one goal's node-test pass to another contract reusing the same criterion ids", () => {
+    const { sha, store } = boundWorld();
+    const ref = proposeRevision(store, sha);
+    approveGate1(store, ref, "cmd-gate-first-contract"); sealAndActivate(store, ref);
+    acceptNode(store, "node-slice");
+    const created = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build the separate goal.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Separate goal",
+    }, "2"));
+    if (!created.ok) throw new Error(created.code);
+    const other = runProductContractProposeRevision(store, {
+      correlationId: "other-contract", decidedAt: "2026-09-02T12:06:00.000Z",
+      payload: { draft: { ...draft(sha), contractId: "contract-other" }, goalRef: "goal-2" },
+      principalId: "compiler-agent-1", projectId: PROJECT_ID,
+    });
+    if (!other.ok) throw new Error(other.code);
+    approveGate1(store, other.ref, "cmd-gate-other-contract"); sealAndActivate(store, other.ref, "goal-2");
+    const view = coverage(portFor(store).readCoverage({ goalRef: "goal-2" }));
+    const rows = view.contracts.find((contract) => contract.contractId === "contract-other")!.requirements.flatMap((row) => row.criteria);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
+    expect(view.totals.verified).toBe(0);
+  });
+
+  it("keeps two goals' node-test facts separate under one approved contract", () => {
+    const { sha, store } = boundWorld(); const ref = proposeRevision(store, sha);
+    approveGate1(store, ref, "cmd-gate-shared-contract"); sealAndActivate(store, ref); acceptNode(store, "node-slice");
+    const created = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Implement independently.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Independent goal",
+    }, "2"));
+    if (!created.ok) throw new Error(created.code);
+    sealAndActivate(store, ref, "goal-2");
+    const port = portFor(store);
+    const first = coverage(port.readCoverage({ goalRef: GOAL_ID }));
+    const second = coverage(port.readCoverage({ goalRef: "goal-2" }));
+    expect(Object.values(statusOf(first)).map(([status]) => status)).toEqual(["EVIDENCE_REQUIRED", "EVIDENCE_REQUIRED", "EVIDENCE_REQUIRED"]);
+    expect(Object.values(statusOf(second)).map(([status]) => status)).toEqual(["PLANNED", "PLANNED", "PLANNED"]);
+    expect(second.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria))
+      .map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
+  });
+
+  it("does not carry an accepted node into a new approved revision without exact revision provenance", () => {
+    const { sha, store } = boundWorld(); const first = proposeRevision(store, sha);
+    approveGate1(store, first, "cmd-gate-original"); sealAndActivate(store, first); acceptNode(store, "node-slice");
+    const newer = proposeRevision(store, sha, "rev-cover-2"); approveGate1(store, newer, "cmd-gate-newer");
+    const view = coverage(portFor(store).readCoverage({ goalRef: GOAL_ID }));
+    expect(view.contracts[0]?.revisionId).toBe("rev-cover-2");
+    const rows = view.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria));
+    expect(rows.map((row) => row.status)).toEqual(["UNATTRIBUTABLE", "UNATTRIBUTABLE", "UNATTRIBUTABLE"]);
+    expect(rows.map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
   });
 
   it("refuses to attribute an acceptance to a node key another activated plan also carries", () => {
@@ -293,12 +356,12 @@ describe("createDocumentCoverageReadPort", () => {
     }).readCoverage({ contentSha256: sha }));
     expect(statusOf(shared)["crit-1"]).toEqual(["UNATTRIBUTABLE", "implement"]);
     expect(shared.totals).toMatchObject({ unattributable: 1, verified: 0 });
-    // Control: the same acceptance on a key only this document's plan carries IS verified.
+    // Even one apparent owner cannot migrate an unscoped acceptance into scoped authority.
     const unique = coverage(portFor(store, {
       readActive: () => [graphFor(GOAL_ID, "implement"), graphFor("goal-2", "implement-other")],
     }).readCoverage({ contentSha256: sha }));
-    expect(statusOf(unique)["crit-1"]).toEqual(["VERIFIED", "implement"]);
-    expect(unique.totals).toMatchObject({ unattributable: 0, verified: 1 });
+    expect(statusOf(unique)["crit-1"]).toEqual(["UNATTRIBUTABLE", "implement"]);
+    expect(unique.totals).toMatchObject({ unattributable: 1, verified: 0 });
   });
 
   it.each(["old-goal", GOAL_ID])("keeps historical owner %s unattributable despite an accepted current node", (goalRef) => {
@@ -328,11 +391,11 @@ describe("createDocumentCoverageReadPort", () => {
     // (VERIFIED). Definitions are canonical in key order, so the two worlds differ only in which
     // carrier sorts first; the fold used to keep whichever came first and answered VERIFIED or
     // UNATTRIBUTABLE for the same durable facts — and with it the goal.close offer.
-    rawAcceptance(store, "b-verified");
-    rawAcceptance(store, "a-verified");
     for (const [shared, verified] of [["a-shared", "b-verified"], ["b-shared", "a-verified"]] as const) {
       // Compiled outside the read so a fixture refusal surfaces as itself, not as UNREADABLE.
       const active = [graphWith(GOAL_ID, [shared, verified].sort()), graphFor("goal-2", shared)];
+      rawAcceptance(store, shared);
+      rawAcceptance(store, compiledExecutionRef(PROJECT_ID, active[0]!, verified));
       const view = coverage(portFor(store, { readActive: () => active }).readCoverage({ contentSha256: sha }));
       expect(statusOf(view)["crit-1"]).toEqual(["UNATTRIBUTABLE", shared]);
       expect(view.totals).toMatchObject({ planned: 0, unattributable: 1, verified: 0 });

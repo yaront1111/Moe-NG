@@ -18,12 +18,21 @@ import {
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { createAffordancePort } from "../http/affordance-read.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { createGoalLandingReader, goalHasLandedCommit } from "./goal-landing-facts.js";
 
 /** The outcome the durable ledger holds for one node, read independently of the fact. */
 function nodeLanded(store: ReturnType<typeof openStore>, nodeRef: string): string | null {
+  nodeRef = scopedRef(store, nodeRef);
   return readReviewLedgers(store, PROJECT_ID, new Set([nodeRef]))
     .landings.get(nodeRef)?.outcome ?? null;
+}
+
+function scopedRef(store: ReturnType<typeof openStore>, nodeKey: string): string {
+  const graph = activeCompiledGraphs(store, PROJECT_ID).find((plan) =>
+    plan.goalRef === GOAL_ID && plan.content.snapshot.nodes.some((node) => node.nodeKey === nodeKey));
+  return graph === undefined ? nodeKey : compiledExecutionRef(PROJECT_ID, graph, nodeKey);
 }
 
 /**
@@ -56,6 +65,7 @@ function land(
   store: ReturnType<typeof openStore>, nodeRef: string,
   outcome: Parameters<typeof seedLandingReceipt>[2],
 ): void {
+  nodeRef = scopedRef(store, nodeRef);
   seedReviewAcceptance(store, nodeRef);
   seedLandingReceipt(store, nodeRef, outcome);
 }
@@ -280,4 +290,3 @@ function countingStore(store: ReturnType<typeof openStore>): {
   });
   return { pages: (): number => pages, store: proxy };
 }
-

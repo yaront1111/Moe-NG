@@ -4,6 +4,8 @@
 **Architecture:** Preserve the durable core. First quarantine ambiguous execution facts, correct live role instructions and retry handling, and remove unsupported UI success claims. Exact artifact delivery requires a separate end-to-end implementation rather than a label change.
 **Tech stack:** TypeScript, pnpm, SQLite, Git, React, Vitest.
 
+Continuation: [6 September repository delivery remediation](2026-09-06-repository-delivery-remediation.md) supersedes the open identity, repository-serialization and generic-criterion-claim items below. This file preserves the first pass's evidence and limitations.
+
 The review is pinned to `829c3bc0af969826d9a5c05ad5f4da6409475f52`. Initial checkout for this response was `df4a56a0` on `moe/work-2026-09-04`. This is a shared checkout with active foreign changes. Follow AGENTS.md: preserve them, stage explicit owned paths, and do not push or create sibling worktrees.
 
 ## Implemented

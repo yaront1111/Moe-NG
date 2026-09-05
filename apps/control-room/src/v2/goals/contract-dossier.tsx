@@ -42,11 +42,12 @@ function CriterionRow({ criterion }: { readonly criterion: CoverageCriterionView
       data-status={criterion.status}
       data-testid={`cr.contract.criterion.${criterion.criterionId}`}
     >
-      <span className="cr2-coverage-status">{criterion.status}</span>
+      <span className="cr2-coverage-status">{criterion.status === "EVIDENCE_REQUIRED" ? "Evidence required" : criterion.status}</span>
       <span className="cr2-approve-mono">{criterion.criterionId}</span>
       <span className="cr2-approve-step-body">
         {criterion.statement}
         {criterion.nodeKey === null ? "" : ` ${MIDDOT} ${criterion.nodeKey}`}
+        {criterion.nodeTestStatus === "NODE_TEST_PASSED" ? ` ${MIDDOT} Node test passed` : ""}
       </span>
     </li>
   );

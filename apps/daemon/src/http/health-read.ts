@@ -43,8 +43,13 @@ export interface ProviderPauseView {
   readonly workItemId: string;
 }
 
+export type RepositoryReservationView =
+  | { readonly code: null; readonly owner: { readonly nodeRef: string; readonly projectId: string }; readonly phase: string; readonly status: "HELD" }
+  | { readonly code: null; readonly owner: null; readonly phase: null; readonly status: "IDLE" }
+  | { readonly code: string; readonly owner: null; readonly phase: null; readonly status: "UNKNOWN" };
+
 export interface HealthView {
-  readonly agents: { readonly paused: ProviderPauseView | null };
+  readonly agents: { readonly paused: ProviderPauseView | null; readonly repository: RepositoryReservationView };
   readonly daemon: {
     readonly commandAuthorityPlane: string;
     readonly nodeSpecsDir: string | null;
@@ -80,10 +85,33 @@ export interface HealthReadOptions {
   readonly pid?: number;
   readonly projectId: string;
   readonly readPlane: () => string;
+  /** Inspection of the daemon's configured workspace. No HTTP caller selects a path. */
+  readonly readRepository?: (() => unknown) | undefined;
   readonly readVerifier?: (store: SqliteEventStore, projectId: string) => VerifierStandingAuthority;
   readonly startedAt: string;
   readonly store: SqliteEventStore;
   readonly storePath: string;
+}
+
+/** Select public facts only; reservation tokens and filesystem details never cross this read. */
+function repositoryView(read: HealthReadOptions["readRepository"]): RepositoryReservationView {
+  const unknown = (code: string): RepositoryReservationView => Object.freeze({ code, owner: null, phase: null, status: "UNKNOWN" });
+  if (read === undefined) return unknown("REPOSITORY_EXECUTION_UNCONFIGURED");
+  try {
+    const answer = read() as { readonly ok?: unknown; readonly code?: unknown; readonly reservation?: unknown } | null;
+    if (answer === null || typeof answer !== "object") return unknown("REPOSITORY_EXECUTION_READ_FAILED");
+    if (answer.ok === false && typeof answer.code === "string" && answer.code.length > 0) return unknown(answer.code);
+    if (answer.ok !== true) return unknown("REPOSITORY_EXECUTION_READ_FAILED");
+    if (answer.reservation === null) return Object.freeze({ code: null, owner: null, phase: null, status: "IDLE" });
+    const record = answer.reservation as { readonly nodeRef?: unknown; readonly projectId?: unknown; readonly phase?: unknown } | null;
+    if (record === null || typeof record !== "object" || typeof record.nodeRef !== "string" || record.nodeRef.length === 0
+      || typeof record.projectId !== "string" || record.projectId.length === 0 || typeof record.phase !== "string" || record.phase.length === 0) {
+      return unknown("REPOSITORY_EXECUTION_READ_FAILED");
+    }
+    return Object.freeze({
+      code: null, owner: Object.freeze({ nodeRef: record.nodeRef, projectId: record.projectId }), phase: record.phase, status: "HELD",
+    });
+  } catch { return unknown("REPOSITORY_EXECUTION_READ_FAILED"); }
 }
 
 /**
@@ -131,7 +159,7 @@ export function createHealthReadPort(options: HealthReadOptions): HealthReadPort
       // ONE INSTANT PER READ: the pause window and the stated read time never disagree.
       const now = clock();
       return Object.freeze({
-        agents: Object.freeze({ paused: pausedAgent(store, projectId, now) }),
+        agents: Object.freeze({ paused: pausedAgent(store, projectId, now), repository: repositoryView(options.readRepository) }),
         daemon: Object.freeze({
           commandAuthorityPlane: options.readPlane(),
           nodeSpecsDir: options.nodeSpecsDir,

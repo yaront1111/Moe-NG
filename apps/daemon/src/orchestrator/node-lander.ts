@@ -5,7 +5,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import type { GitLandingPort } from "../repository/git-landing-port.js";
 import {
-  readEarliestLandingBaseline, readLandingReceipt, readLatestLandingBaseline,
+  readEarliestLandingBaseline, readLandingBaseline, readLandingReceipt, readLatestLandingBaseline,
   recordLandingBaseline, recordLandingReceipt,
 } from "../repository/landing-ledger.js";
 import { DELETED_BLOB, landingReceiptId } from "../repository/landing-receipt-contracts.js";
@@ -13,6 +13,8 @@ import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { untrackedImports } from "./landing-imports.js";
+import { checkLandingVerification } from "./node-lander-verification.js";
+import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 
 /**
  * THE LANDER: once the daemon has accepted a node (a verifier receipt consumed
@@ -33,6 +35,11 @@ import { untrackedImports } from "./landing-imports.js";
  */
 
 export interface NodeLanderConfig {
+  readonly verifiedWorkspace?: VerifiedWorkspacePort;
+  /** Test injection; production reads the exact accepted verifier receipt from the store. */
+  readonly readVerifiedBinding?: (nodeRef: string, receiptId: string) => VerifiedWorkspaceBinding | null;
+  /** Original reservation baseline; absent keeps the legacy test composition readable. */
+  readonly baselineId?: (nodeRef: string) => string | null;
   readonly clock?: () => string;
   readonly git: GitLandingPort;
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
@@ -46,6 +53,7 @@ export interface NodeLanderConfig {
 }
 
 export interface LanderReport {
+  readonly baselineId?: string;
   readonly detail: string;
   readonly nodeRef: string;
   readonly outcome: "BASELINE_RECORDED" | "COMMITTED" | "REFUSED" | string;
@@ -134,6 +142,7 @@ export function createNodeLander(config: NodeLanderConfig) {
     });
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     return {
+      baselineId: recorded.baselineId,
       detail: `${String(observed.observation.entries.length)} dirty path(s) before the seat`,
       nodeRef,
       outcome: "BASELINE_RECORDED",
@@ -163,7 +172,11 @@ export function createNodeLander(config: NodeLanderConfig) {
     }
     const brief = config.nodeMission(nodeRef);
     if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
-    const before = readLatestLandingBaseline(config.store, config.projectId, nodeRef);
+    const selectedBaseline = config.baselineId?.(nodeRef);
+    const before = config.baselineId === undefined
+      ? readLatestLandingBaseline(config.store, config.projectId, nodeRef)
+      : selectedBaseline === null || selectedBaseline === undefined ? null
+        : readLandingBaseline(config.store, config.projectId, nodeRef, selectedBaseline);
     if (before === null) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "LANDING_BASELINE_MISSING",
@@ -197,12 +210,16 @@ export function createNodeLander(config: NodeLanderConfig) {
     const carried = untrackedImports(delivered, untracked, (path) => readText(root, path));
     const paths = [...delivered, ...carried];
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
-    const committed = await config.git.commit(brief.workspace, paths, message);
+    const checked = await checkLandingVerification({
+      brief, nodeRef, port: config.verifiedWorkspace, projectId: config.projectId,
+      readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
+    });
+    if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
+    const committed = await checked.port.commit(brief.workspace, paths, message, checked.binding);
     if (!committed.ok) {
-      // Another git process holding the index (an operator commit, a seat's own git call) is
-      // a moment, not a verdict: report it and let the next pass try again. Recording it
-      // durably lost a verified node's landing for good (boot-sweep on UnAI, 2026-09-05).
-      if (/index\.lock/u.test(committed.detail)) {
+      // Only the strict port's no-effect refusal permits retry. Error prose cannot prove
+      // whether a commit or ref update happened before the failure.
+      if (committed.code === "VERIFIED_WORKSPACE_INDEX_LOCKED") {
         return { detail: committed.detail, nodeRef, outcome: "GIT_INDEX_LOCKED" };
       }
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {

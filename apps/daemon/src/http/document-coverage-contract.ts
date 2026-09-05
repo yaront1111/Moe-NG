@@ -3,11 +3,11 @@
  * bound to it) everything the daemon can say DURABLY about how far its product is built.
  *
  * A criterion is UNPLANNED (no sealed node carries it), PLANNED (a sealed node carries it,
- * not yet accepted), VERIFIED (the node's review ledger holds the daemon's own acceptance,
- * the verifier receipt `integration.accept_output` consumed) or UNATTRIBUTABLE (the node's
- * key is carried by another activated plan too, or its review ledger does not read, so no
- * durable fact says which plan's acceptance it would be). The section map is derived from
- * prose and travels as `advisoryOnly: true`; "the whole PRD is done" stays the human's call.
+ * not yet accepted), EVIDENCE_REQUIRED (its node test passed, but no criterion-specific
+ * evidence establishes the requirement) or UNATTRIBUTABLE (legacy bare-key execution cannot
+ * be assigned to the plan, or the scoped review ledger does not read). The section map is derived from
+ * prose and travels as `advisoryOnly: true`. VERIFIED is reserved for criterion-specific
+ * evidence; the current generic node verifier cannot produce that status.
  */
 import type { SectionCoverage } from "./document-coverage-sections.js";
 
@@ -26,7 +26,7 @@ export const DOCUMENT_COVERAGE_READ_CODES = Object.freeze([
 export type DocumentCoverageReadCode = (typeof DOCUMENT_COVERAGE_READ_CODES)[number];
 
 export const CRITERION_COVERAGE_STATUSES = Object.freeze([
-  "PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED",
+  "EVIDENCE_REQUIRED", "PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED",
 ] as const);
 export type CriterionCoverageStatus = (typeof CRITERION_COVERAGE_STATUSES)[number];
 
@@ -34,6 +34,8 @@ export interface CriterionCoverage {
   readonly criterionId: string;
   /** The sealed node that carries this criterion, when one does. */
   readonly nodeKey: string | null;
+  /** A node test fact, independent of whether this criterion has suitable evidence. */
+  readonly nodeTestStatus: "NODE_TEST_PASSED" | null;
   readonly statement: string;
   readonly status: CriterionCoverageStatus;
 }

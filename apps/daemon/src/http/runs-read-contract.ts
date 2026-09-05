@@ -7,9 +7,9 @@
  *
  * `status` is a derived word for the card, spelled from those facts in one fixed order
  * (see `runs-read.ts`); every fact it was derived from travels beside it, so the card can
- * show the evidence and never has to trust the word. A node whose key is carried by more
- * than one activated plan is UNATTRIBUTABLE: the review ledger is keyed by bare node key,
- * so nothing durable says which plan's work a round or an acceptance belongs to.
+ * show the evidence and never has to trust the word. A node with legacy bare-key execution
+ * facts is UNATTRIBUTABLE: those records contain no sealed owner and cannot be migrated
+ * into the new scoped execution subject.
  */
 import type { PlanningRunApprovalState } from "./planning-run-read.js";
 
@@ -45,6 +45,7 @@ export interface RunNodeFinding {
   readonly subject: string;
 }
 export interface RunNodeReceipt {
+  readonly testedTreeSha: string | null;
   readonly byteCount: number;
   readonly exitCode: number;
   readonly outputSha256: string;
@@ -80,11 +81,13 @@ export interface RunNodeView {
   readonly landing: RunNodeLanding | null;
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
+  /** Opaque execution identity; nodeKey remains the local graph/display name. */
+  readonly nodeRef: string;
   readonly objective: string;
   /** The verifier's own execution evidence, when its receipt decision decodes. */
   readonly receipt: RunNodeReceipt | null;
   readonly review: RunNodeReview;
-  /** True when another activated plan carries the same node key (see the header). */
+  /** Legacy execution attribution is unresolved, including a dependency's legacy identity. */
   readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }

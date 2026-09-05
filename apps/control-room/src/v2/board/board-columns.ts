@@ -43,7 +43,7 @@ const STOP_WORDS: Readonly<Record<Exclude<RunNodeStatus, "ACCEPTED" | "DELIVERED
     ESCALATED: "escalated; a human decided the exhausted review",
     ESCALATION_REQUIRED: "every review attempt used; needs your decision",
     REPLANNED: "replanned into a successor goal",
-    UNATTRIBUTABLE: "its key is shared by two plans, so its work cannot be attributed",
+    UNATTRIBUTABLE: "earlier execution has no scoped identity; attribution is required",
   });
 
 export function isStuck(node: RunNodeView): boolean {

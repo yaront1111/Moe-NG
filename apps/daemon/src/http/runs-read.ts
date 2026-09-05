@@ -6,8 +6,8 @@
  * node's rounds, findings, escalation, acceptance and verifier receipt, and the decision
  * ledger for last activity.
  *
- * STATUS, in one fixed order, first match wins: UNATTRIBUTABLE (the node key is carried by
- * another activated plan too, so the review ledger cannot be attributed) > ACCEPTED (the
+ * STATUS, in one fixed order, first match wins: UNATTRIBUTABLE (legacy execution has no
+ * scoped owner, or depends on such work) > ACCEPTED (the
  * daemon's acceptance is on the node) > BLOCKED (its review ledger does not read) >
  * ESCALATED > ESCALATION_REQUIRED (three unsuccessful rounds and no escalation decision, so
  * review.submit is refused) > DELIVERED (the latest round routed ACCEPT and awaits the
@@ -18,7 +18,8 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
-import { ambiguousCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
+import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/compiled-node-identity.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import type { GoalPublishState } from "../repository/publish-ledger.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
@@ -90,10 +91,11 @@ interface SealedNode {
   readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
+  readonly nodeRef: string;
   readonly objective: string;
 }
 
-function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
+function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
   const nodes: SealedNode[] = [];
   for (const graph of graphs) {
     const { edges, nodes: snapshotNodes } = graph.content.snapshot;
@@ -106,18 +108,12 @@ function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedN
           .map((edge) => edge.producerNodeKey),
         goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
+        nodeRef: compiledExecutionRef(projectId, graph, definition.nodeKey),
         objective: definition.objective,
       }));
     }
   }
   return nodes;
-}
-
-/** Node keys carried by more than one activated plan: their review ledgers are shared. */
-function sharedKeysOf(nodes: readonly SealedNode[]): ReadonlySet<string> {
-  const seen = new Map<string, number>();
-  for (const node of nodes) seen.set(node.nodeKey, (seen.get(node.nodeKey) ?? 0) + 1);
-  return new Set([...seen].filter(([, count]) => count > 1).map(([key]) => key));
 }
 
 const EMPTY_FACTS: NodeReviewFacts = Object.freeze({
@@ -182,12 +178,12 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
       goalId: goal.goalId,
       lifecycle: goal.lifecycle,
       nodes: Object.freeze(own.map((node): RunNodeView => {
-        const facts = reviews.ledgers.get(node.nodeKey) ?? EMPTY_FACTS;
+        const facts = reviews.ledgers.get(node.nodeRef) ?? EMPTY_FACTS;
         const review = reviewOf(facts);
-        const record = claims.get(workItemIdFor(NODE_DELIVER_KIND, node.nodeKey));
+        const record = claims.get(workItemIdFor(NODE_DELIVER_KIND, node.nodeRef));
         const active = activeClaim(record, now) !== null;
-        const receipt = reviews.receipts.get(node.nodeKey);
-        const landing = reviews.landings.get(node.nodeKey);
+        const receipt = reviews.receipts.get(node.nodeRef);
+        const landing = reviews.landings.get(node.nodeRef);
         const isShared = shared.has(node.nodeKey);
         return Object.freeze({
           accepted: facts.accepted === undefined
@@ -204,12 +200,13 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
             outcome: landing.outcome,
             sha: landing.commit?.sha ?? null,
           }),
-          lastActivityAt: latest.get(node.nodeKey) ?? null,
+          lastActivityAt: latest.get(node.nodeRef) ?? null,
           nodeKey: node.nodeKey,
+          nodeRef: node.nodeRef,
           objective: node.objective,
           receipt: receipt === undefined ? null : Object.freeze({
             byteCount: receipt.byteCount, exitCode: receipt.exitCode, outputSha256: receipt.outputSha256,
-            test: receipt.test, workspace: receipt.workspace,
+            test: receipt.test, workspace: receipt.workspace, testedTreeSha: receipt.workspaceBinding?.treeSha ?? null,
           }),
           review,
           sharedKey: isShared,
@@ -234,13 +231,13 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
         if (one === undefined) return refused("RUNS_READ_GOAL_UNKNOWN");
         goals = [one];
       }
-      // Every activated plan, not only the selected goals': a shared key is shared with ANY plan.
+      // Legacy facts can concern any graph; fresh subjects bind their own sealed owner.
       const graphs = readActive(store, projectId);
-      const allNodes = sealedNodesOf(graphs);
-      const shared = new Set([...sharedKeysOf(allNodes), ...ambiguousCompiledNodeKeys(store, projectId, graphs)]);
+      const allNodes = sealedNodesOf(projectId, graphs);
+      const shared = nodesBlockedByIdentity(graphs, legacyCompiledNodeKeys(store, projectId, graphs));
       const goalIds = new Set(goals.map((goal) => goal.goalId));
       const nodes = allNodes.filter((node) => goalIds.has(node.goalRef));
-      const nodeKeys = new Set(nodes.map((node) => node.nodeKey));
+      const nodeKeys = new Set(nodes.map((node) => node.nodeRef));
       const claims = readClaims(store, projectId);
       const reviews = readReviews(store, projectId, nodeKeys);
       const latest = lastDecidedAt(store, projectId, nodeKeys);

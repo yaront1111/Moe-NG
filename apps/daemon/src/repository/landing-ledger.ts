@@ -33,7 +33,7 @@ export type LandingRecordResult =
   | Readonly<{ readonly code: "EXPECTED_VERSION_CONFLICT" | "LANDING_RECEIPT_INVALID"; readonly ok: false }>;
 
 export type LandingBaselineRecordResult =
-  | Readonly<{ readonly baseline: LandingBaselineV1; readonly ok: true }>
+  | Readonly<{ readonly baseline: LandingBaselineV1; readonly baselineId: string; readonly ok: true }>
   | Readonly<{ readonly code: "EXPECTED_VERSION_CONFLICT" | "LANDING_BASELINE_INVALID"; readonly ok: false }>;
 
 export interface RecordLandingReceiptInput {
@@ -85,6 +85,19 @@ export function readLandingReceipt(
     return { code: "LANDING_RECEIPT_INVALID", ok: false };
   }
   return { decision, ok: true, receipt: decoded.receipt };
+}
+
+/** Resolve the reservation's original baseline; a newer attempt cannot replace its provenance. */
+export function readLandingBaseline(
+  store: SqliteEventStore, projectId: string, subjectRef: string, baselineId: string,
+): LandingBaselineV1 | null {
+  const decision = ownDecision(store, projectId, baselineId, LANDING_BASELINE_COMMAND_KIND);
+  if (decision === null || decision === "INVALID" || decision.previousVersion === null
+    || decision.targetAggregateId !== landingAggregateId(subjectRef)
+    || baselineId !== landingBaselineId(projectId, subjectRef, decision.previousVersion)) return null;
+  const decoded = decodeLandingBaselineBytes(decision.resultBytes);
+  return decoded.ok && decoded.baseline.projectId === projectId && decoded.baseline.subjectRef === subjectRef
+    ? decoded.baseline : null;
 }
 
 /** The most recent baseline recorded for the node, or null when none was. */
@@ -169,7 +182,7 @@ export function recordLandingBaseline(
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return { code: "EXPECTED_VERSION_CONFLICT", ok: false };
   }
-  return { baseline, ok: true };
+  return { baseline, baselineId, ok: true };
 }
 
 export function recordLandingReceipt(

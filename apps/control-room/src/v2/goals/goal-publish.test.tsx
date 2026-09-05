@@ -43,7 +43,7 @@ const goal = (overrides: Partial<RunGoalView> = {}): RunGoalView => ({
   nodes: [{
     accepted: { verifierReceiptId: "r" }, claim: null, criterionIds: [], dependsOn: [],
     landing: { branch: "main", code: null, files: ["src/a.ts"], outcome: "COMMITTED", sha: "a".repeat(40) },
-    lastActivityAt: null, nodeKey: "node-a", objective: "o", receipt: null,
+    lastActivityAt: null, nodeKey: "node-a", nodeRef: "node-a", objective: "o", receipt: null,
     review: { escalated: false, findings: [], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 2 },
     sharedKey: false, status: "ACCEPTED",
   }],

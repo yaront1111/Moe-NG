@@ -12,6 +12,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { catalogBoundGoals } from "./document-coverage-goals.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
@@ -133,7 +134,7 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
     if (goal.planningRunRef !== null) targets.add(goal.planningRunRef);
     for (const graph of readActive(store, projectId)) {
       if (graph.goalRef !== goalRef) continue;
-      for (const node of graph.content.snapshot.nodes) targets.add(node.nodeKey);
+      for (const node of graph.content.snapshot.nodes) targets.add(compiledExecutionRef(projectId, graph, node.nodeKey));
     }
     return targets;
   };

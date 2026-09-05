@@ -27,6 +27,7 @@ import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
+import { compiledExecutionRef } from "./compiled-execution-ref.js";
 
 const PRD = "# Compile me\n\nA PRD whose approved plan must build itself.\n";
 const CONTRACT_ID = "contract-source-1";
@@ -41,6 +42,9 @@ const CHAIN = Object.freeze([
 ]);
 
 afterEach(closeStores);
+
+const ref = (key: string): string => compiledExecutionRef(PROJECT_ID,
+  key === "node-kernel" ? activeGraphFor(GOAL_ID) : chainGraphFor(GOAL_ID), key);
 
 function activeGraphFor(goalRef: string): ActiveCompiledGraph {
   const compiled = compiledPlanAuthority({
@@ -155,7 +159,7 @@ describe("createCompiledNodeSource", () => {
   it("lists every execution-bearing sealed node, titled by its objective", () => {
     const store = openStore();
     expect(sourceFor(store, [activeGraphFor(GOAL_ID)]).nodes()).toEqual([
-      { dependsOn: [], nodeRef: "node-kernel", title: "Implement the belief-key identity kernel." },
+      { dependsOn: [], nodeRef: ref("node-kernel"), title: "Implement the belief-key identity kernel." },
     ]);
   });
 
@@ -163,26 +167,26 @@ describe("createCompiledNodeSource", () => {
     const store = openStore();
     const nodes = sourceFor(store, [chainGraphFor(GOAL_ID)]).nodes();
     // The whole chain seals, so the arm cannot pass by producing fewer nodes.
-    expect(nodes.map((node) => node.nodeRef)).toEqual(["node-a", "node-b", "node-c"]);
+    expect(nodes.map((node) => node.nodeRef)).toEqual(["node-a", "node-b", "node-c"].map(ref));
     // EQUALITY per node against the submitted build order — not merely that the
     // member is present. An always-empty producer fails here, which is the one
     // failure mode that would leave the readiness gate green and useless.
     expect(nodes.map((node) => [...node.dependsOn]))
-      .toEqual(CHAIN.map((node) => [...node.dependsOn]));
-    expect(nodes.map((node) => [...node.dependsOn])).toEqual([[], ["node-a"], ["node-b"]]);
+      .toEqual(CHAIN.map((node) => node.dependsOn.map(ref)));
+    expect(nodes.map((node) => [...node.dependsOn])).toEqual([[], [ref("node-a")], [ref("node-b")]]);
   });
 
   it("lists nothing while no graph is active, and for an unknown nodeRef briefs nothing", () => {
     const store = openStore();
     const source = sourceFor(store, []);
     expect(source.nodes()).toEqual([]);
-    expect(source.mission("node-kernel")).toBeNull();
+    expect(source.mission(ref("node-kernel"))).toBeNull();
     expect(sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-that-never-was")).toBeNull();
   });
 
   it("briefs a sealed node from host facts plus the sealed objective", () => {
     const store = openStore();
-    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-kernel");
+    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission(ref("node-kernel"));
     expect(mission).not.toBeNull();
     expect(mission?.workspace).toBe("D:/projects/unai");
     expect(mission?.test).toBe("pnpm test");
@@ -196,8 +200,8 @@ describe("createCompiledNodeSource", () => {
   it("refuses to brief without the host workspace or test command — fail closed", () => {
     const store = openStore();
     const graph = [activeGraphFor(GOAL_ID)];
-    expect(sourceFor(store, graph, { workspace: null }).mission("node-kernel")).toBeNull();
-    expect(sourceFor(store, graph, { testCommand: null }).mission("node-kernel")).toBeNull();
+    expect(sourceFor(store, graph, { workspace: null }).mission(ref("node-kernel"))).toBeNull();
+    expect(sourceFor(store, graph, { testCommand: null }).mission(ref("node-kernel"))).toBeNull();
     // Listing is unaffected: the board may show the node; only staffing needs the brief.
     expect(sourceFor(store, graph, { workspace: null }).nodes()).toHaveLength(1);
   });
@@ -216,7 +220,7 @@ describe("createCompiledNodeSource", () => {
       contractId: CONTRACT_ID, gateId: "gate-1", grant: {},
       revisionDigest: "e".repeat(64), revisionId: REVISION_ID, workRef: "work-source-1",
     });
-    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-kernel");
+    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission(ref("node-kernel"));
     expect(mission?.instructions).toContain("Acceptance criteria");
     expect(mission?.instructions).toContain(`- [crit-1] ${STATEMENT}`);
     // Only the criteria THIS node cites: the uncited one stays out of the brief.

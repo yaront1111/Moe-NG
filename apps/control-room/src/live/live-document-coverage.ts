@@ -14,12 +14,13 @@ const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
 const DOCUMENT_COVERAGE_READ_PATH = "/documents/coverage/read";
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export const CRITERION_COVERAGE_STATUSES = ["PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED"] as const;
+export const CRITERION_COVERAGE_STATUSES = ["EVIDENCE_REQUIRED", "PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED"] as const;
 export type CriterionCoverageStatus = (typeof CRITERION_COVERAGE_STATUSES)[number];
 
 export interface CoverageCriterionView {
   readonly criterionId: string;
   readonly nodeKey: string | null;
+  readonly nodeTestStatus: "NODE_TEST_PASSED" | null;
   readonly statement: string;
   readonly status: CriterionCoverageStatus;
 }
@@ -169,12 +170,18 @@ function listOf<T>(value: unknown, itemOf: (item: unknown) => T | null): readonl
 }
 
 function criterionOf(value: unknown): CoverageCriterionView | null {
-  const record = exactDataRecord(value, ["criterionId", "nodeKey", "statement", "status"]);
+  const record = exactDataRecord(value, ["criterionId", "nodeKey", "nodeTestStatus", "statement", "status"]);
   if (record === null || !nonEmptyString(record.criterionId) || !nullableString(record.nodeKey)
     || typeof record.statement !== "string" || typeof record.status !== "string"
+    || (record.nodeTestStatus !== null && record.nodeTestStatus !== "NODE_TEST_PASSED")
     || !(CRITERION_COVERAGE_STATUSES as readonly string[]).includes(record.status)) return null;
+  if (record.status === "EVIDENCE_REQUIRED" && record.nodeTestStatus !== "NODE_TEST_PASSED") return null;
+  if (record.nodeTestStatus === "NODE_TEST_PASSED"
+    && (!nonEmptyString(record.nodeKey)
+      || (record.status !== "EVIDENCE_REQUIRED" && record.status !== "VERIFIED"))) return null;
   return Object.freeze({
     criterionId: record.criterionId, nodeKey: record.nodeKey, statement: record.statement,
+    nodeTestStatus: record.nodeTestStatus,
     status: record.status as CriterionCoverageStatus,
   });
 }
