@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T23:21:30.207Z",
+  "updatedAt": "2026-09-05T23:24:45.445Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -267,6 +267,36 @@
       "treeId": "17e4d152532f2d2ee005e01b3fb500c2c2fee9b6",
       "status": "WORKING",
       "pushed": false
+    },
+    {
+      "sha": "c719aec8dfa8fdab544294432c6ff6da8731a5dd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:22:08Z",
+      "paths": [
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:22:58.932Z",
+      "treeId": "6cbb42baeb284b046340377052054a8b94e2173b",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "81172b946dc34f38f7e584132826e214788e5594",
+      "ref": "refs/moe/rescue/task-ac9d5e2d43334525bd990b1362652ce4/20260905T232440Z",
+      "kind": "rescue",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:23:37Z",
+      "paths": [
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:24:45.120Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "MOE_RESCUE_REF task=task-ac9d5e2d43334525bd990b1362652ce4 ref=refs/moe/rescue/task-ac9d5e2d43334525bd990b1362652ce4/20260905T232440Z sha=81172b946dc34f38f7e584132826e214788e5594 reason=ref-contention"
     }
   ],
   "filesModified": [
@@ -280,11 +310,15 @@
     "README.md"
   ],
   "unattributedPaths": [
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner.ts",
     "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
     "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
     "apps/daemon/src/repository/publication-effect-ledger.ts",
@@ -299,9 +333,10 @@
     "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "failed",
     "kind": "checkpoint",
-    "sessionId": "worker-2739fee7@2026-09-05T23:20:55Z",
-    "at": "2026-09-05T23:21:30.207Z"
+    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
+    "sessionId": "worker-2739fee7@2026-09-05T23:23:37Z",
+    "at": "2026-09-05T23:24:45.445Z"
   }
 }
