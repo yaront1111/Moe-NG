@@ -171,7 +171,7 @@
       "startedAt": "2026-09-05T19:22:02.800Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -231,7 +231,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:58.974Z",
-  "updatedAt": "2026-09-05T19:51:27.361Z",
+  "updatedAt": "2026-09-05T21:07:28.796Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:29:26.800Z",
     "plannedStepCount": 10,
@@ -562,11 +562,9 @@
     "apps/control-room/src/v2/styles/cordum-shell.css",
     "apps/control-room/src/v2/shell/advanced-frames.test.ts"
   ],
-  "blockedReason": "Concrete delivered-tree missing-import hole, not generic peer dirt: checkpoint4653ed18 contains this proof row's cordum-app plus task-e9cb2442 LiveDesign import/mount, but Design card/decoder are still untracked and absent from HEAD (git cat-file exact paths exits128). Owning task-e9cb2442 is REVIEW with commits=[] and awaits completion landing; its153-file/1903-test shared-tree green cannot certify this parent at delivered bytes. Preserve completed steps1-9; resume step10 after child lands. No source edits made during this resumed parent claim; do not absorb child files or fabricate live-lane completion.",
-  "blockedOnTaskIds": [
-    "task-e9cb2442a9a44408bea35cfce6a1897b"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T19:51:27.361Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

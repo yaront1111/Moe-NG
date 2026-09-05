@@ -114,7 +114,7 @@
       "completedAt": "2026-09-05T19:46:59.251Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -151,20 +151,35 @@
       "author": "worker-f72a1438",
       "content": "Final measurement correction: [IO.File]::ReadAllLines reports live-design.ts 183 physical lines, design-card.tsx 98 (earlier note said103); both ASCII. 'No processes left running' in step5 means all of my foreground verification sessions have returned completion, not a census claim about the host or another worker's processes. Authored browser tests/probe launch no daemon service; probe closes stores in afterEach. No source changed after the green153/1903 gate. Exact final owned diff check is clean.",
       "timestamp": "2026-09-05T19:47:48.559Z"
+    },
+    {
+      "id": "comment-2b48846c6a2147f780c043d61bcabc38",
+      "author": "qa-f2906c26",
+      "content": "QA FOLLOW-UP (not a rejection; recorded per the DELIVERY BIAS rail for the epic-final hardening row).\n\nREFUSAL-ROSTER GAP IN live-design.ts. `refusalOf` (live-design.ts:133-143) decodes exactly three frames: {code,layer}, {code,layer,outcome}, and the 5-key DesignRefusal {code,layer,ok,sourceCode,sourceLayer}. It does NOT decode the two HTTP-authority frames that design-read.ts:61 declares in its own body union:\n  HttpRefused      = {error, httpStatus, ok, outcome, stage}       (http-contract.ts:237)\n  HttpPortRefused  = {httpStatus, ok, outcome, refusal, stage}\ndesign-read.ts:84 returns `access` verbatim as the body on an auth/protocol refusal, and http-listener-read-dispatch.ts:371 `reply(response, result.httpStatus, result.body)` sends it raw. So an expired session or a protocol-version mismatch reaches the browser as HttpRefused, matches none of the three rosters, falls to `status !== 200`, and renders as DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN - i.e. \"the daemon sent a malformed design frame\" when the truth is \"your session was refused\". It fails CLOSED with words and a code, so nothing is broken, but the code misattributes the layer.\n\nMEASURED, not asserted from style: of the 16 daemon-read decoders in apps/control-room/src/live/, 15 decode these two shapes (live-activation, live-activity, live-command-dispatch, live-document-coverage, live-document-dossier, live-document-ingest, live-goal-catalog, live-goal-source, live-graph-get, live-ops, live-planning-run, live-product-contract-gate-1, live-repository-remote, live-runs, live-sessions). live-design.ts is the only one that does not - `grep -c httpStatus` returns 0 for it and 2+ for every peer. live-goal-source.ts:62-75 is the copy shape the plan named and it carries both.\n\nFIX SHAPE (whoever picks it up): add the two exact-key arms to refusalOf lifting `error.code`/`refusal.code` the way live-goal-source.ts:62-75 does, plus one arm per shape in live-design.test.ts. ~10 lines. Nothing else in the row changes.\n\nNot rejected because: task rail 1's own rationale is decoder TOLERANCE (\"a tolerant decoder defeats the stale-daemon detector\") and this decoder is exact; no DoD item names auth refusals; the path fails closed with a code and a layer; and a reject would reset all five steps to PENDING over ten lines.",
+      "timestamp": "2026-09-05T21:05:53.220Z"
+    },
+    {
+      "id": "comment-a6907f933b5c4b3a997e15773854aaf5",
+      "author": "qa-f2906c26",
+      "content": "QA REVIEW EVIDENCE (qa-f2906c26). Verdict APPROVE. Bytes graded at HEAD 9a25ff5422763ee81f45111b6167e035d067ec3e, tree 38ed0811 - QA hand-landed under the ratified hand-landing rule because task.commits was EMPTY ~4h after REVIEW and the deliverer session was gone. HEAD hashes are byte-identical to the worker's recorded post-drill SHA256s (live-design f45a90f6..., design-card b88bc4db...), so no drill mutant was stranded. cordum-app.tsx mount and the daemon census retirement were already carried by peer checkpoint 4653ed18 (Moe-Contested for this row) and are clean. No foreign path staged or committed; 198 peer-dirty paths left untouched.\n\nGATES I RE-RAN MYSELF, not read from the record:\n1. `pnpm --filter @moe/control-room test` (VITEST_MAX_WORKERS=2) -> exit 0, Test Files 153 passed (153), Tests 1903 passed (1903), 209.82s. Reproduces task.verification exactly.\n2. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=2 src/http/http-listener-read-dispatch.test.ts src/http/design-read.test.ts` -> exit 0, Test Files 2 passed (2), Tests 20 passed (20).\n3. I RECREATED the deleted real-frame probe verbatim from comment-e829916205b9 and ran it: exit 0, Test Files 1 passed (1), Tests 1 passed (1). Real submitDesignRevision -> real handleDesignReadRequest -> JSON wire round-trip -> production mapDesignAnswer. I also dumped the LIVE wire rosters: wire [ok,record,versions]; record [contractRef,goalRef,profile,projectId,revision,schemaVersion,submittedAt,version]; revision [apiSurface,componentList,dataModel,nonFunctional,openDecisions,screens]; entity {entity:\"Order\",fields:[\"id\"],relations:[]}. Equals the decoder's frozen constants exactly. MAX_DESIGN_TEXT=4096 (design-contracts.ts:36) also equals the browser text bound, so there is no false-refusal window on a long design string.\n4. `pnpm typecheck` -> exit 1, THREE errors, all in apps/control-room/src/v2/ops/ops-screens.test.tsx (122,137,143) TS2353 'repository'. FOREIGN: ops-screens.tsx, ops-screens.test.tsx and activation-port.ts are all a concurrent peer's uncommitted WIP (they are mid-flight adding a repository member to the health view). Zero owned-path errors, and tsc reports program-wide so that absence is evidence. NOTE the worker's disclosed baseline has already MOVED: the TS7053 in packages/control-room-client is gone and this one appeared.\n5. `pnpm --filter @moe/daemon test` is INADMISSIBLE on this host right now. I ran it ~50 minutes in the foreground and stopped it. Every failure is a wall-clock timeout against the script's 30s testTimeout: src/work/foundation-attempt-service.test.ts (107 tests, 52 failed) 2429945ms; src/work/foundation-capture-producer.test.ts (26 tests, 24 failed) 1406396ms; src/evidence/foundation-verification-service.test.ts (43 tests, 4 failed) 843145ms. Single files at 23-40 minutes is the host handle/spawn-latency cliff, not logic. Independently reproduces the worker's disclosure. Path-attributed: this row's only daemon path is http-listener-read-dispatch.test.ts, green in leg 2, so the failing-path set intersected with owned paths is EMPTY.\n\nCROSS-CHECKS. daemon-entry-ops.test.ts:145 proves the real daemon serves the absent case as {code:DESIGN_REVISION_ABSENT, layer:LEDGER, ok:false, sourceCode:null, sourceLayer:null} at 200 and :174 the unavailable case as LISTENER_DESIGN_UNAVAILABLE at 503 - both are shapes this decoder maps to REFUSED with code AND layer, so DoD 3's skip copy is proven against production, not a fixture. Full-tree literal census of /design/read: 14 hits, all consistent, no orphan mirror. Per-file lines 183/117/98/103, all under 250. ASCII-clean, apostrophe-free JSX, no apps/daemon import, no new dependency, request body is exactly {goalRef}. approve-plan.tsx and approve-plan-gate.tsx untouched (task rail 4).\n\nDoD 1 note: the DoD says \"(sorted)\" but DEV_PROXY_PATHS is not alphabetical at all (/health/read precedes /graph/get at HEAD) and no arm asserts a sort; the insert is at the slot approved plan step 4(3) named, and the two lists match position for position. Not charged.",
+      "timestamp": "2026-09-05T21:06:47.830Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:27:06.954Z",
-  "updatedAt": "2026-09-05T19:47:52.325Z",
+  "updatedAt": "2026-09-05T21:07:28.608Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:36:26.414Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-05T21:07:28.608Z",
+    "wallClockMs": 23462194
   },
   "contextFetchedBy": [
     "architect-2e480458",
-    "worker-f72a1438"
+    "worker-f72a1438",
+    "qa-f2906c26"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -224,5 +239,38 @@
     "apps/control-room/src/v2/cordum-app.tsx",
     "apps/control-room/src/live/dev-proxy-paths.ts"
   ],
-  "completionSummary": "Opened-goal Design card now reads POST /design/read with session headers and exactly {goalRef}. Exact-key frozen decoder validates all nested sections/records, retains refusal code+layer, rejects unknown shapes/schema, and supports the landed declared skip. UI shows five sections, open decisions and stored version; absence/skip/error have words. Proxy pin and both daemon route census exemptions updated. Eight paths reported; no daemon imports or new dependency.\nFresh full control-room gate PASS:153 files/1903 tests (VITEST_MAX_WORKERS=2), CR typecheck exit0. Owned daemon HTTP suites PASS:2 files/20 tests. Real durable submit->HTTP frame->browser decode PASS:1 test; recreatable full probe in comment-e829916205b94643a2c51ec18d967817. Three mutation reds and separate SHA256 restore proof in comment-88fc22469d024a8289440654f400c080.\nLIMITS: full daemon suite was interrupted after >20min foreign timeout arms, exec -1/no final count; INCOMPLETE, NOT green. Root typecheck TS7053 at packages/control-room-client/src/generated-coverage.test.ts(92,19), missing peer-generated repository.bootstrap/deployment.deploy builders before/after; no owned failing-path delta. Full attribution and rerun counts in comment-e0e2140e6bf94a8baa43db3045423d2e. No broad-daemon-green or clean-checkout claim.\nShared cordum-app mount and daemon census retirement already checkpointed by peer in4653ed18 and are clean; six remaining files ready for wrapper. New production files183/98 lines. Version provenance on plan approval remains outside this row as planned."
+  "completionSummary": "Opened-goal Design card now reads POST /design/read with session headers and exactly {goalRef}. Exact-key frozen decoder validates all nested sections/records, retains refusal code+layer, rejects unknown shapes/schema, and supports the landed declared skip. UI shows five sections, open decisions and stored version; absence/skip/error have words. Proxy pin and both daemon route census exemptions updated. Eight paths reported; no daemon imports or new dependency.\nFresh full control-room gate PASS:153 files/1903 tests (VITEST_MAX_WORKERS=2), CR typecheck exit0. Owned daemon HTTP suites PASS:2 files/20 tests. Real durable submit->HTTP frame->browser decode PASS:1 test; recreatable full probe in comment-e829916205b94643a2c51ec18d967817. Three mutation reds and separate SHA256 restore proof in comment-88fc22469d024a8289440654f400c080.\nLIMITS: full daemon suite was interrupted after >20min foreign timeout arms, exec -1/no final count; INCOMPLETE, NOT green. Root typecheck TS7053 at packages/control-room-client/src/generated-coverage.test.ts(92,19), missing peer-generated repository.bootstrap/deployment.deploy builders before/after; no owned failing-path delta. Full attribution and rerun counts in comment-e0e2140e6bf94a8baa43db3045423d2e. No broad-daemon-green or clean-checkout claim.\nShared cordum-app mount and daemon census retirement already checkpointed by peer in4653ed18 and are clean; six remaining files ready for wrapper. New production files183/98 lines. Version provenance on plan approval remains outside this row as planned.",
+  "commits": [
+    {
+      "sha": "9a25ff5422763ee81f45111b6167e035d067ec3e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T20:04:00Z",
+      "paths": [
+        "apps/control-room/src/live/live-design.ts",
+        "apps/control-room/src/live/live-design.test.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/v2/goals/design-card.tsx",
+        "apps/control-room/src/v2/goals/design-card.test.tsx"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T21:05:37.058Z",
+      "treeId": "38ed08113e192724bf9f9ebbff2fbba10abb56af",
+      "status": "REVIEW",
+      "pushed": false,
+      "recoveredBy": "qa-f2906c26",
+      "message": "feat(control-room): read /design/read through an exact-key decoder [task-e9cb2442a9a44408bea35cfce6a1897b] - QA hand-landing, author of record worker-f72a1438"
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-f2906c26@2026-09-05T20:04:00Z",
+    "at": "2026-09-05T21:05:37.058Z"
+  },
+  "completedAt": "2026-09-05T21:07:28.608Z",
+  "reviewCompletedAt": "2026-09-05T21:07:28.608Z",
+  "reviewSummary": "APPROVED. Graded at HEAD 9a25ff54, which I HAND-LANDED (task.commits was empty ~4h after REVIEW, deliverer gone). HEAD bytes hash-identical to the worker's post-drill SHA256s, so no drill mutant stranded; mount + census retirement already in peer 4653ed18; no foreign path committed.\n\nGATES RE-RUN BY ME: (1) pnpm --filter @moe/control-room test exit 0, Test Files 153 passed (153), Tests 1903 passed (1903) - reproduces task.verification. (2) owned daemon pins (--root . --config package.json, http-listener-read-dispatch + design-read) exit 0, Test Files 2 passed (2), Tests 20 passed (20). (3) I RECREATED the worker's deleted real-frame probe and ran it: exit 0, 1 file/1 test; dumped the LIVE wire rosters - equal to the decoder's frozen constants exactly, entity Order reaches the view. MAX_DESIGN_TEXT=4096 matches the browser bound.\n\nDoD 1 PASS. 2 PASS (extra AND missing key at 9 nested records; accessors/prototypes/symbols refused, getter never invoked). 3 PASS (mounted unconditionally cordum-app.tsx:309 with a source-text arm; five sections + version; absence and skip in words - daemon-entry-ops.test.ts:145/:174 prove the real daemon serves exactly those frames). 4 N/A, approve-plan*.tsx untouched. 5 PARTIAL, disclosed: pnpm --filter @moe/daemon test is inadmissible on this host - ran 50 min then killed; all failures are 23-40 MINUTE timeouts in src/work/foundation-* and src/evidence/foundation-* against a 30s testTimeout. Owned-path intersection EMPTY. pnpm typecheck exit 1 on 3 errors, all in a peer's uncommitted ops-screens WIP; zero owned-path errors.\n\nFiles 183/117/98/103 lines, ASCII, no daemon import, body exactly {goalRef}.\n\nEvidence comment-a6907f93. Non-blocking follow-up comment-2b48846c: refusalOf misses HttpRefused/HttpPortRefused so an auth refusal misattributes as DESIGN_RESPONSE_INVALID; 15 of 16 siblings carry those arms. Fails closed, ~10 lines - routed to the hardening row."
 }
