@@ -31,6 +31,10 @@ describe("compilerMission", () => {
     expect(text).toContain("supersedesCriterionId: null");
     expect(text).toContain("retiredRequirementIds: [], retiredCriterionIds: []");
     expect(text).toContain("work_release");
+    // The success path takes the step off the surface before the seat releases (measured
+    // 2026-09-05): the brief must say what to release with, or the seat has to guess.
+    expect(text).toContain("WORK_ITEM_UNKNOWN");
+    expect(text).toContain("claimAggregateVersion of your last successful read");
     expect(text).not.toContain("Suggested development payload");
   });
 

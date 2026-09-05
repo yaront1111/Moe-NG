@@ -382,6 +382,19 @@ describe("the compiler ladder on a source-bound goal", () => {
     ]);
   });
 
+  it("offers NOTHING while a citing revision awaits Gate 1: the human's turn, no seat", () => {
+    const resolution = resolutionFor("DRAFTING", "DRAFT", laneOf({
+      approvedGateRef: null, lane: "COMPILER",
+      pendingRevision: { contractId: "contract-widget", revisionId: "revision-0001" },
+    }));
+    expect(resolution.offers).toEqual([]);
+    expect(resolution.compilerSteps).toEqual([]);
+    // The explicit "none pending" reads exactly like the absent field.
+    expect(offersFor("DRAFTING", "DRAFT",
+      laneOf({ approvedGateRef: null, lane: "COMPILER", pendingRevision: null }))
+      .map((entry) => entry.commandKind)).toEqual(["product_contract.propose_revision"]);
+  });
+
   it("offers the dispatcher instead once Gate 1 approved a citing revision", () => {
     const resolution = resolutionFor("DRAFTING", "DRAFT",
       laneOf({ approvedGateRef: GATE_REF, lane: "COMPILER" }));

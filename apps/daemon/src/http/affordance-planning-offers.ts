@@ -150,9 +150,13 @@ function offersForGoal(
     const facts = input.compilerLane.factsFor(goal.goalId);
     if (facts.lane === "WITHHELD") return [];
     if (facts.lane === "COMPILER") {
-      return facts.approvedGateRef === null
+      if (facts.approvedGateRef !== null) {
+        return [offer(input, "planning.submit_decomposition", goal.goalId)];
+      }
+      // A revision awaiting Gate 1 is the human's turn: nothing to staff until they decide.
+      return (facts.pendingRevision ?? null) === null
         ? [offer(input, "product_contract.propose_revision", goal.goalId)]
-        : [offer(input, "planning.submit_decomposition", goal.goalId)];
+        : [];
     }
     return [offer(input, "plan.propose", runId)];
   }
