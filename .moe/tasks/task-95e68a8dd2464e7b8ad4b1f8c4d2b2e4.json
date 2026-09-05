@@ -1,0 +1,41 @@
+{
+  "id": "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Backups are proven restorable and rollback returns the previous sha",
+  "description": "SPIDR child 2 of task-7683a432eb3f4e87b1eb0cbc6e3a55ff (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-6ec875f4dd5f4f2ab97e46f71bf57b2b for the probe that confirms a rollback actually recovered.\n\nWHAT THIS ROW OWNS: (a) scheduled BACKUPS of the project store and, per environment with a database, `pg_dump` - written under `<project>/.moe-next/backups/...` with a sha256 and a retention of N; (b) `deployment.rollback {environment, toReceiptRef}` (human-only), redeploying the previous image/sha with an atomic replace and the same health probe, optionally restoring the database backup taken at that deploy. No UI - child 3.\n\nEVERY BACKUP IS PROVEN RESTORABLE. The parent's DoD 2 is unusually strong and correct: a restore-to-temp check whose sha256 is recorded PER RECEIPT. A backup that has never been restored is a file with a hopeful name, and the moment you discover otherwise is the moment you need it. This is the row's central property.\n\nTHE BACKUP LOCATION ALREADY HAS A CONVENTION: apps/daemon/src/bootstrap/activation-receipts-measure.ts:32-33 defines BACKUP_DIRECTORY '.moe-next' and BACKUP_LEAF 'backups'. Reuse it - a second backup location is a second place to search during an incident. The migrations row (task-78eedd8ebc2b43c581ac21ea28648a9a, a sibling parent's child) writes `pg_dump` backups to the same tree; coordinate on the layout rather than interleaving two schemes.\n\nROLLBACK RESOLVES THROUGH THE KEPT DEPLOY RECEIPT that task-04b3ce7e349743c2a156d32ee5550ba5 stores (a SIBLING parent's row - no dependsOn allowed). Build against the shape recorded there. ROLLBACK_IMAGE_MISSING is the case that matters: the receipt names an image that no longer exists locally, and the honest answer is a refusal, not a rebuild from source, which would produce a different image under the same sha.\n\nRETENTION PRUNES, AND THE RECEIPT SAYS WHAT IT PRUNED. Silent deletion of backups is how the one you needed disappears.",
+  "definitionOfDone": [
+    "Scheduled backups write the project store and, per environment with a database, a `pg_dump`, under the EXISTING `.moe-next/backups` convention with a sha256 per backup. Assert the files exist and their recorded sha256 matches the bytes.",
+    "EVERY BACKUP IS PROVEN RESTORABLE: a restore-to-temp check runs per backup and its sha256 equality is RECORDED IN THE RECEIPT. Assert a real restore round trip, and assert that a backup which fails to restore is recorded as FAILED rather than kept as a good one - an unrestorable backup that reports success is worse than no backup, because it stops anyone looking for another.",
+    "RETENTION PRUNES TO N and the receipt LISTS THE PRUNED REFS. Assert the count after pruning and that the listed refs are the ones actually removed - silent deletion is how the backup you needed disappears.",
+    "`deployment.rollback` published HUMAN-ONLY and MCP-EXCLUDED with the full roster backfill and a bidirectional set-equality roster test. Rolling back a production environment is never an agent's decision.",
+    "The rollback offline test asserts the PREVIOUS IMAGE TAG is redeployed (resolved from the kept deploy receipt, not rebuilt from source - a rebuild under the same sha produces a different image) and that the DB restore is applied ONLY when requested. Assert the not-requested path leaves the database untouched.",
+    "ROLLBACK_RECEIPT_UNKNOWN, ROLLBACK_IMAGE_MISSING and BACKUP_FAILED each assert code + layer. ROLLBACK_IMAGE_MISSING refuses rather than rebuilding.",
+    "After a rollback the health probe from child 1 confirms recovery - assert the environment returns to UP through the real probe path, not through an internal flag.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "A BACKUP THAT HAS NEVER BEEN RESTORED IS NOT A BACKUP. The restore-to-temp proof per receipt is this row's reason for existing.",
+    "NEVER REBUILD AN IMAGE TO SATISFY A ROLLBACK. A rebuild under the same sha is a different image; a missing image is ROLLBACK_IMAGE_MISSING.",
+    "RETENTION NAMES WHAT IT DELETED. Silent pruning loses the one you needed.",
+    "REUSE `.moe-next/backups` (activation-receipts-measure.ts:32-33) and coordinate the layout with the migrations row's pg_dump backups - one tree, one scheme.",
+    "`deployment.rollback` IS HUMAN-ONLY, and the DB restore happens ONLY when explicitly requested."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
+  "dependsOn": [
+    "task-6ec875f4dd5f4f2ab97e46f71bf57b2b"
+  ],
+  "priority": "HIGH",
+  "order": 122,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:53:30.667Z",
+  "updatedAt": "2026-09-05T00:53:30.667Z"
+}

@@ -9,6 +9,7 @@ import {
   closeStores,
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { scanGlobalEvents, seedReviewAcceptance } from "./goal-closure-test-fixtures.js";
@@ -67,7 +68,12 @@ const HANDLERS: daemon.HandlerTable = Object.freeze({
 });
 
 function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcome {
-  return daemon.runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), HANDLERS);
+  // FIXTURE_ACTIVATION_RECEIPTS stands in for what the daemon measures for itself;
+  // `project.activate` mints its witness from them and refuses when none were measured.
+  return daemon.runBootstrapCommand(
+    store, encoder.encode(JSON.stringify(request)), HANDLERS, undefined,
+    FIXTURE_ACTIVATION_RECEIPTS,
+  );
 }
 
 /** No committed activation ANYWHERE in the store, with the journey's own events as the positive

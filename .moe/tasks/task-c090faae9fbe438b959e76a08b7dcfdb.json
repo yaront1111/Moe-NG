@@ -1,0 +1,41 @@
+{
+  "id": "task-c090faae9fbe438b959e76a08b7dcfdb",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Seats says which provider is running on what credential, and a real codex seat delivers",
+  "description": "SPIDR child 3 of task-969575299465484d9486ea02ff7ae336 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-8e793ae3c63f41189bcc05f6d7c15605, the setting) and child 2 (task-df64aa204d6f4c35810376226980e4b7, mission parity). PROOF ROW: it owns the UI, the Playwright journey, the live drive and the docs (global rail 21).\n\nWHAT THIS ROW OWNS: the provider toggle in the browser, the Seats screen showing provider + credential SOURCE + CLI version per seat, the missing-credential refusal rendered verbatim, and the live `codex exec` drive.\n\nCREDENTIAL SOURCE, NEVER A VALUE. Seats shows WHERE the credential came from - a sign-in file, or the NAME of an env var - and never the value itself. `moe-up-credentials.ts` / `moe-up-env.ts` hold the CODEX_HOME / CODEX_ACCESS_TOKEN / OPENAI_API_KEY / CODEX_API_KEY roster, and the launcher's `MOE_UP_ENV_MISSING` roster is what renders when the chosen provider has no credential. This is the one clause in this row worth a hostile test: a credential in an operator's screenshot cannot be recalled.\n\nTHE LIVE DRIVE MAY LEGITIMATELY BE BLOCKED. The parent filed this row while the Codex quota was exhausted until 2026-09-08, and its DoD 4 says so explicitly: if the quota still refuses, `moe.report_blocked` with the RESET DATE and the EXACT refusal line - never a fabricated pass. That is a real outcome, not a failure of this row.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb: `KNOWN_PROVIDERS = [\"claude\",\"codex\"]` at apps/daemon/src/http/health-read.ts:34; the Seats panel renders under `data-testid=\"cr.sessions.root\"` in apps/control-room/src/v2/ops/activity-screens.tsx, fed by live-sessions.ts, whose decoder is EXACT-KEY (it refuses a response whose key set differs) - so any new member on /sessions/read needs the daemon and the decoder to move together, or the Seats screen goes blank. task-92d84d384e4443d7bf78c76024af5688 is also extending /sessions/read (with the concurrency limit); expect a rebase there.",
+  "definitionOfDone": [
+    "A provider toggle in the browser writes the durable setting from child 1, and the Seats screen shows PROVIDER, CREDENTIAL SOURCE and CLI VERSION per seat, read from a REAL daemon frame.",
+    "NO CREDENTIAL VALUE IS EVER RENDERED - only its source (a sign-in file, or an env var NAME). Assert it hostilely: a frame carrying a credential-shaped value renders the source only, and the test greps the rendered output for the value and finds nothing. A credential in an operator screenshot cannot be recalled.",
+    "When the chosen provider has NO credential, the launcher's `MOE_UP_ENV_MISSING` roster renders VERBATIM, naming which variables are missing - an operator whose seats will not start needs the variable names, not 'no credential'.",
+    "The env override from child 1 is visible here: with `MOE_AGENT_COMMAND` set, Seats says the effective provider AND that a launcher env override is in force, so a browser choice that is being ignored is legible rather than mysterious.",
+    "A Playwright journey against a REAL daemon covers the toggle and the Seats reading, with the `pnpm test:e2e:browser` count line quoted. The /sessions/read decoder is EXACT-KEY: daemon and browser move together, and a round-trip assertion proves it.",
+    "LIVE DRIVE: a real `codex exec` seat delivers a node on UnAI or a fresh project - transcript and landing sha in a row comment under ~4500 chars. IF THE CODEX QUOTA STILL REFUSES, report_blocked with the reset date and the EXACT refusal line (the parent's DoD 4 makes this a legitimate outcome) - never a fabricated pass, and never a claude seat reported as a codex one.",
+    "docs/agent-stack-runbook.md 'Codex seats' and the README Codex clause ('wired but was last proven only to reach the API') are updated to the measured truth. Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "NEVER RENDER A CREDENTIAL VALUE - only its source. This is the row's one hard safety property and it carries its own hostile test.",
+    "A BLOCKED LIVE DRIVE IS AN ACCEPTED OUTCOME when the Codex quota refuses: report_blocked with the reset date and the exact refusal line. Never fabricate a pass and never report a claude seat as a codex one.",
+    "THIS ROW PROVES, IT DOES NOT REBUILD: if the setting does not reach the spawn, that is child 1's; if a codex seat cannot complete its mission, that is child 2's. Comment there and report_blocked.",
+    "/sessions/read has an EXACT-KEY browser decoder and another row (task-92d84d38) is extending the same read; daemon and browser move together, and expect a rebase.",
+    "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-969575299465484d9486ea02ff7ae336",
+  "dependsOn": [
+    "task-8e793ae3c63f41189bcc05f6d7c15605",
+    "task-df64aa204d6f4c35810376226980e4b7"
+  ],
+  "priority": "HIGH",
+  "order": 73,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:40:24.658Z",
+  "updatedAt": "2026-09-05T00:40:24.658Z"
+}

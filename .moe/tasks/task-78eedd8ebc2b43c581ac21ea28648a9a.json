@@ -1,0 +1,41 @@
+{
+  "id": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Deploy backs up before it migrates, and migrate_down can undo it",
+  "description": "SPIDR child 3 of task-8f86e10504c74e248ccfa6f427b41a15 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-463f195efd2f4fd2886790029a474194, the tool) and child 2 (task-ff41c5c9efa34494b7b91e6f0ddcb7c2, the disposable-database lifecycle this reuses). PROOF ROW: it owns the UI, the live drive and the docs (global rail 21).\n\nWHAT THIS ROW OWNS: applying pending migrations on deploy AFTER a `pg_dump` backup; the `moe-migration-receipt/1` record; the human-only `deployment.migrate_down`; the Deployments and node cards; and the live drive.\n\nBACKUP BEFORE MIGRATE IS THE ORDER, and it is the only thing standing between a bad migration and lost production data. The backup goes to `<project>/.moe-next/backups/<env>/<ts>.sql` with its sha256 in the receipt - note `.moe-next/backups` is an EXISTING convention (apps/daemon/src/bootstrap/activation-receipts-measure.ts:32-33 already defines BACKUP_DIRECTORY '.moe-next' and BACKUP_LEAF 'backups'), so reuse it rather than inventing a second location. MIGRATION_BACKUP_FAILED means NOTHING IS APPLIED - a migration that ran after a failed backup is the exact scenario this receipt exists to make impossible.\n\nCROSS-ROW COORDINATION, NOT A DEPENDENCY: 'applies on deploy' needs the deploy path, which belongs to task-5d30948435524c6fa2789e1c033aafe7 (containerized deployment) - a SIBLING feature row, and the parent rail forbids depending on one. Build the migration-on-deploy step so it composes with that row's deploy rather than duplicating it, and if the deploy path does not exist yet, land the migrate/backup/receipt machinery with its own entry point and say so in the record. Also: the environment's DATABASE_URL comes from the environments model (task-9ae492b373fa4e7aa6b1e91585f6e612's children) - same coordination, same rule.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): no deploy path, no migration receipt, no backup-before-migrate anywhere.",
+  "definitionOfDone": [
+    "BACKUP-BEFORE-MIGRATE ORDERING is asserted through injectable docker/pg ports in an offline test: the `pg_dump` completes before the first migration runs, and MIGRATION_BACKUP_FAILED means ZERO migrations were applied - assert the schema is untouched on that path, not merely that a refusal was returned. This is the row's central safety property.",
+    "`moe-migration-receipt/1` records {environment, sha, applied[], backupRef, APPLIED|REFUSED(code)} and is read back from a real store with every member asserted; the backupRef carries the backup's sha256 and the file exists at `<project>/.moe-next/backups/<env>/<ts>.sql`, reusing the EXISTING `.moe-next/backups` convention (activation-receipts-measure.ts:32-33) rather than a second location.",
+    "`deployment.migrate_down` published HUMAN-ONLY and MCP-EXCLUDED with the full roster backfill and a bidirectional set-equality roster test; it reverts the last batch and its receipt records the revert. Assert the schema actually changed back, not merely that the command returned.",
+    "THE RESTORE PATH: when a down-migration cannot revert, restoring the recorded backup is possible and its receipt says so. Assert a restore round trip against a real disposable PostgreSQL - a backup nobody has ever restored is a file, not a safety net.",
+    "MIGRATION_BACKUP_FAILED and MIGRATION_FAILED (with the failing file) assert code + layer; MIGRATION_FAILED on deploy leaves the receipt REFUSED with the failing migration named.",
+    "The Deployments card shows migration state per environment (pending/applied, last backup) and a node card shows 'adds migration NNNN'; Runs shows migration receipts. Playwright against a REAL daemon; `pnpm test:e2e:browser` count line quoted.",
+    "LIVE DRIVE: a real migration verified on a disposable PostgreSQL and applied to the PREVIEW environment - the receipt and the `\\dt` listing in a row comment under ~4500 chars. If no preview environment exists yet (the deployment row is a sibling and may not have landed), record that plainly and drive the verified half only. Runbook + README updated; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "BACKUP BEFORE MIGRATE, ALWAYS. A failed backup means nothing is applied. This is the row's reason for existing and the one property whose failure loses data that cannot be recovered.",
+    "RESTORE MUST BE PROVEN, not assumed. A backup that has never been restored in a test is a file, not a safety net.",
+    "REUSE `.moe-next/backups` (activation-receipts-measure.ts:32-33). A second backup location is a second place to look during an incident.",
+    "COMPOSE WITH THE DEPLOY ROW, do not duplicate it: task-5d30948435524c6fa2789e1c033aafe7 owns the deploy path and is a SIBLING feature row (no dependsOn allowed). If it has not landed, ship this row's machinery behind its own entry point and say so.",
+    "`deployment.migrate_down` IS HUMAN-ONLY. Reverting a production schema is never an agent's decision."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-8f86e10504c74e248ccfa6f427b41a15",
+  "dependsOn": [
+    "task-463f195efd2f4fd2886790029a474194",
+    "task-ff41c5c9efa34494b7b91e6f0ddcb7c2"
+  ],
+  "priority": "HIGH",
+  "order": 113,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:48:57.960Z",
+  "updatedAt": "2026-09-05T00:48:57.960Z"
+}

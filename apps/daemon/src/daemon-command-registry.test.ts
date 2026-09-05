@@ -196,8 +196,14 @@ const ROWS: readonly Row[] = [
     kind: "policy.install", layer: INGRESS, payloadKeys: ["slice"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "policy.validate",
     layer: PREREQ_LAYER, payloadKeys: ["input"] },
-  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.activate",
-    layer: PREREQ_LAYER, payloadKeys: ["witness"] },
+  // ASYNC-ONLY since task-4b9c394d: the daemon MEASURES its own activation receipts (a git HEAD
+  // read and a store backup) before it may mint the witness, and a synchronous handler cannot
+  // await that. `payloadKeys` still lists "witness" DELIBERATELY -- the roster is the ingress
+  // allow-list, and an unlisted key would be refused generically at PAYLOAD_SHAPE instead of
+  // reaching the specific ACTIVATION_WITNESS_CALLER_SUPPLIED refusal. The empty payload this
+  // sweep sends is the CORRECT one, so the row still reaches the prerequisite gate.
+  { agent: [ADMIN, WORK], asyncOnly: true, capability: ADMIN, code: PREREQUISITE,
+    kind: "project.activate", layer: PREREQ_LAYER, payloadKeys: ["witness"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.bind_repository",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",

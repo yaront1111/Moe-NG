@@ -1,0 +1,41 @@
+{
+  "id": "task-ba83b202265d40d1885d3091f009b0a2",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The Environments screen shows what is set without ever showing a value",
+  "description": "SPIDR child 3 of task-9ae492b373fa4e7aa6b1e91585f6e612 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-d0c63cd8848a4da18ad3fbb8eb1d95c3, the store and reads) and child 2 (task-72b22fcf9da54b3b91dabf5b7392aff1, required names and delivery). PROOF ROW: it owns the UI, the Playwright journey and the docs (global rail 21).\n\nWHAT THIS ROW OWNS: an Environments screen (per environment: required vs set, set/unset dialogs, fingerprint, last update) and the goal's 'N required variables unset for preview' with a link to it.\n\nTHE SCREEN NEVER SHOWS A VALUE, and it is the surface most likely to leak one: it is the only place an operator TYPES a value, so the input, its state, any error message and any browser devtools-visible prop must be considered. The reads child 1 built return {name, isSet, sha256 fingerprint, updatedAt} and no value - the screen must not add one back by echoing what was typed after a failed submit, which is the natural way to be helpful and the exact way this leaks into a screenshot.\n\nTHE FINGERPRINT IS THE OPERATOR'S ONLY FEEDBACK. Since they can never see the value back, the sha256 fingerprint changing after an update is how they know the update took. Render it, and make clear it is a fingerprint rather than a truncated value.\n\nTHE UNSET COUNT IS THE POINT OF THE GOAL CARD. 'N required variables unset for preview' is what stops a deploy failing for a reason nobody can see - the required names come from the approved contract via child 2.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): the ops screens live at apps/control-room/src/v2/ops/ (ops-screens.tsx is 228 lines, close to the 250 ceiling - a new screen likely belongs in its own module rather than appended there), the live read clients in apps/control-room/src/live/ decode with EXACT-KEY checks, and every new route needs its pin in dev-proxy-paths.ts.",
+  "definitionOfDone": [
+    "An Environments screen renders, per environment, the required-vs-set table with each variable's fingerprint and last update, plus set and unset dialogs, against a REAL daemon frame.",
+    "NO VALUE IS EVER RENDERED OR RETAINED: assert that after a FAILED submit the screen does not echo the typed value back, and that no value appears in the rendered output for any state. This is the leak this screen invites - echoing input after an error is the helpful-looking behaviour that puts a secret in a screenshot.",
+    "The fingerprint CHANGES in the UI after an update and is labelled as a fingerprint, not as a truncated value - the operator can never see the value back, so this is their only confirmation the update took.",
+    "The goal card shows 'N required variables unset for <environment>' with a link to the screen, driven by the required names child 2 reads from the approved contract; assert the count for a goal with two required names and one set, and assert the card is absent when none are required.",
+    "All four refusals render VERBATIM with their codes (ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN, ENV_STORE_KEY_UNAVAILABLE) - and the refusal text must not contain the submitted value.",
+    "A Playwright journey against a REAL daemon covers the required-vs-set table, a set/unset round trip and the fingerprint changing on update; `pnpm test:e2e:browser` count line quoted. The new read's decoder is EXACT-KEY and its proxy pin is added to dev-proxy-paths.ts.",
+    "The runbook documents the environments model (environments, required names from the contract, fingerprints, and that values are never readable back); gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "NEVER ECHO A TYPED VALUE BACK - not after a failed submit, not in a refusal message, not in a retained form state. This screen is the only place a value is typed and therefore the likeliest leak.",
+    "THE FINGERPRINT IS NOT A TRUNCATED VALUE. Label it so; an operator who thinks they are seeing part of the secret will treat the screen as unsafe to share, or worse, will not.",
+    "THIS ROW PROVES, IT DOES NOT REBUILD: a store or read defect is child 1's, a required-names or delivery defect is child 2's. Comment there and report_blocked.",
+    "ops-screens.tsx is 228 lines against a 250 ceiling - put a new screen in its own module rather than appending, and measure with `wc -l` before writing.",
+    "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; EXACT-KEY decoder plus a dev-proxy-paths pin for any new read."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
+    "task-72b22fcf9da54b3b91dabf5b7392aff1"
+  ],
+  "priority": "HIGH",
+  "order": 103,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:46:11.818Z",
+  "updatedAt": "2026-09-05T00:46:11.818Z"
+}

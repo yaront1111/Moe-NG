@@ -108,14 +108,12 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
       policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
     },
   },
-  "project.activate": {
-    witness: {
-      artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",
-      distributionManifestHash: hex64("cafe"), policyRevisionHash: hex64("face"),
-      providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-      storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
+  // EMPTY ON PURPOSE (task-4b9c394d). The daemon measures its own activation receipts -- repo
+  // HEAD, provider probe, store driver, backup sha256, distribution manifest, installed policy
+  // -- and mints the nine-key witness itself. A witness sent from the browser is refused
+  // ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS, which is the whole point: this dev
+  // board used to hand the daemon invented refs and have them committed as DAEMON_VERIFIED.
+  "project.activate": {},
   "project.bind_repository": {
     observation: {
       baseRevisionHash: hex64("beef"), repositoryRef: "repo-1", scopeRef: "scope-1",

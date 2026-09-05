@@ -5,6 +5,7 @@ import {
 import { GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_RECURSION_LAYERS } from "@moe/scheduler";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import type { ActivationReceipts } from "./activation-receipts.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
 
 /**
@@ -101,6 +102,13 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // compile-time check is `graph-revision-activation-leg.ts` typing its core refusal's `layer` as
   // this exact literal and `activateInitialGraph` passing it straight into `refuse`.
   "GRAPH_REVISION",
+  // Where a `project.activate` refuses because the daemon could not MEASURE a receipt it must
+  // mint the witness from. Spelled literally for the same reason GRAPH_REVISION is: the receipts
+  // module keeps `ACTIVATION_RECEIPTS_LAYER` module-private (an exported `*_LAYER` owes the
+  // security lane's boundary roster six coupled assertions) and exports only its type. The
+  // compile-time check is `UnmeasuredReceipt.layer` being this exact literal type and
+  // `activateProject` passing it straight into `refuse`.
+  "DAEMON_ACTIVATION_RECEIPTS",
   ...ACCEPTANCE_CONTRACT_LAYERS,
   ...APPROVAL_AUTHORITY_LAYERS,
   // BOTH scheduler rosters, spread rather than retyped. What a graph-content READER may observe
@@ -223,6 +231,11 @@ export function humanReviewWitness(principalId: string, commandId: string): Huma
 export interface HandlerContext {
   readonly humanReview?: HumanReviewWitness;
   readonly ledger: DurableLedger;
+  /**
+   * What THIS daemon measured for a `project.activate`, assembled by the composition root and
+   * never decoded from request bytes. Absent means nothing was measured, which fails closed.
+   */
+  readonly receipts?: ActivationReceipts;
   readonly request: BootstrapRequest;
   readonly store: SqliteEventStore;
 }

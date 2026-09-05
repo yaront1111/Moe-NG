@@ -260,10 +260,12 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         "demo-seed-project.register",
         "demo-seed-project.bind_repository",
         "demo-seed-provider.probe",
-        "demo-seed-project.activate",
+        // POLICY BEFORE ACTIVATION (task-4b9c394d): the `policy` activation receipt is the
+        // digest of the INSTALLED slice set, so activating first refuses POLICY_UNMEASURED.
         "demo-seed-policy.install-verifier-policy",
         "demo-seed-policy.install-reviewer-calibration",
         "demo-seed-policy.install-validatable-policy",
+        "demo-seed-project.activate",
         // NOT `demo-seed-goal.create`: production mints the goal aggregate as
         // `goal-${commandId}`, so the seed names its create command after the configured
         // goal subject (`goal-live-1` -> `live-1`) and the seeded goal lands where the
@@ -473,7 +475,8 @@ describe("runDemoSeed refusals", () => {
     // convergence, not failure.
     const stub = await startStub({
       commandRefusal: {
-        at: 3,
+        // Index 6 IS `project.activate`: the three policy installs now precede it.
+        at: 6,
         frame: {
           httpStatus: 409,
           ok: false,
@@ -490,7 +493,7 @@ describe("runDemoSeed refusals", () => {
       expect(lines.some((line) => line.includes("skipped project.activate"))).toBe(true);
       // Every later step still went to the wire: the walk continued past the skip.
       expect(stub.requests.filter((recorded) => recorded.path === "/command").length)
-        .toBeGreaterThan(4);
+        .toBeGreaterThan(7);
     } finally {
       await stub.close();
     }
@@ -499,7 +502,8 @@ describe("runDemoSeed refusals", () => {
   it("echoes a command refusal's code and layer and sends nothing after it", async () => {
     const stub = await startStub({
       commandRefusal: {
-        at: 3,
+        // Index 6 IS `project.activate`: the three policy installs now precede it.
+        at: 6,
         frame: {
           httpStatus: 409,
           ok: false,
@@ -523,7 +527,8 @@ describe("runDemoSeed refusals", () => {
       expect(outcome.line).toContain("STORE_VERSION_CONFLICT");
       expect(outcome.line).toContain("layer=STATE");
       expect(outcome.line).toContain("project.activate");
-      expect(stub.requests.filter((recorded) => recorded.path === "/command").length).toBe(4);
+      // Seven sent, then nothing: the refused `project.activate` is the SEVENTH command.
+      expect(stub.requests.filter((recorded) => recorded.path === "/command").length).toBe(7);
     } finally {
       await stub.close();
     }

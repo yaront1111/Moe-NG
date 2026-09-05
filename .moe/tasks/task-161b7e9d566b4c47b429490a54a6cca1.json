@@ -16,8 +16,61 @@
     "EVIDENCE, NEVER FABRICATION (epic rail 4 + global rails): every claim in the transcript names its measurement anchor (store path, sha, receipt id); a gate that prints no count line did not run; a live step that refuses is recorded verbatim and the row goes BLOCKED with blockedOnTaskIds or a comment - never a narrowed DoD.",
     "PROVE IT LIVE: the run is a fresh product directory (not UnAI's existing store) driven from the browser only; the seeds/scripts under scratchpad are not used for any step the product claims to do itself. Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE ON THE TWELVE, AND GET THE PRD, NO CODE. (a) This row carries dependsOn on all twelve feature rows and is the epic's ONLY row that does — the owner's deliberate exception. Confirm each is DONE and record its landing sha and completionSummary/reviewSummary in a step note; per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it. (b) THE PRD IS A HUMAN INPUT AND THIS ROW CANNOT START WITHOUT IT: the description says 'the human supplies or approves it at claim time (comment on this row)'. Read this row's comments for a supplied PRD; if none exists, ASK IN THE ROW and wait rather than inventing one — a PRD you wrote yourself makes the whole proof circular, because the product would be built from requirements chosen to be easy. The shape agreed: small but real, e.g. a 3-screen TypeScript web app with sign-in, one PostgreSQL table and one API. (c) Read every feature row's comments and collect the FOLLOW-UP ITEMS they recorded — DoD 6 requires each to be closed here or listed with a reason, and they are unfindable later.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE FAULT-INJECTION KNOB — the one piece of PRODUCTION code this row writes, and it does not exist yet. MEASURED at plan time: `grep -rn 'FAULT_INJECT|DEVELOPMENT_ONLY|MOE_CRASH|crashAfter|killAfter' --include=*.ts apps/daemon/src` returns ZERO, so the description's 'a knob the daemon already carries or this row adds' resolves to ADDS. Add it under an explicit DEVELOPMENT_ONLY flag that is OFF by default and refuses to arm when the daemon is not in development mode — a crash knob reachable in a normal run is a denial-of-service switch, and this row's rail 1 keeps security work out of scope precisely so the knob must not become one. It kills the daemon at a NAMED point during a landing write. REUSE THE EXISTING CRASH MACHINERY FIRST: tests/e2e/foundation/j3-crash-harness.ts and j3-crash-recovery.e2e.test.ts already kill and restart a real daemon and assert recovery, and dispatch-crash-sweep.e2e.test.ts sweeps dispatch crashes — read them before inventing a mechanism, and say in the step note whether the knob is new or an extension of theirs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j3-crash-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE BROWSER-ONLY RUN ON A FRESH PRODUCT (DoD 1). A FRESH product directory — NOT UnAI's existing store (task rail 3) — driven from the browser only, with real seats. The scripts under scratchpad are not used for ANY step the product claims to do itself; using one to bootstrap the repository would make the bootstrap claim false. Walk the whole loop and record each artefact as a row comment in a series, EACH UNDER 4500 CHARS (comments truncate silently at 5000, so a 6000-char transcript loses its tail without saying so): bootstrap receipt, activation witness, Gate 1 decision id AND the real clarification (DoD 1 requires at least one — if the PRD is unambiguous enough that the seat asks nothing, that is a finding to record, not a step to fake), design ref, plan run id, node landing shas for at least 2 nodes with at least 2 STAFFED CONCURRENTLY (the multi-node feature this epic built), preview receipt + decision, release receipt + PR URL, deploy receipt + health URL, migration receipt, environment fingerprints. Every claim names its measurement anchor — store path, sha, receipt id (task rail 2). NEVER RESTART THE WRAPPER to unstick a seat: the claim TTL is 30 minutes and a restart just waits a full lease.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CRASH, MID-WRITE (DoD 2 — the Stage 1 bar, and the hardest claim in this row). Kill the daemon DURING a landing write, recording the knob name and the timestamp. Then restart and prove recovery FROM THE STORE ALONE, never from agent memory or a log line: the ledger shows EXACTLY ONE outcome for that landing — COMMITTED once, or REFUSED with its code — never duplicated and never lost, and the goal resumes. THE EVIDENCE IS A STORE QUERY QUOTED WITH ITS RESULT (DoD 2 says so explicitly); a log line saying 'recovered' is not evidence, because the log is written by the process whose correctness is in question. Assert the ONE-OUTCOME property by counting rows for that landing in the durable ledger, not by observing that the goal looks fine afterwards — a duplicate landing also looks fine.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE RELEASE DOSSIER AT THE RELEASED SHA (DoD 3). Every approved criterion reads VERIFIED, n/n, in the dossier AT the released sha, and the dossier is attached to the opened PR with its URL in the comment. Assert the fraction with its DENOMINATOR — 'all verified' without n/n hides a dossier that enumerated fewer criteria than the contract approved, which is the failure mode this clause exists to catch. Cross-check the criterion COUNT against the approved Product Contract revision rather than against the dossier's own header, since a dossier that dropped a criterion would report itself complete.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "WHOLE-EPIC REGRESSION (DoD 4). Every leg standalone and foreground, each `Test Files N passed` count line quoted VERBATIM; a leg that prints no count line DID NOT RUN and must not be reported as a pass (global rail 8, and task rail 2 repeats it). The DoD names: `pnpm test`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, `pnpm test:integration` (from PowerShell), `pnpm test:security`, `pnpm test:property`. State explicitly that `pnpm test` covers NO apps/** (global rail 18), so the two --filter legs are what cover the daemon and control room. ALSO RUN `pnpm test:fault` and quote it: the repo has that lane (tests/fault, `test:fault` in package.json) and this row ADDS A CRASH KNOB — the DoD's list predates that decision and omitting the fault lane while shipping fault-injection would be the obvious gap. If it is red for reasons this row did not cause, attribute by the merge-base/HEAD delta and disclose it verbatim (global rail 3).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE DOCS SWEEP (DoD 5). README's 'What runs today' and 'What this is not' rewritten to the MEASURED state with its date — 'as of <date>' — and that date must be the date of the run in step 3, not the date of writing. The 'What this is not' section exists to be honest about gaps: anything this epic did NOT close stays listed, and anything it did close comes out with evidence behind it. Update the VISION Stage 1 / Stage 2 status lines. The runbook covers every kind this epic added — enumerate them from the epic's DONE rows rather than from memory, or a kind shipped by a row you did not personally plan will be missed. Cross-check against the clauses sibling rows already rewrote (the multi-node row rewrote README's 'one node at a time' sentence; the Gate 2 row rewrote 'no working preview') so this sweep does not reintroduce a claim they retired.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE ADVERSARIAL PASS AND THE FOLLOW-UP LEDGER (DoD 6), as a row comment. (a) A TABLE: every human-only kind this epic added -> its MCP refusal code -> the test file:line that PINS it. Build the kind list from the epic's DONE rows, and for each one open the named test and confirm the pin is real — a table entry citing a line that does not assert the refusal is worse than an empty table, because it retires the question while answering nothing (global rail 4). (b) Every follow-up item recorded in the feature rows' comments (collected in step 1) is either CLOSED here with evidence, or listed with the reason it is not — no silent drops. (c) The integration-level adversarial read across the whole epic: what happens when the crash lands during a PREVIEW rather than a landing; whether any human-only kind became reachable over MCP through a path added late in the epic; and whether the concurrency the multi-node work introduced can interleave two landings on one goal. Where an answer is 'not covered', list it in (b) rather than opening a new row — this IS the epic's hardening row (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -51,5 +104,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-04T09:44:56.912Z"
+  "updatedAt": "2026-09-05T00:29:27.449Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:28:10.582Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:29:25.253Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, writing the PRD myself or letting the worker invent one: the description assigns it to the human at claim time, and a PRD authored by the party being tested makes the proof circular — step 1 asks and waits. REJECTED, reusing UnAI's store for the run: task rail 3 requires a FRESH product directory, because UnAI already carries activated state and the bootstrap/activation claims would be untested. REJECTED, using the scratchpad scripts for any step the product claims to do itself: the same rail; a seeded bootstrap makes the bootstrap receipt meaningless. REJECTED, treating the crash knob as out of scope: the description allows 'a knob the daemon already carries or this row adds', and I measured that NONE exists, so this row adds it — under a DEVELOPMENT_ONLY flag, off by default, because a crash switch reachable in a normal run is a denial-of-service control and rail 1 keeps security work out of scope. REJECTED, accepting the DoD's gate list as complete: it omits `pnpm test:fault` while this row ships fault injection, so step 6 adds it — the list predates the knob decision.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE CRASH KNOB DOES NOT EXIST: `grep -rn 'FAULT_INJECT|DEVELOPMENT_ONLY|MOE_CRASH|crashAfter|killAfter' --include=*.ts apps/daemon/src` = ZERO hits, so the description's either/or resolves to 'this row adds it' — the only production code in an otherwise proof-shaped row. CRASH MACHINERY ALREADY EXISTS AND SHOULD BE REUSED: tests/e2e/foundation/j3-crash-harness.ts, j3-crash-recovery.e2e.test.ts and dispatch-crash-sweep.e2e.test.ts already kill and restart a real daemon and assert recovery. THE GATE LANES, read from package.json: test, test:meta, test:property, test:e2e, test:e2e:browser, test:integration, test:store, test:fault, test:security, test:migration — the DoD names nine of these and OMITS test:fault, which is precisely the lane a fault-injection change belongs in. SIBLING DOCS EDITS TO COORDINATE WITH: the multi-node row (task-b8a389bb) rewrites README's 'one node at a time' clause and the Gate 2 row (task-33ceae56) rewrites 'no working preview'; this sweep must not reintroduce either. This row is get_context.isEpicFinal and owns the whole-epic regression, the docs sweep and the adversarial pass (global rail 21), so no sibling files its own evidence row.",
+    "risks": "BIGGEST RISK — a fabricated or narrowed transcript. This row's value is entirely in evidence, and every clause is one a tired worker could summarise instead of measure. Task rail 2 makes a refusal a recordable outcome and a BLOCKED row an acceptable one, so there is never an incentive to invent; the plan repeats that at each live step. SECOND — the crash knob becoming a production hazard: it must be DEVELOPMENT_ONLY, off by default, and refuse to arm outside development, or the epic ships a remote kill switch under rail 1's 'no security work' banner. THIRD — comment truncation. Comments silently truncate at 5000 chars and this row's transcript is long; the plan caps each at 4500 and splits the series, because a lost tail is invisible. FOURTH — 'all criteria verified' without a denominator hides a dossier that enumerated fewer criteria than the contract approved; step 5 cross-checks the count against the approved revision, not the dossier's own header. FIFTH — a duplicate landing LOOKS FINE afterwards, so step 4 counts ledger rows rather than observing that the goal recovered. SIXTH — the PRD is a human input; without it the run cannot honestly start, and step 1 waits rather than inventing one. SEVENTH — the adversarial table can retire questions while answering none if an entry cites a line that does not actually pin the refusal; step 8 requires opening each cited test.",
+    "keyFiles": [
+      "tests/e2e/foundation/j3-crash-harness.ts",
+      "tests/e2e/foundation/j3-crash-recovery.e2e.test.ts",
+      "tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts",
+      "package.json",
+      "README.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:29:27.449Z"
 }

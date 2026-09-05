@@ -19,6 +19,14 @@ import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap-contracts.js";
 import { readDurableLedger, versionOf } from "./bootstrap-ledger.js";
 import type { HandlerTable, ServiceOutcome } from "./bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap-services.js";
+import {
+  ACTIVATION_RECEIPT_MEMBERS,
+  SIGNING_UNSIGNED_REF,
+  measuredReceipt,
+  signingReceipt,
+  unmeasuredReceipt,
+} from "./activation-receipts.js";
+import type { ActivationReceiptMember, ActivationReceipts } from "./activation-receipts.js";
 
 /**
  * Shared request fixtures for the bootstrap, goal and planning service suites.
@@ -199,7 +207,23 @@ export const ALL_HANDLERS: HandlerTable = Object.freeze({
   ...PLANNING_HANDLERS,
 });
 
-export function send(store: SqliteEventStore, request: Envelope): ServiceOutcome {
+/**
+ * The fixture daemon's dispatch. `receipts` defaults to the measured set the production
+ * composition would have measured for itself, because `project.activate` no longer accepts a
+ * caller witness — an arm that wants the fail-closed path passes `receiptsWithout(member)`.
+ */
+export function send(
+  store: SqliteEventStore,
+  request: Envelope,
+  receipts: ActivationReceipts = FIXTURE_ACTIVATION_RECEIPTS,
+): ServiceOutcome {
+  return runBootstrapCommand(
+    store, encoder.encode(JSON.stringify(request)), ALL_HANDLERS, undefined, receipts,
+  );
+}
+
+/** `send` with NOTHING measured: the unwired-composition path, which must refuse. */
+export function sendUnmeasured(store: SqliteEventStore, request: Envelope): ServiceOutcome {
   return runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), ALL_HANDLERS);
 }
 
@@ -219,6 +243,7 @@ export function sendReviewed(
     encoder.encode(JSON.stringify(request)),
     ALL_HANDLERS,
     Object.freeze({ principalId }),
+    FIXTURE_ACTIVATION_RECEIPTS,
   );
 }
 
@@ -274,7 +299,10 @@ export const ACTIVATION_WITNESS = Object.freeze({
   distributionManifestHash: hex64("cafe"),
   policyRevisionHash: hex64("face"),
   providerMinimumProfileRef: "provider-profile-1",
-  signingKeyRef: "signing-1",
+  // The daemon MINTS this key rather than measuring it, and always as
+  // `SIGNING_UNSIGNED_REF` (this release ships an unsigned source checkout). The fixture states
+  // minted value so `FIXTURE_ACTIVATION_RECEIPTS` assembles this witness EXACTLY.
+  signingKeyRef: SIGNING_UNSIGNED_REF,
   storeDriverRef: "store-driver-1",
   truthClass: "DAEMON_VERIFIED",
 });
@@ -282,23 +310,92 @@ export const ACTIVATION_WITNESS = Object.freeze({
 /**
  * The ONE `project.activate` payload builder every in-repo sender goes through.
  *
- * WHY IT EXISTS: task-4b9c394debe94b41a80e2b46c6d55ab8 makes the daemon MINT the activation
- * witness and REFUSE a caller-supplied one. Every sender routing through this body turns that
- * flip into a one-function change instead of a twelve-site edit, and removes the window where
- * those files would sit red on the shared branch owned by neither row. Do not inline
- * `{ witness: ACTIVATION_WITNESS }` at a call site again.
+ * TWO PAYLOADS, AND THE ARGUMENT IS WHICH ONE YOU WANT (task-4b9c394d flipped this body;
+ * task-960254c5 built the seam that made the flip a one-function change):
  *
- * `overrides` MERGES over the base rather than replacing it, so a caller naming one member
- * keeps the other eight (`provider-profile-resolver.test.ts` plants a weak `truthClass` that
- * way). An absent or explicitly-`undefined` `overrides` yields the frozen base itself, which is
- * the branch `options.witness ?? ACTIVATION_WITNESS` used to take.
+ *  - BARE `activatePayload()` yields `{}` — THE CORRECT PAYLOAD. The daemon mints the witness
+ *    from its own measured receipts, so a well-behaved sender carries nothing.
+ *  - `activatePayload(overrides)` yields `{ witness: {...} }` — A HOSTILE PAYLOAD, and the only
+ *    reason it still exists. Every caller-supplied witness is now refused
+ *    `ACTIVATION_WITNESS_CALLER_SUPPLIED` at `DAEMON_INGRESS`, so this branch builds refusal
+ *    arms and nothing else. `overrides` still MERGES over the base, so an arm naming one member
+ *    keeps the other eight.
+ *
+ * Do not inline `{ witness: ACTIVATION_WITNESS }` at a call site again: that spelling is what
+ * hid five senders from the migration grep the first time (see the census in
+ * `mem:gotcha-project-activate-has-four-sender-spellings`).
  */
 export function activatePayload(
   overrides?: Partial<Record<keyof typeof ACTIVATION_WITNESS, unknown>>,
 ): Record<string, unknown> {
-  return {
-    witness: overrides === undefined ? ACTIVATION_WITNESS : { ...ACTIVATION_WITNESS, ...overrides },
-  };
+  return overrides === undefined ? {} : { witness: { ...ACTIVATION_WITNESS, ...overrides } };
+}
+
+/**
+ * THE MEASURED RECEIPTS EVERY FIXTURE ACTIVATION IS DRIVEN WITH.
+ *
+ * Assembled so `activationWitnessOf(FIXTURE_ACTIVATION_RECEIPTS)` returns `ACTIVATION_WITNESS`
+ * BYTE-FOR-BYTE — that identity is what keeps ~60 downstream suites asserting the same durable
+ * activation payload they asserted before the daemon started minting it. Each field below is
+ * the member the minter actually reads, NOT a member of the witness:
+ * `distribution.ref`/`.hash` -> artifactPathRef/distributionManifestHash,
+ * `provider.ref`/`.detail`   -> providerMinimumProfileRef/credentialRef (detail is the
+ *                                credential PRESENCE ref, never a value),
+ * `store.ref` -> storeDriverRef, `backup.ref` -> backupPathRef, `policy.hash` ->
+ * policyRevisionHash. `repository` feeds no witness key but must be measured and carry a
+ * non-empty ref or `usable()` refuses the whole assembly.
+ */
+export const FIXTURE_ACTIVATION_RECEIPTS: ActivationReceipts = Object.freeze({
+  distribution: Object.freeze({ kind: "SOURCE_CHECKOUT" as const, root: "/fixture/project" }),
+  measuredAt: "2026-01-01T00:00:00.000Z",
+  members: Object.freeze([
+    measuredReceipt("repository", "repository//fixture/project", "fixture head"),
+    measuredReceipt("provider", "provider-profile-1", "credential-1"),
+    measuredReceipt("store", "store-driver-1", "fixture sqlite store"),
+    measuredReceipt("backup", "backup-1", "fixture backup"),
+    measuredReceipt("distribution", "artifact-1", "fixture checkout", hex64("cafe")),
+    measuredReceipt("policy", "policy/1-slices", "fixture policy", hex64("face")),
+  ]),
+  repository: Object.freeze({ headSha: "0".repeat(40), toplevel: "/fixture/project" }),
+  schemaVersion: "moe-activation-receipts/1" as const,
+  signing: signingReceipt(),
+  store: Object.freeze({ storePath: "/fixture/project/.moe-next/store.sqlite" }),
+});
+
+/**
+ * The measured receipts with a DIFFERENT provider ref, for arms that need the minted witness to
+ * disagree with the committed `provider.probe`.
+ *
+ * Since the daemon mints `providerMinimumProfileRef` from `committedProbeRef()`, an honest path
+ * can no longer produce that disagreement at all — a caller cannot supply a witness, and the
+ * wired port always reads the probe. Driving the MEASUREMENT apart from the probe is the only
+ * remaining way to exercise the reader's severed-binding gate, and it exercises it through the
+ * production seam rather than by hand-writing a durable record.
+ */
+export function receiptsWithProviderRef(ref: string): ActivationReceipts {
+  return Object.freeze({
+    ...FIXTURE_ACTIVATION_RECEIPTS,
+    members: Object.freeze(FIXTURE_ACTIVATION_RECEIPTS.members.map((receipt) =>
+      receipt.member === "provider" && receipt.measured
+        ? measuredReceipt("provider", ref, receipt.detail)
+        : receipt)),
+  });
+}
+
+/**
+ * The same receipts with exactly ONE member unmeasurable, for the per-member fail-closed arms.
+ * Driven from `ACTIVATION_RECEIPT_MEMBERS` rather than a hand list so a member added to child A
+ * cannot quietly escape the sweep.
+ */
+export function receiptsWithout(member: ActivationReceiptMember): ActivationReceipts {
+  return Object.freeze({
+    ...FIXTURE_ACTIVATION_RECEIPTS,
+    members: Object.freeze(ACTIVATION_RECEIPT_MEMBERS.map((name) =>
+      name === member
+        ? unmeasuredReceipt(name, `fixture withheld the ${name} measurement`)
+        : (FIXTURE_ACTIVATION_RECEIPTS.members.find((r) => r.member === name)
+            ?? unmeasuredReceipt(name, `no ${name} fixture receipt`)))),
+  });
 }
 
 /**

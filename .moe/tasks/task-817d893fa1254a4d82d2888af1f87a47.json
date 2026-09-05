@@ -1,0 +1,41 @@
+{
+  "id": "task-817d893fa1254a4d82d2888af1f87a47",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Approve the release in the browser and read the evidence that carried it",
+  "description": "SPIDR child 3 of task-2a345b2e97d94599b4688af1923056e5 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-70a7ccd3293f465fbc9c1888ae540f5d, the dossier this card summarises) and child 2 (task-f961dc899a13488da8f119abdc37631f, the kind and receipt it dispatches and renders). PROOF ROW for Gate 3: it owns the browser journey, the live PR, the docs sweep and the adversarial pass, so neither sibling files its own evidence row (global rail 21).\n\nWHAT THIS ROW OWNS: the operator's side of Gate 3. A Release card on the opened goal showing the evidence summary (criteria covered n/m, receipts, landings, the preview decision), an Approve-release arm/confirm modelled on the PUBLISH card, and the PR link afterwards. Runs shows the release receipt. Needs-you lists goals ready for release.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb - every pattern exists, so this row composes:\n- The arm/confirm card to model: apps/control-room/src/v2/goals/goal-publish.tsx (141 lines) with testids cr.publish.root/landed/state/link/unoffered, and publish-port.ts (22 lines) spending the offer.\n- The decision wire: apps/control-room/src/v2/approvals/offer-wire.ts `spendOffer`, with escalation-port.ts (43 lines) as the tightest worked example.\n- Needs-you: needs-you-model.ts:28 `NEEDS_YOU_KINDS` (a four-member roster) with the card in needs-you.tsx.\n- The board/Runs feed: activity-words.ts maps a kind to operator words.\n\nWORDS ARE THE PRODUCT. Gate 3 asks the human 'Is the evidence strong enough to expose this to users?' - the card asks THAT, and the evidence summary exists so the answer can be informed. An n/m that reads 'complete' while criteria rendered UNKNOWN in the dossier would be the worst defect this row could ship: the operator would approve a release believing evidence that was never measured. Surface the UNKNOWN count beside the covered count.",
+  "definitionOfDone": [
+    "The Release card renders on a goal whose evidence is ready: criteria covered n/m WITH the UNKNOWN count shown separately when any criterion could not be re-measured, the verifier receipts and landing shas, and the preview decision or its explicit absence. A test asserts the UNKNOWN count is visible when the dossier carries one - a summary that folds UNKNOWN into 'covered' would let an operator approve unmeasured evidence.",
+    "Approve dispatches `release.decide` through the offer-wire `spendOffer` path (no second decision wire), with an arm/confirm modelled on the PUBLISH card; the PR link renders after a RELEASED receipt, and a REFUSED receipt renders its code VERBATIM - assert the literal RELEASE_EVIDENCE_INCOMPLETE text and that the missing criterion ids reach the operator.",
+    "The card is ABSENT when the daemon offers no `release.decide`, rather than rendering a dead button - a control that dispatches into a refusal is worse than an honest explanation. Assert both the offered and un-offered states.",
+    "Needs-you lists a goal ready for release and stops listing it once released; Runs shows the release receipt. Assert appearance AND disappearance - a queue entry that never clears grows forever.",
+    "A Playwright journey against a REAL daemon covers evidence -> card -> approve -> PR link, with the `pnpm test:e2e:browser` count line quoted. Control-room fixtures are the daemon's REAL frames captured from that run (the exact-key decoders reject hand-written ones).",
+    "LIVE DRIVE: a real pull request opened on the UnAI remote or a throwaway GitHub repository, with the PR URL, the release receipt id and the dossier sha256 in a row comment under ~4500 chars. If `gh` is absent or unauthenticated on the lane, record the RELEASE_PR_FAILED refusal with its stderr line verbatim - that is a legitimate recorded outcome, never worked around and never a fabricated PR.",
+    "README's 'no release gate' clause and the VISION Stage 1 'proof-carrying PR' status line are rewritten to the measured truth; the runbook documents the `gh` prerequisite and its refusal. Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "THIS ROW PROVES, IT DOES NOT REBUILD. If the card cannot render because the dossier or receipt is missing a member, comment on THAT child and report_blocked on it - do not add a daemon field here (global rail 4: a proof that repairs its own subject retires the question unanswered).",
+    "NEVER FOLD UNKNOWN INTO COVERED. The dossier deliberately renders unmeasurable evidence as UNKNOWN rather than dropping it; a summary that hides that distinction defeats child 1's whole design.",
+    "REUSE THE EXISTING PATTERNS: offer-wire `spendOffer` for the decision, the PUBLISH card's arm/confirm shape, the existing Needs-you roster. A second decision wire is a design regression.",
+    "REAL FRAMES ONLY: control-room fixtures come from a real daemon run; exact-key decoders reject hand-written frames, and the failure looks like a test bug rather than a fixture bug.",
+    "Check any new testid namespace is free before using it, keep JSX text ASCII-only and apostrophe-free (the scheduler package-boundary scan reds otherwise), and keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-2a345b2e97d94599b4688af1923056e5",
+  "dependsOn": [
+    "task-70a7ccd3293f465fbc9c1888ae540f5d",
+    "task-f961dc899a13488da8f119abdc37631f"
+  ],
+  "priority": "HIGH",
+  "order": 43,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:31:45.397Z",
+  "updatedAt": "2026-09-05T00:31:45.397Z"
+}

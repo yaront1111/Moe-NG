@@ -38,7 +38,7 @@ import { deriveApprovalBudgetRef } from "../planning/approval-budget-ref.js";
 import { PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE } from "../planning/planning-authority-finalize.js";
 import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import type { NodeMission } from "./agent-wrapper.js";
-import { DEMO_VALIDATABLE_POLICY_REF, activationWitness, probeObservation,
+import { DEMO_VALIDATABLE_POLICY_REF, probeObservation,
   providerProfileRef } from "./demo-seed-payloads.js";
 import { buildDemoSeedPlan } from "./demo-seed-plan.js";
 import type { DemoSeedInput, SeedCommand } from "./demo-seed-plan.js";
@@ -120,8 +120,11 @@ describe("the provider.probe observation", () => {
     if (!admission.ok) throw new Error("the demo profile must be admissible to compare its ref");
     // recordProbe: `profileRef !== revision.providerMinimumProfileRef` -> PROVIDER_PROFILE_REF_MISMATCH.
     expect(admission.revision.providerMinimumProfileRef).toBe(sent["providerMinimumProfileRef"]);
-    // The activation witness names the SAME ref, so activate agrees with what probe registered.
-    expect(activationWitness(INPUT)["providerMinimumProfileRef"]).toBe(sent["providerMinimumProfileRef"]);
+    // The activation witness used to be BUILT here and asserted to name this same ref. It is
+    // not built here any more (task-4b9c394d): the daemon reads the committed probe through
+    // `committedProbeRef()` and mints `providerMinimumProfileRef` FROM it, so the two agree by
+    // construction rather than by two fixtures being kept in step. The seed's activation
+    // payload is now asserted EMPTY in demo-seed-plan.test.ts.
   });
 
   it("keeps profileRevisionId distinct from the profile ref: identity of content, not of the profile", () => {

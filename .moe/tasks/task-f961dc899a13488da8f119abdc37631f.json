@@ -1,0 +1,40 @@
+{
+  "id": "task-f961dc899a13488da8f119abdc37631f",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "release.decide is published human-only and opens a proof-carrying pull request",
+  "description": "SPIDR child 2 of task-2a345b2e97d94599b4688af1923056e5 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-70a7ccd3293f465fbc9c1888ae540f5d for the dossier bytes this row puts in the PR body.\n\nWHAT THIS ROW OWNS: the command kind with its roster backfill and refusal codes, and the PR-opening port plus the release receipt. No UI - that is child 3.\n\nARCHITECT DECISION on the question the parent row left open (\"`gh pr create` on the operator's machine, or the REST API with a token the human names on the goal - architect decides\"): USE THE `gh` CLI. Reasons, so it is not re-litigated: (1) a per-goal API token is SECRET HANDLING, and the parent's rail 2 is FEATURES ONLY with security-boundary work out of scope - storing, redacting and rotating a token is exactly that work; (2) the daemon already spawns workspace commands as child processes with timeouts and process-group cleanup (orchestrator/verifier-process-runner.ts), so `gh` needs no new mechanism; (3) the operator's machine already holds the git credentials the publisher pushes with, so `gh` inherits an auth story that exists rather than inventing a second one. `gh` absent or unauthenticated REFUSES CLEANLY with RELEASE_PR_FAILED carrying the tool's last stderr line - it does not fall back to a token path.\n\nROSTER, traced from an existing human-only decide kind (`escalation.decide`): daemon-command-vocabulary.ts (kind, capability, family, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS), daemon-command-families.ts (the per-kind flag block), daemon-command-registry.ts (`entryOf` resolves asyncEntries then family flags), mcp-tool-allowlist.ts (EXCLUDED), packages/contracts/src/runtime/runtime-vocabulary.ts, and the GENERATED client (`pnpm --filter @moe/control-room-client generate` - never hand-edited; it pins GENERATED_CONTRACT_DIGEST, checked at client-compat.ts:169).\n\nTWO PAYLOAD-KEY TEST TABLES must both gain a row and are invisible to a grep for the kind literal in production source: daemon-command-vocabulary.test.ts (~:170-182) and daemon-command-registry.test.ts (~:197-203, plus the flat roster ~:283-300). Measured the hard way on task-4b9c394d, where neither the plan nor a governor triage named them.\n\nHUMAN_ONLY_STEPS has exactly ONE definition (agent-spawn-contract.ts:195); agent-wrapper.ts:24 re-exports it. Do not look for a second.",
+  "definitionOfDone": [
+    "`release.decide` published human-only and MCP-EXCLUDED with the full roster backfill, and a BIDIRECTIONAL set-equality test that enumerates the SERVED kinds from the dispatch seam and asserts equality with the advertised roster in both directions - a test iterating the roster constant alone sees only one direction. Verify by deleting the entry from each side in turn and confirming both go red.",
+    "The three refusal codes carry a closed code->layer map (the refusal factory takes no layer argument, so a call site cannot mint a disagreeing pair) and each is asserted with code AND layer: RELEASE_REMOTE_MISSING; RELEASE_EVIDENCE_INCOMPLETE, whose detail NAMES THE MISSING CRITERIA (assert the criterion ids appear - 'evidence incomplete' without naming what is missing sends the operator hunting); RELEASE_PR_FAILED, carrying the tool's LAST STDERR LINE verbatim.",
+    "PR creation goes through an injectable port so it is tested OFFLINE: the request (title, base, head, body) is asserted BYTE-FOR-BYTE, with body equal to child 1's dossier bytes - not a re-rendered copy, since a second rendering is how the PR body and the stored dossier come to differ.",
+    "`gh` absent, unauthenticated, or failing refuses RELEASE_PR_FAILED with its stderr line and commits NO release receipt claiming success - assert the store holds no RELEASED receipt on that path. A refused release that recorded success is the worst possible outcome here.",
+    "`moe-release-receipt/1` records {goalId, sha, dossierSha256, prUrl, RELEASED|REFUSED(code)}, mirroring repository/landing-receipt-contracts.ts; a REFUSED receipt carries its code and NO prUrl. Read it back from a real store and assert every member.",
+    "APPROVE reuses the EXISTING publisher to push (orchestrator/node-publisher.ts) rather than a second push path; assert the push happened through it, and that a goal whose remote is unbound refuses RELEASE_REMOTE_MISSING before anything is pushed.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts and the generated client are touched, so the root lane is real evidence here)."
+  ],
+  "taskRails": [
+    "`gh` CLI ONLY - no token path, no REST fallback. A per-goal token is secret handling and the parent's FEATURES ONLY rail puts it out of scope. Absent or unauthenticated `gh` refuses cleanly.",
+    "NEVER HAND-EDIT the generated client: run `pnpm --filter @moe/control-room-client generate` and quote the OLD and NEW GENERATED_CONTRACT_DIGEST. A hand-typed entry passes every grep and fails the runtime compat check.",
+    "REUSE THE PUBLISHER for the push (orchestrator/node-publisher.ts). A second push path is how the two come to disagree about what was pushed.",
+    "The PR body IS child 1's stored dossier bytes, not a fresh rendering. If they can differ, the PR stops being proof-carrying.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-2a345b2e97d94599b4688af1923056e5",
+  "dependsOn": [
+    "task-70a7ccd3293f465fbc9c1888ae540f5d"
+  ],
+  "priority": "HIGH",
+  "order": 42,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:31:14.023Z",
+  "updatedAt": "2026-09-05T00:31:14.023Z"
+}

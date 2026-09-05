@@ -14,8 +14,73 @@
     "NO offer/dispatcher/read/UI change (2a, child 3); the only production edits are the new planning module and the six-line wiring in agent-wrapper-main.ts.",
     "REAL PROCESSES in the journey (daemon, wrapper, store); only the seat is doubled, and it must go through the real MCP wire with a scoped bearer, never a store write."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE THREE PREREQUISITES AND RE-MEASURE, NO EDITS. Confirmed by the architect at plan time; re-run them because the checkout is shared. (a) Child 1's fold landed: apps/daemon/src/planning/current-planning-run.ts exists and carries `successorRunId` (:29, read at :77-79) — this row walks the run chain through it. (b) task-4109c1a0 (provider pause) and task-7945f38d (reclaim pass) are DONE; task-138fab3075884df98c3c220e74c1a3e9 (2a, offers + compiler follow the current run) was still WORKING at plan time. All three are dependsOn precisely because they edit apps/daemon/src/orchestrator/agent-wrapper-main.ts, which is 477 lines and already over the size cap — the serialisation exists so two rows never edit it at once. If 2a has not landed, report_blocked with blockedOnTaskIds naming it rather than editing the file concurrently. (c) Re-measure the two seams: the operator markers at agent-mission-text.ts:138 (`<<<OPERATOR INSTRUCTIONS\\n...\\nOPERATOR INSTRUCTIONS>>>`) and `compilerInstructions` at agent-wrapper-main.ts:244. RECORD agent-wrapper-main.ts's exact pre-change line count now — DoD 4 caps this row's growth at SIX lines and the number is meaningless without the baseline. (d) NOTE A CONCURRENT EDITOR: task-f79d38b119984ae1ae51eba887a28b7d is rewriting the compiler mission sentence in agent-mission-text.ts under the fence-lift ruling. This row does not edit that file's production text — it composes the INSTRUCTIONS string that flows into it — but if DoD 2 lands its arm in agent-mission-text.test.ts, expect a rebase there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/planning/current-planning-run.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE PURE MODULE, tests first, in a new apps/daemon/src/planning/rejection-instructions.ts (+ its `.js` bridge — a missing bridge kills the daemon at boot with ERR_MODULE_NOT_FOUND). Two exports, both PURE: `latestRejectionReason(store, projectId, planningRunRef)` walks the run chain from the goal's IMMUTABLE ref through child 1's fold and returns `{ reason, rejectedRunId }` for the LATEST rejected run, or null when never rejected — and NEVER THROWS, including on a corrupt chain; and `composeCompilerInstructions(brief, rejection)` returning the brief plus, when a rejection exists, the sentence `PLAN REJECTED by the operator: <reason verbatim>. Submit a DIFFERENT decomposition that addresses it.` Keep it under 120 lines (DoD 4). Write the test first over a REAL store using child 1's reject fixture: never rejected -> null and the brief passes through UNCHANGED (byte-identical, not merely non-empty); rejected once -> the composed text ends with that exact sentence and names the rejected run; rejected TWICE -> the LATEST reason, which is the arm that catches a fold returning the first match; a corrupt run chain -> null, never a throw.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/planning/rejection-instructions.ts",
+        "apps/daemon/src/planning/rejection-instructions.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE MARKER FENCE — the security-shaped correctness arm this module exists to get right (task rail 1). Child 1 stores the operator's rejection reason VERBATIM, and the compiler mission embeds the instructions between `<<<OPERATOR INSTRUCTIONS` and `OPERATOR INSTRUCTIONS>>>` (agent-mission-text.ts:138). A reason CONTAINING either marker sequence would close the operator block early and let the remainder of the reason read to the seat as mission-level text outside the quoted block. `composeCompilerInstructions` must NEUTRALISE both marker sequences in the reason — neutralise, never drop silently and never rewrite the reason into a paraphrase (task rail 1: the reason reaches the seat verbatim EXCEPT the markers). Assert it: a reason containing `<<<OPERATOR INSTRUCTIONS` and one containing `OPERATOR INSTRUCTIONS>>>` each produce composed text whose sentence contains NEITHER sequence, while the rest of the reason survives character-for-character. Mutate the neutralisation away and confirm the arm reds — an unfenced marker is invisible in a passing test suite.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/rejection-instructions.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE SIX-LINE WIRING. apps/daemon/src/orchestrator/agent-wrapper-main.ts:244 `compilerInstructions: (goalId) => { ... }` currently reads the goal catalog brief; it now calls the composer with that brief plus `latestRejectionReason(...)`. The file is 477 lines and ALREADY over the cap, so this row is permitted growth of at most SIX lines (DoD 4) — that is the entire reason the module in step 2 is pure and lives elsewhere. Do not refactor the file, do not 'tidy while here', and do not extract anything: three other rows are serialised behind this same file and a drive-by refactor would collide with all of them. Add the source-text pin DoD 2 requires, modelled on the existing fence pin in agent-wrapper-main.test.ts (:135-166): assert the composer call text appears EXACTLY ONCE, and prove the pin works by deleting the call and confirming it reds — a source-text pin that passes with the code removed is decoration.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE MISSION ARM (DoD 2's second half). Prove the composed instructions actually reach a compiler seat's mission BETWEEN the operator markers: build the mission through `compilerMission` (agent-mission-text.ts:78) with an instructions string carrying a rejection, and assert the `PLAN REJECTED by the operator: <reason>` sentence appears INSIDE the `<<<OPERATOR INSTRUCTIONS ... OPERATOR INSTRUCTIONS>>>` block — not merely somewhere in the text, because outside the block it would read as daemon-authored instruction rather than as the operator's words. State in the step note WHICH file the arm lands in (agent-mission-text.test.ts or the wrapper-main pin) as DoD 2 requires you to name. If it lands in agent-mission-text.test.ts, expect a rebase against task-f79d38b1, which is rewriting that file's compiler sentence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE REAL-PROCESS JOURNEY (DoD 3), in the NODE e2e lane — `pnpm test:e2e` runs vitest over tests/e2e. REUSE J4 FIRST: tests/e2e/foundation/j4-replan-harness.ts already exports `readAffordanceSurface` (:73), `stepFor` (:87), `deltaNode` (:94) and `replanCommand` (:110), and j4-replan-handoff.e2e.test.ts already drives a real daemon + real wrapper + fake-agent.mjs seat double. Measure how J4 scripts the double's MCP calls and drives the wrapper, and add a j5 harness ONLY if J4's cannot be parameterised (prefer reuse — say which you did and why). New tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts: a source-bound goal compiles (the double submits a one-node decomposition) -> the operator REJECTs with a reason over the REAL HTTP wire (approval.decide_intent, decision REJECT) -> the wrapper re-staffs the compiler step -> THE DOUBLE'S MISSION CARRIES `PLAN REJECTED by the operator: <reason>`, asserted from the mission the double ECHOES TO A FILE the test reads (that echo is the only way to see what the seat actually received) -> the double submits a DIFFERENT decomposition under a NEW node key -> the successor is offered for approval -> the operator APPROVEs -> the activation event is read back FROM THE STORE. Every process real except the seat, which goes through the real MCP wire with a scoped bearer and NEVER writes to the store directly (task rail 3).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j4-replan-harness.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "TEARDOWN, DRILLS, GATES. (a) TEARDOWN PROOF (DoD 3): the journey leaves no surviving process — assert by pid liveness after the test, reusing whatever reaped-pid check the J-series already uses rather than inventing a second one. A leaked daemon or wrapper holds its port and reds the NEXT e2e run, which then looks like an unrelated flake. (b) DRILLS (DoD 4: 'every arm mutated red once'), recorded in a step note: strip the composer call from agent-wrapper-main.ts -> the step-4 source pin reds; remove the marker neutralisation -> the step-3 fence arm reds; make `latestRejectionReason` return the FIRST rejection instead of the latest -> the rejected-twice arm reds. Restore each; the new modules under apps/daemon/src/planning/ and tests/e2e/foundation/ are UNTRACKED until committed, and `git diff` is blind to untracked paths, so prove those restores by SHA256 against an out-of-tree backup in %TEMP% suffixed by worker id, in a call SEPARATE from the restore (global rail 13). agent-wrapper-main.ts is tracked, so an empty `git diff` is sound proof there. (c) SIZE PROOF: `wc -l apps/daemon/src/planning/rejection-instructions.ts` <= 120, and agent-wrapper-main.ts growth <= 6 lines against the baseline recorded in step 1 — quote both numbers. (d) GATES with count lines quoted (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e` with the new test listed by name in the output. Named verification command for completion: `pnpm test:e2e`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/planning/rejection-instructions.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -33,5 +98,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:45:43.617Z",
-  "updatedAt": "2026-09-04T14:45:43.617Z"
+  "updatedAt": "2026-09-05T00:27:54.977Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:26:45.539Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:27:52.820Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, composing the rejection sentence inside agent-wrapper-main.ts: the file is 477 lines and already over the cap, three other rows are serialised behind it, and DoD 4 caps this row's growth at six lines — hence a pure module elsewhere and a one-call wiring. REJECTED, dropping a reason that contains the operator markers: task rail 1 says the reason reaches the seat verbatim EXCEPT the markers, which are neutralised; dropping it silently would hide the operator's actual words and rewriting it would put daemon prose in the operator's mouth. REJECTED, a fresh e2e harness: j4-replan-harness.ts already drives a real daemon, real wrapper and a fake-agent seat double and exports the surface helpers this journey needs; the plan requires reuse unless parameterisation genuinely fails, and requires saying which. REJECTED, asserting the seat's mission from the daemon's side: what matters is what the SEAT received, so the double echoes its mission to a file the test reads — asserting the daemon's output would pass even if the mission never reached the process. REJECTED, letting the seat double write to the store: task rail 3 requires the real MCP wire with a scoped bearer, or the journey proves the fixture rather than the product.",
+    "codebaseInsights": "RE-MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb; the row was filed against main 9e9b7b04 and its numbers still hold. THE MARKERS: agent-mission-text.ts:138 embeds instructions as `<<<OPERATOR INSTRUCTIONS\\n${instructions.trim()}\\nOPERATOR INSTRUCTIONS>>>` — a single template line, which is exactly why a reason containing either sequence can close the block early. THE WIRING POINT: agent-wrapper-main.ts:244 `compilerInstructions: (goalId) => {...}`; the file is 477 LINES, already over the 400 cap, which is why three rows are serialised behind it and why this row is capped at six lines of growth. CHILD 1 LANDED: apps/daemon/src/planning/current-planning-run.ts carries `successorRunId` at :29 and reads it at :77-79, so the run chain is walkable from the goal's immutable planningRunRef. THE J4 HARNESS IS REUSABLE: tests/e2e/foundation/j4-replan-harness.ts exports workspaceDigest (:37), readAffordanceSurface (:73), stepFor (:87), deltaNode (:94), replanCommand (:110), and j4-replan-handoff.e2e.test.ts already runs a real daemon + wrapper + fake-agent.mjs. DEPENDENCY STATE at plan time: task-4109c1a0 and task-7945f38d are DONE; task-138fab30 (2a) is still WORKING — and I amended ITS step-4 earlier this session to drop a multi-node fence assertion, so its plan is in flux. CONCURRENT EDITOR ON agent-mission-text.ts: task-f79d38b1 is rewriting the compiler mission sentence there under the owner's fence-lift ruling; this row does not edit that production text but may add a test arm beside it.",
+    "risks": "BIGGEST RISK — the marker fence. The operator's rejection reason is stored verbatim by child 1 and embedded in a single template line; a reason containing `OPERATOR INSTRUCTIONS>>>` closes the block early and the remainder reads to the seat as daemon-authored mission text. It is invisible in a passing suite, so step 3 asserts both sequences and step 7 mutates the neutralisation away to prove the arm bites. SECOND — the over-cap file. agent-wrapper-main.ts is 477 lines with three rows serialised behind it; a drive-by refactor here collides with all of them, and the six-line budget is meaningless without the baseline step 1 records. THIRD — a source-text pin that passes with the code removed is decoration; step 4 requires proving it reds. FOURTH — 'latest rejection' vs 'first rejection' is the kind of fold bug a single-rejection test never sees; the rejected-twice arm and its drill exist for that. FIFTH — asserting the mission from the daemon's side would pass even if it never reached the seat; the double must echo what it actually received. SIXTH — drill restores on UNTRACKED new files need an out-of-tree SHA256 comparison, because `git diff` is blind to them (global rail 13). SEVENTH — a leaked daemon or wrapper from the journey reds the NEXT e2e run and reads as an unrelated flake.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/planning/current-planning-run.ts",
+      "tests/e2e/foundation/j4-replan-harness.ts",
+      "tests/e2e/foundation/j4-replan-handoff.e2e.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:27:54.977Z"
 }

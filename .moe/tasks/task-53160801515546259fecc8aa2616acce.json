@@ -151,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:18:26.749Z",
-  "updatedAt": "2026-09-04T23:52:58.474Z",
+  "updatedAt": "2026-09-04T23:53:59.446Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:25:20.604Z",
     "plannedStepCount": 6,
@@ -213,7 +213,8 @@
     ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
     ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
     ".moe/tasks/task-53160801515546259fecc8aa2616acce.json",
-    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json"
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
   ],
   "completionSummary": "Seats and the board now say agents are paused, from the shell's ONE pause fact (3b's context) - no screen polls /health/read for itself.\n\nTHE TWO SENTENCES\n- Seats (cr.sessions.paused, ops/activity-screens.tsx:129): `Agents paused: <provider> limit, resumes <when> - last line from the seat: <lastLine>`. Renders inside the SESSIONS branch ABOVE the count line, so it shows even when no agent seat is live AND when nothing at all is live. An empty/blank lastLine renders `(no output)`.\n- Board + strip (cr.kanban.next / cr.goalstatus.next): label `Waiting for the provider limit to reset at <when>`, detail `The <provider> seat hit its limit on <workItemId>; the wrapper staffs again at <resetAt>.` (label = locale-formatted; detail = the daemon's raw instant).\n\nINPUTS: `paused?: ProviderPause | null | undefined` on SessionsPanelProps, BoardScreenProps and deriveGoalStatus's input. Optional everywhere, so no existing caller broke; null and absent are the same fact.\nHOSTS reading useProviderPause(): board-screen.tsx:209 (LiveBoard), goal-status-strip.tsx:109 (LiveGoalStatus), live-ops.tsx:122 (LiveSessions) - 3 files, import + call each. The pure screens never call the hook.\n\nPRECEDENCE UNCHANGED: only the WORKING branch reads the pause. CONTRACT/PLAN/ESCALATION/REPLANNED/READY_TO_CLOSE/CLOSED/NO_PRD/UNKNOWN answer byte-for-byte as before; four are pinned by an arm, and a drill that makes READY_TO_CLOSE read the pause reds it.\n\nPLANNED DEVIATION (3b's comment on this row is the authority): steps 2/3 prescribed an inline `new Date(resetAt).toLocaleString()`, which prints \"Invalid Date\" on an unparseable resetAt - and 3a's decoder gates resetAt on non-emptiness only, so those arrive. Instead pause-context.tsx (3b's, in keyFiles) gained two additive exports: `pauseResetWords` (the NaN-safe instant, extracted verbatim from pauseWords - its output is byte-identical, 3b's 5 shell files / 46 tests green with no edit) and `pauseSeatWords` (the Seats sentence). Rendered bytes for a par",
   "commits": [
@@ -269,6 +270,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "8acd8cc88fb2f5bfe31380dfe1e77f287b15e20a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T23:47:18Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-53160801515546259fecc8aa2616acce.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T23:53:59.446Z",
+      "treeId": "3023756d740915f7652c484db640e2568aa82f59",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -282,12 +299,18 @@
     "apps/control-room/src/v2/board/board-screen.test.tsx",
     "apps/control-room/src/v2/ops/live-ops.tsx"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    "apps/daemon/src/http/http-listener-planning-run.test.ts",
+    "tests/integration/control-room/live-approval-activation.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-12c76c19@2026-09-04T23:23:30Z",
-    "at": "2026-09-04T23:43:46.933Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T23:47:18Z",
+    "at": "2026-09-04T23:53:59.446Z"
   },
   "completedAt": "2026-09-04T23:52:58.474Z",
   "reviewCompletedAt": "2026-09-04T23:52:58.474Z",

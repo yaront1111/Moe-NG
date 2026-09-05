@@ -1,0 +1,40 @@
+{
+  "id": "task-de0598236f3b4d95aa3b6098b9d56995",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The design step is staffed between Gate 1 and the plan, and is skippable",
+  "description": "SPIDR child 2 of task-8a6d6660c31c4e119f962d13e6f1505d (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-5e90317e80ac4b86a9704b6b8ba8874a for the kinds and aggregate.\n\nWHAT THIS ROW OWNS: the LOOP change. The affordance surface offers a design step after Gate 1 and before decomposition; the wrapper staffs a design seat with a mission that reads the approved contract and the PRD; the compiler mission then carries the design ref and its section headings; node missions cite the screens/entities they implement; and a per-goal toggle skips the whole step. No UI - that is child 3.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb:\n- The compiler seat plans straight from the approved contract today: `apps/daemon/src/orchestrator/agent-mission-text.ts` `compilerMission` (:78) tells the seat to read `product_contract_read` and the paged PRD and submit the decomposition. There is no design in the chain.\n- The affordance surface composes steps in `apps/daemon/src/http/affordance-read.ts`; a new step kind joins that composition.\n- The wrapper staffs any READY unclaimed step up to maxAgents (`agent-wrapper.ts:339-372`), skipping HUMAN_ONLY_STEPS (:351) and `session.*` kinds, ordering `node.deliver` first (:348-357) - a design step must fall out of that ordering sensibly rather than competing with node work.\n\nTHE SKIP TOGGLE IS A SAFETY VALVE, not a nicety: the parent's DoD 4 requires that a goal can plan WITHOUT a design so the loop never blocks on this step. Build it as a per-goal setting read at surface-composition time, and make the compiler mission STATE that no design exists when it is skipped - a seat that silently gets no design cannot tell the difference between 'skipped' and 'the read failed'.\n\nCONCURRENT EDITOR: task-f79d38b119984ae1ae51eba887a28b7d is rewriting the compiler mission sentence in agent-mission-text.ts under the owner's fence-lift ruling, and task-2c016c04dedc4eb88982a1d8d5108ddf is adding a rejection sentence to the instructions that flow into it. Expect a rebase there and do not delete either row's sentence to make yours fit.",
+  "definitionOfDone": [
+    "The affordance surface offers a design step for a goal whose Gate 1 contract is APPROVED and whose decomposition has not run, and stops offering it once a design exists. Assert both transitions against a real store, and assert the step is ABSENT before Gate 1 approval - a design step offered on an unapproved contract would staff a seat with nothing to design against.",
+    "The wrapper staffs the design seat: a surface offering a READY unclaimed design step produces a spawn, asserted by work-item id. Assert its ordering relative to node.deliver is deliberate (agent-wrapper.ts:348-357 currently ranks node.deliver first) and say in a step note which rank you chose and why.",
+    "The design seat's mission reads the approved contract and the PRD and names the five sections it must submit - assert the produced mission text contains the section headings, so a seat cannot be staffed with an underspecified brief.",
+    "AFTER a design exists, the compiler mission bytes contain the design REF and the five section headings - assert on the produced mission text (the parent's DoD 2). This is the clause that makes the design load-bearing rather than decorative: a design nothing reads is a form nobody fills in twice.",
+    "Node missions cite the screens/entities they implement, drawn from the design - assert one node mission names a screen from the design it was compiled against.",
+    "THE SKIP TOGGLE: a per-goal 'plan without a design' setting makes the surface skip the design step entirely and the decomposition run opens with no design; the compiler mission STATES that no design exists rather than silently omitting it. Assert the mission text says so - the difference between 'skipped' and 'unreadable' must be visible to the seat.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "NO UI. The Design tab, the version on the plan-approval card, the live drive and the docs are child 3's.",
+    "THE LOOP MUST NEVER BLOCK ON THIS STEP. The skip toggle is a required safety valve, not an optional extra; a goal must always be able to reach a plan.",
+    "A SKIPPED DESIGN IS STATED, NOT OMITTED. A seat that receives no design section cannot distinguish a skipped step from a failed read, and will guess.",
+    "agent-mission-text.ts has two other rows editing it concurrently (task-f79d38b1's fence-lift rewrite and task-2c016c04's rejection sentence). Rebase, do not delete their sentences.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a"
+  ],
+  "priority": "HIGH",
+  "order": 62,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:37:08.875Z",
+  "updatedAt": "2026-09-05T00:37:08.875Z"
+}

@@ -8,7 +8,8 @@ import { SqliteEventStore, createBackupGeneration } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
-  ACTIVATION_WITNESS,
+  FIXTURE_ACTIVATION_RECEIPTS,
+  activatePayload,
   OBSERVATION,
   PROVIDER_OBSERVATION,
   envelope,
@@ -158,6 +159,10 @@ function send(
     store,
     encoder.encode(JSON.stringify(envelope(kind, version, payload))),
     BOOTSTRAP_HANDLERS,
+    // No human-review witness, but the activation receipts the daemon would have measured:
+    // `project.activate` MINTS its witness from them and refuses when none were measured.
+    undefined,
+    FIXTURE_ACTIVATION_RECEIPTS,
   );
   if (!outcome.ok) throw new Error(`seeding ${kind} failed: ${outcome.code}`);
 }
@@ -174,7 +179,7 @@ export function seedReadyProject(
   send(store, "project.register", 0, { owner: "owner-1" });
   send(store, "project.bind_repository", 1, { observation: OBSERVATION });
   send(store, "provider.probe", 0, { observation: PROVIDER_OBSERVATION });
-  send(store, "project.activate", 2, { witness: ACTIVATION_WITNESS });
+  send(store, "project.activate", 2, activatePayload());
   // task-acc1a3b4: the durable ACTIVE graph + authorized budget root every world here will owe
   // once `effect.activate` derives its budget from durable authority instead of the caller's
   // payload section. A strict no-op today — nothing reads either yet — and IDEMPOTENT, so a

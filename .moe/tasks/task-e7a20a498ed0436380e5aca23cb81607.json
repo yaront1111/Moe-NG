@@ -16,8 +16,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell: all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-2ee775b319cb496fad9256c84d24744c (Resources live, no SOON chip), task-1c9587ed1b2b4e1abd6b51396ee672f8 (the Product Contract and PRD dossiers), task-bc4617d6f84f4213a00c9b1786622577 (the bidirectional route roster, the forensic view, the design pass and the live drive) — recording each landing sha and its completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it. Write no production code in this step.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD, AND CORRECT ONE STALE PREMISE, in a step note. DoD 1 (Resources live, no SOON chip, nav roster updated) -> child task-2ee775b3. DoD 2 (the contract dossier and its decoder/digest mirrors) -> child task-1c9587ed. DoD 3 (the bidirectional route roster), DoD 4 (the design pass comment) and DoD 5 (Playwright + gates) -> child task-bc4617d6. THE STALE PREMISE, measured by the architect at plan time and carried into child 1's description: this row says Resources is 'FROZEN with a SOON chip (apps/control-room/src/v2/shell/shell-model.ts:111)'. `grep -n SOON apps/control-room/src/v2/shell/shell-model.ts` returns NOTHING — :110-111 is the nav entry's label and icon. The real mechanism is the per-entry `live: boolean` flag declared at shell-model.ts:25, with nav-rail.tsx:112-124 rendering the SOON StatusChip (testid `cr.nav.<id>.unavailable`) when an entry is unavailable. Record that so QA grades the rendered marker rather than a grep for a string that was never in that file.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`, and `pnpm test` — the root lane IS real evidence here because child 2 touched the packages digest mirrors, though it still covers NO apps/** (global rail 18), so the two --filter legs are what cover the daemon and the control room. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths and quote foreign red verbatim (global rail 3). Named verification command for completion: `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "VERIFY THE ROSTER ACTUALLY BITES — the integration check only the parent can do, because child 3 wrote the test and a test's author is the worst judge of whether it would have caught the thing it was written for. (a) Confirm the served set is DERIVED from the `*_PATH` constants http-listener-read-dispatch.ts dispatches on, not from a hand-kept list — open the test and read it; a list would be a third copy free to drift (global rail 9). (b) Delete one consumer and confirm the roster reds; add a served route with no consumer and confirm it reds. Both directions, verified by doing them, not by reading the assertion. (c) Confirm the deliberate exclusions (planning.write, graph.supersede, cutover.*, work.*) each carry a stated REASON — an exclusion list without reasons is where a real gap hides. (d) Check whether `REPOSITORY_REMOTE_READ_PATH` is now consumed: it was SERVED but had no browser decoder at plan time (comment-81312c74 on task-19d2329c), and task-e6000b57fd374f78ba074b9f0f0f2c67 was planned to add it. If the roster is red on that route, that is a CORRECT result naming a real gap — record it and coordinate with that row; a green roster achieved by special-casing the route is a failure.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (each child's task.verification, completionSummary and reviewSummary, plus the landing shas). A summary that only says 'children landed' does not discharge the parent. Two things to state EXPLICITLY rather than leave implied: (a) whether the DESIGN PASS comment names what actually CHANGED — the owner's ask was 'we need it for humans not bots', and a comment listing which skills were run without naming the fixes applied does not discharge DoD 4; quote the comment id. (b) Whether the live drive happened, quoting its transcript comment, or saying plainly that it did not. Detail over the 2000-char completionSummary cap goes in a row comment under ~4500 chars, one idea per comment (global rail 14). This row writes no production code: a gap found here is a comment on the owning child plus report_blocked, never a patch.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +61,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:43.469Z",
-  "updatedAt": "2026-09-04T09:14:24.155Z"
+  "updatedAt": "2026-09-05T00:35:54.028Z",
+  "dependsOn": [
+    "task-2ee775b319cb496fad9256c84d24744c",
+    "task-1c9587ed1b2b4e1abd6b51396ee672f8",
+    "task-bc4617d6f84f4213a00c9b1786622577"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:35:06.135Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:35:51.851Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: it carries five distinct deliverables (a live Resources screen, two unconsumed daemon reads given screens, a bidirectional route roster, a forensic view, and a design pass with a live drive), which is far past the 12-step/10-file thresholds — task rail 1 mandates a SPIDR split into children under this row. REJECTED, folding the roster test into child 1 or 2: it can only pass once BOTH their screens consume their reads, so it belongs to a third row that depends on them; putting it in either would make that child's own gate depend on its sibling. REJECTED, letting each child run its own live drive and design pass: global rail 21 concentrates the e2e, the design pass and the live drive in one row, which is child 3. REJECTED, planning against the row's own claim that a SOON chip sits at shell-model.ts:111 — measured false; the freeze is the `live` flag at :25 rendered by nav-rail.tsx:112-124, and child 1's description carries the correction so a worker does not hunt a string that is not there.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. ONE OF THIS ROW'S OWN PREMISES IS STALE: `grep -n SOON apps/control-room/src/v2/shell/shell-model.ts` = ZERO hits; the string lives in nav-rail.tsx:120 (the StatusChip) and in context-bar.tsx comments. A nav entry is frozen by its `live: boolean` (shell-model.ts:25), and nav-rail.tsx:112-124 renders the chip with testid `cr.nav.<id>.unavailable` — so the rendered marker, not a source grep, is what a test should assert. THE TWO UNCONSUMED READS ARE REAL AND SERVED: http-listener-read-dispatch.ts imports PRODUCT_CONTRACT_GATE_1_READ_PATH with its handler (:11-12) and DOCUMENT_DOSSIER_PATH with its handler (:3); `grep -rn 'gate-1/read' apps/control-room/src` finds nothing outside the proxy list, and `/documents/dossier/read` is already pinned at dev-proxy-paths.ts:16 while the gate-1 route is not. HOW TO ENUMERATE THE SERVED SET: that listener (539 lines) holds NO literal route strings — it imports `*_READ_PATH` constants and dispatches on them, so the roster test derives the served set from those imports rather than a hand-kept list. A GAP THE ROSTER WILL NAME: REPOSITORY_REMOTE_READ_PATH is served (:34) but has no browser decoder and no proxy pin — I recorded that on task-19d2329c as comment-81312c74 and planned task-e6000b57 to add it, so the two rows interact.",
+    "risks": "BIGGEST RISK — a roster test that cannot fail. If child 3 enumerates the served set from a hand-kept constant rather than from the listener's dispatch, the test passes forever while routes drift out of reach; step 4 requires opening the test and breaking it in both directions rather than reading its assertion. SECOND — the exclusion list. planning.write, graph.supersede, cutover.* and work.* are unconsumed BY DESIGN, and an exclusion list without a reason per entry becomes the place a genuine gap hides; step 4(c) checks for the reasons. THIRD — a green roster bought by special-casing REPOSITORY_REMOTE_READ_PATH, which is exactly the gap the test exists to name; a red roster there is a correct result. FOURTH — the design pass is the clause most easily discharged with a comment that lists skills and no changes; step 5 requires naming what changed and quoting the comment. FIFTH — this row's own SOON premise is false, and a worker who trusts it will grep a file that never held the string and conclude the freeze was already lifted; the correction is in child 1's description and repeated in step 2. SIXTH — credential values on a Resources screen would leak into any operator screenshot; child 1 carries the hostile test for it, and the parent should confirm that arm exists rather than assuming.",
+    "keyFiles": [
+      "apps/control-room/src/v2/shell/shell-model.ts",
+      "apps/control-room/src/v2/shell/nav-rail.tsx",
+      "apps/daemon/src/http/http-listener-read-dispatch.ts",
+      "apps/control-room/src/live/dev-proxy-paths.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:35:54.028Z"
 }

@@ -15,8 +15,70 @@
     "REAL FRAMES ONLY: control-room fixtures are recorded from a real daemon (exact-key decoders); the remote URL in the live drive is the owner's, never invented, and never carries a credential.",
     "Test ids keep the cr.publish.* / cr.health.* prefixes; sources ASCII-only, JSX text without apostrophes (package-boundary scan). <=250 lines per production source."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE CHILDREN AND THE GAP I FOUND, NO EDITS. (a) Child 1 (task-19d2329c25934099b2ff10086987d1c5) is DONE and its DAEMON half is on disk: `grep -n REPOSITORY_REMOTE_READ_PATH apps/daemon/src/http/repository-remote-read.ts` (:26) and `grep -rn PUBLISH_REMOTE_UNBOUND apps/daemon/src` (publish-receipt-contracts.ts:30, publish-services.ts:61). (b) BUT ITS BROWSER HALF IS NOT — see comment-81312c74875b4284be80b60c1e4705d1 which I left on that row. Re-run all three greps yourself: `grep -rn 'repository/remote/read' apps/control-room/src` (expected ZERO), `ls apps/control-room/src/live/ | grep -i 'repo|remote'` (expected nothing), and `grep -n '\"/' apps/control-room/src/live/dev-proxy-paths.ts` (expected: /repository/remote/read ABSENT from the ~30 listed paths). IF THE BROWSER HALF HAS SINCE APPEARED, skip step 2 entirely and say so — do not build a second decoder. (c) Child 2 (task-f6f33a3925bf4856b42cf84a37bb0f9e, 'Publish is offered only for a goal with a landed commit') was WORKING at plan time; confirm it landed, because DoD 1's 'nothing landed -> the card renders nothing' arm depends on the offer being withheld. If not, report_blocked with blockedOnTaskIds naming it. (d) Record pre-change `Test Files N passed` for `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE MISSING READ CLIENT — the half of child 1's DoD 4 that did not land (task rail 1 forbids a DAEMON change; this is control-room work, which is this row's own domain, so absorb it rather than blocking). New apps/control-room/src/live/live-repository-remote.ts, following the shape of a sibling read client such as live-sessions.ts: POST `/repository/remote/read` with EXACTLY `{}`, and decode `{outcome:\"REMOTE\", remoteUrl, boundAt, boundBy}` with an EXACT-KEY record check — the same `exactDataRecord` discipline the other live clients use, which rejects a response whose key set differs rather than silently defaulting. `remoteUrl`, `boundAt` and `boundBy` are all NULL when unbound, so the decoder must accept null for each WITHOUT collapsing 'unbound' into 'malformed'. Add `/repository/remote/read` to apps/control-room/src/live/dev-proxy-paths.ts (the sorted list at :6-37). Test the decoder both ways: a bound frame, and an all-null unbound frame, plus a frame with an extra key which must be REFUSED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-repository-remote.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "ONE PUBLISH CONTROL, tests first. apps/control-room/src/v2/goals/goal-publish.tsx (141 lines) today reads and writes `REMOTE_STORAGE_KEY = \"moe.publish.remoteUrl\"` through localStorage (:20, :31, :39) and gates `canPublish` on a typed URL (:75). Replace that with the bound remote: (a) BOUND -> no URL input; the card names the remote and the landed commits it will push (from /runs/read landing), and Publish dispatches `{goalId, remoteUrl: null}` — assert the payload BYTE-EXACT through publish-port.ts (22 lines, `submit(affordance, goalId, remoteUrl)`). (b) UNBOUND -> the input renders once and Publish dispatches `{goalId, remoteUrl: <typed>}`. (c) A Change link reveals the input while bound, and the next publish rebinds. (d) NOTHING LANDED (no offer) -> the card renders nothing at all; note `cr.publish.unoffered` exists today at :102 for the un-offered case, so decide and record whether that sentence stays or goes. (e) THE LOCALSTORAGE MUST BE GONE: `grep -rn 'moe.publish.remoteUrl' apps/control-room/src` = 0 and no localStorage read or write remains in goal-publish.tsx. That grep is DoD 1's own gate — a leftover write would keep a stale URL shadowing the bound remote.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-publish.tsx",
+        "apps/control-room/src/v2/goals/publish-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE REPOSITORY CARD ON HEALTH, and a SIZE CHECK FIRST. apps/control-room/src/v2/ops/ops-screens.tsx is 228 lines TODAY against the row's own 250-line ceiling (DoD 5), and this step adds a card — measure with `wc -l` BEFORE writing, and if the addition would cross 250, extract the Health screen (or the new card) into its own module in the same step rather than discovering the violation at the final gate. Then the card itself: the bound remote with boundAt/boundBy from the real `/repository/remote/read` frame, the unbound wording ('no remote bound - bind it from a goal's Publish card') when null, and a Change control. Wire the read into the ops poller in live-ops.tsx beside the existing sessions/policy/health reads (:9-16), and update whatever roster or poller test pins that set — a read added to the screen but not the poller renders once and never refreshes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/ops-screens.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE BROWSER JOURNEY over a REAL daemon, in tests/e2e/control-room/ (follow the harness in daemon-board.spec.ts / prd-to-approval.spec.ts). Land a commit -> the Publish card appears -> the FIRST publish types the URL, using a LOCAL BARE REPOSITORY as the remote so the lane pushes somewhere real without touching anyone's account -> the receipt link renders -> a SECOND goal publishes with NO typing, which is the whole point of the feature and the arm that proves the remote was bound rather than remembered per goal. Capture the control-room fixtures this row uses FROM THAT RUN (task rail 2: exact-key decoders reject hand-written frames, so a synthetic fixture fails at the decoder and reads as a test bug). Quote the `pnpm test:e2e:browser` count line.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/e2e/control-room/publish-remote.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE LIVE PUSH ON UnAI (DoD 4, and task rail 2). At D:/projexts/UnAI via scripts/up.ps1: bind THE OWNER'S remote by the first publish from the browser — NEVER invent a URL and never one carrying a credential — then record in a row comment under ~4500 chars: the `moe-publish-receipt/1` PUSHED line with the remote branch link, and then a SECOND publish with no URL typed, with its receipt id. A REFUSED push is recorded VERBATIM with its code and is a legitimate outcome; it is never worked around and never retried into a fabricated success. If the owner has not named a remote for UnAI, say so and record the refusal or the unbound state instead of guessing one — an invented remote is the one failure here that could push real code somewhere unintended.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-7",
+      "description": "DOCS, SIZE PROOF, GATES. (a) docs/agent-stack-runbook.md '### Publishing (your decision, your remote)' (:402-420, which today tells the operator to 'type the git remote ... and confirm') and README.md's publish clause (:54-55, 'the publisher pushes only when a human names a remote on the goal') are rewritten to the PROJECT shape: the remote is bound once for the project by the first publish and reused, changed from the card or from Health, and never typed per goal. Both in the same commit as the behaviour (DoD 5) — docs that lag a shipped UI are how an operator learns to distrust them. (b) SIZE PROOF: `wc -l` for every production file touched, each <=250 — ops-screens.tsx started at 228, so quote it explicitly. (c) ASCII-only sources and apostrophe-free JSX text, or the scheduler package-boundary scan reds — 'no remote bound - bind it from a goal's Publish card' contains an apostrophe, so rephrase it (e.g. 'bind it from the Publish card on any goal'). (d) GATES with count lines quoted (global rail 8): `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`. (e) SCOPE PROOF: `git diff --stat` shows NO file under apps/daemon/src (task rail 1). Named verification command for completion: `pnpm --filter @moe/control-room test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md",
+        "docs/agent-stack-runbook.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -41,9 +103,40 @@
       "author": "worker-cceb207f",
       "content": "FROM task-9d55341928f04110ba7b286a985f8fa0 (child 1b, now in REVIEW): the daemon route your decoder and proxy pins consume is LANDED. Everything below is measured at the delivered tree, not designed.\n\nPATH + METHOD: `POST /repository/remote/read`, body EXACTLY `{}` (an empty request body also forwards). Exported as `REPOSITORY_REMOTE_READ_PATH` from apps/daemon/src/http/repository-remote-read.ts:21. Capability gate: CAPABILITIES.GOAL — the same gate as /goals/source/read.\n\nSUCCESS SHAPE, exact 5-key roster, nothing more and nothing less:\n  { boundAt: string | null, boundBy: string | null, outcome: \"REMOTE\", readAt: string, remoteUrl: string | null }\nHTTP status 200. `boundBy` is a PRINCIPAL id (e.g. \"principal-1\"), never a credential. `readAt` is the daemon's composition clock. All three nullable fields are null TOGETHER or set TOGETHER — there is no partial state.\n\nREFUSALS your decoder must handle. All three arrive as HTTP 200 with an `outcome: \"REFUSED\"` body carrying `code` and `layer`, where layer is always the string \"REPOSITORY_REMOTE_READ\":\n  REPOSITORY_REMOTE_READ_CAPABILITY_DENIED   — credential lacks the GOAL capability\n  REPOSITORY_REMOTE_READ_PROJECT_MISMATCH    — credential bound to a different project\n  REPOSITORY_REMOTE_READ_UNREADABLE          — see the WARNING below; rarer than it looks\nExported as the frozen roster `REPOSITORY_REMOTE_READ_CODES` (same module) in that order.\n\nLISTENER refusals, which do NOT carry a layer and are NOT 200:\n  LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID — HTTP 400; any non-POST method, or any body that is not `{}`/empty\n  LISTENER_REPOSITORY_REMOTE_UNAVAILABLE     — HTTP 503; the port is not wired\nBoth are in LISTENER_REFUSAL_CODES with statusFor 400/503 (http-listener-guards.ts:86-87, :216-217).\n\n**WARNING, THE NON-OBVIOUS PART — do not build a \"store is broken\" branch.** `readProjectRemote` catches its OWN store failure and re-applies today's url admission rule on the read. So a broken store, an undecodable binding, AND a url that `admitRemoteUrl` no longer admits ALL come back as the UNBOUND view — all nulls under `outcome: \"REMOTE\"` — not as a refusal. UNREADABLE is reachable only when an injected reader throws, which production never does. This is child 1's deliberate fail-closed rule (surfacing a superseded remote would point a push at a repository the operator has already left). CONSEQUENCE FOR YOUR UI: render an all-nulls view as \"no remote yet\" and nothing else; a \"cannot read the remote\" state would be dead code. I found this by probe during adversarial review — my own module comment had it wrong — and it is now pinned by the arm `reads an unreadable STORE as unbound, not as a refusal` in apps/daemon/src/http/repository-remote-read.test.ts.\n\nYOUR PROXY PIN — THIS ONE REDS UNTIL YOU DO IT. The route is deliberately recorded as NOT dev-proxied, because apps/control-room/src/live/dev-proxy-paths.ts is YOUR path and this row is a pure daemon leaf. I added \"/repository/remote/read\" to `UNPROXIED_SERVED_PATHS` in apps/daemon/src/http/http-listener-read-dispatch.test.ts:91-101 (with a comment naming your row). That census is an EXACT set-equality assertion, so when you add the path to DEV_PROXY_PATHS you MUST delete it from UNPROXIED_SERVED_PATHS in the same change — otherwise that arm reds with the entry outliving its gap. Also note apps/control-room/src/live/live-document-proxy.test.ts:6 asserts DEV_PROXY_PATHS with hard-coded literals via toStrictEqual, so it needs the new literal too. Until you land the proxy the route works in production and fails ONLY under the dev server, which is where the e2e lane runs.\n\nA working consumer to copy: apps/control-room/src/live/live-sessions.ts is the sessions read's decoder and uses the identical envelope. My route mirrors sessions-read.ts line for line, so its decoder shape transfers directly.\n\nGate at my delivery: `pnpm --filter @moe/daemon test` => Test Files 408 passed (408) / Tests 8116 passed (8116), exit 0.",
       "timestamp": "2026-09-04T21:02:52.226Z"
+    },
+    {
+      "id": "comment-8f2e6e0f0c8d406fa8c4f1391966a631",
+      "author": "worker-12c76c19",
+      "content": "FROM SPIDR CHILD 2 (task-f6f33a3925bf4856b42cf84a37bb0f9e), which gates the publish OFFER — read before planning the Publish control.\n\nWHAT CHANGED, and what it means for your row. `/affordances/read` no longer mints `repository.publish` for every activated goal. It is offered ONLY when at least one node of that goal carries a landing receipt with `outcome === \"COMMITTED\"`. A goal with no landing, or whose landings are all REFUSED, gets NO publish offer at all.\n\nCONSEQUENCE FOR YOUR CONTROL: `apps/control-room/src/v2/goals/goal-publish.tsx:49` finds its offer by `row[\"commandKind\"] === \"repository.publish\" && row[\"targetAggregateId\"] === \\`publish:${goalId}\\``. For an unlanded goal that find now returns undefined, so the Publish card renders nothing — which is the intended end state (\"the card then renders nothing — child 3\"). You do NOT need to add a \"nothing is landed\" branch to the card: the absent offer already is that branch. `board-header.tsx:23` keys on the same presence and will likewise stop pointing at the card. NO offer SHAPE changed — same commandKind, same `publish:<goalId>` target, same envelope — so nothing in your rendering path needs re-keying.\n\nTHE SURFACE ARM THAT PINS IT, if you want a fixture to copy: `apps/daemon/src/repository/goal-landing-facts.test.ts`, describe \"the publish offer on /affordances/read\", arm **\"APPEARS targeting publish:<goalId> once a commit lands, and goes again on a fresh world\"**. It reads the real surface through `createAffordancePort` and asserts set-equality on `commandKind@target` for the goal's two aggregates:\n- before any landing: `[\"goal.close@goal-1\"]`\n- after `seedReviewAcceptance(store, \"node-a\")` + `seedLandingReceipt(store, \"node-a\", \"COMMITTED\")`: `[\"goal.close@goal-1\", \"repository.publish@publish:goal-1\"]`\nSibling arms pin that a REFUSED-only landing stays unoffered, and that a COMMITTED landing on a node outside the goal's graph does not count.\n\nONE FIXTURE GOTCHA THAT COST ME A STEP: the seed world's activated graph names node **`node-a`**, NOT `node-1` (the plan asserted `node-1` and was wrong — probe output in comment-6d272018 on my row). If you build a browser fixture that needs a landed goal, seed `node-a`. `node-1` is useful as the opposite: a real landable node the goal's graph does not carry.\n\n`goal.close` is unaffected in every arm — task-8145137c's NO_CONTRACT rule for the seed/Foundation journey is untouched, so the close card's behaviour is exactly what it was.",
+      "timestamp": "2026-09-05T00:53:01.798Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:38:40.884Z",
-  "updatedAt": "2026-09-04T21:02:52.226Z"
+  "updatedAt": "2026-09-05T00:53:01.798Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:24:10.181Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:26:15.875Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, reporting blocked on child 1 for the missing browser decoder: task rail 1 forbids a DAEMON change and routes daemon gaps to children 1/2, but this gap is CONTROL-ROOM (a read client plus a proxy pin), which is precisely this row's own domain and about two files. Blocking would stall a DONE-gated chain over work this row is already the right owner for. I recorded the under-delivery on child 1 instead (comment-81312c74) so it is attributed rather than silently credited, and step 1 re-checks so the work is skipped if it appears. REJECTED, keeping localStorage as a fallback when no remote is bound: a stale `moe.publish.remoteUrl` would shadow the daemon's bound remote and could push to a URL the project never bound — DoD 1 makes its total absence a grep gate for exactly that reason. REJECTED, hand-written fixtures: exact-key decoders reject them at the decoder, which reads as a test bug. REJECTED, inventing a remote for the live drive: the URL is the owner's or the drive records the unbound state — a guessed remote is the one mistake here that could push real code somewhere unintended.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE ROW'S OWN PREMISE IS HALF-TRUE AND I CORRECTED IT: child 1 task-19d2329c is DONE (landed `47141db5`, QA-approved `74c55505`) and its DAEMON half is real — apps/daemon/src/http/repository-remote-read.ts:26 defines REPOSITORY_REMOTE_READ_PATH, publish-receipt-contracts.ts:30 defines PUBLISH_REMOTE_UNBOUND, publish-services.ts:61 refuses it at DAEMON_PREREQUISITE. But its DoD 4 also promised 'its exact-key control-room decoder and the two proxy-path pins updated', and NONE of that is on disk: `grep -rn 'repository/remote/read' apps/control-room/src` = 0; there is no live-repository*/remote module among the ~30 live-*.ts read clients; and `/repository/remote/read` is absent from dev-proxy-paths.ts's sorted list (:6-37). This row therefore builds the read client itself. THE PUBLISH CARD TODAY: goal-publish.tsx is 141 lines with REMOTE_STORAGE_KEY at :20 read at :31 and written at :39, `canPublish` requiring a typed URL at :75, and testids cr.publish.root (:90), .landed (:92), .state (:97), .link (:99), .unoffered (:102). publish-port.ts is 22 lines: `submit(affordance, goalId, remoteUrl)`. SIZE HAZARD: ops-screens.tsx is 228 lines against the row's own 250 ceiling and this row adds a Health card — the same class of finding as approve-plan.tsx (263) on task-a988ca1c, so step 4 measures before writing. live-ops.tsx wires the ops reads at :9-16 (sessions, policy) and its comment at :121 notes the pause comes from the shell's single health poll, so a new read must join the poller rather than fetching on its own.",
+    "risks": "BIGGEST RISK — planning against a DONE row's DoD without checking it. Child 1's DoD 4 claims a browser decoder that does not exist; a worker who trusted it would import a module that is not there and lose an hour deciding whether their branch was broken. Step 1 re-runs the three greps and step 2 builds it. SECOND — leftover localStorage. A surviving `moe.publish.remoteUrl` write would shadow the bound remote and could push to a URL the project never bound; DoD 1's grep gate is the guard and it must return literally 0. THIRD — ops-screens.tsx is 228 lines and the ceiling is 250; measure before writing, extract if needed, and do not leave it for the final gate. FOURTH — a read added to the screen but not to the ops poller renders once and never refreshes, which looks like a stale daemon rather than a wiring bug. FIFTH — the live drive can push REAL CODE: the remote is the owner's or the drive records the unbound state; never invent one, never accept one carrying a credential, and record a refused push verbatim. SIXTH — apostrophes in JSX text red the scheduler package-boundary scan, and the natural unbound wording ('a goal's Publish card') contains one. SEVENTH — child 2 (task-f6f33a39) was still WORKING at plan time and DoD 1's 'nothing landed -> renders nothing' arm depends on it withholding the offer.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/goal-publish.tsx",
+      "apps/control-room/src/v2/goals/publish-port.ts",
+      "apps/control-room/src/live/dev-proxy-paths.ts",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/v2/ops/live-ops.tsx",
+      "apps/daemon/src/http/repository-remote-read.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:26:18.043Z"
 }

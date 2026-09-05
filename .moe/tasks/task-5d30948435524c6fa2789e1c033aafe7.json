@@ -17,8 +17,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-3706b7e7bb8741d88105f42c25166ea0 (the generated infrastructure and the image that actually serves health), task-04b3ce7e349743c2a156d32ee5550ba5 (deployment.set_target and deployment.deploy, the atomic replace, the receipts and the kept previous receipt), task-84cd2e55aae942cf8d56657308215fde (the Deployments card, the Playwright journey, the live local deploy and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (both kinds human-only, MCP-excluded, roster backfill, four refusals with code + layer) -> child task-04b3ce7e; DoD 2 (infrastructure golden AND the image building and answering health, with docker-absent failing loudly) -> child task-3706b7e7; DoD 3 (the deploy effect through docker/ssh ports, argv asserted, receipt shape golden including the KEPT previous receipt) -> child task-04b3ce7e; DoD 4 (the Deployments card and the Playwright journey) -> child task-84cd2e55; DoD 5 (the live local PREVIEW deploy) -> child task-84cd2e55; DoD 6 (runbook Deploy section, README Stage 2, gates) -> child task-84cd2e55. CONFIRM TWO THINGS RATHER THAN ASSUMING THEM: (a) whether the image-build arm in child 1 actually RAN on the machine that produced the gate output, or whether docker was absent — a loud failure is acceptable, a silent skip reported as a pass is not; (b) that the KEPT PREVIOUS RECEIPT from child 2 is readable, because the rollback row (task-7683a432eb3f4e87b1eb0cbc6e3a55ff) is a SIBLING that cannot depend on this one and will build directly against that shape.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. `pnpm test` covers no apps/** (global rail 18) but IS real evidence here because child 2 touched packages/contracts and the generated client. STATE WHETHER THE DOCKER-DEPENDENT LEGS RAN on this machine — child 1's image build and child 3's live deploy both need docker, and a machine without it produces a gate output that looks complete while the two most important arms never executed. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. (a) THE OUTAGE WINDOW: child 2 was required to prove the old container serves until the new one is healthy. Verify that on the DELIVERED code, and check the case no child owns — what happens when the NEW container starts, answers health once, then crashes seconds later? Is the old one already gone? (b) ACCIDENTAL PRODUCTION: child 3 must make the confirm step name the environment unmistakably; walk the card as an operator in a hurry and say whether PREVIEW and PRODUCTION are genuinely distinguishable at the moment of the click. (c) THE SIBLING SEAMS, none of which are dependsOn and all of which will bite someone: the environment's variables come from task-9ae492b3's children, the migrations that must run on deploy come from task-8f86e105's children, and the rollback that consumes the kept receipt is task-7683a432's. For EACH, record whether it landed, and if so whether this row's deploy composes with it or silently ignores it — a deploy that skips migrations or ships without environment variables will fail in the environment, not in a test. (d) A DEPLOY WHOSE SHA IS NOT THE BUILD TAG makes every rollback and dossier claim unverifiable; confirm the tag equals the landed sha on the delivered code. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (task.verification, completionSummary, reviewSummary, landing shas). State EXPLICITLY: (a) whether the LIVE PREVIEW DEPLOY happened — quote the receipt and the curl of the health URL (status and body) from the row comment — or, if docker was unavailable on the lane, quote DEPLOY_DOCKER_UNAVAILABLE verbatim; (b) whether the docker-dependent test arms ran at all; (c) which sibling seams (environment variables, migrations, rollback) were composed with and which were absent at completion. All three are partial results that read as complete unless said. Confirm the runbook's Deploy section and README's Stage 2 status describe the MEASURED state — not the intended one — and carry the live drive's date. Detail over the 2000-char cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +62,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:08.082Z",
-  "updatedAt": "2026-09-04T09:13:08.082Z"
+  "updatedAt": "2026-09-05T00:52:31.729Z",
+  "dependsOn": [
+    "task-3706b7e7bb8741d88105f42c25166ea0",
+    "task-04b3ce7e349743c2a156d32ee5550ba5",
+    "task-84cd2e55aae942cf8d56657308215fde"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:51:43.043Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:52:29.330Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: an infrastructure generator with a golden tree AND a real image build, two new human-only command kinds with full roster backfill, a deploy effect spanning docker and ssh with atomic replace and health probing, receipts with a kept previous, a Deployments card, a Playwright journey, a live deploy and a docs sweep — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, folding the infrastructure generator into the deploy row: its 'the image actually builds and serves health' clause is slow and docker-dependent, and isolating it means that cost is paid once in a row with no dependencies. REJECTED, having child 3 own any part of the deploy effect: a proof row that repairs its own subject retires the question unanswered (global rail 4). REJECTED, expressing the seams to the environments, migrations and rollback rows as dependsOn: all three are SIBLING feature rows and the parent rail forbids it — so they are recorded as coordination points in the children's descriptions and checked explicitly at step 4(c) of this roll-up, which is the only place they can be seen together.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS TOTAL: `grep -c deploy apps/daemon/src/daemon-command-vocabulary.ts` = 0, and there is no Dockerfile or compose file in the repo root. THE PATTERN TO FOLLOW rather than invent: `repository.publish` already does the shape this row needs — the human names a target on the goal, the effect runs in the wrapper, and a receipt records the outcome (orchestrator/node-publisher.ts; repository/landing-receipt-contracts.ts:20 for the receipt shape, whose header records the discipline that a thing which did not happen is a REFUSED receipt with its code rather than an absent one). The UI pattern is goal-publish.tsx (141 lines, arm/confirm, testids cr.publish.*) with publish-port.ts (22 lines) spending the offer through offer-wire `spendOffer`. FOUR SIBLING SEAMS, none of them dependsOn-able: the SCAFFOLD row (task-4a0f7064) already emits a compose with postgres, so child 1 must decide whether it generates only what is missing or extends that — two compose files means two postgres services; the ENVIRONMENTS rows (task-9ae492b3's children) own the variables a deployed app needs; the MIGRATIONS rows (task-8f86e105's children) own applying migrations on deploy and assume one compose with postgres; and the ROLLBACK row (task-7683a432) consumes the previous deploy receipt this row keeps. NEEDS_YOU_KINDS is being extended concurrently by task-a988ca1c and task-33ceae56.",
+    "risks": "BIGGEST RISK — an outage the operator did not ask for. A deploy that stops the old container before the new one is healthy takes the product down, and the subtler case no child's DoD names is a new container that answers health once and then crashes, after the old one is already gone; step 4(a) asks. SECOND — an accidental production deploy. PREVIEW and PRODUCTION share one card and one click separates them; child 3 carries the confirm-names-the-environment clause and step 4(b) walks it as an operator in a hurry. THIRD — the sibling seams. Environment variables, migrations-on-deploy and rollback all live in rows this one may not depend on, and a deploy that silently ignores any of them fails IN THE ENVIRONMENT rather than in a test; step 4(c) forces each to be recorded as composed or absent. FOURTH — docker-dependent arms that never ran: child 1's image build and child 3's live deploy both need docker, and a machine without it yields a gate output that looks complete while the two most important arms were skipped; steps 3 and 5 require saying so. FIFTH — a build tag that is not the landed sha, which makes every later rollback and dossier claim unverifiable. SIXTH — the kept previous receipt's shape: the rollback row is a sibling that cannot depend on this one, so whatever ships is what it builds against.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/node-publisher.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/control-room/src/v2/goals/goal-publish.tsx",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:52:31.729Z"
 }

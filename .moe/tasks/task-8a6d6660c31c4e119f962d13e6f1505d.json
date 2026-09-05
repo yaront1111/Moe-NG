@@ -17,8 +17,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-5e90317e80ac4b86a9704b6b8ba8874a (the versioned design aggregate and the two seat kinds), task-de0598236f3b4d95aa3b6098b9d56995 (the staffed step, the compiler mission carrying the design, and the skip toggle), task-f3409f9a1f3a4925a73974ea371098e5 (the Design tab, the version on the approval card, the e2e, the live drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (design.submit and design.read published with roster backfill, three refusals with code + layer, bidirectional roster tests) -> child task-5e90317e. DoD 2 (the wrapper staffs the step; the compiler mission bytes carry the design ref and the five section headings) -> child task-de059823. DoD 3 (the Design tab, the version, the resubmit bump, the approval card naming the version) -> child task-f3409f9a. DoD 4 (the skip toggle) -> child task-de059823. DoD 5 (live drive; VISION/README journey step 4) -> child task-f3409f9a. RECORD ONE DESIGN DECISION EXPLICITLY so QA does not grade it against the wrong pattern: `design.submit` and `design.read` are SEAT kinds, deliberately NOT human-only and NOT MCP-excluded — the opposite of every other kind this epic added. Copying approval.decide's human-only shape would have made the design step unstaffable, and child 1 carries an arm asserting an agent-authenticated dispatch REACHES the handler.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. State that `pnpm test` covers NO apps/** (global rail 18) but IS real evidence here because child 1 touched packages/contracts and the generated client. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note — the integration read only the parent can do. (a) IS THE DESIGN LOAD-BEARING, or decorative? Trace one entity from the design aggregate into the compiler mission bytes and then into a node mission. A design that nothing downstream reads is a form the operator fills in twice and the plan ignores — that is the failure mode this whole feature risks, and child 2's mission assertions are the only thing preventing it. (b) DOES THE LOOP EVER BLOCK? Confirm a goal can always reach a plan: the skip toggle works, and a design step that is offered but never staffed (no seat available) does not wedge the goal. (c) THE SKIP PATH END TO END: a goal planned without a design must say so in the compiler mission AND on the approval card — confirm both, since a silent absence lets a seat and a human each assume the other saw one. (d) VERSION DRIFT: if a design is resubmitted AFTER the plan compiled, does the approval card still name the version the plan actually used, or the latest? The card must name what the plan was BUILT ON. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here — do not file a new evidence row (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (each child's task.verification, completionSummary and reviewSummary, plus the landing shas from step 1). A summary that only says 'children landed' does not discharge the parent. State EXPLICITLY whether the LIVE DRIVE happened with a REAL seat (not a double) — quote the transcript comment and the design ref — or, if the seat could not produce a valid design, quote the DESIGN_SHAPE_INVALID refusal, which is a real finding about the mission text and a legitimate recorded outcome. Confirm VISION and README journey step 4 are marked as running WITH the date, and that the date is the live drive's, not the day the docs were edited. Detail over the 2000-char completionSummary cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code: a gap found here is a comment on the owning child plus report_blocked.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +62,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:00.823Z",
-  "updatedAt": "2026-09-04T09:14:26.060Z"
+  "updatedAt": "2026-09-05T00:38:34.949Z",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a",
+    "task-de0598236f3b4d95aa3b6098b9d56995",
+    "task-f3409f9a1f3a4925a73974ea371098e5"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:37:48.144Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:38:32.679Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a new versioned aggregate, two command kinds with full roster backfill, an affordance-surface step, wrapper staffing, three mission-text changes, a skip toggle, a Design tab, a decoder and proxy pin, an approval-card change, a Playwright journey and a live drive — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, giving design.submit the human-only/MCP-excluded treatment every other kind in this epic gets: it is a SEAT command, and excluding it from MCP would make the design step unstaffable — child 1 carries an explicit arm that an agent-authenticated dispatch reaches the handler, precisely because the surrounding pattern invites the wrong copy. REJECTED, making the design mandatory: the parent's DoD 4 requires a skip toggle so the loop never blocks, and child 2 treats it as a safety valve rather than a nicety. REJECTED, letting the design be write-only: a design nothing reads is decorative, so child 2's DoD asserts the compiler mission BYTES carry the design ref and section headings and that node missions cite screens/entities.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -rn 'design\\.submit|DESIGN_STEP|designRevision' --include=*.ts apps/ packages/` = ZERO hits. Nothing sits between the Gate 1 approval and the decomposition run; `compilerMission` (agent-mission-text.ts:78) sends the seat straight to `product_contract_read` and the paged PRD. THE STAFFING SEAM: agent-wrapper.ts:339-372 staffs any READY unclaimed step up to maxAgents, skipping HUMAN_ONLY_STEPS (:351) and `session.*` kinds and ranking `node.deliver` first (:348-357) — a design step must sit in that ordering deliberately. THREE ROWS NOW EDIT agent-mission-text.ts CONCURRENTLY: task-f79d38b1 (the fence-lift rewrite of the compiler sentence), task-2c016c04 (the rejection sentence in the instructions that flow into it) and this epic's child 2 (the design ref and sections). All three are flagged in the children's descriptions to rebase rather than delete each other's sentences. A SIZE HAZARD CARRIED INTO CHILD 3: approve-plan.tsx is 263 lines, already over the 250 ceiling, and task-a988ca1c is planned to split it — child 3 must either inherit that split or split before adding the design-version line. THE ROSTER HAZARDS carried into child 1 are the ones this board has hit repeatedly: two payload-key TEST tables invisible to a symbol grep, and a GENERATED client with a pinned digest checked at client-compat.ts:169.",
+    "risks": "BIGGEST RISK — a decorative design. The feature is only worth its cost if the plan and the node missions actually READ the design; otherwise the operator fills in a form the compiler ignores. Child 2's DoD asserts the compiler mission bytes carry the design ref and section headings and that a node mission names a screen, and step 4(a) of this roll-up traces one entity end to end. SECOND — wrong pattern on the command kinds. Every other kind this epic adds is human-only and MCP-excluded; design.submit is the exception, and copying the neighbours would make the step unstaffable in a way that looks correct in review. THIRD — the loop wedging on a step that cannot be staffed: the skip toggle must work and an unstaffed design step must not block the goal (step 4(b)). FOURTH — the silent skip: a seat that receives no design section cannot tell 'skipped' from 'read failed' and will guess, and a human approving a plan built with no design must be told. Both children carry that clause. FIFTH — version drift: if the design is resubmitted after compilation, the approval card must name the version the plan was BUILT ON, not the latest (step 4(d)). SIXTH — three rows editing agent-mission-text.ts and two editing approve-plan.tsx; rebases are expected and no row may delete a peer's sentence to fit.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/control-room/src/v2/goals/approve-plan.tsx",
+      "apps/control-room/src/live/dev-proxy-paths.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:38:34.949Z"
 }

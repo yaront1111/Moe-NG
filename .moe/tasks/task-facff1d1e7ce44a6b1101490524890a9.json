@@ -1,0 +1,39 @@
+{
+  "id": "task-facff1d1e7ce44a6b1101490524890a9",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "repository.bootstrap creates the repository, commits the scaffold and binds it",
+  "description": "SPIDR child 2 of task-5ef1a0a9010c4bfe872ff9b774068234 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-4a0f706437a042059789be2ebdb98bc0 for the scaffold it writes.\n\nWHAT THIS ROW OWNS: the operator-only `repository.bootstrap` command and everything it does on disk - `git init`, write child 1's scaffold, first commit 'chore: scaffold by Moe', OPTIONAL `gh repo create <owner>/<name> --<visibility> --source . --push`, then bind it as the project repository via the EXISTING `project.bind_repository` and register it in the manager catalog - plus the `moe-bootstrap-receipt/1` receipt. No UI - child 3.\n\nGITHUB IS OPTIONAL AND THAT IS LOAD-BEARING. A local-only bootstrap SUCCEEDS and SAYS SO. `gh` absent refuses BOOTSTRAP_GH_UNAVAILABLE for the GitHub half while the local repository still exists, is committed and is bound - the receipt records remoteUrl: null. Getting this backwards (failing the whole bootstrap because `gh` is missing) would make the feature unusable on any machine without the GitHub CLI, which is most of them.\n\nREUSE, DO NOT REINVENT: `project.bind_repository` already binds an existing repository and is what this row calls once the directory is a repository - do not write a second binding path. The `gh` invocation follows the same discipline chosen for Gate 3 (task-f961dc899a13488da8f119abdc37631f): the CLI on the operator's machine, refusing cleanly when absent, never a stored token.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): `grep -rc 'repo create' apps/ tools/` = 0; no GitHub repository creation path exists. `moe init` scaffolds a store, not a product.\n\nFOUR REFUSALS, and the directory one is the safety property: BOOTSTRAP_DIR_NOT_EMPTY (never write into a directory with contents - this command writes a whole tree and a wrong path could bury someone's work), BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE (partial, as above), BOOTSTRAP_PROFILE_VERSION_UNKNOWN (defined by child 1, raised here).",
+  "definitionOfDone": [
+    "`repository.bootstrap` published OPERATOR-ONLY and MCP-EXCLUDED, in HUMAN_ONLY_STEPS, with the full roster backfill and a bidirectional set-equality roster test enumerating the served kinds from the dispatch seam; verify by deleting the entry from each side in turn and confirming both go red.",
+    "BOOTSTRAP_DIR_NOT_EMPTY is asserted with code AND layer against a directory containing ONE file, and the test asserts NOTHING was written - this command writes a whole tree, and a wrong path that buries an existing directory is the worst outcome in this row. Also assert a non-existent directory is created, and an EMPTY existing one is accepted.",
+    "A local-only bootstrap SUCCEEDS with `gh` absent: the directory is a git repository, `git log --oneline` is exactly ONE line ('chore: scaffold by Moe'), the repository is bound through the EXISTING `project.bind_repository`, the project is in the manager catalog, and the receipt records BOOTSTRAPPED with remoteUrl: null and the code BOOTSTRAP_GH_UNAVAILABLE for the GitHub half. Assert all of it - a bootstrap that fails wholesale without `gh` is unusable on most machines.",
+    "GitHub creation is tested OFFLINE through an injectable port asserting the `gh` ARGV byte-for-byte (`gh repo create <owner>/<name> --<visibility> --source . --push`); BOOTSTRAP_GIT_UNAVAILABLE and BOOTSTRAP_PROFILE_VERSION_UNKNOWN each assert code + layer.",
+    "`moe-bootstrap-receipt/1` records {dir, sha, remoteUrl|null, BOOTSTRAPPED|REFUSED(code)}, mirroring repository/landing-receipt-contracts.ts; read it back from a real store and assert every member, including that a REFUSED receipt carries its code and no sha.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts and the generated client are touched by the new kind)."
+  ],
+  "taskRails": [
+    "NEVER WRITE INTO A NON-EMPTY DIRECTORY. BOOTSTRAP_DIR_NOT_EMPTY is a safety property, not a validation nicety: this command writes a whole tree and the operator supplies the path.",
+    "A LOCAL-ONLY BOOTSTRAP IS A SUCCESS. `gh` absent refuses only the GitHub half; the repository still exists, is committed and is bound, and the receipt says remoteUrl: null.",
+    "REUSE `project.bind_repository` for the binding and child 1's generator for the tree. A second binding path or an inline scaffold defeats both rows.",
+    "`gh` CLI ONLY, matching the Gate 3 decision (task-f961dc89): no stored token, no REST fallback.",
+    "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
+  "dependsOn": [
+    "task-4a0f706437a042059789be2ebdb98bc0"
+  ],
+  "priority": "HIGH",
+  "order": 82,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:42:35.381Z",
+  "updatedAt": "2026-09-05T00:42:35.381Z"
+}

@@ -16,8 +16,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-8e793ae3c63f41189bcc05f6d7c15605 (the durable agentProvider setting honoured at spawn), task-df64aa204d6f4c35810376226980e4b7 (codex mission parity and the offline proof over the real MCP wire), task-c090faae9fbe438b959e76a08b7dcfdb (Seats, the Playwright journey, the live drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD AND RECORD TWO THINGS QA WILL OTHERWISE MISGRADE, in a step note. Mapping: DoD 1 (durable setting, wrapper spawns codex, env override disclosed) -> child task-8e793ae3; DoD 2 (scripted codex double over the real MCP wire: planning reads, submit_decomposition, node.deliver -> ACCEPTED -> COMMITTED) -> child task-df64aa20; DoD 3 (Seats shows provider, credential source, CLI version; MOE_UP_ENV_MISSING verbatim) -> child task-c090faae; DoD 4 (live codex run) -> child task-c090faae; DoD 5 (runbook + README + gates) -> child task-c090faae. THE TWO THINGS: (a) child 1 had to resolve a structural invariant this parent row never mentions — agent-provider-pause.ts:36 states ONE MOE_AGENT_COMMAND PER WRAPPER PROCESS, and a per-project setting read at spawn changes it. Read child 1's step note for which model it chose (per-spawn resolution, or per-wrapper selection) and record it here, because the provider-pause row (task-4109c1a0, DONE) depends on that invariant. (b) DoD 4's live drive is EXPLICITLY allowed to be blocked on the Codex quota, which was exhausted until 2026-09-08 when this row was filed — a report_blocked carrying the reset date and the exact refusal line DISCHARGES it; a fabricated pass does not.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, and `pnpm test` — which covers NO apps/** (global rail 18) but IS real evidence here because child 1 touched packages/contracts and the generated client. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note — the integration read only the parent can do. (a) CREDENTIAL EXPOSURE, end to end: child 3 carries a hostile test that Seats renders a credential SOURCE and never a value, but trace the whole path — does the credential value appear in a spawn argv, in a log line, in a /sessions/read frame, or in a refusal message anywhere? agent-spawner.ts:35 deliberately passes the MCP bearer through an env var NAME rather than argv or a file; confirm the codex credential follows the same discipline. A value in any of those surfaces ends up in an operator screenshot or a bug report. (b) PROVIDER MISMATCH: with the setting saying codex and MOE_AGENT_COMMAND saying claude, does every surface agree about what is actually running — Seats, the spawn, and the provider-pause bookkeeping? A disagreement here is how an operator concludes the toggle is broken. (c) RESULT-SIZE PARITY: child 2 was required to MEASURE what codex does with an oversized MCP result rather than assume it pages like claude. Read that measurement; if codex truncates, confirm the fix landed rather than the measurement merely being recorded, because a silently truncated context produces a bad plan rather than an error. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here — do not file a new evidence row (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (each child's task.verification, completionSummary and reviewSummary, plus the landing shas from step 1). State EXPLICITLY the disposition of DoD 4: either the live `codex exec` seat delivered a node — quote the transcript comment and the landing sha — or the Codex quota refused, in which case quote the reset date and the EXACT refusal line and confirm the row was blocked rather than passed. Never report a claude seat as a codex one; that is the specific fabrication this feature invites, because the two seats produce identical downstream artefacts. Confirm the README Codex clause ('wired but was last proven only to reach the API') and the runbook's 'Codex seats' section now match the measured state — and that they do NOT claim a live delivery if only the offline double ran. Detail over the 2000-char completionSummary cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +61,32 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:31.237Z",
-  "updatedAt": "2026-09-04T09:12:31.237Z"
+  "updatedAt": "2026-09-05T00:41:22.186Z",
+  "dependsOn": [
+    "task-8e793ae3c63f41189bcc05f6d7c15605",
+    "task-df64aa204d6f4c35810376226980e4b7",
+    "task-c090faae9fbe438b959e76a08b7dcfdb"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:40:31.504Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:41:20.009Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a durable operator-only setting with full roster backfill, a spawn-path change touching a documented per-wrapper invariant, codex mission parity including MCP result-size handling, a scripted-double e2e over the real wire, a Seats screen with credential handling, a Playwright journey, a live drive and a docs sweep — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, making the live codex run a hard requirement of any child: the Codex quota was exhausted until 2026-09-08 when this row was filed and the parent's own DoD 4 provides for report_blocked with the reset date; child 2's offline proof is therefore quota-independent and child 3 owns the live attempt. REJECTED, declaring a second provider-name roster: KNOWN_PROVIDERS already exists at health-read.ts:34 and a copy would drift. REJECTED, letting child 3 assume codex pages large MCP results like claude: child 2 must MEASURE it, because a silently truncated context yields a bad plan rather than an error.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE WIRING EXISTS; THE SELECTION AND THE PROOF DO NOT. agent-spawner.ts:64-83,116-150 already invokes `codex exec` with the mission on STDIN via `-`, the scoped MCP bearer through an env var codex reads BY NAME (`bearer_token_env_var`, :35 — never argv, never a file), `--ignore-user-config` to keep the host's codex config out, and QUOTE-FREE `-c` values because codex parses each one itself (:73). agent-spawn-environment.ts:22-24 holds the CLOSED CODEX_/OPENAI_ env allowlist measured against codex-cli 0.147.0. `KNOWN_PROVIDERS = [\"claude\",\"codex\"]` is at health-read.ts:34. THE STRUCTURAL FINDING THIS PARENT ROW OMITS: agent-provider-pause.ts:36 documents \"The provider this wrapper serves — one MOE_AGENT_COMMAND per wrapper process\", and the provider is resolved once per process (agent-spawner.ts:50, agent-wrapper-main.ts:286). A per-PROJECT setting read at SPAWN changes that invariant and the DONE provider-pause row (task-4109c1a0) assumes it — so child 1's plan must decide and record the model before writing spawn code, rather than discovering it at step 5. `agentProvider` itself does not exist anywhere today. CONCURRENT EDITOR ON /sessions/read: task-92d84d384e4443d7bf78c76024af5688 is adding the concurrency limit to the same read whose browser decoder (live-sessions.ts) is EXACT-KEY — daemon and browser must move together or Seats goes blank, and a rebase is expected.",
+    "risks": "BIGGEST RISK — a credential value escaping into an operator-visible surface. Seats, a spawn argv, a log line, a /sessions/read frame or a refusal message would each put it in a screenshot or a bug report, and it cannot be recalled. Child 3 carries a hostile render test and step 4(a) traces the whole path, because the existing code is careful here (the MCP bearer goes through an env var NAME, never argv) and the codex credential must follow the same discipline. SECOND — the per-wrapper-process invariant. agent-provider-pause.ts:36 states it and a DONE row depends on it; a per-spawn setting silently breaks the pause bookkeeping, and this is exactly the kind of thing that gets discovered at step 5 and rejects a plan. Child 1 must decide it first. THIRD — reporting a claude seat as a codex one. The two produce identical downstream artefacts (a sealed run, a verifier receipt, a landing sha), so nothing in the evidence distinguishes them unless the provider is asserted at the spawn; step 5 names this as the specific fabrication this feature invites. FOURTH — assumed result-size parity: 'it worked on a small read' is not parity, and a truncating seat plans against a partial contract. FIFTH — a browser toggle silently overridden by MOE_AGENT_COMMAND, with no disclosure, makes the control a lie; both child 1 and child 3 carry the disclosure clause. SIXTH — the live drive may be quota-blocked, and that is an accepted, recorded outcome rather than a gap.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/orchestrator/agent-provider-pause.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+      "apps/daemon/src/http/health-read.ts",
+      "apps/control-room/src/live/live-sessions.ts",
+      "apps/daemon/src/orchestrator/moe-up-credentials.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:41:22.186Z"
 }

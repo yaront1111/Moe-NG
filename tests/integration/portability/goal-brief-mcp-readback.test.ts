@@ -15,7 +15,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  ACTIVATION_WITNESS, OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID, PROVIDER_OBSERVATION,
+  activatePayload, OBSERVATION, POLICY_REF, POLICY_SLICE, PROJECT_ID, PROVIDER_OBSERVATION,
   evaluationInput,
 } from "../../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -147,7 +147,7 @@ const BOOTSTRAP_CHAIN: readonly {
   // (bootstrap-policy-services.ts:130). The in-process fixture can name `principal-1`; a real
   // MCP session cannot, and must not.
   { kind: "policy.validate", payload: { input: withoutActor(evaluationInput(POLICY_REF)) } },
-  { kind: "project.activate", payload: { witness: ACTIVATION_WITNESS } },
+  { kind: "project.activate", payload: activatePayload() },
 ]);
 
 async function driveChainThroughHost(driver: Driver): Promise<void> {

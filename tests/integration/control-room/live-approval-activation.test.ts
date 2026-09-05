@@ -7,6 +7,8 @@ import type { HandlerTable } from "../../../apps/daemon/src/bootstrap/bootstrap-
 import {
   BOOTSTRAP_HANDLERS, runBootstrapCommand,
 } from "../../../apps/daemon/src/bootstrap/bootstrap-services.js";
+import { FIXTURE_ACTIVATION_RECEIPTS }
+  from "../../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../../../apps/daemon/src/goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../../../apps/daemon/src/planning/planning-services.js";
 import { deriveApprovalBudgetRef }
@@ -87,6 +89,8 @@ function send(
     bytes,
     handlers,
     kind === "approval.decide" ? Object.freeze({ principalId: PRINCIPAL_ID }) : undefined,
+    // `project.activate` MINTS its witness from measured receipts and refuses without them.
+    FIXTURE_ACTIVATION_RECEIPTS,
   );
 }
 

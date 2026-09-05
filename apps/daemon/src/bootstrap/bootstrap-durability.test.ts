@@ -1,3 +1,7 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { SQLITE_APPLICATION_ID } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -6,6 +10,8 @@ import { commitAccepted, missingPrerequisites, readDurableLedger } from "./boots
 import { PREREQUISITE_ALTERNATIVES } from "./bootstrap-sequence.js";
 import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import {
+  ACTIVATION_WITNESS,
+  FIXTURE_ACTIVATION_RECEIPTS,
   GOAL_CREATE_COMMAND_ID,
   OBSERVATION,
   PROJECT_ID,
@@ -22,9 +28,24 @@ import {
   goalPayload,
   hex64,
   openStore,
+  receiptsWithout,
   sealedPlanningChain,
   send,
+  sendUnmeasured,
 } from "./bootstrap-test-fixtures.js";
+import {
+  ACTIVATION_RECEIPT_CODES,
+  ACTIVATION_RECEIPT_MEMBERS,
+  SIGNING_UNSIGNED_REF,
+  sha256Hex,
+} from "./activation-receipts.js";
+import type { ActivationReceiptMember } from "./activation-receipts.js";
+import {
+  measureActivationReceipts,
+  nodeActivationReceiptPorts,
+} from "./activation-receipts-measure.js";
+import type { ActivationReceiptInput } from "./activation-receipts-measure.js";
+import type { ActivationReceiptPorts } from "./activation-receipts-ports.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
@@ -91,16 +112,24 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
     expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(false);
   });
 
-  it("refuses activation carrying no witness, at the ingress layer", () => {
+  /**
+   * INVERTED BY task-4b9c394d. This arm used to assert the opposite: that a payload carrying NO
+   * witness was refused BOOTSTRAP_PAYLOAD_INVALID. An empty payload is now the CORRECT one — the
+   * daemon mints the witness — so the refusal this file must pin is the reverse, and pinning the
+   * old direction would have kept a green test guarding behaviour the product no longer wants.
+   */
+  it("refuses activation CARRYING a witness, at the ingress layer", () => {
     const store = openStore();
     driveThrough(store, "project.activate");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("project.activate", 2, {}));
+    const outcome = send(
+      store, envelope("project.activate", 2, { witness: { ...ACTIVATION_WITNESS } }),
+    );
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("BOOTSTRAP_PAYLOAD_INVALID");
+    expect(outcome.code).toBe("ACTIVATION_WITNESS_CALLER_SUPPLIED");
     expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
     expect(decisionCount(store)).toBe(before);
     expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(false);
@@ -222,6 +251,9 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
   it("STALE_VERSION is refused by the core reducer and writes no decision", () => {
     const store = openStore();
     // Register, bind and probe are durable, so the sequence gate passes and the core answers.
+    // The payload carries NO witness on purpose (task-4b9c394d): a caller-supplied one would be
+    // refused at DAEMON_INGRESS first and this arm would pass for the wrong reason, never
+    // reaching the reducer whose refusal it exists to pin.
     driveThrough(store, "project.activate");
     const before = decisionCount(store);
     const head = readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID);
@@ -601,5 +633,255 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+
+/**
+ * THE DAEMON MINTS THE ACTIVATION WITNESS (task-4b9c394d).
+ *
+ * Before this row `activateProject` read `payload.witness` and handed the CALLER'S OBJECT
+ * straight to the core reducer, so any caller could invent `artifact-1` / `backup-1` and the
+ * daemon would commit it as DAEMON_VERIFIED authority. Now the payload carries nothing and the
+ * daemon assembles the nine keys from its OWN measured receipts.
+ *
+ * Every arm below names the code AND the layer. Four layers can refuse a `project.activate`
+ * and they answer in a fixed order — ingress decode, replay, prerequisites, then this handler —
+ * so an arm asserting only "it refused" would go vacuous the moment an earlier layer starts
+ * answering (global rail 1).
+ */
+describe("project.activate mints its own witness and refuses a caller-supplied one", () => {
+  const PROJECT_ROOT = join(tmpdir(), "moe-mint-project");
+  const STORE_PATH = join(PROJECT_ROOT, "moe.sqlite");
+  const HEAD_SHA = "1".repeat(40);
+  const BACKUP_SHA = "a".repeat(64);
+  const POLICY_SLICE_REF = "b".repeat(64);
+  /** Must match the ref `driveThrough` commits via `provider.probe`, not an invented one. */
+  const PROBE_REF = "provider-profile-1";
+  const CLOCK = "2026-09-04T09:15:00.123Z";
+  const BACKUP_PATH = join(PROJECT_ROOT, ".moe-next", "backups", "20260904091500123.sqlite");
+
+  const MEASURE_INPUT: ActivationReceiptInput = {
+    agentCommand: "fixture-agent", artifactRoot: PROJECT_ROOT, projectId: PROJECT_ID,
+    projectRoot: PROJECT_ROOT, storePath: STORE_PATH,
+  };
+
+  /** Deterministic ports, so every expected value below is a KNOWN LITERAL, never a re-derivation. */
+  function measurePorts(): ActivationReceiptPorts {
+    const present = new Set([STORE_PATH]);
+    return nodeActivationReceiptPorts({
+      backup: () => Promise.resolve({ byteLength: 2048, ok: true as const, sha256: BACKUP_SHA }),
+      committedProbeRef: () => Promise.resolve(PROBE_REF),
+      env: {},
+      fs: {
+        exists: (path: string) => present.has(path),
+        mkdir: (path: string) => { present.add(path); },
+        readBytes: () => null,
+        stat: (path: string) => (present.has(path) ? { size: 4096 } : null),
+      },
+      git: (_cwd: string, args: readonly string[]) => Promise.resolve(
+        args[1] === "--show-toplevel"
+          ? { code: 0, stderr: "", stdout: `${PROJECT_ROOT}
+` }
+          : { code: 0, stderr: "", stdout: `${HEAD_SHA}
+` },
+      ),
+      installedPolicySliceRefs: () => Promise.resolve([POLICY_SLICE_REF]),
+      now: () => new Date(CLOCK),
+      sqliteApplicationId: () => SQLITE_APPLICATION_ID,
+    });
+  }
+
+  /** The witness as the store actually holds it, decoded from the committed event payload. */
+  function committedWitness(store: SqliteEventStore): Record<string, unknown> {
+    const decoder = new TextDecoder();
+    for (const event of store.readEventsAfter(0n, 1000).items) {
+      const body = JSON.parse(decoder.decode(event.payload)) as Record<string, unknown>;
+      if (body["kind"] === "ProjectActivated") return body["witness"] as Record<string, unknown>;
+    }
+    throw new Error("no ProjectActivated event was committed");
+  }
+
+  it("commits the MEASURED values, not nine keys of any shape (DoD 1)", async () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+    const receipts = await measureActivationReceipts(MEASURE_INPUT, measurePorts());
+
+    const outcome = send(store, envelope("project.activate", 2, {}), receipts);
+
+    expect(outcome.ok, JSON.stringify(receipts.members)).toBe(true);
+    // EXACT VALUES, each traceable to a port return above. `toEqual` on the whole object is
+    // what makes this fail when a member is defaulted rather than measured.
+    expect(committedWitness(store)).toEqual({
+      artifactPathRef: `source-checkout/${PROJECT_ROOT}@${HEAD_SHA}`,
+      backupPathRef: `${BACKUP_PATH}@sha256:${BACKUP_SHA}`,
+      credentialRef: "credential/fixture-agent/ungated",
+      distributionManifestHash: sha256Hex(`moe-distribution/source-checkout
+${HEAD_SHA}
+`),
+      policyRevisionHash: sha256Hex(`moe-policy-revision
+${POLICY_SLICE_REF}
+`),
+      providerMinimumProfileRef: PROBE_REF,
+      signingKeyRef: SIGNING_UNSIGNED_REF,
+      storeDriverRef: `store/node-sqlite/${SQLITE_APPLICATION_ID}`,
+      truthClass: "DAEMON_VERIFIED",
+    });
+    // The repository measurement reaches the receipts even though no witness key carries it.
+    expect(receipts.repository).toEqual({ headSha: HEAD_SHA, toplevel: PROJECT_ROOT });
+    expect(receipts.store).toEqual({ storePath: STORE_PATH });
+  });
+
+  it("drives the REAL core reducer with the minted witness and is accepted (DoD 4)", async () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+    const receipts = await measureActivationReceipts(MEASURE_INPUT, measurePorts());
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("project.activate", 2, {}), receipts);
+
+    // Acceptance IS the proof that `packages/core`'s unchanged `validActivation` took it: the
+    // reducer refuses `PROJECT_COMMAND_ILLEGAL` on a witness that misses its exact nine keys,
+    // a non-64-hex digest, or a weak truthClass. Core is not edited by this row.
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error(`${outcome.code} @ ${outcome.refusedBy}`);
+    expect(outcome.authority).toBe("DURABLE_DECISION");
+    expect(decisionCount(store)).toBe(before + 1);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(true);
+  });
+
+  it("mints a witness core accepts from the fixture receipts every other suite drives", () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+
+    const outcome = send(store, envelope("project.activate", 2, {}));
+
+    expect(outcome.ok).toBe(true);
+    // Byte identity with the long-standing fixture constant is what keeps ~60 downstream
+    // suites asserting the same durable activation they asserted before the daemon minted it.
+    expect(committedWitness(store)).toEqual({ ...ACTIVATION_WITNESS });
+  });
+});
+
+/**
+ * FAIL CLOSED, PER MEMBER (task-4b9c394d, task rail 1).
+ *
+ * There is no partial witness and no defaulted member: ONE unmeasurable receipt refuses the
+ * WHOLE activation with THAT member's own code, and nothing is committed. Every arm asserts the
+ * code AND the layer AND that no `ProjectActivated` event exists — asserting only "it refused"
+ * would stay green if the ingress or prerequisite layer started answering first (global rail 1).
+ */
+describe("an unmeasurable receipt refuses the whole activation, committing nothing", () => {
+  /** No `ProjectActivated` event at all — the shape a PARTIAL witness would still produce one of. */
+  function activationEvents(store: SqliteEventStore): number {
+    const decoder = new TextDecoder();
+    return store.readEventsAfter(0n, 1000).items.filter((event) => {
+      const body = JSON.parse(decoder.decode(event.payload)) as Record<string, unknown>;
+      return body["kind"] === "ProjectActivated";
+    }).length;
+  }
+
+  function refusalOf(outcome: ServiceOutcome): { readonly code: string; readonly layer: string } {
+    if (outcome.ok) throw new Error("expected a refusal, got an accepted decision");
+    return { code: outcome.code, layer: outcome.refusedBy };
+  }
+
+  it("refuses a CALLER-SUPPLIED witness by its own code, at the ingress layer (DoD 2)", () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+    const before = decisionCount(store);
+
+    // The exact payload the daemon used to REQUIRE, and every browser and seed used to send.
+    const outcome = send(
+      store, envelope("project.activate", 2, { witness: { ...ACTIVATION_WITNESS } }),
+    );
+
+    expect(refusalOf(outcome)).toEqual({
+      code: "ACTIVATION_WITNESS_CALLER_SUPPLIED", layer: "DAEMON_INGRESS",
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.authority).toBe("NONE");
+    // NOTHING COMMITTED.
+    expect(decisionCount(store)).toBe(before);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(false);
+    expect(activationEvents(store)).toBe(0);
+  });
+
+  it("refuses a caller witness even when it is the one the daemon would have minted", () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+
+    // The refusal is about WHO measured, not about whether the values happen to be right.
+    // Honouring a witness that merely LOOKS correct would restore the whole product gap.
+    const outcome = send(store, envelope("project.activate", 2, activatePayload({})));
+
+    expect(refusalOf(outcome)).toEqual({
+      code: "ACTIVATION_WITNESS_CALLER_SUPPLIED", layer: "DAEMON_INGRESS",
+    });
+    expect(activationEvents(store)).toBe(0);
+  });
+
+  it("refuses when the composition measured NOTHING, rather than inventing a witness", () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+    const before = decisionCount(store);
+
+    // An unwired composition root. Child A defaults its two durable-reader ports to ABSENT on
+    // purpose, so this is the honest answer a daemon that forgot to wire them must give.
+    const outcome = refusalOf(sendUnmeasured(store, envelope("project.activate", 2, {})));
+
+    expect(outcome).toEqual({
+      code: ACTIVATION_RECEIPT_CODES.repository, layer: "DAEMON_ACTIVATION_RECEIPTS",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(activationEvents(store)).toBe(0);
+  });
+
+  // Driven off the EXPORTED member roster, so a member added to child A joins this sweep
+  // automatically instead of silently escaping it.
+  const MEMBERS: readonly ActivationReceiptMember[] = [...ACTIVATION_RECEIPT_MEMBERS];
+
+  it("generates one arm per measured member, and there are six of them", () => {
+    // A sweep that silently yields zero cases passes while testing nothing (global rail 1).
+    expect(MEMBERS).toHaveLength(6);
+    expect(new Set(MEMBERS).size).toBe(6);
+    expect([...MEMBERS].sort()).toEqual(
+      ["backup", "distribution", "policy", "provider", "repository", "store"],
+    );
+    // Every member has its own distinct code: a shared code could not say WHICH receipt failed.
+    expect(new Set(MEMBERS.map((m) => ACTIVATION_RECEIPT_CODES[m])).size).toBe(6);
+  });
+
+  it.each(MEMBERS)(
+    "refuses the whole activation with %s's own code and writes no partial witness (DoD 3)",
+    (member) => {
+      const store = openStore();
+      driveThrough(store, "project.activate");
+      const before = decisionCount(store);
+
+      const outcome = send(
+        store, envelope("project.activate", 2, {}), receiptsWithout(member),
+      );
+
+      expect(refusalOf(outcome)).toEqual({
+        code: ACTIVATION_RECEIPT_CODES[member], layer: "DAEMON_ACTIVATION_RECEIPTS",
+      });
+      expect(decisionCount(store)).toBe(before);
+      expect(readDurableLedger(store, PROJECT_ID).kinds.has("project.activate")).toBe(false);
+      // NO PARTIAL WITNESS: not a witness missing one key, not a witness with a defaulted key.
+      expect(activationEvents(store)).toBe(0);
+    },
+  );
+
+  it("still mints when every member IS measured, so the arms above are not vacuously red", () => {
+    const store = openStore();
+    driveThrough(store, "project.activate");
+
+    // The positive control for the sweep: same store, same envelope, complete receipts.
+    const outcome = send(store, envelope("project.activate", 2, {}), FIXTURE_ACTIVATION_RECEIPTS);
+
+    expect(outcome.ok).toBe(true);
+    expect(activationEvents(store)).toBe(1);
   });
 });

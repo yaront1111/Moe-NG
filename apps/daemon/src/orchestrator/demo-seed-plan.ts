@@ -89,7 +89,13 @@ export const DEMO_SEED_KINDS = Object.freeze([
   "project.register",
   "project.bind_repository",
   "provider.probe",
-  "project.activate",
+  // POLICY BEFORE ACTIVATION, and the position is NO LONGER FREE (task-4b9c394d). The daemon
+  // mints the activation witness from receipts it measures, and the `policy` receipt is the
+  // digest of the INSTALLED SLICE SET; with nothing installed there is no revision to measure
+  // and `project.activate` refuses ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS.
+  // Measured against a live daemon, not reasoned: with the installs after the activate,
+  // `pnpm seed` refuses at project.activate and every real-process e2e fails to seed.
+  //
   // Three times, and before goal.create. The first two are the slices the daemon-side verifier
   // reads: without them `createVerifierAuthorityProvider` returns null and
   // `readReviewerCalibration` refuses REVIEWER_CALIBRATION_NOT_INSTALLED, so node-verifier.ts
@@ -97,11 +103,13 @@ export const DEMO_SEED_KINDS = Object.freeze([
   // COMMITTED. The third is the VALIDATABLE slice at the 64-hex address the development payload
   // hint names: the seeded surface offers `policy.validate` as a READY step, and without an
   // installed nameable revision that step is unsatisfiable by construction (the other two live
-  // at non-hex addresses on purpose). `policy.install` names no prerequisite and rides the
-  // project's `-policy` stream, so their position is free and their versions are their own.
+  // at non-hex addresses on purpose). `policy.install` names no prerequisite in the bootstrap
+  // sequence table and rides the project's `-policy` stream, so its VERSIONS are its own -- but
+  // its POSITION is now fixed by the activation receipt above, not free.
   "policy.install",
   "policy.install",
   "policy.install",
+  "project.activate",
   "goal.create",
   "plan.propose",
   // Twice: the proposal, then the finalize terminal. They may not share one chain -
@@ -113,7 +121,6 @@ export const DEMO_SEED_KINDS = Object.freeze([
 ] as const);
 
 import {
-  activationWitness,
   approvalRecord,
   finalizeChain,
   planningActivation,
@@ -189,12 +196,24 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     build("project.register", 0, { owner: input.principalId }),
     build("project.bind_repository", 1, { observation: repositoryObservation(input) }),
     build("provider.probe", 0, { observation: probeObservation(input) }),
-    build("project.activate", 2, { witness: activationWitness(input) }),
+    // POLICY IS INSTALLED BEFORE ACTIVATION, and this ORDER IS LOAD-BEARING (task-4b9c394d).
+    // The daemon now mints the activation witness from receipts it measures, and the `policy`
+    // receipt is the digest of the INSTALLED SLICE SET. With no slices installed there is no
+    // policy revision to measure, so activation refuses ACTIVATION_POLICY_UNMEASURED @
+    // DAEMON_ACTIVATION_RECEIPTS -- which is what a real operator sees too, and why the Policy
+    // screen comes before the Activate button. Measured, not reasoned: with these three lines
+    // AFTER the activate below, `pnpm seed` refuses at project.activate against a live daemon.
+    //
     // The policy stream's own 0 -> 1 -> 2 line; `installPolicy` refuses
-    // BOOTSTRAP_EXPECTED_VERSION_STALE on anything else.
+    // BOOTSTRAP_EXPECTED_VERSION_STALE on anything else. These are the POLICY aggregate's
+    // versions, independent of the project aggregate's, so moving them above the activate
+    // changes no expectedVersion on either stream.
     build("policy.install", 0, { slice: verifierPolicySlice(input) }, "-verifier-policy"),
     build("policy.install", 1, { slice: reviewerCalibrationSlice(input) }, "-reviewer-calibration"),
     build("policy.install", 2, { slice: validatablePolicySlice() }, "-validatable-policy"),
+    // NO PAYLOAD. The daemon measures its own activation receipts and mints the witness; a
+    // caller-supplied one is refused ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS.
+    build("project.activate", 2, {}),
     // PROSE ONLY. The goal, its planning run, its budget account and the readiness witness are
     // all derived by the daemon; naming any of them here is refused INPUT_INVALID at
     // PAYLOAD_SHAPE before the handler runs.

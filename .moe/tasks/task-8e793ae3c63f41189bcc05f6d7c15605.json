@@ -1,0 +1,35 @@
+{
+  "id": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The agent provider is a durable project setting the wrapper honours at spawn",
+  "description": "SPIDR child 1 of task-969575299465484d9486ea02ff7ae336 (architect-20a6d1eb, 2026-09-05). Dependency-free LEAF.\n\nWHAT THIS ROW OWNS: a durable per-project `agentProvider: claude|codex` (with a per-goal override), written by an operator-only command, and honoured by the wrapper at spawn. No Codex mission work, no UI - children 2 and 3.\n\nA STRUCTURAL CONSTRAINT THE PARENT ROW DOES NOT MENTION, and the first thing to resolve. `apps/daemon/src/orchestrator/agent-provider-pause.ts:36` documents the current invariant verbatim: \"The provider this wrapper serves - ONE MOE_AGENT_COMMAND PER WRAPPER PROCESS.\" The provider is resolved ONCE per wrapper process today: `agent-spawner.ts:50` `options.command ?? process.env[\"MOE_AGENT_COMMAND\"] ?? \"claude\"`, and `agent-wrapper-main.ts:286` derives the wrapper's provider the same way for its pause bookkeeping. A per-PROJECT setting read at SPAWN time changes that invariant, and the provider-pause machinery (task-4109c1a0, DONE) assumes it.\n\nTHE PLAN'S FIRST STEP MUST DECIDE AND RECORD which of these it does, because they are materially different builds:\n(a) the wrapper resolves the provider PER SPAWN from the durable setting, and the pause bookkeeping becomes per-provider rather than per-wrapper; or\n(b) the wrapper keeps one provider per process and the setting selects WHICH wrapper staffs a goal, leaving a project with two providers needing two wrapper processes.\nMeasure `agent-provider-pause.ts` before choosing; do not discover this at step 5.\n\nTHE ENV STILL WINS. The parent is explicit: `MOE_AGENT_COMMAND` overrides the setting and is DISCLOSED on /sessions/read. That disclosure matters - an operator who set `codex` in the browser and gets `claude` seats must be able to see why, and the launcher env is invisible from the UI otherwise.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): `agentProvider` does not exist (`grep -rn agentProvider --include=*.ts apps/daemon/src` = 0 outside this row's description). `KNOWN_PROVIDERS = [\"claude\",\"codex\"]` already exists at apps/daemon/src/http/health-read.ts:34 - REUSE that roster rather than declaring a second list of provider names.",
+  "definitionOfDone": [
+    "A durable per-project `agentProvider` setting with a per-goal override, written by an OPERATOR-ONLY command (human-only, MCP-excluded, in HUMAN_ONLY_STEPS) with the full roster backfill and a bidirectional set-equality roster test; its refusal for an unknown provider name asserts code AND layer, and the valid names come from the EXISTING `KNOWN_PROVIDERS` roster (health-read.ts:34), not a second list.",
+    "THE WRAPPER HONOURS IT AT SPAWN: a test asserts argv[0] is `codex` when the setting says codex, and `claude` when it says claude - asserting the spawned argv, not an internal field. Also assert the codex-only env allowlist is applied for a codex spawn (agent-spawn-environment.ts:22-24 documents the closed CODEX_/OPENAI_ surface).",
+    "THE ENV OVERRIDE STILL WINS AND IS DISCLOSED: with `MOE_AGENT_COMMAND` set, the spawn uses it REGARDLESS of the setting, and `/sessions/read` reports both the effective provider and the fact that an env override is in force. Assert the disclosure, not just the precedence - an operator whose browser choice is silently ignored has no way to find out.",
+    "THE PER-WRAPPER-PROCESS INVARIANT IS RESOLVED EXPLICITLY: the step note records which option was taken (per-spawn resolution, or per-wrapper selection) and what happened to the provider-pause bookkeeping, which assumes one provider per wrapper (agent-provider-pause.ts:36). A test covers a pause under the chosen model.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts and the generated client are touched by the new kind, so the root lane is real evidence here)."
+  ],
+  "taskRails": [
+    "RESOLVE THE PER-WRAPPER-PROCESS INVARIANT FIRST. agent-provider-pause.ts:36 states one MOE_AGENT_COMMAND per wrapper process and the DONE provider-pause row depends on it. Decide and record the model before writing spawn code; discovering it mid-flight is a rejected plan.",
+    "REUSE `KNOWN_PROVIDERS` (health-read.ts:34). A second roster of provider names is a copy that drifts.",
+    "THE ENV OVERRIDE IS DISCLOSED, NEVER SILENT. Precedence without disclosure makes the browser control a lie.",
+    "NO CODEX MISSION WORK AND NO UI: mission parity and the offline codex e2e are child 2; the Seats screen and the live drive are child 3.",
+    "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-969575299465484d9486ea02ff7ae336",
+  "priority": "HIGH",
+  "order": 71,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:39:23.042Z",
+  "updatedAt": "2026-09-05T00:39:23.042Z"
+}

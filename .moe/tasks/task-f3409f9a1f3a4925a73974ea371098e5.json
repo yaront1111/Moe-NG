@@ -1,0 +1,41 @@
+{
+  "id": "task-f3409f9a1f3a4925a73974ea371098e5",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The operator reads the design and knows which version the plan was built on",
+  "description": "SPIDR child 3 of task-8a6d6660c31c4e119f962d13e6f1505d (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-5e90317e80ac4b86a9704b6b8ba8874a, the aggregate and reads) and child 2 (task-de0598236f3b4d95aa3b6098b9d56995, the staffed step). PROOF ROW: it owns the e2e, the live drive and the docs, so neither sibling files its own evidence row (global rail 21).\n\nWHAT THIS ROW OWNS: a Design tab on the opened goal showing the five sections and the version; the operator read `/design/read` wired through the browser's exact-key decoder and proxy pin; the plan-approval card naming the design VERSION the plan was compiled against; and the request-changes path (a comment-driven resubmit bumps the version).\n\nTHE VERSION ON THE APPROVAL CARD IS THE POINT, not a label. The parent's design is that the human accepts the design IMPLICITLY by approving the plan - so the approval card must say WHICH design version that plan was compiled against, or the human is approving a plan against a design they may not have read. `apps/control-room/src/v2/goals/approve-plan-gate.tsx` (78 lines) and approve-plan.tsx are where it lands.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb:\n- approve-plan.tsx is 263 LINES, already over the 250-line ceiling this epic's rows carry. task-a988ca1c240347178c54348c470d07ed is planned to SPLIT it as its own step 2; if that row has not landed, this row must split before adding, or it ships a violation.\n- The browser read clients in apps/control-room/src/live/ decode with EXACT-KEY record checks that refuse an unexpected key set; `/design/read` needs its decoder and its pin in dev-proxy-paths.ts (the sorted list at :6-37).\n- The goal screen's tabs and the board live under apps/control-room/src/v2/.\n\nCONCURRENT EDITORS on approve-plan.tsx / approve-plan-gate.tsx: task-a988ca1c (Reject on the plan gate) owns both. Coordinate rather than collide - it splits the file, this row adds one line of provenance to the card.",
+  "definitionOfDone": [
+    "The opened goal shows a Design tab with the five sections and the version, read through `/design/read` with an EXACT-KEY decoder (a frame with an extra key is REFUSED, one missing a key is REFUSED) and its pin added to dev-proxy-paths.ts. Assert against a REAL daemon frame that a named entity from the data-model section reaches the rendered tab.",
+    "THE PLAN-APPROVAL CARD NAMES THE DESIGN VERSION the plan was compiled against. Assert the version string is rendered on the card, and assert the card still renders when the goal has NO design (the skip path from child 2) with words saying so rather than a blank or a zero - a human approving a plan built with no design must be told that, since approval is the implicit acceptance.",
+    "A resubmit bumps the version and the tab shows the newer one; assert the older version is still readable, since the operator's question is what CHANGED.",
+    "The skip path renders honestly: a goal planned without a design shows the Design tab stating the step was skipped, not an empty tab that reads as 'the design is blank'.",
+    "A Playwright journey against a REAL daemon covers a design being submitted by a scripted seat double and the operator reading it, with the `pnpm test:e2e:browser` count line quoted. Control-room fixtures are REAL daemon frames captured from that run.",
+    "LIVE DRIVE on UnAI or a fresh project: a REAL seat (not a double) submits a design - transcript and design ref in a row comment under ~4500 chars. If the seat cannot produce a valid design, record the DESIGN_SHAPE_INVALID refusal verbatim; that is a real finding about the mission, never worked around.",
+    "VISION and README journey step 4 ('UX and architecture') marked as running, with the date. Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "THIS ROW PROVES, IT DOES NOT REBUILD. If the tab cannot render because the aggregate is missing a section, comment on child 1 and report_blocked; if the compiler mission lacks the design ref, that is child 2's.",
+    "approve-plan.tsx IS ALREADY OVER THE 250-LINE CEILING (263). Either task-a988ca1c has landed its split, or this row splits before adding. Measure with `wc -l` before writing, not at the final gate.",
+    "EXACT-KEY DECODER for /design/read, matching every sibling in apps/control-room/src/live/. A tolerant decoder defeats the mechanism that detects a stale daemon.",
+    "THE NO-DESIGN CASE IS RENDERED IN WORDS, never as an empty tab. A blank design tab reads as 'the design is empty', which is a different and false claim.",
+    "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a",
+    "task-de0598236f3b4d95aa3b6098b9d56995"
+  ],
+  "priority": "HIGH",
+  "order": 63,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:37:41.269Z",
+  "updatedAt": "2026-09-05T00:37:41.269Z"
+}

@@ -21,6 +21,7 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import {
   CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
 } from "./bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "./bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
@@ -942,7 +943,9 @@ describe("the composed affordance port carries planning authority (task-ed89967f
         principalId: AUTHORITY_OWNER,
         projectId: AUTHORITY_PROJECT,
         schemaVersion: "moe-bootstrap-command/1",
-      })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+      })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+      // `project.activate` MINTS its witness from measured receipts, never the payload.
+      FIXTURE_ACTIVATION_RECEIPTS);
       if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
     };
     commit("project.register", { owner: AUTHORITY_OWNER });
@@ -955,16 +958,8 @@ describe("the composed affordance port carries planning authority (task-ed89967f
     commit("provider.probe", { observation: PROVIDER_OBSERVATION });
     commit("policy.install", { slice: POLICY_SLICE });
     commit("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commit("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-composed", backupPathRef: "backup-composed",
-        credentialRef: "credential-composed", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-composed",
-        signingKeyRef: "signing-composed", storeDriverRef: "store-driver-composed",
-        truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commit("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     commit("goal.create", {
       instructions: "Carry the composed planning run.", title: "Composed goal",
     }, 0, GOAL_COMMAND);

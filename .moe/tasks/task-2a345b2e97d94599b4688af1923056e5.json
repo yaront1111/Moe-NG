@@ -17,8 +17,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell: all production work lives in its three children and it carries dependsOn on every one, so it is not claimable for WORKING until they are DONE. Confirm rather than assume — read get_context.epicSiblings (or `git log moe/work-2026-09-04 --grep 'Moe-Task: <id>'`) for task-70a7ccd3293f465fbc9c1888ae540f5d (the pure dossier generator), task-f961dc899a13488da8f119abdc37631f (release.decide, the gh PR port and the release receipt) and task-817d893fa1254a4d82d2888af1f87a47 (the Release card, the browser journey, the live PR and the docs). Record each child's landing sha plus its completionSummary/reviewSummary in a step note; per global rail 11 read those instead of re-measuring HEAD. If any child is short, report_blocked with blockedOnTaskIds naming it. Write no production code in this step.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THIS ROW'S DoD AGAINST WHAT THE CHILDREN SHIPPED, in a step note, one line per DoD item. DoD 1 (release.decide human-only, MCP-excluded, roster backfill, bidirectional roster tests, three refusal codes with code + layer) -> child task-f961dc89. DoD 2 (the pure dossier generator, its golden test, and re-measurement proven both ways) -> child task-70a7ccd3. DoD 3 (PR creation asserted byte-for-byte offline, plus the live PR) -> split across task-f961dc89 (the offline port assertion) and task-817d893f (the live drive) — confirm BOTH halves landed, since a byte-exact offline assertion with no live PR proves the request shape and not the integration. DoD 4 (Release card + Playwright) -> task-817d893f. DoD 5 (README 'no release gate', VISION Stage 1 status, runbook `gh` prerequisite) -> task-817d893f. DoD 6's gates are run by each child and again here. ALSO RECORD THE ARCHITECT DECISION so QA does not treat it as an open question: the parent left `gh pr create` vs a REST token to the architect, and child 2 is scoped to `gh` ONLY — a per-goal token is secret handling, which task rail 2 (FEATURES ONLY) puts out of scope.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE — the composed Gate 3 feature, not any one child's slice. Each leg standalone and foreground, with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run and must not be reported as a pass (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. State explicitly that `pnpm test` runs ZERO tests under apps/** (global rail 18), so the two --filter legs are what cover the daemon and control room, and that the root lane IS real evidence here because packages/contracts and the generated client were touched by child 2. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths and quote foreign red verbatim (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`, because the browser journey is the only leg that exercises Gate 3 end to end.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. Child 3 owns the adversarial read of its own journey; this is the integration-level read only the parent can do. Answer at minimum: (a) CAN A DOSSIER AND ITS PR BODY DIVERGE? Child 2 is required to put child 1's STORED BYTES in the PR body rather than re-rendering; verify that on the delivered code, because a re-render is the one change that would quietly end proof-carrying. (b) DOES UNKNOWN SURVIVE THE WHOLE CHAIN? Child 1 renders unmeasurable evidence as UNKNOWN, child 3 must show it beside the covered count — trace one UNKNOWN criterion from generator to card and confirm it is visible to the operator at every hop. (c) WHAT HAPPENS IF THE SHA MOVES between the dossier build and the push — is the released dossier still true of what was pushed, and if not, does anything detect it. (d) A REFUSED release that already pushed: is there a window where the push succeeded and the PR failed, and what does the receipt say then. Where an answer is 'not covered', add it to the owning child's DoD or as a comment on this row — do not file a new evidence row (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Write the completion record naming, item by item, which child discharged which parent DoD clause and where the evidence lives (each child's task.verification, completionSummary and reviewSummary, plus the landing shas from step 1). A summary that only says 'children landed' does not discharge the parent. State EXPLICITLY whether the LIVE PR in DoD 3 was actually opened — quote the row comment holding its URL, receipt id and dossier sha256 — or, if `gh` was absent or unauthenticated on the lane, quote the RELEASE_PR_FAILED refusal with its stderr line. Both are honest outcomes; a silent omission is not, because the README clause child 3 rewrote would then claim a release gate nobody drove. Confirm `git grep -n 'no release gate'` returns 0 hits and that the VISION Stage 1 status line matches the measured state. Detail over the 2000-char completionSummary cap goes in a row comment under ~4500 chars, one idea per comment (global rail 14). This row writes no production code: a gap found here is a comment on the owning child plus report_blocked, never a patch.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +62,32 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:24.958Z",
-  "updatedAt": "2026-09-04T09:14:22.375Z"
+  "updatedAt": "2026-09-05T00:32:44.643Z",
+  "dependsOn": [
+    "task-70a7ccd3293f465fbc9c1888ae540f5d",
+    "task-f961dc899a13488da8f119abdc37631f",
+    "task-817d893fa1254a4d82d2888af1f87a47"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:31:54.121Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:32:42.424Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning Gate 3 as one row: it needs a new operator-only command kind with the full roster backfill, a pure dossier generator with golden and re-measurement tests, a PR-opening port, a durable receipt, a Release card, a Playwright journey, a live PR and a docs sweep — far past the 12-step/10-file thresholds. Split into three children under this row; the parent is a roll-up shell. REJECTED, folding the dossier generator into the command row: the generator is the intellectual core (determinism, ancestry re-measurement, UNKNOWN rendering) and deserves a golden test unclouded by command plumbing; it is also the one piece with no dependencies, so it can start immediately. REJECTED, a REST API token for PR creation — the parent left this to the architect and I chose `gh`: a per-goal token is secret storage, redaction and rotation, which task rail 2 (FEATURES ONLY, no security-boundary work) puts out of scope; the daemon already spawns workspace commands with process-group cleanup, and the operator's machine already holds the git credentials the publisher pushes with. REJECTED, letting each child file its own evidence row: global rail 21 concentrates the e2e, docs sweep and adversarial pass in one row, which is child 3.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -rn 'release\\.decide|RELEASE_DOSSIER|release-dossier' --include=*.ts apps/ packages/` returns ZERO. The single hit for `moe-release-handoff-binding/1` (apps/daemon/src/work/release-handoff-binding.ts:55) is the WORK handoff record and is unrelated. `packages/release` and `scripts/release` exist but release MOE-NEXT ITSELF, not the product being built — a worker who reuses them would ship the wrong tool. THE INPUTS ALL EXIST: `/runs/read` (http/runs-read.ts) carries per-node review rounds, verifier receipts, landing and publish; `POST /documents/coverage/read` carries per-criterion coverage but is keyed on the PRD contentSha256 rather than the shipping git sha — that mismatch is precisely what the dossier's re-measurement closes. THE PUBLISHER EXISTS AND MUST BE REUSED: orchestrator/node-publisher.ts pushes `HEAD:refs/heads/<branch>` and writes `moe-publish-receipt/1`; `grep -c pull apps/daemon/src/orchestrator/node-publisher.ts` = 0, so no PR is opened today. THE UI PATTERNS EXIST: goal-publish.tsx (141 lines) is the arm/confirm card to model, offer-wire.ts `spendOffer` is the decision path, escalation-port.ts (43 lines) the tightest example. ROSTER HAZARDS carried into child 2: two payload-key TEST tables (daemon-command-vocabulary.test.ts and daemon-command-registry.test.ts) are invisible to a grep for the kind literal, and the generated client is produced by `pnpm --filter @moe/control-room-client generate` with a pinned digest checked at client-compat.ts:169.",
+    "risks": "BIGGEST RISK — a dossier that stops being proof. Two ways it happens and both are checked in step 4: the PR body gets RE-RENDERED instead of carrying child 1's stored bytes (so the PR and the durable record can differ), or UNKNOWN evidence gets folded into the covered count somewhere between the generator and the card (so an operator approves a release believing evidence that was never measured). SECOND — the sha can move between building the dossier and pushing; the released dossier would then describe a different tree, and nothing in the current design obviously detects it. Step 4(c) forces an answer. THIRD — a partial release: the push succeeds and `gh pr create` fails, leaving code pushed with no proof attached; step 4(d) asks what the receipt says in that window. FOURTH — the live PR is the clause most likely to be skipped while the README's 'no release gate' clause is deleted anyway; step 5 requires stating plainly whether it happened, and a `gh`-absent refusal is an accepted outcome so there is no incentive to fabricate. FIFTH — a worker reusing packages/release or scripts/release would ship moe-next's own release tooling as the product's; the children's rails say so explicitly. SIXTH — dependsOn REPLACES rather than merges: if a fourth child is filed here, re-run set_task_dependencies with the full list or the parent silently re-ungates.",
+    "keyFiles": [
+      "apps/daemon/src/http/runs-read.ts",
+      "apps/daemon/src/http/document-coverage-read.ts",
+      "apps/daemon/src/orchestrator/node-publisher.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "apps/control-room/src/v2/goals/goal-publish.tsx",
+      "README.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:32:44.643Z"
 }

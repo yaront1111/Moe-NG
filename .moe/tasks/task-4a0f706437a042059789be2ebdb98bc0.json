@@ -1,0 +1,36 @@
+{
+  "id": "task-4a0f706437a042059789be2ebdb98bc0",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The controlled-profile scaffold is deterministic and the app it generates builds",
+  "description": "SPIDR child 1 of task-5ef1a0a9010c4bfe872ff9b774068234 (architect-20a6d1eb, 2026-09-05). Dependency-free LEAF and the highest-risk piece: everything else in the parent is a command wrapper around this generator.\n\nWHAT THIS ROW OWNS: a DETERMINISTIC scaffold generator for the controlled profile, pinned by a profile version constant, and the proof that what it emits actually builds. No command kind, no git, no UI - children 2 and 3.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb: no product scaffold exists. `grep -rn 'repository\\\\.bootstrap|CONTROLLED_PROFILE|scaffold' --include=*.ts apps/ packages/` finds only `moe init`, which scaffolds a STORE, an operator credential and moe.config.json (cli/moe-cli-main.ts:16,58) - not a product. `project.bind_repository` binds an EXISTING repository. The gap is real.\n\nTHE PROFILE (VISION 'one controlled product profile first'): TypeScript; React + Vite web; Node API; PostgreSQL via docker-compose; vitest; Playwright; pnpm workspace; GitHub Actions CI running `pnpm typecheck && pnpm test`; `.env.example`; README carrying the product name.\n\nDETERMINISM IS THE CONTRACT. Every product must start IDENTICAL for a given profile version, or the loop's later claims (the verifier recipe, the deployment requirements, the migration tool) stop holding across products. Pin the generated tree with a GOLDEN TEST under a profile version constant, and make the only variable input explicit (the product name) so a diff of two scaffolds differs in exactly the places it should.\n\nTHE HARD PART IS DoD 2's SECOND HALF: the generated app must actually pass `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build` IN A TEST THAT RUNS IT. That is a slow, network-touching, disk-heavy test - design it deliberately: a single run in a temp directory, with the child run's own count lines captured and quoted. A golden tree that has never been built is a file list, not a working scaffold, and this clause is what stops shipping one.",
+  "definitionOfDone": [
+    "A golden test pins the EXACT generated file tree plus the bytes of package.json, the docker-compose file and the CI workflow, under a named profile version constant. Two generations with the same inputs are byte-identical; two generations differing only in product name differ ONLY where the name appears - assert that as a diff, not by eyeballing.",
+    "THE GENERATED APP BUILDS: a test generates into a temp directory and runs `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build`, quoting the CHILD run's own count lines. A golden tree that was never built is a file list; this is the clause that makes it a scaffold. Record the wall-clock cost in the step note so a later row can decide whether to gate it differently.",
+    "`pnpm install --frozen-lockfile` implies a COMMITTED LOCKFILE in the scaffold: assert one is generated and that the install does not need to resolve it. A scaffold whose first install rewrites its own lockfile is not deterministic.",
+    "The profile version constant is the single source: an unknown version refuses BOOTSTRAP_PROFILE_VERSION_UNKNOWN with its layer (the code is defined here even though child 2 raises it at the command edge - say so in the record rather than manufacturing a call site).",
+    "The CI workflow the scaffold emits runs `pnpm typecheck && pnpm test` - assert the workflow bytes contain both, since a scaffold that ships a CI file that does not actually gate is worse than none.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Quote the generated app's own gate output separately and label it as the CHILD run, so the two are never confused."
+  ],
+  "taskRails": [
+    "DETERMINISM IS THE CONTRACT. Same profile version plus same product name must yield byte-identical trees. No timestamps, no random ids, no host paths, no tool versions read from the host baked into generated files.",
+    "THE GENERATED APP MUST BE BUILT, not just written. A file-tree golden test alone cannot tell a working scaffold from a broken one.",
+    "NO COMMAND KIND, NO GIT, NO UI: `repository.bootstrap`, `git init`, the first commit, the optional `gh repo create` and the binding are child 2; the browser form is child 3.",
+    "PIN THE PROFILE VERSION and treat the scaffold as an artifact of it. A change to the tree is a version bump, not an edit in place, because later rows depend on knowing what a product started as.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
+  "priority": "HIGH",
+  "order": 81,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:42:05.163Z",
+  "updatedAt": "2026-09-05T00:42:05.163Z"
+}

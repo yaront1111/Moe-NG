@@ -65,3 +65,8 @@ Thumbs.db
 
 # moe-up dev launcher scratch state (stores, credentials) - never commit
 .moe-dev/
+
+# Activation store backups. `project.activate` measures a `backup` receipt by copying the
+# store to <projectRoot>/.moe-next/backups/<stamp>.sqlite (activation-receipts-measure.ts),
+# so activating from a checkout leaves multi-MB binaries in the working tree.
+.moe-next/

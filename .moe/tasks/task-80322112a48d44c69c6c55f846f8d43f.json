@@ -1,0 +1,40 @@
+{
+  "id": "task-80322112a48d44c69c6c55f846f8d43f",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "New product from PRD: one form in the browser reaches a bound repository and a goal",
+  "description": "SPIDR child 3 of task-5ef1a0a9010c4bfe872ff9b774068234 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-4a0f706437a042059789be2ebdb98bc0, the scaffold) and child 2 (task-facff1d1e7ce44a6b1101490524890a9, the command). PROOF ROW: it owns the browser form, the Playwright journey, the live GitHub drive and the docs (global rail 21).\n\nWHAT THIS ROW OWNS: the 'New product from PRD' form in the browser - directory (new or empty), PRD file, product name, optional GitHub owner/visibility - dispatching child 2's command and then creating the goal with the PRD through the EXISTING `goal.create_with_source`, after which the existing lane continues unchanged.\n\nTHE WHOLE POINT IS THAT THE BROWSER IS ENOUGH. This is the row that makes 'a fresh project cannot be started from the browser alone' false - a README clause measured true on 2026-09-03. The journey must therefore use NO scratchpad script and NO seed for any step the product claims to do itself; a bootstrap driven by a helper script proves nothing about the browser.\n\nREFUSALS ARE OPERATOR WORDS. All four of child 2's codes surface here, and BOOTSTRAP_GH_UNAVAILABLE is the interesting one: the local bootstrap SUCCEEDED and the GitHub half did not, so the form must say exactly that rather than reading as a total failure. An operator told 'bootstrap failed' when they have a perfectly good local repository will delete it and start again.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): goal creation from a PRD already exists (`goal.create_with_source`), and the existing goal-create surface is at apps/control-room/src/v2/goals/live-goal-create.ts (its :91 sentence, 'cannot drive the pre-activation chain', is the kind of honest blocker wording this form should reuse rather than invent). The Playwright specs under tests/e2e/control-room/ already drive a real daemon.",
+  "definitionOfDone": [
+    "A 'New product from PRD' form takes directory, PRD file, product name and OPTIONAL GitHub owner/visibility, and dispatches child 2's command. The GitHub fields are visibly optional - a form that implies GitHub is required would hide the local-only path that child 2 exists to support.",
+    "A Playwright journey against a REAL daemon completes the whole thing from the browser: directory created, first commit exists (`git log --oneline` = exactly 1 line), repository bound, project in the manager catalog, PRD goal created and the lane continuing. `pnpm test:e2e:browser` count line quoted. NO scratchpad script and NO seed is used for any step - this row's claim is that the BROWSER is sufficient, and a helper script anywhere in the path voids it.",
+    "The four refusals render as operator words with their codes VERBATIM, and BOOTSTRAP_GH_UNAVAILABLE renders as a PARTIAL success: the local repository exists and is bound, only the GitHub half did not. Assert that wording specifically - 'bootstrap failed' here would make an operator delete a good repository.",
+    "LIVE DRIVE: a throwaway repository created under the owner's GitHub account from the browser - URL and receipt id in a row comment under ~4500 chars. The owner's account and visibility are supplied by the owner, never invented. If `gh` is absent or unauthenticated on the lane, record the BOOTSTRAP_GH_UNAVAILABLE refusal verbatim together with the successful LOCAL bootstrap - that is a complete outcome, not a partial one.",
+    "README's 'a fresh project cannot be started from the browser alone' clause and the VISION Stage 2 'repository bootstrapping' / 'new repository creation' status lines are rewritten to the measured truth, WITH the date of the live drive. `git grep -n 'cannot be started from the browser alone'` returns 0 hits.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "NO SCRIPT, NO SEED, ANYWHERE IN THE JOURNEY. The claim is that the browser alone is sufficient; a scratchpad helper in the path makes the claim false while the test stays green.",
+    "A PARTIAL SUCCESS IS RENDERED AS ONE. BOOTSTRAP_GH_UNAVAILABLE means the local repository is fine - say so, or an operator destroys good work.",
+    "THIS ROW PROVES, IT DOES NOT REBUILD: a scaffold defect is child 1's, a command defect is child 2's. Comment there and report_blocked.",
+    "THE OWNER'S GITHUB ACCOUNT AND VISIBILITY ARE THE OWNER'S. Never invent an owner, never make a repository public by default, and never let a credential reach the form or a log.",
+    "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
+  "dependsOn": [
+    "task-4a0f706437a042059789be2ebdb98bc0",
+    "task-facff1d1e7ce44a6b1101490524890a9"
+  ],
+  "priority": "HIGH",
+  "order": 83,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:43:05.459Z",
+  "updatedAt": "2026-09-05T00:43:05.459Z"
+}

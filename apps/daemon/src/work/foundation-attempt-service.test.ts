@@ -118,7 +118,7 @@ import {
 } from "../planning/active-graph-projection.js";
 import { putGraphBody } from "../planning/graph-body-record.js";
 import {
-  ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  activatePayload, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -275,7 +275,7 @@ function readyStore(label: string): SqliteEventStore {
       },
     }],
     ["provider.probe", 0, { observation: PROVIDER_OBSERVATION }],
-    ["project.activate", 2, { witness: ACTIVATION_WITNESS }],
+    ["project.activate", 2, activatePayload()],
   ] as readonly (readonly [string, number, Record<string, unknown>])[]) {
     const outcome = sendBootstrap(
       store, bootstrapEnvelope(kind, version, payload, `cmd-${kind}-${label}`));

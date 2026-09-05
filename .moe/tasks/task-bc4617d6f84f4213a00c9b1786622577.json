@@ -1,0 +1,39 @@
+{
+  "id": "task-bc4617d6f84f4213a00c9b1786622577",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Every served read reaches a screen: the route roster, the forensic view, the design pass",
+  "description": "SPIDR child 3 of task-e7a20a498ed0436380e5aca23cb81607 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-2ee775b319cb496fad9256c84d24744c, Resources) and child 2 (task-1c9587ed1b2b4e1abd6b51396ee672f8, the two dossiers) - the roster test only passes once their screens consume their reads. PROOF ROW: it owns the bidirectional roster, the Playwright journeys, the design pass and the live drive.\n\nWHAT THIS ROW OWNS: (a) the bidirectional route roster test; (b) an 'Advanced' forensic view behind a toggle listing the remaining raw reads (events, work items) so nothing served is unreachable; (c) the design pass with the apple-design-skill and frontend-design skills; (d) the Playwright journeys and the live drive.\n\nHOW TO ENUMERATE THE SERVED SET - measured, because the parent's instruction needs a technique. `apps/daemon/src/http/http-listener-read-dispatch.ts` (539 lines) contains NO literal route strings: it IMPORTS `*_READ_PATH` / `*_PATH` constants and dispatches on them (DOCUMENT_DOSSIER_PATH :3, GOAL_CATALOG_READ_PATH :5, PLANNING_RUN_READ_PATH :9, PRODUCT_CONTRACT_GATE_1_READ_PATH :11, DOCUMENT_COVERAGE_READ_PATH :25, RUNS_READ_PATH :27, POLICY_READ_PATH :29, ACTIVATION_READ_PATH :30, HEALTH_READ_PATH :31, ACTIVITY_READ_PATH :32, SESSIONS_READ_PATH :33, REPOSITORY_REMOTE_READ_PATH :34, GOAL_SOURCE_READ_PATH :35, and more). So the served set is derived from those imported constants - NOT from a hand-kept list, which would be a third copy free to drift (global rail 9: enumerate from the implementation seam).\n\nA GAP THIS TEST WILL CATCH, already known: `REPOSITORY_REMOTE_READ_PATH` is served (:34) but has NO browser decoder and is absent from dev-proxy-paths.ts - see comment-81312c74 on task-19d2329c. task-e6000b57fd374f78ba074b9f0f0f2c67 is planned to add it. If that row has not landed when this test goes green-or-red, the honest outcome is a RED roster naming the unconsumed route - record it and coordinate; do NOT special-case the route to get a pass, because the whole point of the test is that it names exactly this class of gap.\n\nDELIBERATELY UNCONSUMED, and must stay so: planning.write, graph.supersede, cutover.*, work.* are unconnected BY DESIGN and stay forensic. The roster test must express that as an explicit, justified exclusion list with a reason per entry - not as a silent omission, or the test stops meaning anything.",
+  "definitionOfDone": [
+    "A bidirectional roster test asserts SET EQUALITY (not subset, both directions) between the read routes the daemon SERVES - derived from the `*_PATH` constants http-listener-read-dispatch.ts imports and dispatches on, never a hand-kept list - and the routes the control-room client consumes. Deleting a consumer must red it, and adding a served route with no consumer must red it; verify both by doing them.",
+    "The deliberate exclusions (planning.write, graph.supersede, cutover.*, work.*) are an EXPLICIT list with a stated reason per entry, asserted as exclusions rather than omitted - an exclusion list without reasons becomes a place to hide a real gap.",
+    "An 'Advanced' forensic view behind a toggle lists the remaining raw reads (events, work items) so nothing served is unreachable from the UI; a test asserts the toggle is off by default and that the view renders the raw frames when opened.",
+    "DESIGN PASS recorded in a row comment: the skills used (apple-design-skill, frontend-design), the findings, the fixes applied, and before/after screenshots from the live lane. The owner's ask was 'we need it for humans not bots' - a comment listing skills without naming what CHANGED does not discharge this.",
+    "Playwright journeys against a REAL daemon for Resources and the contract dossier, with the `pnpm test:e2e:browser` count line quoted.",
+    "LIVE DRIVE on the lane (UnAI or a fresh project): transcript, store path and sha in a row comment under ~4500 chars. Gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
+  ],
+  "taskRails": [
+    "THIS ROW PROVES, IT DOES NOT BUILD SCREENS. Resources is child 1's and the two dossiers are child 2's; if a screen is missing a fact the roster needs, comment on that child and report_blocked rather than adding it here.",
+    "NEVER SPECIAL-CASE A ROUTE TO GET THE ROSTER GREEN. An unconsumed served route is exactly what this test exists to name; a red roster naming REPOSITORY_REMOTE_READ_PATH is a correct result, not a failure to work around.",
+    "ENUMERATE FROM THE SEAM, not from a constant: the served set comes from the paths the listener actually dispatches on. A hand-kept list is a third copy and drifts (global rail 9).",
+    "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-e7a20a498ed0436380e5aca23cb81607",
+  "dependsOn": [
+    "task-2ee775b319cb496fad9256c84d24744c",
+    "task-1c9587ed1b2b4e1abd6b51396ee672f8"
+  ],
+  "priority": "HIGH",
+  "order": 53,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:34:58.974Z",
+  "updatedAt": "2026-09-05T00:34:58.974Z"
+}

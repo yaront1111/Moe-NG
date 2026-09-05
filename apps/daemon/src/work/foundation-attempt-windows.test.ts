@@ -101,7 +101,7 @@ import {
   ACTIVATION_WORLD_NODE_KEY, seedActivationWorld,
 } from "../activation/activation-world-fixtures.js";
 import {
-  ACTIVATION_WITNESS, GOAL_ID, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  activatePayload, GOAL_ID, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -315,7 +315,7 @@ function readyStore(root: string): SqliteEventStore {
       },
     }],
     ["provider.probe", 0, { observation: PROVIDER_OBSERVATION }],
-    ["project.activate", 2, { witness: ACTIVATION_WITNESS }],
+    ["project.activate", 2, activatePayload()],
   ] as readonly (readonly [string, number, Record<string, unknown>])[]) {
     const outcome = sendBootstrap(store, bootstrapEnvelope(kind, version, payload));
     if (!outcome.ok) throw new Error(`fixture ${kind} refused: ${outcome.code}`);

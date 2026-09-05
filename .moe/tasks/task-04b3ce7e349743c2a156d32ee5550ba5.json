@@ -1,0 +1,41 @@
+{
+  "id": "task-04b3ce7e349743c2a156d32ee5550ba5",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "deployment.deploy builds at the landed sha, replaces atomically and proves health",
+  "description": "SPIDR child 2 of task-5d30948435524c6fa2789e1c033aafe7 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-3706b7e7bb8741d88105f42c25166ea0 for the infrastructure it builds from.\n\nWHAT THIS ROW OWNS: `deployment.set_target` and `deployment.deploy` (both human-only), and the deploy EFFECT - build the image at the landed HEAD sha (tag = sha), ship it (local: docker run; ssh: `docker save | ssh docker load`), replace the running container ATOMICALLY, probe the health URL until 200 with a timeout that REFUSES, record `moe-deploy-receipt/1`, and KEEP the previous receipt for rollback. No UI - child 3.\n\nTHE PREVIOUS RECEIPT IS KEPT HERE AND CONSUMED ELSEWHERE. The monitoring/rollback row (task-7683a432eb3f4e87b1eb0cbc6e3a55ff) rolls back to it. That row is a SIBLING feature row, so it cannot depend on this one under the parent rail - which makes it MORE important, not less, that the kept receipt's shape is right the first time: get it wrong and the rollback row builds against a shape that changes under it.\n\nATOMIC REPLACE IS THE PROPERTY THAT MATTERS. A deploy that stops the old container before the new one is healthy produces a window where the product is down, and the operator sees an outage they did not cause. Health is probed until 200; DEPLOY_HEALTH_TIMEOUT REFUSES rather than leaving a half-deployed environment.\n\nA PRODUCTION DEPLOY CITES THE RELEASE DECISION when one exists on the goal, and otherwise STATES 'no release decision' honestly - it does not silently proceed as though one existed, and it does not refuse. (Gate 3 is task-2a345b2e97d94599b4688af1923056e5's; also a sibling.)\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): no deployment kind exists. The closest working pattern is `repository.publish` - the human names a target on the goal, the effect runs in the wrapper, a receipt records the outcome (orchestrator/node-publisher.ts, repository/landing-receipt-contracts.ts for the receipt shape). Follow it rather than inventing a second shape. THE ENVIRONMENT'S VARIABLES come from the environments model (task-9ae492b373fa4e7aa6b1e91585f6e612's children) - another sibling; compose with it if it has landed, and record what you did if not.",
+  "definitionOfDone": [
+    "`deployment.set_target` and `deployment.deploy` published HUMAN-ONLY and MCP-EXCLUDED with the full roster backfill and a bidirectional set-equality roster test; verify by deleting each entry from each side and confirming every deletion reds. Deploying a product is never an agent's decision.",
+    "The deploy effect is tested OFFLINE through injectable docker/ssh ports asserting the ARGV byte-for-byte: the build tag EQUALS the landed sha, the ssh path uses `docker save | ssh docker load`, and the replace is atomic in the argv sense the port expresses. A tag that is not the sha makes every later rollback and dossier claim unverifiable.",
+    "ATOMIC REPLACE PROVEN, not asserted in prose: the OLD container still serves until the NEW one answers health. Assert there is no window in which neither serves - this is the difference between a deploy and an outage.",
+    "DEPLOY_HEALTH_TIMEOUT REFUSES and leaves the environment in a defined state (the old container still running), asserted with code + layer. A half-deployed environment that reports success is worse than a refusal.",
+    "`moe-deploy-receipt/1` records {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)}, mirroring the landing-receipt shape, and THE PREVIOUS RECEIPT IS KEPT and readable - assert two successive deploys leave both receipts retrievable, since the rollback row (a sibling that cannot depend on this one) builds directly on that shape.",
+    "DEPLOY_TARGET_MISSING, DEPLOY_BUILD_FAILED (with the last stderr line), DEPLOY_DOCKER_UNAVAILABLE each assert code + layer; the build failure carries the tool's actual stderr, not a generic message.",
+    "A PRODUCTION deploy cites the release decision when one exists on the goal and states 'no release decision' when none does - assert both wordings. It neither invents an approval nor refuses for lack of one.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test`."
+  ],
+  "taskRails": [
+    "ATOMIC REPLACE: the old container serves until the new one is healthy. A stop-then-start deploy is an outage the operator did not ask for.",
+    "THE IMAGE TAG IS THE LANDED SHA. Every later claim - rollback, dossier, incident - resolves through it.",
+    "KEEP THE PREVIOUS RECEIPT, and get its shape right first time: the rollback row is a SIBLING and cannot depend on this row, so it will build against whatever ships.",
+    "FOLLOW `repository.publish`'s pattern (human names a target, wrapper effect, receipt). A second deployment shape is a second thing to reason about during an incident.",
+    "A PRODUCTION DEPLOY WITHOUT A RELEASE DECISION SAYS SO. It does not invent one and does not refuse."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-5d30948435524c6fa2789e1c033aafe7",
+  "dependsOn": [
+    "task-3706b7e7bb8741d88105f42c25166ea0"
+  ],
+  "priority": "HIGH",
+  "order": 92,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:51:09.618Z",
+  "updatedAt": "2026-09-05T00:51:09.618Z"
+}

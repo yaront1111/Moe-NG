@@ -12,6 +12,7 @@ import {
   PROVIDER_OBSERVATION,
   fixtureBudgetCommitmentFor,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
@@ -69,7 +70,9 @@ function commitBootstrap(
     principalId: "operator-local",
     projectId: PROJECT,
     schemaVersion: "moe-bootstrap-command/1",
-  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
   if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
 }
 
@@ -110,15 +113,8 @@ describe("plan.propose on the surface", () => {
     // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
     // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
     commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitBootstrap("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
-        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitBootstrap("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // TWO goals, so the binding cannot be read as scan order or as a default name. Each goal
     // now OWNS its planning run - the writer derives `run-${subject}` from the goal it mints -
     // so only the goal minted by command `live-1` pairs with the run this board addresses.
@@ -275,7 +271,9 @@ describe("planningGoalRef when no goal owns the board's run", () => {
       principalId: "operator-local",
       projectId: ABSENT_PROJECT,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -301,15 +299,8 @@ describe("planningGoalRef when no goal owns the board's run", () => {
     commitAbsent("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitAbsent("policy.install", { slice: POLICY_SLICE });
     commitAbsent("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitAbsent("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
-        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitAbsent("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // ONLY the decoy. `goal.create` derives the run from the goal it mints, so this world holds
     // `goal-affordance-fresh` bound to `run-affordance-fresh` and NOTHING bound to
     // DEFAULT_RUN_SUBJECT. A deriving producer answers null; a hardcoding one answers
@@ -375,7 +366,9 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
       principalId: "operator-local",
       projectId,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -403,15 +396,8 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
     commitR3("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitR3("policy.install", { slice: POLICY_SLICE });
     commitR3("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitR3("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-r3-10", backupPathRef: "backup-r3-10",
-        credentialRef: "credential-r3-10", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-r3-10", signingKeyRef: "signing-r3-10",
-        storeDriverRef: "store-driver-r3-10", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitR3("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     commitR3("goal.create", {
       instructions: "Carry the live board's planning run.", title: "Live board goal",
     }, 0, BOARD_GOAL_COMMAND);
@@ -654,7 +640,9 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
       principalId: COMMAND_ISSUER,
       projectId,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -697,15 +685,8 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
     commitAuthority("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitAuthority("policy.install", { slice: POLICY_SLICE });
     commitAuthority("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitAuthority("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-r3-016", backupPathRef: "backup-r3-016",
-        credentialRef: "credential-r3-016", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-r3-016", signingKeyRef: "signing-r3-016",
-        storeDriverRef: "store-driver-r3-016", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitAuthority("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // TWO goals on the legacy lane, so both runs carry an eligible plan.propose offer and the
     // sibling-isolation arm has two entries that must differ in every bound field.
     commitAuthority("goal.create", {

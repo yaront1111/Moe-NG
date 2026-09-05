@@ -1,0 +1,39 @@
+{
+  "id": "task-72b22fcf9da54b3b91dabf5b7392aff1",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Environment variables reach the processes that need them, and the repository lists their names",
+  "description": "SPIDR child 2 of task-9ae492b373fa4e7aa6b1e91585f6e612 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-d0c63cd8848a4da18ad3fbb8eb1d95c3 for the store.\n\nWHAT THIS ROW OWNS: DELIVERY. The verifier, preview and deploy process spawns receive the environment's variables merged UNDER the wrapper allowlist; the approved contract's deployment requirements enumerate the REQUIRED variable names so a goal can say which are unset; and a `.env.example` listing NAMES ONLY is generated into the repository through the lander. No UI - child 3.\n\nMERGED UNDER THE ALLOWLIST, not around it. `apps/daemon/src/orchestrator/agent-spawn-environment.ts` builds the seat env from a CLOSED roster (`RUNTIME_ENVIRONMENT_KEYS` at :14, `PROVIDER_ENVIRONMENT_PREFIXES` at :28, the codex surface measured against a specific CLI version at :22-24), and `verifier-process-runner.ts` spawns the verifier. Environment variables join that construction; they do not bypass it. A delivery path that hands a child `process.env` plus extras would undo the allowlist's whole purpose, which is that a seat sees what it needs and nothing else.\n\nTHE SPAWN HALF OF THE CANARY. Child 1 proved the value never appears in the store bytes, events, reads or receipts. This row proves the other two halves: the value DOES reach the child process that needs it, and does NOT appear in the WRAPPER LOG. Those pull in opposite directions and that is exactly why they are one row.\n\n`.env.example` IS NAMES ONLY. It is generated into the repository through the lander, so it is committed and visible to anyone with the repository - a values-carrying .env.example is the single most common way this class of feature leaks, and it would be committed and pushed.\n\nREQUIRED NAMES COME FROM THE CONTRACT: the compiler emits the deployment requirements' variable names, and a goal shows which are unset. Read them from the approved contract rather than a hand-kept list.",
+  "definitionOfDone": [
+    "The verifier, preview and deploy spawns receive the environment's variables MERGED UNDER the existing wrapper allowlist construction (agent-spawn-environment.ts / verifier-process-runner.ts) - not appended to a raw `process.env`. A test asserts the child's env contains the variable AND still excludes a host variable outside the allowlist, so the merge did not widen the surface.",
+    "THE SPAWN HALF OF THE CANARY: set `MOE_CANARY_<random>`, spawn a verifier, and assert (a) the CHILD SAW the value - assert from the child's own output, not from the parent's intent - and (b) the value appears NOWHERE in the wrapper log. Both halves in one test, because they pull in opposite directions and a delivery that logs what it delivers is the obvious failure.",
+    "The approved contract's deployment requirements enumerate the REQUIRED variable names, read from the contract rather than a hand-kept list, and a goal can report which are unset for a given environment - assert the unset set for a goal with two required names and one set.",
+    "`.env.example` carries NAMES ONLY and is generated into the repository through the lander. Assert the file's bytes contain every required name and NO value - this file is committed and pushed, so a value here is a value published.",
+    "An environment with no variables set delivers nothing and refuses nothing - a spawn must still work, since the verifier ran fine before this feature existed and must not start depending on it.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "MERGE UNDER THE ALLOWLIST, never around it. The closed env roster exists so a child sees what it needs and nothing else; a delivery that passes `process.env` plus extras destroys that and would be very hard to notice.",
+    "`.env.example` IS NAMES ONLY. It gets committed and pushed; a value in it is a value published.",
+    "THE VALUE REACHES THE CHILD AND NOT THE LOG. Assert both, from the child's own output and from the log bytes.",
+    "DELIVERY MUST NOT BECOME A DEPENDENCY: a project with no variables set must spawn exactly as it does today.",
+    "NO UI: the Environments screen and the goal's unset count are child 3."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3"
+  ],
+  "priority": "HIGH",
+  "order": 102,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:45:42.652Z",
+  "updatedAt": "2026-09-05T00:45:42.652Z"
+}

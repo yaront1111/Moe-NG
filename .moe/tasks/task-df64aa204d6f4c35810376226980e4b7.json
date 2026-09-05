@@ -1,0 +1,39 @@
+{
+  "id": "task-df64aa204d6f4c35810376226980e4b7",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A codex seat plans and delivers over the real MCP wire",
+  "description": "SPIDR child 2 of task-969575299465484d9486ea02ff7ae336 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-8e793ae3c63f41189bcc05f6d7c15605, which makes the provider selectable.\n\nWHAT THIS ROW OWNS: Codex MISSION PARITY and the offline proof. The mission text, the MCP result-size handling (the codex analogue of Claude's MAX_MCP_OUTPUT_TOKENS, i.e. paged reads), the tool roster, and the work_get_context / work_release path must all work for a codex seat as they do for a claude one. No UI, no live drive - child 3.\n\nTHE WIRING ALREADY EXISTS, so this row is parity work, not integration from scratch. Measured at HEAD (branch moe/work-2026-09-04): `apps/daemon/src/orchestrator/agent-spawner.ts:64-83,116-150` invokes `codex exec` with the mission ON STDIN via `-`, passes the scoped MCP bearer through an env var codex reads by name (`bearer_token_env_var`, :35) - never argv, never a file - and sets `--ignore-user-config` so the HOST's codex config cannot leak in. Config values are deliberately QUOTE-FREE because codex parses each `-c` value itself (:73). `agent-spawn-environment.ts:22-24` holds the CLOSED codex env allowlist, measured against codex-cli 0.147.0. README's own words are the gap: 'a Codex seat is wired but was last proven only to reach the API'.\n\nTHE PROOF IS A SCRIPTED DOUBLE, NOT THE REAL CLI. The parent's DoD 2 asks for a scripted `codex` double over the REAL MCP wire completing the planning reads plus `planning.submit_decomposition`, and a node.deliver reaching verifier ACCEPTED and lander COMMITTED. That is reachable offline and does not depend on the Codex quota (exhausted until 2026-09-08 when the parent was filed). The REAL `codex exec` run is child 3's live drive, and is explicitly allowed to report blocked on quota.\n\nRESULT-SIZE HANDLING IS THE LIKELY REAL DEFECT. A seat that cannot page a large read silently truncates its context and plans against a partial contract. Claude's path uses paged reads because of MAX_MCP_OUTPUT_TOKENS; measure what codex does with an oversized MCP result BEFORE assuming parity, and record the measurement.",
+  "definitionOfDone": [
+    "A scripted `codex` double drives the REAL MCP wire end to end offline against a real daemon: the planning reads, then `planning.submit_decomposition` accepted; then a `node.deliver` reaching verifier ACCEPTED and lander COMMITTED. Assert the durable outcomes from the store (the sealed run, the verifier receipt, the landing sha), not the double's own exit code. `pnpm test:e2e` count line quoted with the new test named.",
+    "MCP RESULT-SIZE HANDLING MEASURED, not assumed: drive an oversized read through the codex path and record what happens. If codex truncates where claude pages, that is the defect this row fixes; if it does not, record the measurement that shows so. A seat that silently truncates its context plans against a partial contract and the failure appears later as a bad plan, not as an error.",
+    "The work_get_context / work_release path completes for a codex seat: the double claims, reads its own item, and RELEASES on the first try - reusing the observed-version disclosure task-f99cec0b landed (bootstrap-conflict-error.ts). Assert the release decision is EFFECTS_COMMITTED, not merely that the call returned.",
+    "The tool roster a codex seat sees equals the roster a claude seat sees for the same step kind - assert set-equality in both directions, because a missing tool makes a seat fail in a way that reads as a model problem rather than a wiring one.",
+    "The mission text a codex seat receives is asserted (it arrives on stdin via `-`, agent-spawner.ts:66-70): a produced codex mission contains the same load-bearing sentences as the claude one for the same step.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e`."
+  ],
+  "taskRails": [
+    "OFFLINE PROOF ONLY. The real `codex exec` run is child 3's live drive; the Codex quota was exhausted until 2026-09-08 and this row must not depend on it.",
+    "THE DOUBLE GOES THROUGH THE REAL MCP WIRE with a scoped bearer and NEVER writes to the store directly - otherwise the journey proves the fixture, not the product.",
+    "NEVER WEAKEN THE CODEX SPAWN SURFACE to make a test pass: `--ignore-user-config`, the bearer-through-env-var-name (never argv, never a file), the closed CODEX_/OPENAI_ env allowlist and the quote-free `-c` values are all deliberate and measured against a specific codex-cli version. If one blocks the test, report it rather than relaxing it.",
+    "MEASURE RESULT-SIZE BEHAVIOUR before claiming parity. 'It worked on a small read' is not parity.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-969575299465484d9486ea02ff7ae336",
+  "dependsOn": [
+    "task-8e793ae3c63f41189bcc05f6d7c15605"
+  ],
+  "priority": "HIGH",
+  "order": 72,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:39:55.125Z",
+  "updatedAt": "2026-09-05T00:39:55.125Z"
+}

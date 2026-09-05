@@ -16,8 +16,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-4a0f706437a042059789be2ebdb98bc0 (the deterministic scaffold whose generated app actually builds), task-facff1d1e7ce44a6b1101490524890a9 (repository.bootstrap: git init, first commit, optional gh, binding, receipt), task-80322112a48d44c69c6c55f846f8d43f (the browser form, the Playwright journey, the live GitHub drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (repository.bootstrap operator-only, MCP-excluded, roster backfill, four refusals with code + layer) -> child task-facff1d1. DoD 2 (the scaffold golden test AND the generated app passing its own install/typecheck/test/build) -> child task-4a0f7064. DoD 3 (the browser journey to a bound repository and a PRD goal) -> child task-80322112. DoD 4 (gh argv offline, plus the live throwaway repository and the clean `gh`-absent refusal) -> split across task-facff1d1 (the offline argv assertion) and task-80322112 (the live drive) — confirm BOTH, since an argv assertion with no live run proves the command shape and not the integration. DoD 5 (runbook + README 'new repository creation' running) -> child task-80322112. CONFIRM ONE THING EXPLICITLY: child 1's DoD required the generated app to be BUILT, not merely written. Quote its child-run gate output. A golden file tree that was never installed and built is a file list, and it is the single most likely place this feature ships broken.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. State that `pnpm test` covers NO apps/** (global rail 18) but IS real evidence here because child 2 touched packages/contracts and the generated client. KEEP THE TWO GATE UNIVERSES SEPARATE in the record: moe-next's own gates and the GENERATED product's gates are different runs with different count lines, and conflating them would let a green scaffold be claimed from moe-next's own suite. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. (a) THE DESTRUCTIVE PATH: `repository.bootstrap` writes a whole tree at an operator-supplied path. Confirm BOOTSTRAP_DIR_NOT_EMPTY actually prevents writing into a directory with contents, and check the boundary cases child 2's DoD did not name — a directory containing only a dotfile, a directory that exists but is a FILE, a path with a trailing separator, and a symlink. This is the one command in the epic that can destroy an operator's existing work. (b) PARTIAL BOOTSTRAP: with `gh` failing AFTER `git init` and the commit, is the local repository still bound and the receipt still honest (BOOTSTRAPPED, remoteUrl null)? And if `gh repo create --push` half-succeeds — repository created, push failed — what does the receipt say? (c) DETERMINISM ACROSS HOSTS: child 1 forbids baking host paths, timestamps or tool versions into generated files; confirm by generating on this host and diffing against the golden, then reasoning about what would differ on another. (d) IS THE SCAFFOLD ACTUALLY THE PROFILE THE REST OF THE EPIC ASSUMES? The deployment, migrations and monitoring rows all assume a docker-compose with postgres and a `pnpm db:migrate` script; check the scaffold matches what those rows expect, or record the mismatch now rather than letting them discover it. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (each child's task.verification, completionSummary and reviewSummary, plus the landing shas from step 1). State EXPLICITLY: (a) whether the LIVE GitHub drive happened — quote the throwaway repository URL and the receipt id from the row comment — or, if `gh` was absent or unauthenticated, quote the BOOTSTRAP_GH_UNAVAILABLE refusal ALONGSIDE the successful local bootstrap, which is a complete outcome rather than a partial one; (b) that the browser journey used NO scratchpad script and NO seed, since this row's entire claim is that the browser alone suffices and a helper anywhere in the path voids it. Confirm `git grep -n 'cannot be started from the browser alone'` returns 0 hits and that the VISION Stage 2 line carries the live drive's date, not the docs-edit date. Detail over the 2000-char completionSummary cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +61,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:49.471Z",
-  "updatedAt": "2026-09-04T09:12:49.471Z"
+  "updatedAt": "2026-09-05T00:44:01.036Z",
+  "dependsOn": [
+    "task-4a0f706437a042059789be2ebdb98bc0",
+    "task-facff1d1e7ce44a6b1101490524890a9",
+    "task-80322112a48d44c69c6c55f846f8d43f"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:43:12.246Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:43:58.864Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a deterministic scaffold generator with a golden tree AND a real build of the generated app, a new operator-only command doing git init plus an optional GitHub creation plus a binding plus a receipt, a browser form, a Playwright journey, a live GitHub drive and a docs sweep — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, folding the scaffold into the command row: the generator is the highest-risk piece and its 'the generated app actually builds' clause is slow and disk-heavy; isolating it means that cost is paid once, in a row with no dependencies, and the command row can assume a working tree. REJECTED, making GitHub creation mandatory: `gh` is absent on most machines, and a bootstrap that fails wholesale without it would make the feature unusable — child 2 treats a local-only bootstrap as a SUCCESS with remoteUrl null. REJECTED, a stored GitHub token: same decision as Gate 3 (task-f961dc89) — secret handling is out of scope under the FEATURES ONLY rail, so `gh` CLI only.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -rn 'repository\\.bootstrap|CONTROLLED_PROFILE|scaffold' --include=*.ts apps/ packages/` finds only `moe init`, which scaffolds a STORE, an operator credential and moe.config.json (cli/moe-cli-main.ts:16,58) — not a product; and `grep -rc 'repo create' apps/ tools/` = 0, so no GitHub creation path exists. `project.bind_repository` already binds an EXISTING repository and is what child 2 reuses rather than writing a second binding. `goal.create_with_source` already creates a goal from a PRD, so child 3's form ends by calling something that exists. THE PROFILE the scaffold must emit (VISION 'one controlled product profile first'): TypeScript, React + Vite web, Node API, PostgreSQL via docker-compose, vitest, Playwright, pnpm workspace, GitHub Actions CI running `pnpm typecheck && pnpm test`, `.env.example`, README with the product name. A CROSS-EPIC DEPENDENCY WORTH CHECKING AT ROLL-UP: the containerized-deployment, migrations and monitoring rows all assume a compose file with postgres and a `pnpm db:migrate` script — if the scaffold does not emit what they assume, they each discover it separately, so step 4(d) checks it here.",
+    "risks": "BIGGEST RISK — destroying an operator's existing work. `repository.bootstrap` writes a whole tree at a path the operator types, and BOOTSTRAP_DIR_NOT_EMPTY is the only thing between it and someone's directory. Child 2 asserts the one-file case; step 4(a) pushes on the boundaries it did not name (a dotfile-only directory, a path that is a file, a trailing separator, a symlink). SECOND — a scaffold that was never built. A golden file-tree test passes on a tree that cannot install; child 1's DoD forces a real install/typecheck/test/build of the generated app, and step 2 requires quoting that CHILD run's output — conflating it with moe-next's own suite is how a broken scaffold would be reported green. THIRD — partial bootstrap states: `gh` failing after the commit, or `gh repo create --push` creating the repository but failing the push; the receipt must be honest about each, and step 4(b) asks. FOURTH — non-determinism creeping in through host paths, timestamps or tool versions baked into generated files, which would only show up when two products are compared much later. FIFTH — the browser-only claim being voided by a scratchpad helper somewhere in the journey; step 5(b) requires stating that none was used. SIXTH — the scaffold not matching what the deployment, migration and monitoring rows assume, which would surface as three separate mid-flight discoveries; step 4(d) checks it once here.",
+    "keyFiles": [
+      "apps/daemon/src/cli/moe-cli-main.ts",
+      "apps/control-room/src/v2/goals/live-goal-create.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts",
+      "README.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:44:01.036Z"
 }

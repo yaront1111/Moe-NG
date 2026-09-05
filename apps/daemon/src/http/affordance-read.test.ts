@@ -14,6 +14,7 @@ import {
   PROVIDER_OBSERVATION,
   fixtureBudgetCommitmentFor,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -81,7 +82,9 @@ function commitBootstrap(
     principalId: "operator-local",
     projectId: PROJECT,
     schemaVersion: "moe-bootstrap-command/1",
-  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
   if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
 }
 
@@ -224,15 +227,8 @@ describe("code node steps", () => {
     // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
     // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
     commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitBootstrap("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
-        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitBootstrap("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     commitBootstrap(
       "goal.create",
       { instructions: "Author the first durable goal.", title: "Node surface goal" },
@@ -452,9 +448,15 @@ const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
   { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS },
 );
 
-/** These lifecycle kinds are carded only from their durable per-goal offers. */
+/**
+ * These lifecycle kinds are carded only from their durable per-goal offers — the exact four the
+ * chain-offer path withholds (affordance-read.ts's `kind !== ...` guard). `repository.publish`
+ * belongs here for the same reason as the other three: the chain mints a READY STEP for it and
+ * no offer, and the per-goal ladder decides separately whether to offer one — since
+ * task-f6f33a39, only for a goal with a landed commit.
+ */
 const BOARD_PLANNING_KINDS: readonly string[] =
-  Object.freeze(["approval.decide", "goal.close", "plan.propose"]);
+  Object.freeze(["approval.decide", "goal.close", "plan.propose", "repository.publish"]);
 
 describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () => {
   it("offers both creation kinds against fresh daemon-minted aggregates", () => {
@@ -497,8 +499,11 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
     expect(nonPlanningServed.filter((kind) => !carded.includes(kind))).toEqual([]);
     expect(nonPlanningCarded).toEqual([...nonPlanningServed].sort());
     expect(BOARD_PLANNING_KINDS.length).toBeGreaterThan(0);
+    // The roster is pinned against the SOURCE of the production guard it mirrors, not against a
+    // hand-copy: affordance-read.ts withholds a chain offer for exactly these four kinds, and a
+    // fifth added there without being added here would silently widen the exemption below.
     expect([...BOARD_PLANNING_KINDS].sort())
-      .toEqual(["approval.decide", "goal.close", "plan.propose"]);
+      .toEqual(["approval.decide", "goal.close", "plan.propose", "repository.publish"]);
 
     // And set-equality over the CHAIN OFFERS: every READY bootstrap step carries an offer, and
     // no offer exists for a kind no step called READY. The three planning kinds are covered

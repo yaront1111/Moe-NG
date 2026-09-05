@@ -17,8 +17,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-463f195efd2f4fd2886790029a474194 (the scaffold ships node-pg-migrate and the generated app migrates up and down), task-ff41c5c9efa34494b7b91e6f0ddcb7c2 (the verifier's DATABASE leg on a disposable PostgreSQL with teardown on every path), task-78eedd8ebc2b43c581ac21ea28648a9a (backup-before-migrate on deploy, migrate_down, the receipts, the cards and the live drive) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD AND RECORD THE TOOL DECISION, in a step note. Mapping: DoD 1 (the verifier DATABASE leg, DATABASE_URL reaching the recipe, migrations before tests, container gone after ACCEPT/REJECT/kill, docker-absent refusing rather than skipping) -> child task-ff41c5c9; DoD 2 (backup-before-migrate ordering, the receipt, migrate_down and its revert) -> child task-78eedd8e; DoD 3 (scaffold golden updated, the generated app's `pnpm db:migrate` green against a real PostgreSQL) -> child task-463f195e; DoD 4 (deployment.migrate_down published human-only with roster backfill and the four refusals) -> child task-78eedd8e; DoD 5 (cards, Playwright, live drive) -> child task-78eedd8e; DoD 6 (runbook, README, gates) -> child task-78eedd8e. THE DECISION: the parent left the tool to the architect and I chose NODE-PG-MIGRATE over drizzle-kit — drizzle-kit implies adopting Drizzle ORM as the generated product's data layer, this feature needs first-class per-migration `down` for migrate_down, and plain migration files are what a coding seat can author reliably. Record it so QA does not grade against drizzle.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE GATE SET AT THE INTEGRATED TREE, keeping TWO GATE UNIVERSES SEPARATE. moe-next's own gates: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser` — each standalone and foreground with its `Test Files N passed` count line quoted VERBATIM (global rail 8); `pnpm test` covers no apps/** (global rail 18). The GENERATED PRODUCT's own migration run (child 1's `pnpm db:migrate` against a disposable PostgreSQL) is a DIFFERENT run with its own output — quote it separately and label it as the child product's, because conflating the two would let a green scaffold be claimed from moe-next's suite. Also note whether the docker-dependent legs actually RAN on this machine: if docker is absent here, child 2's DATABASE-leg tests either refused or were skipped, and a skipped leg is NOT a pass — say which, since the whole point of child 2 is that a missing docker refuses rather than skips.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. (a) THE DATA-LOSS PATH, which is this row's reason for existing: confirm on the DELIVERED code that a failed `pg_dump` leaves ZERO migrations applied, and check the case no child owns — a backup that SUCCEEDS but writes a truncated or empty file. A zero-byte .sql with a recorded sha256 is a receipt that says 'backed up' and a file that restores nothing. (b) RESTORE ACTUALLY WORKS: child 3 was required to prove a restore round trip; read that evidence rather than the receipt's claim — a backup nobody restored is a file. (c) CONTAINER LEAKS UNDER CONCURRENCY: nodes now staff in parallel (task-92d84d38), so two verifications with disposable databases can run at once; confirm child 2's port strategy and teardown hold for two simultaneously, and that a crash between them leaves nothing behind. (d) THE SILENT-SKIP HOLE: confirm that on a machine WITHOUT docker a node cannot reach ACCEPTED through the database leg — that is the failure that would ship a schema change nobody ran, and it is invisible in a green suite. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (task.verification, completionSummary, reviewSummary, landing shas). State EXPLICITLY: (a) whether the LIVE DRIVE applied a migration to a real PREVIEW environment, quoting the receipt and the `\\dt` listing — or, if no preview environment exists because the deployment row (task-5d30948435524c6fa2789e1c033aafe7, a SIBLING this row may not depend on) has not landed, say so plainly and confirm the verified half was driven instead; (b) whether the docker-dependent legs ran on the machine that produced the gate output. Both are the kind of partial result that reads as complete unless stated. Detail over the 2000-char cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code: a gap found here is a comment on the owning child plus report_blocked.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +62,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:42.656Z",
-  "updatedAt": "2026-09-04T09:13:42.656Z"
+  "updatedAt": "2026-09-05T00:49:55.495Z",
+  "dependsOn": [
+    "task-463f195efd2f4fd2886790029a474194",
+    "task-ff41c5c9efa34494b7b91e6f0ddcb7c2",
+    "task-78eedd8ebc2b43c581ac21ea28648a9a"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:49:04.937Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:49:53.303Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a scaffold change with a golden-tree bump, a verifier DATABASE leg with container lifecycle, a deploy-time backup-and-migrate path, a new human-only command with roster backfill, two UI surfaces, a Playwright journey and a live drive — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, drizzle-kit (the parent left the tool to the architect): it implies adopting Drizzle ORM as the generated product's DATA LAYER, constraining how every future node writes schema and query code, when this row's subject is only migrations; node-pg-migrate has explicit per-migration up/down, which `deployment.migrate_down` and the revert path need, and plain migration files are what a coding seat can author reliably. REJECTED, making child 3 depend on the containerized-deployment row: it is a SIBLING feature row and the parent rail forbids that dependsOn — so child 3 composes with the deploy path if it exists and otherwise ships behind its own entry point, recording which. REJECTED, letting the database leg skip when docker is absent: a silent skip lets a node reach ACCEPTED with its migrations unrun, which is the worst outcome this feature can produce; it refuses with a code instead.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `grep -rn 'db:migrate|MIGRATION_' --include=*.ts apps/ packages/` finds only unrelated scheduler fairness constants (fairness-cap-revision.ts:53, fairness-aging.ts:110); the verifier runs the node's `test` recipe with NO database (node-verifier.ts, 230 lines; verifier-process-runner.ts, 395). WHAT TO REUSE RATHER THAN REINVENT: verifier-process-runner.ts already solves 'always clean up' for processes — injectable spawn/timeoutMs/killGraceMs/killProcessGroup (options :49-55), a process-GROUP SIGKILL (:187-189) and timer cleanup on every exit path (:110-114) — and child 2's container lifecycle should follow that shape. The BACKUP LOCATION already has a convention: activation-receipts-measure.ts:32-33 defines BACKUP_DIRECTORY '.moe-next' and BACKUP_LEAF 'backups', so `<project>/.moe-next/backups/<env>/<ts>.sql` extends an existing path rather than inventing a second place to look during an incident. TWO CROSS-ROW COORDINATIONS, neither expressible as dependsOn under the parent rail: the scaffold tree belongs to task-4a0f706437a042059789be2ebdb98bc0 (a profile VERSION BUMP, not an edit in place), and the deploy path plus the environment DATABASE_URL belong to task-5d309484... and task-9ae492b3...'s children. CONCURRENCY IS NOW NORMAL: parallel node staffing (task-92d84d38) makes two simultaneous verifications the ordinary case, so a disposable-database port strategy must survive it.",
+    "risks": "BIGGEST RISK — losing data. Backup-before-migrate is the only thing between a bad migration and an unrecoverable production database, and the case no child's DoD names is a backup that SUCCEEDS but writes a truncated or empty file: a zero-byte .sql with a recorded sha256 produces a receipt saying 'backed up' and a file that restores nothing. Step 4(a) checks it. SECOND — a restore nobody has ever performed. Child 3 must prove a round trip; a backup that has only ever been written is a file, not a safety net. THIRD — the silent-skip hole: on a machine without docker, a database leg that skips instead of refusing lets a node reach ACCEPTED with its schema change unrun, and it is invisible in a green suite. That is why the refusal is a DoD clause and why step 3 asks whether the docker legs actually ran. FOURTH — leaked containers under concurrency: parallel staffing makes two disposable databases at once the normal case, and a leaked container holds its port so the NEXT verification fails far from the cause. FIFTH — conflating the two gate universes: the generated product's migration run and moe-next's own suite are different runs, and quoting one for the other would let a broken scaffold be reported green. SIXTH — timestamped migration filenames would break the scaffold's byte-identical golden test; child 1 must pin them.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/node-verifier.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:49:55.495Z"
 }

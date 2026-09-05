@@ -1,0 +1,34 @@
+{
+  "id": "task-2ee775b319cb496fad9256c84d24744c",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Resources goes live: the project's measured facts, no SOON chip",
+  "description": "SPIDR child 1 of task-e7a20a498ed0436380e5aca23cb81607 (architect-20a6d1eb, 2026-09-05). Dependency-free LEAF.\n\nWHAT THIS ROW OWNS: the Resources screen, built from reads that ALREADY EXIST, and the removal of its SOON freeze. Nothing else from the parent.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb - and the parent's cited line is WRONG, so do not plan against it. The parent says Resources is 'FROZEN with a SOON chip (apps/control-room/src/v2/shell/shell-model.ts:111)'. `grep -n SOON apps/control-room/src/v2/shell/shell-model.ts` returns NOTHING; :110-111 is just the nav entry's label and icon. THE ACTUAL MECHANISM: `shell-model.ts:25` declares `readonly live: boolean` per nav entry, and `nav-rail.tsx:112-124` renders the `SOON` StatusChip (testid `cr.nav.<id>.unavailable`) when the entry is unavailable. So unfreezing Resources means flipping its `live` flag and giving it a real screen - not deleting a chip.\n\nTHE FACTS ALL COME FROM EXISTING READS, so this row adds NO daemon route: repository (root, branch, HEAD) from the remote/activation reads; provider (CLI, credential SOURCE - never a value); store (path, size, last backup); policy revision from `/policy/read`; seat limit from `/sessions/read`. One fact per row, refusals rendered VERBATIM.\n\nNOTE A NEIGHBOURING GAP, already filed: `/repository/remote/read` is SERVED by the daemon (http-listener-read-dispatch.ts:34 imports REPOSITORY_REMOTE_READ_PATH) but has NO browser decoder and is absent from dev-proxy-paths.ts - see comment-81312c74 on task-19d2329c. task-e6000b57fd374f78ba074b9f0f0f2c67 is planned to add that decoder. If this row needs the bound remote for its repository facts and that decoder has not landed, either consume what IS decoded today or coordinate - do not build a second decoder.",
+  "definitionOfDone": [
+    "The Resources nav entry is LIVE: its `live` flag is true in shell-model.ts and the SOON chip no longer renders - assert the absence of testid `cr.nav.resources.unavailable`, which is the actual rendered marker, rather than grepping for the string SOON in a file that never contained it. The nav roster test is updated.",
+    "The screen renders the project's measured facts one per row from EXISTING reads - repository, provider (CLI and credential SOURCE, never a value), store (path, size, last backup), policy revision, seat limit - against a REAL daemon frame. A test asserts a named fact's value reaches the row.",
+    "NO CREDENTIAL VALUE IS EVER RENDERED. Assert it: a frame whose provider section carries a credential-shaped value renders the SOURCE only, and a test greps the rendered output for the value and finds nothing. This is the one clause worth a hostile test, because a credential leaked into an operator screenshot cannot be recalled.",
+    "Every refusal renders VERBATIM with its code - a resources screen that silently omits a fact it could not read is indistinguishable from a project that has no such resource. Assert one refusing read renders its code and the others still render.",
+    "This row adds NO daemon route and NO new command kind: `git diff --stat` shows no file under apps/daemon/src. Gates quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "BROWSER-ONLY. Every fact comes from a read the daemon already serves. If a fact has no read, render what IS available and say so in a step note - do not add a daemon route here (that is a different row's 8-touchpoint work).",
+    "NEVER RENDER A CREDENTIAL VALUE - only its source. This is the row's one hard safety property and it carries its own hostile test.",
+    "REAL FRAMES ONLY: fixtures come from a real daemon; the exact-key decoders reject hand-written ones.",
+    "ASCII-only sources (glyphs.ts) and apostrophe-free JSX text, or the scheduler package-boundary scan reds. Check any new testid namespace is free. Keep every production file under 250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-e7a20a498ed0436380e5aca23cb81607",
+  "priority": "HIGH",
+  "order": 51,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:34:00.435Z",
+  "updatedAt": "2026-09-05T00:34:00.435Z"
+}

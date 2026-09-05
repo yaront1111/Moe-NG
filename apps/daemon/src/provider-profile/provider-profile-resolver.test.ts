@@ -34,6 +34,7 @@ import {
   POLICY_SLICE,
   PROJECT_ID,
   activatePayload,
+  receiptsWithProviderRef,
   closeStores,
   envelope,
   evaluationInput,
@@ -120,7 +121,12 @@ interface SeedOptions {
   readonly settings?: Record<string, unknown>;
   readonly skipProbe?: boolean;
   readonly truthClass?: string;
-  readonly witness?: Record<string, unknown>;
+  /**
+   * Drives the MINTED witness's `providerMinimumProfileRef` apart from the committed probe.
+   * Replaced `witness?` (task-4b9c394d): a caller can no longer supply a witness at all, so a
+   * planted payload is refused at the ingress and never reaches the record this seeds.
+   */
+  readonly activationProviderRef?: string;
 }
 
 interface Seeded {
@@ -167,10 +173,15 @@ function seed(options: SeedOptions = {}): Seeded {
         envelope("provider.probe", 0, { observation }),
         envelope("policy.install", 0, { slice: POLICY_SLICE }),
         envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
-        envelope("project.activate", 2, activatePayload(options.witness)),
+        envelope("project.activate", 2, activatePayload()),
       ];
   for (const step of steps) {
-    const outcome = send(store, step);
+    // Only the activation carries receipts, and only when this seed is deliberately severing the
+    // provider binding; every other command ignores the argument.
+    const outcome = send(store, step, step.kind === "project.activate"
+      && options.activationProviderRef !== undefined
+      ? receiptsWithProviderRef(options.activationProviderRef)
+      : undefined);
     if (!outcome.ok) throw new Error(`seed failed at ${step.kind}: ${outcome.code}`);
   }
   return { settingsDigest: configure(store, options.settings ?? settingsBody()), store };
@@ -312,7 +323,7 @@ const BINDING_ROWS: readonly { readonly binding: string; readonly options: SeedO
     { binding: "profileRevisionId", options: withProfile({ profileRevisionId: "profile-ref-2" }) },
     {
       binding: "providerMinimumProfileRef",
-      options: { witness: { ...ACTIVATION_WITNESS, providerMinimumProfileRef: "provider-profile-2" } },
+      options: { activationProviderRef: "provider-profile-2" },
     },
     {
       binding: "limits.stdoutBytes",
@@ -427,8 +438,9 @@ describe("resolveCurrentProviderProfile — truth and scope", () => {
   /**
    * STATED LIMIT, so this is not read as an ordinary end-to-end case.
    *
-   * `project.activate` refuses a weak-truth witness at the CORE_REDUCER (see the negative
-   * control below), so no production writer can leave a durable ProjectActivated carrying one.
+   * `project.activate` refuses a caller-supplied witness outright at DAEMON_INGRESS and mints
+   * its own with `truthClass: "DAEMON_VERIFIED"` (see the negative control below), so no
+   * production writer can leave a durable ProjectActivated carrying a weak one.
    * The reader's witness-truth gate is therefore defence in depth against a record that only a
    * corrupted or hand-written store could hold — and the only way to exercise it is to plant
    * that record through the store's own commit API. What this proves is that the gate fires on
@@ -462,8 +474,18 @@ describe("resolveCurrentProviderProfile — truth and scope", () => {
     expect(refusal.detail).not.toContain("probe");
   });
 
-  /** The layer that actually owns the weak-witness refusal on every honest path. */
-  it("project.activate refuses a weak-truth witness at the CORE_REDUCER, before any reader", () => {
+  /**
+   * The layer that actually owns the weak-witness refusal on every honest path.
+   *
+   * RE-POINTED, NOT DELETED, by task-4b9c394d. This arm used to send a witness with
+   * `truthClass: "OBSERVED"` and assert CORE_REDUCER. That mechanism is gone: a caller cannot
+   * supply a witness at all, so core's truth check is unreachable from here and an arm still
+   * asserting CORE_REDUCER would have been asserting a layer that no longer answers. Deleting it
+   * was the alternative, but the STATED-LIMIT comment above depends on naming the layer that
+   * owns this refusal on the honest path — that layer is now DAEMON_INGRESS, and the guarantee
+   * is STRONGER than before (a weak witness is refused before its truthClass is even read).
+   */
+  it("project.activate refuses a caller's weak-truth witness at the INGRESS, before any reader", () => {
     const store = openStore();
     for (const step of [
       envelope("project.register", 0, { owner: "owner-1" }),
@@ -487,8 +509,10 @@ describe("resolveCurrentProviderProfile — truth and scope", () => {
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
-    expect(outcome.refusedBy).toBe("CORE_REDUCER");
+    expect(outcome.code).toBe("ACTIVATION_WITNESS_CALLER_SUPPLIED");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
   });
+
 
   it("does not answer a foreign project from another project's durable records", () => {
     const { settingsDigest, store } = seed();

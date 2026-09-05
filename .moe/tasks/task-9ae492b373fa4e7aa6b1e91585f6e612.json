@@ -16,8 +16,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-d0c63cd8848a4da18ad3fbb8eb1d95c3 (the encrypted store, the two commands, the value-free reads), task-72b22fcf9da54b3b91dabf5b7392aff1 (delivery into spawns, required names from the contract, .env.example), task-ba83b202265d40d1885d3091f009b0a2 (the Environments screen, the goal's unset count, the Playwright journey and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD AND RECORD THE ARCHITECT DECISION, in a step note. Mapping: DoD 1 (both commands operator-only, MCP-excluded, roster backfill, four refusals with code + layer) -> child task-d0c63cd8; DoD 2 (the canary: no plaintext in store bytes, events, reads, receipts or the wrapper log, while the value DOES reach a spawned verifier) -> SPLIT across task-d0c63cd8 (store/events/reads/receipts) and task-72b22fcf (the spawn and the log) — confirm BOTH halves ran, because each alone leaves the other surface unchecked; DoD 3 (encrypted at rest, a copied store useless) -> task-d0c63cd8; DoD 4 (the Environments screen and the goal card) -> task-ba83b202; DoD 5 (.env.example, runbook, gates) -> split across task-72b22fcf (the file) and task-ba83b202 (the runbook). THE DECISION: the parent left the key derivation to the architect (daemon credential vs Windows DPAPI) and I chose the DAEMON CREDENTIAL — DPAPI is Windows-only and this repo ships on three platforms, so it would mean a platform-locked feature or two implementations of the most sensitive code here. Record it so QA does not grade against DPAPI.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RE-RUN THE CANARY YOURSELF, ACROSS THE WHOLE COMPOSED FEATURE — this is the one step of this roll-up that is not bookkeeping. Each child proved its own surfaces; nobody has yet proved the surfaces BETWEEN them. Set `MOE_CANARY_<random>` through the real command path, drive a verifier spawn and a browser read, and then grep for the PLAINTEXT in: the store file bytes, the event stream, every read response, every receipt, the wrapper log, the daemon log, the generated `.env.example`, and the Playwright artefacts (traces and screenshots — a browser trace records typed input, and it is the surface no child owns). Zero occurrences everywhere; the fingerprint present where expected. Grep BYTES, not parsed values. Quote each command and its zero result. If any surface leaks, that is a finding on the owning child plus report_blocked — never a note in the completion record.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. (a) THE ALLOWLIST: child 2 merges variables into the seat env built from a CLOSED roster (agent-spawn-environment.ts:14,28). Confirm on the delivered code that the merge did not widen it — a child must still NOT see an arbitrary host variable. That roster is what keeps a seat's view narrow, and widening it is invisible until something leaks. (b) THE COPIED STORE: child 1 proved a store without the credential refuses and yields no plaintext. Check the adjacent case nobody owns — a store copied WITH a stale or rotated credential, and a store whose credential file is present but unreadable. (c) DELIVERY IS NOT A DEPENDENCY: a project with NO variables set must spawn exactly as it did before this feature existed; confirm, because the verifier worked fine without it and a new hard dependency would break every existing project. (d) `.env.example` IS COMMITTED AND PUSHED: confirm the landed file carries names only, on the delivered tree, not just in a unit test — this is the artefact that leaves the machine. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "RUN THE GATES AND COMPLETE THE ROLL-UP. Gates: each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM (global rail 8) — `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`; `pnpm test` covers no apps/** (global rail 18) but IS real evidence here because child 1 touched packages/contracts and the generated client. Then the completion record: name, item by item, which child discharged which DoD clause and where the evidence lives (task.verification, completionSummary, reviewSummary, landing shas). Quote the roll-up canary from step 3 with its zero results — that, not the children's individual canaries, is this row's central evidence, because the composed feature is where the surfaces meet. State plainly that values are never readable back by design, so an operator who loses one must re-set it; that is a real operational consequence the runbook must carry. Detail over the 2000-char cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +61,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:24.602Z",
-  "updatedAt": "2026-09-04T09:13:24.602Z"
+  "updatedAt": "2026-09-05T00:47:08.417Z",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
+    "task-72b22fcf9da54b3b91dabf5b7392aff1",
+    "task-ba83b202265d40d1885d3091f009b0a2"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:46:18.931Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:47:06.206Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: an encrypted per-environment store, two operator-only commands with full roster backfill, delivery into three different spawn paths, contract-driven required names, a generated .env.example landed through the lander, an Environments screen with set/unset dialogs, a goal card, a Playwright journey and a runbook section — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, Windows DPAPI for the at-rest key (the parent left it to the architect): DPAPI is Windows-only and this repo ships on Windows, macOS and Linux — it would mean either a platform-locked feature or two implementations of the most sensitive code in the row. The daemon credential already exists, already gates the store, keeps ONE secret to manage, and satisfies the stated requirement (a copied store without the key is useless) on every platform. REJECTED, splitting the canary so each child proves only its own surfaces: the surfaces BETWEEN children — the Playwright trace, the daemon log, the landed .env.example — are owned by nobody, which is why step 3 of this roll-up re-runs the whole leak hunt. REJECTED, expanding into key rotation, audit logging or access control: the parent frames this as a Stage 2 capability adding no new trust boundary, and the FEATURES ONLY rail holds.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: no per-project or per-environment variable store exists; `grep -rn 'environment\\.set_variable|ENVIRONMENT_' --include=*.ts apps/ packages/` returns only unrelated hits — agent-spawn-environment.ts's `RUNTIME_ENVIRONMENT_KEYS` (:14) and `PROVIDER_ENVIRONMENT_PREFIXES` (:28), and a CARRY_FORWARD_ENVIRONMENT_CHANGED fixture. WHAT ALREADY EXISTS AND CONSTRAINS THE DESIGN: seats and the verifier already receive an ALLOWLISTED env built by the wrapper (agent-spawn-environment.ts, with the codex surface measured against a specific CLI version at :22-24) and verifier-process-runner.ts spawns the verifier — so delivery must merge UNDER that construction rather than around it, or the allowlist stops meaning anything. A store BACKUP directory convention already exists at activation-receipts-measure.ts:32-33 (`.moe-next/backups`), worth knowing for the copied-store test. THE CONTROL-ROOM CONSTRAINTS: ops-screens.tsx is 228 lines against a 250 ceiling so a new screen needs its own module; live read clients decode EXACT-KEY; every new route needs a dev-proxy-paths pin. THE PLAYWRIGHT TRACE IS AN UNOWNED LEAK SURFACE: browser traces and screenshots record typed input, and this is the only feature in the epic where an operator types a secret — no child's DoD covers it, so the roll-up does.",
+    "risks": "BIGGEST RISK — a plaintext value on a surface no child owns. Each child greps its own surfaces; the Playwright trace, the daemon log and the LANDED .env.example sit between them, and a browser trace records typed input in the one feature where an operator types a secret. Step 3 re-runs the whole leak hunt across the composed feature for exactly that reason, greping BYTES rather than parsed values because a plaintext inside a serialised blob is invisible to a parsed assertion. SECOND — widening the env allowlist. Delivery merges variables into a closed roster that exists so a child sees what it needs and nothing else; a merge that hands over `process.env` plus extras destroys it and nothing fails visibly. THIRD — delivery becoming a hard dependency: the verifier worked before this feature and must still spawn for a project with no variables set. FOURTH — the UI echoing a typed value back after a failed submit, which is the helpful-looking behaviour that puts a secret in a screenshot; child 3 carries that assertion. FIFTH — an operator cannot ever read a value back, so losing one means re-setting it; that is a real operational consequence and the runbook must say so rather than leaving it to be discovered. SIXTH — the DPAPI decision is recorded here because a worker copying a Windows-only approach would either lock the feature to one platform or double the sensitive surface.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/live/dev-proxy-paths.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:47:08.417Z"
 }
