@@ -166,7 +166,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T22:04:59.834Z",
+  "updatedAt": "2026-09-05T22:07:11.625Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -215,7 +215,65 @@
     "apps/daemon/src/mcp-tool-allowlist.test.ts",
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
     "apps/daemon/src/orchestrator/agent-wrapper.test.ts",
-    "apps/daemon/src/http/affordance-planning-offers.test.ts"
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+    ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json"
   ],
-  "completionSummary": "preview.decide is fenced to the operator. 4 files, all apps/daemon. THREE of the five things this row's description says it owns were ALREADY LANDED at HEAD and are untouched by me — re-measured in step 1 before the architect's step-4 amendment said the same.\n\nDELIVERED\n1. WRAPPER FENCE (the row's real gap): \"preview.decide\" added to the single HUMAN_ONLY_STEPS Set, agent-spawn-contract.ts:225.\n2. STAFFING ARM, by work-item id as DoD 5 demands: agent-wrapper.test.ts's existing runOnce() arm now feeds a READY, unclaimed preview.decide step and asserts `spawned` excludes \"preview.decide@preview-human-1\", plus a vacuity control that the surface really offered it.\n3. MEMBERSHIP GUARD: affordance-planning-offers.test.ts gains an explicit non-approval roster arm. The arm the plan named (:349) is a `startsWith(\"approval.\")` FILTER, so preview.decide can never appear in it — every non-approval member is vacuously green there today.\n4. MCP FENCE, NAMED not counted: mcp-tool-allowlist.test.ts gains 3 arms — excluded+unadvertised by name; label GENERATED-but-omitted (the discriminator pinning CAPABILITY_DENIED rather than INPUT_INVALID); and a real dispatch through the production port under the operator credential reaching the HANDLER at {code:\"PREVIEW_DECISION_INVALID\", layer:\"REQUEST\"}, stage DISPATCH, zero durable decisions.\n\nNOT DONE, DELIBERATELY, ALL ALREADY ON THE BRANCH\n- mcp-tool-allowlist.ts: NO EDIT. The roster is DERIVED (`[...OPERATOR_PRINCIPAL_KINDS].filter(...)`); the file's header forbids hand-keeping it. Runtime probe proves preview.decide already excluded and unadvertised (11 members).\n- runtime-vocabulary.ts:103 and generated-client.ts:239/353: landed by task-c672815d. Generator NOT run: both paths are peer-dirty and the digest moved twice mid-session (ed5f6b87 -> db43c1bc -> f07b77e4), so a regen would have swept peers' uncommitted vocabulary into this row's commit.\n- HUMAN_ONLY_STEPS is ONE set, not two; agent-wrapper.ts:24 is a re-export. The base DoD-4 d"
+  "completionSummary": "preview.decide is fenced to the operator. 4 files, all apps/daemon. THREE of the five things this row's description says it owns were ALREADY LANDED at HEAD and are untouched by me — re-measured in step 1 before the architect's step-4 amendment said the same.\n\nDELIVERED\n1. WRAPPER FENCE (the row's real gap): \"preview.decide\" added to the single HUMAN_ONLY_STEPS Set, agent-spawn-contract.ts:225.\n2. STAFFING ARM, by work-item id as DoD 5 demands: agent-wrapper.test.ts's existing runOnce() arm now feeds a READY, unclaimed preview.decide step and asserts `spawned` excludes \"preview.decide@preview-human-1\", plus a vacuity control that the surface really offered it.\n3. MEMBERSHIP GUARD: affordance-planning-offers.test.ts gains an explicit non-approval roster arm. The arm the plan named (:349) is a `startsWith(\"approval.\")` FILTER, so preview.decide can never appear in it — every non-approval member is vacuously green there today.\n4. MCP FENCE, NAMED not counted: mcp-tool-allowlist.test.ts gains 3 arms — excluded+unadvertised by name; label GENERATED-but-omitted (the discriminator pinning CAPABILITY_DENIED rather than INPUT_INVALID); and a real dispatch through the production port under the operator credential reaching the HANDLER at {code:\"PREVIEW_DECISION_INVALID\", layer:\"REQUEST\"}, stage DISPATCH, zero durable decisions.\n\nNOT DONE, DELIBERATELY, ALL ALREADY ON THE BRANCH\n- mcp-tool-allowlist.ts: NO EDIT. The roster is DERIVED (`[...OPERATOR_PRINCIPAL_KINDS].filter(...)`); the file's header forbids hand-keeping it. Runtime probe proves preview.decide already excluded and unadvertised (11 members).\n- runtime-vocabulary.ts:103 and generated-client.ts:239/353: landed by task-c672815d. Generator NOT run: both paths are peer-dirty and the digest moved twice mid-session (ed5f6b87 -> db43c1bc -> f07b77e4), so a regen would have swept peers' uncommitted vocabulary into this row's commit.\n- HUMAN_ONLY_STEPS is ONE set, not two; agent-wrapper.ts:24 is a re-export. The base DoD-4 d",
+  "commits": [
+    {
+      "sha": "ffc7e7e90ddb8a758377306cd01c7b0bc94404c8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0520a42e@2026-09-05T19:39:36Z",
+      "paths": [
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ],
+      "recordedBy": "worker-0520a42e",
+      "recordedAt": "2026-09-05T22:07:11.625Z",
+      "treeId": "fbb5297bd5adbae87f3b76b66068c9d54ab73aae",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.test.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper.test.ts",
+          "taskId": "task-de0598236f3b4d95aa3b6098b9d56995"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-ledger.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-0520a42e@2026-09-05T19:39:36Z",
+    "at": "2026-09-05T22:07:11.625Z"
+  }
 }
