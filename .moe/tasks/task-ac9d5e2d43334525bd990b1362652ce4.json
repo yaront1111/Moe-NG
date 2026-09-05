@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T23:24:45.445Z",
+  "updatedAt": "2026-09-05T23:25:34.465Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -297,6 +297,21 @@
       "status": "WORKING",
       "pushed": false,
       "message": "MOE_RESCUE_REF task=task-ac9d5e2d43334525bd990b1362652ce4 ref=refs/moe/rescue/task-ac9d5e2d43334525bd990b1362652ce4/20260905T232440Z sha=81172b946dc34f38f7e584132826e214788e5594 reason=ref-contention"
+    },
+    {
+      "sha": "9363dba86a00383cb1e1840cc2f28f196d266d19",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:25:20Z",
+      "paths": [
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:25:34.465Z",
+      "treeId": "f517c9783c01e3669dd247f735c4b6ffbbbc1dec",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -310,6 +325,7 @@
     "README.md"
   ],
   "unattributedPaths": [
+    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
     "apps/control-room/src/v2/styles/cordum-repository-effects.css",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
@@ -333,10 +349,9 @@
     "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "failed",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
-    "sessionId": "worker-2739fee7@2026-09-05T23:23:37Z",
-    "at": "2026-09-05T23:24:45.445Z"
+    "sessionId": "worker-2739fee7@2026-09-05T23:25:20Z",
+    "at": "2026-09-05T23:25:34.465Z"
   }
 }
