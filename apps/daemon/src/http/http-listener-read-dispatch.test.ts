@@ -85,20 +85,26 @@ function proxiedPaths(): ReadonlySet<string> {
 
 /**
  * Daemon JSON routes the dev server does NOT proxy. A frozen census so the gap cannot grow
- * silently: `/product-contract/gate-1/read` predates this row and is recorded, not fixed,
- * because this row does not own that route. A route absent from the proxy works in
- * production and fails only under the dev server, which is where the e2e lane runs.
+ * silently. A route absent from the proxy works in production and fails only under the dev
+ * server, which is where the e2e lane runs.
  *
- * `/repository/remote/read` WAS recorded here by task-9d553419, which landed the daemon route
- * only. task-e6000b57 then landed the control-room half — the exact-key decoder and the proxy
- * pin in apps/control-room/src/live/dev-proxy-paths.ts — so the census entry was removed with
- * that edit, exactly as the note here instructed. The gap is closed; the arm below is what
- * proved it, by reddening the moment the proxy list gained the route and this list still
- * claimed it was missing.
+ * The census is now EMPTY, and both entries it once held were retired the same way: a row
+ * landed the daemon route alone, recorded the gap here, and the row that later landed the
+ * control-room half (exact-key decoder plus the proxy pin in
+ * apps/control-room/src/live/dev-proxy-paths.ts) deleted the census entry in the same edit.
+ *
+ * - `/repository/remote/read`: recorded by task-9d553419, retired by task-e6000b57.
+ * - `/product-contract/gate-1/read`: recorded by task-0a5d7212 (commit 6c0986ea), which owned
+ *   neither half; retired by task-1c9587ed1b2b4e1abd6b51396ee672f8, which landed
+ *   live/live-product-contract-gate-1.ts and the pin at dev-proxy-paths.ts:27.
+ *
+ * An empty census is not a dead arm: the assertion below still reds the moment any served
+ * JSON route is added without its proxy pin. It is also the arm that reds when a pin is
+ * added and this list is not updated with it, which is exactly how both retirements were
+ * caught. Keep the pair edited together; nothing imports this file from the control-room,
+ * so only `grep -rn DEV_PROXY_PATHS apps packages tools` finds this asserter.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
-  "/product-contract/gate-1/read",
-]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 
 describe("the read-route roster and the surface it advertises agree in BOTH directions", () => {
   it("serves exactly what it advertises: dispatch seam == JSON_ROUTES, as sets", () => {

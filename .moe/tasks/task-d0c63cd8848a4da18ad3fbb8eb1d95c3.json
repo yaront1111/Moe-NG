@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:14.933Z",
-  "updatedAt": "2026-09-05T09:40:39.896Z",
+  "updatedAt": "2026-09-05T09:42:35.764Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:41:30.124Z",
     "plannedStepCount": 7,
@@ -244,7 +244,73 @@
     "apps/daemon/src/environment/environment-projection.js",
     "apps/daemon/src/environment/environment-test-fixtures.ts",
     "apps/daemon/src/environment/environment-canary.test.ts",
-    "apps/daemon/src/environment/environment-at-rest.test.ts"
+    "apps/daemon/src/environment/environment-at-rest.test.ts",
+    ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json"
   ],
-  "completionSummary": "Environment variables are stored ENCRYPTED and never surface in plaintext. 17 paths, all new, all under apps/daemon/src/environment/. Nothing outside that directory changed.\n\nVERIFICATION QUOTED ABOVE is the OWNED-SCOPE leg, exit 0, `Test Files 6 passed (6)` / `Tests 129 passed (129)` - a nonzero executed count, not a vacuous exit 0. The plan's named command `pnpm --filter @moe/daemon test` was ALSO run: EXIT 1 on ONE pre-existing FOREIGN failure in src/http/http-listener-read-dispatch.test.ts, owned by task-1c9587ed (status WORKING, actively editing that very file plus five other daemon sources right now). Disclosed verbatim with four attribution measurements in comment-4dae561707aa40b78b7e7af2c3fd12f0: it reproduces in isolation without loading any file of mine; NOTHING outside my directory imports my modules (grep -> zero); my diff changes no tracked source at all (`?? apps/daemon/src/environment/`), so the HEAD-minus-merge-base delta intersected with my owned paths is empty by construction; and that test's own header predicted this exact red. Global rail 3, red disclosed not hidden.\n`pnpm typecheck` repo-wide -> EXIT 0, 19 `typecheck: Done` including apps/daemon, with a planted-error positive control proving the green is a measurement (TS2322, then restored + SHA256-verified). `pnpm test` deliberately not quoted: root vitest includes no apps/** and this row touches no packages/** (rail 18).\n\nDoD 1 is NOT this row's - publishing the two commands moved to task-a2409cba per comment-f26ea546. Proven absent: the four roster files (daemon-command-vocabulary/registry/families.ts, mcp-tool-allowlist.ts - all at apps/daemon/src/, not src/mcp/) and packages/control-room-client are untouched; grep for `environment.set_variable` outside my directory -> zero hits. No generator run, digest unchanged.\n\nDoD 2 - FOUR REFUSALS, CLOSED CODE->LAYER MAP, EACH ASSERTED WITH CODE **AND** LAYER: ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, ENV_STORE_"
+  "completionSummary": "Environment variables are stored ENCRYPTED and never surface in plaintext. 17 paths, all new, all under apps/daemon/src/environment/. Nothing outside that directory changed.\n\nVERIFICATION QUOTED ABOVE is the OWNED-SCOPE leg, exit 0, `Test Files 6 passed (6)` / `Tests 129 passed (129)` - a nonzero executed count, not a vacuous exit 0. The plan's named command `pnpm --filter @moe/daemon test` was ALSO run: EXIT 1 on ONE pre-existing FOREIGN failure in src/http/http-listener-read-dispatch.test.ts, owned by task-1c9587ed (status WORKING, actively editing that very file plus five other daemon sources right now). Disclosed verbatim with four attribution measurements in comment-4dae561707aa40b78b7e7af2c3fd12f0: it reproduces in isolation without loading any file of mine; NOTHING outside my directory imports my modules (grep -> zero); my diff changes no tracked source at all (`?? apps/daemon/src/environment/`), so the HEAD-minus-merge-base delta intersected with my owned paths is empty by construction; and that test's own header predicted this exact red. Global rail 3, red disclosed not hidden.\n`pnpm typecheck` repo-wide -> EXIT 0, 19 `typecheck: Done` including apps/daemon, with a planted-error positive control proving the green is a measurement (TS2322, then restored + SHA256-verified). `pnpm test` deliberately not quoted: root vitest includes no apps/** and this row touches no packages/** (rail 18).\n\nDoD 1 is NOT this row's - publishing the two commands moved to task-a2409cba per comment-f26ea546. Proven absent: the four roster files (daemon-command-vocabulary/registry/families.ts, mcp-tool-allowlist.ts - all at apps/daemon/src/, not src/mcp/) and packages/control-room-client are untouched; grep for `environment.set_variable` outside my directory -> zero hits. No generator run, digest unchanged.\n\nDoD 2 - FOUR REFUSALS, CLOSED CODE->LAYER MAP, EACH ASSERTED WITH CODE **AND** LAYER: ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, ENV_STORE_",
+  "commits": [
+    {
+      "sha": "866160f7890a6a471b4faad08fcfca2f33a89093",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-05T09:06:48Z",
+      "paths": [
+        ".moe/tasks/task-d0c63cd8848a4da18ad3fbb8eb1d95c3.json",
+        "apps/daemon/src/environment/environment-at-rest.test.ts",
+        "apps/daemon/src/environment/environment-canary.test.ts",
+        "apps/daemon/src/environment/environment-cipher.js",
+        "apps/daemon/src/environment/environment-cipher.test.ts",
+        "apps/daemon/src/environment/environment-cipher.ts",
+        "apps/daemon/src/environment/environment-contracts.js",
+        "apps/daemon/src/environment/environment-contracts.test.ts",
+        "apps/daemon/src/environment/environment-contracts.ts",
+        "apps/daemon/src/environment/environment-fold.js",
+        "apps/daemon/src/environment/environment-fold.test.ts",
+        "apps/daemon/src/environment/environment-fold.ts",
+        "apps/daemon/src/environment/environment-projection.js",
+        "apps/daemon/src/environment/environment-projection.ts",
+        "apps/daemon/src/environment/environment-store.js",
+        "apps/daemon/src/environment/environment-store.test.ts",
+        "apps/daemon/src/environment/environment-store.ts",
+        "apps/daemon/src/environment/environment-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-05T09:42:35.764Z",
+      "treeId": "e6566255b203a713a10e770c28fbd9bf5284d897",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/environment/environment-fold.ts",
+    "apps/daemon/src/environment/environment-fold.test.ts",
+    "apps/daemon/src/environment/environment-at-rest.test.ts",
+    "apps/daemon/src/environment/environment-cipher.ts",
+    "apps/daemon/src/environment/environment-store.ts",
+    "apps/daemon/src/environment/environment-contracts.test.ts",
+    "apps/daemon/src/environment/environment-contracts.js",
+    "apps/daemon/src/environment/environment-contracts.ts",
+    "apps/daemon/src/environment/environment-cipher.test.ts",
+    "apps/daemon/src/environment/environment-cipher.js",
+    "apps/daemon/src/environment/environment-store.test.ts",
+    "apps/daemon/src/environment/environment-fold.js",
+    "apps/daemon/src/environment/environment-projection.ts",
+    "apps/daemon/src/environment/environment-test-fixtures.ts",
+    "apps/daemon/src/environment/environment-canary.test.ts",
+    "apps/daemon/src/environment/environment-projection.js",
+    "apps/daemon/src/environment/environment-store.js"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-cceb207f@2026-09-05T09:06:48Z",
+    "at": "2026-09-05T09:42:35.764Z"
+  }
 }
