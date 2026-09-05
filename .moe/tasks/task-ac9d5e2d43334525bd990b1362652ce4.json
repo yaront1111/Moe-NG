@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T23:19:14.911Z",
+  "updatedAt": "2026-09-05T23:20:22.846Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -237,6 +237,21 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "9aa86c9f45dd24329d3f8ccee550418dff08ea75",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:19:54Z",
+      "paths": [
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:20:22.846Z",
+      "treeId": "22689b5030c492ef54b175270bc2a1cbd2243b8c",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -251,23 +266,27 @@
   ],
   "unattributedPaths": [
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner.ts",
     "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
     "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-bootstrap-command.ts",
     "apps/daemon/src/repository/repository-recovery-git.test.ts",
     "apps/daemon/src/repository/repository-recovery-native.test.ts",
     "packages/runner/src/platform/windows/windows-boundary.test.ts",
     "packages/runner/src/platform/windows/windows-process-contract.test.ts",
     "packages/runner/src/platform/windows/windows-status.ts",
-    "packages/runner/src/verification/criterion-check-executor.test.ts"
+    "packages/runner/src/verification/criterion-check-executor.test.ts",
+    "packages/runner/src/verification/criterion-check-executor.ts",
+    "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-2739fee7@2026-09-05T23:12:50Z",
-    "at": "2026-09-05T23:19:14.911Z"
+    "sessionId": "worker-2739fee7@2026-09-05T23:19:54Z",
+    "at": "2026-09-05T23:20:22.846Z"
   }
 }
