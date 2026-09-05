@@ -184,6 +184,8 @@ export interface GeneratedCommandBuilders {
   readonly ["budget.propose_raise"]: CommandBuilder<"budget.propose_raise">;
   readonly ["budget.reconcile"]: CommandBuilder<"budget.reconcile">;
   readonly ["context.repackage"]: CommandBuilder<"context.repackage">;
+  readonly ["criterion_check.approve"]: CommandBuilder<"criterion_check.approve">;
+  readonly ["criterion_check.verify"]: CommandBuilder<"criterion_check.verify">;
   readonly ["cutover.abort"]: CommandBuilder<"cutover.abort">;
   readonly ["cutover.activate"]: CommandBuilder<"cutover.activate">;
   readonly ["cutover.preview"]: CommandBuilder<"cutover.preview">;
@@ -265,6 +267,7 @@ export interface GeneratedCommandBuilders {
   readonly ["replan.propose_unblock"]: CommandBuilder<"replan.propose_unblock">;
   readonly ["repository.bootstrap"]: CommandBuilder<"repository.bootstrap">;
   readonly ["repository.publish"]: CommandBuilder<"repository.publish">;
+  readonly ["repository.recover"]: CommandBuilder<"repository.recover">;
   readonly ["resource.confirm_released"]: CommandBuilder<"resource.confirm_released">;
   readonly ["resource.reconcile"]: CommandBuilder<"resource.reconcile">;
   readonly ["resource.release"]: CommandBuilder<"resource.release">;
@@ -303,6 +306,8 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["budget.propose_raise"]: commandBuilderFor("budget.propose_raise"),
     ["budget.reconcile"]: commandBuilderFor("budget.reconcile"),
     ["context.repackage"]: commandBuilderFor("context.repackage"),
+    ["criterion_check.approve"]: commandBuilderFor("criterion_check.approve"),
+    ["criterion_check.verify"]: commandBuilderFor("criterion_check.verify"),
     ["cutover.abort"]: commandBuilderFor("cutover.abort"),
     ["cutover.activate"]: commandBuilderFor("cutover.activate"),
     ["cutover.preview"]: commandBuilderFor("cutover.preview"),
@@ -384,6 +389,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["replan.propose_unblock"]: commandBuilderFor("replan.propose_unblock"),
     ["repository.bootstrap"]: commandBuilderFor("repository.bootstrap"),
     ["repository.publish"]: commandBuilderFor("repository.publish"),
+    ["repository.recover"]: commandBuilderFor("repository.recover"),
     ["resource.confirm_released"]: commandBuilderFor("resource.confirm_released"),
     ["resource.reconcile"]: commandBuilderFor("resource.reconcile"),
     ["resource.release"]: commandBuilderFor("resource.release"),
@@ -926,7 +932,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "05eef58c496aa7473050da67a224118caeb3ee6de6f9b2fe5c4dfc467d17ec0a";
+export const GENERATED_CONTRACT_DIGEST = "9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

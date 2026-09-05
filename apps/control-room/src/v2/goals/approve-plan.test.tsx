@@ -252,7 +252,7 @@ function admittedWire(
       queryEnvelopeVersion: "moe-runtime-query/1",
     },
     buildToolVersions: { node: "24.16.0" },
-    contractSchemaHash: "05eef58c496aa7473050da67a224118caeb3ee6de6f9b2fe5c4dfc467d17ec0a",
+    contractSchemaHash: "9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d",
   });
   if (!gate.ok) throw new Error("the compat gate refused its own matching report");
   return {

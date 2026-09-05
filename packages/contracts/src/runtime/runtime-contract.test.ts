@@ -36,7 +36,7 @@ const EXPECTED_COMMAND_KINDS = [
   "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
   "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
-  "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
+  "budget.reconcile", "context.repackage", "criterion_check.approve", "criterion_check.verify", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge",
   "deployment.deploy", "deployment.migrate_down", "deployment.rollback",
   "deployment.set_target", "design.read", "design.submit", "effect.activate",
@@ -60,7 +60,7 @@ const EXPECTED_COMMAND_KINDS = [
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
   "recovery.reconcile_external", "release.decide", "replan.propose_unblock", "repository.bootstrap",
-  "repository.publish", "resource.confirm_released",
+  "repository.publish", "repository.recover", "resource.confirm_released",
   "resource.reconcile", "resource.release", "resource.renew", "resource.request",
   "review.release", "review.start", "review.submit", "safe_boundary.observe",
   "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",
@@ -105,8 +105,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 115, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(115);
+    // Literal 118, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(118);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");

@@ -167,7 +167,7 @@
       "completedAt": "2026-09-05T21:50:25.005Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -180,20 +180,30 @@
   ],
   "priority": "HIGH",
   "order": 41.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-d858cf18c1a94cf897fa98da7b5f87b9",
+      "author": "qa-f2906c26",
+      "content": "QA VERIFICATION RECORD (qa-f2906c26, 2026-09-06). Full evidence; the approval summary is the digest of this.\n\nDELIVERED BYTES. Completion commit 0aeb0cf5 carries the 3 release files. The contracts/client edits are on the branch under peer sweep commit c4143694, exactly as the worker disclosed — I verified them by RUNNING THE TREE, not by reading task.commits. All six paths confirmed present at HEAD (`git ls-tree -r HEAD`, `git grep release.decide HEAD`).\n\nDoD-1. At HEAD a9e09ebb: RUNTIME_COMMAND_KINDS = 115 entries, EXPECTED_COMMAND_KINDS = 115, `commands.size` pin = 115 — all three agree, `toEqual` byte-identical (0 divergences), tuple ascending, `release.decide` present exactly once at the sorted seam recovery.reconcile_external < release.decide < replan.propose_unblock.\n\nDoD-2, proven independently rather than accepted. Re-ran `pnpm --filter @moe/control-room-client generate` myself: generated-client.ts SHA256 = 9A4BED62E2F4768FB6565C6E7C24E46874A307701BBF5C1A380B2AF3AA78DAED before AND after, `git status` on the generated dir empty. A generator fixed point cannot contain a hand edit. contract-digest.test.ts DERIVES the digest and is green UNEDITED — DoD-2's own discriminator. At HEAD: client digest == generated-coverage CONTRACT_DIGEST (05eef58c…) and GENERATED_FILE_SHA256 == the file's actual sha256 (9cd99c32…), both YES.\n\nDoD-3. 13/13 green isolated (`Test Files 1 passed`, `Tests 13 passed`). `releaseRefusal.length === 1` — no layer parameter, so a disagreeing (code, layer) pair is structurally unmintable. Per-code arms assert code AND layer for all three. Guard uses `Object.hasOwn` on both `ok` and `code` (prototype-chain hole closed) and checks the code against the closed roster, so a foreign `ok:false` refusal is not admitted. Bidirectional closure per project rail 9: roster asserted by literal AND set-equality enumerated from `Object.keys(map)`, plus a non-vacuity counter `expect(checked).toBe(3)`.\n\nDoD-4. All three layer values read at their declarations: PROJECT_REDUCER_LAYER = \"PROJECT_REDUCER\" (recovery-completion-evidence.ts:43, roster :306), GOAL_PREREQUISITE_LAYER = \"DAEMON_PREREQUISITE\" (goal-close-prerequisite.ts:58, roster :238 — name != value, and the test correctly pins the VALUE), RUNNER_WORKSPACE_LAYER = \"RUNNER_WORKSPACE\" (foundation-attempt-contracts.ts:34, roster :323). The reuse is pinned BY IMPORT in the test, not by comment. I executed `DECLARATION_PATTERN` (boundary-roster.security.ts:603) against the literal declaration line: NO MATCH; `PRIVATE_DECLARATION_PATTERN` (layer-visibility-cases.ts:64) requires the same LAYER/LAYERS/BOUNDARIES tail, likewise no match. So no new rostered boundary exists and DoD-4's `pnpm test:security` conditional correctly never fires. Skipping that lane is compliant, not a gap.\n\nDoD-5, RE-DRILLED BY ME rather than read from the worker's transcript. Pre-drill `git status --porcelain` on both paths; both backed up to %TEMP% suffixed qa-f2906c26 with SHA256 recorded.\n  ARM (a) deleted \"release.decide\" from RUNTIME_COMMAND_KINDS -> runtime-contract.test.ts RED at :106 `expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS)`, \"expected [ 'approval.decide', …(108) ] to deeply equal [ 'approval.decide', …(109) ]\", diff line `- \"release.decide\"`. That is precisely the assertion DoD-1 names.\n  ARM (b) RELEASE_PR_FAILED \"RUNNER_WORKSPACE\" -> \"PROJECT_REDUCER\" (another value already in the reused set, so no membership-style arm could answer first) -> 2 arms RED: \"resolves each code to its own layer\" and \"reuses the values of already-rostered layer constants\", both `Expected: \"RUNNER_WORKSPACE\" / Received: \"PROJECT_REDUCER\"`.\n  RESTORE, per global rail 13, in calls SEPARATE from the restore: vocab 6533963A6B09AF33D1810743C0E480DCFE714F95CCED800C8C8806E3E5E4D22E == backup; module 7266F41D36D321CD90D307E7261D8C70F5E01701506A9687BC9F7A91043E696E == backup. Both equal. Backups deleted.\n\nDoD-6, count lines quoted, each leg standalone foreground, no pipes into the runner.\n  `pnpm --filter @moe/daemon test`  -> Test Files 17 failed | 451 passed (468); Tests 86 failed | 8902 passed | 2 skipped (8990)\n  `pnpm test` (root)                -> Test Files 14 failed | 415 passed | 2 skipped (431); Tests 81 failed | 10252 passed | 46 skipped (10379)\n  `pnpm --filter @moe/control-room test` -> Test Files 1 failed | 154 passed (155); Tests 1 failed | 1982 passed (1983)\n  `pnpm typecheck` -> exactly 1 error\nNote the root leg was piped to `tail`, so the harness reported the tail's exit 0; the real status is the `[ELIFECYCLE] Test failed` line. Recording that so nobody reads exit 0 as green.\n\nRED ATTRIBUTION — every one foreign, none hidden.\n  typecheck's single error: `apps/daemon/src/preview/preview-runner.test.ts(282,21) TS2379 … Argument of type '{ capture: undefined; … }' is not assignable to parameter of type 'Partial<PreviewRunnerConfig>' with 'exactOptionalPropertyTypes: true'`. `git status` = `?? ` — an untracked peer file that has never been committed. Not an owned path. Notably tsc reported NO error in release-decide-contracts.test.ts, which also confirms its `@ts-expect-error` arm is still load-bearing (an unused directive would raise TS2578).\n  control-room: only scaffold.test.tsx, at 20055ms in-suite; 37/37 passed in isolation in 4.16s. Contention flake. A first full run showed data-adapter.test.ts and approve-plan.test.tsx red too; both passed on the immediate re-run and data-adapter passed 16/16 isolated — same class.\n  daemon: I isolated every file that failed in MILLISECONDS (i.e. real assertions, not the timeout cliff): daemon-command-vocabulary (148), node-spec-listing, wrapper-node-missions, http-listener-read-dispatch, daemon-store-dependencies all PASS isolated. Only agent-wrapper-main.test.ts stays red, on a source-text assertion that `createAgentWrapper({…})` contains `staffingFence:` — peer WIP, and `git status` shows six modified + four untracked files in apps/daemon/src/orchestrator/. The rest are literal `Test timed out in 30000ms` at 455s/621s/1302s/1906s per file: the spawn-latency cliff. Measured cmd.exe /c exit at 85–438ms during my review (normal ~30ms).\n  daemon-command-vocabulary passing is the specific check I wanted for project rail 9: adding `release.decide` to the SHARED contract without the daemon roster (child B's row) does not red the roster's bidirectional arm.\n  FAILING-PATHS INTERSECT OWNED-PATHS = EMPTY. Owned = apps/daemon/src/release/**, packages/contracts/src/runtime/**, packages/control-room-client/src/generated/**. No failing file is under any of them.\n\nEPIC RAIL 2 DISCHARGED. Ran `pnpm --filter @moe/control-room test` (not in DoD-6's list) and censused the digest by literal across all file types: exactly FOUR mirrors, no fifth, all carrying the same value at the time of the run — generated-client.ts:919, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255.\n\nLIVE PEER WRITE DURING THIS REVIEW — read this before believing any re-run. Late in the review the worktree went red on `commands.size` (118 received vs 115 pinned) and on both generated-coverage hand-pins. It is NOT this row. Measured: HEAD is fully self-consistent (115/115/115, digest mirror matches, golden sha256 matches), and the three worktree-only kinds are `criterion_check.approve`, `criterion_check.verify`, `repository.recover` — a peer kind-publishing row mid-flight that has not yet bumped its own pin or rotated the mirrors. `release.decide` is present and correct in all three files throughout. Matches the worker's own warning and mem:gotcha-contract-digest-mirror-set-moved-two-are-in-apps-control-room.\n\nONE PIECE OF QA DEBRIS I FOUND AND DID NOT CAUSE THIS SESSION. A prior session under my own worker id died mid-review and its wrapper committed a live drill mutant: e181415d swapped `\"deployment.deploy\", \"deployment.set_target\"` in runtime-vocabulary.ts, which breaks the hand-sorted tuple and reds the toEqual. Peer commit 1a570b32 restored the correct order before I got to it, so HEAD is clean and no repair was needed from me. Filing the pattern as a gotcha memory.\n\nRAIL 2 (forbidden paths): commit 0aeb0cf5 touches none of daemon-command-vocabulary/-families/-registry/-async-entries, mcp-tool-allowlist, agent-spawn-contract. Per-file caps fine: 112 / 171 / 1 lines, all well under 250.\n\nFOR CHILD B (task-54b74b80) AND C (task-f961dc89). The kind is on the shared contract and deliberately NOT wired into the daemon roster — B owns that. C imports `releaseRefusal` from the **.js** bridge; the factory is generic, so `releaseRefusal(\"RELEASE_PR_FAILED\").layer` narrows to `\"RUNNER_WORKSPACE\"` rather than the union.",
+      "timestamp": "2026-09-05T23:05:26.442Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:00.337Z",
-  "updatedAt": "2026-09-05T21:53:51.442Z",
+  "updatedAt": "2026-09-05T23:06:07.011Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:36.684Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-05T23:06:07.011Z",
+    "wallClockMs": 36330327
   },
   "contextFetchedBy": [
     "architect-227be919",
     "architect-b63fabf3",
-    "worker-d6e44333"
+    "worker-d6e44333",
+    "qa-f2906c26"
   ],
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -243,6 +253,52 @@
       "treeId": "b3c740878c5d281f187af399d5eb9d688c6ba704",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "0aeb0cf56c67e421b65b0c7baba1742f4837c6eb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T19:40:40Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
+        "apps/daemon/src/release/release-decide-contracts.js",
+        "apps/daemon/src/release/release-decide-contracts.test.ts",
+        "apps/daemon/src/release/release-decide-contracts.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T21:54:36.037Z",
+      "treeId": "07d670b39ed6edbc8fdfd74aaac15dee07a1075f",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "e181415d6f8d807b360f9bee04b8c15dd8955b90",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T21:54:13Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+        "apps/daemon/src/release/release-decide-contracts.js",
+        "apps/daemon/src/release/release-decide-contracts.test.ts",
+        "apps/daemon/src/release/release-decide-contracts.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T21:55:51.154Z",
+      "treeId": "ce53eb2ca7c68ca412e1426a20f48fe14b14737c",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "packages/contracts/src/runtime/runtime-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -254,14 +310,21 @@
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "apps/daemon/src/release/release-decide-contracts.ts",
     "apps/daemon/src/release/release-decide-contracts.js",
-    "apps/daemon/src/release/release-decide-contracts.test.ts"
+    "apps/daemon/src/release/release-decide-contracts.test.ts",
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-ledger.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "architect-b63fabf3@2026-09-05T13:11:43Z",
-    "at": "2026-09-05T13:21:53.848Z"
+    "sessionId": "qa-f2906c26@2026-09-05T21:54:13Z",
+    "at": "2026-09-05T21:55:51.154Z"
   },
   "workStartedAt": "2026-09-05T19:41:52.361Z",
   "reviewStartedAt": "2026-09-05T21:53:51.441Z",
@@ -271,5 +334,16 @@
     "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  1 passed (1)\n      Tests  13 passed (13)\n\nRUN v4.1.10 D:/projexts/moe-next\n Test Files  3 passed (3)\n      Tests  31 passed (31)\n\nRUN v4.1.10 D:/projexts/moe-next/apps/control-room\n Test Files  2 passed (2)\n      Tests  30 passed (30)\n\nCOMBINED_OWNED_EXIT=0\n\n(&&-chained so a nonzero from ANY leg is the reported exit; all three legs print a nonzero Test Files count, so none ran vacuously.)",
     "reportedAt": "2026-09-05T21:53:51.441Z"
   },
-  "completionSummary": "release.decide is on the shared runtime contract with its 3 refusal codes and a closed code->layer map. 6 paths: 3 NEW (release-decide-contracts .ts/.js/.test.ts, 112/1/171 lines) + runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts.\n\nDoD-1 KIND + BOTH COUPLED PINS. `release.decide` inserted at the sorted seam (recovery.reconcile_external < release.decide < replan.propose_unblock). Sort proved mechanically, not by eye: tuple extracted and diffed against `LC_ALL=C sort` => empty, 0 dupes, kind present once. Both pins reconciled from PRINTED expected-vs-received, never from the plan: (a) toEqual red `expected [...(109)] to deeply equal [...(108)]` with a one-line `+ \"release.decide\"` delta at :106 -> added to EXPECTED_COMMAND_KINDS; (b) size pin then red `expected 110 to be 109` at :108 -> literal AND its comment set to 110. Final: tuple 110 entries.\nCOUNT MOVED FOUR TIMES UNDER ME (109 -> 108 -> 110, peer transiently wrote 109 back): a concurrent row (repository.bootstrap, task-c2b5a9f0) edits these exact lines. Freezing any literal would have been wrong. NOTE FOR QA: my first final-verification run caught the file MID-WRITE and went red; the next read was consistent and green. Re-run once before believing a red on these two files.\n\nDoD-2 REGENERATED, NEVER HAND-EDITED. `pnpm --filter @moe/control-room-client generate`, exit 0, one file written. OLD and NEW digest are the SAME value `f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd` because the peer regenerated after my vocabulary edit landed — reported honestly rather than manufacturing a rotation, and proved in sync three ways: builder present at generated-client.ts:259/:373; generator is a FIXED POINT (sha256 `9a4bed62...` identical before/after a second generate); and contract-digest.test.ts, which DERIVES the digest, is green UNEDITED (`Tests 4 passed`) — DoD-2's own discriminator. Mirror census re-run against the CURRENT digest found all four already rotated, and all three hist"
+  "completionSummary": "release.decide is on the shared runtime contract with its 3 refusal codes and a closed code->layer map. 6 paths: 3 NEW (release-decide-contracts .ts/.js/.test.ts, 112/1/171 lines) + runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts.\n\nDoD-1 KIND + BOTH COUPLED PINS. `release.decide` inserted at the sorted seam (recovery.reconcile_external < release.decide < replan.propose_unblock). Sort proved mechanically, not by eye: tuple extracted and diffed against `LC_ALL=C sort` => empty, 0 dupes, kind present once. Both pins reconciled from PRINTED expected-vs-received, never from the plan: (a) toEqual red `expected [...(109)] to deeply equal [...(108)]` with a one-line `+ \"release.decide\"` delta at :106 -> added to EXPECTED_COMMAND_KINDS; (b) size pin then red `expected 110 to be 109` at :108 -> literal AND its comment set to 110. Final: tuple 110 entries.\nCOUNT MOVED FOUR TIMES UNDER ME (109 -> 108 -> 110, peer transiently wrote 109 back): a concurrent row (repository.bootstrap, task-c2b5a9f0) edits these exact lines. Freezing any literal would have been wrong. NOTE FOR QA: my first final-verification run caught the file MID-WRITE and went red; the next read was consistent and green. Re-run once before believing a red on these two files.\n\nDoD-2 REGENERATED, NEVER HAND-EDITED. `pnpm --filter @moe/control-room-client generate`, exit 0, one file written. OLD and NEW digest are the SAME value `f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd` because the peer regenerated after my vocabulary edit landed — reported honestly rather than manufacturing a rotation, and proved in sync three ways: builder present at generated-client.ts:259/:373; generator is a FIXED POINT (sha256 `9a4bed62...` identical before/after a second generate); and contract-digest.test.ts, which DERIVES the digest, is green UNEDITED (`Tests 4 passed`) — DoD-2's own discriminator. Mirror census re-run against the CURRENT digest found all four already rotated, and all three hist",
+  "touchedFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "apps/daemon/src/release/release-decide-contracts.js",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "apps/daemon/src/release/release-decide-contracts.test.ts",
+    "apps/daemon/src/release/release-decide-contracts.ts",
+    "packages/control-room-client/src/generated/generated-client.ts"
+  ],
+  "completedAt": "2026-09-05T23:06:07.011Z",
+  "reviewCompletedAt": "2026-09-05T23:06:07.011Z",
+  "reviewSummary": "APPROVED. 6/6 DoD verified at HEAD; both drill arms RE-DRILLED BY ME. Full evidence: comment-d858cf18.\n\nCommit 0aeb0cf5 (3 release files); contracts/client edits under peer sweep c4143694 as disclosed, so I verified by RUNNING THE TREE.\n\nDoD-1: HEAD a9e09ebb tuple 115 == EXPECTED_COMMAND_KINDS 115 == commands.size 115; toEqual byte-identical; ascending; release.decide at the sorted seam.\nDoD-2: re-ran the generator myself, SHA256 9A4BED62 identical before/after = fixed point, so no hand edit; contract-digest.test.ts derives, green UNEDITED.\nDoD-3: 13/13 isolated; releaseRefusal.length===1, no layer param; per-code arms pin code AND layer.\nDoD-4: values read at declarations - PROJECT_REDUCER_LAYER (roster:306), GOAL_PREREQUISITE_LAYER=\"DAEMON_PREREQUISITE\" (:238), RUNNER_WORKSPACE_LAYER (:323). Ran DECLARATION_PATTERN against RELEASE_DECIDE_CODE_LAYER_MAP: no match, nor PRIVATE_DECLARATION_PATTERN, so test:security's conditional correctly never fires.\nDoD-5: (a) delete release.decide -> :106 toEqual RED, `- \"release.decide\"`. (b) RELEASE_PR_FAILED->\"PROJECT_REDUCER\" -> per-code arm RED, Expected \"RUNNER_WORKSPACE\" Received \"PROJECT_REDUCER\". Restored; SHA256 proven in calls SEPARATE from the restore.\nDoD-6: daemon 451 passed (468); root 415 passed|2 skipped (431); control-room 154 passed (155); typecheck 1 error.\n\nEvery red foreign: typecheck error is in `?? preview-runner.test.ts`; control-room scaffold = flake, 37/37 isolated; daemon ms-fails pass isolated except agent-wrapper-main (peer staffingFence WIP), rest are 30s timeouts. Failing INTERSECT owned = EMPTY. Epic rail 2 discharged: control-room run + exactly four digest mirrors censused.\n\nCaution: peer live-adding criterion_check.approve/verify + repository.recover, so worktree reds on commands.size 118 vs 115. HEAD self-consistent; not this row."
 }
