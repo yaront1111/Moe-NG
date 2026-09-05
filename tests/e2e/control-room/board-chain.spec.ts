@@ -301,13 +301,25 @@ interface ChainClick {
  * the seventh, on the wait that demands the card stay READY. Only the first of
  * those ever clicks approval.decide, so do not expect the daemon's own code in
  * the output - expect the named step and the board snapshot.
+ *
+ * POLICY BEFORE ACTIVATE (task-4b9c394d), and the prerequisite TABLE cannot tell
+ * you so: bootstrap-sequence.ts gives policy.install `Object.freeze([])` and lists
+ * only register + bind_repository + provider.probe under project.activate, so the
+ * daemon's sequence gate admits the reverse order and refuses one layer further
+ * in. The daemon now MINTS its activation witness from receipts it measures, and
+ * the policy receipt is the digest of the INSTALLED SLICE SET - with no slice
+ * installed there is nothing to measure and the whole activation fails closed
+ * with ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS. One install
+ * suffices, and it is version-safe: the install rides the `-policy` aggregate at
+ * 0 while the activate rides the project aggregate at 2, so no expectedVersion
+ * moves. The same reorder was forced on the seed's chain in demo-seed-plan.ts.
  */
 const CHAIN: readonly ChainClick[] = [
   { becomes: "COMMITTED", kind: "project.register" },
   { becomes: "COMMITTED", kind: "project.bind_repository" },
   { becomes: "COMMITTED", kind: "provider.probe" },
-  { becomes: "COMMITTED", kind: "project.activate" },
   { becomes: "COMMITTED", kind: "policy.install" },
+  { becomes: "COMMITTED", kind: "project.activate" },
   { becomes: "READY", kind: "goal.create", renewsAggregate: true },
   { becomes: "READY", keepsBlocked: "approval.decide", kind: "plan.propose" },
   { becomes: "COMMITTED", kind: "plan.propose" },

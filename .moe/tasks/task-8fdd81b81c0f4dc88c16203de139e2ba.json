@@ -150,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:19:20.564Z",
-  "updatedAt": "2026-09-05T01:59:35.424Z",
+  "updatedAt": "2026-09-05T01:59:45.176Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:23:08.915Z",
     "plannedStepCount": 7,
@@ -209,7 +209,8 @@
     "README.md",
     "docs/agent-stack-runbook.md",
     ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
-    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json"
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
   ],
   "completionSummary": "DELIVERED: DoD 1, 4 and 5 in full; DoD 2 partially (through the real decoders, with one disclosed projection); DoD 3 NOT delivered, because a committed close is unreachable at HEAD. ZERO production files changed in any package — tests, one recorded fixture, and docs only (task rail 1 proven: filtering my 7 paths for ^apps/daemon/src returns none).\n\nTHE ROW'S REAL FINDING. The live drive worked and exposed a shipped defect: ONE /affordances/read frame carries BOTH `steps[goal.close].status === \"BLOCKED\"` AND a live `goal.close` offer. `affordance-planning-offers.ts:170-178` gates the OFFER on criteria readiness only; `bootstrap-services.ts:257-260` + `bootstrap-sequence.ts:22` gate the COMMAND on a committed `approval.decide` and refuse first. UnAI has COMMITTED=0 for `approval.decide` (its goals came through the browser's `approval.decide_intent` path), so every n/n-verified goal is advertised with a Close that answers BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE — a generic code naming nothing about goals. This is the \"dead button\" the plan's risk section named, live. Filed as task-ebbcbdb4967748daa84f314b39bd3960 (PLANNING, HIGH) per task rail 1, not patched here.\n\nDoD 4 (live drive) — DONE, honest branch, comment-41108de3b6b44efc844fec78a522bcee. Real daemon on the live UnAI store, real built bundle, operator-stdin pairing, real chromium. Needs you read \"2 decisions need you\" and rendered two READY_TO_CLOSE cards WITH Close; the two-step arm worked; the card rendered TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT verbatim, and the same offer dispatched without the client timeout got the daemon's own 422 in 212 ms. Coverage 10/10 VERIFIED so there are NO unverified criterion ids to list. NO GoalCompleted id is reported because none was minted — nothing was fabricated.\n\nDoD 1 — DONE. Both card states over the SAME coverage, moving only the offer (negative arm uses an offer targeting a DIFFERENT goal, so matching is by target not by count); fixtures repla",
   "commits": [
@@ -240,6 +241,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "923ca8c5cb0bd6f3c4cefc4f96cbff1d4b8b13ac",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T01:52:54Z",
+      "paths": [
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T01:59:45.176Z",
+      "treeId": "cf6cb334a6f0d09d5263169d35db3ad8b87a0f17",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -254,9 +271,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-05T00:24:40Z",
-    "at": "2026-09-05T01:52:44.304Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T01:52:54Z",
+    "at": "2026-09-05T01:59:45.176Z"
   },
   "completedAt": "2026-09-05T01:59:35.424Z",
   "reviewCompletedAt": "2026-09-05T01:59:35.424Z",

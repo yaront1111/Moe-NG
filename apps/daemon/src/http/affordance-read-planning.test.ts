@@ -5,6 +5,17 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import {
+  GOAL_ID as REJECT_GOAL,
+  PROJECT_ID as REJECT_PROJECT,
+  approveGate1,
+  boundWorld,
+  closeStores,
+  committedRevision,
+  rejectedWorld,
+  submit,
+} from "../planning/plan-reject-test-fixtures.js";
+
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
   CLASSIFYING_POLICY_SLICE,
@@ -902,5 +913,79 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
       nodes: [NODE], offers: [offer], principalId: PRINCIPAL,
       planningGoalRefs: { [offer.targetAggregateId]: ALPHA_GOAL },
     }))).toEqual([offer.targetAggregateId]);
+  });
+});
+
+/**
+ * THE REJECT JOURNEY OVER A REAL STORE, driven end to end by production commands: a PRD-bound
+ * goal, a committed revision, Gate 1 approved by a real paired session, the compiler's own
+ * INITIAL chain to PLAN_REVIEW, then `approval.decide_intent` REJECT.
+ *
+ * Every assertion is SET-EQUALITY on the offer targets for a kind, never `toContain`: the defect
+ * this closes is an offer that should have DISAPPEARED, and a subset assertion is blind to it.
+ */
+describe("after a REJECT the surface follows the goal's successor run", () => {
+  // Each world is an ephemeral store registered by the fixture's own `openStore`; this releases
+  // every one of them, and runs alongside this file's other afterAll rather than replacing it.
+  afterAll(closeStores);
+
+  function portOver(world: SqliteEventStore) {
+    let issued = 0;
+    const bound = createAffordancePort({
+      mintId: () => `reject-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    });
+    return (kind: string): string[] => {
+      const result = bound.readSurface();
+      if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+      return result.nextAllowedCommands
+        .filter((entry) => entry.commandKind === kind)
+        .map((entry) => entry.targetAggregateId)
+        .sort();
+    };
+  }
+
+  function refsOver(world: SqliteEventStore): Readonly<Record<string, string>> {
+    let issued = 0;
+    const result = createAffordancePort({
+      mintId: () => `reject-refs-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    }).readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result.planningGoalRefs;
+  }
+
+  it("offers the approval kinds on the compiled run BEFORE the reject", () => {
+    // The CONTROL for every arm below: without it, "no decide_intent after the reject" could be
+    // green because this world never offered one at all.
+    const world = boundWorld();
+    const ref = committedRevision(world);
+    approveGate1(world, ref);
+    const sealed = submit(world, ref);
+    if (!sealed.ok) throw new Error(`submit refused: ${sealed.code} @ ${sealed.layer}`);
+    const targets = portOver(world);
+    expect(targets("approval.decide_intent")).toEqual([sealed.runId]);
+    expect(targets("approval.decide")).toEqual([sealed.runId]);
+    expect(refsOver(world)).toEqual({ [sealed.runId]: REJECT_GOAL });
+  });
+
+  it("WITHHOLDS both approval kinds for the rejected run and offers the compiler instead", () => {
+    const world = rejectedWorld("needs two nodes, not one");
+    const targets = portOver(world.store);
+    // The card the operator just acted on is GONE — not merely re-pointed, and not still there
+    // beside a new one: a stale decide_intent is a dispatch the daemon would refuse.
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("approval.decide")).toEqual([]);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+  });
+
+  it("binds the SUCCESSOR run to the goal, and the rejected run to nothing", () => {
+    const world = rejectedWorld("the second slice is missing");
+    expect(world.successorRunId).not.toBe(world.originalRunId);
+    // EXACT map. The rejected run's key must be absent, or the surface's authority map still
+    // binds a run nobody may act on to this goal.
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
   });
 });
