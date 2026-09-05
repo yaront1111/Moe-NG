@@ -20,6 +20,7 @@ import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-
 import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
 import { LiveContractDossier } from "./goals/contract-dossier.js";
+import { LiveDesign } from "./goals/design-card.js";
 import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -34,6 +35,7 @@ import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
+import { useAdvancedFrames } from "./shell/advanced-frames.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import { boardRoute } from "./shell/shell-routes.js";
 import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
@@ -174,6 +176,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     ? DETACHED_HEALTH
     : (): Promise<HealthOutcome> => readHealth(attached.headers)), [attached]);
   const health = useOpsRead(healthReader, HEALTH_FAILURE, PAUSE_POLL_MS, undefined);
+  // The raw reads the Advanced panel renders. Fetched HERE, at the composition
+  // root, because the panel lives in the shell frame and every screen is inside
+  // it: a panel handed no frames renders a load that never completes, which is a
+  // served read no operator can reach. Unattached this reads nothing at all.
+  const advanced = useAdvancedFrames(attached);
   // A refused or errored answer reads as NO PAUSE KNOWN. Keeping the last pause
   // alive past the read that failed to confirm it would be state this app invented.
   const paused = health.outcome !== null && health.outcome.status === "HEALTH"
@@ -299,6 +306,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
                 readGate={readGate ?? undefined}
               />
             )}
+            <LiveDesign goalRef={open.goalId} headers={attached.headers} />
           </div>
           {/* The plan stays in the open while it waits for a decision; once decided (or not
               yet proposed) it folds, so the board and the decisions come first. */}
@@ -430,6 +438,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     <ProviderPauseProvider value={paused}>
       <CordumShell
         activeNav={view}
+        advancedEvents={advanced.events}
+        advancedGraph={advanced.graph}
         answeredAtMs={answeredAtMs}
         backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
           : view === "policy" ? "Policy" : view === "health" ? "Health"

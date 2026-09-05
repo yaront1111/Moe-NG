@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -106,9 +106,9 @@ function proxiedPaths(): ReadonlySet<string> {
  * caught. Keep the pair edited together; nothing imports this file from the control-room,
  * so only `grep -rn DEV_PROXY_PATHS apps packages tools` finds this asserter.
  *
- * `/design/read`: recorded by task-7ca9dca3. Browser consumer / proxy pin is task-e9cb2442.
+ * `/design/read` is now proxied and consumed by the opened-goal Design card.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/design/read"]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -124,13 +124,27 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/design/read"]
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
  *
- * /graph/get was retired from this census by live-graph-get.ts: POST {}, CSRF
- * and the paired session already held, so no daemon bytes were added.
- * /design/read: no browser consumer yet; that is task-e9cb2442 (Design tab /
- * live decoder / proxy pin).
+ * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
+ * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
+ * only two hits for its name are prose in live-planning-run.ts:8,115 saying the
+ * discipline was copied from it. It is a dead module, so the ingest route has no
+ * reachable call site. Named here rather than special-cased; building the ingest
+ * control is a screen row, not this proof row (task rail 1).
+ * /budget/commitment/read: consumed ONLY by the retired v1 shell, which main.tsx
+ * reaches through `await import("./development-legacy-root.js")` inside the
+ * `DEVELOPMENT_BUILD` branch that main.tsx:28,47 documents as folded to `false`
+ * and eliminated from a production build. Reachable in a dev build, absent from
+ * the shipped artifact; the walk below measures the shipped one.
+ *
+ * /graph/get was retired from this census by live-graph-get.ts, whose readGraphGet
+ * is CALLED from the production entry's graph: cordum-app.tsx composes
+ * useAdvancedFrames (v2/shell/advanced-frames.ts), which fetches it and feeds the
+ * decoded frame to the Advanced panel. A `import type` referent would not count -
+ * that is exactly the hole the reachability walk closed.
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
-  "/design/read",
+  "/budget/commitment/read",
+  "/documents/ingest",
   "/events/resume",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
@@ -146,10 +160,23 @@ const PERMITTED_CONSUMED_NON_JSON_ROUTES: readonly string[] = Object.freeze([
   "/bootstrap", "/session/pair/claim", "/session/pair/open", "/session/pair/request",
 ]);
 
-const CONTROL_ROOM_SRC = fileURLToPath(new URL("../../../control-room/src", import.meta.url));
-const CLIENT_SRC = fileURLToPath(
-  new URL("../../../../packages/control-room-client/src", import.meta.url),
+/**
+ * CONSUMPTION IS MEASURED FROM THE PRODUCTION ENTRY'S MODULE GRAPH, not from a
+ * directory sweep. A sweep counts a route literal that sits in a module nothing
+ * loads, which is how `/graph/get` once left the census below on the strength of
+ * a constant in a file whose only referents were `import type` (erased by
+ * TypeScript, absent from the bundle). Reachability from `main.tsx` over VALUE
+ * edges is the seam that cannot be fooled that way.
+ */
+const CONTROL_ROOM_ENTRY = fileURLToPath(
+  new URL("../../../control-room/src/main.tsx", import.meta.url),
 );
+/** The one bare specifier this graph crosses; everything else in it is relative. */
+const CLIENT_PACKAGE = "@moe/control-room-client";
+const CLIENT_BARREL = fileURLToPath(
+  new URL("../../../../packages/control-room-client/src/index.ts", import.meta.url),
+);
+const DEV_PROXY_MODULE = "dev-proxy-paths.ts";
 
 function stripComments(source: string): string {
   let out = "";
@@ -191,35 +218,77 @@ function stripComments(source: string): string {
   return out;
 }
 
-function walkConsumerFiles(root: string): readonly string[] {
-  const names = readdirSync(root, { encoding: "utf8", recursive: true });
-  const files: string[] = [];
-  for (const name of names) {
-    const rel = name.replaceAll("\\", "/");
-    if (rel.includes(".test.")) continue;
-    if (rel.endsWith("dev-proxy-paths.ts")) continue;
-    if (!rel.endsWith(".ts") && !rel.endsWith(".tsx")) continue;
-    files.push(join(root, name));
+/**
+ * Every module specifier a source LOADS AT RUNTIME, comments already stripped.
+ *
+ * `import type` and `export type` statements are DELIBERATELY NOT EDGES: TypeScript
+ * erases them, so a module whose only referents are type-only is never in the
+ * bundle and cannot fetch anything. `import { type X, y }` IS an edge - the module
+ * still loads for `y`. Bare side-effect imports are edges.
+ *
+ * DYNAMIC `import()` IS NOT AN EDGE, and that is a measured choice rather than an
+ * oversight: this tree contains exactly ONE (main.tsx's `await import(
+ * "./development-legacy-root.js")`), it sits inside the `DEVELOPMENT_BUILD` branch
+ * that main.tsx:28,47 documents as folded to `false` and dropped by a production
+ * build, and following it certifies `/budget/commitment/read` as consumed by a
+ * shell no production artifact contains. The arm below pins that this stays the
+ * only one, so a real production dynamic import forces a revisit here.
+ */
+function importSpecifiers(stripped: string): readonly string[] {
+  const specifiers: string[] = [];
+  const patterns = [
+    /(?:^|[\s;})])(?:import|export)\s+(?!type\s)[^;]*?\sfrom\s*"([^"]+)"/gu,
+    /(?:^|[\s;}])import\s*"([^"]+)"/gu,
+  ];
+  for (const pattern of patterns) {
+    for (const hit of stripped.matchAll(pattern)) {
+      if (hit[1] !== undefined) specifiers.push(hit[1]);
+    }
   }
-  return files;
+  return specifiers;
+}
+
+/** Relative `.js` specifiers name `.ts`/`.tsx` sources; the one bare specifier is the client barrel. */
+function resolveSpecifier(fromFile: string, specifier: string): string | null {
+  if (specifier === CLIENT_PACKAGE) return CLIENT_BARREL;
+  if (!specifier.startsWith(".")) return null;
+  const base = resolve(dirname(fromFile), specifier).replace(/\.js$/u, "");
+  const candidates = [`${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
 type ConsumerScan = {
+  readonly dynamicImportSites: readonly string[];
   readonly filesWalked: number;
+  readonly modules: ReadonlySet<string>;
   readonly paths: ReadonlySet<string>;
 };
 
 function scanConsumers(): ConsumerScan {
-  const files = [...walkConsumerFiles(CONTROL_ROOM_SRC), ...walkConsumerFiles(CLIENT_SRC)];
+  const modules = new Set<string>();
   const paths = new Set<string>();
-  for (const file of files) {
+  const dynamicImportSites: string[] = [];
+  const pending = [CONTROL_ROOM_ENTRY];
+  while (pending.length > 0) {
+    const file = pending.pop() ?? "";
+    if (modules.has(file)) continue;
+    modules.add(file);
     const stripped = stripComments(readFileSync(file, "utf8"));
-    for (const hit of stripped.matchAll(/"(\/[^"]*)"/gu)) {
-      const path = hit[1];
-      if (path !== undefined) paths.add(path);
+    if (/import\s*\(/u.test(stripped)) dynamicImportSites.push(file.replaceAll("\\", "/"));
+    // The dev proxy is Vite config, not a fetch: a route listed there is proxied,
+    // never consumed. It is unreachable from the entry today; the skip keeps that
+    // true if a production module ever imports the list for another purpose.
+    if (!file.endsWith(DEV_PROXY_MODULE)) {
+      for (const hit of stripped.matchAll(/"(\/[^"]*)"/gu)) {
+        if (hit[1] !== undefined) paths.add(hit[1]);
+      }
+    }
+    for (const specifier of importSpecifiers(stripped)) {
+      const next = resolveSpecifier(file, specifier);
+      if (next !== null && !modules.has(next)) pending.push(next);
     }
   }
-  return { filesWalked: files.length, paths };
+  return { dynamicImportSites, filesWalked: modules.size, modules, paths };
 }
 
 function consumedPaths(): ReadonlySet<string> {
@@ -353,6 +422,38 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(stripComments('const x = "/events/resume";')).toContain('"/events/resume"');
     expect(stripComments('// "/events/resume"\nconst y = 1;')).not.toContain("/events/resume");
     expect(stripComments('/* "/graph/get" */ const z = 1;')).not.toContain("/graph/get");
+  });
+
+  it("walks VALUE edges only, so a type-only referent never marks a module consumed", () => {
+    // THE CONTROL FOR THE FIX. `/graph/get` was certified consumed while its module's
+    // only referents were `import type`, which TypeScript erases: the literal shipped in
+    // nothing. These pin the erasure rule at the extractor rather than at the graph, so
+    // the arm cannot go quiet the way the sweep it replaced did.
+    expect(importSpecifiers('import type { X } from "./a.js";')).toStrictEqual([]);
+    expect(importSpecifiers('export type { X } from "./a.js";')).toStrictEqual([]);
+    expect(importSpecifiers('import { x } from "./a.js";')).toStrictEqual(["./a.js"]);
+    expect(importSpecifiers('import { type X, y } from "./a.js";')).toStrictEqual(["./a.js"]);
+    expect(importSpecifiers('export * from "./a.js";')).toStrictEqual(["./a.js"]);
+    expect(importSpecifiers('import "./a.js";')).toStrictEqual(["./a.js"]);
+    expect(importSpecifiers('import typeOf from "./a.js";')).toStrictEqual(["./a.js"]);
+
+    // Reachability, not a directory sweep: the dev proxy list is Vite config that no
+    // production module imports, so it is absent from the graph entirely. Under the old
+    // sweep it was present and had to be skipped by filename.
+    const scan = scanConsumers();
+    expect([...scan.modules].some((file) => file.endsWith(DEV_PROXY_MODULE))).toBe(false);
+    expect(scan.modules.has(CLIENT_BARREL)).toBe(true);
+    expect([...scan.modules].some((file) => file.includes(".test."))).toBe(false);
+
+    // The single dynamic import this walk deliberately does not follow. If a second
+    // one appears, or this one moves out of the development-only branch, the choice
+    // documented at importSpecifiers has to be re-made rather than silently inherited.
+    expect(scan.dynamicImportSites).toStrictEqual([
+      CONTROL_ROOM_ENTRY.replaceAll("\\", "/"),
+    ]);
+    const entry = readFileSync(CONTROL_ROOM_ENTRY, "utf8");
+    expect(entry).toContain('await import("./development-legacy-root.js")');
+    expect(entry).toContain("const DEVELOPMENT_BUILD: boolean = import.meta.env.DEV;");
   });
 });
 

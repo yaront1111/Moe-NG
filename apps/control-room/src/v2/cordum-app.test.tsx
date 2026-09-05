@@ -42,6 +42,7 @@ beforeAll(() => {
 afterEach(() => {
   bootstrapPlane = "V1";
   commandHook = null;
+  eventPageHook = null;
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -98,6 +99,8 @@ function liveAttempts(
 let bootstrapPlane: "V1" | "V2" = "V1";
 /** Answers the transport's POST /command in the wired-app arms; null = not stubbed. */
 let commandHook: ((body: string) => unknown) | null = null;
+/** Answers the event feed's POST /events/read in the Advanced arm; null = not stubbed. */
+let eventPageHook: (() => unknown) | null = null;
 const BOOTSTRAP = Object.freeze({
   commandAuthorityPlane: "V1",
   csrfToken: "csrf-live",
@@ -191,6 +194,12 @@ const FEED_PROJECTION_CASES = Object.freeze([
 function handshakeResponse(input: string, init?: RequestInit): Promise<Response> {
   if (input === "/command" && commandHook !== null) {
     return Promise.resolve(jsonResponse(commandHook(String(init?.body ?? ""))));
+  }
+  if (input === "/events/read" && eventPageHook !== null) {
+    return Promise.resolve(jsonResponse(eventPageHook()));
+  }
+  if (input === "/events/ack" && eventPageHook !== null) {
+    return Promise.resolve(jsonResponse({ outcome: "ACKNOWLEDGED" }));
   }
   if (input === "/bootstrap") {
     return Promise.resolve(jsonResponse({ ...BOOTSTRAP, commandAuthorityPlane: bootstrapPlane }));
@@ -1434,5 +1443,117 @@ describe("the pause poll's cadence and its detached silence", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+  });
+});
+
+/**
+ * THE UNWIRED-PANEL REGRESSION. The Advanced panel shipped once with both shell
+ * props left at their null defaults, so the browser rendered a load that never
+ * completed and /graph/get was fetched by nothing - while advanced-view.test.tsx
+ * stayed green, because every arm there injects the frames directly. These arms
+ * render the APP, so the composition root is the thing under test.
+ */
+const ADVANCED_GRAPH_BODY = Object.freeze({
+  graphContentHash: "ab".repeat(32),
+  graphEpoch: 9,
+  ok: true,
+  planHash: "cd".repeat(32),
+  provenance: Object.freeze({ aggregateId: "agg-live", goalRef: "goal-live" }),
+  revisionId: "graph-revision-live",
+  snapshot: Object.freeze({
+    completionNodeKey: "node-ship",
+    edges: [],
+    nodes: [Object.freeze({ executionBearing: true, nodeKey: "node-ship" })],
+  }),
+  snapshotIdentity: "ef".repeat(32),
+});
+const ADVANCED_EVENT_PAGE = Object.freeze({
+  checkpoint: "checkpoint-live",
+  events: [Object.freeze({
+    aggregateId: "goal-live",
+    committedAt: "2026-09-05T12:00:00.000Z",
+    eventId: "evt-live-1",
+    eventType: "GoalCreated",
+    globalPosition: "12",
+  })],
+  nextCursor: Object.freeze({ generation: 1, position: "12" }),
+  outcome: "PAGE",
+});
+
+function advancedFetch(graph: () => Promise<Response>): ReturnType<typeof vi.fn> {
+  return vi.fn((input: unknown, init?: RequestInit) => {
+    const path = String(input);
+    if (path === "/graph/get") return graph();
+    return handshakeResponse(path, init);
+  });
+}
+
+describe("the composition root feeds the Advanced panel real frames", () => {
+  it("renders the daemon graph hash and event id the app itself fetched", async () => {
+    eventPageHook = () => ADVANCED_EVENT_PAGE;
+    const fetchMock = advancedFetch(
+      () => Promise.resolve(jsonResponse(ADVANCED_GRAPH_BODY)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CordumApp liveSetup={attachedSetup()} search="" />);
+
+    const toggle = await screen.findByTestId("cr.advanced.toggle");
+    // Closed by default even once the frames have arrived: DoD 3 asks for a toggle.
+    expect(screen.queryByTestId("cr.advanced.panel")).toBeNull();
+    await userEvent.setup().click(toggle);
+
+    // The EXACT bytes the stubbed daemon answered, not a placeholder. If cordum-app
+    // stops passing the props, these become cr.advanced.graph.pending and this reds.
+    expect((await screen.findByTestId("cr.advanced.graph.hash")).textContent)
+      .toBe(ADVANCED_GRAPH_BODY.graphContentHash);
+    expect(screen.getByTestId("cr.advanced.graph.revision").textContent)
+      .toBe("graph-revision-live");
+    expect(screen.getByTestId("cr.advanced.graph.epoch").textContent).toBe("9");
+    expect(screen.queryByTestId("cr.advanced.graph.pending")).toBeNull();
+
+    expect(await screen.findByTestId("cr.advanced.events.frame.evt-live-1")).toBeTruthy();
+    expect(screen.queryByTestId("cr.advanced.events.pending")).toBeNull();
+
+    // The route really was fetched by the app, not merely imported by it.
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === "/graph/get")).toBe(true);
+  });
+
+  it("renders the daemon refusal code verbatim rather than a stuck placeholder", async () => {
+    eventPageHook = () => Object.freeze({
+      code: "EVENTS_READ_FORBIDDEN", layer: "DAEMON_EVENT_STREAM", outcome: "REFUSED",
+    });
+    vi.stubGlobal("fetch", advancedFetch(() => Promise.resolve(jsonResponse({
+      code: "GRAPH_QUERY_FORBIDDEN", layer: "DAEMON_GRAPH_QUERY",
+    }))));
+
+    render(<CordumApp liveSetup={attachedSetup()} search="" />);
+
+    await userEvent.setup().click(await screen.findByTestId("cr.advanced.toggle"));
+
+    // The SPECIFIC code and the layer that refused, per global rail 1 - never just
+    // "it did not load", which is what a null prop would have rendered forever.
+    const graphRefusal = await screen.findByTestId("cr.advanced.graph.refusal");
+    expect(graphRefusal.textContent).toContain("GRAPH_QUERY_FORBIDDEN");
+    expect(graphRefusal.textContent).toContain("DAEMON_GRAPH_QUERY");
+    const eventsRefusal = await screen.findByTestId("cr.advanced.events.refusal");
+    expect(eventsRefusal.textContent).toContain("EVENTS_READ_FORBIDDEN");
+    expect(screen.queryByTestId("cr.advanced.graph.pending")).toBeNull();
+  });
+
+  it("reads neither raw route while the session is unattached", async () => {
+    const fetchMock = vi.fn(
+      (_input: unknown, _init?: RequestInit) => Promise.reject(new Error("no daemon on this origin")),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CordumApp liveSetup={prepareLiveSetup()} search="" />);
+    expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
+
+    await userEvent.setup().click(screen.getByTestId("cr.advanced.toggle"));
+    // Unattached there is no credential, so the panel says it is still reading
+    // rather than claiming an empty graph it never measured.
+    expect(screen.getByTestId("cr.advanced.graph.pending")).toBeTruthy();
+    expect(fetchMock.mock.calls.every(([input]) => String(input) !== "/graph/get")).toBe(true);
   });
 });

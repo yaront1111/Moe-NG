@@ -318,7 +318,7 @@ body:has(.cr2-shell) {
 
 .cr2-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   min-width: 0;
   /* A grid item's automatic minimum size is its content; without this the panel
    * refuses to shrink to the shell's row and pushes the strip off-screen. */
@@ -343,8 +343,22 @@ body:has(.cr2-shell) {
   grid-row: 3;
 }
 
-.cr2-shell .cr2-panel > .cr2-statusstrip {
+/* The forensic panel is SUBORDINATE to the work: stated below the stage, never
+ * auto-placed above it. Closed it is a single quiet control above the strip. */
+.cr2-shell .cr2-panel > .cr2-advancedslot {
   grid-row: 4;
+  /* A hairline, not a card: the panel butts straight onto the last row of work
+   * without it, so the toggle reads as part of the content it sits under. */
+  border-top: 1px solid var(--cr-line);
+  padding: 10px 20px 12px;
+  /* Forensic frames are unbounded (up to 250 event rows). Scroll INSIDE the slot,
+   * so opening the panel can never push the status strip off a short window. */
+  overflow-y: auto;
+  max-height: 40vh;
+}
+
+.cr2-shell .cr2-panel > .cr2-statusstrip {
+  grid-row: 5;
 }
 
 /* --------------------------------------------------------------- context bar - */

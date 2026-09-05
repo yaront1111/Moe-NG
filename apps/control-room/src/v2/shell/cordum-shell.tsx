@@ -192,7 +192,12 @@ export function CordumShell({
             </main>
             <ProofInspector onClose={keyboard.collapseInspector} open={proofOpen} payload={proof} />
           </div>
-          <AdvancedView events={advancedEvents} graph={advancedGraph} />
+          {/* Its OWN stated grid row. Every child of `.cr2-panel` names its row on
+              purpose (see cordum-shell.css); an unstated one is auto-placed above the
+              stage, which put this diagnostic panel over the operator's work. */}
+          <div className="cr2-advancedslot">
+            <AdvancedView events={advancedEvents} graph={advancedGraph} />
+          </div>
           <StatusStrip
             answeredAtMs={answeredAtMs}
             clockPresent={clockPresent}
