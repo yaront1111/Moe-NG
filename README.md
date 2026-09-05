@@ -116,12 +116,18 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-03,
 these are still missing or manual: a fresh project cannot be started from the
 browser alone (goal creation waits on the project activation chain, which the
-seed script or the wrapper drives); a multi-node goal is proven end to end only
-OFFLINE — as of 2026-09-05 the sealed 3-node graph, the parallel staffing, the
-`depends:` gate and the coverage close are exercised over real daemon, wrapper
-and agent processes in `tests/e2e/foundation/multi-node-graph.e2e.test.ts`, but
-no multi-node graph has yet been driven on a live project with a browser
-approval, and every graph on the live store is still single-node; there is
+seed script or the wrapper drives); a multi-node goal was driven on a live
+project on 2026-09-05 — a real `claude` planning seat sealed a five-node DAG,
+a human approved it in the browser, the two independent nodes were staffed on
+one pass while the rest waited on their dependencies, and two nodes landed as
+commits on that one goal — but three of the five landings refused
+`NOTHING_TO_COMMIT`, because every node of a goal shares one
+`MOE_NODE_WORKSPACE` and a later node's commit sweeps an earlier node's
+uncommitted paths, so the code lands and its attribution does not; the sealed
+graph, the parallel staffing, the `depends:` gate and the coverage close are
+exercised over real daemon, wrapper and agent processes in
+`tests/e2e/foundation/multi-node-graph.e2e.test.ts`, and the coverage close and
+its negative arm are proven only there, not on the lane; there is
 no working preview and no release gate, so the vision's Gates 2 and 3 do not
 exist yet; a Codex seat is wired but was last proven only to reach the API; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
