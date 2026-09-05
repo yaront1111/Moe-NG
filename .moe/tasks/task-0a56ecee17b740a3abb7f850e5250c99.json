@@ -1,0 +1,43 @@
+{
+  "id": "task-0a56ecee17b740a3abb7f850e5250c99",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Backup before migrate: the ordering, the receipt, and a restore that has actually been restored",
+  "description": "SPIDR child of task-78eedd8ebc2b43c581ac21ea28648a9a (architect-fa3a3e17, 2026-09-05), which measured far over the 10-file cap: it wanted a migration engine, a published command kind with full roster backfill, a real-PostgreSQL restore proof, three UI surfaces, a Playwright journey, a live drive and docs. This row is the ENGINE and the SAFETY PROPERTY. dependsOn child 1 (task-463f195efd2f4fd2886790029a474194, the migration tool) and child 2 (task-ff41c5c9efa34494b7b91e6f0ddcb7c2, the disposable-PostgreSQL lifecycle this reuses for the restore proof).\n\nWHAT THIS ROW OWNS: applying pending migrations AFTER a `pg_dump` backup; the `moe-migration-receipt/1` record; the MIGRATION_BACKUP_FAILED and MIGRATION_FAILED refusals; and the restore round trip. NO command kind (that is the sibling publish row), NO UI, NO Playwright, NO live drive - all the parent's.\n\nBACKUP BEFORE MIGRATE IS THE ORDER, and it is the only thing standing between a bad migration and lost production data. MIGRATION_BACKUP_FAILED must mean NOTHING IS APPLIED - a migration that ran after a failed backup is the exact scenario the receipt exists to make impossible. Assert the schema is UNTOUCHED on that path, not merely that a refusal was returned.\n\nA BACKUP NOBODY HAS RESTORED IS A FILE, NOT A SAFETY NET. That is why the restore round trip is in this row rather than deferred: the row that writes the backup is the row that must prove it can be read back.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-fa3a3e17:\n- `git grep -c \"migrate_down|MIGRATION_BACKUP_FAILED|moe-migration-receipt\" -- apps packages` returns NOTHING. No migration surface exists at all; the gap is real in every direction.\n- THE BACKUP LOCATION IS AN EXISTING CONVENTION BUT IT IS NOT EXPORTED: apps/daemon/src/bootstrap/activation-receipts-measure.ts:32-33 declares `const BACKUP_DIRECTORY = \".moe-next\"` and `const BACKUP_LEAF = \"backups\"` as MODULE-PRIVATE constants. Reusing them means exporting them (preferred - one definition) or, if that ripples, deriving the path from the same two literals with a comment naming that file as the source. Do NOT invent a second location: a second backup location is a second place to look during an incident.\n- THE RECEIPT SHAPE to mirror is apps/daemon/src/repository/publish-receipt-contracts.ts (`PUBLISH_RECEIPT_VERSION` :16, `PublishRefusal` :36, `PublishReceiptV1` :41), whose null-pairing discipline - exactly one of the success member and the refusal member populated - is what makes a REFUSED receipt unambiguous.\n- `internal.*` receipt kinds are OUTSIDE PAYLOAD_KEYS, the registry and the MCP roster entirely (`grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` = 0), so `moe-migration-receipt/1` costs NO roster backfill.\n\nCOMPOSE WITH THE DEPLOY ROW, DO NOT DUPLICATE IT: task-5d30948435524c6fa2789e1c033aafe7 owns the deploy path and is a SIBLING feature row, so no dependsOn is allowed. If the deploy path has not landed, ship this machinery behind its own entry point and say so plainly in the record.",
+  "definitionOfDone": [
+    "BACKUP-BEFORE-MIGRATE ORDERING asserted offline through injectable docker/pg ports: the `pg_dump` COMPLETES before the first migration runs, proven through the ports' recorded call ORDER rather than by inspection. Mutate the service to migrate-then-backup and confirm the arm goes RED - an ordering property that has never been seen red is not evidence.",
+    "MIGRATION_BACKUP_FAILED MEANS ZERO MIGRATIONS APPLIED, and the assertion reads the SCHEMA, not the return value: on that path the schema is byte-for-byte untouched. This is the row's central safety property and the one whose failure loses data that cannot be recovered. Assert code AND layer.",
+    "`moe-migration-receipt/1` records {environment, sha, applied[], backupRef, APPLIED|REFUSED(code)}, mirroring apps/daemon/src/repository/publish-receipt-contracts.ts including its null-pairing (exactly one of the success member and the refusal member populated). Read it back from a REAL store and assert every member. The backupRef carries the backup's sha256 and the file exists at `<project>/.moe-next/backups/<env>/<ts>.sql`.",
+    "THE BACKUP PATH REUSES THE EXISTING CONVENTION at apps/daemon/src/bootstrap/activation-receipts-measure.ts:32-33 (`.moe-next` + `backups`), which is currently module-private - either export those constants or derive from the same literals with a comment naming that file. Assert the resulting path with a grep in the completion record. A second backup location is a rejection.",
+    "THE RESTORE ROUND TRIP IS PROVEN against a REAL disposable PostgreSQL from child 2's lifecycle: back up a known schema, change it, restore, and assert the schema matches the original. A backup that has never been restored in a test is a file, not a safety net.",
+    "MIGRATION_FAILED asserts code AND layer and NAMES THE FAILING MIGRATION FILE - a generic failure is undiagnosable from a receipt. On that path the receipt is REFUSED with the failing migration named and the backup still recorded.",
+    "EVERY disposable database, container, temp directory and child process is torn down on EVERY exit path including the throwing one (epic rail 4) - teardown in a `finally`, not after the assertions. Invoke `pg_dump`/`psql`/`docker` as bare executables under shell:false with argv arrays; never a hard-coded `.cmd`, never a shell string, never a chain.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` covers no apps/** file, so say that rather than quoting a bare root count line."
+  ],
+  "taskRails": [
+    "BACKUP BEFORE MIGRATE, ALWAYS. A failed backup means nothing is applied. This is the row's reason for existing and the one property whose failure loses data that cannot be recovered.",
+    "RESTORE MUST BE PROVEN, not assumed. The row that writes the backup is the row that proves it can be read back.",
+    "REUSE `.moe-next/backups` (activation-receipts-measure.ts:32-33). A second backup location is a second place to look during an incident.",
+    "NO COMMAND KIND. `deployment.migrate_down` and its roster backfill belong to the sibling publish row; no edit to daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, agent-spawn-contract.ts or packages/contracts.",
+    "NO UI, NO PLAYWRIGHT, NO LIVE DRIVE, NO DOCS - all belong to the parent task-78eedd8ebc2b43c581ac21ea28648a9a.",
+    "COMPOSE WITH THE DEPLOY ROW (task-5d309484), do not duplicate it. It is a SIBLING feature row so no dependsOn is allowed; if it has not landed, ship behind this row's own entry point and say so."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "dependsOn": [
+    "task-463f195efd2f4fd2886790029a474194",
+    "task-ff41c5c9efa34494b7b91e6f0ddcb7c2"
+  ],
+  "priority": "HIGH",
+  "order": 112.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:34:29.013Z",
+  "updatedAt": "2026-09-05T19:34:29.013Z"
+}

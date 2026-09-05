@@ -1,0 +1,41 @@
+{
+  "id": "task-537320eed95348dc9bc3afc879dc0563",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Publish deployment.migrate_down human-only, and prove it reverts the schema",
+  "description": "SPIDR child of task-78eedd8ebc2b43c581ac21ea28648a9a (architect-fa3a3e17, 2026-09-05), which measured far over the file cap. dependsOn the engine row task-0a56ecee17b740a3abb7f850e5250c99 for the receipt and backup machinery this records against.\n\nWHY THIS ROW IS SEPARATE: publishing one command kind on this board is a measured 13 forced edits, five of them invisible to a grep for the kind literal. Folding that into a row that also owns the migration engine, a real-PostgreSQL proof, three UI surfaces and a live drive is what pushed the parent past the cap.\n\nWHAT THIS ROW OWNS: `deployment.migrate_down` published HUMAN-ONLY and MCP-EXCLUDED with the full roster backfill and a bidirectional set-equality roster test, plus the proof that it actually reverts the last batch. NO UI, NO Playwright, NO live drive, NO docs - the parent's.\n\nREVERTING A PRODUCTION SCHEMA IS NEVER AN AGENT'S DECISION. That is why the kind is human-only, and why the fence is asserted on all three axes at once rather than one at a time.\n\nTHE CHEAP PATH, MEASURED 2026-09-05 - follow `repository.publish` and you touch neither the registry nor the allowlist:\n- `apps/daemon/src/goals/goal-services.ts:203` registers `\"repository.publish\": publishRepository` inside GOAL_HANDLERS (:199), and `daemon-command-registry.ts:194` composes its table by spreading `...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS`. So a GOAL_HANDLERS entry is SERVED WITH ZERO REGISTRY LINES. That matters: daemon-command-registry.ts is 449 lines, already past the 400 hard cap at the merge-base. Add nothing to it.\n- `apps/daemon/src/mcp-tool-allowlist.ts:78` DERIVES MCP_EXCLUDED_COMMAND_KINDS from `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind))`. Its own comment states the contract: a kind that becomes operator-only leaves the MCP roster with no edit there. So the fence is AUTOMATIC and lands in the same file and commit as PAYLOAD_KEYS - meaning no landed HEAD ever advertises the kind over MCP, which matters because the MCP port authenticates with the operator bootstrap credential.\n- The other `repository.publish` sites to mirror: daemon-command-vocabulary.ts:75 (family capability), :334 (PAYLOAD_KEYS), :376 (OPERATOR_PRINCIPAL_KINDS); bootstrap-contracts.ts:42 (kind list); bootstrap-sequence.ts:25 (prerequisites); agent-spawn-contract.ts:195 (HUMAN_ONLY_STEPS).\n- THE WELD: daemon-store-dependencies.test.ts:238 asserts registry keys equal `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`. It needs NO edit when this is done right; it reds if PAYLOAD_KEYS gains a kind whose handler is unregistered. Fix the wiring, never the assertion.\n\nCOUNTS THAT MOVE, all invisible to a grep for the kind (2026-09-05 readings - RE-MEASURE, a sibling kind-publishing row may move them first): daemon-command-registry.test.ts:862/:863/:870 (47) and :1040 OPERATOR_ONLY (12); daemon-command-registry-human-approver.test.ts:325,:326 (11); packages/contracts/src/runtime/runtime-contract.test.ts:35 hand-transcribed roster and :105 `commands.size).toBe(104)`.\n\nCENSUS THE CONTRACT DIGEST BY ITS HEX, NEVER BY ITS SYMBOL: three of the four mirrors hard-code the hex and never mention GENERATED_CONTRACT_DIGEST, and one is a `.tsx` a `*.ts`-only grep cannot see. At 2026-09-05: generated-client.ts:907, generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255.",
+  "definitionOfDone": [
+    "`deployment.migrate_down` is published in packages/contracts RUNTIME_COMMAND_KINDS at its SORTED position, the hand-transcribed roster in runtime-contract.test.ts is edited BY HAND (never replaced with a derived expectation), and the control-room client is REGENERATED - never hand-edited - with the OLD and NEW GENERATED_CONTRACT_DIGEST quoted. Census the digest mirrors BY HEX across ALL file types and update every transcribed one.",
+    "The kind is wired daemon-side following `repository.publish`: a GOAL_HANDLERS entry, the vocabulary's family/PAYLOAD_KEYS/OPERATOR_PRINCIPAL_KINDS sites, bootstrap-contracts and bootstrap-sequence. Add NOTHING to daemon-command-registry.ts, which is already past the 400-line cap and composes GOAL_HANDLERS by spreading.",
+    "PUBLISHED HUMAN-ONLY AND MCP-EXCLUDED, asserted on all THREE axes together per kind: present in OPERATOR_PRINCIPAL_KINDS, ABSENT from `wiredMcpToolKinds()`, and present in HUMAN_ONLY_STEPS. Assert MCP-exclusion against `wiredMcpToolKinds()` - the computed served-over-MCP surface - NOT against MCP_EXCLUDED_COMMAND_KINDS, which is derived from OPERATOR_PRINCIPAL_KINDS and would make the assertion circular and green with the fence broken.",
+    "A BIDIRECTIONAL SET-EQUALITY ROSTER TEST enumerating the SERVED kinds from the dispatch seam, not from the roster constant. Verify by deleting the entry from EACH side in turn and confirming BOTH deletions red - a test that iterates the roster shrinks its own iteration and stays green while a served capability vanishes from the advertised surface.",
+    "IT ACTUALLY REVERTS: `deployment.migrate_down` reverts the LAST BATCH and the receipt records the revert. Assert THE SCHEMA CHANGED BACK, not merely that the command returned - read the schema before and after and compare. An agent-authenticated dispatch is refused with its specific code AND the layer that refused.",
+    "Roster count literals are moved by re-running the leg and taking the PRINTED expected-vs-received as authoritative - do NOT freeze any count from this description into an assertion, because sibling kind-publishing rows move the same literals.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test`, and `pnpm --filter @moe/control-room test` - two digest mirrors live under apps/control-room and are invisible to the root lane, to typecheck and to the daemon leg."
+  ],
+  "taskRails": [
+    "`deployment.migrate_down` IS HUMAN-ONLY. Reverting a production schema is never an agent's decision.",
+    "ASSERT MCP-EXCLUSION AGAINST `wiredMcpToolKinds()`, never against MCP_EXCLUDED_COMMAND_KINDS - the latter is derived from OPERATOR_PRINCIPAL_KINDS, so asserting it alongside operator-only is circular and passes with the fence broken.",
+    "ADD NOTHING TO daemon-command-registry.ts (449 lines, already past the 400 cap at merge-base). Follow `repository.publish` into GOAL_HANDLERS, which the registry already spreads.",
+    "NEVER FREEZE A ROSTER COUNT. Run the leg and take the printed expected-vs-received as authoritative; sibling rows move the same literals.",
+    "CENSUS THE CONTRACT DIGEST BY ITS HEX, NEVER BY ITS SYMBOL - three of four mirrors never mention the symbol and one is a .tsx.",
+    "NO UI, NO PLAYWRIGHT, NO LIVE DRIVE, NO DOCS - all belong to the parent task-78eedd8ebc2b43c581ac21ea28648a9a."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "dependsOn": [
+    "task-0a56ecee17b740a3abb7f850e5250c99"
+  ],
+  "priority": "HIGH",
+  "order": 112.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:35:08.019Z",
+  "updatedAt": "2026-09-05T19:35:08.019Z"
+}
