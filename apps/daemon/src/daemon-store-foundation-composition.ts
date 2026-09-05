@@ -23,6 +23,7 @@ import {
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
 import { COMPILED_EXECUTION_REF_PREFIX } from "./orchestrator/compiled-execution-ref.js";
+import { isRepositoryWorkflowRef } from "./repository/repository-workflow-ref.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -35,6 +36,8 @@ import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import type { DesignReadInput } from "./design/design-store.js";
 import { readDesignRevision } from "./design/design-store.js";
 import type { DesignReadPort } from "./http/design-read.js";
+import type { EnvironmentsReadPort } from "./http/environments-read.js";
+import { readEnvironmentVariables } from "./environment/environment-store.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { NodeSpec } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
@@ -91,8 +94,10 @@ import { admitV2ActiveInstallation } from "./cutover/cutover-v2-authority.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
 import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
+import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wiring.js";
 
 export interface StoreDependencyConfig {
+  readonly repositoryWorkspace?: string | null;
   /** Optional deterministic command identity source for bounded harness composition. */
   readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
@@ -129,6 +134,7 @@ function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
         };
         if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
           && !parsed.nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)
+          && !isRepositoryWorkflowRef(parsed.nodeRef)
           && typeof parsed.title === "string") {
           // A file-authored spec carries no sealed build order — this format has
           // no dependency field to read — so it declares none rather than
@@ -163,6 +169,9 @@ export function createStoreDependencies(
   // A long-lived handle keeps its decoded decision ledger: every read model over it tops up
   // from the last position instead of re-walking the whole ledger per request.
   enrollDecisionLedgerMemo(store);
+  const repositoryWorkspace = config.repositoryWorkspace === undefined ? process.env["MOE_NODE_WORKSPACE"] ?? null : config.repositoryWorkspace;
+  const workflows = createRepositoryWorkflowWiring({ store, projectId: config.projectId, storePath: config.storePath,
+    workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, nodeSpecsDir: config.nodeSpecsDir, clock });
   const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
     catalogSource: foundation.foundationCatalogSource,
     clock,
@@ -178,6 +187,8 @@ export function createStoreDependencies(
   });
   const cutoverWiring = cutoverActivationWiringOf(config.cutoverEvidenceRoot);
   const { decisions, registry } = createDaemonCommandPorts({
+    criterionEvidence: workflows.criterionEvidence, repositoryRecovery: workflows.repositoryRecovery,
+    readPublicationCandidate: workflows.readPublicationCandidate,
     clock,
     ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,
@@ -349,6 +360,29 @@ export function createStoreDependencies(
   });
 
   /**
+   * The per-environment variable table, read. Delegates WHOLE to child 1's
+   * `readEnvironmentVariables`, which resolves the credential, proves the existing seals open,
+   * folds the aggregate and projects `{name, isSet, fingerprintSha256, updatedAt}`. Nothing is
+   * re-derived here: a second read path would be a second place a value could be assembled.
+   *
+   * The credential is the SAME `MOE_DAEMON_CREDENTIAL` the operator plane authenticates with
+   * (daemon-store-dependencies.ts:42), handed in as a THUNK because `resolveCredential` treats a
+   * throw as an absent key rather than letting an error naming a credential path escape. An
+   * empty string is ABSENT, so a daemon booted without it answers ENV_STORE_KEY_UNAVAILABLE
+   * instead of listing an environment it cannot actually decrypt.
+   *
+   * `projectId` IS bound here, unlike the design read's deliberate omission: the environment
+   * aggregate id is `environment/<projectId>/<name>`, so the project is the composition root's
+   * own fact and there is no request field that could name another one.
+   */
+  const environmentReads = (): EnvironmentsReadPort => Object.freeze({
+    read: (input: { readonly environment: string }) => readEnvironmentVariables(
+      { credential: () => config.credential, now: clock, projectId: config.projectId, store },
+      input.environment,
+    ),
+  });
+
+  /**
    * The pending-plan read and the operator document ingest, both bound to this root's own store
    * and project - the only place those are FACTS rather than request input. The ingest mints its
    * correlation id and decision time per call, here, for the same reason.
@@ -386,7 +420,6 @@ export function createStoreDependencies(
   const composedAt = (config.clock ?? (() => new Date().toISOString()))();
   // This is the wrapper's configured compiled-workspace binding, captured for this daemon.
   // No CWD fallback: an unconfigured or spec-only workspace remains UNKNOWN on Health.
-  const repositoryWorkspace = process.env["MOE_NODE_WORKSPACE"];
   const repositoryExecution = createRepositoryExecutionPort();
   const health = (): HealthReadPort => createHealthReadPort({
     // The SAME clock every authority decision reads, so a provider pause and the decisions the
@@ -395,7 +428,7 @@ export function createStoreDependencies(
     nodeSpecsDir: config.nodeSpecsDir ?? null,
     projectId: config.projectId,
     readPlane: () => commandAuthorityPlane().readPlane(),
-    readRepository: repositoryWorkspace === undefined || repositoryWorkspace === ""
+    readRepository: repositoryWorkspace === null || repositoryWorkspace === ""
       ? undefined : () => repositoryExecution.inspect(repositoryWorkspace),
     startedAt: composedAt,
     store,
@@ -416,7 +449,7 @@ export function createStoreDependencies(
   });
   /** The remote the first publish bound for this project, at this root clock. */
   const repositoryRemote = (): RepositoryRemoteReadPort =>
-    createRepositoryRemoteReadPort({ clock, projectId: config.projectId, store });
+    createRepositoryRemoteReadPort({ clock, projectId: config.projectId, store, readPublicationCandidate: workflows.readPublicationCandidate });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
@@ -514,6 +547,7 @@ export function createStoreDependencies(
     documentCoverage,
     documentDossiers,
     documentIngest,
+    environmentReads,
     graph,
     goalCatalog,
     goalSource,
@@ -528,6 +562,7 @@ export function createStoreDependencies(
     provideV2,
     reconciliation,
     repositoryRemote,
+    repositoryWorkflows: workflows.repositoryWorkflows,
     runs,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,

@@ -32,8 +32,10 @@ import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
 import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "./repository-remote-read.js";
+import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
+import { ENVIRONMENTS_READ_PATH, handleEnvironmentsReadRequest } from "./environments-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
 } from "./http-listener-guards.js";
@@ -89,8 +91,11 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   ACTIVITY_READ_PATH,
   SESSIONS_READ_PATH,
   REPOSITORY_REMOTE_READ_PATH,
+  CRITERIA_READ_PATH,
+  REPOSITORY_RECOVERY_READ_PATH,
   GOAL_SOURCE_READ_PATH,
   DESIGN_READ_PATH,
+  ENVIRONMENTS_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -111,6 +116,15 @@ function serveDocumentDossier(
     refuseRequest(response, result.code);
     return;
   }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveRepositoryWorkflow(response: ServerResponse, request: IncomingMessage, options: StartListenerOptions,
+  body: Uint8Array, workflow: "CRITERIA" | "RECOVERY"): void {
+  const result = handleRepositoryWorkflowReadRequest(workflow, {
+    authenticator: options.deps.authenticator, repositoryWorkflows: options.repositoryWorkflows,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
   reply(response, result.httpStatus, result.body);
 }
 
@@ -371,6 +385,21 @@ function serveDesign(
   reply(response, result.httpStatus, result.body);
 }
 
+/**
+ * The per-environment variable table. The port answer travels VERBATIM at 200 for the same
+ * reason the design read's does: reshaping here is where a field nobody named would come from,
+ * and on this route that field could carry a secret.
+ */
+function serveEnvironments(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleEnvironmentsReadRequest({
+    authenticator: options.deps.authenticator, environmentReads: options.environmentReads,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveDocumentIngest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -473,12 +502,22 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID");
     return;
   }
+  if (path === CRITERIA_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_CRITERIA_REQUEST_INVALID"); return;
+  }
+  if (path === REPOSITORY_RECOVERY_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID"); return;
+  }
   if (path === GOAL_SOURCE_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
     return;
   }
   if (path === DESIGN_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_DESIGN_REQUEST_INVALID");
+    return;
+  }
+  if (path === ENVIRONMENTS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ENVIRONMENTS_REQUEST_INVALID");
     return;
   }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
@@ -531,6 +570,10 @@ export async function serveReadDispatch(
     serveSessions(response, request, options, body);
   } else if (path === REPOSITORY_REMOTE_READ_PATH) {
     serveRepositoryRemote(response, request, options, body);
+  } else if (path === CRITERIA_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "CRITERIA");
+  } else if (path === REPOSITORY_RECOVERY_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "RECOVERY");
   } else if (path === GOAL_SOURCE_READ_PATH) {
     serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
@@ -553,5 +596,7 @@ export async function serveReadDispatch(
     serveSessionChallengeOperands(response, request, options, body);
   } else if (path === DESIGN_READ_PATH) {
     serveDesign(response, request, options, body);
+  } else if (path === ENVIRONMENTS_READ_PATH) {
+    serveEnvironments(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }

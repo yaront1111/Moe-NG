@@ -16,8 +16,10 @@ import type { HealthReadPort } from "./health-read.js";
 import type { ActivityReadPort } from "./activity-read.js";
 import type { SessionsReadPort } from "./sessions-read.js";
 import type { RepositoryRemoteReadPort } from "./repository-remote-read.js";
+import type { RepositoryWorkflowReadPort } from "./repository-workflow-read.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { DesignReadPort } from "./design-read.js";
+import type { EnvironmentsReadPort } from "./environments-read.js";
 import type {
   ProductContractV2CurrentReadPort,
 } from "./product-contract-v2-current-read.js";
@@ -152,10 +154,13 @@ export interface StartListenerOptions {
   readonly sessions?: SessionsReadPort;
   /** Absent means the repository-remote read refuses as unavailable. */
   readonly repositoryRemote?: RepositoryRemoteReadPort;
+  readonly repositoryWorkflows?: RepositoryWorkflowReadPort;
   /** Absent means the goal-source (PRD text) read refuses as unavailable. */
   readonly goalSource?: GoalSourceReadPort;
   /** Absent means the design-revision read refuses as unavailable. */
   readonly designReads?: DesignReadPort;
+  /** Absent means the per-environment variable-table read refuses as unavailable. */
+  readonly environmentReads?: EnvironmentsReadPort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */

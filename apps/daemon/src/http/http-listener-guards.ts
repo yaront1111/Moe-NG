@@ -85,12 +85,20 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_SESSIONS_UNAVAILABLE",
   // The project's bound git remote: same transport pair, one line to hold the file at its cap.
   "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID", "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE",
+  "LISTENER_CRITERIA_REQUEST_INVALID", "LISTENER_CRITERIA_UNAVAILABLE",
+  "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID", "LISTENER_REPOSITORY_RECOVERY_UNAVAILABLE",
   // The goal-source (PRD text) read: same transport pair.
   "LISTENER_GOAL_SOURCE_REQUEST_INVALID",
   "LISTENER_GOAL_SOURCE_UNAVAILABLE",
   // The design-revision read: same transport pair.
   "LISTENER_DESIGN_REQUEST_INVALID",
   "LISTENER_DESIGN_UNAVAILABLE",
+  // The per-environment variable table: same transport pair. REQUEST_INVALID covers a non-POST
+  // and any body that is not exactly `{environment}`; an environment NAME this project does not
+  // have is NOT here, because that caller is refused by the store's own ENV_ENVIRONMENT_UNKNOWN
+  // at its own layer instead.
+  "LISTENER_ENVIRONMENTS_REQUEST_INVALID",
+  "LISTENER_ENVIRONMENTS_UNAVAILABLE",
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
@@ -222,6 +230,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_ENVIRONMENTS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_ENVIRONMENTS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;

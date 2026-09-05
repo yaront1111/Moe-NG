@@ -293,6 +293,35 @@ describe("createStoreDependencies", () => {
   });
 
   /**
+   * The environments read, resolved through the REAL composition root
+   * (task-ef76a7f4523d46f48a2f9eb19595e801). A fresh project has set no variable, so the honest
+   * answer is the EMPTY TABLE at ok:true -- NOT a refusal, because "no variables yet" must stay
+   * distinguishable from "wrong credential". Unlike the design read, `projectId` IS bound at
+   * composition time: the aggregate id is `environment/<projectId>/<name>`, a composition-root
+   * fact with no request field that could name another project.
+   *
+   * NO VALUE arm at this layer too: the port is the one production ships, so serializing its
+   * answer and searching for the seeded plaintext is a check on the shipped read path, not on a
+   * handler wrapper.
+   */
+  it("provides an environments read port that answers the empty table with no value", () => {
+    const port = provider.environmentReads?.();
+    expect(port).toBeDefined();
+    if (port === undefined) return;
+
+    expect(port.read({ environment: "preview" }))
+      .toStrictEqual({ environment: "preview", ok: true, variables: [] });
+    // The store's scope authority answers, at its own layer.
+    expect(port.read({ environment: "staging" })).toStrictEqual({
+      code: "ENV_ENVIRONMENT_UNKNOWN",
+      detail: "the environment named is not one this project has",
+      layer: "SCOPE",
+      ok: false,
+    });
+    expect(JSON.stringify(port.read({ environment: "preview" }))).not.toContain(CREDENTIAL);
+  });
+
+  /**
    * The design read, resolved through the REAL composition root. A fresh project has appended
    * no revision, so the honest answer is `DESIGN_REVISION_ABSENT` at the LEDGER layer -- the
    * LAYER is asserted with the code because the same code minted at another layer would mean a
@@ -753,7 +782,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "activation", "activity", "affordances", "budgetCommitment", "commandAuthorityPlane",
         "designReads", "documentCoverage",
         "documentDossiers",
-        "documentIngest", "goalCatalog", "goalSource",
+        "documentIngest", "environmentReads", "goalCatalog", "goalSource",
         "graph", "health",
         "pairingOpenSessions",
         "planningRuns", "policy", "productContractGate1", "productContractPending",
@@ -962,6 +991,9 @@ describe("the composed affordance port carries planning authority (task-ed89967f
     writeFileSync(join(nodeSpecsDir, "forged-compiled.json"), JSON.stringify({
       nodeRef: `node:v1:${"a".repeat(64)}`, title: "An operator spec cannot override compiled work",
     }), "utf8");
+    for (const [name, nodeRef] of [["publish", "publish:decision"], ["criterion", "criterion:v1:run"]]) {
+      writeFileSync(join(nodeSpecsDir, `${name}.json`), JSON.stringify({ nodeRef, title: "Reserved workflow" }), "utf8");
+    }
     const store = SqliteEventStore.openForProject(authorityStorePath, AUTHORITY_PROJECT);
     installTestRecoveryBinding(store);
     let minted = 0;

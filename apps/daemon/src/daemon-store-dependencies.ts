@@ -111,6 +111,11 @@ const provider: DaemonDependencyProvider & Pick<
     }
     return port();
   },
+  repositoryWorkflows: () => {
+    const port = fromEnv().repositoryWorkflows;
+    if (port === undefined) throw new Error("repository workflow read port unavailable");
+    return port();
+  },
   goalSource: () => {
     const port = fromEnv().goalSource;
     if (port === undefined) throw new Error("unreachable: the goal-source reader is always wired");
@@ -119,6 +124,11 @@ const provider: DaemonDependencyProvider & Pick<
   designReads: () => {
     const port = fromEnv().designReads;
     if (port === undefined) throw new Error("unreachable: the design reader is always wired");
+    return port();
+  },
+  environmentReads: () => {
+    const port = fromEnv().environmentReads;
+    if (port === undefined) throw new Error("unreachable: the environment reader is always wired");
     return port();
   },
   documentDossiers: () => {

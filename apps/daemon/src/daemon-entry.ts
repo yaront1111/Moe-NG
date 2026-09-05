@@ -284,8 +284,11 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.activity === undefined ? {} : { activity: resolved.activity }),
     ...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions }),
     ...(resolved.repositoryRemote === undefined ? {} : { repositoryRemote: resolved.repositoryRemote }),
+    ...(resolved.repositoryWorkflows === undefined ? {} : { repositoryWorkflows: resolved.repositoryWorkflows }),
     ...(resolved.goalSource === undefined ? {} : { goalSource: resolved.goalSource }),
     ...(resolved.designReads === undefined ? {} : { designReads: resolved.designReads }),
+    ...(resolved.environmentReads === undefined
+      ? {} : { environmentReads: resolved.environmentReads }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
     ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
     ...(resolved.planningRuns === undefined
