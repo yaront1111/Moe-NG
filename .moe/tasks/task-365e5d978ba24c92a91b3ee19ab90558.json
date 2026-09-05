@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:22:42.105Z",
-  "updatedAt": "2026-09-05T17:48:45.624Z",
+  "updatedAt": "2026-09-05T17:48:59.689Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:27:04.808Z",
     "plannedStepCount": 5,
@@ -328,6 +328,23 @@
       "treeId": "fec8db1225c503e8cfa6aa4e7e00ff33d0c9032d",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "ec4be9d8778b4bd649c264e201d0a3846107f061",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T17:48:47Z",
+      "paths": [
+        ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
+        ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+        ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T17:48:59.689Z",
+      "treeId": "c801ab4229ed1901c6f8df6ba2fa008cafea5071",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -335,7 +352,10 @@
     "apps/daemon/src/design/design-records.ts",
     "apps/daemon/src/design/design-test-fixtures.ts",
     "apps/daemon/src/design/design-contracts.test.ts",
-    "apps/daemon/src/design/design-store.test.ts"
+    "apps/daemon/src/design/design-store.test.ts",
+    ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
+    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+    ".moe/tasks/task-df64aa204d6f4c35810376226980e4b7.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/design/design-contracts.ts",
@@ -345,16 +365,12 @@
     "apps/daemon/src/design/design-test-fixtures.ts",
     "apps/daemon/src/design/design-store.test.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/orchestrator/node-lander.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T15:10:19Z",
-    "at": "2026-09-05T15:10:28.711Z"
+    "sessionId": "qa-f2906c26@2026-09-05T17:48:47Z",
+    "at": "2026-09-05T17:48:59.689Z"
   },
   "reviewStartedAt": "2026-09-05T17:48:36.256Z",
   "verification": {
