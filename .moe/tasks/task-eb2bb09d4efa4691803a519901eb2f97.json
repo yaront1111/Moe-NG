@@ -14,8 +14,56 @@
     "Wire an optional designReads factory the same way goalSource/documentDossiers are wired. A missing factory must keep the UNAVAILABLE refusal, never invent a design.",
     "FEATURES ONLY."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ORIENT, no production edits. (a) Confirm task-7ca9dca3 landed: grep DESIGN_READ_PATH and the StartListenerOptions field for the design port (planned name designReads). If the HTTP route is absent, STOP and report_blocked with blockedOnTaskIds [task-7ca9dca37fb44b40ac35abfc3c36cb9a]. Record the landed field name and DesignReadPort import path. (b) Confirm createDesignReadPort at mcp-design-read-query.ts:37 — reuse it; do not write a second factory. (c) Trace the goalSource chain end to end (composition factory, store-deps forwarder, FACTORIES, hasMethods [\"read\"], ports spread, daemon-entry spread, providerKeys). (d) `git status --porcelain -- apps/daemon/src/` — peer dirt is context. Put the landed option name and the current providerKeys list in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-design-read-query.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/http/http-listener.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST (skill test-driven-development). Do not implement production yet.\n\n(1) daemon-store-dependencies.test.ts: insert \"designReads\" into the sorted providerKeys list (after \"documentIngest\", before \"goalCatalog\"). Add an arm like the document-dossier one at :271: provider.designReads?.() is defined; port.read({ goalRef: \"goal-missing\", projectId: PROJECT }) returns DESIGN_REVISION_ABSENT with layer LEDGER; aggregate version unchanged (no write).\n\n(2) daemon-entry-ops.test.ts: add an arm modelled on :83-109. startDaemon with a real-enough authenticator holding GOAL, and designReads: () => createDesignReadPort({ store }) OR a stub { read: () => ({ ok: false, code: \"DESIGN_REVISION_ABSENT\", layer: \"LEDGER\" }) }. POST `/design/read` with body { goalRef: \"goal-1\" }. Expect the stub/store answer (code AND layer), not LISTENER_DESIGN_UNAVAILABLE. A 503 UNAVAILABLE here means daemon-entry did not forward the port.\n\nRun `pnpm --filter @moe/daemon test` and quote the providerKeys / UNAVAILABLE reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-entry-ops.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "WIRE THE FACTORY. daemon-store-foundation-composition.ts (515 lines — add only):\n- import createDesignReadPort and DesignReadPort from mcp-design-read-query.js (or from the HTTP module if that is the landed StartListenerOptions type).\n- const designReads = (): DesignReadPort => createDesignReadPort({ store });\n- add designReads to the frozen return object next to goalSource.\n\ndaemon-store-dependencies.ts: add a forwarder next to goalSource that throws if fromEnv() omits it (same \"unreachable: ... always wired\" shape). The shipped default object is what daemon-main loads; composition-only is invisible.\n\nDo not reimplement readDesignRevision. Do not close over projectId — the HTTP handler passes principal.projectId.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RESOLVE AND FORWARD INTO THE LISTENER. daemon-entry-port-resolution.ts (441 lines — add only):\n- OptionalDaemonPortProvider.designReads?(): DesignReadPort and the same on ResolvedOptionalDaemonPorts.\n- FACTORIES: add \"designReads\" next to \"goalSource\".\n- In resolveOptionalDaemonPorts, copy the goalSource block (factory function check, call, hasMethods(port, [\"read\"])).\n- Spread into the ports object.\n\ndaemon-entry.ts: in the startControlRoomListener call, add `...(resolved.designReads === undefined ? {} : { designReads: resolved.designReads })` next to goalSource. If HTTP landed a different option name, use that name on both sides.\n\nRe-run `pnpm --filter @moe/daemon test`. Step-2 reds go green. Quote Test Files N passed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review). git status --porcelain the exact paths first. All files here are tracked; empty git diff after restore is valid.\n\n(a) Remove designReads from the composition return object only -> providerKeys or the \"always wired\" throw reds.\n(b) Remove it from FACTORIES only -> startDaemon with the factory present still answers LISTENER_DESIGN_UNAVAILABLE (resolution never calls it) and the entry-ops arm reds.\n(c) Remove the daemon-entry spread only -> same UNAVAILABLE. Restore each.\n\nGATES standalone foreground: `pnpm --filter @moe/daemon test` (complete_task verification command), `pnpm typecheck`. Quote Test Files N passed. Path-attributed baseline for foreign red.\n\nAdversarial: missing factory still UNAVAILABLE (never invents a design); port.read does not take projectId from the caller payload; HTTP and MCP share createDesignReadPort; design-read.ts untouched. Report every path in complete_step.modifiedFiles.\n\nNamed verification command: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +79,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:40.806Z",
-  "updatedAt": "2026-09-05T14:28:40.806Z"
+  "updatedAt": "2026-09-05T14:35:17.020Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:32:29.206Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-2e480458"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:35:14.827Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Invent a second DesignReadPort factory in foundation-composition. Rejected: createDesignReadPort already exists at mcp-design-read-query.ts:37, closed over the store, read() taking DesignReadInput (projectId included). Reuse it so HTTP and MCP share one port type. 2) Land composition in the HTTP handler row. Rejected at the 10-file cap (that is why this row exists). 3) Close the port over projectId as well as store. Rejected: the MCP factory takes store only; the HTTP handler (task-7ca9dca3) is specified to pass principal.projectId into the read. Binding projectId twice would hide a principal/project mismatch. 4) Skip daemon-entry-ops POST proof. Rejected: DoD 2 requires a production boot to answer POST /design/read, which only startDaemon+listener proves.",
+    "codebaseInsights": "MEASURED 2026-09-05. createDesignReadPort is DEFINED (mcp-design-read-query.ts:28-42) and NOT composed (single grep hit). HTTP /design/read handler is task-7ca9dca3 WORKING, not landed — this row's WORKING claim waits on it. Copy the goalSource chain: factory in daemon-store-foundation-composition.ts:330-331 + return key :494; forwarder in daemon-store-dependencies.ts:114-118 that throws if fromEnv() omits it; OptionalDaemonPortProvider + ResolvedOptionalDaemonPorts + FACTORIES + resolveOptionalDaemonPorts hasMethods([\"read\"]) + ports spread in daemon-entry-port-resolution.ts (file already 441 lines); startControlRoomListener spread in daemon-entry.ts:287. providerKeys exact list at daemon-store-dependencies.test.ts:721-731 — insert designReads sorted (after documentIngest, before goalCatalog). FACTORIES :135-144 is the resolution order; append designReads next to goalSource. daemon-entry-ops.test.ts:83-109 is the POST-forward proof pattern (inject factory, post path, expect body). File sizes: composition 515, port-resolution 441, entry 333, store-deps 220. Add only; do not split. Field name: HTTP plan used StartListenerOptions.designReads — step 1 greps the landed name and uses THAT.",
+    "risks": "HTTP row may export its own DesignReadPort from design-read.ts that collides with mcp-design-read-query.ts. Prefer one type: import createDesignReadPort from mcp-design-read-query.js unless HTTP's landed StartListenerOptions type is incompatible — then a one-line adapter, never a second readDesignRevision. If DESIGN_READ_PATH is still absent at WORKING claim, report_blocked on task-7ca9dca3. providerKeys is exact-set: a missing or extra key reds. FACTORIES.every in optionalPortFactoriesAreValid ignores unknown keys, so a factory omitted from FACTORIES is silently never resolved — the pin is the FACTORIES tuple PLUS the hasMethods block PLUS the daemon-entry spread. Do not edit design-read.ts or http-listener-read-dispatch.ts.",
+    "keyFiles": [
+      "apps/daemon/src/mcp-design-read-query.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/daemon/src/daemon-entry-port-resolution.ts",
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/daemon-entry-ops.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:35:17.020Z"
 }
