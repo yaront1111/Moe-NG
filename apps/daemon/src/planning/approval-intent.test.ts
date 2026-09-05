@@ -1525,6 +1525,29 @@ describe("one approval intent decision activates, records, and burns atomically"
     expect(decided).toBeGreaterThan(0);
   });
 
+  it("refuses a REJECT of a run whose approval already enabled goal execution", () => {
+    const store = reviewableStore();
+    expect(reviewedDispatch(store, "cmd-intent-approve-first").ok).toBe(true);
+    // APPROVE writes only the goal, so the run record stays PLAN_REVIEW: the binding check alone
+    // used to admit this REJECT, flipping the run to REJECTED with a REVISION successor while the
+    // goal stayed EXECUTION_ENABLED on the rejected run's graph.
+    const goalBefore = store.readEvents(GOAL_ID).map((event) => event.eventType);
+    expect(goalBefore).toContain("GoalExecutionEnabled");
+    const runEventsBefore = store.readEvents(RUN_ID).length;
+
+    expect(refusalOf(dispatch(store, {
+      ...INTENT, decision: "REJECT", decisionReason: "second thoughts",
+    }, {
+      commandId: "cmd-intent-reject-after-approve",
+      humanReview: humanReviewWitness(OPERATOR, "cmd-intent-reject-after-approve"),
+    }))).toEqual({
+      code: "APPROVAL_RUN_NOT_REVIEWABLE", layer: "APPROVAL_RUN_BINDING",
+    });
+    expect(store.readEvents(RUN_ID)).toHaveLength(runEventsBefore);
+    expect(store.readEvents(RUN_ID).some((event) => event.eventType === "PlanningRunRejected")).toBe(false);
+    expect(store.readEvents(GOAL_ID).map((event) => event.eventType)).toEqual(goalBefore);
+  });
+
   it("refuses a REJECT without the operator witness under the same tuple as an APPROVE", () => {
     const store = reviewableStore();
     const before = readDurableLedger(store, PROJECT_ID).decisionCount;

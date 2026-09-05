@@ -5,7 +5,7 @@ import {
 } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
-import { payloadRef, readDurableLedger, refuse } from "../bootstrap/bootstrap-ledger.js";
+import { payloadRef, readDurableLedger, refuse, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { HumanReviewWitness, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { approvalDelayDisposition, readApprovalGate } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
@@ -237,6 +237,18 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
   }
 
   if (intent.decision === "REJECT") {
+    // An APPROVE through this seam writes only the GOAL (GoalExecutionEnabled) and never moves
+    // the run, so the run stays PLAN_REVIEW after approval and the binding check alone admitted a
+    // later REJECT: the run flipped to REJECTED with a REVISION successor while the goal stayed
+    // EXECUTION_ENABLED on the rejected run's graph — a durable split with no repair path. The
+    // goal's own durable fact, the one readApprovedPlan trusts, decides reviewability here.
+    const goal = stateOf(ledger, sources.goalRef);
+    const lifecycle = goal === null ? null : payloadRef(goal, "lifecycle");
+    const active = goal === null ? null : payloadRef(goal, "activeGraphRevisionRef");
+    const enabled = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" || lifecycle === "COMPLETED";
+    if (enabled && active === sources.graphRevisionRef) {
+      return refuse(null, "APPROVAL_RUN_NOT_REVIEWABLE", "APPROVAL_RUN_BINDING");
+    }
     return commitIntentRejection(input.store, command, { intent, sourceFences, sources });
   }
   const assembled = assembleActivationInput(input.store, ledger, {
