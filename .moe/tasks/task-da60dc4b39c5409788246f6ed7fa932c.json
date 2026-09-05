@@ -19,8 +19,80 @@
     "THE DEPLOY RECEIPT'S SHAPE IS A SIBLING'S (task-c0e00f0a) AND CANNOT BE DEPENDED ON. Read its completionSummary and build against what shipped, not against what was designed.",
     "OFFLINE TESTS ONLY, every port injectable, and everything started is stopped on every exit path including the throwing one."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP — all three dependencies were UNLANDED at plan time, and the receipt shape belongs to a fourth row that cannot be depended on. This step is the whole reason the row is safe to plan now.\n\nVERIFY EACH ON DISK, recording the command and output:\n- `git grep -rn \"deployment.rollback\" -- apps/daemon/src packages/contracts` — the wired kind and its FAIL-CLOSED STUB (task-b22462cf9d9e41cd9472415da2c1fb7d, PLANNING at plan time). This row REPLACES that stub; find it before writing, and say in the completion record that it is gone (DoD 6).\n- `git grep -rn \"moe-deploy-receipt\\|DeployReceipt\" -- apps/daemon/src` — the kept deploy receipt (task-c0e00f0a55ad43bfa5f6b323779834cd, a SIBLING, WORKING at plan time).\n- `git grep -rn \"moe-health-probe\\|PROBE_URL_MISSING\" -- apps/daemon/src` — the probe path recovery is asserted through (task-6ec875f4dd5f4f2ab97e46f71bf57b2b).\n- the backup/restore surface (task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4).\n\nTHEN READ THE SIBLING'S completionSummary for task-c0e00f0a via `get_context.epicSiblings` — its DoD 6 requires it to NAME the receipt retrieval call for exactly this purpose. Build against WHAT SHIPPED, not against the designed shape (which was {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)} mirroring publish-receipt-contracts.ts with null-pairing).\n\nIF THE RETRIEVAL CALL IS STILL UNRECORDED: `moe.report_blocked` naming task-c0e00f0a. Do NOT invent one. The sibling rollback and monitoring rows all resolve through these receipts, so a second retrieval shape forks the incident story — that is what rail 4 is protecting.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-docker-probe.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONTRACTS. Create `apps/daemon/src/repository/deployment/deployment-rollback-contracts.ts` (+ a one-line `.js` bridge — `export * from \"./deployment-rollback-contracts.ts\";`, the measured convention in this package).\n\n- `ROLLBACK_RECEIPT_UNKNOWN` and `ROLLBACK_IMAGE_MISSING` as `as const` codes, each paired with an ALREADY-ROSTERED layer literal. DoD 6 forbids a new `*_LAYER` constant: the security lane carries a boundary roster over those and a new one demands a backfill this row does not own. Match whatever layer the neighbouring DEPLOY_* codes in this directory already use.\n- The request type `{ environment, toReceiptRef, restoreDatabase }` — and make the restore flag EXPLICIT and REQUIRED rather than optional-defaulting-to-false. An optional boolean that defaults to restoring is one typo from data loss; an explicit required field makes the caller state their intent, which is rail 2 expressed in the type system.\n- The rollback result/receipt type, mirroring the deploy receipt's null-pairing so exactly one of the success member and the refusal member is populated.\n- Port interfaces: an injectable docker runner and an injectable restore port. REUSE the existing `DEPLOY_DOCKER_UNAVAILABLE` and the pure `classifyDockerProbe` from deployment-docker-probe.ts:20,:50 rather than re-declaring either — there must remain exactly one classification of docker availability in the tree. Do not reuse `probeDocker()` itself: it calls `spawnSync` internally and cannot be driven offline.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback-contracts.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback-contracts.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback-contracts.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE ROLLBACK EFFECT. Create `apps/daemon/src/repository/deployment/deployment-rollback.ts` (+ bridge). Sequence, with the refusals placed before anything moves:\n\n1. RESOLVE the target receipt by `toReceiptRef` from the kept deploy receipts, using the retrieval call recorded in step 1. Unknown ref => `ROLLBACK_RECEIPT_UNKNOWN`, nothing touched.\n2. READ THE PREVIOUS IMAGE TAG from that receipt. The tag is the receipt's sha value — use it verbatim.\n3. VERIFY THE IMAGE EXISTS LOCALLY. Absent => `ROLLBACK_IMAGE_MISSING`, environment left untouched.\n   NEVER REBUILD (rail 1, DoD 2). A rebuild from source under the same sha produces a DIFFERENT image, so an environment \"rolled back\" that way is running bytes nobody has ever run — strictly worse than a refusal, and worse in a way no one can see afterwards. Issue no build command on any path.\n4. REDEPLOY via the FORWARD DEPLOY ENGINE'S atomic replace and health probe (rail 3). Call the sibling's exported switch point; do not write a second replace. If it is not exported, comment on task-c0e00f0a asking for it rather than copying it privately — a second lifecycle is a second thing to reason about during an incident.\n5. RESTORE THE DATABASE ONLY IF `restoreDatabase` IS EXPLICITLY REQUESTED (rail 2). On the not-requested path, issue NO restore call at all — not a no-op call, none. A silent restore is data loss the operator did not ask for, and step 5's arm proves the absence by reading recorded calls.\n6. CONFIRM RECOVERY through the REAL probe path from task-6ec875f4, not an internal flag.\n\nREPLACE the fail-closed stub from task-b22462cf and say so in the completion record.\n\nInvoke `docker` as a bare executable through the injected runner with argv arrays, shell:false — never a hard-coded `.cmd`, never a shell string, never a chain. `wc -l` and keep under 250.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE IMAGE ARMS (DoD 1 and 2) — `deployment-rollback.test.ts`, offline through the injectable docker port.\n\nDoD 1, THE TAG: assert the redeployed tag EQUALS the previous receipt's SHA VALUE, compared against the value read from the receipt — NOT against a regex or a pattern. A pattern passes for the wrong sha, and every downstream claim (dossier, incident, the next rollback) resolves through this tag. Assert the full argv byte-for-byte.\n\nDoD 2, NO REBUILD — assert an ABSENCE, which is the harder and more important direction: ENUMERATE every recorded argv across the whole rollback and assert NONE of them is a build. Do not settle for asserting that a run happened; a rebuild-then-run passes that check and is exactly the defect rail 1 exists to prevent. Cover every path — success, both refusals, and the restore-requested variant.\n\n`ROLLBACK_IMAGE_MISSING`: when the receipt names an image absent locally, assert the code AND the layer, and assert THE ENVIRONMENT IS UNTOUCHED by reading the port's recorded calls and finding no replace. A refusal that already stopped the old container is not a refusal.\n\n`ROLLBACK_RECEIPT_UNKNOWN`: unknown `toReceiptRef` refuses with code AND layer, nothing touched. Never assert merely that it failed — a second refusal layer could answer first and the arm would stay green while no longer testing its subject.\n\nMUTATE AND CONFIRM RED: make the missing-image path fall through to a build, run the no-rebuild arm, confirm RED, restore. Every file here is NEW and untracked, so `git diff` certifies nothing — back up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 in a SEPARATE call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE RESTORE AND ORDERING ARMS (DoD 3 and 4) — same test file.\n\nDoD 3, TWO ARMS, and the second is the one that matters:\n- RESTORE REQUESTED: the restore is applied, asserted through the recorded calls.\n- RESTORE NOT REQUESTED: the database is UNTOUCHED — assert by reading the port's recorded calls and finding NO restore, never by trusting a flag or a return value. A rollback that silently restores a database is data loss the operator did not ask for, and a flag-trusting assertion passes for exactly that bug.\nAlso assert the restore, when requested, happens in a defined ORDER relative to the container replace, and say in the note which order ships and why — restoring a database under a container still serving the old image, or vice versa, are different failure modes and the choice should be deliberate.\n\nDoD 4, THE ATOMIC REPLACE IS THE FORWARD DEPLOY'S: assert through the port's recorded call ORDER that the OLD container serves until the NEW one answers health, with NO point at which neither serves. That is the difference between a rollback and a second outage on top of the first.\nMUTATE to a stop-then-start order and confirm the arm goes RED; restore and prove it. An ordering property never seen red is not evidence — DoD 4 says so explicitly.\nAlso assert this row did not write its own replace: `git grep -n \"docker\" apps/daemon/src/repository/deployment/deployment-rollback.ts` should show the resolve and existence checks, with the replace delegated to the deploy engine. Quote it in the record (rail 3).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "RECOVERY THROUGH THE REAL PROBE (DoD 5) — same test file.\n\nAfter a successful rollback, assert the environment returns to `UP` THROUGH THE PROBE PATH from task-6ec875f4 — the ring and its derived state — and NOT through any internal flag this row sets. DoD 5 is explicit about the seam, and it matters: the probe derives state from its bounded ring precisely so a stored flag cannot disagree with history. A rollback that sets a flag saying \"recovered\" while the probe still reads DOWN is the disagreement that design prevents, and asserting through this row's own return value would hide it.\n\nDrive it as a sequence: probes failing (environment DOWN, incident open per that row's lifecycle), rollback, probes succeeding, assert the derived state is `UP`. Use the probe's injectable HTTP port so the arm stays offline.\n\nIf the probe row has not landed when you reach this step, that is a BLOCK, not a reason to assert on an internal flag instead — substituting a flag for the probe path is the narrowed-DoD failure, and it would retire the question this clause exists to answer.\n\nAssert the rollback receipt records the outcome, read back from a real store, with every member asserted and the null-pairing respected — exactly one of the success member and the refusal member populated.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW (DoD 7).\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` — the row's named verification command (@moe/daemon is apps/daemon; resolve by PACKAGE NAME).\n- `pnpm typecheck`.\n- State that root `pnpm test` covers NO apps/** file, so it is not evidence for anything this row owns.\n`wc -l` every new production file and quote it against the 250 target.\n\nTEARDOWN AUDIT (DoD 7): every container, temp directory and child process released on EVERY exit path INCLUDING the throwing one — teardown in a `finally`, never after the assertions. Force an arm to throw and confirm nothing survives; `docker ps -a` and quote it. No test may reach the network or a real docker daemon. This row's neighbours are already blocked on exactly this class of failure.\n\nEXPECT FOREIGN RED: the governor's 19:26Z/19:30Z logs record host handle exhaustion timing out unowned files at 30 s. Path-attributed baseline — merge-base failures, HEAD failures, subtract, intersect with apps/daemon/src/repository/deployment/; complete only when EMPTY. Disclose foreign red verbatim with paths; do not re-run a full suite repeatedly, which degrades every other seat's gate.\n\nADVERSARIAL PASS:\n- ROLLING BACK TO A RECEIPT THAT IS ITSELF A REFUSED DEPLOY — does it resolve an image that never served? Assert the answer.\n- TWO CONCURRENT ROLLBACKS on one environment — does the second race the first into a half-replaced container? Say which, and whether anything prevents it.\n- ROLLING BACK TO THE CURRENTLY RUNNING RECEIPT — a no-op, or a needless replace with a health-probe window?\n- The restore path when the BACKUP FILE IS MISSING or its sha256 does not match — refuse, or proceed with the container rollback and report? Data loss lives here; state the choice.\n- Does any refusal detail, receipt or log line carry a registry URL with embedded userinfo, a database connection string or a password? Epic rail 3.\n- Did the fail-closed stub from task-b22462cf actually get REPLACED, not merely shadowed? Grep for it and quote the result (DoD 6).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-rollback.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-rollback-contracts.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -38,5 +110,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:51:33.339Z",
-  "updatedAt": "2026-09-05T19:51:33.339Z"
+  "updatedAt": "2026-09-05T20:01:28.640Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:58:25.634Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T20:01:26.464Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING. Not needed. The row is already the third cut of an original that carried backups, a command kind and this effect; what remains is one coherent subject — resolve the previous image, redeploy it the same way the forward deploy does, optionally restore, confirm through the probe. Five files, seven steps.\n\nWHERE THE MODULE LIVES. `apps/daemon/src/repository/deployment/` rather than a new directory: the forward deploy engine, the docker probe and the infrastructure generator are all there, and rail 3's \"reuse the forward deploy's atomic replace\" is easier to honour and easier to review when the two sit side by side.\n\nREUSING `probeDocker()` DIRECTLY. Rejected — it calls `spawnSync` internally and cannot be driven offline. This row injects a docker runner and reuses the PURE `classifyDockerProbe` (deployment-docker-probe.ts:50) plus the existing `DEPLOY_DOCKER_UNAVAILABLE` code, so there is still exactly one classification of docker availability in the tree.\n\nA SEPARATE ROLLBACK LIFECYCLE vs CALLING THE DEPLOY ENGINE'S REPLACE. Calling it, per rail 3 and DoD 4. A rollback that replaces differently from a deploy is a second lifecycle to reason about during an incident — which is exactly when nobody has patience for two. The cost is a hard dependency on the sibling engine's exported switch point; if it is not exported, the fix is a comment on that row asking for it, not a private copy here.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. The row is tightly cut already and every premise in its description held when I checked it.\n\nNOTHING OF THE ROLLBACK EXISTS: `git grep -c \"deployment.rollback|ROLLBACK_IMAGE_MISSING|ROLLBACK_RECEIPT_UNKNOWN\" -- apps packages` returns nothing.\n\nBUT THE DEPLOYMENT DIRECTORY DOES, AND IT IS A REAL REUSE SEAM. `apps/daemon/src/repository/deployment/` already holds work landed by task-3706b7e7: deployment-docker-probe.ts (93 lines), deployment-infrastructure-generator.ts (106), deployment-infrastructure-templates.ts (200), plus tests. The rollback module belongs in that directory, not a new one.\n  - deployment-docker-probe.ts:20 already exports `DEPLOY_DOCKER_UNAVAILABLE`; :50 `classifyDockerProbe(outcome)` is PURE and takes an outcome, so it is directly reusable in an offline arm; :72 `probeDocker()` calls `spawnSync(\"docker\", [\"version\", \"--format\", \"{{.Server.Version}}\"])` — bare executable, argv array, no shell, which is the discipline to copy. Note `probeDocker()` itself is NOT injectable, so this row injects its own docker runner and reuses `classifyDockerProbe` and the existing code rather than re-declaring either.\n\nEVERY DEPENDENCY IS UNLANDED, which makes step 1 load-bearing rather than ceremonial:\n  task-b22462cf (the wired kind whose fail-closed stub this row REPLACES) — PLANNING, order 121.7\n  task-95e68a8d (the backups this row optionally restores from) — WORKING, order 122\n  task-6ec875f4 (the probe that confirms recovery) — WORKING, order 121\n\nTHE RECEIPT SHAPE IS A SIBLING'S AND ITS completionSummary IS NOT WRITTEN YET. task-c0e00f0a55ad43bfa5f6b323779834cd (the deploy engine, order 91.4) is WORKING with no completionSummary, so the only recorded shape is still its DoD text: `moe-deploy-receipt/1` records {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)}, mirroring apps/daemon/src/repository/publish-receipt-contracts.ts with null-pairing (exactly one of the success member and the refusal member populated). Its DoD 6 requires it to NAME the retrieval call in its completion record precisely so this row can use it. Rail 4 is therefore a real instruction with a real deadline: by the time this row executes, READ that completionSummary and build against what shipped. If it is still absent, that is a block, not a licence to guess — an invented retrieval call would fork the incident story that the sibling rollback and monitoring rows all resolve through.\n\nLAYER REUSE: `apps/daemon/src/bootstrap/bootstrap-services.ts:100` uses `refuse(request.kind, \"BOOTSTRAP_PAYLOAD_INVALID\", \"DAEMON_INGRESS\")`, and `\"DAEMON_INGRESS\"` is already the declared `BootstrapRefusedBy` at bootstrap-contracts.ts:68. Other modules declare their own `*_LAYER` consts, and the security lane carries a boundary roster over them — so DoD 6's \"introduce no new `*_LAYER`\" means picking an existing literal, and the deployment directory's own choice (whatever DEPLOY_* codes ship with) is the one to match."
+  },
+  "planApprovedAt": "2026-09-05T20:01:28.640Z"
 }

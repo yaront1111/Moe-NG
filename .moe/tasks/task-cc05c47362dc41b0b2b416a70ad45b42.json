@@ -1,0 +1,146 @@
+{
+  "id": "task-cc05c47362dc41b0b2b416a70ad45b42",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Health probes record a bounded ring, derive UP DEGRADED DOWN, and open exactly one durable incident",
+  "description": "SPIDR grandchild B of task-6ec875f4dd5f4f2ab97e46f71bf57b2b (architect-aa54e231, 2026-09-05). Owns the parent's DoD 1, 2, 4 and the PROBE_URL_MISSING half of DoD 5. dependsOn grandchild A task-e651725c92434127a7b8d72f0ac5246b, which lands the durable recurring schedule this runs on - the daemon has none today.\n\nREAD THIS BEFORE PLANNING: THE PARENT SAYS \"Needs-you incident card\". THIS ROW DELIVERS THE DAEMON-SIDE INCIDENT, NOT THE CARD. Measured at HEAD (branch moe/work-2026-09-04): Needs-you is a CONTROL-ROOM model, not a server table. `apps/control-room/src/v2/approvals/needs-you-model.ts:28` declares a CLOSED roster - `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"]` - and its docblock states the governing principle: every item is \"derived only from things the daemon already states\", each rests on a daemon OFFER or read, and \"every item routes to the goal\". A deployment outage is a FIFTH kind that does NOT route to a goal, so surfacing it is a control-room change - which this row's parent rail 5 explicitly forbids (NO UI; children 2 and 3 own it).\n\nSo the seam is: THIS ROW writes the durable incident with its open/closed lifecycle, and a later UI row derives a card from it. \"Exactly one incident\" is therefore a property of the DURABLE RECORD - one open incident per environment outage, closed on recovery - and it is assertable here without any UI. Say this explicitly in the completion record so the parent's DoD 1 is not read as unmet.\n\nTHE DEPLOY RECEIPT IS NOT LANDED. `grep -rn \"deploy-receipt|moe-deploy-receipt|DeployReceipt\" apps packages --include=*.ts` returns ZERO. It belongs to task-04b3ce7e349743c2a156d32ee5550ba5 under a SIBLING parent, which the parent rail forbids depending on. Build against the receipt shape recorded on that row and SAY SO in the record - do not invent a different one, because the sibling rollback work resolves through the same receipts.\n\nTHREE PROPERTIES THAT ARE EASY TO GET WRONG AND HARD TO NOTICE, carried from the parent:\n1. EXACTLY ONE INCIDENT. Three consecutive failures open one; continued failure opens NO second; recovery closes it. A per-probe raise floods the operator's queue at one item a minute, precisely when it must stay usable.\n2. THE RING IS BOUNDED at 1440. An unbounded durable probe log grows without limit and is invisible until the store is large.\n3. THE STATE IS DERIVED FROM THE RING, never a stored flag - so the two cannot disagree.\n\nNOT IN SCOPE: the schedule itself (grandchild A), backups, rollback, and any UI or Needs-you roster edit (children 2 and 3).\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "EXACTLY ONE OPEN INCIDENT PER OUTAGE, asserted over MANY failing probes: three consecutive failures open one incident, a further ten failures open NO second, and a recovery CLOSES it. Count the incidents in the durable store across the whole sequence - an arm that checks only 'an incident exists' after three failures passes for a loop that opens one per probe.",
+    "THE RING IS BOUNDED AT 1440, asserted by COUNT AND BY CONTENT after more than 1440 probes: the oldest are gone and the newest are present. A count-only assertion passes for a ring that drops the newest instead of the oldest.",
+    "`moe-health-probe/1` records {environment, sha, status, latencyMs, at} and reads back from a REAL store with every member asserted.",
+    "UP / DEGRADED / DOWN IS DERIVED FROM THE RING, not stored: assert the state CHANGES when the ring changes, so a stored flag and the ring can never disagree. Mutate the ring and confirm the derived state follows without any write.",
+    "PROBE_URL_MISSING refuses with code AND layer for an environment that has a deploy receipt but no health URL, and that environment is NOT reported UP - an environment that cannot be probed says so rather than reporting healthy. Assert the state is not UP, not merely that a refusal was returned.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "THE INCIDENT IS A DURABLE RECORD, NOT A UI CARD. Needs-you is a control-room model over a CLOSED four-kind roster (needs-you-model.ts:28) whose items derive from daemon statements and route to a goal; adding a fifth kind is a UI change this row must not make. Write the record; a later row derives the card.",
+    "EXACTLY ONE OPEN INCIDENT PER OUTAGE, asserted across many failing probes and a recovery - not merely 'an incident exists'.",
+    "THE RING IS BOUNDED AT 1440, asserted by count AND content so a ring that evicts the wrong end is caught.",
+    "THE STATE IS DERIVED FROM THE RING, never stored. A stored flag is a second source of truth that can disagree with its own history.",
+    "AN UNPROBEABLE ENVIRONMENT IS NEVER 'UP'. Absence of a health URL is a refusal with a code and a layer, not a green state.",
+    "DO NOT INVENT A DEPLOY RECEIPT SHAPE. It is unlanded and owned by task-04b3ce7e under a sibling parent; build against its recorded shape and say so, because sibling rollback work resolves through the same receipts.",
+    "NO SCHEDULER CODE - grandchild A owns it. Consume its registration seam rather than arming a timer here."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITES AND THE THREE PREMISES THIS ROW RESTS ON. Record each command with its output.\n\nPREREQUISITE — grandchild A task-e651725c92434127a7b8d72f0ac5246b lands the durable recurring schedule and the daemon has NO recurring loop without it. `git grep -rn \"schedule\\|recurring\" -- apps/daemon/src --include=*.ts | grep -iv test` and look for its registration seam. If absent, STOP and `moe.report_blocked` with `blockedOnTaskIds`. Rail 7: consume its seam, never arm a timer here.\n\nPREMISE 1, THE DEPLOY RECEIPT — `git grep -rn \"deploy-receipt\\|moe-deploy-receipt\\|DeployReceipt\" -- apps packages --include=*.ts`. Expected ZERO at plan time. It is owned by task-c0e00f0a55ad43bfa5f6b323779834cd under a SIBLING parent, so no dependsOn is allowed. DO NOT INVENT A SHAPE: build against the one recorded on that row — {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)}, mirroring publish-receipt-contracts.ts with its null-pairing — and NAME that row in the completion record. Sibling rollback work resolves through the same receipts, so a second shape forks the incident story.\n\nPREMISE 2, THE NEEDS-YOU ROSTER IS CLOSED AND NOT YOURS — `grep -n \"NEEDS_YOU_KINDS\" apps/control-room/src/v2/approvals/needs-you-model.ts`. Adding a fifth kind also forces two exhaustive `Record<NeedsYouKind, ...>` maps (needs-you-model.ts:72 KIND_ORDER, needs-you.tsx:41 KIND_EYEBROW), and two peer rows are editing that roster right now. Rail 1 forbids it. Confirm you will touch NO file under apps/control-room.\n\nPREMISE 3 — `ls apps/daemon/src/ | grep -i \"monitor\\|health\\|incident\"` expected empty, confirming the new directory collides with nothing.\n\nRead apps/daemon/src/activation/activation-ledger-contracts.ts and activation-attempt-reader.ts before designing: they are the house pattern for a durable append-only record with a derived reader.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/publish-receipt-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONTRACTS. Create `apps/daemon/src/monitoring/health-probe-contracts.ts` (+ a one-line `.js` bridge: `export * from \"./health-probe-contracts.ts\";`, the measured convention).\n\n- `HEALTH_PROBE_VERSION = \"moe-health-probe/1\" as const` and the record type {environment, sha, status, latencyMs, at}, mirroring apps/daemon/src/repository/publish-receipt-contracts.ts.\n- `PROBE_URL_MISSING` as an `as const` code, paired with an ALREADY-ROSTERED layer literal. Reuse an existing one — `bootstrap-services.ts:100` uses `\"DAEMON_INGRESS\"`, and other modules declare their own `*_LAYER` consts. Do NOT mint a new `*_LAYER`: the security lane carries a boundary roster over those and a new one demands a backfill this row does not own.\n- The DERIVED state type: `UP | DEGRADED | DOWN`. Declare it as a derived RESULT type, with no field anywhere that could store it — rail 4, and the type system is the cheapest place to enforce it.\n- The INCIDENT record: environment, opened-at, closed-at (nullable), and the probe references that opened it. Follow the null-pairing discipline — an open incident and a closed one differ by exactly one populated member, which is what makes \"is it open?\" unambiguous.\n- The RING BOUND as a NAMED CONSTANT (1440), so the number appears once and the test can import it rather than re-spelling it.\n\nDefine the thresholds as named constants too — the three-consecutive-failures rule that opens an incident, and whatever separates DEGRADED from DOWN. A magic 3 buried in a conditional is the kind of thing a later row changes without noticing what depends on it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-probe-contracts.ts",
+        "apps/daemon/src/monitoring/health-probe-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/monitoring/health-probe-contracts.ts",
+        "apps/daemon/src/monitoring/health-probe-contracts.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE BOUNDED RING AND THE DERIVED STATE. Create `apps/daemon/src/monitoring/health-probe-ring.ts` (+ bridge).\n\nAPPEND with eviction at the bound: when the ring exceeds 1440, the OLDEST entries go and the newest stay. Get the direction right — a ring that evicts the newest passes any count-only assertion, which is exactly why DoD 2 demands content as well as count.\n\nDERIVE `UP | DEGRADED | DOWN` FROM THE RING, never from a stored flag (rail 4, DoD 4). The function takes the ring and returns the state; nothing writes it. That is what makes it impossible for the state and its own history to disagree.\n\nThe probe ENTRY POINT lives here too: given an environment, read its health URL from the deploy receipt, probe it, and append the result. It takes an injectable HTTP port so every arm runs offline — no test may reach the network. It arms NO timer: grandchild A's schedule calls this (rail 7).\n\nPROBE_URL_MISSING: an environment with a deploy receipt but NO health URL refuses with code AND layer, and — this is the half that matters — its state is NOT `UP`. Decide what an unprobeable environment reports and make it unmistakable in the type, not just in a branch. An environment that cannot be probed saying \"healthy\" is the worst output this row can produce.\n\nBounded work: deriving over at most 1440 entries is cheap by construction. Do not add a cache — a cache is a stored state wearing a different hat.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/monitoring/health-probe-ring.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/monitoring/health-probe-ring.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE INCIDENT LIFECYCLE. Create `apps/daemon/src/monitoring/health-incident.ts` (+ bridge).\n\nEXACTLY ONE OPEN INCIDENT PER ENVIRONMENT OUTAGE:\n- three CONSECUTIVE failures open one incident;\n- continued failure opens NO second — the open incident is found and left alone;\n- recovery CLOSES it;\n- a later outage opens a NEW one, so closing is not the same as suppressing.\n\nKEY BY ENVIRONMENT and check for an existing OPEN incident before opening. The alternative — opening per failing probe and de-duplicating at read time — was rejected at plan time: it makes the durable record itself the wrong shape and pushes the invariant onto every future consumer.\n\nWHY THIS IS THE ROW'S OPERATOR-FACING PROPERTY: a per-probe raise floods the queue at one item a minute, precisely when it must stay usable. The incident is what a human sees during an outage; making it noisy makes it useless.\n\nTHE INCIDENT IS A DURABLE RECORD, NOT A CARD (rail 1). Write it to the store; a later UI row derives a card. Touch NO file under apps/control-room — Needs-you is a closed four-kind roster whose items route to a goal, a deployment outage does not, and adding a fifth kind forces two exhaustive Record maps in files two peer rows are already editing.\n\nSTATE THIS SEAM IN THE COMPLETION RECORD so the parent's DoD 1 (\"Needs-you incident card\") is not read as unmet: this row delivers the durable incident and names the row that will derive the card.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-incident.ts",
+        "apps/daemon/src/monitoring/health-incident.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/monitoring/health-incident.ts",
+        "apps/daemon/src/monitoring/health-incident.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "RING AND STATE TESTS (DoD 2, 3, 4) — `health-probe-ring.test.ts`.\n\nDoD 2, THE BOUND, ASSERTED BY COUNT **AND** CONTENT after MORE than 1440 probes: the count is exactly 1440, the OLDEST entries are gone, and the NEWEST are present. Assert specific identifiable entries at both ends — a count-only assertion passes for a ring that drops the newest instead of the oldest, which is the defect this clause exists to catch. Import the bound constant rather than re-spelling 1440, so the two cannot drift.\n\nDoD 3: `moe-health-probe/1` reads back from a REAL store with EVERY member asserted — environment, sha, status, latencyMs, at. Not a shape check: each value.\n\nDoD 4, DERIVED NOT STORED: assert the state CHANGES when the ring changes, WITHOUT ANY WRITE. Mutate the ring, re-derive, confirm the state follows. Then the inverse: confirm no field anywhere holds the state — grep the module for an assignment of `UP`/`DEGRADED`/`DOWN` to a stored member. A stored flag that happens to agree today is the failure mode; the arm must catch it while it still agrees.\n\nDoD 5, THE UNPROBEABLE ENVIRONMENT: an environment with a deploy receipt but no health URL refuses `PROBE_URL_MISSING` with CODE AND LAYER, and its state IS NOT `UP`. Assert the state explicitly — DoD 5 says \"not merely that a refusal was returned\", because a refusal that leaves the environment reporting healthy is precisely the dangerous outcome.\n\nMUTATE AND CONFIRM RED for the eviction direction and for the not-UP arm; restore and prove it. Every file here is NEW and untracked, so `git diff` certifies nothing — back up out of tree and prove restores by SHA256 in a separate call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE INCIDENT TEST (DoD 1) — `health-incident.test.ts`. This is the row's central arm and it must be driven as a SEQUENCE, not as three separate cases.\n\nRun one continuous sequence against a REAL store and COUNT THE INCIDENTS AT EVERY STAGE:\n1. two failures — assert ZERO incidents (the threshold is three, and an off-by-one here pages on every transient blip);\n2. the third consecutive failure — assert EXACTLY ONE;\n3. TEN MORE failures — assert STILL EXACTLY ONE. DoD 1 names ten specifically. An arm that checks only \"an incident exists\" after three failures passes for a loop that opens one per probe, and that loop is invisible until an outage floods the queue;\n4. a recovery — assert the incident is CLOSED, and that the count of OPEN incidents is zero while the closed record survives;\n5. a SECOND outage — assert a NEW incident opens. Closing must not mean suppressing, or the second outage is silent.\n\nCount incidents in the DURABLE STORE across the whole sequence, not in a return value — the record is what a later UI row and the sibling rollback work read.\n\nAlso assert an intermittent pattern: fail, fail, succeed, fail, fail, fail. The counter must RESET on success, so this opens exactly one incident at the sixth probe and none earlier. A non-resetting counter passes the simple consecutive case and pages on unrelated blips forever.\n\nMUTATE AND CONFIRM RED: remove the existing-open-incident check so it opens per failure, run the sequence, confirm stage 3 goes RED. Restore and prove it by SHA256 against an out-of-tree backup — this file is new and untracked.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-incident.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/monitoring/health-incident.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES (DoD 6). Run each leg standalone and quote its `Test Files N passed` count line — the OUTPUT, never the exit code. `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0 when the name is wrong; \"No test files found\" is also exit 0.\n\n- `pnpm --filter @moe/daemon test` — the row's named verification command (@moe/daemon is apps/daemon; resolve by PACKAGE NAME).\n- `pnpm typecheck`.\n- State explicitly that root `pnpm test` covers NO apps/** file, so it is not evidence for anything this row owns.\n\nSCOPE EVIDENCE, since three rails are about what this row must NOT touch — make each a command, not a sentence:\n- `git status --porcelain -- apps/control-room` must be EMPTY (rail 1: no Needs-you or UI edit).\n- `git status --porcelain` must show no scheduler or timer file (rail 7).\n- `git grep -rn \"setInterval\\|setTimeout\" -- apps/daemon/src/monitoring` must return nothing — this row arms no timer.\n- `wc -l` every new production file and quote it against the 250-line target.\n\nEXPECT FOREIGN RED AND ATTRIBUTE IT: the governor's 19:26Z/19:30Z logs record host handle exhaustion timing out unowned files at 30 s. Path-attributed baseline — merge-base failures, HEAD failures, subtract, intersect with apps/daemon/src/monitoring/; complete only when that intersection is EMPTY. Disclose foreign red verbatim with paths, and do not re-run a full suite repeatedly, which degrades every other seat's gate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/monitoring/health-incident.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nTHE THREE PROPERTIES, each attacked rather than re-read:\n- ONE INCIDENT: what happens if two probes for the SAME environment run concurrently and both see the third failure? Does the existing-open check race into two incidents? Assert which, and say whether the store's write path makes it impossible or whether you handled it.\n- THE BOUND: what happens at exactly 1440, and at 1441? Off-by-one at the boundary is the classic ring defect and a test that jumps to 2000 never sees it.\n- DERIVED STATE: is there ANY path that writes a state value — a cache, a memo, a convenience field on the incident? Grep for it. A memo added later for performance is how this invariant dies.\n\nEDGE INPUTS:\n- An environment with NO probes at all — what state? It is not UP, and it is not DOWN either; say what it is and why.\n- A probe with a negative or absurd latency, a missing `at`, a clock that moves backwards between probes. The ring is ordered by time; a backwards clock must not silently reorder history.\n- An environment whose deploy receipt is REFUSED rather than DEPLOYED — is it probeable at all?\n\nSECURITY AND CLEANUP:\n- Does the probe record, a refusal detail or a log line carry a URL with embedded credentials, or a response body? Epic rail 3: a secret never surfaces in plaintext, and a health endpoint's body is not this row's to store.\n- Does any test leave a store handle, temp directory or HTTP mock open? Teardown in a `finally` — this row's neighbours are already blocked on exactly that class of failure (epic rail 4).\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. EVERY file in this row is NEW and untracked, so `git diff -- <path>` is empty before, during and after and certifies NOTHING. Back each mutated path up out of tree under %TEMP% suffixed by your worker id, and prove each restore by SHA256 equality in a call SEPARATE from the restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/monitoring/health-incident.ts",
+        "apps/daemon/src/monitoring/health-probe-contracts.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
+  "dependsOn": [
+    "task-e651725c92434127a7b8d72f0ac5246b"
+  ],
+  "priority": "HIGH",
+  "order": 121.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:51:21.392Z",
+  "updatedAt": "2026-09-05T19:58:15.448Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:54:50.097Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:58:13.317Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING. Not needed and not right. The row is already narrow - no scheduler (grandchild A), no UI (children 2 and 3), no receipt invention - and its four properties are one coherent subject: a bounded durable ring, a state derived from it, and an incident lifecycle over the same ring. Nine files, eight steps, inside both thresholds. Splitting the ring from the state it derives would put the two halves of one invariant in different rows.\n\nSTORING UP/DEGRADED/DOWN vs DERIVING IT. Deriving, per rail 4 and DoD 4. A stored flag is a second source of truth that can disagree with its own history, and the disagreement is invisible until an incident. The cost is recomputing over a bounded window, which is cheap precisely because the ring is capped at 1440.\n\nWHERE THE INCIDENT LIVES. A durable record in this row; the card in a later UI row. That is the description's seam and it is correct - see the NeedsYouKind coupling in codebaseInsights for why a fifth roster kind is not a small change. State this explicitly in the completion record so the parent's DoD 1 is not read as unmet.\n\nONE OPEN INCIDENT: keyed by environment, opened on the third consecutive failure, closed on recovery. The alternative - opening per failing probe and de-duplicating at read time - was rejected: it makes the durable record itself the wrong shape and pushes the invariant into every future consumer.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. The row's own description is unusually well measured; I re-checked every load-bearing claim and all of them hold.\n\nNOTHING OF THIS EXISTS: `ls apps/daemon/src/ | grep -i \"monitor|health|incident\"` returns NOTHING, and `git grep -c \"moe-health-probe|PROBE_URL_MISSING|healthProbe\" -- apps packages` returns nothing. `apps/daemon/src/monitoring/` is a new directory and collides with no one.\n\nTHE SCHEDULE IS NOT LANDED AND IS CORRECTLY DECLARED: grandchild A task-e651725c92434127a7b8d72f0ac5246b (\"The daemon gets its first durable recurring schedule, restart-safe and never doubled\", order 121.1) is still PLANNING. Its own description states the daemon has NO recurring loop at all. This row's dependsOn already names it. Rail 7 is therefore load-bearing: expose a probe ENTRY POINT that A's registration seam calls, and arm no timer here.\n\nTHE DEPLOY RECEIPT SHAPE IS RECORDED AND MUST NOT BE INVENTED. `git grep -rn \"deploy-receipt|moe-deploy-receipt|DeployReceipt\" apps packages --include=*.ts` returns ZERO, exactly as the description says. The shape lives in the DoD of task-c0e00f0a55ad43bfa5f6b323779834cd (the deploy engine row, order 91.4, filed today): `moe-deploy-receipt/1` records {environment, sha, imageDigest, url, DEPLOYED|REFUSED(code)}, mirroring apps/daemon/src/repository/publish-receipt-contracts.ts including its NULL-PAIRING discipline - exactly one of the success member and the refusal member populated. Build against THAT and name the row in the completion record. Sibling rollback work (task-7683a432) resolves through the same receipts, so a second shape would fork the incident story.\n\nTHE RECEIPT PATTERN TO MIRROR for `moe-health-probe/1` is apps/daemon/src/repository/publish-receipt-contracts.ts: `PUBLISH_RECEIPT_VERSION = \"moe-publish-receipt/1\"` (:16), `PublishRefusal` (:36), `PublishReceiptV1` (:41), a decode-result union (:57). Note `internal.*` receipt kinds are OUTSIDE PAYLOAD_KEYS, the registry and the MCP roster entirely (`grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` = 0), so a durable probe record costs NO roster backfill - which is what keeps this row inside its budget.\n\nTHE NEEDS-YOU SEAM THE ROW CORRECTLY REFUSES TO TOUCH: apps/control-room/src/v2/approvals/needs-you-model.ts:28 declares the CLOSED roster `[\"PLAN_APPROVAL\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]`. I measured its coupling while planning a different row: `NeedsYouKind` is derived from that tuple at :29, and TWO exhaustive `Record<NeedsYouKind, ...>` maps - KIND_ORDER at needs-you-model.ts:72 and KIND_EYEBROW at needs-you.tsx:41 - stop compiling the moment a member is added. So a fifth kind is a three-file control-room change, which rail 1 forbids here. The row's seam (durable incident now, card later) is right, and TWO OTHER ROWS are already extending that roster concurrently (task-a988ca1c adds PLAN_REJECTED, task-33ceae56 a preview card) - another reason not to reach into it.\n\nEXISTING LEDGER/READER PRECEDENT worth reading before inventing a ring: apps/daemon/src/activation/ has activation-ledger-contracts.ts, activation-ledger-codec.ts and activation-attempt-reader.ts - the house pattern for a durable append-only record with a derived reader."
+  },
+  "planApprovedAt": "2026-09-05T19:58:15.448Z"
+}

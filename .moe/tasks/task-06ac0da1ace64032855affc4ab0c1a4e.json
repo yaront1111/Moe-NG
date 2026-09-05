@@ -23,8 +23,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY, NO EDITS. (a) Confirm the producer: apps/daemon/src/design/design-store.ts exports submitDesignRevision and readDesignRevision; design-contracts.ts has DESIGN_CODE_LAYERS / designRefusal taking no layer argument. (b) Confirm the gap: grep design.submit / design.read in daemon-command-vocabulary.ts, runtime-vocabulary.ts, PAYLOAD_KEYS — ZERO roster hits (the store file's commandKind string does not count). (c) Re-measure the LIVE counts this row increments: ROWS.toHaveLength(N) in vocabulary.test.ts:243 and registry.test.ts:818, REGISTRATION_ORDER length, OPERATOR_ONLY length (must NOT increment — this kind is not operator-only), store-deps registryKinds length, RUNTIME_COMMAND_KINDS size literal in runtime-contract.test.ts:105, RUNTIME_QUERY_KINDS array at :93. preview.decide (task-40e52fa8) may already have bumped 46→47; write the measured N in the step note and increment from THAT, not from this plan's memory of 46. (d) Confirm dependsOn task-40e52fa8 is DONE before editing the shared roster; if still WORKING, you should not have been claimed — report_blocked with blockedOnTaskIds naming it. (e) If a file outside planningNotes.keyFiles appears, STOP. MCP allowlist and mcp-dispatch-port.ts are task-7f9f20c7.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-05T20:02:21.637Z"
     },
     {
       "stepId": "step-2",
@@ -75,12 +76,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Re-plan: the approved plan's 10 affectedFiles omit two mandatory consumer mirrors that step 2's client regeneration will break — apps/control-room/src/data/data-adapter.test.ts:18 and apps/control-room/src/v2/goals/approve-plan.test.tsx:255, both pin GENERATED_CONTRACT_DIGEST and throw via createCompatGate on mismatch. worker-f72a1438 stopped at step 1 pre-edit per the plan's own STOP clause and global rail 19 (a consumer roster that would breach the path cap is a SPLIT signal at plan time). The roster is already at the 10-file ceiling, so this is amend+split, not a worker workaround. Routed to PLANNING by governor because the row was BLOCKED with NO blockedOnTaskIds — a dead park nothing auto-clears — and the remedy is architect work. Recommended shape (posted to #architects 20:07): carve 'publish kinds on the shared contract + regenerate + all four mirrors' into its own leaf, make 06ac0da1 (and 44760ed1, 37a50989, 5a8c3166, which all rotate the same digest tonight) dependsOn it, and drop runtime-vocabulary.ts / generated-client.ts from 06ac0da1's roster. This is the third collision on these two mirrors today (40e52fa8 14:15, c2b5a9f0 rescue 19:39). Prerequisites are DONE/landed; no source was edited; foreign dirty bytes preserved.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
   "dependsOn": [
@@ -95,11 +96,17 @@
       "author": "architect-3c27f2ab",
       "content": "PLAN NOTE (architect-3c27f2ab). DoD-2 (MCP behavioural read) and DoD-4 (MCP_SERVED_QUERY_KINDS + dispatch handler) moved to sibling task-7f9f20c7cddf4d50b49054951ab177fb so this row stays at 10 files. This row still: publishes both kinds on the shared contract + generated client, wires design.submit into the daemon command roster, asserts it is NOT MCP-excluded and NOT human-only.\n\ndependsOn now includes task-40e52fa8 (in-flight on the same roster files). WORKING stays gated until that lands. Re-measure ROWS length before incrementing — do not assume 46.\n\nQA: grade DoD-2 read-half and DoD-4 as owned by task-7f9f20c7.",
       "timestamp": "2026-09-05T11:31:15.219Z"
+    },
+    {
+      "id": "comment-f6d51faf142a411b8a7d5402006b0023",
+      "author": "worker-f72a1438",
+      "content": "Step-1 pre-edit audit (zero source edits). Prerequisites 5e90317e and 40e52fa8 are DONE/landed per epicSiblings, verification/completion read. Gap still real: git grep design.submit/design.read in daemon-command-vocabulary.ts + runtime-vocabulary.ts + generated client => zero roster hits; store free-form commandKind is not publication. Existing exports submitDesignRevision/readDesignRevision and designRefusal(code,sourceCode=null,sourceLayer=null) verified; layer derives DESIGN_CODE_LAYERS.\nCounts at production-at-claim: vocabulary ROWS47; registry ROWS47, REGISTRATION_ORDER47; OPERATOR_ONLY12 in both (must stay12); runtime commands110 in dirty peer roster; queries18; registryKinds literal47 entries, no length assertion. vocabulary386 physical lines, registry462 pre-existing. Daemon six owned paths are clean; four shared contract/client paths contain peer edits adding deployment.deploy/set_target, environment.set_variable/unset_variable, release.decide, repository.bootstrap. Preserved all.\nBLOCKING SCOPE DISCOVERY: extracting GENERATED_CONTRACT_DIGEST then `git grep -n -F <hex> -- . ':!.moe' ':!.serena'` gives FOUR paths. Current hex f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd at generated-client.ts:919; generated-coverage.test.ts:36; apps/control-room/src/data/data-adapter.test.ts:18; apps/control-room/src/v2/goals/approve-plan.test.tsx:255. The latter TWO are not in planningNotes.keyFiles (10 paths). Both feed the literal to createCompatGate and throw on !gate.ok (lines20/257), so a real regeneration necessarily requires these mirrors or breaks consumers. Independent read-only audit confirms. No activeAmendmentId/amendments returned for any step in freshly fetched context; step1(e) explicitly STOP for any file outside keyFiles. Epic rail2 independently requires literal census and full UI gate; base step6 omits UI gate. Need architect amend/split shared-contract leaf+all four mirrors and sequence daemon consumer, or explicitly resolve ownership/scope without expanding silently. This is a guaranteed consumer break, not peer-dirt blocking or denominator polish. No generator/tests run and no path claimed.",
+      "timestamp": "2026-09-05T20:05:10.301Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:40:28.076Z",
-  "updatedAt": "2026-09-05T11:31:17.223Z",
+  "updatedAt": "2026-09-05T20:09:05.544Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:26:39.278Z",
     "plannedStepCount": 6,
@@ -128,5 +135,15 @@
       "apps/daemon/src/daemon-store-dependencies.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T11:31:17.223Z"
+  "planApprovedAt": "2026-09-05T11:31:17.223Z",
+  "contextFetchedBy": [
+    "worker-f72a1438"
+  ],
+  "workStartedAt": "2026-09-05T20:02:21.637Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Step1 explicitly STOP for files outside the 10-file keyFiles; fresh plan has no amendment overlay. Literal generated digest census proves two mandatory consumer mirrors omitted: apps/control-room/src/data/data-adapter.test.ts:18 and apps/control-room/src/v2/goals/approve-plan.test.tsx:255. Both pass hard-coded hash to real createCompatGate and throw when it mismatches. Step2 regeneration changes digest, so implementing as approved breaks those consumers; silently adding them violates exact scope. Need architect split/amend shared-contract+all-four-mirror leaf and dependency or equivalent explicit scope resolution. Prerequisites are DONE/landed, foreign dirty bytes preserved, no source edited. Full measurements in latest comment.",
+  "blockedOnTaskIds": null
 }

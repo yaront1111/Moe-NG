@@ -19,8 +19,30 @@
     "needs-you-model.ts and ops-screens.tsx are being edited by three other rows concurrently - rebase, do not delete a peer's entry; ops-screens.tsx is 228 lines against a 250 ceiling, so put the Environments section in its own module.",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; EXACT-KEY decoders plus a dev-proxy-paths pin for any new read."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE TWO GRANDCHILDREN DELIVERED, AND THAT THE PROOF LANDED WHERE IT WAS FOLDED. This row is a SPIDR shell: it carried four UI surfaces plus a Playwright journey, a live drive and docs — thirteen-plus files against a ten-file ceiling. Write NO production code here; a shortfall routes back to the row that owns it.\n\nIts DoD is now distributed three ways:\n  - DoD 1 and 5 -> grandchild A task-df972c274f2a43eda3a9f57d2780c6f9 (Environments surface, sparkline, backups restore-proof list)\n  - DoD 2, 3 and 4 -> grandchild B task-85895a88a2484d8589046b2030efd445 (the incident card's three time-pressure properties)\n  - DoD 6 and 7 -> FOLDED INTO the epic's integration-and-hardening row task-99f364e3a6104ee993b6820c580a52fb as comment-a725ac5d23b543a08ff33d40637ab648, per global rail 21. `moe.create_task` named that row when the first grandchild was filed, its own title is already this journey, and the epic stood at 44 non-archived rows against an advisory ceiling of 40 — so a third grandchild would have been board inflation. Verify that comment is still on that row and that its DoD absorbed the journey, the live drive and the docs. If it did not, say so plainly here rather than quietly re-filing them.\n\nRead both grandchildren's verification, completionSummary and reviewSummary from get_context.epicSiblings rather than re-deriving their work.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONFIRM THE FOUR PROPERTIES THAT MAKE THIS AN INCIDENT SURFACE RATHER THAN A DASHBOARD. Check the ASSERTION SHAPE, not merely that an arm exists — each of these has a way of passing while being wrong.\n\n(a) THE REAL ERROR LINE (B's DoD 1). Confirm the arm asserts the EXACT error text reaches the card, not that some error-ish string is present. A card rendering only \"unhealthy\" sends the operator to the logs it was built to replace.\n\n(b) THE CONFIRM NAMES THE SHA (B's DoD 2). Confirm the assertion is on the CONFIRM surface, not the card behind it. The confirm is the moment the operator commits, and rolling back to the wrong sha during an incident is a second incident.\n\n(c) DISMISS IS NOT RESOLVE (B's DoD 3). Confirm BOTH directions are asserted: still DOWN on the Environments surface after a dismiss, AND the card returns at the next failure threshold. One direction alone permits a dismiss that quietly ends monitoring — which is how an outage gets forgotten.\n\n(d) RESTORE-PROOF STATE IN THREE VALUES (A's DoD 3). Confirm \"not yet checked\" is asserted as NOT rendering as proven. Collapsing those two is the exact distinction the restore check exists to establish, and an operator leans on it at the worst possible moment.\n\nThen confirm the two structural properties that keep the browser honest:\n  - The card renders the state the DAEMON derived and does not recompute UP/DEGRADED/DOWN client-side (A's DoD 2). A browser-side derivation is a second opinion about one ring.\n  - The Roll back control is OFFERED BY THE DAEMON, absent when no rollback is offered (B's DoD 5). A browser-minted control can offer what the command path refuses — the dead-button hazard this board has already shipped once.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/ops/ops-screens.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES AND CLOSE.\n\nRun each STANDALONE and FOREGROUND — no pipe, no `;` chain, no `&&` (a piped run reports tail's exit code; a chain reports only the last command's):\n  1. `pnpm --filter @moe/control-room test`\n  2. `pnpm --filter @moe/daemon test`\n  3. `pnpm typecheck`\nREAD THE OUTPUT, NOT THE EXIT CODE: a missed `--filter` exits 0, and \"No test files found\" / \"0 passed\" are also exit 0. The discriminator is `Test Files N passed` with N nonzero — quote it for each. A bare `pnpm test` covers no `apps/**` and is not evidence for anything in this row's subtree. Name `pnpm --filter @moe/control-room test` as this row's complete_task verification command.\n\nDo NOT run `pnpm test:e2e:browser` as this row's gate: the journey moved to task-99f364e3 with the fold-in, and quoting its count line here would claim evidence this row does not own.\n\nThis row owns NO production paths, so any red belongs to a grandchild or a peer — attribute by path per global rail 3 and report it verbatim with exact failing lines. Note that three rows (task-a988ca1c, task-33ceae56, task-84cd2e55) were editing needs-you-model.ts, needs-you.tsx and ops-screens.tsx concurrently at plan time, so a red in those files may well be a peer's; say which rather than absorbing it.\n\nCOMPLETION RECORD states: which grandchild delivered which DoD item; that DoD 6 and 7 were folded into task-99f364e3 rather than dropped, naming the comment id; the final line count of ops-screens.tsx against its 250 ceiling (236 at plan time); and whether the live drive actually ran or was honestly recorded as absent because no environment was deployed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,13 +51,33 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
   "dependsOn": [
-    "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
-    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4"
+    "task-df972c274f2a43eda3a9f57d2780c6f9",
+    "task-85895a88a2484d8589046b2030efd445"
   ],
   "priority": "HIGH",
   "order": 123,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:54:00.782Z",
-  "updatedAt": "2026-09-05T00:54:00.782Z"
+  "updatedAt": "2026-09-05T20:07:13.914Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T20:02:54.872Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T20:07:11.709Z",
+  "planningNotes": {
+    "approachesConsidered": "A THIRD GRANDCHILD FOR THE PROOF (journey + live drive + docs) — rejected, and this is the one judgement call in the split. Global rail 21 permits a proof row only when it certifies a capability shipped by a DONE row it does not own, and the epic already HAS its integration-and-hardening row whose title is literally this journey. create_task named that row unprompted, and the epic is four rows past its advisory ceiling. Folding the two proof items into task-99f364e3 by comment is what the rail asks for and costs the board nothing.\n\nWHERE THE UI SEAM WENT: ops/ versus approvals/. Grandchild A (Environments surface, sparkline, backups list) and grandchild B (the incident card) touch DISJOINT files, so they are parallel-claimable — which matters here because three peers are already editing this area. Splitting instead by \"read surfaces vs write actions\" would have put both rows in needs-you.tsx and serialised them for no benefit.\n\nKEEPING THE INCIDENT CARD WITH THE DEPLOYMENTS CARD — rejected on size and on failure mode: together they are ~10 files before the journey, and the incident card carries three sharp behavioural properties (verbatim error, sha on the confirm, dismiss-is-not-resolve) that deserve their own review rather than sharing one with a sparkline.\n\nLETTING THIS SHELL QUOTE `pnpm test:e2e:browser` — explicitly forbidden in step 3. The journey moved to task-99f364e3; quoting its count line here would claim evidence this row no longer owns.",
+    "codebaseInsights": "MEASURED 2026-09-05 by architect-aa54e231 on branch moe/work-2026-09-04. This row was SPLIT and PARTLY FOLDED rather than planned: four UI surfaces plus a Playwright journey, a live drive and docs projected to thirteen-plus files against a ten-file ceiling.\n\nTHE ROSTER THIS ROW'S CARD EXTENDS IS CLOSED, AND THAT IS THE SEAM. apps/control-room/src/v2/approvals/needs-you-model.ts:28 still declares NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"], and its docblock states the governing principle: every item is \"derived only from things the daemon already states\", each rests on a daemon OFFER or read, and \"Every item routes to the goal\". A deployment outage routes to an ENVIRONMENT, not a goal — so the fifth kind is genuinely a UI change, which is why the daemon-side incident row (task-cc05c473) was fenced out of it and grandchild B owns it. Grandchild B is told to decide the routing deliberately and never to put a non-goal id in a goalId field, because every existing consumer assumes that field means what it says.\n\nSIZES, RE-MEASURED AND MOVING: apps/control-room/src/v2/ops/ops-screens.tsx is 236 lines against a 250 ceiling — it grew from the 228 the parent's description recorded, while the parent was being planned. needs-you-model.ts is 197 and needs-you.tsx is 207. So the Environments section must be its own module, and grandchild A is told ops-screens.tsx should gain only wiring.\n\nCONCURRENCY IS HIGH AND CONFIRMED LIVE: task-a988ca1c, task-33ceae56 and task-84cd2e55 are ALL in WORKING status and all editing needs-you-model.ts / needs-you.tsx / ops-screens.tsx. task-84cd2e55 is deployment UI adjacent to grandchild A. Both grandchildren carry a rebase-do-not-delete rail and are told to re-measure the roster before editing it.\n\nBOTH OF THE PARENT'S DEPENDENCIES ARE STILL WORKING: task-6ec875f4 (the probe and incident, which I split earlier into a scheduler leaf plus the probe/ring/incident row) and task-95e68a8d (backups and rollback). The grandchildren inherit those dependsOn unchanged; this shell now depends on the grandchildren instead.\n\nWHY THE PROOF WAS FOLDED RATHER THAN FILED. `moe.create_task` fired the meta/hardening warning naming task-99f364e3a6104ee993b6820c580a52fb (\"Platform integration and hardening: one goal reaches a running deployed environment and back out again\", order 130), and separately warned that the epic now holds 44 non-archived rows against an advisory ceiling of 40. Global rail 21 says to treat that warning as a fold-in instruction. That row's title IS this journey, so DoD 6 and 7 went there as comment-a725ac5d23b543a08ff33d40637ab648 rather than into a third grandchild.",
+    "risks": "1. THE PROOF GOING MISSING IN THE FOLD. DoD 6 and 7 now live in another row's comment. If task-99f364e3 does not absorb them into its DoD, the journey, the live drive and the docs are silently dropped and this row's parent looks complete. Step 1 requires verifying the fold actually took, and forbids quietly re-filing them.\n\n2. A DISMISS THAT READS AS RECOVERY. The single worst outcome this surface can produce: an operator dismisses a card, the environment is still down, and nothing brings it back. Only asserting BOTH directions catches it, and the natural test asserts one.\n\n3. AN ERROR LINE SUMMARISED. \"Unhealthy\" is the obvious render and it defeats the card's entire purpose — an incident surface that hides the error sends its reader to the logs under time pressure.\n\n4. A BROWSER-MINTED ROLLBACK CONTROL. Every existing Needs-you kind rests on a daemon offer; synthesising this one produces a button the command path refuses, which this board has already shipped once and had to file a row to undo.\n\n5. \"NOT YET CHECKED\" RENDERING AS PROVEN. It collapses the exact distinction the restore check exists to establish, and it fails safe-looking: the operator believes a backup is restorable when nobody has tried.\n\n6. A CLIENT-SIDE UP/DOWN DERIVATION. Two opinions about one probe ring, which will eventually disagree, and the browser's will be the one the operator sees.\n\n7. PEER CONTENTION. Three rows are live in these exact files; a rebase that drops a peer's roster entry is the likely accident, and the roster may already have grown past four kinds by claim time.\n\n8. THE EPIC IS 44 ROWS AGAINST A CEILING OF 40. Flagged rather than acted on: re-slicing this epic is a governor call, not something to do while planning one row inside it.",
+    "keyFiles": [
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/control-room/src/v2/approvals/needs-you.tsx",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/live/live-ops.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T20:07:13.914Z"
 }

@@ -1,0 +1,42 @@
+{
+  "id": "task-85895a88a2484d8589046b2030efd445",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The Needs-you incident card: the real error line, a rollback confirm that names the sha, and a dismiss that is not a resolve",
+  "description": "SPIDR grandchild B of task-f008f29a38d54ae7a10e97cad1c4443d (architect-aa54e231, 2026-09-05). Owns the parent's DoD 2, 3 and 4 - the three properties the parent called out as consequences of this being an INCIDENT SURFACE. It carries the parent's dependsOn unchanged.\n\nTHIS ROW ADDS THE FIFTH NEEDS-YOU KIND, and that is deliberate: it is the UI change the daemon-side incident row was explicitly forbidden from making. Measured at HEAD (branch moe/work-2026-09-04): apps/control-room/src/v2/approvals/needs-you-model.ts:28 declares a CLOSED roster - NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"] - and its docblock states the governing principle: every item is \"derived only from things the daemon already states\", each rests on a daemon OFFER or read, and \"Every item routes to the goal\".\n\nAN INCIDENT BREAKS THAT LAST SENTENCE and you must handle it deliberately rather than by accident: a deployment outage routes to an ENVIRONMENT, not a goal. Decide where the card routes and say why in the record; do not leave `goalId` holding something that is not a goal, because every existing consumer of a Needs-you item assumes that field means what it says. The first four kinds also each rest on a daemon OFFER - keep that property: the Roll back control should be offered by the daemon, not synthesised in the browser, or the card will offer an action the command path can refuse.\n\nTHREE PROPERTIES, ALL OF THEM ABOUT AN OPERATOR UNDER TIME PRESSURE:\n1. THE LAST ERROR LINE VERBATIM. \"Unhealthy\" sends the operator to the logs this card was supposed to replace.\n2. THE CONFIRM NAMES THE TARGET SHA. Rolling back to the wrong sha during an incident is a second incident.\n3. DISMISS IS NOT RESOLVE. Dismissing while the environment is still DOWN must leave it visibly DOWN elsewhere and must let the card return at the next failure threshold. A dismiss that reads as recovery is how an outage gets forgotten.\n\nCONCURRENCY IS HIGH HERE. needs-you-model.ts (197 lines) and needs-you.tsx (207 lines) are being edited RIGHT NOW by task-a988ca1c, task-33ceae56 and task-84cd2e55, all WORKING. Expect a rebase, never delete a peer's roster entry, and re-measure the roster before editing it - it may already have grown.\n\nNOT IN SCOPE: the Deployments card and the backups list (grandchild A); the Playwright journey, the live drive and the docs (grandchild C).\n\nVERIFY: `pnpm --filter @moe/control-room test`.",
+  "definitionOfDone": [
+    "The incident card renders 'production unhealthy since <t>' with THE LAST ERROR LINE VERBATIM. Assert the exact error text reaches the rendered card, not that some error-ish string is present - a card showing only 'unhealthy' sends the operator to the logs it was meant to replace.",
+    "THE ROLLBACK CONFIRM NAMES THE TARGET SHA at the moment of confirmation - assert the sha is in the confirm surface itself, not merely in the card behind it. Rolling back to the wrong sha during an incident is a second incident.",
+    "DISMISS IS NOT RESOLVE, asserted in BOTH directions: after dismissing, the environment still reads DOWN on the Environments surface, AND the card returns at the next failure threshold rather than staying silent. One direction alone permits a dismiss that quietly ends monitoring.",
+    "The fifth kind is added to NEEDS_YOU_KINDS without disturbing the four that exist - assert all five are present, and re-measure the roster before editing since three rows are extending this file concurrently and it may already have grown.",
+    "The Roll back control is OFFERED BY THE DAEMON rather than synthesised in the browser, matching how the existing four kinds each rest on a daemon offer or read. Assert the control is absent when the daemon offers no rollback - a card that offers an action the command path will refuse is the dead-button hazard this board has already shipped once.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "THE REAL ERROR LINE, VERBATIM. An incident surface that summarises the error has failed at the one job it has.",
+    "THE CONFIRM NAMES THE SHA. Not the card, the confirm - that is the moment the operator commits.",
+    "DISMISS MUST NOT READ AS RECOVERY, asserted in both directions: still DOWN elsewhere, and the card returns.",
+    "THE CONTROL IS OFFERED BY THE DAEMON, never synthesised. The existing four kinds all rest on a daemon offer; a browser-minted control can offer what the command path refuses.",
+    "AN INCIDENT DOES NOT ROUTE TO A GOAL. The model's docblock says every item routes to the goal; decide deliberately where this one routes and never put a non-goal id in a goalId field.",
+    "REBASE, DO NOT DELETE A PEER'S ENTRY: task-a988ca1c, task-33ceae56 and task-84cd2e55 are all editing needs-you-model.ts and needs-you.tsx concurrently.",
+    "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT, EXACT-KEY decoders, dev-proxy-paths pin for any new read."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f008f29a38d54ae7a10e97cad1c4443d",
+  "dependsOn": [
+    "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
+    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4"
+  ],
+  "priority": "HIGH",
+  "order": 123.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T20:05:32.557Z",
+  "updatedAt": "2026-09-05T20:05:32.557Z"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "task-df972c274f2a43eda3a9f57d2780c6f9",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The Environments surface: UP DEGRADED DOWN with a latency sparkline, and backups showing restore-proof state",
+  "description": "SPIDR grandchild A of task-f008f29a38d54ae7a10e97cad1c4443d (architect-aa54e231, 2026-09-05), split because the parent carried four UI surfaces plus a Playwright journey, a live drive and docs - measured at thirteen-plus files against a ten-file ceiling. This row owns the parent's DoD 1 and 5. It carries the parent's dependsOn unchanged.\n\nWHAT THIS ROW OWNS: the Deployments card (UP / DEGRADED / DOWN, last probe time, latency sparkline over the last hour) and the backups list showing RESTORE-PROOF state, plus the 'Environments' section on the Health screen that hosts them.\n\nPUT IT IN ITS OWN MODULE. Measured at HEAD (branch moe/work-2026-09-04): apps/control-room/src/v2/ops/ops-screens.tsx is 236 LINES against a 250 ceiling - it grew from 228 while the parent was being planned. A new section written inline pushes it over. ops-screens.tsx should gain little more than the wiring.\n\nSHOW RESTORE-PROOF STATE, NOT BACKUP EXISTENCE. Child 2 (task-95e68a8d) records a restore-to-temp sha256 per backup precisely so 'a backup exists' and 'a backup has been proven restorable' are different facts. A list that renders only existence hides the distinction that row exists to establish, and it is the distinction an operator relies on at the worst possible moment. Render three states - proven / failed / not yet checked - and never collapse 'not yet checked' into 'proven'.\n\nREAD WHAT THE DAEMON STATES. The probe ring and the derived UP/DEGRADED/DOWN belong to child 1's grandchild task-cc05c47362dc41b0b2b416a70ad45b42; this row RENDERS them and derives nothing of its own. If the frame does not carry a fact you need, that is a comment on that row and a report_blocked here - not a client-side derivation, which would put a second UP/DOWN opinion in the browser.\n\nCONCURRENCY: apps/control-room/src/v2/ops/ops-screens.tsx is being edited by task-84cd2e55 ('The operator deploys an environment from the goal and sees where...'), which is WORKING and is deployment UI adjacent to this. Rebase, never delete a peer's entry, and check the testid namespace you choose is free before using it.\n\nNOT IN SCOPE: the Needs-you incident card, Roll back / Dismiss (grandchild B); the Playwright journey, the live drive and the docs (grandchild C).\n\nVERIFY: `pnpm --filter @moe/control-room test`.",
+  "definitionOfDone": [
+    "The Deployments card renders UP / DEGRADED / DOWN with the last probe time and a latency sparkline over the last hour, driven by a REAL daemon frame rather than a hand-built fixture object - assert against the shape the daemon actually serves, so a frame change breaks this test rather than production.",
+    "The state shown is the one the DAEMON derived: assert the card renders what the frame says and does NOT recompute UP/DEGRADED/DOWN in the browser. A client-side derivation is a second opinion that will eventually disagree with the daemon about the same ring.",
+    "The backups list renders each backup's RESTORE-PROOF state as three distinct values - proven / failed / not yet checked - asserted separately. Assert specifically that 'not yet checked' is NOT rendered as proven: collapsing them hides the exact distinction the restore check exists to establish.",
+    "The Health screen gains an 'Environments' section in its own module, and apps/control-room/src/v2/ops/ops-screens.tsx stays under the 250-line ceiling - quote its line count before and after in the completion record. It was 236 at filing.",
+    "Any new read is decoded EXACT-KEY with a dev-proxy-paths pin, matching how every other live read client in this app works; and the sources are ASCII-only with apostrophe-free JSX text (the scheduler package-boundary scan reds on an apostrophe in JSX).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "RENDER WHAT THE DAEMON STATES, DERIVE NOTHING. UP/DEGRADED/DOWN is computed from the probe ring by the daemon; a browser-side recomputation is a second source of truth about one history.",
+    "SHOW RESTORE-PROOF STATE IN THREE VALUES. 'Not yet checked' must never render as proven - that collapse is the failure this surface exists to prevent.",
+    "OWN MODULE, NOT INLINE. ops-screens.tsx was 236 lines against a 250 ceiling at filing and is being edited concurrently by task-84cd2e55; it should gain only wiring.",
+    "REBASE, DO NOT DELETE A PEER'S ENTRY. Three rows are editing this area concurrently; check your testid namespace is free before claiming it.",
+    "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT, EXACT-KEY decoders, dev-proxy-paths pin for any new read.",
+    "NO INCIDENT CARD, NO ROLLBACK CONTROL, NO PLAYWRIGHT, NO LIVE DRIVE, NO DOCS - grandchildren B and C."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f008f29a38d54ae7a10e97cad1c4443d",
+  "dependsOn": [
+    "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
+    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4"
+  ],
+  "priority": "HIGH",
+  "order": 123.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T20:05:08.102Z",
+  "updatedAt": "2026-09-05T20:05:08.102Z"
+}
