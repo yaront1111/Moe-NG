@@ -19,14 +19,18 @@
     {
       "stepId": "step-1",
       "description": "SPIDR PARENT - VERIFICATION ONLY, NO EDITS. Split on 2026-09-04 by architect-16a01670 into two children that carry every edit; dependsOn names them and the runtime withholds this row until both are DONE: 2a task-138fab3075884df98c3c220e74c1a3e9 (offer ladder + compile dispatcher follow the current run, activity verdict for approval kinds) and 2b task-2c016c04dedc4eb88982a1d8d5108ddf (rejection reason in the compiler mission + the real-process reject/re-plan/approve journey). STEP 1 - prove each landed ON DISK: `git log main --grep \"Moe-Task: <id>\" --oneline` for both (or get_context.epicSiblings landing.merged); `grep -n \"currentRun\" apps/daemon/src/http/affordance-planning-offers.ts apps/daemon/src/http/affordance-read.ts`, `grep -n \"currentPlanningRun\\|REVISION\" apps/daemon/src/planning/compile-dispatcher.ts`, `grep -n \"approval.decide_intent\" apps/daemon/src/http/activity-read.ts`, `ls apps/daemon/src/planning/rejection-instructions.ts tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts`. Any miss -> moe.report_blocked with blockedOnTaskIds naming the child; never patch here.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "STEP 1 (verification only, ZERO edits). Both SPIDR children are landed on moe/work-2026-09-04 and present on disk.\n\nLANDING (git log <branch> --grep \"Moe-Task: <id>\"):\n- child 1 task-3780109018bb49b2bf3a00b18952d7ff: feat bb1afdf6 + fix 5d035120, DONE wip a33076d7.\n- child 2a task-138fab3075884df98c3c220e74c1a3e9: feat 48eed563, DONE wip d1b8b371.\n- child 2b task-2c016c04dedc4eb88982a1d8d5108ddf: feat 32e53bcf, DONE wip 4e85df6e.\n\nON-DISK GREPS (all present):\n- `grep -n currentRun apps/daemon/src/http/affordance-planning-offers.ts apps/daemon/src/http/affordance-read.ts` -> offers.ts:56 `readonly currentRun: (planningRunRef: string) => string;` (the PlanningOfferInput fact), offers.ts:214 `const current = input.currentRun(goal.planningRunRef);`, affordance-read.ts:309 `currentRun: (planningRunRef): string =>` (composition site).\n- `grep -n \"currentPlanningRun\\|REVISION\" apps/daemon/src/planning/compile-dispatcher.ts` -> REVISION at :277/:285/:336; NO literal `currentPlanningRun` hit. NOT a miss: 2a resolves the current run ONE HOP away through a new module so the dispatcher stays under cap — compile-dispatcher.ts:198 `const target = resolveCompileRun(store, provenance.planningRunRef);` (imported :36 from ./compile-run-resolution.js), and compile-run-resolution.ts:19 imports `currentPlanningRun` from ./current-planning-run.js, :50 calls it, :53-57 answers {runId, runKind INITIAL|REVISION, baseVersion 0|1} and FAILS CLOSED (`if (current.unreadable) return null`) instead of compiling onto a last-good id. Dispatcher then uses `runId` for the ids (:267/:273) and `proposalKind: target.runKind` (:337) — the row's \"resolve, never rewrite\" rail is satisfied through the seam.\n- `grep -n \"approval.decide_intent\" apps/daemon/src/http/activity-read.ts` -> :80 inside VERDICT_KINDS alongside \"approval.decide\".\n- `ls apps/daemon/src/planning/rejection-instructions.ts tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts` -> both exist (6511 B / 8496 B).\n- child 1 resolver: `grep -n currentPlanningRun apps/daemon/src/planning/current-planning-run.ts` -> :120 `export function currentPlanningRun(`.\n\nPER-FILE CAP MEASURED NOW vs the children's merge parents (`git show <feat>^:<path> | wc -l`):\n- affordance-read.ts 468 -> 497 (2a +29). ALREADY over the 400 hard stop before 2a touched it; 2a widened a pre-existing violation. Carried into step 2/3 as the one DoD-sentence-5 exception; will be recorded as a comment on the owning child, not re-litigated here.\n- compile-dispatcher.ts 388 -> 388 (2a added no net lines; under 400, over the 250 target).\n- agent-wrapper-main.ts 483 -> 378 (2b SHRANK it by 105 by extracting rejection-instructions.ts at 120 lines — an over-400 file brought back under).\n- new modules: compile-run-resolution.ts 93, current-planning-run.ts 125, rejection-instructions.ts 120 — all under 250.\n\nShared checkout: 42 foreign dirty paths (.moe/*, control-room, docs, scripts) noted and left untouched. No files created or modified by this step.",
+      "startedAt": "2026-09-05T22:25:20.722Z",
+      "completedAt": "2026-09-05T22:28:48.094Z"
     },
     {
       "stepId": "step-2",
       "description": "STEP 2 - re-run the children's gates READ-ONLY at the delivered tree and quote every count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e` (the j5 journey listed). Walk this row's five DoD sentences and map each to the child arm that discharges it (file + test name); a sentence with no arm -> comment on the owning child and report_blocked with blockedOnTaskIds. No new tests here.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-05T22:28:54.614Z"
     },
     {
       "stepId": "step-3",
@@ -36,7 +40,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-afd89b78",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -77,13 +81,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:27:30.045Z",
-  "updatedAt": "2026-09-04T21:01:46.417Z",
+  "updatedAt": "2026-09-05T22:28:54.614Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:43:17.427Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 0
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T14:46:09.620Z",
   "planningNotes": {
@@ -98,5 +105,9 @@
       "tests/e2e/foundation/j4-replan-harness.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T14:46:11.791Z"
+  "planApprovedAt": "2026-09-04T14:46:11.791Z",
+  "contextFetchedBy": [
+    "worker-afd89b78"
+  ],
+  "workStartedAt": "2026-09-05T22:25:20.722Z"
 }
