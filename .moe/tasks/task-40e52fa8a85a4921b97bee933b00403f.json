@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T11:31:57.174Z",
+  "updatedAt": "2026-09-05T11:32:34.718Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -230,6 +230,27 @@
       "treeId": "4a83d3f8bbe9f1d1779e576e5ee666facfcb390f",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "2f3a4f58f3de34e6dba5dba53406297e7a26a110",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+        ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
+        ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json"
+      ],
+      "recordedBy": "worker-fa42c94f",
+      "recordedAt": "2026-09-05T11:32:34.718Z",
+      "treeId": "a42475a95941404f58c0007bac68aa6d5c1eafb1",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -242,19 +263,33 @@
     "apps/daemon/src/preview/preview-contracts.ts",
     ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
     ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
-    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+    ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
+    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/preview/preview-contracts.js",
     "apps/daemon/src/preview/preview-contracts.ts",
     "apps/daemon/src/preview/preview-contracts.test.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/daemon-command-dispatch.ts",
+    "apps/daemon/src/daemon-command-edges.ts",
+    "apps/daemon/src/daemon-foundation-verification-command.ts",
+    "apps/daemon/src/daemon-v2-command-registry.ts",
+    "apps/daemon/src/planning/compiled-authority-bodies.ts",
+    "apps/daemon/src/product-contract/product-contract-propose-service.ts",
+    "apps/daemon/src/product-contract/product-contract-provenance.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
-    "at": "2026-09-05T11:22:16.085Z"
+    "at": "2026-09-05T11:32:34.718Z"
   },
   "priorBlockedReason": "STEP 1 CLAUSE (c) STOP-AND-REPORT FIRED. Amended text (activeAmendmentId=amend-1, global rail 10): \"If the trace names a file outside this plan's seven, STOP and report - there is no headroom.\" It names TWO. Verbatim evidence: comment-6093ee6b869d4383bf6dec53c9334b02.\n\n1. apps/daemon/src/daemon-store-dependencies.test.ts - unnamed, hard red. :670 `registryKinds: [...deps.registry.keys()].sort()` vs a hand-written 46-kind roster at :745 (\"A new command writes its own kind here\"). registry.ts:392 DERIVES the served set from Object.keys(PAYLOAD_KEYS), so step 4's entry alone reds it. Invisible to a kind-literal grep in production source.\n\n2. packages/contracts/src/runtime/runtime-vocabulary.ts - moved OUT by amend-1, needed twice.\n(i) TYPECHECK: RUNTIME_COMMAND_KINDS lacks \"preview.decide\"; registry.test.ts types Row.kind (:75), REGISTRATION_ORDER (:280), OPERATOR_ONLY (:306) as RuntimeCommandKind, with set-equality sweeps at :814/:820-821 forbidding omission. Probe: `TS2322: Type '\"preview.decide\"' is not assignable to type '\"approval.decide\" | ... 95 more ... | \"work.resume\"'`.\n(ii) REACHABILITY, decisive: http-command-ingress.ts:152 -> runtime-envelope.ts:142 `if (!isCommandKind(...)) return commandFailure(invalidInput())`. preview.decide is refused INPUT_INVALID at the envelope BEFORE the registry and the operator fence, so step 4's \"MUST BE SERVED, NOT ONLY ADVERTISED\" and DoD-2's \"reaches the handler\" are unreachable here.\n\nNot taking the file: task-5f883e4e12c34842b3cb6c2f218e4256 is WORKING and its DoD-2 owns that line plus the four digest mirrors. It dependsOn THIS row, so blockedOnTaskIds would close a cycle - omitted deliberately.\n\nDELIVERED GREEN (DoD 4, 5): apps/daemon/src/preview/preview-contracts.ts (249 lines) + .js bridge + test. Tests 30 passed (30), exit 0. Three mutation drills RED, SHA256-restored.\n\nFIX: give this row one RUNTIME_COMMAND_KINDS line + daemon-store-dependencies.test.ts; strike DoD-2 from task-5f883e4e.",
   "blockedOnTaskIds": null,

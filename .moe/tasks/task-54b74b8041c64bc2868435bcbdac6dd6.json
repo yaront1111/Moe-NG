@@ -1,0 +1,41 @@
+{
+  "id": "task-54b74b8041c64bc2868435bcbdac6dd6",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "release.decide is wired in the daemon registry and fenced to the operator: human-only, MCP-excluded, refusing fail-closed",
+  "description": "SPIDR child B of task-f961dc899a13488da8f119abdc37631f (architect-71b9a4e9, 2026-09-05). dependsOn child A task-bda0eeac02544c1992c6738c2db83178 for `RuntimeCommandKind`, and on task-40e52fa8 / task-5f883e4e because `preview.decide` moves the SAME count literals and the SAME two fence files first.\n\nWHAT THIS ROW OWNS: the daemon-side roster backfill, the operator fence, and an async registry entry that REFUSES FAIL-CLOSED. No PR port, no receipt, no service - that is child C (task-f961dc89).\n\nROSTER MEASURED AT HEAD (architect-71b9a4e9, 2026-09-05), traced from `escalation.decide` and `repository.publish`:\n- daemon-command-vocabulary.ts: `:80` REVIEW_FAMILY / `:70` BOOTSTRAP_FAMILY (pick ONE family and say why in the step note - `repository.publish` sits in BOOTSTRAP_FAMILY on CAPABILITIES.GOAL and is the closest analogue, since a release is the operator's act on their own repository), `:160` WiredCommandKind union, `:256` PAYLOAD_KEYS, `:344` OPERATOR_PRINCIPAL_KINDS.\n- daemon-command-families.ts:156 `commandFamilyFacts` - the per-kind flag block.\n- daemon-command-registry.ts:229 `asyncEntries` / `:244` `entryOf` (async entries are answered FIRST and returned whole, so the family wiring below never runs for them).\n- daemon-command-async-entries.ts:24 `AsyncCommandKind` union (2 members today) and `:43` `createAsyncCommandEntries` - this is where the fail-closed entry goes. The file is 87 lines; the established posture is `unconfiguredFoundationContextSealPort()`, i.e. an unconfigured daemon REFUSES under the producer's own code.\n- mcp-tool-allowlist.ts:59 `MCP_EXCLUDED_COMMAND_KINDS` (6 entries today).\n- orchestrator/agent-spawn-contract.ts:195 `HUMAN_ONLY_STEPS`. There is EXACTLY ONE definition; agent-wrapper.ts:24 re-exports it. Do not look for a second.\n\nTHE FOUR TEST PINS THAT ARE INVISIBLE TO A GREP FOR THE KIND LITERAL IN PRODUCTION SOURCE - all four move, measured line by line:\n- daemon-command-vocabulary.test.ts: `:243/:244` ROWS 46, `:245` `Object.keys(PAYLOAD_KEYS)` toEqual ROWS kinds, `:283` declared 35, `:289-296` FAMILY_MAPS per-table sizes, `:328/:329` OPERATOR_ONLY 11 and OPERATOR_PRINCIPAL_KINDS.size 11.\n- daemon-command-registry.test.ts: `:195-203` the ROWS payload-key table, `:818/:819/:826` ROWS 46 / registry.size 46 / REGISTRATION_ORDER 46, `:283-300` the FLAT `REGISTRATION_ORDER` roster which is transcribed in PAYLOAD_KEYS INSERTION order (NOT alphabetical - a row appended to the wrong place reds it), `:312` OPERATOR_ONLY, `:996/:997` its length 11.\n- daemon-store-dependencies.test.ts:746 `registryKinds` - a hand-written kind SET (the comment at :744 says \"A new command writes its own kind here\"), compared against `[...deps.registry.keys()].sort()` at `:671`.\n- mcp-tool-allowlist.test.ts:142 `expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(6)` plus the derived arithmetic at `:128` and `:149`.\nNOT AFFECTED, measured: `http/affordance-planning-offers.test.ts:352-360` iterates only kinds matching `startsWith(\"approval.\")`, so adding `release.decide` to HUMAN_ONLY_STEPS does not red it. Do not edit that file.\n\nEvery count literal above is CURRENT-STATE and will have MOVED by the time this row is claimed (task-40e52fa8 and task-5f883e4e land first). Read the printed expected-vs-received from the failing assertion and reconcile to THAT; never to a number in this description.",
+  "definitionOfDone": [
+    "`release.decide` is wired end to end in the daemon: a family capability, the WiredCommandKind union, a PAYLOAD_KEYS row, an `asyncEntries` entry, and `commandFamilyFacts` coverage - and it is in OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS. All four hand-written test pins reconciled in the SAME commit: daemon-command-vocabulary.test.ts, daemon-command-registry.test.ts (both the ROWS payload-key table AND the insertion-ordered REGISTRATION_ORDER roster), daemon-store-dependencies.test.ts registryKinds, mcp-tool-allowlist.test.ts.",
+    "A BIDIRECTIONAL set-equality test for the MCP fence that enumerates the SERVED set from the DISPATCH SEAM in production - `registry.keys()` for commands, `servedMcpQueryKinds()` for queries (mcp-dispatch-port.ts:316) - and asserts SET EQUALITY with the advertised roster in BOTH directions. A test that iterates the roster constant alone sees only one direction: deleting an entry shrinks its own iteration and stays green. VERIFY BY DELETING THE ENTRY FROM EACH SIDE IN TURN and confirming both go RED; quote both reds.",
+    "A non-operator principal dispatching `release.decide` is refused by the registry's operator fence, and the refusal is asserted with its CODE AND the LAYER that refused - not merely that it did not succeed. A second arm proves the kind is unreachable over MCP: assert it hits the port's generic INPUT_INVALID refusal, matching the existing behavioural binding mcp-tool-allowlist.test.ts already holds for the other six excluded kinds.",
+    "The async entry REFUSES FAIL-CLOSED for a well-formed operator dispatch, using RELEASE_PR_FAILED from child A's contract with a detail naming the unconfigured release port - the same posture `unconfiguredFoundationContextSealPort()` takes. A test asserts that code AND its layer, and that NO durable receipt or event is written on that path. Child C (task-f961dc899a13488da8f119abdc37631f) replaces this handler with the real service.",
+    "Mutation drill, quoted, one arm per fence: (a) remove `release.decide` from OPERATOR_PRINCIPAL_KINDS -> the non-operator refusal arm goes RED; (b) remove it from MCP_EXCLUDED_COMMAND_KINDS -> the bidirectional set-equality test goes RED; (c) remove it from HUMAN_ONLY_STEPS -> the staffing arm goes RED. Restore proof per global rail 13: `git status --porcelain` the mutated paths BEFORE drilling, and prove any UNTRACKED path restored by SHA256 against an out-of-tree backup, in a call SEPARATE from the restore.",
+    "Gates quoted WITH their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test` (this row is entirely apps/daemon - a bare `pnpm test` covers NO apps/** and is not evidence here), plus `pnpm typecheck`. A leg with no count line RAN NOTHING."
+  ],
+  "taskRails": [
+    "FAIL CLOSED, NEVER FAKE SUCCESS. The async entry refuses until child C lands the service. It must not write a receipt, an event or a decision on the refusing path.",
+    "Do NOT hand-edit the generated client and do NOT touch packages/contracts - child A (task-bda0eeac) owns both and lands first.",
+    "Do NOT edit apps/daemon/src/http/affordance-planning-offers.test.ts: measured, it iterates only `approval.*` kinds and does not move for this kind.",
+    "No count literal in this description is trustworthy at claim time - task-40e52fa8 and task-5f883e4e move the same numbers first. Reconcile to the assertion's PRINTED expected-vs-received.",
+    "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-bda0eeac02544c1992c6738c2db83178",
+    "task-40e52fa8a85a4921b97bee933b00403f",
+    "task-5f883e4e12c34842b3cb6c2f218e4256"
+  ],
+  "priority": "HIGH",
+  "order": 41.7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T11:32:41.681Z",
+  "updatedAt": "2026-09-05T11:32:41.681Z"
+}
