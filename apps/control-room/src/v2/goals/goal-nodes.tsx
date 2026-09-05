@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { OutcomeNote } from "../components/outcome-note.js";
@@ -25,7 +26,11 @@ export interface LiveGoalNodesProps {
   readonly headers: Readonly<Record<string, string>>;
   readonly pollMs?: number | undefined;
   /** The publish decision's two inputs: the daemon's surface (for its offer) and the port that spends it. */
-  readonly publishing?: { readonly frame: SurfaceFrame | null; readonly port: PublishPort | null } | undefined;
+  readonly publishing?: {
+    readonly frame: SurfaceFrame | null;
+    readonly port: PublishPort | null;
+    readonly remote: RepositoryRemoteOutcome | null;
+  } | undefined;
   /** Injectable for tests; the default reads POST /runs/read with `{ goalRef }`. */
   readonly read?: ((goalId: string) => Promise<RunsOutcome>) | undefined;
 }
@@ -38,7 +43,7 @@ export function GoalNodesPanel({ goalId, nowMs, outcome, publishing }: {
   return (
     <section className="cr2-ops-panel" data-testid="cr.goalnodes.root">
       {publishing === undefined ? null : (
-        <GoalPublish frame={publishing.frame} goal={goal ?? null} goalId={goalId} port={publishing.port} />
+        <GoalPublish frame={publishing.frame} goal={goal ?? null} goalId={goalId} port={publishing.port} remote={publishing.remote} />
       )}
       <h3 className="cr2-approve-heading">The work</h3>
       {outcome === null ? (

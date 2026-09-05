@@ -52,7 +52,8 @@ entry points, environment, and knobs.
   contract). A daemon-side verifier reruns the node's test before acceptance;
   the lander then commits exactly the paths the seat changed, on the
   workspace's current branch, and the publisher pushes only when a human
-  names a remote on the goal.
+  decides to publish — to the one git remote the project is bound to, named
+  once by a human on the first publish and reused, never typed again.
 - **Review loop**: three unsuccessful review rounds block a node on a human,
   who either allows more attempts or replans the work into a successor goal
   that carries the findings.

@@ -174,7 +174,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-05T02:35:08.690Z",
+  "updatedAt": "2026-09-05T02:36:18.270Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:47:41.465Z",
     "plannedStepCount": 7,
@@ -263,6 +263,21 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "89efc21d43072ed584b63321e1469bf36e997200",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-05T02:26:03Z",
+      "paths": [
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-05T02:36:18.270Z",
+      "treeId": "a4f7df73ae50a308e8ad8e589fe9cd6c5ee91466",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -274,7 +289,8 @@
     "apps/daemon/src/http/affordance-read-planning.test.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/control-room/src/v2/goals/work-labels.ts",
-    "apps/control-room/src/v2/goals/work-labels.test.ts"
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json"
   ],
   "touchedFiles": [
     ".moe-scratch-labels-arms.ts",
@@ -290,17 +306,13 @@
     ".moe-scratch-depends-arms.ts"
   ],
   "unattributedPaths": [
-    ".moe-tmp-step4.py",
-    ".moe-tmp-step5.py",
-    ".moe-tmp-step6.py",
-    ".moe-tmp-step7.py",
-    ".moe-tmp-step7b.py"
+    "apps/control-room/src/live/live-activation.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-75411639@2026-09-04T22:37:59Z",
-    "at": "2026-09-04T23:38:45.581Z"
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-05T02:26:03Z",
+    "at": "2026-09-05T02:36:18.270Z"
   },
   "reviewStartedAt": "2026-09-05T02:35:08.690Z",
   "verification": {

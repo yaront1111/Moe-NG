@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { LiveHealth, LivePolicy } from "./live-ops.js";
 import { HealthScreen, PolicyScreen, verifierWords } from "./ops-screens.js";
 
@@ -39,6 +40,19 @@ const HEALTH: HealthOutcome = {
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:35:00.000Z" },
   readAt: "2026-09-02T20:00:00.000Z", status: "HEALTH", verifier: { calibration: true, policy: true },
 };
+
+/**
+ * The two REMOTE frames the daemon really answers, recorded off its own production port
+ * (`createRepositoryRemoteReadPort(...).readRemote()`, apps/daemon/src/http/repository-remote-read.ts)
+ * and decoded through live-repository-remote.ts. Same bytes as live-repository-remote.test.ts.
+ */
+const BOUND_REMOTE: RepositoryRemoteOutcome = Object.freeze({
+  boundAt: "2026-09-05T04:33:07.118Z", boundBy: "operator-local", readAt: "2026-09-05T04:41:12.503Z",
+  remoteUrl: "https://github.com/owner/unai.git", status: "REMOTE" as const,
+});
+const UNBOUND_REMOTE: RepositoryRemoteOutcome = Object.freeze({
+  boundAt: null, boundBy: null, readAt: "2026-09-05T04:41:12.907Z", remoteUrl: null, status: "REMOTE" as const,
+});
 
 describe("verifierWords", () => {
   it("names exactly what is missing before delivered work can be accepted", () => {
@@ -127,6 +141,45 @@ describe("HealthScreen", () => {
   });
 });
 
+describe("the Repository card on Health", () => {
+  it("names the bound remote with who bound it and when, from the recorded daemon frame", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={BOUND_REMOTE} />);
+    expect(screen.getByTestId("cr.health.repository.remote").textContent).toBe("https://github.com/owner/unai.git");
+    expect(screen.getByTestId("cr.health.repository.boundat").textContent).toBe("2026-09-05T04:33:07.118Z");
+    expect(screen.getByTestId("cr.health.repository.boundby").textContent).toBe("operator-local");
+  });
+
+  it("says the remote is unbound rather than treating an all-null frame as a fault", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={UNBOUND_REMOTE} />);
+    expect(screen.getByTestId("cr.health.repository.remote").textContent)
+      .toBe("No remote bound - bind it from the Publish card on any goal.");
+    expect(screen.queryByTestId("cr.health.repository.facts")).toBeNull();
+    expect(screen.queryByTestId("cr.health.repository.refusal")).toBeNull();
+  });
+
+  it("reveals where the rebind happens when Change is pressed, and hides it again", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={BOUND_REMOTE} />);
+    expect(screen.queryByTestId("cr.health.repository.changehow")).toBeNull();
+    fireEvent.click(screen.getByTestId("cr.health.repository.change"));
+    expect(screen.getByTestId("cr.health.repository.changehow").textContent).toContain("Publish card on any goal");
+    fireEvent.click(screen.getByTestId("cr.health.repository.change"));
+    expect(screen.queryByTestId("cr.health.repository.changehow")).toBeNull();
+  });
+
+  it("carries the daemon own refusal code and layer, and says so while the read has not answered", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={null} />);
+    expect(screen.getByTestId("cr.health.repository.loading")).toBeTruthy();
+    cleanup();
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={{
+      code: "REPOSITORY_REMOTE_READ_CAPABILITY_DENIED", layer: "REPOSITORY_REMOTE_READ", status: "REFUSED",
+    }} />);
+    const refusal = screen.getByTestId("cr.health.repository.refusal").textContent ?? "";
+    expect(refusal).toContain("REPOSITORY_REMOTE_READ_CAPABILITY_DENIED");
+    expect(refusal).toContain("REPOSITORY_REMOTE_READ");
+    expect(screen.queryByTestId("cr.health.repository.remote")).toBeNull();
+  });
+});
+
 describe("LivePolicy / LiveHealth", () => {
   it("read through the injected reader on mount and render the answer", async () => {
     const read = vi.fn(async () => HEALTH);
@@ -143,5 +196,27 @@ describe("LivePolicy / LiveHealth", () => {
     cleanup();
     render(<LivePolicy headers={{}} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.policy.refusal")).textContent).toContain("POLICY_READ_FAILED");
+  });
+
+  it("puts the repository remote ON THE POLLER, not on the mount alone", async () => {
+    const readRemote = vi.fn(async () => BOUND_REMOTE);
+    render(<LiveHealth headers={{}} pollMs={20} read={async () => HEALTH} readRemote={readRemote} />);
+    expect((await screen.findByTestId("cr.health.repository.remote")).textContent)
+      .toBe("https://github.com/owner/unai.git");
+    // A read wired to the screen but not the poll would stay at ONE call forever, so a remote
+    // bound from a goal Publish card would never appear here without a reload.
+    await waitFor(() => { expect(readRemote.mock.calls.length).toBeGreaterThan(1); });
+  });
+
+  it("keeps the daemon own refusal for the repository read when it is the one that fails", async () => {
+    render(<LiveHealth
+      headers={{}}
+      pollMs={60_000}
+      read={async () => HEALTH}
+      readRemote={() => Promise.reject(new Error("x"))}
+    />);
+    expect((await screen.findByTestId("cr.health.repository.refusal")).textContent)
+      .toContain("REPOSITORY_REMOTE_READ_FAILED");
+    expect(screen.getByTestId("cr.health.banner")).toBeTruthy();
   });
 });

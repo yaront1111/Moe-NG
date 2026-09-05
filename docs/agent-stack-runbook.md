@@ -527,14 +527,40 @@ goal-specific has been consulted yet. If you see it on a goal whose criteria all
 read VERIFIED, the goal is not the problem: the project has never committed an
 `approval.decide`.
 
-### Publishing (your decision, your remote)
+### Publishing (your decision, one remote for the project)
 
 Landed commits stay in the workspace's repository until a human publishes them.
-The opened goal carries a PUBLISH card: type the git remote (an `https://` or
-ssh URL, no embedded credentials) and confirm. That spends the daemon's
-`repository.publish` offer for the goal — a bootstrap-family, operator-only
-command that is never reachable over MCP — and records the decision on the
-goal's publish aggregate. Nothing is pushed by the browser or the daemon.
+
+**The remote belongs to the PROJECT, and you name it once.** The first publish
+binds it; every publish after that reuses it. There is no per-goal remote and
+nothing is remembered in your browser.
+
+A goal carries a PUBLISH card only once at least one of its nodes has LANDED as
+a commit — with nothing to push there is no card at all. The card has one
+control:
+
+- **No remote bound yet** — it asks for the git remote once (an `https://` or
+  ssh URL, no embedded credentials). Confirming binds that URL to the project
+  and publishes to it.
+- **A remote is bound** — it says `Publish to <remote>`, lists the landed
+  commits it will push, and asks for nothing. Confirm and it goes.
+- **Changing it** — `Change` on the card reveals the field again; the next
+  publish rebinds the project to what you type. `Change` on Health says the same
+  thing but does not rebind from there, because the binding is an effect of
+  publishing.
+
+Either way the browser spends the daemon's `repository.publish` offer for the
+goal — a bootstrap-family, operator-only command never reachable over MCP — and
+records the decision on the goal's publish aggregate. Nothing is pushed by the
+browser or the daemon. On the wire a typed URL rides as `remoteUrl: <url>` and
+means BIND-AND-PUSH; a reused one rides as `remoteUrl: null` and means "the
+remote this project is already bound to". Publishing with nothing bound is
+refused `PUBLISH_REMOTE_UNBOUND` at `DAEMON_PREREQUISITE`.
+
+**Health shows the binding.** The Repository card on the Health screen states
+the bound remote with who bound it and when, read from `POST
+/repository/remote/read`, or says no remote is bound yet. Unbound is a state,
+not an error.
 
 The wrapper's PUBLISHER performs the push as the effect of that decision on its
 next pass: `git push <remote> HEAD:refs/heads/<current branch>` in
@@ -543,8 +569,7 @@ next pass: `git push <remote> HEAD:refs/heads/<current branch>` in
 `REFUSED (GIT_PUSH_FAILED: <git's words>)`. A refused push is never retried
 under the same decision; decide again to retry. The card reads the runs read's
 `publish` state: waiting for the wrapper, pushed with the branch link (GitHub
-remotes get a browse link), or refused with the code. The remote you typed last
-is remembered in this browser only.
+remotes get a browse link), or refused with the code.
 
 ### Replan (when a review is exhausted)
 

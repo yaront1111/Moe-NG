@@ -25,6 +25,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/planning/run/read",
   "/policy/read",
   "/product-contract/pending/read",
+  "/repository/remote/read",
   "/runs/read",
   // The browser reads the three OPEN_SESSION operands and completes the signed open on
   // the daemon's own origin; without these two the dev server answers them itself and the

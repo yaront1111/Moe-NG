@@ -6,6 +6,8 @@ import type { ActivityOutcome } from "../../live/live-activity.js";
 import { readHealth, readPolicy } from "../../live/live-ops.js";
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { readRepositoryRemote } from "../../live/live-repository-remote.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
 import { useProviderPause } from "../shell/pause-context.js";
@@ -64,6 +66,20 @@ const POLICY_FAILURE: PolicyOutcome = Object.freeze({ code: "POLICY_READ_FAILED"
 export const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const ACTIVITY_FAILURE: ActivityOutcome = Object.freeze({ code: "ACTIVITY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const SESSIONS_FAILURE: SessionsOutcome = Object.freeze({ code: "SESSIONS_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+export const REPOSITORY_REMOTE_FAILURE: RepositoryRemoteOutcome = Object.freeze({ code: "REPOSITORY_REMOTE_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+
+/**
+ * THE PROJECT'S BOUND REMOTE, on the same poller as every other ops read. It joins the poll
+ * rather than fetching once on mount, because a remote bound from a goal Publish card has to
+ * appear on Health without a reload; a one-shot read here would look like a stale daemon.
+ */
+export function useRepositoryRemote(
+  headers: Readonly<Record<string, string>>, pollMs?: number | undefined,
+  read?: (() => Promise<RepositoryRemoteOutcome>) | undefined,
+): RepositoryRemoteOutcome | null {
+  const [reader] = useState(() => read ?? ((): Promise<RepositoryRemoteOutcome> => readRepositoryRemote(headers)));
+  return useOpsRead(reader, REPOSITORY_REMOTE_FAILURE, pollMs ?? POLL_MS, undefined).outcome;
+}
 
 export interface LiveOpsProps<T> {
   readonly headers: Readonly<Record<string, string>>;
@@ -103,12 +119,18 @@ export function LivePolicy({ headers, installPort, onConnection, pollMs, read, r
   return <PolicyScreen install={install} nowMs={nowMs} outcome={outcome} />;
 }
 
-export function LiveHealth({ headers, onConnection, pollMs, read }: LiveOpsProps<HealthOutcome>): JSX.Element {
+export interface LiveHealthProps extends LiveOpsProps<HealthOutcome> {
+  /** Injectable for tests; the default reads POST /repository/remote/read with the same headers. */
+  readonly readRemote?: (() => Promise<RepositoryRemoteOutcome>) | undefined;
+}
+
+export function LiveHealth({ headers, onConnection, pollMs, read, readRemote }: LiveHealthProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<HealthOutcome> => readHealth(headers)));
   const { nowMs, outcome } = useOpsRead(reader, HEALTH_FAILURE, pollMs ?? POLL_MS, onConnection);
+  const remote = useRepositoryRemote(headers, pollMs, readRemote);
   return (
     <>
-      <HealthScreen nowMs={nowMs} outcome={outcome} />
+      <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
       <LiveSessions headers={headers} pollMs={pollMs} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />
     </>

@@ -89,14 +89,15 @@ function proxiedPaths(): ReadonlySet<string> {
  * because this row does not own that route. A route absent from the proxy works in
  * production and fails only under the dev server, which is where the e2e lane runs.
  *
- * `/repository/remote/read` is recorded here by task-9d553419, which lands the daemon route
- * only: the proxy list lives in the control-room package and belongs to task-e6000b57, which
- * lands the decoder and the proxy pins together. Recording it keeps the census exact instead
- * of letting the arm below go subset-shaped, and REMOVING this line is what that row's proxy
- * edit has to do — a census entry that outlives its gap reds here.
+ * `/repository/remote/read` WAS recorded here by task-9d553419, which landed the daemon route
+ * only. task-e6000b57 then landed the control-room half — the exact-key decoder and the proxy
+ * pin in apps/control-room/src/live/dev-proxy-paths.ts — so the census entry was removed with
+ * that edit, exactly as the note here instructed. The gap is closed; the arm below is what
+ * proved it, by reddening the moment the proxy list gained the route and this list still
+ * claimed it was missing.
  */
 const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
-  "/product-contract/gate-1/read", "/repository/remote/read",
+  "/product-contract/gate-1/read",
 ]);
 
 describe("the read-route roster and the surface it advertises agree in BOTH directions", () => {

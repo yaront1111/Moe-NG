@@ -26,6 +26,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/planning/run/read",
     "/policy/read",
     "/product-contract/pending/read",
+    "/repository/remote/read",
     "/runs/read",
     "/session/challenge-operands/read",
     "/session/pair",

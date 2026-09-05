@@ -1,10 +1,12 @@
 import type { JSX } from "react";
 
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind, ProviderPauseView } from "../../live/live-ops.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { RepositoryCard } from "./repository-card.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -195,7 +197,12 @@ export function PolicyScreen({ install, nowMs, outcome }: {
   );
 }
 
-export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; readonly outcome: HealthOutcome | null }): JSX.Element {
+export function HealthScreen({ nowMs, outcome, remote }: {
+  readonly nowMs: number;
+  readonly outcome: HealthOutcome | null;
+  /** The project's bound git remote; null while the read has not answered. */
+  readonly remote?: RepositoryRemoteOutcome | null | undefined;
+}): JSX.Element {
   if (outcome === null) {
     return <section className="cr2-ops" data-testid="cr.health.root"><p className="cr2-slot-kicker" data-testid="cr.health.loading">Reading the daemon...</p></section>;
   }
@@ -222,6 +229,7 @@ export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; reado
         <Fact label="Goals bound to a PRD" value={ledger.goals === null ? "unreadable" : String(ledger.goals)} />
         <Fact label="Agents" testId="cr.health.agents" value={agentsWords(outcome.agents.paused)} />
       </dl>
+      <RepositoryCard outcome={remote ?? null} />
       <p className="cr2-approve-banner" data-testid="cr.health.verifier">{verifierWords(outcome.verifier)}</p>
     </section>
   );

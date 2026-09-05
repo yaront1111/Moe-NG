@@ -9,6 +9,8 @@ import { readDocumentCoverage } from "../../live/live-document-coverage.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { readGoalCatalog } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
+import { readRepositoryRemote } from "../../live/live-repository-remote.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
@@ -34,6 +36,8 @@ import { BoardLanes } from "./board-lanes.js";
 export interface BoardPublishing {
   readonly frame: SurfaceFrame | null;
   readonly port: PublishPort | null;
+  /** The project's bound remote as the daemon stated it; null while the read has not answered. */
+  readonly remote: RepositoryRemoteOutcome | null;
 }
 
 export interface BoardScreenProps {
@@ -93,7 +97,7 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
       />
       {showPublish ? (
         <div className="cr2-kanban-publish" id={GOAL_SECTION_IDS.publish}>
-          <GoalPublish frame={publishing.frame} goal={goal} goalId={goalId} port={publishing.port} />
+          <GoalPublish frame={publishing.frame} goal={goal} goalId={goalId} port={publishing.port} remote={publishing.remote} />
         </div>
       ) : null}
       {fold !== null ? (
@@ -164,6 +168,7 @@ function usePolled<T>(read: () => Promise<T>, failure: T, pollMs: number): { rea
 const RUNS_FAILURE: RunsOutcome = Object.freeze({ code: "RUNS_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
 const ACTIVITY_FAILURE: ActivityOutcome = Object.freeze({ code: "ACTIVITY_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
 const COVERAGE_FAILURE: DocumentCoverageOutcome = Object.freeze({ code: "DOCUMENT_COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
+const REMOTE_FAILURE: RepositoryRemoteOutcome = Object.freeze({ code: "REPOSITORY_REMOTE_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
 const CATALOG_FAILURE: GoalCatalogFrame = Object.freeze({ connection: "DISCONNECTED" as const, detail: "catalog read failed", goals: Object.freeze([]), outcome: "UNDELIVERED" as const });
 
 export interface LiveBoardProps {
@@ -171,11 +176,13 @@ export interface LiveBoardProps {
   readonly headers: Readonly<Record<string, string>>;
   readonly onNeedsYou?: (() => void) | undefined;
   readonly pollMs?: number | undefined;
-  readonly publishing?: BoardPublishing | undefined;
+  /** The host supplies the offer surface and the port; the BOUND REMOTE is this board's own read. */
+  readonly publishing?: Omit<BoardPublishing, "remote"> | undefined;
   /** Injectable for tests; the defaults read the daemon with the attached session's headers. */
   readonly readActivity?: ((goalId: string) => Promise<ActivityOutcome>) | undefined;
   readonly readCatalog?: (() => Promise<GoalCatalogFrame>) | undefined;
   readonly readCoverage?: ((goalId: string) => Promise<DocumentCoverageOutcome>) | undefined;
+  readonly readRemote?: (() => Promise<RepositoryRemoteOutcome>) | undefined;
   readonly readRuns?: ((goalId: string) => Promise<RunsOutcome>) | undefined;
   readonly runId: string;
   /** The page's one affordance frame, shared so the board and the approval gate agree on offers. */
@@ -191,12 +198,16 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
   const [coverageBase] = useState(() => props.readCoverage ?? ((ref: string): Promise<DocumentCoverageOutcome> => readDocumentCoverage(headers, ref)));
   const [activityBase] = useState(() => props.readActivity ?? ((ref: string): Promise<ActivityOutcome> => readActivity(headers, ref)));
   const [catalogReader] = useState(() => props.readCatalog ?? ((): Promise<GoalCatalogFrame> => readGoalCatalog({ headers })));
+  // The PROJECT's bound remote, polled beside the goal's own reads: a remote bound from one
+  // goal has to show on the next without a reload, so this joins the poll rather than the mount.
+  const [remoteReader] = useState(() => props.readRemote ?? ((): Promise<RepositoryRemoteOutcome> => readRepositoryRemote(headers)));
   const runsReader = useCallback((): Promise<RunsOutcome> => runsBase(goalId), [goalId, runsBase]);
   const coverageReader = useCallback((): Promise<DocumentCoverageOutcome> => coverageBase(goalId), [coverageBase, goalId]);
   const activityReader = useCallback((): Promise<ActivityOutcome> => activityBase(goalId), [activityBase, goalId]);
   const runs = usePolled(runsReader, RUNS_FAILURE, pollMs ?? POLL_MS);
   const coverage = usePolled(coverageReader, COVERAGE_FAILURE, pollMs ?? POLL_MS);
   const activity = usePolled(activityReader, ACTIVITY_FAILURE, pollMs ?? POLL_MS);
+  const remote = usePolled(remoteReader, REMOTE_FAILURE, pollMs ?? POLL_MS);
   // The brief is the human's own words at creation; it never changes, so one read is enough.
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   useEffect(() => {
@@ -216,7 +227,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
       nowMs={runs.nowMs}
       onNeedsYou={onNeedsYou}
       paused={paused}
-      publishing={publishing}
+      publishing={publishing === undefined ? undefined : { ...publishing, remote: remote.value }}
       runId={runId}
       runs={runs.value}
       surface={surface}

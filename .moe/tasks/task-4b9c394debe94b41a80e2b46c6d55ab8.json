@@ -224,7 +224,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:03.414Z",
-  "updatedAt": "2026-09-05T02:25:44.717Z",
+  "updatedAt": "2026-09-05T02:26:03.182Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -457,6 +457,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7414285058c72bb1a1b5b1a116eca105a25f59f2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T02:00:16Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T02:26:03.182Z",
+      "treeId": "aaf604dac06645826ddd55163179611f447a3c74",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -466,14 +483,19 @@
     "apps/daemon/src/provider-profile/provider-profile-resolver.test.ts",
     "tests/e2e/control-room/board-chain.spec.ts",
     ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
-    "apps/daemon/src/http/affordance-read-planning.test.ts"
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-05T01:17:48Z",
-    "at": "2026-09-05T02:00:17.484Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T02:00:16Z",
+    "at": "2026-09-05T02:26:03.182Z"
   },
   "priorBlockedReason": "PLAN SCOPE INSUFFICIENT — 6 unnamed consumers. Step 1 COMPLETE (all 4 checks passed; registry needs NO edit, as hoped). No code written, tree clean. FULL per-file triage in comment-6b2a932eb60f4bbca50427b7a2ba425b.\n\nStep 6 names TWO witness senders; it grepped SYMBOLS, not the SHAPE. `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` = 12 hits / 8 files. Six sit outside the owned roster, all via the shared `send` helper (bootstrap-test-fixtures.ts:202), which passes no receipts:\n  bootstrap/bootstrap-durability.test.ts (:83 :99 :229 :263 :299)\n  activation/admission-gate-resolver.test.ts:185\n  planning/node-mission-test-fixtures.ts:262\n  provider-profile/provider-profile-resolver.test.ts (:169 :483)\n  work/foundation-launch-completion-wiring.test.ts:183\n  work/launch-template-producer.test.ts:207\nFixing bootstrapSequence() + teaching `send` receipts rescues the ~63 driveThrough consumers, NOT these six — each writes its own witness-bearing envelope literal.\n\nSTOP, NOT ABSORB: two need SEMANTIC rewrites. durability:94 (\"refuses activation carrying no witness, at the ingress layer\") has its subject INVERTED — the empty payload becomes the correct one. durability:229 STALE_VERSION reaches the handler, so the new refusal answers before CORE_REDUCER. Rewriting another row's contract tests unscoped is what rail 19 forbids. Owned 9 (planningNotes: \"no headroom left\") + 6 = 15 vs the 10 threshold; you pre-authorized a stop-and-report at ONE path over. No smaller working slice exists: any correct implementation stops honoring a payload witness, so these go red on ANY delivery of this DoD.\n\nRECOMMENDED: spin a child row carrying those 6 paths, dependsOn this row. Alternative: amend affectedFiles to 15.\n\nALSO (non-blocking): step 2 says `ActivationReceiptSet`; real export is `ActivationReceipts`. Steps 3/4 must WIRE child A's two default-absent ports — committedProbeRef and installedPolicySliceRefs — or the handler can NEVER mint.",
   "blockedOnTaskIds": null,
