@@ -20,8 +20,92 @@
     "FOLLOW `repository.publish`'s pattern (human names a target, wrapper effect, receipt). A second deployment shape is a second thing to reason about during an incident.",
     "A PRODUCTION DEPLOY WITHOUT A RELEASE DECISION SAYS SO. It does not invent one and does not refuse."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP, then re-measure the counts.\n\nPREREQUISITES — both are children filed at plan time; `dependsOn` gates the WORKING claim, but verify on disk so the chain fails closed if the field is ever cleared:\n- `git grep -n \"deployment.deploy\" -- packages/contracts/src/runtime/runtime-vocabulary.ts` must hit (task-44760ed17c714ccc8bdc5a36b630a17a).\n- `git grep -rn \"DEPLOY_HEALTH_TIMEOUT\\|moe-deploy-receipt\" -- apps/daemon/src` must hit the engine module (task-c0e00f0a55ad43bfa5f6b323779834cd).\n- `git grep -rn \"DEPLOYMENT\\|Dockerfile\" -- apps/daemon/src` for the infrastructure row (task-3706b7e7bb8741d88105f42c25166ea0).\nIf any is absent, STOP and `moe.report_blocked` with `blockedOnTaskIds`. Do NOT re-implement the engine here and do NOT narrow the DoD.\n\nRE-MEASURE THE COUNTS — every number in this plan is a plan-time reading and a sibling kind-publishing row may have moved it first. This epic's rail forbids freezing a count in a gate, so run these and use what they print, not what this plan says:\n  `grep -n \"toHaveLength(4[0-9])\\|registry.size).toBe(4[0-9])\\|OPERATOR_ONLY).toHaveLength\" apps/daemon/src/daemon-command-registry.test.ts`\n  `grep -n \"toHaveLength(1[0-9])\" apps/daemon/src/daemon-command-registry-human-approver.test.ts`\nWhen an arm reds, the PRINTED expected-vs-received is authoritative.\n\nAlso confirm `git grep -n \"deployment.set_target\" -- apps/daemon/src/daemon-command-vocabulary.ts` returns NOTHING — if a peer already wired it, stop rather than landing a duplicate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "VOCABULARY: both kinds, operator-only, and the automatic MCP fence. Edit `apps/daemon/src/daemon-command-vocabulary.ts`, mirroring `repository.publish` at every site:\n1. Kind constants for `deployment.set_target` and `deployment.deploy`.\n2. Both added to the `WiredCommandKind` union.\n3. Both in the EXISTING goal family table with `CAPABILITIES.GOAL`, exactly as `repository.publish` at :75. Do NOT create a new family table — a new table is dead unless it is also added to `FAMILY_TABLES`, because `familyCapabilityOf` walks only that array, and these kinds are goal-scoped anyway.\n4. `PAYLOAD_KEYS` entries beside :334 (`\"repository.publish\": [\"goalId\", \"remoteUrl\"]`), mirroring the payload child task-44760ed1 published. Read that entry and match it — do not invent a second shape.\n5. Both in `OPERATOR_PRINCIPAL_KINDS` (:376 area).\n\nSTEP 5 IS THE MCP FENCE AND IT NEEDS NO OTHER EDIT. mcp-tool-allowlist.ts:78 derives the exclusion from `OPERATOR_PRINCIPAL_KINDS`; its comment states that a kind becoming operator-only leaves the MCP roster untouched. Because the fence and the payload entry land in the SAME file and commit, there is no landed HEAD at which either kind is MCP-advertised — which matters because the MCP port authenticates with the operator bootstrap credential.\n\nSIZE GUARD, and it is tight: the file was 386 lines against a 400 hard cap and two kinds add roughly fourteen. `wc -l` it after editing. If it crosses 400, PACK entries onto shared lines the way the file already does at :79 (`\"project.activate\": CAPABILITIES.ADMIN, \"project.bind_repository\": CAPABILITIES.ADMIN,`) — do not add a new module, and do not move a table into daemon-command-families.ts, which imports these tables and would invert the dependency.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "REGISTER BOTH HANDLERS IN GOAL_HANDLERS — not in the registry, and not in a new table.\n\n`apps/daemon/src/daemon-command-registry.ts:194` already composes its table by spreading `...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS`, so a GOAL_HANDLERS entry is served with no registry line. That file is 449 lines and ALREADY past the 400 hard cap at the merge-base: add nothing to it, and disclose the pre-existing breach in the completion record so it is attributed to the merge-base and not to this row.\n\n1. `apps/daemon/src/goals/goal-services.ts` — add two entries to `GOAL_HANDLERS` (:199), beside `\"repository.publish\": publishRepository` (:203). Each is a THIN ADAPTER: validate the payload, call the engine from task-c0e00f0a55ad43bfa5f6b323779834cd with the host ports, return its result. If you find yourself writing docker or ssh invocation here, it belongs in the engine — stop and report rather than taking the extra path.\n2. `apps/daemon/src/bootstrap/bootstrap-contracts.ts` — add both kinds to the list at :42 where `\"repository.publish\"` sits.\n3. `apps/daemon/src/bootstrap/bootstrap-sequence.ts` — declare prerequisites beside :25 (`\"repository.publish\": [\"approval.decide\"]`). Decide deliberately what `deployment.deploy` requires (a target set first? an approval?) and STATE the choice and its reason in the step note — this is the ordering an operator will feel.\n\nDO NOT EDIT `apps/daemon/src/daemon-store-dependencies.test.ts`. Its :238 assertion needs no change when this is done right; it is the tripwire that reds if step 2 added the payload keys while this step did not register the handlers. If it reds, the wiring is half-done — fix the wiring, never the assertion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "HUMAN_ONLY_STEPS. Add both kinds to the set at `apps/daemon/src/orchestrator/agent-spawn-contract.ts:195`, beside the existing `\"repository.publish\"` entry and under a comment in the same voice: deploying a product is the operator's decision; the wrapper performs it as an effect of that decision, never as staffed work. DoD 1 states it directly — deploying a product is never an agent's decision.\n\nThis is a plain addition: no count guard and no membership guard reads `HUMAN_ONLY_STEPS`, unlike the MCP exclusion roster. Confirm that rather than assuming it — `git grep -n \"HUMAN_ONLY_STEPS\" -- apps packages tests tools` returned three source files at plan time (agent-spawn-contract.ts, agent-wrapper.ts, http/affordance-planning-offers.test.ts). If any asserts a size, that count moves in step 5 too.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ROSTER COUNT BACKFILL — every one of these is invisible to a grep for either kind literal, which is why they are enumerated here rather than left for discovery. Move each by TWO, using the numbers you re-measured in step 1:\n\n- `apps/daemon/src/daemon-command-registry.test.ts` — :862 `ROWS).toHaveLength(N)`, :863 `deps.registry.size).toBe(N)`, :870 `REGISTRATION_ORDER).toHaveLength(N)`; and :1040 `OPERATOR_ONLY).toHaveLength(M)`. If `ROWS` or `REGISTRATION_ORDER` transcribes the kinds by hand, insert both entries at the positions the file's own ordering demands.\n- `apps/daemon/src/daemon-command-registry-human-approver.test.ts` — :325 `expectedExclusions).toHaveLength(K)` and :326 `MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(K)`. Both; and check whether `expectedExclusions` is a transcribed list that also needs the two entries.\n- `apps/daemon/src/daemon-command-vocabulary.test.ts` — add or update the arms pinning the family table, the payload keys and the operator-only set.\n\nA count bumped without its roster entry, or an entry added without the count, is a half-done job the step-3 weld catches. Run `pnpm --filter @moe/daemon test` after this step and read the OUTPUT, not the exit code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "BIDIRECTIONAL ROSTER TEST (DoD 1). Add an arm to `apps/daemon/src/daemon-command-registry.test.ts`, following the served-origin roster arm already at :795-812.\n\nAssert SET EQUALITY — not a subset — between the ADVERTISED roster and the SERVED set enumerated from the IMPLEMENTATION SEAM: the composed registry's keys and `wiredMcpToolKinds()`, never from the roster constant. A test that iterates the roster shrinks its own iteration when an entry is deleted and stays green while a served capability vanishes from the advertised surface.\n\nDERIVE, DO NOT FREEZE: no count literal and no transcribed kind list in this arm. Assert relationships between production surfaces so a sibling row bumping a roster cannot red it spuriously.\n\nDoD 1 REQUIRES THE DELETION MATRIX, so run it and record every outcome: for EACH of the two kinds, delete it from the ADVERTISED side and confirm RED; restore. Delete it from the SERVED side (its GOAL_HANDLERS entry) and confirm RED; restore. That is four deletions and four reds — \"every deletion reds\" is the DoD's wording and a partial matrix does not satisfy it. These are TRACKED files, so `git diff -- <path>` is a valid restore proof; `git status --porcelain` the paths first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE JOURNEY (DoD 3, 4, 5, 7 through the wiring) — a new test, `apps/daemon/src/goals/deployment-journey.test.ts`, exercising the REGISTERED kinds through the dispatch seam against a real store. The engine unit-proves these; this proves they survive the wiring.\n\n(a) `deployment.set_target` then `deployment.deploy` succeeds end to end: the image tag EQUALS the landed sha (assert against the sha value, not a pattern), and `moe-deploy-receipt/1` records environment, sha, imageDigest, url and DEPLOYED.\n(b) ATOMIC REPLACE through the injected port's recorded call ORDER: the old container still serves until the new one answers health, with NO point at which neither serves. This is the difference between a deploy and an outage.\n(c) `DEPLOY_HEALTH_TIMEOUT` REFUSES with CODE AND LAYER, and the environment is left DEFINED — assert the old container is still running by reading the port's final state, not by trusting the return value.\n(d) `DEPLOY_TARGET_MISSING`, `DEPLOY_BUILD_FAILED`, `DEPLOY_DOCKER_UNAVAILABLE` each assert code AND layer; the build failure carries the tool's ACTUAL last stderr line.\n(e) THE PREVIOUS RECEIPT IS KEPT: two successive deploys leave BOTH receipts retrievable and distinguishable by sha. The rollback row task-7683a432eb3f4e87b1eb0cbc6e3a55ff is a sibling that CANNOT depend on this row and will build against this shape — so record the exact retrieval call in the completion record for it to use.\n(f) RELEASE DECISION, both wordings: a PRODUCTION deploy CITES the decision when one exists on the goal, and states 'no release decision' when none does. Assert both strings. It neither invents an approval nor refuses for lack of one.\n(g) An AGENT-authenticated dispatch of either kind is refused with its specific code and the layer that refused.\n\nOFFLINE ONLY, and teardown in a `finally`: no real docker daemon, no network, no leaked container, temp directory or store handle on any exit path including the throwing one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/deployment-journey.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/deployment-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES (DoD 8). Run each leg standalone and quote its `Test Files N passed` count line — the OUTPUT, never the exit code.\n\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon — resolve by PACKAGE NAME, not directory).\n- `pnpm typecheck`.\n- `pnpm test` — named by the DoD. State explicitly that the root include has NO `apps/**`, so this leg is NOT evidence for anything this row owns; the daemon leg is.\n- ALSO run `pnpm --filter @moe/control-room test` even though this row adds no mirror: this epic's rail requires it of any row in the kind-publishing chain, and two digest mirrors live where the root lane, typecheck and the daemon leg cannot see them. If the sibling row task-44760ed1 already moved them, say so and quote the leg anyway.\n\nSIZE EVIDENCE: `wc -l` every production file you edited and quote it. daemon-command-vocabulary.ts must be at or under 400.\n\nPRE-EXISTING BREACH TO DISCLOSE, NOT FIX: `apps/daemon/src/daemon-command-registry.ts` is 449 lines, past the cap, at the merge-base and untouched by this row. Record the measurement so it is attributed correctly, and file it as a follow-up comment rather than a new row.\n\nPATH-ATTRIBUTED BASELINE: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths. Complete only when that intersection is EMPTY. Disclose any foreign red verbatim with its exact failing lines and file paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/goals/goal-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nSECURITY-SHAPED, each answered with a command:\n- Is either kind MCP-ADVERTISED at this HEAD? Compute `wiredMcpToolKinds()` and assert both are absent. An advertised operator kind means an agent arrives as the operator, because the MCP port authenticates with the operator bootstrap credential.\n- Are both operator-only AND in HUMAN_ONLY_STEPS? Assert all three axes together per kind and report which axis failed, not merely that one did — a kind fenced on two of three is the defect class this matters for.\n- Does any refusal detail, log line or receipt carry a credential, an ssh key path, or a registry URL with embedded userinfo? Epic rail 3: a secret never surfaces in plaintext, including on the error path.\n\nCORRECTNESS:\n- TWO CONCURRENT DEPLOYS to the same environment: does the second queue, refuse, or race the first into a half-replaced container? Assert which — this is the interleaving that produces the outage the row exists to prevent.\n- A deploy whose sha is not the landed HEAD sha — refused, or silently tagged wrong? Every later rollback and dossier claim resolves through that tag.\n- `deployment.deploy` BEFORE `deployment.set_target`: does the prerequisite you declared in step 3 actually enforce it, with a code and layer?\n- If the engine throws mid-sequence, is a REFUSED receipt still written, and is the previous receipt still retrievable? The rollback row depends on that being true.\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. The journey test is NEW (untracked), so `git diff -- <path>` certifies nothing for it — back it up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore. The vocabulary, goal-services and roster files are TRACKED, so `git diff` is a valid restore proof there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/deployment-journey.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/goals/goal-services.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,12 +114,31 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-5d30948435524c6fa2789e1c033aafe7",
   "dependsOn": [
-    "task-3706b7e7bb8741d88105f42c25166ea0"
+    "task-3706b7e7bb8741d88105f42c25166ea0",
+    "task-c0e00f0a55ad43bfa5f6b323779834cd",
+    "task-44760ed17c714ccc8bdc5a36b630a17a"
   ],
   "priority": "HIGH",
   "order": 92,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:51:09.618Z",
-  "updatedAt": "2026-09-05T00:51:09.618Z"
+  "updatedAt": "2026-09-05T18:56:23.134Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T18:51:06.615Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T18:56:20.688Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING. Measured, not felt. The DoD wanted TWO command kinds published (13 forced edits each on this board) plus the deploy effect, its docker/ssh ports, the receipt and four refusal codes. Two children were filed before this plan and this row's dependsOn set to all three (previousDependsOn had one id, now three):\n- task-c0e00f0a55ad43bfa5f6b323779834cd — the deploy ENGINE leaf (argv, atomic replace, health timeout, `moe-deploy-receipt/1`, previous-receipt retention, the release-decision citation), dependsOn the infrastructure row task-3706b7e7.\n- task-44760ed17c714ccc8bdc5a36b630a17a — the SHARED-CONTRACT publication for both kinds plus the three hand-transcribed digest mirrors.\n\nA NEW DEPLOYMENT HANDLER TABLE. Rejected on measurement: `repository.publish` — the pattern the row rails tell us to follow — registers in GOAL_HANDLERS, and a new table would force an edit to the 449-line daemon-command-registry.ts and a fifth entry in its spread. Joining GOAL_HANDLERS keeps this row out of that file entirely.\n\nA NEW FAMILY TABLE. Rejected for the same reason plus a known hazard: a new family table is dead unless it is also added to FAMILY_TABLES, because `familyCapabilityOf` walks only that array. The deployment kinds are goal-scoped like `repository.publish`, so they take the existing family.\n\nFREEZING THE COUNTS FROM THIS PLAN. Rejected — sibling kind-publishing rows move the same literals and this epic's rail forbids it. Step 1 re-measures them and the plan says to take the printed expected-vs-received as authoritative.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. This row was SPLIT before planning; what remains is the daemon-side wiring for BOTH kinds plus the journey.\n\nTHE GAP IS REAL: `git grep -c \"deployment\\.deploy|deployment\\.set_target\" -- apps packages tests` = 0.\n\nTHE MEASUREMENT THAT SHAPED THE WHOLE PLAN — `repository.publish` is the pattern the row rails name, so I traced where it actually registers rather than assuming a new family:\n  apps/daemon/src/goals/goal-services.ts:203   `\"repository.publish\": publishRepository` inside GOAL_HANDLERS (:199)\n  apps/daemon/src/daemon-command-vocabulary.ts:75   `\"repository.publish\": CAPABILITIES.GOAL`\n  apps/daemon/src/daemon-command-vocabulary.ts:334  PAYLOAD_KEYS `[\"goalId\", \"remoteUrl\"]`\n  apps/daemon/src/daemon-command-vocabulary.ts:376  OPERATOR_PRINCIPAL_KINDS\n  apps/daemon/src/bootstrap/bootstrap-contracts.ts:42  the kind list\n  apps/daemon/src/bootstrap/bootstrap-sequence.ts:25   prerequisites: `[\"approval.decide\"]`\n  apps/daemon/src/http/affordance-planning-offers.ts:124,182 and affordance-read.ts:145  the OFFER (child 3's, not this row's)\nSO: the deployment kinds join the EXISTING GOAL_HANDLERS table and the EXISTING goal family. NO new handler table, and therefore NO edit to daemon-command-registry.ts — which is 449 lines, already past the 400 hard cap at the merge-base and untouched by this row. `daemon-command-registry.ts:194` composes `bootstrapTable` by spreading `...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS`, so a GOAL_HANDLERS entry is served with no registry line at all.\n\nTHE MCP FENCE IS AUTOMATIC, NOT AN EDIT. `apps/daemon/src/mcp-tool-allowlist.ts:78` derives MCP_EXCLUDED_COMMAND_KINDS as `[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()`, and its comment states the contract: a kind that becomes operator-only leaves the MCP roster with no edit there. So mcp-tool-allowlist.ts gets NO source edit; only its counts move. Because the fence and PAYLOAD_KEYS live in the SAME file and the same commit, there is no landed HEAD at which either kind is MCP-advertised — which matters, since the MCP port authenticates with the operator bootstrap credential and an advertised operator kind means an agent arrives AS THE OPERATOR.\n\nHARD COUNTS THAT MOVE BY TWO (plan-time readings — RE-MEASURE, epic rails forbid freezing them):\n  daemon-command-registry.test.ts:862/:863/:870  47 -> 49 (ROWS, registry.size, REGISTRATION_ORDER)\n  daemon-command-registry.test.ts:1040           OPERATOR_ONLY 12 -> 14\n  daemon-command-registry-human-approver.test.ts:325,:326  11 -> 13\n\nTHE WELD: daemon-store-dependencies.test.ts:238 asserts `[...v2.registry.keys()].sort()` equals `Object.keys(PAYLOAD_KEYS)` minus `planning.submit_decomposition`. It needs NO edit when this is done right; it is the tripwire that reds if PAYLOAD_KEYS gains a kind whose handler is unregistered.\n\nHUMAN_ONLY_STEPS is ONE Set at agent-spawn-contract.ts:195 (re-exported by agent-wrapper.ts), already carrying `\"repository.publish\"` with a comment explaining why an operator repository action is never staffed work. No count or membership guard reads it, so it takes a plain addition.\n\nFILE SIZES: daemon-command-vocabulary.ts 386 against a 400 hard cap — see step 2's size guard; daemon-command-families.ts 171 (it IMPORTS the family tables and computes CommandFamilyFacts, so it is NOT a place to move a table to); goal-services.ts and bootstrap-sequence.ts are the other edited production files."
+  },
+  "planApprovedAt": "2026-09-05T18:56:23.134Z"
 }

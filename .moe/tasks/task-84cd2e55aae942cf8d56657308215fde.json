@@ -19,8 +19,90 @@
     "NEEDS_YOU_KINDS is being extended by two other rows concurrently (task-a988ca1c, task-33ceae56) - rebase, do not delete a peer's entry.",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP, then re-measure the contended roster.\n\nPREREQUISITES — all three are dependsOn rows; verify on disk so the chain fails closed if the field is cleared:\n- `git grep -rn \"deployment.deploy\" -- apps/daemon/src packages/contracts` — the kinds (task-04b3ce7e's chain).\n- `git grep -rn \"cr.deploy\\|goal-deployments\" -- apps/control-room/src` — the CARD (task-c9e76f53010149adb2ba1ba55838f41c). This row renders no card of its own.\n- `git grep -rn \"moe-deploy-receipt\" -- apps/daemon/src` — the receipt whose words Runs will show.\nIf any is absent, STOP and `moe.report_blocked` with `blockedOnTaskIds`. This row PROVES; it does not rebuild. An infrastructure defect is task-3706b7e7's, a deploy-effect defect is task-04b3ce7e's chain, a card defect is task-c9e76f53's — comment on the owning row rather than patching across the seam.\n\nRE-MEASURE THE CONTENDED ROSTER, because two peer rows are extending it concurrently (task-a988ca1c adds PLAN_REJECTED, task-33ceae56 adds a preview card):\n  `grep -n \"NEEDS_YOU_KINDS\\|KIND_ORDER\" apps/control-room/src/v2/approvals/needs-you-model.ts`\n  `grep -n \"KIND_EYEBROW\" apps/control-room/src/v2/approvals/needs-you.tsx`\nRecord what each contains NOW. Expect entries you did not write. REBASE ONTO THEM; never delete a peer's entry to make your own diff clean.\n\nNote the description's path for needs-you (`v2/goals/`) is STALE — the file is `v2/approvals/needs-you-model.ts`. The line number :28 is correct.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE NEEDS-YOU KIND (DoD 4, first half). Add a deploy-ready member to `NEEDS_YOU_KINDS` at apps/control-room/src/v2/approvals/needs-you-model.ts:28.\n\nADDING THE MEMBER FORCES TWO EXHAUSTIVE MAPS, and this is the whole reason the file roster is what it is. `NeedsYouKind` is derived from the tuple (:29), and both of these are `Readonly<Record<NeedsYouKind, ...>>`, so each stops compiling until it gains the new key:\n  needs-you-model.ts:72  `KIND_ORDER` — a NUMBER, and it encodes the operator's priority order. Choose the position deliberately and say why in the step note: a deploy-ready goal sits somewhere relative to PLAN_APPROVAL, ESCALATION, GATE_1 and READY_TO_CLOSE, and getting it wrong buries or over-promotes the item.\n  needs-you.tsx:41       `KIND_EYEBROW` — the operator-visible label. ASCII only, no apostrophe (the scheduler package-boundary scan reds on an apostrophe in JSX).\n\nNote `needs-you.tsx:8` imports the TYPE only (`import type ... NeedsYouKind`), so a symbol grep for `NEEDS_YOU_KINDS` does not find it. It is in this plan's roster because the SHAPE couples them, not the symbol.\n\nDo NOT reuse `READY_TO_CLOSE` for this. It means something else to an operator, and KIND_ORDER encodes priority — overloading it would silently reorder an unrelated item.\n\nThen define WHEN the item appears: a goal is deploy-ready after the preview/release decisions its band records. State the predicate in the note; step 3 asserts both its appearance and its disappearance.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "NEEDS-YOU APPEARS AND DISAPPEARS (DoD 4). Extend `apps/control-room/src/v2/approvals/needs-you-model.test.ts`.\n\nDoD 4 says \"assert appearance AND disappearance\" and the second half is the one that catches the real defect: an item that appears correctly but never clears leaves the operator with a permanent false to-do, and a test that only asserts appearance stays green through it. So assert BOTH: a goal ready to deploy IS listed, and once deployed it is NOT.\n\nASSERT THE ROSTER BIDIRECTIONALLY, not by iterating the roster. A test that walks `NEEDS_YOU_KINDS` shrinks its own iteration when an entry is deleted and stays green while an item silently vanishes from the surface. Enumerate the kinds the MODEL can actually emit and assert set-equality against the roster, so a kind in the roster that nothing produces, and a produced kind missing from the roster, both red.\n\nMUTATE AND CONFIRM RED: remove the new member's KIND_ORDER entry and confirm a compile or arm failure; restore. Change the disappearance predicate to always-true and confirm the disappearance arm reds; restore. These are TRACKED files, so `git diff -- <path>` is a valid restore proof; `git status --porcelain` them first.\n\nDo not assert a hard COUNT of roster members — two peer rows are adding entries concurrently and a frozen count would red on their landing rather than on a defect.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RUNS SHOWS THE DEPLOY RECEIPT (DoD 4, second half). Add the deploy receipt's operator words to `apps/control-room/src/v2/ops/activity-words.ts` (133 lines), beside the existing entries at :18-20 — `\"internal.repository.publish_receipt\": \"recorded the publish\"` is the one to model.\n\nThe words describe what HAPPENED, in the operator's vocabulary and past tense, matching the neighbours' voice. ASCII only, no apostrophe.\n\nA REFUSED deploy and a DEPLOYED one must not read the same. If one receipt kind carries both outcomes, the row's words must distinguish them or the operator reads a failed deploy as a success in the Runs feed — check how the neighbouring receipts handle their refusal case before inventing a scheme.\n\nNote the deploy receipt is an `internal.*` kind, which is OUTSIDE PAYLOAD_KEYS, the registry and the MCP roster entirely (`grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` returns zero). So this display entry is the ONLY roster cost of the receipt — do not go looking for a command-roster backfill that does not exist.\n\nIf activity-words.ts has a test asserting its key set, that file joins this step; check before editing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activity-words.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE JOURNEY (DoD 5) — a new spec, tests/e2e/control-room/deploy-environment.spec.ts, against a REAL daemon with a FAKE DOCKER PORT BEHIND IT. Read tests/e2e/control-room/publish-remote.spec.ts first: it is the closest existing journey and reusing its shape beats inventing a fourth harness.\n\nHARNESS: `withDaemonBackedControlRoom` / `DaemonLane` from ./daemon-ports.js. Drive the bare `lane.baseUrl` — `main.tsx:101` serves the legacy shell only for `?v1=1`, so a journey clicking `cr.liveboard.*` re-proves the old dev board and leaves the shipped surface untested.\n\nSEAT THE RECORDER BEFORE THE FIRST CLICK. A card's dispatch report lives only until the next surface poll re-keys the card (board-chain.spec.ts:26-33), so a watcher sampling on its own schedule can watch a dispatch succeed and see nothing.\n\nCOVER target -> deploy -> url: set a target, arm and confirm a PREVIEW deploy, and assert the resulting url is rendered. Assert the receipt row appears in Runs and that Needs-you stops listing the goal — the two surfaces this row owns, proven through the real path rather than in isolation.\n\nCONTROL-ROOM FIXTURES ARE REAL DAEMON FRAMES FROM THAT RUN (DoD 5), not hand-written objects. Capture them from the lane and say in the note how they were captured, so a later reader can tell a real frame from an invented one.\n\nTEARDOWN in a `finally`: the lane, the daemon child, the fake docker port and any container or directory it recorded — released on the throwing path too. A test that leaks a container or a port makes every later gate on this board inadmissible (epic rail 4).\n\nQuote the `pnpm test:e2e:browser` count line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/deploy-environment.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/deploy-environment.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE LIVE DRIVE (DoD 6). Deploy the PREVIEW environment LOCALLY with real docker — UnAI or the scaffold app from task-4a0f7064 — and record the receipt plus a curl of the health URL (status AND body) in a row comment under ~4500 chars (comments truncate silently at 5000).\n\nPREVIEW ONLY. Do not drive a PRODUCTION deploy on this lane: production is one click from preview on this card and a live production deploy is not this row's to perform.\n\nIF DOCKER IS UNAVAILABLE, record `DEPLOY_DOCKER_UNAVAILABLE` VERBATIM rather than a fabricated deploy. That is a complete, honest outcome and it is explicitly what DoD 6 asks for — an invented deploy receipt would make every later rollback and dossier claim rest on a fiction.\n\nSTOP WHAT YOU START (epic rail 4): the container, the image and any port this drive opens are torn down when it finishes, including when it fails. Record the teardown commands and their output alongside the receipt — a live drive that leaves a container running is the exact failure the rail names.\n\nNo credential, no registry URL with embedded userinfo, and no ssh key path in the comment, the transcript or a screenshot. Check the transcript before pasting.\n\nRecord the DATE of the drive; step 7's docs are dated to it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/deploy-environment.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DOCS (DoD 7). The runbook gains a 'Deploy' section and README's Stage 2 status is updated to the MEASURED state, with the live drive's date from step 6.\n\n`docs/agent-stack-runbook.md` — a Deploy section covering: setting a target, the arm/confirm on the Deployments card, what a PRODUCTION deploy shows about the release decision, and what each of the four refusal codes means to an operator. Write what the drive actually did, not what the design intended.\n\n`README.md` — update the Stage 2 status line for DEPLOYMENT ONLY. docs/VISION.md:141 lists Stage 2 as \"repository bootstrapping; infrastructure generation; preview and production deployment; secrets and environment management; database migrations; monitoring, backup, and rollback; release evidence\" — those other items belong to other rows and must NOT be marked shipped here. Overstating Stage 2 is worse than leaving it understated: it retires questions no one has answered.\n\nIf docker was unavailable and step 6 recorded DEPLOY_DOCKER_UNAVAILABLE, SAY THAT in the docs rather than describing a deploy that did not happen — and say what was proven instead (the journey, the fake-port path).\n\nIf a doc needed no change, name the files you READ to reach that conclusion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/agent-stack-runbook.md",
+        "README.md"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES (DoD 7, second half). Run each leg standalone and quote its `Test Files N passed` count line — the OUTPUT, never the exit code. An exit-0 leg with no count line RAN NOTHING.\n\n- `pnpm --filter @moe/control-room test` — this row's primary evidence; every source file it owns is under apps/control-room.\n- `pnpm --filter @moe/daemon test`\n- `pnpm typecheck`\n- `pnpm test:e2e:browser`\nState explicitly that root `pnpm test` covers NO apps/** file, so the control-room leg carries the apps/** claim and a bare root count line would not.\n\nSIZE AND STYLE EVIDENCE: `wc -l` every production file touched and quote it (250-line target). Confirm ASCII-only sources and apostrophe-free JSX text — the scheduler package-boundary scan reds on an apostrophe in JSX, and it is the kind of red that looks unrelated to the diff that caused it.\n\nPEER-CONTENDED FILE CHECK: re-read needs-you-model.ts and needs-you.tsx at HEAD before the final run. Two rows are adding entries to the same roster and both Record maps; if a peer landed between your edit and now, rebase onto their entry rather than reverting it.\n\nPATH-ATTRIBUTED BASELINE: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths. Complete only when that intersection is EMPTY. Disclose any foreign red verbatim with its exact failing lines and file paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/ops/activity-words.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nTHE SAFETY QUESTION THIS ROW INHERITS: the card is task-c9e76f53's, but the JOURNEY is this row's, so use it to check the property end to end. Arm a PREVIEW deploy and confirm — does anything in the dispatched payload or the receipt say PRODUCTION? An operator must not deploy production believing they clicked preview, and the journey is the only place that is provable against a real daemon.\n\nSURFACE QUESTIONS:\n- Does the Needs-you item clear on a FAILED deploy, or only on a successful one? A refused deploy that clears the to-do hides work the operator still owes; a successful deploy that does not clear it trains them to ignore the list. Assert which behaviour ships and say why.\n- Two goals deploy-ready at once: does KIND_ORDER put them where you intended relative to PLAN_APPROVAL and ESCALATION?\n- Does the Runs feed distinguish a REFUSED deploy from a DEPLOYED one at a glance, or do both read as activity?\n- Does any rendered string, log line or screenshot carry a credential, an ssh key path, or a registry URL with embedded userinfo (epic rail 3)?\n\nTEARDOWN AUDIT (epic rail 4): after the full suite, is any container, image or port from step 5's fake-port lane or step 6's live drive still alive? `docker ps -a` and a port check, quoted. Anything left running makes every later gate on this board inadmissible.\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. The spec is NEW (untracked), so `git diff -- <path>` certifies NOTHING for it — back it up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore. needs-you-model.ts, needs-you.tsx, activity-words.ts and the docs are TRACKED, so `git diff` is a valid restore proof there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/deploy-environment.spec.ts",
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,12 +112,30 @@
   "parentTaskId": "task-5d30948435524c6fa2789e1c033aafe7",
   "dependsOn": [
     "task-3706b7e7bb8741d88105f42c25166ea0",
-    "task-04b3ce7e349743c2a156d32ee5550ba5"
+    "task-04b3ce7e349743c2a156d32ee5550ba5",
+    "task-c9e76f53010149adb2ba1ba55838f41c"
   ],
   "priority": "HIGH",
   "order": 93,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:51:35.982Z",
-  "updatedAt": "2026-09-05T00:51:35.982Z"
+  "updatedAt": "2026-09-05T19:03:04.799Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T18:58:46.330Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:03:02.609Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLITTING. Measured. The full row needed goal-deployments.tsx, deployment-port.ts, its test, needs-you-model.ts, needs-you-model.test.ts, needs-you.tsx, activity-words.ts, board-screen.tsx, the spec, the runbook and README — eleven paths, twelve with an activity-words test, against a 10-file hard cap. The card is the separable half and is production-reachable on its own once mounted, so it went to task-c9e76f53010149adb2ba1ba55838f41c (order 92.5) and this row's dependsOn now names it alongside the two originals.\n\nWHICH HALF THIS ROW KEEPS. The PROOF half, per global rail 21: the journey, the live drive and the docs belong with the row that certifies the feature, not with the component. Needs-you and Runs came here too because both are cross-goal surfaces rather than card internals, and because the Needs-you roster is the contended file — keeping it in one row stops two of my own rows racing the same three files.\n\nA NEW NEEDS-YOU KIND vs REUSING READY_TO_CLOSE. Rejected reuse: `READY_TO_CLOSE` means something else to an operator, and KIND_ORDER encodes priority — overloading it would silently reorder an unrelated item. A new member is the honest change and the two Record maps are the price.\n\nWRITING A FOURTH PLAYWRIGHT HARNESS. Rejected — publish-remote.spec.ts and the daemon-ports.ts lane already cover this shape.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. This row was SPLIT before planning; the CARD went to task-c9e76f53010149adb2ba1ba55838f41c and this row keeps Needs-you, Runs, the journey, the live drive and the docs.\n\nTHE MEASUREMENT THAT FORCED THE SPLIT — `NEEDS_YOU_KINDS` IS NOT ONE EDIT, IT IS THREE FILES. `apps/control-room/src/v2/approvals/needs-you-model.ts:28` declares `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"] as const` and `:29` derives `NeedsYouKind` from it. TWO EXHAUSTIVE `Record<NeedsYouKind, ...>` MAPS then fail to compile the moment a member is added:\n  needs-you-model.ts:72  `KIND_ORDER: Readonly<Record<NeedsYouKind, number>>`\n  needs-you.tsx:41       `KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>>`\nThat is a SHAPE coupling a symbol grep for `NEEDS_YOU_KINDS` alone does not reveal — `needs-you.tsx` imports only the TYPE (`needs-you.tsx:8`, `import type`). Both files are in this plan's owned roster. With the card in the same plan the roster reached 11-12 paths against the 10 hard cap, which is a split signal at plan time rather than a discovery at step 5.\n\nTHE DESCRIPTION'S PATH FOR NEEDS-YOU IS STALE: it says `needs-you-model.ts` with `NEEDS_YOU_KINDS at :28`. The LINE is right, the DIRECTORY is wrong — the file is under `v2/approvals/`, not `v2/goals/`. Sibling files: needs-you.tsx, needs-you-model.test.ts, needs-you.test.tsx, live-needs-you.tsx.\n\nTWO PEER ROWS ARE EXTENDING THIS SAME ROSTER CONCURRENTLY (task-a988ca1c adds PLAN_REJECTED, task-33ceae56 adds a preview card). Rebase; never delete a peer's entry, and expect both Record maps to have gained entries you did not write.\n\nRUNS RECEIPTS: `apps/control-room/src/v2/ops/activity-words.ts` (133 lines) maps internal receipt kinds to operator words — `:18` verifier_receipt, `:19` landing_receipt, `:20` `\"internal.repository.publish_receipt\": \"recorded the publish\"`. The deploy receipt needs its entry here for DoD 4. Note `internal.*` receipt kinds are OUTSIDE PAYLOAD_KEYS, the registry and the MCP roster entirely (`grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` = 0), so a receipt costs no roster backfill — only these display words.\n\nTHE CARD SEAM this row consumes but does not build: apps/control-room/src/v2/goals/publish-port.ts (29 lines) is the whole decision wire — `:1` imports `spendOffer` from ../approvals/offer-wire.js, `:27` calls `spendOffer(wire, KIND, affordance, payload, \"ui-publish\", PUBLISH_LAYER)`. goal-publish.tsx is 173 lines. Compose sites: board-screen.tsx:17 and goal-nodes.tsx:11.\n\nPLAYWRIGHT LANE, from tests/e2e/control-room/ (33 files) and the lessons its specs record:\n- `main.tsx:101` serves the legacy shell only for `?v1=1`, so bare `lane.baseUrl` IS the product; a journey clicking `cr.liveboard.*` re-proves the old dev board.\n- A card's dispatch report lives ONLY until the next surface poll re-keys the card (board-chain.spec.ts:26-33) — seat the recorder BEFORE the first click or you watch a dispatch succeed and see nothing.\n- `withDaemonBackedControlRoom` / `DaemonLane` in daemon-ports.ts; `seedPid` is null for `seed: \"NONE\"` (:245-249); board-chain.spec.ts:429-434 is a worked example.\n- publish-remote.spec.ts is the closest existing journey to this one — read it before writing a fourth harness shape."
+  },
+  "planApprovedAt": "2026-09-05T19:03:04.799Z"
 }

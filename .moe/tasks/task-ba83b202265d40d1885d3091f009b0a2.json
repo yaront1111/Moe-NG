@@ -19,8 +19,100 @@
     "ops-screens.tsx is 228 lines against a 250 ceiling - put a new screen in its own module rather than appending, and measure with `wc -l` before writing.",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; EXACT-KEY decoder plus a dev-proxy-paths pin for any new read."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP. This row PROVES; it does not rebuild. Verify each prerequisite on disk and STOP if any is missing.\n\n- `ls apps/daemon/src/http/ | grep -i env` and `git grep -n \"/environments/read\" -- apps/daemon/src` — the HTTP read (task-ef76a7f4523d46f48a2f9eb19595e801). At plan time this returned NOTHING, which is why that row exists. Confirm it is reachable from the COMPOSED production listener, not only from a hand-built test server — that distinction is exactly what forced task-eb2bb09d to exist after task-7ca9dca3.\n- `git grep -rn \"required\" -- apps/daemon/src/environment` and whatever symbol child 2 (task-72b22fcf9da54b3b91dabf5b7392aff1) shipped for REQUIRED NAMES from the approved contract. It was still PLANNING at plan time and DoD 4 depends on it.\n- `git grep -rn \"ENV_NAME_INVALID\\|ENV_VALUE_TOO_LARGE\\|ENV_ENVIRONMENT_UNKNOWN\\|ENV_STORE_KEY_UNAVAILABLE\" -- apps/daemon/src/environment` — child 1's four codes and their CLOSED code->layer map. Record the exact layer each code carries; step 5 asserts code AND layer and must reuse this map rather than minting a second one.\n\nIf any is absent, `moe.report_blocked` with `blockedOnTaskIds`. Do NOT mock the read, do NOT hand-write a daemon frame, and do NOT narrow DoD 1 or 4 — a mock-backed journey proves the shape and retires the question unanswered.\n\nAlso measure before writing (rail 4): `wc -l apps/control-room/src/v2/ops/ops-screens.tsx` (236 at plan time against a 250 ceiling — the description's 228 is stale) and confirm the testid namespace you intend to claim is free with `git grep -c \"cr\\.<namespace>\" -- apps tests`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/ops-screens.tsx",
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE READ CLIENT: exact-key decoder plus the proxy pin (DoD 6, second half). Create the live read module under apps/control-room/src/live/ following the neighbouring live read clients.\n\nEXACT-KEY DECODING: an unknown key and a missing key each REFUSE with a specific code, asserted with the code AND the layer that refused — never merely that decoding failed. The decoded shape is {name, isSet, sha256 fingerprint, updatedAt} per variable, per environment. THERE IS NO VALUE FIELD, and the decoder must not tolerate one: if the daemon ever grows a value field, this decoder should REFUSE rather than pass it through to a screen that might render it. Assert that as its own arm — it is the client-side half of epic rail 3.\n\nADD THE PROXY PIN to `DEV_PROXY_PATHS` in apps/control-room/src/live/dev-proxy-paths.ts (55 lines, frozen list at :5), keeping the file's existing ordering. Note `/design/read` is NOT pinned there, so a pin is not automatic for every route — DoD 6 requires one here deliberately, and without it the dev lane cannot reach the read at all.\n\nNO VALUE IS RETAINED CLIENT-SIDE: no localStorage, no sessionStorage, no module-level cache of a submitted value. Copy the source-text assertion pattern from apps/control-room/src/v2/goals/goal-publish.test.tsx:204-215 — readFileSync of your own module, then `not.toContain(\"localStorage\")` / `\"sessionStorage\"`. That arm is cheap and it is the one that catches a helpful cache added later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-environments-read.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-environments-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE ENVIRONMENTS SCREEN (DoD 1) — its OWN module under apps/control-room/src/v2/ops/, NOT appended to ops-screens.tsx (236 lines against a 250 ceiling).\n\nRender, per environment, the required-vs-set table: each variable's name, whether it is set, its sha256 FINGERPRINT and last update, plus set and unset dialogs.\n\nTHE FINGERPRINT IS THE OPERATOR'S ONLY FEEDBACK and it must be LABELLED AS A FINGERPRINT, not shown as a bare truncated-looking string (DoD 3, rail 2). An operator who believes they are seeing part of the secret will either treat the screen as unsafe to share or, worse, will not. Put the word in the rendered output and assert it — not in a comment.\n\nMount it as a route and register it wherever ops screens are registered; a screen no route reaches is dead code that satisfies every existence grep while the feature does not exist.\n\nCONSTRAINTS (rail 5): ASCII-only sources; apostrophe-free JSX text — the scheduler package-boundary scan reds on an apostrophe in JSX and the red looks unrelated to the diff that caused it; the new testid namespace confirmed free in step 1; and `wc -l` under 250, quoted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "NO VALUE IS EVER RENDERED OR RETAINED (DoD 2) — the row's central arm, in the screen's test file. This is the leak the screen invites, so test it as an attacker would.\n\nSubmit a distinctive sentinel value through the set dialog, then assert that sentinel appears NOWHERE, across every state:\n(a) after a SUCCESSFUL submit — in the rendered output, in the table, in the fingerprint cell;\n(b) after a FAILED submit — THIS IS THE ONE. Echoing the typed value back so the operator can correct it is the natural, helpful-looking behaviour, and it is exactly how a secret reaches a screenshot. Assert the input is NOT repopulated and the sentinel is not in the DOM;\n(c) in every refusal message (step 5 covers the codes; this arm covers the value);\n(d) in any component prop a browser devtools inspector would show — assert against the rendered tree, not only the visible text, since a value passed as a prop is visible in devtools even when nothing paints it.\n\nSearch the WHOLE rendered container for the sentinel, not a specific node: an assertion scoped to the input misses the value re-rendered somewhere else.\n\nMUTATE AND CONFIRM RED: make the failed-submit path repopulate the input, run the arm, confirm it goes RED, restore. A leak test that has never been seen red is not evidence — and this is the one arm on this row whose silent failure has a real-world cost.\n\nUse a sentinel that cannot occur naturally, and do NOT commit a realistic-looking secret as a fixture (epic rail 3 forbids a secret in a committed fixture, and a plausible one invites a credential scanner alert).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE FINGERPRINT CHANGES, AND THE FOUR REFUSALS (DoD 3 and 5) — same test file.\n\nFINGERPRINT (DoD 3): after an update, the rendered fingerprint CHANGES. Assert the before and after values differ AND that the new one matches what the read returned — not merely that something changed, which a re-render alone would satisfy. Because the operator can never see the value back, this is their only confirmation the update took. Also assert the fingerprint is labelled as a fingerprint in the rendered output.\n\nREFUSALS (DoD 5): ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN and ENV_STORE_KEY_UNAVAILABLE each render VERBATIM with their code plus operator words. Reuse child 1's CLOSED code->layer map recorded in step 1 — do not mint a second map, and do not invent a fifth code.\n\nAND THE REFUSAL TEXT MUST NOT CONTAIN THE SUBMITTED VALUE. ENV_VALUE_TOO_LARGE is the trap: the natural message names the size and often quotes the offending input. Assert the sentinel is absent from each refusal message, and assert ENV_VALUE_TOO_LARGE reports the LIMIT rather than the value.\n\nENV_STORE_KEY_UNAVAILABLE deserves operator words that say what to do — it means the store key is missing, which is an operator-fixable condition, not a bug report.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE GOAL CARD: 'N required variables unset for <environment>' (DoD 4). This is what stops a deploy failing for a reason nobody can see.\n\nThe required names come from the approved contract via child 2 (task-72b22fcf9da54b3b91dabf5b7392aff1) — read them from its surface, do not re-derive them from the contract here.\n\nRender the count with a LINK to the Environments screen, and assert exactly what DoD 4 names:\n(a) a goal with TWO required names and ONE set shows a count of ONE;\n(b) the card is ABSENT when none are required — absent, not a zero badge. Assert absence by querying for the testid and finding nothing.\nAlso assert the card names the ENVIRONMENT it is counting for: 'unset for preview' and 'unset for production' are different facts and a card that omits which one it means invites the wrong fix.\n\nThe card renders NAMES and COUNTS only — never a value, never a fingerprint that could be mistaken for one.\n\nMount it on the goal beside the existing cards; check whether it belongs in the status-strip map at apps/control-room/src/v2/goals/goal-status-strip.tsx:33 the way `publish` does, and say either way in the note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-environments-card.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/goal-environments-card.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE JOURNEY (DoD 6) — a new spec under tests/e2e/control-room/, against a REAL daemon.\n\nHARNESS: `withDaemonBackedControlRoom` / `DaemonLane` from ./daemon-ports.js. Drive the bare `lane.baseUrl` — main.tsx:101 serves the legacy shell only for `?v1=1`, so a journey clicking `cr.liveboard.*` re-proves the old dev board and leaves the shipped surface untested. Seat any dispatch recorder BEFORE the first click: a card's dispatch report lives only until the next surface poll re-keys the card (board-chain.spec.ts:26-33).\n\nCOVER: the required-vs-set table rendering from a real frame; a set/unset ROUND TRIP; and the fingerprint CHANGING on update. The round trip is the part that proves the screen and the daemon agree — a set that renders but does not persist, or an unset that leaves the row 'set', both pass a component test.\n\nTHEN THE LEAK CHECK AT THE REAL BOUNDARY: after typing a sentinel value in the browser, assert it appears in NO response body the page received and in NO page content. A component test cannot see the wire; this can.\n\nTEARDOWN in a `finally`: the lane, the daemon child, and any store or temp directory it created — released on the throwing path too. A test that leaks a port makes every later gate on this board inadmissible (epic rail 4).\n\nQuote the `pnpm test:e2e:browser` count line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/environments-screen.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/environments-screen.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE RUNBOOK AND THE GATES (DoD 7).\n\nDOCS: `docs/agent-stack-runbook.md` documents the environments model — what an environment is, that required names come from the APPROVED CONTRACT (not from a config file), what the fingerprint is and what it is for, and, stated plainly, THAT VALUES ARE NEVER READABLE BACK. That last sentence is the one an operator needs before they type a secret into a browser: they must know the only way to verify an update is the fingerprint. Say what shipped, not what the design intended.\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/control-room test` — this row's primary evidence.\n- `pnpm --filter @moe/daemon test`\n- `pnpm typecheck`\n- `pnpm test:e2e:browser`\nState explicitly that root `pnpm test` covers NO apps/** file, so the control-room leg carries the apps/** claim.\n\nSIZE AND STYLE: `wc -l` every production file you created and quote it (250 ceiling). Confirm ASCII-only sources and apostrophe-free JSX text.\n\nPATH-ATTRIBUTED BASELINE: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths. Complete only when that intersection is EMPTY; disclose any foreign red verbatim with its failing file paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/agent-stack-runbook.md"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`. This screen handles secrets, so review it as someone trying to get a value out of it.\n\nTHE LEAK SURFACE, each answered with a command or an arm:\n- Does the sentinel appear in ANY response body, console line, or page content after a full round trip? The journey can see the wire; use it.\n- Does a FAILED submit retain the value anywhere — React state, an uncontrolled input's DOM value, a form's autocomplete, a retry buffer? Check the DOM after the failure, not just the React tree.\n- Would a browser autofill or password manager capture the input? Check the input's `type` and `autocomplete` attributes and say what they are.\n- Does any refusal message quote the input? ENV_VALUE_TOO_LARGE is the likeliest offender.\n- Does the fingerprint reveal anything about the value — is it the full sha256, and is it labelled so no one reads it as a prefix of the secret?\n- Is there a realistic-looking secret in ANY committed fixture (epic rail 3)? Grep your own new files.\n- Does an error boundary or a logging hook serialize props that carry the value?\n\nCORRECTNESS:\n- Two operators setting the same variable concurrently — does the fingerprint the second sees reflect the first's write, or a stale read?\n- An unset of a variable that is not set — defined answer, or a crash?\n- A variable required by the contract but for an environment that does not exist — which refusal wins, and is that the useful one?\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. Every file this row creates is NEW (untracked), so `git diff -- <path>` certifies NOTHING for them — back each mutated path up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore. dev-proxy-paths.ts and the runbook are TRACKED, so `git diff` is a valid restore proof there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-screen.tsx",
+        "apps/control-room/src/v2/ops/environments-screen.test.tsx",
+        "tests/e2e/control-room/environments-screen.spec.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,12 +122,30 @@
   "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
   "dependsOn": [
     "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
-    "task-72b22fcf9da54b3b91dabf5b7392aff1"
+    "task-72b22fcf9da54b3b91dabf5b7392aff1",
+    "task-ef76a7f4523d46f48a2f9eb19595e801"
   ],
   "priority": "HIGH",
   "order": 103,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:46:11.818Z",
-  "updatedAt": "2026-09-05T00:46:11.818Z"
+  "updatedAt": "2026-09-05T19:11:13.481Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:06:25.393Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:11:11.145Z",
+  "planningNotes": {
+    "approachesConsidered": "FILING THE MISSING ROUTE AS A PREREQUISITE vs BUILDING IT HERE. Building it here was rejected on two counts. First, size: the daemon route plus its .js bridge, its test, and the listener composition across http-listener-read-dispatch.ts / http-listener.ts / http-listener-guards.ts / daemon-entry.ts is six-plus paths, on top of this row's screen, client decoder, proxy pin, goal card, journey and docs - far past the cap. Second, ownership: this is a PROOF row (global rail 21) and its own rail 3 says a read defect is child 1's, not this row's. The rails' answer to a missing prerequisite is a production row measured symbol by symbol, which is what task-ef76a7f4 is.\n\nMOCKING THE READ TO UNBLOCK THE SCREEN. Rejected outright. A mock-backed journey proves the shape and retires the question unanswered, and DoD 1 explicitly says \"against a REAL daemon frame\".\n\nAPPENDING THE SCREEN TO ops-screens.tsx. Rejected on measurement - the file is 236 lines against a 250 ceiling, and the row's own rail 4 says to measure with `wc -l` before writing. Its own module.\n\nWHERE THE 'NO VALUE' PROPERTY IS PROVEN. The daemon boundary is the prerequisite row's arm; this row owns the BROWSER half, which is the harder half: the input, its retained state after a failed submit, the refusal text, and anything a devtools-visible prop would carry. Both halves are needed - a value that never leaves the daemon can still be leaked by the screen that typed it.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. ONE PREREQUISITE WAS MISSING AND IS NOW A ROW; read this before step 1.\n\nTHE SCREEN HAD NOTHING TO READ. `ls apps/daemon/src/http/ | grep -i env` returns NOTHING - no environments HTTP route exists. Child 1 (task-d0c63cd8848a4da18ad3fbb8eb1d95c3) is DONE and its own completionSummary is explicit about why: \"17 paths, all new, all under apps/daemon/src/environment/. Nothing outside that directory changed.\" What it shipped are IN-PROCESS projection functions - environment-projection.ts `readEnvironmentState` (:80), `projectEnvironmentVariables` (:95), `EnvironmentReadOk` (:49), `EnvironmentReadResult` (:61) - plus the store, cipher and fold. The operator-facing READ was never built. DoD 1 says \"against a REAL daemon frame\" and DoD 6 requires \"the new read's decoder\", both of which presuppose a route that did not exist.\nI filed task-ef76a7f4523d46f48a2f9eb19595e801 (order 102.5) to serve `/environments/read` AND compose it into the production listener in the same row, and set this row's dependsOn to include it. That is the rails' required output for a missing prerequisite - a production row with the gap measured symbol by symbol, never a narrowed DoD and never a mock-backed journey.\n\nWHY THE PREREQUISITE INSISTS ON SERVE-AND-COMPOSE TOGETHER: the design chain needed TWO rows because the first only served. task-7ca9dca3 shipped `/design/read` and task-eb2bb09d then existed purely to compose the port into the listener. A served route nothing mounts satisfies every existence grep while the feature does not exist.\n\nCHILD 2 (task-72b22fcf9da54b3b91dabf5b7392aff1, required names and delivery) is still PLANNING, NOT landed. DoD 4 - the goal card's \"N required variables unset for <environment>\" - is driven by the required names it reads from the approved contract. Step 1 hard-stops on it.\n\nWHAT DOES EXIST AND IS REUSABLE: the four refusal codes with a CLOSED code->layer map, shipped and asserted by child 1 (ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, ENV_STORE_KEY_UNAVAILABLE/...). Reuse that map; do not mint a second one. `environment.set_variable` is already in packages/contracts/src/runtime/runtime-vocabulary.ts and in apps/daemon/src/orchestrator/agent-spawn-contract.ts, so the kind is published and human-only-fenced by task-a2409cba's chain - this row publishes nothing.\n\nCONTROL-ROOM SURFACES:\n- apps/control-room/src/v2/ops/ is where ops screens live: ops-screens.tsx is 236 LINES at HEAD (the description says 228 - it has grown, and the ceiling is 250). A new screen goes in its OWN module; appending would breach the cap immediately.\n- apps/control-room/src/live/dev-proxy-paths.ts is 55 lines with `DEV_PROXY_PATHS` frozen at :5, an alphabetical-ish list of route strings (/activation/read, /activity/read, /affordances/read, /bootstrap, ... /goals/source/read, /health/read, /graph/get). Note `/design/read` is NOT pinned there - so the pin is not automatic for every route and DoD 6 requiring one for this read is a deliberate instruction, not a formality.\n- The card pattern for a goal-scoped card is goal-publish.tsx (173 lines) + publish-port.ts (29 lines), the port spending the offer through offer-wire's `spendOffer`.\n\nPLAYWRIGHT: tests/e2e/control-room/ with `withDaemonBackedControlRoom` / `DaemonLane` in daemon-ports.ts. Drive the bare `lane.baseUrl` (main.tsx:101 serves the legacy shell only for `?v1=1`). Seat any dispatch recorder BEFORE the first click - a card's dispatch report lives only until the next surface poll re-keys the card (board-chain.spec.ts:26-33)."
+  },
+  "planApprovedAt": "2026-09-05T19:11:13.481Z"
 }

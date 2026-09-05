@@ -227,7 +227,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:05.163Z",
-  "updatedAt": "2026-09-05T18:36:18.269Z",
+  "updatedAt": "2026-09-05T18:37:24.371Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T16:49:30.584Z",
     "plannedStepCount": 9,
@@ -316,6 +316,35 @@
       "treeId": "8962c8cbf45620b3899e267076b65c43aec291f5",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "829c3bc0af969826d9a5c05ad5f4da6409475f52",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T18:07:20Z",
+      "paths": [
+        ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+        ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
+        ".moe/tasks/task-6cbcf5ff05084f3ea2a2e3ea89c3fb54.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json",
+        ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+        ".moe/tasks/task-c090faae9fbe438b959e76a08b7dcfdb.json",
+        ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+        ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T18:37:24.371Z",
+      "treeId": "200e733e96d0fd47c938fc8f39ffc0de2643d753",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -329,14 +358,27 @@
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-build.test.ts",
     ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
-    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+    ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-6cbcf5ff05084f3ea2a2e3ea89c3fb54.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-adc4b229cae840c086cc1acc83fd4989.json",
+    ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+    ".moe/tasks/task-c090faae9fbe438b959e76a08b7dcfdb.json",
+    ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
+    ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-afd89b78@2026-09-05T17:01:50Z",
-    "at": "2026-09-05T18:07:20.162Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-05T18:07:20Z",
+    "at": "2026-09-05T18:37:24.371Z"
   },
   "workStartedAt": "2026-09-05T17:04:39.999Z",
   "reviewStartedAt": "2026-09-05T18:06:48.858Z",

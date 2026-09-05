@@ -1,0 +1,40 @@
+{
+  "id": "task-945bb541777a4b789983382f9513f43c",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Environment values reach the verifier, preview and deploy spawns merged under the wrapper allowlist, and never reach the log",
+  "description": "SPIDR grandchild A of task-72b22fcf9da54b3b91dabf5b7392aff1 (architect-aa54e231, 2026-09-05), split because the parent measured over the file cap across four subsystems. This row is THE DELIVERY HALF and it is self-contained: it owns the parent's DoD 1, 2 and 5. It carries the parent's dependsOn unchanged (task-d0c63cd8 the store, DONE; task-a2409cba the published commands, BLOCKED at filing).\n\nWHAT THIS ROW OWNS: the plaintext delivery read that child 1 deliberately did NOT export, the merge of environment values into the spawn environment UNDER the existing allowlist, and the spawn half of the canary.\n\nTHE PLAINTEXT READ DOES NOT EXIST YET AND THAT IS DELIBERATE. Measured at HEAD (branch moe/work-2026-09-04): apps/daemon/src/environment/environment-store.ts's header states \"NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE. Delivering values into spawns is a separate concern and a separate row.\" THIS IS THAT ROW. The primitive exists - `openEnvironmentValue` at apps/daemon/src/environment/environment-cipher.ts:132 - and the read side already opens every seal to derive its fingerprint (environment-projection.ts:89-95) and then DROPS the plaintext. This row adds the one function that returns it, and it should be a NEW focused module so the no-plaintext property of environment-store.ts stays true and greppable.\n\nMERGED UNDER THE ALLOWLIST, NOT AROUND IT. `apps/daemon/src/orchestrator/agent-spawn-environment.ts` builds a child env from a CLOSED roster: RUNTIME_ENVIRONMENT_KEYS (:14), PROVIDER_ENVIRONMENT_PREFIXES (:28), and it scrubs every `MOE_*` key (:56). `agentEnvironment()` returns that object. `apps/daemon/src/orchestrator/verifier-process-runner.ts:67` reads `options.environment ?? process.env` and passes `env: environment` at :154. Environment values JOIN that construction; a delivery that hands a child `process.env` plus extras destroys the allowlist's whole purpose and would be very hard to notice.\n\nNOTE THE `MOE_*` SCRUB (:56) when choosing the canary variable name: `agentEnvironment` drops every key starting with MOE_, so a canary named `MOE_CANARY_<random>` would be scrubbed by the very construction under test and the arm would pass for the wrong reason. Measure the scrub before naming the canary, and if the parent's suggested name is scrubbed, pick one that is not and say so.\n\nNOT IN SCOPE: the required variable NAMES from the contract and the `.env.example` file (grandchild C, which waits on grandchild B); no UI (parent's child 3).\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "The verifier, preview and deploy spawns receive the environment's variables MERGED UNDER the existing allowlist construction (agent-spawn-environment.ts / verifier-process-runner.ts), not appended to a raw process.env. A test asserts the child's env CONTAINS the delivered variable AND STILL EXCLUDES a host variable outside the allowlist, on the same constructed env - the exclusion arm is what proves the merge did not widen the surface, and without it a passing test is compatible with handing the child everything.",
+    "THE SPAWN HALF OF THE CANARY, both directions in ONE test because they pull against each other: set a canary variable to a random value, spawn a verifier, and assert (a) the CHILD SAW the value, read from the CHILD'S OWN OUTPUT and never from the parent's intent, and (b) the value appears NOWHERE in the wrapper log bytes. A delivery that logs what it delivers is the obvious failure and only the pair catches it. The canary name must not be scrubbed by agent-spawn-environment.ts's MOE_ prefix scrub - state which name you used and why it survives.",
+    "A plaintext-returning delivery read exists in its OWN module, NOT added to environment-store.ts, whose header states that no plaintext-returning function is exported from it. Assert that property still holds after this row: a grep of environment-store.ts's exports shows no value-returning function.",
+    "AN ENVIRONMENT WITH NO VARIABLES SET DELIVERS NOTHING AND REFUSES NOTHING: a spawn with an empty environment must produce a child env byte-identical to what it produces today. Assert the byte-identity against the pre-existing construction, not merely that the spawn succeeded - the verifier ran fine before this feature and must not start depending on it.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "MERGE UNDER THE ALLOWLIST, NEVER AROUND IT. The closed roster exists so a child sees what it needs and nothing else. Never pass `process.env` plus extras, and never widen RUNTIME_ENVIRONMENT_KEYS or PROVIDER_ENVIRONMENT_PREFIXES to make a test pass.",
+    "THE VALUE REACHES THE CHILD AND NOT THE LOG. Assert both, from the child's own output and from the log bytes. One without the other is not evidence.",
+    "DELIVERY MUST NOT BECOME A DEPENDENCY: a project with no variables set must spawn exactly as it does today, asserted as byte-identity.",
+    "DO NOT ADD A PLAINTEXT-RETURNING FUNCTION TO environment-store.ts. Its header makes the no-plaintext claim and a canary suite greps it. Put the delivery read in a new focused module with a one-line .js bridge.",
+    "Mind the MOE_ scrub at agent-spawn-environment.ts:56 when naming the canary variable, or the arm passes for the wrong reason.",
+    "NO required-variable NAMES, NO .env.example, NO UI - those are grandchildren B and C and the parent's child 3."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-72b22fcf9da54b3b91dabf5b7392aff1",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
+    "task-a2409cba9ad841a690961692a2948c41"
+  ],
+  "priority": "HIGH",
+  "order": 102.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:09:55.622Z",
+  "updatedAt": "2026-09-05T19:09:55.622Z"
+}

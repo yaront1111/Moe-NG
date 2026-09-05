@@ -1,0 +1,34 @@
+{
+  "id": "task-fd2d438f29d64830a2bd6110f2ded78b",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "A deployment requirement can name the environment variables it needs",
+  "description": "SPIDR grandchild B of task-72b22fcf9da54b3b91dabf5b7392aff1 (architect-aa54e231, 2026-09-05). This row exists because the parent's DoD 3 assumed structure that DOES NOT EXIST, and global rail 6 requires the gap be closed by a prerequisite row measured symbol by symbol rather than by narrowing the DoD.\n\nTHE GAP, MEASURED AT HEAD (branch moe/work-2026-09-04). The parent says \"the compiler emits the deployment requirements' variable names, read from the contract rather than a hand-kept list\". There is no such field. A deployment requirement is exactly:\n  { dependsOnRequirementIds, priority, requirementId, statement, supersedesRequirementId }\n(apps/control-room/src/v2/goals/gate1-v2-test-fixture.ts:7-15, mirrored at apps/daemon/src/planning/v2-compiler/compiler.test.ts:45-48). Confirmed absent by `grep -rn \"variableName|environmentVariable|requiredVariables|envVar\" packages/contracts/src apps/daemon/src/planning` returning ZERO hits. Also note `deploymentRequirements` does not appear in packages/contracts at all - the shape lives in apps/control-room/src/v2/goals/gate1-contract-shape.ts (:14 in the section roster, :172 in the validator) and is mirrored daemon-side.\n\nWHAT THIS ROW OWNS: adding the variable-names carrier to the deployment requirement shape and its validator, so a requirement can state the environment variable names it needs. Grandchild C consumes it.\n\nSIZE THIS BEFORE YOU WIDEN ANYTHING. `grep -rln \"dependsOnRequirementIds\" apps packages --include=*.ts --include=*.tsx` returns 27 FILES. A REQUIRED field on that shape is a 27-file change, far past the 10-file ceiling. An OPTIONAL field that defaults to empty is the tractable shape and is very likely the right answer - but MEASURE the actual roster your chosen shape forces before writing code, and if it still exceeds the ceiling, SPLIT rather than submitting over it. Do not make the field required to be tidy.\n\nFIELD SEMANTICS. Names only, never values - this data is contract text that gets displayed, stored and published. An empty or absent list means the requirement names no variables, which must remain the overwhelmingly common case and must not make any existing contract invalid.\n\nNOT IN SCOPE: reading the names back, the unset-set report, `.env.example`, delivery, UI. Those are grandchild C and the parent's child 3.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "A deployment requirement can carry the environment variable NAMES it needs, and the shape validator (apps/control-room/src/v2/goals/gate1-contract-shape.ts) accepts it. Assert a requirement WITH names validates and a requirement carrying a VALUE-shaped entry does not - names only.",
+    "EVERY EXISTING CONTRACT STAYS VALID. A requirement with no names, and one with the field absent entirely, both validate exactly as today. Assert both explicitly: this is the property that keeps the field optional and the blast radius small, and it is the one a required-field implementation silently breaks.",
+    "The forced-edit roster is MEASURED AND STATED before implementation: run `grep -rln \"dependsOnRequirementIds\" apps packages --include=*.ts --include=*.tsx` (27 files at filing) plus a shape grep for the literal requirement object in test expectations, and record which files your chosen field shape actually forces. If that set exceeds the 10-file ceiling, STOP and split - do not submit over it.",
+    "The daemon-side mirror of the requirement shape agrees with the control-room one, asserted rather than assumed - the shape is transcribed in both and a divergence is invisible until a contract round-trips.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. The control-room leg is not optional: the shape and its validator live under apps/control-room, which the root vitest lane does not cover."
+  ],
+  "taskRails": [
+    "NAMES ONLY, NEVER VALUES. This is contract text: it is displayed, stored, and reaches a published repository through grandchild C. A value here is a value published.",
+    "OPTIONAL, NOT REQUIRED, unless you measure that required fits the ceiling. 27 files reference the requirement shape; a required field is a 27-file change and a split.",
+    "MEASURE THE FORCED-EDIT ROSTER BEFORE WRITING CODE and split at plan time if it exceeds the ceiling - a worker discovering it at step 5 is the failure this rail exists to prevent.",
+    "DO NOT CONSUME THE FIELD HERE. The unset-set report and .env.example are grandchild C."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-72b22fcf9da54b3b91dabf5b7392aff1",
+  "priority": "HIGH",
+  "order": 102.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:10:18.244Z",
+  "updatedAt": "2026-09-05T19:10:18.244Z"
+}

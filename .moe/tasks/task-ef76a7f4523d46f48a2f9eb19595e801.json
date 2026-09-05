@@ -1,0 +1,39 @@
+{
+  "id": "task-ef76a7f4523d46f48a2f9eb19595e801",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "HTTP /environments/read serves the required-vs-set table, composed into the production listener",
+  "description": "PREREQUISITE row filed by architect-fa3a3e17 on 2026-09-05 while planning task-ba83b202265d40d1885d3091f009b0a2 (the Environments screen), which cannot read anything without it. That row now declares dependsOn against this one.\n\nTHE GAP, MEASURED AT HEAD (branch moe/work-2026-09-04):\n- `ls apps/daemon/src/http/ | grep -i env` returns NOTHING. No environments route exists.\n- `grep -n design apps/control-room/src/live/dev-proxy-paths.ts` and the equivalent for environments return nothing either.\n- Child 1 task-d0c63cd8848a4da18ad3fbb8eb1d95c3 is DONE, and its own completionSummary states the scope precisely: \"17 paths, all new, all under apps/daemon/src/environment/. Nothing outside that directory changed.\" Its \"reads\" are IN-PROCESS projection functions - `readEnvironmentState` (:80), `projectEnvironmentVariables` (:95), `EnvironmentReadOk` (:49), `EnvironmentReadResult` (:61) in apps/daemon/src/environment/environment-projection.ts - not an HTTP surface.\nSo the store and the projection exist and are DONE; the operator-facing READ does not. This row closes exactly that gap, symbol by symbol, rather than letting the screen row invent a daemon route it does not own or mock one in a test.\n\nWHAT THIS ROW OWNS: `/environments/read` serving, per environment, the variable table as {name, isSet, sha256 fingerprint, updatedAt} and NO VALUE - plus its composition into the PRODUCTION listener, in the SAME row. Do not repeat the design-read split: task-7ca9dca3 served /design/read and task-eb2bb09d then had to exist purely to compose the port into the listener, because a served route nothing mounts satisfies every existence grep while the feature does not exist.\n\nTHE PATTERN TO FOLLOW is apps/daemon/src/http/design-read.ts (with its .js bridge and design-read.test.ts), composed through apps/daemon/src/http/http-listener-read-dispatch.ts, http-listener.ts, http-listener-guards.ts and apps/daemon/src/daemon-entry.ts. Read all five before writing; the guard and dispatch seams are where a route silently fails to mount.\n\nA VALUE MUST NEVER CROSS THIS BOUNDARY. The projection already returns no value; this row must not add one back in a response field, an error body, a log line or a trace. That is epic rail 3 and it is the reason this route exists as its own row rather than as a field bolted onto an existing read.",
+  "definitionOfDone": [
+    "`/environments/read` serves, per environment, a variable table of {name, isSet, sha256 fingerprint, updatedAt} built from the EXISTING projection in apps/daemon/src/environment/environment-projection.ts (`readEnvironmentState`, `projectEnvironmentVariables`). It reimplements no store logic - assert the reuse with a grep in the completion record.",
+    "NO VALUE CROSSES THE BOUNDARY, asserted as its own arm and not merely by inspection: seed a variable with a known distinctive value, call the route, and assert that value appears NOWHERE in the response body, in any error body, or in any log line the request emits. Repeat for the refusal paths. This is epic rail 3 and it is the whole reason the route is a separate row.",
+    "THE ROUTE IS COMPOSED INTO THE PRODUCTION LISTENER IN THIS SAME ROW - http-listener-read-dispatch.ts, http-listener.ts / http-listener-guards.ts and daemon-entry.ts as the design-read precedent requires. Assert it is reachable from the composed production listener, not only from a hand-built test server. A served route nothing mounts satisfies every existence grep while the feature does not exist; that is exactly why task-eb2bb09d had to exist after task-7ca9dca3.",
+    "The response decoder contract is EXACT-KEY: an unknown key and a missing key each refuse, asserted with the specific code AND the layer that refused, never merely that it failed.",
+    "ENV_ENVIRONMENT_UNKNOWN is asserted with code AND layer for an unknown environment, reusing child 1's already-closed code->layer map rather than minting a second one. Reuse an already-rostered layer literal; introduce no new `*_LAYER` constant.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` covers no apps/** file, so say that rather than quoting a bare root count line as evidence."
+  ],
+  "taskRails": [
+    "A VALUE NEVER CROSSES THIS BOUNDARY - not in a response field, not in an error body, not in a log line, not in a trace, not in a committed fixture.",
+    "SERVE AND COMPOSE IN THE SAME ROW. A route that is served but not mounted is the failure that forced task-eb2bb09d to exist after task-7ca9dca3.",
+    "REUSE the existing projection (apps/daemon/src/environment/environment-projection.ts) and child 1's closed code->layer map. A second store path or a second refusal map is a rejection.",
+    "NO UI, NO PROXY PIN, NO CLIENT DECODER: the control-room half belongs to task-ba83b202265d40d1885d3091f009b0a2 and touching apps/control-room here collides in the shared worktree.",
+    "Reuse an already-rostered layer literal; introduce no new `*_LAYER` constant, which would demand a boundary-roster backfill this row does not own."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3"
+  ],
+  "priority": "HIGH",
+  "order": 102.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T19:09:27.095Z",
+  "updatedAt": "2026-09-05T19:09:27.095Z"
+}

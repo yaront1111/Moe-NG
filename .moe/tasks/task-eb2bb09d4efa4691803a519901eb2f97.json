@@ -98,8 +98,8 @@
       "completedAt": "2026-09-05T18:07:56.875Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -117,16 +117,24 @@
       "author": "worker-8c5af680",
       "content": "COMMIT-SCOPE WARNING for whoever lands this row.\n\n`complete_task.stats.filesModified` returned EIGHT paths. TWO of them I never wrote — they are the known read-only harvest artifact (`moe-filesmodified-includes-read-only-files`). My authoritative list is the SIX paths I reported in `complete_step.modifiedFiles` on steps 2-5:\n\n  apps/daemon/src/daemon-store-foundation-composition.ts\n  apps/daemon/src/daemon-store-dependencies.ts\n  apps/daemon/src/daemon-entry-port-resolution.ts\n  apps/daemon/src/daemon-entry.ts\n  apps/daemon/src/daemon-store-dependencies.test.ts\n  apps/daemon/src/daemon-entry-ops.test.ts\n\nDO NOT COMMIT these two:\n\n1. `apps/daemon/src/mcp-design-read-query.ts` — **UNTRACKED and owned by task-7f9f20c7cddf4d50b49054951ab177fb, which is BLOCKED.** I opened it only to measure whether `createDesignReadPort` was landed (it is not: `git log --all -- <path>` is empty). Committing it would land a blocked row's unreviewed WIP under this row's trailer — precisely the outcome my plan deviation exists to avoid. Its `.js` and `.test.ts` siblings are untracked for the same reason.\n2. `apps/daemon/src/http/http-listener.ts` — TRACKED and CLEAN. Read only, to confirm the landed option name `designReads?: DesignReadPort` at :158. It is a task-7ca9dca3 path and this row's rails forbid touching it. `git diff --name-only -- apps/daemon/src/http/http-listener.ts` returns 0 files.\n\nBoth claims are checkable at review time: `git status --porcelain -- apps/daemon/src/mcp-design-read-query.ts` should still print `??`, and the http-listener diff should still be empty.\n\nAlso present in the shared checkout, disclosed and deliberately untouched: task-40e52fa8's `preview.decide` edits (including one line inside `daemon-store-dependencies.test.ts` at ~:758, which will ride along in a pathspec commit of that file) and task-4a0f7064's untracked `apps/daemon/src/repository/controlled-profile/`.",
       "timestamp": "2026-09-05T18:09:56.826Z"
+    },
+    {
+      "id": "comment-398a54cb72234b4da666477aa08f78c5",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE (qa-f2906c26, 2026-09-05). Reviewed commit 5cde885c (`git branch --contains` -> moe/work-2026-09-04 only). All six owned paths clean in `git status --porcelain` at review time, so the reviewed bytes are the committed bytes.\n\nMUTATION DRILLS I RAN MYSELF (backup to %TEMP%, sed-mutate, restore by copy, restore proven by SHA256 equality AND empty `git status --porcelain` in a call separate from the restore):\n\n(1) Deleted `designReads,` from the composition return object (composition:504). RED: `daemon-store-dependencies.test.ts` -> `Tests 1 failed | 26 passed (27)`, `AssertionError: expected undefined to be defined` at :304. NOTE FOR THE RECORD: this drill reds the COMPOSITION arm, NOT the providerKeys pin -- the pin reads the shipped `daemon-store-dependencies.ts` object, which this mutation does not touch. DoD 3's wording (\"deleting the factory from the shipped object\") is therefore satisfied only by drill (2), not by this one.\n\n(2) Deleted the five-line forwarder from the SHIPPED object (`daemon-store-dependencies.ts:119-123`). RED on the right pin: `× serves the default provider and its registry bridge under plain Node`, diff line `-     \"designReads\",`. DoD 3 CONFIRMED against the surface it names.\n\n(3) Deleted the daemon-entry spread (`daemon-entry.ts:288`). RED: `expected { status: 503 } to deeply equal { status: 200 }`, `+ \"code\": \"LISTENER_DESIGN_UNAVAILABLE\"` / `- \"code\": \"DESIGN_REVISION_ABSENT\"`. DoD 2's production-boot forwarding is genuinely pinned, and it reds with the LAYER-BEARING status (503 listener refusal vs 200 store answer), not merely \"not equal\".\n\nGATES, with path attribution.\n- `pnpm --filter @moe/daemon test`: exit 1 (`PIPESTATUS[0]=1`), `Test Files 10 failed | 431 passed (441)` / `Tests 24 failed | 8672 passed | 2 skipped (8698)`, duration 1346s. Ran it TWICE; between runs the file count moved 438 -> 441 and the red set changed, which is itself evidence the tree is churning under peers.\n- FAILING-PATH SET (10 files): src/cutover/v2-readiness-evidence-collector.test.ts, src/cutover/v2-readiness-evidence-producers.test.ts, src/http/foundation-registry-hostile.test.ts, src/http/foundation-registry.test.ts, src/http/http-listener-read-dispatch.test.ts, src/runtime-entrypoint.test.ts, src/work/foundation-attempt-service.test.ts, src/work/foundation-attempt-windows.test.ts, src/work/foundation-capture-lifecycle.test.ts, src/work/foundation-capture-producer.test.ts.\n- INTERSECTION WITH OWNED PATHS: EMPTY. Nine of the ten contain zero references to `daemon-entry*` / `daemon-store-*` (grep -c = 0 each). The tenth, `runtime-entrypoint.test.ts`, matches only because `DEFAULT_EXPORT_BRIDGES = new Set([\"daemon-store-dependencies.ts\"])` is a name literal in its roster; its actual failure is `unexpected: [\"repository\\deployment\\deployment-docker-probe.js\"]` -- an orphan bridge under repository/deployment. Note this is a DIFFERENT red from the one the worker disclosed (`missing: orchestrator\\node-spec-listing.ts`), i.e. a peer fixed one and left another.\n- `src/http/http-listener-read-dispatch.test.ts` deserves a specific word because it is the design-read consumer and could look attributable: it is NOT. It fails on `+ \"/graph/get\"` being an unconsumed served route. `/design/read` appears IDENTICALLY on both the expected and received sides of that assertion, so this row's route is consumed correctly and someone else's `/graph/get` is not. This row is also fenced from that file by taskRail 1.\n- OWNED LEGS GREEN: `npx vitest run --root . --config package.json src/daemon-store-dependencies.test.ts src/daemon-entry-ops.test.ts src/daemon-entry.test.ts src/http/design-read.test.ts` -> exit 0, `Test Files 4 passed (4)` / `Tests 51 passed (51)`.\n- `pnpm typecheck`: exit 1, two errors, BOTH in apps/control-room (`cordum-app.test.tsx(1555,41) TS2493`, `advanced-frames.test.ts(58,10) TS2352`). This row touches zero control-room files.\n- `pnpm --filter @moe/daemon typecheck`: execution proven by the `$ tsc --project tsconfig.json` echo. Exit 1, six errors: five TS6133 in `src/bootstrap/bootstrap-durability.test.ts`, one TS18046 in `packages/scheduler/src/budget/budget-reservation.ts`. ZERO in this row's six files.\n- FOREIGN RED ATTRIBUTED BY COMMIT, not by assertion: bootstrap-durability.test.ts -> e70730c5, budget-reservation.ts -> e53e3e6a, cordum-app.test.tsx -> 039911cd; `git show --stat 5cde885c | grep -c` for all four names = 0. The worker's disclosed typecheck red was budget-reservation only; the daemon TS6133 five and the control-room two arrived after their run.\n\nPLAN DEVIATION, AUDITED AND ENDORSED. Steps 1/3 told the worker to reuse `createDesignReadPort` from `mcp-design-read-query.ts:37`. I re-measured: that module has no importers anywhere in apps/daemon/src and was untracked at the worker's claim; it belongs to task-7f9f20c7 (BLOCKED). The worker instead closed a 3-line port over the LANDED `readDesignRevision`, typed with the LANDED `DesignReadPort` from `./http/design-read.js` -- which IS `StartListenerOptions.designReads`'s type (http-listener.ts:158), so no adapter. `readDesignRevision` is not reimplemented. This is the stale-description rail working as intended, not drift.\n\nSECURITY PROPERTY RE-VERIFIED ON THE PRODUCTION SURFACE, not from the record: the port binds the store and NOT a project; `design-read.ts:99-100` builds `DesignReadInput` with `projectId: access.principal.projectId`. Binding a project in the closure too would let the check agree with itself. `designReadBodyOf` (:43-48) is an exact-key roster of `{goalRef}` / `{goalRef, version}`, so a caller-supplied `projectId` is refused, not honoured.\n\nDISCLOSED, NOT A REJECT REASON — TWO ITEMS FOR A GOVERNOR/ARCHITECT, NOT FOR THIS WORKER:\n\n(A) COMMIT 5cde885c SWEPT IN A BLOCKED FOREIGN ROW'S WIP. Its trailer says `Moe-Contested: apps/daemon/src/mcp-design-read-query.ts (task-7f9f20c7...)` and the stat shows that file at +126 lines. The worker filed an explicit \"DO NOT COMMIT these two\" comment naming exactly this path BEFORE the commit existed; the path still reached `declaredPaths` via complete_task's read-only harvest (`moe-filesmodified-includes-read-only-files`) and the wrapper committed by declared pathspec. This is a harness attribution artifact, not a worker defect, and I am not reverting it (rail: never revert or commit foreign paths). I checked whether it opens a clean-checkout hole and it does NOT: the module has zero importers, its `.test.ts` sibling is untracked, and `runtimeTierModules` promotes only the entry module, modules with a PRESENT test sibling, and their transitive relative imports -- so on a clean checkout it is test-tier, needs no `.js` bridge, and its untracked bridge produces no `unexpected` entry either. It is an inert tracked orphan. Someone who owns task-7f9f20c7 should still decide whether to keep or untrack it.\n\n(B) PER-FILE LINE CAP, PRE-EXISTING AND WORSENED. `daemon-store-foundation-composition.ts` 515 -> 531 and `daemon-entry-port-resolution.ts` 441 -> 459 (both measured at parent 746c1584 and at HEAD). BOTH were already over the 400 split line before this diff, and the plan mandated add-only against them. Under `moe-core-line-cap-guard-is-planning-only` this is the architect's to fix, and rejecting a worker for obeying an add-only plan on a file that was already non-compliant would be a bad reject. A split row for the composition root is worth filing.\n\n(C) The same commit also carries a peer's `\"preview.decide\"` insertion into `daemon-store-dependencies.test.ts`'s command roster (contested with task-06ac0da1). Not this row's edit; it does not red the owned legs.",
+      "timestamp": "2026-09-05T19:06:43.287Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:40.806Z",
-  "updatedAt": "2026-09-05T18:09:56.826Z",
+  "updatedAt": "2026-09-05T19:10:16.191Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:32:29.206Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-05T19:10:16.191Z",
+    "wallClockMs": 16666985
   },
   "contextFetchedBy": [
     "architect-2e480458",
@@ -176,7 +184,57 @@
     "apps/daemon/src/daemon-entry-ops.test.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-dependencies.ts",
-    "apps/daemon/src/daemon-entry.ts"
+    "apps/daemon/src/daemon-entry.ts",
+    ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
+    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json"
   ],
-  "completionSummary": "The production daemon now supplies the design-read port. A real `daemon-main`-shaped boot answers POST /design/read from the real store: `{code:\"DESIGN_REVISION_ABSENT\", layer:\"LEDGER\", ok:false, sourceCode:null, sourceLayer:null}` at 200, not LISTENER_DESIGN_UNAVAILABLE/503. Add-only, 6 files.\n\nPLAN DEVIATION (load-bearing, please read first). The plan says reuse `createDesignReadPort` from `mcp-design-read-query.ts:37`. THAT MODULE IS NOT ON THE BRANCH — untracked, `git log --all -- <path>` empty, `git cat-file -e HEAD:<path>` -> \"exists on disk, but not in 'HEAD'\". It belongs to task-7f9f20c7cddf4d50b49054951ab177fb, which is BLOCKED. The architect measured it on disk. Importing it from tracked production would break branch HEAD or carry a blocked row's unreviewed WIP. Took the step text's own escape hatch: a 3-line closure over the LANDED `readDesignRevision`, typed with the LANDED `DesignReadPort` from `./http/design-read.js` (which IS the landed `StartListenerOptions.designReads` type). `readDesignRevision` is NOT reimplemented — identical shape to `documentDossiers` at composition:322. FOLLOW-UP: collapse with `createDesignReadPort` when task-7f9f20c7 lands.\n\nDELIVERED: composition factory + return key; forwarder in the shipped `daemon-store-dependencies.ts` object; provider/resolved members + FACTORIES + explicit resolution block + ports spread in port-resolution; listener spread in daemon-entry.\n\nTWO PLAN FACTS MEASURED FALSE. (1) providerKeys sort slot: producer is `Object.keys(provider).sort()` and `toEqual` on an array is order-sensitive, so `designReads` goes after `commandAuthorityPlane`, BEFORE `documentCoverage` — not \"after documentIngest\". (2) FACTORIES DOES NOT GATE RESOLUTION. Drill (b) removed it and the end-to-end arm stayed GREEN (5 passed). `resolveOptionalDaemonPorts` reads `provider.designReads` from its own explicit block; FACTORIES feeds only `optionalPortFactoriesAreValid` -> `isDependencyProvider` -> daemon-main.ts:56. What it decides i"
+  "completionSummary": "The production daemon now supplies the design-read port. A real `daemon-main`-shaped boot answers POST /design/read from the real store: `{code:\"DESIGN_REVISION_ABSENT\", layer:\"LEDGER\", ok:false, sourceCode:null, sourceLayer:null}` at 200, not LISTENER_DESIGN_UNAVAILABLE/503. Add-only, 6 files.\n\nPLAN DEVIATION (load-bearing, please read first). The plan says reuse `createDesignReadPort` from `mcp-design-read-query.ts:37`. THAT MODULE IS NOT ON THE BRANCH — untracked, `git log --all -- <path>` empty, `git cat-file -e HEAD:<path>` -> \"exists on disk, but not in 'HEAD'\". It belongs to task-7f9f20c7cddf4d50b49054951ab177fb, which is BLOCKED. The architect measured it on disk. Importing it from tracked production would break branch HEAD or carry a blocked row's unreviewed WIP. Took the step text's own escape hatch: a 3-line closure over the LANDED `readDesignRevision`, typed with the LANDED `DesignReadPort` from `./http/design-read.js` (which IS the landed `StartListenerOptions.designReads` type). `readDesignRevision` is NOT reimplemented — identical shape to `documentDossiers` at composition:322. FOLLOW-UP: collapse with `createDesignReadPort` when task-7f9f20c7 lands.\n\nDELIVERED: composition factory + return key; forwarder in the shipped `daemon-store-dependencies.ts` object; provider/resolved members + FACTORIES + explicit resolution block + ports spread in port-resolution; listener spread in daemon-entry.\n\nTWO PLAN FACTS MEASURED FALSE. (1) providerKeys sort slot: producer is `Object.keys(provider).sort()` and `toEqual` on an array is order-sensitive, so `designReads` goes after `commandAuthorityPlane`, BEFORE `documentCoverage` — not \"after documentIngest\". (2) FACTORIES DOES NOT GATE RESOLUTION. Drill (b) removed it and the end-to-end arm stayed GREEN (5 passed). `resolveOptionalDaemonPorts` reads `provider.designReads` from its own explicit block; FACTORIES feeds only `optionalPortFactoriesAreValid` -> `isDependencyProvider` -> daemon-main.ts:56. What it decides i",
+  "commits": [
+    {
+      "sha": "5cde885cf247bc33f4ddabc18137f11228635768",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T18:09:56Z",
+      "paths": [
+        ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
+        ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-entry-ops.test.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/mcp-design-read-query.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T18:10:18.951Z",
+      "treeId": "ea352943dad9e4cc09fd63bc391902464d2e024e",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/mcp-design-read-query.ts",
+          "taskId": "task-7f9f20c7cddf4d50b49054951ab177fb"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "tests/e2e/foundation/j5-compiler-agent.mjs"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "nothing",
+    "kind": "completion",
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-8c5af680@2026-09-05T17:26:38Z",
+    "at": "2026-09-05T18:10:33.462Z"
+  },
+  "completedAt": "2026-09-05T19:10:16.191Z",
+  "reviewCompletedAt": "2026-09-05T19:10:16.191Z",
+  "reviewSummary": "APPROVED. Commit 5cde885c (moe/work-2026-09-04; six owned paths clean, reviewed bytes = committed bytes). Full evidence in comment-398a54cb.\n\nDoD1-2 OK: designReads closes over the store and calls readDesignRevision (composition:336-345/:504), forwarded in the SHIPPED daemon-store-dependencies.ts:119-123, in FACTORIES:151 and providerKeys, resolved via hasMethods([\"read\"]), spread at daemon-entry.ts:288; chain to http-listener.ts:158 -> read-dispatch:368 -> handler feeds projectId from access.principal.\n\nDoD3 OK by my own drills, not by the record. Restores proven by SHA256 equality AND empty git status:\n1. drop designReads from the composition return -> RED \"expected undefined to be defined\": reds the COMPOSITION arm, NOT the providerKeys pin.\n2. drop the forwarder from the SHIPPED object -> RED on the right pin, diff `- \"designReads\",`. Satisfies DoD3.\n3. drop the daemon-entry spread -> RED 503 LISTENER_DESIGN_UNAVAILABLE vs 200 DESIGN_REVISION_ABSENT.\n\nGATES. pnpm --filter @moe/daemon test exit 1 (PIPESTATUS[0]=1): Test Files 10 failed | 431 passed (441). FAILING SET INTERSECTED WITH OWNED PATHS IS EMPTY: 9/10 have zero refs to this row's modules; runtime-entrypoint matches only a name literal, failing on an orphan repository/deployment bridge.\nOWNED LEGS GREEN: Test Files 4 passed (4) / Tests 51 passed (51), exit 0.\npnpm typecheck exit 1: 2 errors, both control-room. pnpm --filter @moe/daemon typecheck (proven by the `$ tsc` echo) exit 1: 6 errors, ZERO in this row's files; attributed to e70730c5/e53e3e6a/039911cd, none in 5cde885c.\n\nDEVIATION ENDORSED: createDesignReadPort has no importers and belongs to BLOCKED task-7f9f20c7; the worker closed over the LANDED readDesignRevision. Missing factory still refuses UNAVAILABLE.\n\nDISCLOSED not rejected: (a) commit swept task-7f9f20c7's mcp-design-read-query.ts (+126) against the worker's DO-NOT-COMMIT comment; no clean-checkout hole. (b) per-FILE cap 515->531, 441->459, both over 400 before this add-only diff."
 }
