@@ -93,10 +93,17 @@
   "parentTaskId": "task-04b3ce7e349743c2a156d32ee5550ba5",
   "priority": "HIGH",
   "order": 91.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0ac8135119db486287cc059b5340a191",
+      "author": "worker-caece97b",
+      "content": "HANDOFF FROM worker-caece97b — THE WORK OF THIS ROW IS DELIVERED AND GREEN ON DISK. DO NOT REDO IT.\n\nMy claim lapsed while `pnpm test` ran (the root lane took >30 min on this degraded host — one file, tools/packaging/pack-source.test.ts, took 1,926,891ms alone). The row is now claimed by worker-afd89b78, so complete_step/complete_task refuse me with [NOT_ALLOWED]. Steps 1-3 are recorded COMPLETE with full notes; step 4's gate evidence had nowhere to land, so it is below. Steps 4 and 5 are the only work remaining, and step 4 is already RUN.\n\n=== WHAT IS ON DISK, VERIFIED MOMENTS AGO ===\nruntime-vocabulary.ts:91   \"deployment.deploy\", \"deployment.set_target\", \"effect.activate\",\nruntime-contract.test.ts:41  identical hand transcription\nSorted slot confirmed by an actual sort under the SAME collation the production arm uses:\n  cutover.quiesce < dependency.challenge < deployment.deploy < deployment.set_target < effect.activate\n(`dependency` precedes `deployment` on the 4th char, e=101 vs l=108 — NOT next to cutover.*)\nTranscription stays transcribed; nothing derived. No per-kind payload type (rail 6). No daemon edit.\n\nDIGEST: OLD db43c1bc6e7e3c67825903acb2416ce7b9456d71efaea24f9320531b1f4c1522\n        NEW f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd\nvia `pnpm --filter @moe/control-room-client generate` ($ node --experimental-strip-types generator/generate.ts), EXIT=0. Never hand-edited. Digest CHANGED, so the edit reached canonicalContractSurface(). Kinds are buildable, not merely hashed: generated-client.ts:192,193,306,307 carry CommandBuilder entries for both.\n\nMIRRORS — census BY HEX across all file types, all four carry the new value:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n  packages/control-room-client/src/generated-coverage.test.ts:36\n  packages/control-room-client/src/generated/generated-client.ts:919\nOLD-hex census returns NOTHING (exit 1). Zero stale mirrors.\n\n*** THE FIFTH LITERAL — READ THIS, THE HEX CENSUS CANNOT SEE IT ***\ngenerated-coverage.test.ts:35 `GENERATED_FILE_SHA256`, asserted at :164, is a sha256 of the generated file BYTES — a DIFFERENT hex from the contract digest, so censusing by the digest value misses it, and `git grep GENERATED_CONTRACT_DIGEST` misses it too. It moves on EVERY regeneration. I updated it 1465b228… -> 9a4bed62e2f4768fb6565c6e7c24e46874a307701bbf5c1a380b2af3aa78daed. Left stale it reds this row's own named verification command. ANY future kind-publishing row hits this.\n\nSYMBOL IMPORTERS confirmed by reading, not assumed — all four import/re-export and were NOT edited: contract-pins.ts:7, contract-digest.test.ts:4, v2-readiness-evidence-collector.ts:9, v2-readiness-evidence-producers.test.ts:4.\n\n=== STEP 4 GATES, ALL RUN STANDALONE AND FOREGROUND ===\n`pnpm typecheck` EXIT=0, 20 projects, apps/control-room and apps/daemon both \"Done\".\n`pnpm --filter @moe/control-room test` -> Test Files 1 failed | 152 passed (153); Tests 1 failed | 1902 passed (1903). The one failure is a 5000ms TIMEOUT in src/scaffold.test.tsx:620, not an assertion. Re-run ALONE: 1 passed (1), 37 passed (37), 4.86s vs 20.93s contended -> load flake; uncontended this leg is 153/153. MY TWO MIRRORS MEASURED DIRECTLY: `npx vitest run src/data/data-adapter.test.ts src/v2/goals/approve-plan.test.tsx` -> 2 passed (2), 30 passed (30).\n`pnpm --filter @moe/control-room-client test` EXIT=0 -> Test Files 10 passed (10), Tests 96 passed (96). ** this is the named verification command **\nContracts targeted -> 12 passed (12). contract-digest.test.ts -> 4 passed (4).\n\n`pnpm test` EXIT=1: Test Files 14 failed | 414 passed | 2 skipped (430); Tests 112 failed | 10185 passed | 46 skipped (10343). Failing: benchmark/{freeze-manifest-admission,pre-freeze-audit,pre-freeze-pinned-documents}, runner/workspace/{foundation-workspace-capture-node,worktree-materializer-node}, e2e/foundation/{dispatch-crash-sweep,multi-node-graph}, integration/control-room/compiled-product-journey, integration/portability/bin-target-modes, tools/packaging/{pack-command,pack-source,pack-windows,pack-windows-main,pack-windows-process-lease}.\nATTRIBUTED FOREIGN on four independent lines: (1) PER-FILE grep of all 14 for RUNTIME_COMMAND_KINDS|runtime-vocabulary|control-room-client|GENERATED_CONTRACT_DIGEST|deployment.* -> ZERO hits each. (2) REVERT-MY-DIFF CONTROL on the nearest one: with my kinds removed, compiled-product-journey fails BYTE-IDENTICALLY — `expected [ 'goal.create', …(8) ] to include 'goal.close'` at :331:48. My diff only ADDS roster entries; it cannot remove goal.close. (3) THE FAILING SET MIGRATES BETWEEN TWO RUNS OF THE SAME TREE (run 1 had legacy-import-commit, pack-artifact-sweep, phase0-node-capture-port, scope-git, source-snapshot-git-node; run 2 has worktree-materializer-node and the pack-* family) — a source-caused red does not migrate. (4) Durations are absurd (1,926,891ms / 962,948ms / 805,934ms), all git/packaging/workspace/e2e shell-out suites: the spawn-latency cliff. INTERSECTION WITH THIS ROW'S OWNED PATHS: EMPTY.\n\n=== TWO TRAPS FOR WHOEVER FINISHES THIS ===\n1. THE PLAN'S STEP-5 RESTORE PROOF IS WRONG ON THIS CHECKOUT. It says the six files are tracked so an empty `git diff -- <path>` proves a drill was restored. FALSE: every one carries peer dirt, so that diff is non-empty before, during and after, and an unrestored mutant rides in wearing an identical diff. Use SHA256 vs an out-of-tree backup taken BEFORE mutating, verified in a call SEPARATE from the restore. My backups are at %TEMP%\\moe-bk-caece97b (5 files). I did exactly this for the one control mutation I ran; restore proven 6533963a6b09af33d1810743c0e480dcfe714f95cced800c8c8806e3e5e4d22e == backup.\n2. `pnpm --filter @moe/control-room test` REFUSES TO RUN on this tree: [ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] at runDepsStatusCheck, because a peer left ` M apps/daemon/package.json` without the lockfile. DO NOT use pnpm's suggested remedies (`CI=true`, `confirmModulesPurge=false`) — both PURGE node_modules out from under every live session in this shared checkout. Use `--config.verify-deps-before-run=false`. The env-var form npm_config_verify_deps_before_run does NOT work; only the `--config.` flag does.\n\n=== TREE MOVED UNDER ME, AND IT IS CURRENTLY CONSISTENT ===\nI set commands.size to 109 (from a MEASURED 107, never the DoD's 106). It now reads 110 — a peer published one more kind between my step-2 run and now and moved the literal correctly. Re-verified just now at the live tree: contracts 12/12 green, contract-digest 4/4 green, roster length 110 with 110 unique, and ZERO kinds present in the roster but missing from the generated client. So my regeneration covered the peer's kind too and the tree is self-consistent — nothing to repair. Re-measure anyway before you touch it; that literal moved three times during this row (104 -> 106 -> 107 -> 109 -> 110).\n\nREMAINING: step 5 only (the three drills + completion record). Step 4 needs no re-run beyond a fresh `pnpm --filter @moe/control-room-client test` for complete_task's verification block.\n\nThe intermediate state is DELIBERATE, not a hole: both kinds are advertised on the shared contract and not yet served by the daemon roster. Precedent is documented at apps/daemon/src/goals/goal-create-with-source.ts:35 — goal.create_with_source is in RUNTIME_COMMAND_KINDS and not in the daemon table. The daemon half is parent task-04b3ce7e349743c2a156d32ee5550ba5. DoD 5 holds: daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts and agent-spawn-contract.ts are all clean under `git status --porcelain` — I never touched them.",
+      "timestamp": "2026-09-05T20:33:37.899Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:53:34.370Z",
-  "updatedAt": "2026-09-05T20:22:26.186Z",
+  "updatedAt": "2026-09-05T20:33:37.899Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:58:28.884Z",
     "plannedStepCount": 5,
@@ -132,5 +139,91 @@
     "worker-caece97b",
     "worker-afd89b78"
   ],
-  "workStartedAt": "2026-09-05T19:29:10.105Z"
+  "workStartedAt": "2026-09-05T19:29:10.105Z",
+  "commits": [
+    {
+      "sha": "1d14ea2f10c9956cfa3e7c792529cc88c92db5cd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-afd89b78@2026-09-05T20:22:30Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+        ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+        ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json"
+      ],
+      "recordedBy": "worker-afd89b78",
+      "recordedAt": "2026-09-05T20:23:03.238Z",
+      "treeId": "e8c6c40702efcdf07986b3e2378de0bacf52e767",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+    ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+    ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-ops.test.ts",
+    "apps/control-room/src/live/live-ops.ts",
+    "apps/control-room/src/live/live-repository-reservation.ts",
+    "apps/control-room/src/live/live-runs.test.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/replan-successor-port.test.ts",
+    "apps/control-room/src/v2/approvals/replan-successor-port.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+    "apps/control-room/src/v2/ops/repository-reservation-card.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/daemon/src/http/activity-read.test.ts",
+    "apps/daemon/src/http/activity-read.ts",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/health-read.test.ts",
+    "apps/daemon/src/http/runs-read.test.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.js",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity-test-fixtures.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/preview/preview-command-resolution.test.ts",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-test-fixtures.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/repository/repository-execution-concurrency.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.js",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-identity.js",
+    "apps/daemon/src/repository/repository-execution-identity.ts",
+    "apps/daemon/src/repository/repository-execution-persistence.js",
+    "apps/daemon/src/repository/repository-execution-persistence.ts",
+    "apps/daemon/src/repository/repository-execution-port.js",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.js",
+    "apps/daemon/src/repository/repository-execution-record.test.ts",
+    "apps/daemon/src/repository/repository-execution-record.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-afd89b78@2026-09-05T20:22:30Z",
+    "at": "2026-09-05T20:23:03.238Z"
+  }
 }
