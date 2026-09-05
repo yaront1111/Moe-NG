@@ -155,6 +155,25 @@ describe("bytes the decoder refuses rather than guesses", () => {
     expect(report.refusals.length).toBe(2);
   });
 
+  it("refuses a top-level directory named after an Object.prototype member", () => {
+    // `in` on the family table answered true for these, so the file decoded with
+    // Object.prototype.toString (or Object.prototype itself) as its kind instead of refusing.
+    const report = decode(tree([
+      ...GOOD,
+      ["constructor/x.json", '{"legacyId":"c","owner":"me"}'],
+      ["toString/y.json", '{"legacyId":"t","owner":"me"}'],
+      ["hasOwnProperty/z.json", '{"legacyId":"h","owner":"me"}'],
+    ]));
+
+    for (const path of ["constructor/x.json", "toString/y.json", "hasOwnProperty/z.json"]) {
+      expect(refusalAt(report, path).refusal.code).toBe("IMPORT_SOURCE_UNSUPPORTED");
+      expect(refusalAt(report, path).refusal.layer).toBe("DECODE");
+    }
+    expect(report.records.length).toBe(3);
+    expect(report.records.every((record) => typeof record.kind === "string")).toBe(true);
+    expect(report.refusals.length).toBe(3);
+  });
+
   it("refuses malformed bytes and a non-record document with the same exact code", () => {
     const report = decode(tree([
       ["tasks/truncated.json", '{"legacyId":"t","owner":'],

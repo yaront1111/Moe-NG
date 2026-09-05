@@ -79,11 +79,16 @@ function decodeRefusal(
   return refusal(sourcePath, refuseImport(code, "DECODE", detail));
 }
 
-/** The family is the first path segment; a nested file belongs to its top-level family. */
+/**
+ * The family is the first path segment; a nested file belongs to its top-level family. Own
+ * keys only: `in` also answers true for `constructor`, `toString` or `__proto__`, and a legacy
+ * tree with such a top-level directory then decoded with `Object.prototype.toString` (or
+ * `Object.prototype` itself) as its `kind` instead of refusing.
+ */
 function familyOf(path: string): SupportedSourceFamily | null {
   const [head] = path.split("/");
   if (head === undefined) return null;
-  return head in SUPPORTED_SOURCE_FAMILIES ? (head as SupportedSourceFamily) : null;
+  return Object.hasOwn(SUPPORTED_SOURCE_FAMILIES, head) ? (head as SupportedSourceFamily) : null;
 }
 
 /**
