@@ -88,7 +88,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:32.672Z",
-  "updatedAt": "2026-09-05T14:38:37.375Z",
+  "updatedAt": "2026-09-05T15:06:49.029Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:30:41.029Z",
     "plannedStepCount": 6,
@@ -136,6 +136,21 @@
       "treeId": "265231423cd2da03090eb9d9b1d62d9f6d2548a6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "57963b916e8a26d5e82c053e87eb080c542f1cf3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T14:39:12Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:06:49.029Z",
+      "treeId": "9610d2cb4b766cab7d8e6098e980b61d4d803c20",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -143,11 +158,15 @@
     ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
     ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T14:34:57Z",
-    "at": "2026-09-05T14:38:37.375Z"
+    "sessionId": "worker-caece97b@2026-09-05T14:39:12Z",
+    "at": "2026-09-05T15:06:49.029Z"
   }
 }
