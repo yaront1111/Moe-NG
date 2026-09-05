@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:10:18.244Z",
-  "updatedAt": "2026-09-05T23:12:04.364Z",
+  "updatedAt": "2026-09-05T23:24:32.664Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:12:51.765Z",
     "plannedStepCount": 8,
@@ -207,7 +207,8 @@
     "packages/core/src/product-contract/product-contract-v2-contract.ts",
     "packages/core/src/product-contract/product-contract-v2-codec.test.ts",
     "apps/control-room/src/v2/goals/gate1-contract-shape.test.ts",
-    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json"
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+    ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
   ],
   "completionSummary": "A deployment requirement can now NAME the environment variables it needs. Optional carrier, names only, 5 files, no consumer (grandchild C owns that).\n\nWHAT SHIPPED\n- packages/core/.../product-contract-v2-contract.ts: `ProductContractV2DeploymentRequirement extends ProductContractV2Requirement { readonly environmentVariableNames?: readonly string[] }` (:104-111); `deploymentRequirements` retyped to it (:166); two bounds added to the already-exported PRODUCT_CONTRACT_V2_LIMITS (`maxEnvironmentVariableNameBytes: 128`, `maxEnvironmentVariableNames: 256`). The SHARED `ProductContractV2Requirement` is untouched, so the other five requirement sections keep their exact shape.\n- packages/core/.../product-contract-v2-admission.ts: `DEPLOYMENT_REQUIREMENT_KEYS`, the grammar `/^[A-Z_][A-Z0-9_]*$/`, `readEnvironmentVariableNames`, `readDeploymentRequirement`; ONLY the deployment section rewired.\n- apps/control-room/.../gate1-contract-shape.ts: the same change mirrored character for character (212 lines).\n- Tests: product-contract-v2-codec.test.ts extended 446 -> 606 lines; NEW gate1-contract-shape.test.ts (226 lines).\n\nDoD 1 - a requirement WITH names validates; a VALUE-shaped entry does not. 21 refusal cases on each side asserted BY REASON CODE, never merely \"it refused\": `DB_PASSWORD=REDACTED_FAKE`, colon-form, space-form, lowercase, leading digit, hyphen, quote, newline, NUL, leading/trailing space, empty, non-string, duplicate, unsorted, non-array, lone surrogate, non-ASCII -> PRODUCT_CONTRACT_V2_PROVENANCE_INVALID; name past 128 bytes and list past 256 -> PRODUCT_CONTRACT_V2_LIMIT_EXCEEDED, each paired with an accept-at-exactly-the-limit arm. No realistic secret is committed (epic rail 3): every fake value is the literal REDACTED_FAKE.\n\nDoD 2 - EVERY EXISTING CONTRACT STAYS VALID, by construction rather than by a parallel implementation: when the key is absent, `readDeploymentRequirement` hands the value to the UNMODIFIED `readRequirement`, so today's code path and today's",
   "commits": [
@@ -235,6 +236,21 @@
           "taskId": "task-971caed1c5ca46bd871a7ec1c6ca8de1"
         }
       ],
+      "pushed": true
+    },
+    {
+      "sha": "7a89d302b49aa644c3a0782fedf26123c96d31a9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T23:12:05Z",
+      "paths": [
+        ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T23:24:32.664Z",
+      "treeId": "7779d8c0928511e0eafaa485322966f5324258d4",
+      "status": "REVIEW",
       "pushed": true
     }
   ],
@@ -303,11 +319,13 @@
     "apps/daemon/src/criterion-evidence/criterion-run.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner.js",
     "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-service.js",
     "apps/daemon/src/criterion-evidence/criterion-service.ts",
     "apps/daemon/src/criterion-evidence/criterion-storage.js",
     "apps/daemon/src/criterion-evidence/criterion-storage.ts",
     "apps/daemon/src/criterion-evidence/criterion-test-fixtures.ts",
+    "apps/daemon/src/daemon-repository-workflows.test.ts",
     "apps/daemon/src/goals/goal-publish-remote.test.ts",
     "apps/daemon/src/http/document-coverage-criteria.js",
     "apps/daemon/src/http/document-coverage-criteria.ts",
@@ -322,6 +340,8 @@
     "apps/daemon/src/http/run-goal-publication.ts",
     "apps/daemon/src/http/runs-read.ts",
     "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
     "apps/daemon/src/orchestrator/node-publisher.test.ts",
     "apps/daemon/src/orchestrator/node-publisher.ts",
     "apps/daemon/src/orchestrator/node-publisher-approved.test.ts",
@@ -330,8 +350,11 @@
     "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
     "apps/daemon/src/orchestrator/node-spec-listing.ts",
     "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-workflows.test.ts",
     "apps/daemon/src/orchestrator/wrapper-node-missions.test.ts",
     "apps/daemon/src/orchestrator/wrapper-node-missions.ts",
@@ -361,6 +384,7 @@
     "apps/daemon/src/repository/publication-effect-contracts.js",
     "apps/daemon/src/repository/publication-effect-contracts.ts",
     "apps/daemon/src/repository/publication-effect-ledger.js",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
     "apps/daemon/src/repository/publication-effect-ledger.ts",
     "apps/daemon/src/repository/publication-goal-integration.js",
     "apps/daemon/src/repository/publication-goal-integration.test.ts",
@@ -375,6 +399,7 @@
     "apps/daemon/src/repository/repository-execution-recovery.test.ts",
     "apps/daemon/src/repository/repository-execution-recovery.ts",
     "apps/daemon/src/repository/repository-execution-workflows.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.ts",
     "apps/daemon/src/repository/repository-landing-intent.js",
     "apps/daemon/src/repository/repository-landing-intent.test.ts",
     "apps/daemon/src/repository/repository-landing-intent.ts",
@@ -394,6 +419,7 @@
     "apps/daemon/src/repository/repository-recovery-git.js",
     "apps/daemon/src/repository/repository-recovery-git.test.ts",
     "apps/daemon/src/repository/repository-recovery-git.ts",
+    "apps/daemon/src/repository/repository-recovery-native.test.ts",
     "apps/daemon/src/repository/repository-recovery-service.js",
     "apps/daemon/src/repository/repository-recovery-service.test.ts",
     "apps/daemon/src/repository/repository-recovery-service.ts",
@@ -402,14 +428,19 @@
     "apps/daemon/src/repository/repository-workflow-ref.ts",
     "docs/plans/2026-09-06-product-evidence-and-recovery.md",
     "packages/runner/src/index.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary.test.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
+    "packages/runner/src/platform/windows/windows-status.ts",
     "packages/runner/src/verification/criterion-check-executor.js",
     "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts"
+    "packages/runner/src/verification/criterion-check-executor.ts",
+    "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-caece97b@2026-09-05T20:37:21Z",
-    "at": "2026-09-05T23:04:21.126Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-05T23:12:05Z",
+    "at": "2026-09-05T23:24:32.664Z"
   }
 }
