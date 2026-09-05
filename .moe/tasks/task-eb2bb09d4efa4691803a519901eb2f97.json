@@ -1,0 +1,35 @@
+{
+  "id": "task-eb2bb09d4efa4691803a519901eb2f97",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Compose the design-read port into the production daemon listener",
+  "description": "SPIDR child of task-8a6d6660, spun from task-7ca9dca3 (architect-2e480458, 2026-09-05) because wiring the listener AND composing it into daemon-store-foundation-composition.ts + daemon-entry.ts + FACTORIES + providerKeys exceeds the 10-file cap.\n\nOBJECTIVE: the production daemon (daemon-main / createStoreDependencies) actually supplies the design-read port the listener already knows how to call.\n\nDELIVERABLE: factory in daemon-store-foundation-composition.ts, forwarded in daemon-store-dependencies.ts, listed in FACTORIES (daemon-entry-port-resolution.ts) and providerKeys, spread in daemon-entry.ts onto StartListenerOptions.\n\nNOT IN SCOPE: the HTTP handler and JSON_ROUTES (task-7ca9dca3), UI, MCP.\n\nVERIFICATION: `pnpm --filter @moe/daemon test` plus `pnpm typecheck`.",
+  "definitionOfDone": [
+    "createStoreDependencies / the foundation composition root exposes a designReads factory that closes over the project store and calls readDesignRevision. providerKeys and FACTORIES include the new key.",
+    "daemon-entry resolves the factory and passes it into StartListenerOptions. A production boot with the factory present answers POST /design/read from the real store (DESIGN_REVISION_ABSENT on a fresh project is a valid answer).",
+    "daemon-store-dependencies.test.ts providerKeys pin includes the new key. Deleting the factory from the shipped object reds that pin.",
+    "Gates quoted WITH `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "Do not edit design-read.ts or http-listener-read-dispatch.ts — those belong to task-7ca9dca3.",
+    "Wire an optional designReads factory the same way goalSource/documentDossiers are wired. A missing factory must keep the UNAVAILABLE refusal, never invent a design.",
+    "FEATURES ONLY."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-7ca9dca37fb44b40ac35abfc3c36cb9a"
+  ],
+  "priority": "HIGH",
+  "order": 62.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:28:40.806Z",
+  "updatedAt": "2026-09-05T14:28:40.806Z"
+}

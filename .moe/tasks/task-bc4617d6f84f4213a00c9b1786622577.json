@@ -17,9 +17,162 @@
     "ENUMERATE FROM THE SEAM, not from a constant: the served set comes from the paths the listener actually dispatches on. A hand-kept list is a third copy and drifts (global rail 9).",
     "ASCII-only sources and apostrophe-free JSX text (scheduler package-boundary scan); check any new testid namespace is free; keep every production file under 250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND RE-MEASURE. Record, in the step note, the pre-change count lines for `pnpm --filter @moe/control-room test` and for the targeted daemon roster leg `cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts` (expect 7 passed (7), exit 0). Then re-run the four consumption greps from planningNotes.codebaseInsights section C and paste their verbatim output, because a peer row may have closed one while this plan was being written. If a route has gained a consumer, drop it from the census before writing it. Do NOT edit any file in this step.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE (no files edited). Count lines:\n\n1) pnpm --filter @moe/control-room test -> exit 0, Test Files 147 passed (147), Tests 1843 passed (1843), Duration 58.71s.\n\n2) cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts -> exit 0, Test Files 1 passed (1), Tests 7 passed (7).\n\nCONSUMPTION GREPS (section C re-measure, production .ts/.tsx under apps/control-room/src and packages/control-room-client/src, SKIP *.test.* and dev-proxy-paths.ts). All 26 JSON_ROUTES scanned for the literal \"/<path>\":\n\nCONSUMED (22): /affordances/read (live-board-feed.ts, policy-install-port.ts); /budget/commitment/read (live-budget-commitment.ts); /command (client-transport.ts); /documents/coverage/read (live-document-coverage.ts); /documents/dossier/read (prd-dossier.tsx, client-transport.ts); /documents/ingest (live-document-ingest.ts); /events/ack (client-transport.ts); /events/read (client-transport.ts); /goals/read (live-goal-catalog.ts); /planning/run/read (live-planning-run.ts); /product-contract/gate-1/read (live-product-contract-gate-1.ts); /product-contract/pending/read (gate1-v1-approval.ts); /v2/product-contract/pending/read (gate1-approval.ts); /v2/command (client-transport.ts); /runs/read (live-runs.ts); /policy/read (live-ops.ts); /activation/read (live-activation.ts); /health/read (live-ops.ts); /activity/read (live-activity.ts); /sessions/read (live-sessions.ts); /repository/remote/read (live-repository-remote.ts); /goals/source/read (live-goal-source.ts).\n\nUNCONSUMED (4) — census UNCHANGED, do not drop:\n- /events/resume consumers=0 (only dev-proxy-paths.ts:20, live-document-proxy.test.ts:21, daemon). generated-client.ts:28 comment: Cursor/resume semantics are TBD. client-transport.ts has EVENT_PAGE_PATH=/events/read and EVENT_ACKNOWLEDGE_PATH=/events/ack, no resume.\n- /graph/get consumers=0 (only proxy + proxy test + daemon).\n- /v2/product-contract/current consumers=0 (browser consumes .../pending/read via gate1-approval.ts, not current).\n- /session/challenge-operands/read consumers=0 (only proxy:34 despite comment claiming the browser reads the operands).\n\nConcat/template check (grep events/, /resume, graph/, challenge-operands, product-contract/current over both consumer roots):\n- apps/control-room/src: hits only in dev-proxy-paths.ts, live-document-proxy.test.ts, and live-config.ts:81 comment 'proxies /command, /events/read, /events/ack and /affordances/read'. live-handshake.ts:38-39 names /v2/command and /command inside JSDoc — not the four census routes.\n- packages/control-room-client/src: client-transport.ts:123-124 /events/read and /events/ack; generated-client.ts:28 TBD comment; client-transport.test.ts (excluded).\n\nNamespaces still free: cr.advanced / cr.forensic / cr.roster = 0 hits under apps/control-room and tests. Dirty peer paths: 0.",
+      "startedAt": "2026-09-05T13:39:30.657Z",
+      "completedAt": "2026-09-05T13:41:58.789Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONSUMER SCANNER plus the two new bidirectional arms, in the EXISTING asserter. In apps/daemon/src/http/http-listener-read-dispatch.test.ts add `consumedPaths()`: walk apps/control-room/src and packages/control-room-client/src for .ts/.tsx, SKIP any path containing `.test.` or ending dev-proxy-paths.ts, strip // and /* */ comments from each file (risk R2 - live-config.ts:81 and live-handshake.ts:38 name routes inside comments), and collect every `\"/...\"` literal. Then assert BOTH directions as sets, never subset: (a) JSON_ROUTES minus consumed == UNCONSUMED_SERVED_ROUTES; (b) consumed-and-daemon-shaped minus JSON_ROUTES == the permitted non-JSON_ROUTES surface already named at :182 (/bootstrap and the four /session/pair* paths). Direction (b) is what catches a browser fetching a route this daemon does not serve.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "Extended the existing asserter with consumedPaths() / scanConsumers(): walks apps/control-room/src and packages/control-room-client/src, skips `.test.` and dev-proxy-paths.ts, strips // and /* */ with a string-aware scanner (so https:// placeholders and live-config.ts:81 / live-handshake.ts:38 comments cannot count as consumption), collects every \"/...\" literal.\n\nDirection (a): JSON_ROUTES minus consumed == UNCONSUMED_SERVED_ROUTES (the four census members from step 1; reasons in step 3).\nDirection (b): consumed-and-daemon-shaped minus JSON_ROUTES == PERMITTED_CONSUMED_NON_JSON_ROUTES. Daemon-shaped excludes `/` (keyboard-map search binding) and `/manager/*` (separate origin). MEASURED drift from the :182 proxy list: `/session/pair` is proxied but no production module fetches it (pairing tombstone). Equality uses the four actually fetched: /bootstrap, /session/pair/claim, /session/pair/open, /session/pair/request. Including the tombstone would make (b) permanently red for a proxy-only path, which is not 'a browser fetching a route this daemon does not serve'.\n\nGate: cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts -> Test Files 1 passed (1), Tests 9 passed (9) (was 7). Drills of both arms are step 3.",
+      "startedAt": "2026-09-05T13:42:22.713Z",
+      "completedAt": "2026-09-05T13:45:25.393Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE EXCLUSION CENSUS WITH A REASON PER ENTRY (DoD 2), and its positive control. Declare UNCONSUMED_SERVED_ROUTES as a frozen list where every entry carries a written reason in an adjacent comment - currently /events/resume (client-transport.ts declares page and ack but not resume; generated-client.ts:28 says resume semantics are TBD), /graph/get, /v2/product-contract/current (the browser consumes .../pending/read, not current) and /session/challenge-operands/read. An entry with no reason is a hiding place, so assert the reasons EXIST: pin that each census member's name appears in the file's comment block. Extend the existing positive-control arm at :189 with floors for the new scan (files walked > 100, consumed paths > 15) so no new arm can pass on an empty set. Then DRILL, per global rail 1: delete live-repository-remote.ts's route literal and confirm arm (a) reds naming /repository/remote/read; add a fake served route to JSON_ROUTES and confirm arm (a) reds; add a bogus \"/not/served/read\" literal to a control-room production module and confirm arm (b) reds. Restore all three and prove restoration with `git status --porcelain` on the exact paths in a SEPARATE call.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "Census reasons pinned in the UNCONSUMED_SERVED_ROUTES comment block; positive-control arm now asserts each census path appears in comments (not just the array), filesWalked>100, consumed.paths.size>15, and stripComments keeps a live `/events/resume` literal while dropping the same literal from // and /* */ fixtures.\n\nPRE-DRILL porcelain on the three mutated paths: empty (all tracked).\nDRILL 1: live-repository-remote.ts literal `/repository/remote/read` -> `/repository/remote/x`. Arm (a) RED: received 5 paths including `/repository/remote/read` vs census of 4. (Arm (b) also named `/repository/remote/x`.)\nDRILL 2: appended `/fake/served/read` to JSON_ROUTES. Arm (a) RED naming `/fake/served/read` (proxy arm also red as unproxied).\nDRILL 3: live-ops.ts added `const BOGUS_UNSERVED_PATH = \"/not/served/read\"`. Arm (b) RED naming `/not/served/read`. Arm (a) stayed green.\nRESTORE: SHA256 match vs %TEMP%/moe-worker-b33940f5-drills for all three (53D132F2 live-repository-remote, FB35F645 dispatch, 85656670 live-ops). SEPARATE porcelain on the three paths: empty. Post-restore roster test: Tests 9 passed (9).",
+      "startedAt": "2026-09-05T13:45:47.042Z",
+      "completedAt": "2026-09-05T13:48:47.423Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE COMMAND-KIND EXCLUSIONS (DoD 2's named entries: planning.write, graph.supersede, cutover.*, work.*). These are KINDS, not routes - they travel over /command and /v2/command. Enumerate the served kinds from the daemon seam (apps/daemon/src/daemon-command-registry.ts) and the browser-advertised kinds from packages/control-room-client/src/generated/generated-client.ts (builders declared per kind, e.g. :187 cutover.abort, :188 cutover.activate). Assert the deliberate exclusions as an EXPLICIT reasoned list rather than a silent omission, and state per entry which sense of unconsumed applies - note the measured subtlety that cutover.* IS advertised by the generated client while the UI gates it at approvals/approval-detail-confirmation.tsx:31, so 'not advertised' and 'not offered in the UI' are different claims and the census must not conflate them. If this enumeration proves to need more than the two seam files above, STOP and report rather than widening the file roster (global rail 19 - that is a split signal, not a discovery for step 8).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "Command-kind exclusions live in the existing asserter. Served set is Object.keys(PAYLOAD_KEYS): registry.ts contains no kind literals; it composes `(Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf)` (pinned as source text). Vocabulary was READ via import, not edited — no third owned path. Advertised set is commandBuilderFor(\"...\") inside GENERATED_COMMAND_BUILDERS in generated-client.ts.\n\nSense per DoD-named entry (measured, not guessed):\n- planning.write: NOT_A_COMMAND_KIND (it is CAPABILITIES.PLANNING). Absent from both seams.\n- graph.supersede: ADVERTISED_AND_SERVED_HUMAN_ONLY.\n- cutover.abort/preview/quiesce: ADVERTISED_NOT_SERVED. cutover.activate: ADVERTISED_AND_SERVED_UI_GATED. UI file is apps/control-room/src/approvals/approval-detail-confirmation.tsx (plan cited v2/approvals — that path does not exist); the module does not choose between approval.decide and cutover.*, the caller supplies commandKind.\n- work.cancel: ADVERTISED_NOT_SERVED. work.claim/release/renew/resume: ADVERTISED_AND_SERVED_AGENT_WIRE (resume is CONTINUATION_COMMAND_KIND). Globs expanded from the advertised seam so a new cutover.* or work.* builder reds the census.\nGate: Tests 12 passed (12). Did not edit registry or generated-client.",
+      "startedAt": "2026-09-05T13:48:56.034Z",
+      "completedAt": "2026-09-05T13:52:21.161Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DECIDE /graph/get BEFORE BUILDING AGAINST IT (risk R4). Read serveGraphQuery at apps/daemon/src/http/http-listener-command-stream-routes.ts:286 and record its request contract - method, body shape, whether it needs the CSRF token and projectId the handshake carries - in the step note. It sits in the UNGUARDED_MEMBERS census at http-listener-read-dispatch.test.ts:69-72, so it is NOT guaranteed to be a plain GET. Two outcomes, both legitimate: if the browser can consume it with the credentials it already holds, write apps/control-room/src/live/live-graph-get.ts as a thin exact-key-decoded port plus its test, and delete /graph/get from the census in the SAME edit. If consuming it would need new daemon bytes, task rail 1 forbids adding them here: leave it in the census with that measured reason recorded, and build the Advanced view against the raw event frames alone. Write which branch was taken and why.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-graph-get.ts",
+        "apps/control-room/src/live/live-graph-get.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-graph-get.ts",
+        "apps/control-room/src/live/live-graph-get.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-graph-get.ts",
+        "apps/control-room/src/live/live-graph-get.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "note": "BRANCH TAKEN: consume /graph/get. No new daemon bytes.\n\nRequest contract (serveGraphQuery + gateGraphQuery + answerGatedGraphQuery):\n- Method: POST in production tests; UNGUARDED in this dispatcher (GET would still hit the handler after checkHeaders + readBoundedBody). Body is required for the documented call.\n- Headers: JSON_ROUTES membership runs checkHeaders FIRST, so CSRF (x-moe-csrf), Origin, Host ARE required. The 'CSRF deliberately not' comment at :321 is serveAsset, not this route.\n- Auth: gateGraphQuery = authenticateHttpRequest then planning.write. Project is a SERVER fact (principal.projectId vs port.boundProjectId).\n- Body: empty/{} names no project (normal call). Optional { projectId } only if it matches the principal. Non-JSON -> LISTENER_GRAPH_REQUEST_INVALID@CONTROL_ROOM_LISTENER (400). Extra keys -> GRAPH_QUERY_REQUEST_INVALID.\n- Status: auth refusals keep adapter status (401/422); GRAPH_QUERY frame refusals reply 200 with code+layer+ok:false.\n\nThe paired operator session already holds CSRF, credential, protocol version, and planning.write. live-graph-get.ts POSTs {} with those headers. Exact-key envelope GraphQueryAccepted (8 keys) plus provenance (2) plus snapshot (3) plus node (2) plus edge (4). Census dropped /graph/get in the same edit.\nRED: test failed to resolve ./live-graph-get.js. GREEN: 6 passed (6). Roster: 12 passed (12). Production file 202 lines.",
+      "startedAt": "2026-09-05T13:52:28.181Z",
+      "completedAt": "2026-09-05T13:56:32.974Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE ADVANCED FORENSIC VIEW (DoD 3), as its own module under the free `cr.advanced.*` testid namespace (measured free: 0 hits under apps/control-room/src and tests). New file apps/control-room/src/v2/shell/advanced-view.tsx, under 250 lines, ASCII-only, no apostrophes in any rendered string (task rail 4). It renders the remaining raw reads - the raw event frames, plus work items from the step-5 port if that branch was taken - as frames, not as prose summaries: the point is that a served read is reachable, so show what the daemon actually returned. Every frame goes through the PRODUCTION exact-key decoder, never a hand-written shape (task rail 4 of task-2ee775b3's precedent: a drifted fixture must red at the decode, not render a refusal silently).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "note": "New apps/control-room/src/v2/shell/advanced-view.tsx (138 lines, ASCII, no apostrophes in rendered strings). cr.advanced.* namespace. Toggle starts OFF via useState(false); panel mounts only when open so queryByTestId('cr.advanced.panel') is null by default. Graph frames render GraphGetOutcome from mapGraphGetAnswer (hash at cr.advanced.graph.hash); event frames render LiveEventRow from the production event-page shaper. Refusals go through OutcomeNote so the daemon code is verbatim at cr.advanced.graph.refusal / cr.advanced.events.refusal. Tests and shell mount are the next step.",
+      "startedAt": "2026-09-05T13:56:44.271Z",
+      "completedAt": "2026-09-05T13:58:33.212Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVANCED VIEW TESTS plus the shell mount. New apps/control-room/src/v2/shell/advanced-view.test.tsx asserting exactly what DoD 3 names: the toggle is OFF BY DEFAULT (assert the rendered content is absent via queryByTestId returning null, not merely that a flag is false), and opening it RENDERS THE RAW FRAMES (assert on decoded frame content by exact string, not on the container existing). Add a refusal arm: when a raw read refuses, its code renders VERBATIM (global rail 1 - assert the specific code, not that something failed). Then mount the toggle in apps/control-room/src/v2/shell/cordum-shell.tsx, which is 202 lines - keep the addition to roughly ten lines so the 250 cap holds, and put every visual detail in the new module. Do NOT touch BUILT_NAV_ROUTES in v2/shell/shell-routes.ts: DoD 3 asks for a toggle, and that roster's asserters live outside this row's file budget.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.test.tsx",
+        "apps/control-room/src/v2/shell/cordum-shell.tsx",
+        "apps/control-room/src/v2/cordum-shell.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.test.tsx",
+        "apps/control-room/src/v2/shell/cordum-shell.tsx"
+      ],
+      "note": "advanced-view.test.tsx: toggle OFF by default (queryByTestId cr.advanced.panel is null); after click, graphContentHash/revisionId/epoch/nodes and GoalCreated/evt-1 asserted by exact string; GRAPH_QUERY_CAPABILITY_DENIED and EVENT_PAGE_CAPABILITY_DENIED render verbatim on the refusal testids; drifted extra-key fixture reds at mapGraphGetAnswer with GRAPH_GET_RESPONSE_INVALID. Tests 4 passed (4).\nMounted AdvancedView in cordum-shell.tsx (210 lines, was 202). Optional advancedEvents/advancedGraph pass-through so a live parent can feed decoded frames without putting visuals in the shell. BUILT_NAV_ROUTES untouched. Shell suites: cordum-shell 23, responsive 9, layout 6, all green.",
+      "startedAt": "2026-09-05T13:58:40.191Z",
+      "completedAt": "2026-09-05T14:00:44.349Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "PLAYWRIGHT JOURNEYS AGAINST A REAL DAEMON (DoD 5) for Resources and the contract dossier - the two screens this row's dependencies shipped (task-2ee775b3 at 039911cd, task-1c9587ed at 21eab155). New spec under tests/e2e/control-room/, following the existing shape in journeys.spec.ts and gate1-v1-approval.spec.ts. Run `pnpm test:e2e:browser` (package.json:22 - it typechecks tests/e2e/control-room/tsconfig.json first, so a spec that does not compile fails before any browser starts) and quote the count line. If the lane reds, attribute it before claiming anything: per mem:gotcha-e2e-browser-lane-mounts-the-legacy-shell that lane has previously failed 8/3 because the served bundle mounted the legacy v1 fixture shell from worktree WIP rather than from delivered bytes. Re-run the spec with HEAD's bytes in place, restore, and prove the restore by SHA256 in a SEPARATE call (global rail 13). Record the lane UNMET AND NOT RETIRED rather than fabricating a pass.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/e2e/control-room/advanced-and-dossier.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/advanced-and-dossier.spec.ts"
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/resources-and-contract.spec.ts"
+      ],
+      "note": "New tests/e2e/control-room/resources-and-contract.spec.ts: real daemon (gate1 spawn/pair/seed), clicks Resources, asserts cr.resources.screen plus a measured cr.resources.value.* string, creates a PRD-bound goal, opens it, asserts cr.contract.card with none/body/refusal.\n\nOWN spec standalone: npx playwright test -c tests/e2e/control-room/playwright.config.ts resources-and-contract.spec.ts -> 1 passed (6.4s).\n\nFULL `pnpm test:e2e:browser`: 25 tests, 19 passed, 6 failed, exit 1. THIS SPEC is among the 19 (ok 24, 4.9s). Lane UNMET AND NOT RETIRED at the aggregate gate. Foreign reds (none of these files are this row's):\n- board-chain.spec.ts:438 cr.liveboard not found (30s)\n- daemon-board.spec.ts:96 seeded node.deliver card not found (60s)\n- journeys.spec.ts:79 CR-J1-002 expects cr.nav.resources DISABLED; it is ENABLED because child 1 landed Resources in BUILT_NAV_ROUTES (this row did not touch that roster)\n- journeys.spec.ts:95 CR-A11Y-001 chips length 0\n- prd-to-approval.spec.ts:130 expected /\\d+ GOAL/u, received '1 goal'\n- provider-pause.spec.ts:172 cr.shell.paused not found\n\nNot a legacy-shell mount: smoke still finds cr2.shell.root. Did not special-case or edit the foreign specs.",
+      "startedAt": "2026-09-05T14:01:00.677Z",
+      "completedAt": "2026-09-05T14:08:25.777Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "THE DESIGN PASS (DoD 4), recorded in a row comment. Invoke the apple-design-skill and the frontend-design skill against the Advanced view and the two journey screens, then write a comment under ~4500 chars that names: the skills used, the findings, and - the part the DoD singles out - WHAT ACTUALLY CHANGED as a result, with before/after screenshots from the live lane. The owner's ask was 'we need it for humans not bots', so a comment that lists skills without naming a concrete fix does NOT discharge this clause and QA is instructed to read it that way. If a finding was deliberately not fixed, say which and why.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "note": "Design pass recorded in comment-18d86d0931424feaad8b4b69dca38155. Concrete chrome change: ghost variant, sentence case, aria-controls, hash wrap, human copy. Screenshots of rebuilt dist at 127.0.0.1:4178 (closed/open) in %TEMP%/moe-worker-b33940f5-design/. Advanced tests 4 passed (4). frontend-design skill file absent on host; used Cordum tokens + apple-design HIG writing/a11y.",
+      "startedAt": "2026-09-05T14:08:38.098Z",
+      "completedAt": "2026-09-05T14:12:28.782Z"
+    },
+    {
+      "stepId": "step-10",
+      "description": "LIVE DRIVE, GATES AND ADVERSARIAL REVIEW (DoD 6). Drive the lane per mem:control-room-live-lane-recipe-2026-09-05 and record the transcript, store path and sha in a row comment under ~4500 chars. Run every gate FOREGROUND and quote COUNT LINES, not exit codes (global rail 8 - an exit-0 leg with no count line ran nothing): `pnpm --filter @moe/control-room test` (the plan's NAMED verification command for complete_task), the targeted daemon roster leg `cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test:e2e:browser`. The full daemon package run is expected to carry FOREIGN reds (task-70a7ccd3 recorded 1 failed | 421 passed at 1c464208): apply global rail 3 - report HEAD-minus-merge-base failing paths intersected with this row's owned paths, disclose every foreign red verbatim with its file and line, and never fabricate green. Finish with the adversarial-self-review skill over the whole diff before complete_task, and state in completionSummary how many served routes remain unconsumed and why each one does.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/control-room/src/v2/shell/advanced-view.tsx"
+      ],
+      "note": "Adversarial: stripComments is string-aware (https:// placeholders survive); consumer scan floors filesWalked>100 paths>15; extra-key graph fixture reds at decode; Advanced not live-wired (cordum-app still passes null frames — presentational mount, unit tests inject decoded frames). Test file 448 lines is TEST-only (250/400 is production). Live drive + gates in comment-782256fd. Named command green: 149 files / 1853 tests. 3 unconsumed routes remain with reasons. Daemon package 8 failed | 424 passed, all foreign vs this row's paths.",
+      "startedAt": "2026-09-05T14:12:47.914Z",
+      "completedAt": "2026-09-05T14:31:25.417Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f2906c26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,8 +185,93 @@
   ],
   "priority": "HIGH",
   "order": 53,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-18d86d0931424feaad8b4b69dca38155",
+      "author": "worker-b33940f5",
+      "content": "DESIGN PASS (DoD 4). Skills: apple-design-skill (HIG writing.md, accessibility.md, layout via lookup) plus the Cordum token system in apps/control-room/src/v2/styles/cordum-tokens.css as the project's frontend-design language. No separate frontend-design skill file exists on this host.\n\nFINDINGS (against Advanced, Resources, contract dossier):\n1. CRITICAL/HIGH a11y+writing: the Advanced control was a default cr2-btn with Title Case \"Show Advanced\" and no aria-controls. HIG writing: sentence case for controls; HIG a11y: name the expanded region. It sat as a full ops block competing with primary actions (New goal).\n2. HIGH layout: 64-char hashes in a fact row wrap poorly. HIG layout/typography: content must remain readable at desktop width.\n3. Resources + contract dossier: person-first OutcomeNote already in place; empty contract copy (\"No Product Contract cites this PRD yet\") is honest. No invented next-step (that would be a fake workflow). Left unchanged.\n\nWHAT CHANGED (advanced-view.tsx):\n- data-variant=\"ghost\" so the control is a quiet disclosure, not a primary CTA\n- sentence case: \"Show advanced\" / \"Hide advanced\"\n- aria-controls=\"cr-advanced-panel\" + id on the panel; title=\"The bytes the daemon sent, as frames\"\n- copy: \"What the daemon sent · hashes and event ids, not a summary.\"\n- overflowWrap:anywhere on the graphContentHash row\n- root is no longer a full cr2-ops block when closed\n\nNOT FIXED, on purpose: did not move the toggle into status-strip.tsx (that file is outside this row's roster). Disconnected banner / LIVE_BOOTSTRAP_UNAVAILABLE on the screenshot host is the unpaired static bundle, not this control.\n\nSCREENSHOTS from the rebuilt production bundle served at 127.0.0.1:4178 with ?v1=1&fixtures=1 (same dist the daemon hosts; pairing is step 10):\n- closed: ghost pill \"Show advanced\" under the daemon-link strip; New goal stays the only filled CTA. %TEMP%/moe-worker-b33940f5-design/after-closed.png\n- open: \"Hide advanced\", panel copy \"What the daemon sent\", pending frames (no daemon on this static host). %TEMP%/moe-worker-b33940f5-design/after-open.png\nMeasured: TOGGLE_TEXT=Hide advanced, VARIANT=ghost.\nAdvanced tests still 4 passed (4).",
+      "timestamp": "2026-09-05T14:12:21.036Z"
+    },
+    {
+      "id": "comment-782256fdbd46432abd46c5bb1b2dbf60",
+      "author": "worker-b33940f5",
+      "content": "LIVE DRIVE + GATES (DoD 6).\n\nLIVE DRIVE: not a full UnAI seat loop. The real-daemon Playwright spec tests/e2e/control-room/resources-and-contract.spec.ts paired via operator-stdin, seeded SPEED, clicked Resources (measured cr.resources.value.*), created a PRD-bound goal, opened cr.contract.card. Standalone 1 passed (6.4s). Scratch store was mkdtemp moe-e2e-daemon-* and rm'd in finally — no durable store sha to keep. HEAD sha 64dbe0bb. Design-pass screenshots of the rebuilt bundle (ghost Show advanced / Hide advanced) at %TEMP%/moe-worker-b33940f5-design/after-closed.png and after-open.png. Advanced live frames stay PENDING until cordum-app passes advancedGraph/advancedEvents (presentational mount only).\n\nGATES (count lines, not exit codes):\n- pnpm --filter @moe/control-room test: Test Files 149 passed (149), Tests 1853 passed (1853), exit 0. NAMED complete_task command.\n- cd apps/daemon && npx vitest run --root . --config package.json src/http/http-listener-read-dispatch.test.ts: Test Files 1 passed (1), Tests 12 passed (12).\n- pnpm typecheck: 19 of 20 workspace projects, each `$ tsc --project tsconfig.json` then Done, exit 0.\n- pnpm test:e2e:browser: 25 tests, 19 passed, 6 failed, exit 1. THIS SPEC among the 19. Lane UNMET. Foreign: board-chain cr.liveboard missing; daemon-board seeded card missing; journeys.spec.ts:79 resources expected disabled (child 1 enabled it); journeys chips length 0; prd-to-approval /\\d+ GOAL/ vs '1 goal'; provider-pause cr.shell.paused missing.\n- pnpm --filter @moe/daemon test: Test Files 8 failed | 424 passed (432), Tests 19 failed | 8545 passed (8564), exit 1. FOREIGN files: src/work/foundation-capture-producer.test.ts, foundation-capture-lifecycle.test.ts, foundation-attempt-service.test.ts, src/mcp-tool-allowlist.test.ts, src/mcp-main.test.ts, src/mcp-http/mcp-http-host.test.ts, src/http/affordance-compiler-lane.test.ts, src/http/affordance-planning-offers.test.ts. Rail 3: failing-path set intersect this row owned paths = EMPTY. Roster test standalone green.\n\nUNCONSUMED JSON ROUTES remaining (3): /events/resume, /v2/product-contract/current, /session/challenge-operands/read.",
+      "timestamp": "2026-09-05T14:31:09.617Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:58.974Z",
-  "updatedAt": "2026-09-05T00:34:58.974Z"
+  "updatedAt": "2026-09-05T14:31:54.174Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T13:29:26.800Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 10
+  },
+  "contextFetchedBy": [
+    "worker-d6e44333",
+    "worker-b33940f5",
+    "qa-f2906c26"
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T13:38:35.241Z",
+  "planningNotes": {
+    "approachesConsidered": "1) A NEW roster test in apps/control-room reading the daemon dispatch as source text. REJECTED: it makes a second asserter for one invariant, and the existing daemon test already owns the served-side scan plus its positive-control floors. One asserter, extended, is what rail 9 and task rail 3 ask for.\n2) A hand-kept list of consumed routes in the control-room. REJECTED explicitly by task rail 3 - that is the third copy that drifts.\n3) Deriving the consumer set from DEV_PROXY_PATHS. REJECTED: it is the proxy config, and treating it as consumption is exactly the error that let four routes stay unfetched while every existing arm was green.\n4) Making Advanced a nav destination in BUILT_NAV_ROUTES. REJECTED: DoD 3 says toggle, and the nav roster's asserters live in v2/styles/cordum-shell-responsive.test.tsx, which would push this row past its file budget - a split signal we can avoid entirely by not creating it.\n5) Special-casing the four unconsumed routes into the existing UNPROXIED_SERVED_PATHS census. REJECTED by task rail 2 and DoD 2: that census means 'served but unproxied' and is legitimately empty; overloading it would hide a different defect class under a name that no longer describes it.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 2026-09-05T13:35Z (rail 6, BOTH directions). Commands and results:\n\nA. GAP THE DESCRIPTION CLAIMS IS OPEN, ACTUALLY CLOSED. The description says REPOSITORY_REMOTE_READ_PATH is served but has no browser decoder and is absent from dev-proxy-paths.ts. FALSE at HEAD: dev-proxy-paths.ts:29 pins \"/repository/remote/read\"; apps/control-room/src/live/live-repository-remote.ts is its production consumer; http-listener-read-dispatch.test.ts:151-163 already asserts it in all three daemon seams. Retired by task-e6000b57. Do NOT plan work for it.\n\nB. DoD 1 IS PARTLY ALREADY BUILT. apps/daemon/src/http/http-listener-read-dispatch.test.ts (199 lines) already asserts, bidirectionally and with a positive control: dispatch-seam branches UNION the unconditional-else member == JSON_ROUTES identifiers as SETS (:110, roster.size 26); non-POST guards == roster bar a 6-member UNGUARDED census (:127); JSON_ROUTES minus DEV_PROXY_PATHS == UNPROXIED_SERVED_PATHS, currently Object.freeze([]) (:165); proxied-minus-served == the 5 pairing/bootstrap paths (:175); and :189 floors every scan so no arm can pass on an empty set. Re-implementing any of that is a silent duplicate (rail 6). EXTEND this file; do not create a second asserter.\n\nC. THE ACTUAL UNCLOSED GAP, and it is what this row exists to name. The existing arms compare served-to-ROSTER and served-to-PROXY. Neither is CONSUMPTION: dev-proxy-paths.ts is Vite dev-server config, so a route can be proxied and still be fetched by nothing. Measured the real consumer seam by grepping each of the 26 JSON_ROUTES literals across apps/control-room/src and packages/control-room-client/src, excluding dev-proxy-paths.ts and *.test.*: 22 have a production consumer, FOUR HAVE ZERO.\n  - /events/resume (EVENT_RESUME_PATH, http-listener-command-stream-routes.ts:63). client-transport.ts declares EVENT_PAGE_PATH :123 and EVENT_ACKNOWLEDGE_PATH :124 and NO resume; generated-client.ts:28 states \"Cursor/resume semantics are TBD\".\n  - /graph/get (GRAPH_GET_PATH, ...command-stream-routes.ts:65). Zero hits outside the proxy list and its test.\n  - /v2/product-contract/current (product-contract-v2-current-read.ts:25). gate1-approval.ts consumes .../pending/read, NOT current.\n  - /session/challenge-operands/read (session-challenge-operands-read.ts:27). Only dev-proxy-paths.ts:34 names it, despite its own comment claiming the browser reads the operands.\nVerified these are not built by concatenation or template: grep for events/, /resume, graph/, challenge-operands, product-contract/current over both consumer roots returns only the two client-transport constants and comments.\n\nD. THE CONSUMER SEAM SPANS TWO PACKAGES. Route literals live BOTH in apps/control-room/src (live/live-*.ts, v2/goals/*.ts, v2/ops/policy-install-port.ts) AND in packages/control-room-client/src/client-transport.ts (COMMAND_PATH :120, V2_COMMAND_PATH :121, DOCUMENT_DOSSIER_PATH :122, EVENT_PAGE_PATH :123, EVENT_ACKNOWLEDGE_PATH :124). A scanner rooted only at apps/control-room would falsely report /command, /v2/command, /events/read and /events/ack as unconsumed. Both roots are mandatory.\n\nE. COMMAND-KIND SEAMS for DoD 2. The exclusions the DoD names (planning.write, graph.supersede, cutover.*, work.*) are command KINDS, not routes: they reach the daemon through /command and /v2/command. Served-kind seam: apps/daemon/src/daemon-command-registry.ts (also daemon-command-vocabulary.ts, daemon-command-graph-*.ts). Browser-advertised seam: packages/control-room-client/src/generated/generated-client.ts, which declares builders per kind (e.g. :187 \"cutover.abort\", :188 \"cutover.activate\"). So cutover.* IS advertised in the generated client even though the UI gates it behind approval-detail-confirmation.tsx:31 - the exclusion list must say which sense of \"unconsumed\" it means, per entry.\n\nF. NAMESPACES AND SHAPE. cr.advanced / cr.forensic / cr.roster all return 0 hits under apps/control-room/src and tests - free. cordum-shell.tsx is 202 lines, so the Advanced view MUST be its own module or the 250 cap breaks. proof-inspector.tsx is already 263 lines (pre-existing, not this row's). BUILT_NAV_ROUTES in v2/shell/shell-routes.ts is deliberately NOT touched: DoD 3 asks for a TOGGLE, not a nav destination, and task-2ee775b3's reviewSummary records that changing that roster moves arms in v2/styles/cordum-shell-responsive.test.tsx which this row's file budget cannot absorb.\n\nG. GATES. pnpm test:e2e:browser = tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c .../playwright.config.ts (package.json:22). Existing specs include control-room-smoke.spec.ts, journeys.spec.ts, gate1-v1-approval.spec.ts. Serena mem:gotcha-e2e-browser-lane-mounts-the-legacy-shell (2026-08-28) records that lane going 8 failed/3 passed because the served bundle mounted the legacy v1 fixture shell from worktree WIP, NOT from delivered bytes - re-measure before attributing any red there.",
+    "risks": "R1 SCANNER VACUITY. The consumer scan compares two derived sets and two empty sets are equal. If the directory walk stops matching (a moved root, a changed extension filter) every new arm goes green while measuring nothing. MANDATORY: extend the existing :189 positive-control arm with floors for the consumer scan (files walked > 100, consumed paths > 15) in the same commit, and prove each new arm reds by mutation before calling it done.\n\nR2 FALSE CONSUMPTION HITS. Scanning for a bare literal will match a comment or a doc string - live-config.ts:81 literally contains the sentence 'proxies /command, /events/read, /events/ack and /affordances/read', and live-handshake.ts:38-39 name /v2/command and /command inside a JSDoc block. A naive scan would call /events/resume consumed the moment someone writes its name in a comment. Strip line and block comments before matching, and assert the stripping works with a fixture that contains a commented-out route.\n\nR3 THE FOUR-ROUTE CENSUS IS THE DELIVERABLE, NOT AN OBSTACLE. Task rail 2 is binding: if a route cannot be consumed honestly it stays in the census WITH A REASON. Do not add a token fetch to make a number go to zero - a consumer that fetches and discards is worse than a named gap.\n\nR4 /graph/get MAY NOT BE A PLAIN GET. It sits in the UNGUARDED_MEMBERS census at http-listener-read-dispatch.test.ts:69-72, meaning this dispatcher applies no non-POST guard to it, and it is served by serveGraphQuery at http-listener-command-stream-routes.ts:286. Read that handler's request contract BEFORE writing a port. If consuming it needs new daemon bytes, task rail 1 forbids adding them here: leave it in the census with that reason and say so.\n\nR5 ASCII AND APOSTROPHES. Task rail 4: the scheduler package-boundary scan reds on non-ASCII sources and on apostrophes in JSX text. 'Advanced', 'raw reads', 'work items' are safe; avoid contractions like 'don't' in any rendered string.\n\nR6 E2E ATTRIBUTION. Per mem:gotcha-e2e-browser-lane-mounts-the-legacy-shell, a red in that lane has previously been worktree WIP rather than delivered bytes. If it reds, attribute it with HEAD's bytes in place for the spec (git show HEAD:<spec>), restore, and prove the restore by SHA256 in a SEPARATE call (rail 13). Record the lane UNMET AND NOT RETIRED rather than fabricating a pass.\n\nR7 VERIFICATION LEG SPLIT. The row's deliverables straddle two packages, and complete_task takes ONE command. pnpm --filter @moe/daemon test is known to carry foreign reds (task-70a7ccd3 recorded 1 failed | 421 passed), so it cannot be the named command. Named command is pnpm --filter @moe/control-room test; the daemon roster leg is run TARGETED and quoted in the final step note and completionSummary. Rail 8: read the count line, never the exit code.",
+    "keyFiles": [
+      "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+      "apps/daemon/src/http/http-listener-read-dispatch.ts",
+      "apps/control-room/src/live/dev-proxy-paths.ts",
+      "packages/control-room-client/src/client-transport.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "apps/control-room/src/v2/shell/cordum-shell.tsx",
+      "apps/control-room/src/v2/resources/resources-screen.tsx",
+      "tests/e2e/control-room/playwright.config.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T13:38:37.403Z",
+  "workStartedAt": "2026-09-05T13:39:30.657Z",
+  "declaredFiles": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/live/live-graph-get.ts",
+    "apps/control-room/src/live/live-graph-get.test.ts",
+    "apps/control-room/src/v2/shell/advanced-view.tsx",
+    "apps/control-room/src/v2/shell/advanced-view.test.tsx",
+    "apps/control-room/src/v2/shell/cordum-shell.tsx",
+    "tests/e2e/control-room/resources-and-contract.spec.ts"
+  ],
+  "reviewStartedAt": "2026-09-05T14:31:45.439Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": " Test Files  149 passed (149)\n      Tests  1853 passed (1853)\n   Start at  17:13:48\n   Duration  29.80s (transform 187.65s, setup 0ms, import 395.28s, tests 89.26s, environment 99.02s)",
+    "reportedAt": "2026-09-05T14:31:45.439Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/live/live-graph-get.ts",
+    "apps/control-room/src/live/live-graph-get.test.ts",
+    "apps/control-room/src/v2/shell/advanced-view.tsx",
+    "apps/control-room/src/v2/shell/advanced-view.test.tsx",
+    "apps/control-room/src/v2/shell/cordum-shell.tsx",
+    "tests/e2e/control-room/resources-and-contract.spec.ts"
+  ],
+  "completionSummary": "Bidirectional consumer roster in the existing daemon asserter. 3 JSON routes remain unconsumed with reasons: /events/resume (TBD), /v2/product-contract/current (browser uses pending/read), /session/challenge-operands/read (proxy-only). /graph/get consumed via live-graph-get.ts. Command-kind exclusions named with sense (planning.write is a capability). Advanced forensic toggle (cr.advanced.*, off by default). Playwright resources-and-contract.spec.ts 1 passed; full e2e lane 19 passed / 6 failed (UNMET, foreign). Named gate: Test Files 149 passed (149), Tests 1853 passed (1853)."
 }

@@ -32,12 +32,39 @@
     "task-5e90317e80ac4b86a9704b6b8ba8874a",
     "task-de0598236f3b4d95aa3b6098b9d56995",
     "task-06ac0da1ace64032855affc4ab0c1a4e",
-    "task-7f9f20c7cddf4d50b49054951ab177fb"
+    "task-7f9f20c7cddf4d50b49054951ab177fb",
+    "task-7ca9dca37fb44b40ac35abfc3c36cb9a",
+    "task-e9cb2442a9a44408bea35cfce6a1897b",
+    "task-eb2bb09d4efa4691803a519901eb2f97"
   ],
   "priority": "HIGH",
   "order": 63,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-b6cb034045b54eba8f6e38067fa3c6d8",
+      "author": "architect-2e480458",
+      "content": "SPIDR (architect-2e480458, 2026-09-05). Re-measured at plan time: POST `/design/read` does not exist (grep handleDesign|/design/read in apps/daemon/src = 0). Child 1 (DONE) owns the store only. task-06ac0da1 publishes MCP command/query, not HTTP. No Design tab, no live decoder, DEV_PROXY_PATHS has no pin. approve-plan.tsx is still 263 lines; task-a988ca1c is WORKING and has not landed a split.\n\nThis proof row cannot rebuild the missing HTTP+UI inside a 10-file plan. Producers filed:\n- task-7ca9dca37fb44b40ac35abfc3c36cb9a HTTP `/design/read` (leaf, dependsOn child 1)\n- Design-tab/decoder/proxy sibling (dependsOn the HTTP leaf)\n\nThis row keeps e2e, live drive, docs, and the approval-card provenance once the producers land. dependsOn now includes the HTTP leaf. Releasing to plan the HTTP leaf in build order.",
+      "timestamp": "2026-09-05T14:27:07.148Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:37:41.269Z",
-  "updatedAt": "2026-09-05T11:31:14.656Z"
+  "updatedAt": "2026-09-05T14:28:57.462Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:19:17.986Z"
+  },
+  "contextFetchedBy": [
+    "architect-2e480458"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the gap and filed two producer rows. POST /design/read does not exist. Child 1 owns the store only. Created task-7ca9dca37fb44b40ac35abfc3c36cb9a (HTTP leaf) and task-e9cb2442a9a44408bea35cfce6a1897b (Design tab + exact-key decoder + proxy). Updated this row's dependsOn and the parent task-8a6d6660. Comment-b6cb0340 records the split. No production files edited.",
+      "whatRemains": "Plan and land the HTTP leaf, then the Design-tab row, then this proof row's e2e/live/docs. Do not rebuild /design/read or the live decoder inside this proof row.",
+      "pitfalls": "approve-plan.tsx is 263 lines; task-a988ca1c owns it and has not landed. Put version provenance on approve-plan-gate.tsx (78 lines) or wait. live-document-proxy.test.ts hard-codes DEV_PROXY_PATHS. http-listener-read-dispatch.ts is already 539 lines.",
+      "openQuestions": "Whether the plan-approval card version lands in the Design-tab row or stays on this proof row once the gate file is free.",
+      "releasedAt": "2026-09-05T14:27:37.102Z",
+      "releasedBy": "architect-2e480458",
+      "reason": "Build-order: HTTP /design/read is absent on disk; releasing the proof row to plan the producer leaf task-7ca9dca3 first."
+    }
+  ]
 }

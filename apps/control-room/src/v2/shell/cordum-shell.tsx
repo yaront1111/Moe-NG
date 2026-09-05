@@ -15,6 +15,9 @@ import { ProofInspector } from "./proof-inspector.js";
 import { useProviderPause } from "./pause-context.js";
 import { ProofProvider } from "./proof-context.js";
 import type { ProofController, ProofPayload } from "./proof-context.js";
+import { AdvancedView } from "./advanced-view.js";
+import type { AdvancedEvents } from "./advanced-view.js";
+import type { GraphGetOutcome } from "../../live/live-graph-get.js";
 import { ConnectionBanner, StatusStrip } from "./status-strip.js";
 import { describeConnection } from "./shell-model.js";
 import type { ConnectionState, NavId, NavItem } from "./shell-model.js";
@@ -54,6 +57,8 @@ export interface CordumShellProps {
   readonly simulatable?: boolean;
   readonly initialProofOpen?: boolean;
   readonly answeredAtMs?: number | null | undefined;
+  readonly advancedEvents?: AdvancedEvents | null;
+  readonly advancedGraph?: GraphGetOutcome | null;
 }
 
 const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
@@ -113,6 +118,8 @@ export function CordumShell({
   simulatable = false,
   initialProofOpen = false,
   answeredAtMs = null,
+  advancedEvents = null,
+  advancedGraph = null,
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
@@ -185,6 +192,7 @@ export function CordumShell({
             </main>
             <ProofInspector onClose={keyboard.collapseInspector} open={proofOpen} payload={proof} />
           </div>
+          <AdvancedView events={advancedEvents} graph={advancedGraph} />
           <StatusStrip
             answeredAtMs={answeredAtMs}
             clockPresent={clockPresent}

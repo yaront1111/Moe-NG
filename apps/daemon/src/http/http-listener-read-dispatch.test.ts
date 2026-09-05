@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { CAPABILITIES, PAYLOAD_KEYS } from "../daemon-command-vocabulary.js";
 import { ACTIVATION_READ_PATH } from "./activation-read.js";
 import { JSON_ROUTES } from "./http-listener-read-dispatch.js";
 import { REPOSITORY_REMOTE_READ_PATH } from "./repository-remote-read.js";
@@ -106,6 +108,125 @@ function proxiedPaths(): ReadonlySet<string> {
  */
 const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 
+/**
+ * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
+ * subset: a newly served route with no consumer reds, and deleting a consumer
+ * of a previously-consumed route reds. An entry with no reason is a hiding
+ * place; the positive-control arm pins every member named in THIS comment.
+ *
+ * /events/resume: client-transport.ts declares EVENT_PAGE_PATH (/events/read)
+ * and EVENT_ACKNOWLEDGE_PATH (/events/ack) and not resume; generated-client.ts:28
+ * states Cursor/resume semantics are TBD.
+ * /v2/product-contract/current: the browser consumes
+ * /v2/product-contract/pending/read (gate1-approval.ts), not current.
+ * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
+ * that file commenting that the browser reads the operands.
+ *
+ * /graph/get was retired from this census by live-graph-get.ts: POST {}, CSRF
+ * and the paired session already held, so no daemon bytes were added.
+ */
+const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
+  "/events/resume",
+  "/session/challenge-operands/read",
+  "/v2/product-contract/current",
+]);
+
+/**
+ * Pairing/bootstrap paths the browser DOES fetch that live outside JSON_ROUTES.
+ * The proxy list at the arm below also names `/session/pair`; no production
+ * module fetches that tombstone, so consumption equality uses the four that
+ * live-handshake.ts and live-keyed-session.ts actually call.
+ */
+const PERMITTED_CONSUMED_NON_JSON_ROUTES: readonly string[] = Object.freeze([
+  "/bootstrap", "/session/pair/claim", "/session/pair/open", "/session/pair/request",
+]);
+
+const CONTROL_ROOM_SRC = fileURLToPath(new URL("../../../control-room/src", import.meta.url));
+const CLIENT_SRC = fileURLToPath(
+  new URL("../../../../packages/control-room-client/src", import.meta.url),
+);
+
+function stripComments(source: string): string {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i] ?? "";
+    const n = source[i + 1] ?? "";
+    if (c === "\"" || c === "'" || c === "`") {
+      const quote = c;
+      out += c;
+      i += 1;
+      while (i < source.length) {
+        const ch = source[i] ?? "";
+        out += ch;
+        i += 1;
+        if (ch === "\\" && i < source.length) {
+          out += source[i] ?? "";
+          i += 1;
+          continue;
+        }
+        if (ch === quote) break;
+      }
+      continue;
+    }
+    if (c === "/" && n === "/") {
+      i += 2;
+      while (i < source.length && source[i] !== "\n") i += 1;
+      continue;
+    }
+    if (c === "/" && n === "*") {
+      i += 2;
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i += 1;
+      i += 2;
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}
+
+function walkConsumerFiles(root: string): readonly string[] {
+  const names = readdirSync(root, { encoding: "utf8", recursive: true });
+  const files: string[] = [];
+  for (const name of names) {
+    const rel = name.replaceAll("\\", "/");
+    if (rel.includes(".test.")) continue;
+    if (rel.endsWith("dev-proxy-paths.ts")) continue;
+    if (!rel.endsWith(".ts") && !rel.endsWith(".tsx")) continue;
+    files.push(join(root, name));
+  }
+  return files;
+}
+
+type ConsumerScan = {
+  readonly filesWalked: number;
+  readonly paths: ReadonlySet<string>;
+};
+
+function scanConsumers(): ConsumerScan {
+  const files = [...walkConsumerFiles(CONTROL_ROOM_SRC), ...walkConsumerFiles(CLIENT_SRC)];
+  const paths = new Set<string>();
+  for (const file of files) {
+    const stripped = stripComments(readFileSync(file, "utf8"));
+    for (const hit of stripped.matchAll(/"(\/[^"]*)"/gu)) {
+      const path = hit[1];
+      if (path !== undefined) paths.add(path);
+    }
+  }
+  return { filesWalked: files.length, paths };
+}
+
+function consumedPaths(): ReadonlySet<string> {
+  return scanConsumers().paths;
+}
+
+/** Project-daemon HTTP routes, not the manager origin and not a keyboard `/`. */
+function isDaemonShaped(path: string): boolean {
+  return path.startsWith("/") && path.length > 1 && !path.startsWith("/manager/")
+    && /^\/[a-z0-9][a-z0-9./-]*$/.test(path);
+}
+
 describe("the read-route roster and the surface it advertises agree in BOTH directions", () => {
   it("serves exactly what it advertises: dispatch seam == JSON_ROUTES, as sets", () => {
     const source = dispatchSource();
@@ -186,6 +307,19 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect([...proxied].some((path) => path.startsWith("/manager/"))).toBe(false);
   });
 
+  it("consumes every served JSON route, bar a named census", () => {
+    const consumed = consumedPaths();
+    const unconsumed = JSON_ROUTES.filter((path) => !consumed.has(path));
+    expect(sorted(unconsumed)).toStrictEqual(sorted(UNCONSUMED_SERVED_ROUTES));
+  });
+
+  it("fetches no daemon-shaped route this listener does not serve, bar pairing", () => {
+    const consumed = consumedPaths();
+    const served = new Set<string>(JSON_ROUTES);
+    const foreign = [...consumed].filter((path) => isDaemonShaped(path) && !served.has(path));
+    expect(sorted(foreign)).toStrictEqual(sorted(PERMITTED_CONSUMED_NON_JSON_ROUTES));
+  });
+
   it("scans a seam that is actually populated — no arm above can pass on an empty set", () => {
     // A POSITIVE CONTROL for the three source scans. Every set arm above compares two derived
     // sets, and two empty sets are equal: if a regex stopped matching, those arms would go
@@ -195,5 +329,120 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(branchIdentifiers(source).size).toBeGreaterThan(20);
     expect(guardIdentifiers(source).size).toBeGreaterThan(15);
     expect(proxiedPaths().size).toBeGreaterThan(25);
+    const scan = scanConsumers();
+    expect(scan.filesWalked).toBeGreaterThan(100);
+    expect(scan.paths.size).toBeGreaterThan(15);
+    const comments = [...readFileSync(fileURLToPath(new URL(import.meta.url)), "utf8")
+      .matchAll(/\/\*[\s\S]*?\*\/|\/\/.*$/gmu)].map((hit) => hit[0]).join("\n");
+    for (const path of UNCONSUMED_SERVED_ROUTES) {
+      expect(comments).toContain(path);
+    }
+    expect(stripComments('const x = "/events/resume";')).toContain('"/events/resume"');
+    expect(stripComments('// "/events/resume"\nconst y = 1;')).not.toContain("/events/resume");
+    expect(stripComments('/* "/graph/get" */ const z = 1;')).not.toContain("/graph/get");
+  });
+});
+
+const REGISTRY_SOURCE = fileURLToPath(new URL("../daemon-command-registry.ts", import.meta.url));
+const GENERATED_CLIENT_SOURCE = fileURLToPath(
+  new URL("../../../../packages/control-room-client/src/generated/generated-client.ts", import.meta.url),
+);
+
+/**
+ * DoD 2 named exclusions. These are KINDS (or, for planning.write, a capability
+ * that is not a kind). They travel over /command and /v2/command. Sense is
+ * measured, not guessed:
+ *
+ * planning.write: NOT_A_COMMAND_KIND. CAPABILITIES.PLANNING, not a PAYLOAD_KEYS
+ * entry and not a generated command builder.
+ * graph.supersede: ADVERTISED_AND_SERVED_HUMAN_ONLY. In PAYLOAD_KEYS and in
+ * GENERATED_COMMAND_BUILDERS; OPERATOR_PRINCIPAL_KINDS; no first-class UI
+ * affordance that mints it.
+ * cutover.abort: ADVERTISED_NOT_SERVED. Builder exists; registry does not.
+ * cutover.activate: ADVERTISED_AND_SERVED_UI_GATED. Builder and PAYLOAD_KEYS
+ * both carry it. The UI does not choose the kind: approval-detail-confirmation.tsx
+ * (apps/control-room/src/approvals, not v2/approvals) takes commandKind from the
+ * caller rather than picking between approval.decide and cutover.*.
+ * cutover.preview: ADVERTISED_NOT_SERVED.
+ * cutover.quiesce: ADVERTISED_NOT_SERVED.
+ * work.cancel: ADVERTISED_NOT_SERVED.
+ * work.claim: ADVERTISED_AND_SERVED_AGENT_WIRE. Served and advertised; the
+ * browser does not offer a human claim control.
+ * work.release: ADVERTISED_AND_SERVED_AGENT_WIRE.
+ * work.renew: ADVERTISED_AND_SERVED_AGENT_WIRE.
+ * work.resume: ADVERTISED_AND_SERVED_AGENT_WIRE. CONTINUATION_COMMAND_KIND.
+ */
+const KIND_EXCLUSION_SENSE = Object.freeze({
+  "cutover.abort": "ADVERTISED_NOT_SERVED",
+  "cutover.activate": "ADVERTISED_AND_SERVED_UI_GATED",
+  "cutover.preview": "ADVERTISED_NOT_SERVED",
+  "cutover.quiesce": "ADVERTISED_NOT_SERVED",
+  "graph.supersede": "ADVERTISED_AND_SERVED_HUMAN_ONLY",
+  "planning.write": "NOT_A_COMMAND_KIND",
+  "work.cancel": "ADVERTISED_NOT_SERVED",
+  "work.claim": "ADVERTISED_AND_SERVED_AGENT_WIRE",
+  "work.release": "ADVERTISED_AND_SERVED_AGENT_WIRE",
+  "work.renew": "ADVERTISED_AND_SERVED_AGENT_WIRE",
+  "work.resume": "ADVERTISED_AND_SERVED_AGENT_WIRE",
+} as const);
+
+function advertisedCommandKinds(): ReadonlySet<string> {
+  const source = readFileSync(GENERATED_CLIENT_SOURCE, "utf8");
+  const start = source.indexOf("export const GENERATED_COMMAND_BUILDERS");
+  const end = source.indexOf("});", start);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return new Set(
+    [...source.slice(start, end).matchAll(/commandBuilderFor\("([^"]+)"\)/gu)]
+      .map((hit) => hit[1] ?? ""),
+  );
+}
+
+function servedCommandKinds(): ReadonlySet<string> {
+  return new Set(Object.keys(PAYLOAD_KEYS));
+}
+
+describe("command-kind exclusions are explicit and reasoned, not omitted", () => {
+  it("registers every served kind from PAYLOAD_KEYS, the table the registry composes", () => {
+    expect(readFileSync(REGISTRY_SOURCE, "utf8")).toContain(
+      "(Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf)",
+    );
+    expect(servedCommandKinds().size).toBeGreaterThan(20);
+    expect(advertisedCommandKinds().size).toBeGreaterThan(50);
+  });
+
+  it("states a sense per DoD-named exclusion and pins that sense to the two seams", () => {
+    const served = servedCommandKinds();
+    const advertised = advertisedCommandKinds();
+    const comments = [...readFileSync(fileURLToPath(new URL(import.meta.url)), "utf8")
+      .matchAll(/\/\*[\s\S]*?\*\/|\/\/.*$/gmu)].map((hit) => hit[0]).join("\n");
+    for (const [kind, sense] of Object.entries(KIND_EXCLUSION_SENSE)) {
+      expect(comments).toContain(`${kind}: ${sense}`);
+      if (sense === "NOT_A_COMMAND_KIND") {
+        expect(served.has(kind)).toBe(false);
+        expect(advertised.has(kind)).toBe(false);
+        expect(CAPABILITIES.PLANNING).toBe(kind);
+        continue;
+      }
+      expect(advertised.has(kind)).toBe(true);
+      expect(served.has(kind)).toBe(sense.startsWith("ADVERTISED_AND_SERVED"));
+    }
+  });
+
+  it("expands cutover.* and work.* from the advertised seam, not a silent glob", () => {
+    const advertised = advertisedCommandKinds();
+    const served = servedCommandKinds();
+    expect(sorted([...advertised].filter((kind) => kind.startsWith("cutover.")))).toStrictEqual([
+      "cutover.abort", "cutover.activate", "cutover.preview", "cutover.quiesce",
+    ]);
+    expect(sorted([...served].filter((kind) => kind.startsWith("cutover.")))).toStrictEqual([
+      "cutover.activate",
+    ]);
+    expect(sorted([...advertised].filter((kind) => kind.startsWith("work.")))).toStrictEqual([
+      "work.cancel", "work.claim", "work.release", "work.renew", "work.resume",
+    ]);
+    expect(sorted([...served].filter((kind) => kind.startsWith("work.")))).toStrictEqual([
+      "work.claim", "work.release", "work.renew", "work.resume",
+    ]);
   });
 });

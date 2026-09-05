@@ -1,0 +1,38 @@
+{
+  "id": "task-e9cb2442a9a44408bea35cfce6a1897b",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Design tab reads /design/read through an exact-key decoder",
+  "description": "SPIDR child of task-8a6d6660c31c4e119f962d13e6f1505d, spun from task-f3409f9a (architect-2e480458, 2026-09-05). dependsOn the HTTP `/design/read` leaf task-7ca9dca37fb44b40ac35abfc3c36cb9a.\n\nOBJECTIVE: the operator can open a goal and read the five design sections plus the version, through the same exact-key live client discipline as the other daemon reads.\n\nDELIVERABLE: live-design.ts decoder + tests, DEV_PROXY_PATHS pin + live-document-proxy.test.ts list, Design tab mounted on the opened goal (cordum-app / contract-dossier analogue), skip/absent copy in words.\n\nNOT IN SCOPE: the HTTP route itself (task-7ca9dca3), MCP, staffing (task-de059823), e2e/live-drive/docs (task-f3409f9a), approve-plan.tsx.\n\nMEASURED: no Design tab, no live-design module, DEV_PROXY_PATHS has no /design/read, live-document-proxy.test.ts:6-38 is a hard-coded path list.\n\nVERIFICATION: `pnpm --filter @moe/control-room test` plus the daemon pin tests and `pnpm typecheck`.",
+  "definitionOfDone": [
+    "`/design/read` is pinned in DEV_PROXY_PATHS (sorted) and live-document-proxy.test.ts's hard-coded list. http-listener-read-dispatch.test.ts UNCONSUMED_SERVED_ROUTES and UNPROXIED_SERVED_PATHS no longer name it.",
+    "A live exact-key decoder in apps/control-room/src/live/ refuses a frame with an extra key and a frame missing a key. Assert against a REAL daemon frame that a named entity from the data-model section reaches the decoded view.",
+    "The opened goal shows a Design tab with the five sections and the version. Skip path: a goal with DESIGN_REVISION_ABSENT (or equivalent) shows words that the step was skipped or no design exists, not a blank tab.",
+    "If the version string is added to the plan-approval gate in this row, it is on approve-plan-gate.tsx not approve-plan.tsx, and the card still renders with words when the goal has no design.",
+    "Gates quoted WITH `Test Files N passed`: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test` (proxy/unconsumed pins live in daemon tests), `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "EXACT-KEY decoder matching apps/control-room/src/live/ siblings. Extra key REFUSED, missing key REFUSED. A tolerant decoder defeats the stale-daemon detector.",
+    "The no-design case is rendered IN WORDS, never as an empty tab.",
+    "ASCII-only sources and apostrophe-free JSX. Every new production file under 250 lines.",
+    "Do not edit approve-plan.tsx (263 lines, over ceiling; task-a988ca1c owns it). Put plan-card version provenance in approve-plan-gate.tsx (78 lines) if this row carries it; otherwise leave it to a comment on task-f3409f9a.",
+    "FEATURES ONLY."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-eb2bb09d4efa4691803a519901eb2f97"
+  ],
+  "priority": "HIGH",
+  "order": 62.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:27:06.954Z",
+  "updatedAt": "2026-09-05T14:28:57.147Z"
+}

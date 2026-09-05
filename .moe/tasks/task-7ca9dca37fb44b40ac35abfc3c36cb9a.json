@@ -1,0 +1,115 @@
+{
+  "id": "task-7ca9dca37fb44b40ac35abfc3c36cb9a",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "HTTP /design/read serves the versioned aggregate to the operator",
+  "description": "SPIDR child of task-8a6d6660c31c4e119f962d13e6f1505d, spun from task-f3409f9a1f3a4925a73974ea371098e5 (architect-2e480458, 2026-09-05) because child 3's DoD requires POST `/design/read` and that route does not exist.\n\nOBJECTIVE: the operator (and the later Design tab) can POST `/design/read` against a real daemon and get the versioned design aggregate child 1 already stores.\n\nDELIVERABLE: handleDesignReadRequest at `/design/read`, composed as an optional listener port the same way document-dossier-read is, calling readDesignRevision. JSON_ROUTES + POST guard + dispatch. Exact-key body `{goalRef}` or `{goalRef, version}`; projectId from the principal.\n\nNOT IN SCOPE: MCP (task-7f9f20c7), design.submit roster (task-06ac0da1), Design tab / live decoder / proxy pin (sibling UI row), approval card, e2e.\n\nMEASURED: grep handleDesign|/design/read in apps/daemon/src = 0. Child 1 landed readDesignRevision (design-store.ts:189). 06ac0da1 publishes MCP command/query, not HTTP. document-dossier-read.ts is the copy shape.\n\nVERIFICATION: `pnpm --filter @moe/daemon test` plus `pnpm typecheck`.",
+  "definitionOfDone": [
+    "POST `/design/read` is a JSON_ROUTES member with a POST-only guard and a dispatch branch. An unconfigured daemon (no design port) refuses LISTENER_DESIGN_UNAVAILABLE (or the existing UNAVAILABLE pattern for optional reads) with a stable code AND layer, and writes nothing.",
+    "The handler authenticates first, then exact-key decodes the body as `{goalRef}` or `{goalRef, version}`. Extra key, missing goalRef, non-string goalRef, or payload-supplied projectId is REFUSED at the listener with a stable code AND layer. projectId is taken from the authenticated principal.",
+    "A well-formed operator read of a stored revision returns the record plus the versions list from readDesignRevision. DESIGN_REVISION_ABSENT is forwarded with code AND layer. Assert both against a real file-backed store.",
+    "UNCONSUMED_SERVED_ROUTES in http-listener-read-dispatch.test.ts names `/design/read` with a reason (no browser consumer yet). UNPROXIED_SERVED_PATHS stays empty only if the proxy pin lands in the same commit; otherwise `/design/read` is recorded there. Do not leave a silent gap.",
+    "Gates quoted WITH `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. A leg with no count line RAN NOTHING."
+  ],
+  "taskRails": [
+    "Call readDesignRevision from apps/daemon/src/design/design-store.ts. Do not reimplement the aggregate.",
+    "projectId comes from the authenticated principal, never the payload. A payload that carries projectId is an unknown key and is REFUSED.",
+    "http-listener-read-dispatch.ts is already 539 lines (over 400). Add the route; do not reformat or split the file in this row.",
+    "FEATURES ONLY. No MCP work (that is task-7f9f20c7). No UI (that is the Design-tab sibling)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ORIENT, no production edits. (a) Confirm child 1 landed: readDesignRevision and DesignReadInput in apps/daemon/src/design/design-store.ts. (b) Confirm the gap: grep DESIGN_READ_PATH|/design/read in apps/daemon/src/http is empty. (c) Read goal-source-read.ts and goal-source-read.test.ts end to end — that is the copy shape (auth, GOAL capability, optional port, exact-key body, listener vs port refusal split). (d) Read JSON_ROUTES, the POST-guard block, the else-if chain ending in unconditional serveDocumentDossier, UNCONSUMED_SERVED_ROUTES, UNPROXIED_SERVED_PATHS, LISTENER_REFUSAL_CODES, statusFor's GOAL_SOURCE pair, StartListenerOptions. (e) `git status --porcelain -- apps/daemon/src/http/` — peer dirt is context, never a stop. Put measured line counts (dispatch, guards) in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/goal-source-read.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-guards.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST (skill test-driven-development). New apps/daemon/src/http/design-read.test.ts modelled on goal-source-read.test.ts.\n\nArms, each asserting code AND layer (CONTROL_ROOM_LISTENER for listener refusals; DesignRefusal.layer for store answers):\n(1) no port -> LISTENER_DESIGN_UNAVAILABLE;\n(2) non-GOAL principal -> capability denied (copy GOAL_SOURCE_READ_CAPABILITY_DENIED pattern or DESIGN_READ_CAPABILITY_DENIED if you add one — pick one and use it in production too);\n(3) extra key / missing goalRef / non-string goalRef / payload projectId -> LISTENER_DESIGN_REQUEST_INVALID;\n(4) `{goalRef}` with an injected port that returns DESIGN_REVISION_ABSENT -> that code AND LEDGER, httpStatus 200, no durable write;\n(5) `{goalRef, version}` well-formed with an injected port backed by a REAL file-backed store (submit via submitDesignRevision then read) -> ok record plus versions list; a second submit yields version 2 and version 1 still readable;\n(6) `{goalRef, version: 1}` after two submits returns version 1.\n\nAlso extend http-listener-read-dispatch.test.ts: JSON_ROUTES contains `/design/read`; UNCONSUMED_SERVED_ROUTES includes `/design/read` with a comment that the browser consumer is task-e9cb2442; do NOT add a proxy pin (UNPROXIED_SERVED_PATHS gets `/design/read` if the dispatch-vs-proxy arm would otherwise red).\n\nRun `pnpm --filter @moe/daemon test` and quote the reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/design-read.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "HANDLER MODULE. New apps/daemon/src/http/design-read.ts plus `export * from \"./design-read.ts\";` bridge design-read.js (a missing bridge is ERR_MODULE_NOT_FOUND at boot).\n\nCopy goal-source-read.ts:\n- DESIGN_READ_PATH = `/design/read`\n- DesignReadPort `{ read(input: { goalRef: string; version?: number }): DesignReadResult }` — the handler supplies principal.projectId when calling readDesignRevision; the port closes over store+projectId in the composition sibling. For THIS row's tests, the injected port may close over a store itself.\n- authenticateHttpRequest from http-command-ingress.js first.\n- GOAL capability check.\n- Missing port -> LISTENER_DESIGN_UNAVAILABLE.\n- Exact-key body: own enumerable keys are exactly `[\"goalRef\"]` or `[\"goalRef\",\"version\"]`. goalRef non-empty string. version, if present, a finite number. Any other key including projectId -> LISTENER_DESIGN_REQUEST_INVALID.\n- On success reply 200 with the DesignReadResult (ok record+versions, or DesignRefusal forwarded verbatim with its code AND layer). Do not wrap store refusals as listener codes.\n- Stay under 250 lines.\n\nhttp-listener-guards.ts (already 404 lines): add LISTENER_DESIGN_REQUEST_INVALID and LISTENER_DESIGN_UNAVAILABLE next to the GOAL_SOURCE pair; statusFor 400 and 503 next to the GOAL_SOURCE mappings. Do not reformat the rest of the file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-guards.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/design-read.ts",
+        "apps/daemon/src/http/design-read.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE THE ROUTE, do not compose the production factory (task-eb2bb09d).\n\nhttp-listener.ts: add optional `designReads?: DesignReadPort` on StartListenerOptions, same JSDoc as goalSource (absent => UNAVAILABLE).\n\nhttp-listener-read-dispatch.ts (539 lines; add only):\n- import DESIGN_READ_PATH and handleDesignReadRequest;\n- JSON_ROUTES member `/design/read` (near the other /goals and /documents paths);\n- POST guard: non-POST -> LISTENER_DESIGN_REQUEST_INVALID;\n- serveDesign helper copying serveGoalSource;\n- else-if branch immediately ABOVE the unconditional `else serveDocumentDossier`. Do not turn that else into a conditional.\n\nDo not edit daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, daemon-entry.ts, or daemon-entry-port-resolution.ts.\n\nRe-run `pnpm --filter @moe/daemon test`. Step-2 reds go green. Quote Test Files N passed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILL, GATES, ADVERSARIAL (skill adversarial-self-review).\n\nBefore mutating: `git status --porcelain` on the exact paths. Tracked files restore with empty git diff; new files restore by SHA256 vs %TEMP% backup (rail 13), hash in a call SEPARATE from the restore.\n\n(a) Remove `/design/read` from JSON_ROUTES only -> dispatch-seam set-equality reds.\n(b) Remove LISTENER_DESIGN_UNAVAILABLE from LISTENER_REFUSAL_CODES only -> typecheck or the unconfigured arm reds.\n(c) Delete the extra-key refusal in the handler only -> extra-key arm goes green (that is the red you want). Restore each.\n\nGATES standalone foreground: `pnpm --filter @moe/daemon test` (this IS complete_task verification), `pnpm typecheck`. Quote Test Files N passed. Path-attributed baseline for foreign red.\n\nAdversarial: payload projectId cannot cross projects; version 1 remains after version 2; unconfigured port writes nothing; else-chain still ends at dossier; composition files untouched. Report every path in complete_step.modifiedFiles including the .js bridge.\n\nNamed verification command: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/design-read.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-guards.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a"
+  ],
+  "priority": "HIGH",
+  "order": 62.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:26:42.930Z",
+  "updatedAt": "2026-09-05T14:30:57.199Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:27:45.951Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:30:55.032Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Land HTTP handler, JSON_ROUTES, listener options, store composition, FACTORIES, providerKeys, and daemon-entry spread in one row. Rejected: that is 11+ files vs the 10-file hard cap (dispatch 539 lines, guards 404, plus foundation-composition and daemon-entry). Composition is task-eb2bb09d. 2) Skip ListenerRefusalCode and let refuseRequest take a string. Rejected: refuseRequest is typed on LISTENER_REFUSAL_CODES; an unrostered code does not typecheck. 3) Return DesignRefusal through refuseRequest. Rejected: store refusals have LEDGER/REQUEST layers; listener refusals are CONTROL_ROOM_LISTENER. Forward store answers as a 200 body like goal-source-read; listener invalid/unavailable stay refuseRequest. 4) Empty body like document-dossier. Rejected: design is per-goal; DesignReadInput requires goalRef. Copy goal-source-read's `{goalRef}` exact body, widened to also admit `{goalRef, version}`.",
+    "codebaseInsights": "MEASURED 2026-09-05. grep handleDesign|/design/read in apps/daemon/src = 0. Child 1 DONE: readDesignRevision at design-store.ts:189, DesignReadInput {goalRef, projectId, version?}, DesignReadResult ok+record+versions | DesignRefusal. DesignRecord in design-records.ts:40. Closest HTTP analogue: goal-source-read.ts (auth via http-command-ingress, GOAL capability, optional port, LISTENER_GOAL_SOURCE_UNAVAILABLE/REQUEST_INVALID, exact `{goalRef}` body, 200 body for port answers). document-dossier-read.ts is empty-body and not per-goal. JSON_ROUTES at http-listener-read-dispatch.ts:65; POST guards ~412; dispatch else-if chain ends at :538 else serveDocumentDossier (unconditional else is load-bearing). UNCONSUMED_SERVED_ROUTES :128 currently `/events/resume`, `/session/challenge-operands/read`, `/v2/product-contract/current`. UNPROXIED_SERVED_PATHS is empty. refuseRequest types ListenerRefusalCode from LISTENER_REFUSAL_CODES in http-listener-guards.ts:22 (file 404 lines). statusFor must map REQUEST_INVALID->400 and UNAVAILABLE->503 or they default 403. StartListenerOptions in http-listener.ts. Production factory is NOT this row (task-eb2bb09d). Tests inject the port like goal-source-read.test.ts:57-63. Child 1 store is apps/daemon — no new workspace dependency.",
+    "risks": "http-listener-read-dispatch.ts is 539 lines and http-listener-guards.ts is 404 — add the route/codes only, do not reformat or split. The unconditional else must remain serveDocumentDossier; insert serveDesign as an else-if immediately above it. Dispatch-seam tests read JSON_ROUTES and `path ===` branches as source text. A new JSON route without UNCONSUMED_SERVED_ROUTES entry reds because the browser does not fetch it yet. Do not add the DEV_PROXY_PATHS pin here (that is task-e9cb2442); record `/design/read` on UNCONSUMED and, if the proxy is not updated, UNPROXIED. projectId from principal only. Do not compose into daemon-store-foundation-composition.ts (task-eb2bb09d). Without that sibling a production boot still answers UNAVAILABLE — that is this row's unconfigured path, not a bug.",
+    "keyFiles": [
+      "apps/daemon/src/http/goal-source-read.ts",
+      "apps/daemon/src/http/goal-source-read.test.ts",
+      "apps/daemon/src/design/design-store.ts",
+      "apps/daemon/src/http/http-listener-read-dispatch.ts",
+      "apps/daemon/src/http/http-listener-guards.ts",
+      "apps/daemon/src/http/http-listener.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:30:57.199Z"
+}
