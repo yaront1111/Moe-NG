@@ -31,6 +31,31 @@ const approvalOffer = (runId: string): Record<string, unknown> => ({
   commandKind: "approval.decide_intent", expectedVersion: 2,
   inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: runId,
 });
+
+/**
+ * The daemon's REAL `goal.close` offer, captured verbatim off `POST /affordances/read` on the
+ * LIVE UnAI store (project `unai`, 2026-09-05) and re-targeted per arm. Only `targetAggregateId`
+ * moves; the other five keys are the recorded bytes.
+ *
+ * Recorded frame:
+ *   {"commandEnvelopeVersion":"moe-runtime-command/1",
+ *    "commandId":"c3606f5b-1e81-4b6d-a48d-981ec90d35d8","commandKind":"goal.close",
+ *    "expectedVersion":2,"inputSchemaVersion":"moe-bootstrap-command/1",
+ *    "targetAggregateId":"goal-c9d9850b-ccef-4c14-8893-a162e3aaf679"}
+ *
+ * WHY THE REAL BYTES MATTER HERE. `commandId` is a daemon-minted UUID, not the `cmd-<id>` slug a
+ * hand-written fixture reaches for, and `resolvePlanningOffers` emits EXACTLY these six keys
+ * (affordance-planning-offers.ts, `offer`). An offer carrying a seventh key, or missing one,
+ * is not what the browser will ever be handed.
+ */
+const closeOffer = (goalId: string): Record<string, unknown> => ({
+  commandEnvelopeVersion: "moe-runtime-command/1",
+  commandId: "c3606f5b-1e81-4b6d-a48d-981ec90d35d8",
+  commandKind: "goal.close",
+  expectedVersion: 2,
+  inputSchemaVersion: "moe-bootstrap-command/1",
+  targetAggregateId: goalId,
+});
 function coverage(
   goalId: string, verified: number, criteria: number,
   gate1: "APPROVED" | "PENDING", lifecycle: string,
@@ -107,14 +132,71 @@ describe("deriveNeedsYou", () => {
   });
 
   it("carries the close decision only when the daemon offers goal.close for that goal", () => {
-    const closeOffer = { ...approvalOffer("goal-d"), commandKind: "goal.close", targetAggregateId: "goal-d" };
+    const offer = closeOffer("goal-d");
     const data = deriveNeedsYou({
       catalog: catalog([entry("goal-d", "Done")]),
       coverage: new Map([["goal-d", coverage("goal-d", 3, 3, "APPROVED", "EXECUTION_ENABLED")]]),
-      surface: surface([closeOffer]),
+      surface: surface([offer]),
     });
-    expect(data.items[0]).toMatchObject({ close: { affordance: closeOffer }, kind: "READY_TO_CLOSE" });
+    expect(data.items[0]).toMatchObject({ close: { affordance: offer }, kind: "READY_TO_CLOSE" });
     expect(data.items[0]?.detail).toContain("Close the goal when you are satisfied");
+    // The affordance is carried THROUGH, byte for byte: the port spends the daemon's own
+    // (commandId, expectedVersion, schema) and a model that rebuilt any of them would spend a
+    // command the daemon never offered.
+    expect(data.items[0]?.close?.affordance).toBe(offer);
+    expect(Object.keys(data.items[0]?.close?.affordance ?? {}).sort()).toEqual([
+      "commandEnvelopeVersion", "commandId", "commandKind",
+      "expectedVersion", "inputSchemaVersion", "targetAggregateId",
+    ]);
+  });
+
+  /**
+   * THE TWO STATES ON THE SAME COVERAGE. n/n verified is NOT what puts a Close control on the
+   * card; the daemon's OFFER is. Both arms below hold coverage at 3/3 and move only the offer,
+   * so nothing but the offer can explain the difference.
+   *
+   * State (b) is the one that matters. The daemon can — and on the live UnAI loop DOES — refuse
+   * a close for a goal whose criteria are all verified, so a control that is always live would
+   * dispatch straight into a refusal. The honest sentence is the better answer, and this arm
+   * exists to stop a later change from replacing it with a button.
+   */
+  it("offers no close action for an n/n verified goal the daemon is not offering to close", () => {
+    const verified = coverage("goal-d", 3, 3, "APPROVED", "EXECUTION_ENABLED");
+    const withOffer = deriveNeedsYou({
+      catalog: catalog([entry("goal-d", "Done")]),
+      coverage: new Map([["goal-d", verified]]),
+      surface: surface([closeOffer("goal-d")]),
+    });
+    const withoutOffer = deriveNeedsYou({
+      catalog: catalog([entry("goal-d", "Done")]),
+      coverage: new Map([["goal-d", verified]]),
+      // A surface carrying a goal.close for a DIFFERENT goal, so the arm proves the offer is
+      // matched by target and not merely counted.
+      surface: surface([closeOffer("goal-other")]),
+    });
+    expect(withOffer.items[0]?.kind).toBe("READY_TO_CLOSE");
+    expect(withoutOffer.items[0]?.kind).toBe("READY_TO_CLOSE");
+    expect(withOffer.items[0]?.close).toBeDefined();
+    expect(withoutOffer.items[0]?.close).toBeUndefined();
+    expect(withoutOffer.items[0]?.detail)
+      .toContain("The daemon is not offering to close it yet; open the goal to see why");
+    expect(withoutOffer.items[0]?.detail).not.toContain("Close the goal when you are satisfied");
+  });
+
+  /**
+   * A CLOSED GOAL LEAVES THE QUEUE ENTIRELY. Not a disabled control, not a spent one: no item,
+   * so there is nothing left to click a second time. `OPEN_LIFECYCLES` is what draws this line,
+   * and the arm holds the offer PRESENT while moving only the lifecycle — a stale offer left on
+   * one poll's surface must not resurrect the decision.
+   */
+  it("drops the ready-to-close decision once the goal's lifecycle is COMPLETED", () => {
+    const closed = deriveNeedsYou({
+      catalog: catalog([entry("goal-d", "Done")]),
+      coverage: new Map([["goal-d", coverage("goal-d", 3, 3, "APPROVED", "COMPLETED")]]),
+      surface: surface([closeOffer("goal-d")]),
+    });
+    expect(closed.items).toEqual([]);
+    expect(closed.countLabel).toBe("0 decisions need you");
   });
 
   it("orders plans before contracts before closes, then by title", () => {

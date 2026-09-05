@@ -56,6 +56,26 @@ entry points, environment, and knobs.
 - **Review loop**: three unsuccessful review rounds block a node on a human,
   who either allows more attempts or replans the work into a successor goal
   that carries the findings.
+- **Goal closure**: a goal is closed by a human, never by an agent, and the
+  daemon derives every witness from its own records rather than trusting the
+  browser. It offers `goal.close` only once every approved acceptance criterion
+  of the goal's Product Contract reads VERIFIED on the coverage read; the
+  command then additionally requires, for each approved node, a durable review
+  acceptance, the verifier receipt that acceptance names, and the node's
+  landing, plus no activation still holding authority. A goal that does not
+  qualify is refused at the daemon's own code — the `GOAL_CLOSE_*` family
+  (`GOAL_CLOSE_CRITERIA_UNVERIFIED`, `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE`,
+  `GOAL_CLOSE_VERIFICATION_NOT_PASSED`, `GOAL_CLOSE_RESULT_DIGEST_MISMATCH`,
+  `GOAL_CLOSE_REVIEW_PACKAGE_STALE`, `GOAL_CLOSE_AUTHORITY_REMAINS`), all at
+  layer `DAEMON_PREREQUISITE` and all rendered verbatim on the card, so the
+  reason is searchable rather than a shrug. `goal.close` also sits behind the
+  bootstrap sequence, which requires the project to have committed an
+  `approval.decide`; a project approved only through the browser's
+  `approval.decide_intent` path is refused the generic
+  `BOOTSTRAP_PREREQUISITE_MISSING` before any of the codes above can speak.
 - **Control room** (`apps/control-room`): the operating surface. Goals with
   progress from coverage; an opened goal that opens on a board: where it
   stands and what to do next, its nodes in six columns (queued, working, in

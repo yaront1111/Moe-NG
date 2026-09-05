@@ -101,6 +101,49 @@ describe("the Needs-you queue", () => {
     expect(screen.queryByTestId("cr.needsyou.close.goal-1")).toBeNull();
   });
 
+  /**
+   * A REFUSED CLOSE REACHES THE OPERATOR AS THE DAEMON'S OWN CODE, VERBATIM.
+   *
+   * The close card is the one place a `goal.close` refusal is ever seen, and "could not close"
+   * on its own cannot tell an unverified criterion from a daemon fault. Both codes below were
+   * MEASURED off a real daemon, not invented:
+   *   - GOAL_CLOSE_CRITERIA_UNVERIFIED is child 2's goal-level gate
+   *     (goal-close-prerequisite.ts:31-32, rostered :54, layer :60).
+   *   - BOOTSTRAP_PREREQUISITE_MISSING is what the LIVE UnAI store actually answered on
+   *     2026-09-05 for a 10/10-verified goal: `goal.close` requires a committed
+   *     `approval.decide` (bootstrap-sequence.ts:22) and that project has none, so the
+   *     generic bootstrap gate refuses before any goal handler runs. The card must carry
+   *     THAT code too — an operator who is shown only the friendly sentence has no string
+   *     to search for.
+   *
+   * Asserted as the exact `CODE @ LAYER` text, so a paraphrase or a swallowed layer reddens.
+   */
+  it.each([
+    ["GOAL_CLOSE_CRITERIA_UNVERIFIED", "DAEMON_PREREQUISITE"],
+    ["BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE"],
+    ["TRANSPORT_REQUEST_FAILED", "CONTROL_ROOM_TRANSPORT"],
+  ])("renders a refused close as %s verbatim", (code, layer) => {
+    const item = {
+      actionLabel: "Open the goal", close: { affordance: { commandKind: "goal.close" } },
+      detail: "All 10 acceptance criteria verified by the daemon's verifier.",
+      goalId: "goal-1", headline: "Everything the contract states is verified",
+      kind: "READY_TO_CLOSE" as const, planningRunRef: "run-1", title: "Alpha",
+    };
+    render(<NeedsYou
+      data={{ countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null }}
+      decisionResults={new Map([["goal-1", { busy: false, outcome: { code, layer, ok: false as const } }]])}
+      onDecide={vi.fn()}
+      onOpenBoard={vi.fn()}
+    />);
+    const note = screen.getByTestId("cr.needsyou.result.goal-1").textContent ?? "";
+    expect(note).toContain("That didn't go through.");
+    expect(note).toContain(`${code} @ ${layer}`);
+    // The refusal is not mistaken for success: the "Closed." line must NOT appear.
+    expect(note).not.toContain("Closed. The goal is complete");
+    // And the control stays live, so the operator can act once the cause is fixed.
+    expect((screen.getByTestId("cr.needsyou.close.goal-1") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("states the empty queue as an invitation and carries the daemon's note", () => {
     render(<NeedsYou
       data={{ countLabel: "0 DECISIONS · NEEDS YOU", items: [], note: "The daemon's offers have not arrived yet." }}

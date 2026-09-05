@@ -146,7 +146,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:19:08.132Z",
-  "updatedAt": "2026-09-05T01:52:11.439Z",
+  "updatedAt": "2026-09-05T01:52:22.064Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:27:56.563Z",
     "plannedStepCount": 6,
@@ -230,6 +230,29 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "ef555b3aa9d9fff37ea5ee91cd587a51af7baa34",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T01:30:17Z",
+      "paths": [
+        ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T01:52:22.064Z",
+      "treeId": "497972d14387e8b6763fbf4dfc248ef11bfeeb61",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-8fdd81b81c0f4dc88c16203de139e2ba"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -241,9 +264,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-04T23:53:08Z",
-    "at": "2026-09-05T01:06:53.887Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T01:30:17Z",
+    "at": "2026-09-05T01:52:22.064Z"
   },
   "completedAt": "2026-09-05T01:52:11.439Z",
   "reviewCompletedAt": "2026-09-05T01:52:11.439Z",
