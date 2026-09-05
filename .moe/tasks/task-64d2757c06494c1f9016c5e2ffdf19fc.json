@@ -1,0 +1,36 @@
+{
+  "id": "task-64d2757c06494c1f9016c5e2ffdf19fc",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "One digest rotation: publish every pending command kind on the shared runtime contract at once",
+  "description": "THE SHARED CONTRACT LEAF. Filed by architect-b63fabf3 on 2026-09-06 in answer to the governor's #architects request of 20:07, after the THIRD collision in one day on the same two digest mirrors (task-40e52fa8 14:15, task-c2b5a9f0 rescue 19:39, task-06ac0da1 reopened tonight).\n\nTHE PROBLEM THIS ROW ENDS. Adding ANY kind to RUNTIME_COMMAND_KINDS rotates GENERATED_CONTRACT_DIGEST by construction - contract-digest.ts puts `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)` inside canonicalContractSurface(), which deriveContractDigest() SHA256s. Every publishing row therefore edits THE SAME SIX FILES and invalidates every sibling's digest the moment it lands. FOUR rows are queued to do exactly that tonight, each with its own plan, each touching the same six paths:\n- task-37a50989 `deployment.rollback`\n- task-5a8c3166 `deployment.migrate_down`\n- task-bb0a7131 `project.set_agent_provider`\n- task-06ac0da1 `design.submit` and `design.read`\nThey cannot run concurrently and they serialise badly: whoever lands second re-does the census, the regeneration and the four mirrors against a digest the first one moved. All four are WORKING with NO assignee, so nothing is mid-flight and this can be fixed properly rather than worked around.\n\nWHAT THIS ROW OWNS: ONE roster edit adding ALL FIVE remaining strings, ONE regeneration, ONE mirror census, ONE digest rotation. Six files, once.\n\nTHE FIVE STRINGS, in sorted position: `deployment.migrate_down`, `deployment.rollback`, `design.read`, `design.submit`, `project.set_agent_provider`. VERIFY EACH ONE IS STILL ABSENT before adding it - a sibling may have landed one meanwhile, and re-adding a member is invisible in a Set-based count (a duplicate SHRINKS the set rather than growing it, which is why runtime-contract.test.ts pins `commands.size` by literal and its own comment says so).\n\nMEASURED AT HEAD 3891a2a0 (2026-09-06): the roster already carries deployment.deploy, deployment.set_target, environment.set_variable, environment.unset_variable, preview.decide, release.decide and repository.bootstrap - so the pattern is proven and this row follows a trail four rows have already cut.\n\nTHE TRAP THAT CAUSED ALL THREE COLLISIONS: two of the four GENERATED_CONTRACT_DIGEST mirrors live under apps/control-room (data-adapter.test.ts and v2/goals/approve-plan.test.tsx), and apps/control-room is in NONE of `pnpm test` (the root vitest include has no apps/**), `pnpm typecheck` (it is a runtime value compare) or `pnpm --filter @moe/daemon test`. A forgotten mirror ships two HARD-THROWING tests behind three green gates. `pnpm --filter @moe/control-room test` is the only leg that sees them, and it is this row's named verification command.\n\nAFTER THIS LANDS, every consumer row drops its contract files and keeps only its daemon work. Their dependsOn has been set to this row.\n\nNOT IN SCOPE: any daemon vocabulary, family, registry, roster test, MCP fence or dispatch handler. Those stay with the four consumer rows.\n\nVERIFY: `pnpm --filter @moe/control-room test`.",
+  "definitionOfDone": [
+    "All five strings - `deployment.migrate_down`, `deployment.rollback`, `design.read`, `design.submit`, `project.set_agent_provider` - are members of RUNTIME_COMMAND_KINDS in SORTED position, each VERIFIED ABSENT immediately before being added (a sibling may have landed one; a duplicate member SHRINKS the Set rather than growing it and is invisible to a naive count). runtime-contract.test.ts agrees in BOTH coupled assertions: the hand-transcribed EXPECTED_COMMAND_KINDS list and the `commands.size` literal. Do NOT derive the expected list from the tuple - that file's comment forbids it and a derived list asserts nothing. Take the size from the PRINTED expected-vs-received, never from arithmetic.",
+    "The generated client was REGENERATED, never hand-edited: `pnpm --filter @moe/control-room-client generate`, with the OLD and NEW GENERATED_CONTRACT_DIGEST both quoted in the completion record. An UNCHANGED digest means the generator did not see the new kinds - a stop, not a pass. contract-digest.test.ts DERIVES the digest rather than pinning it, so it must go green WITHOUT being edited; if it needs an edit, the generate step was skipped.",
+    "THE MIRROR CENSUS IS RUN, NOT QUOTED: `git grep -n <old digest> -- . ':!.moe' ':!pnpm-lock.yaml'` BEFORE the change (expect exactly four hits) and AFTER (expect zero), across ALL file types - a `--include=*.ts` grep misses the .tsx mirror, which is one of the two that caused three collisions today. Every hit carries the new hex, including GENERATED_FILE_SHA256 beside CONTRACT_DIGEST in generated-coverage.test.ts. A FIFTH hit is a stop-and-report.",
+    "MUTATION DRILL, quoted with its failing line: revert ONLY apps/control-room/src/v2/goals/approve-plan.test.tsx to the old digest and confirm `pnpm --filter @moe/control-room test` goes RED with the compat gate's own refusal message. That drill is this row's most valuable artifact - it is the only proof the two apps/control-room mirrors are covered by any gate at all, and its absence is what let three rows ship past them.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test` (MANDATORY), `pnpm typecheck`, and root `pnpm test` - stating plainly that the root lane covers NO apps/** file.",
+    "The diff touches EXACTLY six files and ZERO under apps/daemon/: runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts, generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx. Prove it with `git status --porcelain -- apps/ packages/` in the completion record. A daemon file here means a consumer row's work leaked into the leaf."
+  ],
+  "taskRails": [
+    "CONTRACT SURFACE ONLY, AND ALL OF IT AT ONCE. This row exists so the digest rotates exactly once for five kinds instead of five times for one each. It wires no daemon command, defines no refusal code, fences no principal and serves no query.",
+    "NEVER hand-edit the generated client. It is generator output; the only legal way to change it is `pnpm --filter @moe/control-room-client generate`.",
+    "CENSUS THE MIRRORS WITH A FULL-TREE `git grep` OF THE LITERAL, across all file types. The set has moved twice and a *.ts-only grep misses the .tsx one - that exact miss caused three collisions on 2026-09-05.",
+    "`pnpm --filter @moe/control-room test` IS MANDATORY: two mirrors live there and no other gate sees them.",
+    "VERIFY EACH STRING IS ABSENT BEFORE ADDING IT. A duplicate member shrinks the Set and hides in every count."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 29,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T22:17:46.607Z",
+  "updatedAt": "2026-09-05T22:17:46.607Z"
+}

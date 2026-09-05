@@ -76,7 +76,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:20.683Z",
-  "updatedAt": "2026-09-05T20:01:14.509Z",
+  "updatedAt": "2026-09-05T22:17:58.260Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.027Z",
     "plannedStepCount": 5,
@@ -101,5 +101,8 @@
       "apps/control-room/src/v2/goals/approve-plan.test.tsx"
     ]
   },
-  "planApprovedAt": "2026-09-05T20:01:14.509Z"
+  "planApprovedAt": "2026-09-05T20:01:14.509Z",
+  "dependsOn": [
+    "task-64d2757c06494c1f9016c5e2ffdf19fc"
+  ]
 }

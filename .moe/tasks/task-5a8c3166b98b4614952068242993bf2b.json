@@ -22,11 +22,12 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE EVERYTHING THIS PLAN CITES. Both load-bearing values moved between two readings a few hours apart today, so treat every number below as stale until you reprint it.\n\n1. THE DIGEST AND ITS MIRRORS, censused BY HEX across ALL file types — a symbol grep cannot see three of the four:\n   D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"')\n   git grep -n \"$D\" -- . ':!.moe' ':!.serena'\n   At 19:47Z: digest f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd, four hits (generated-client.ts, generated-coverage.test.ts, apps/control-room/src/data/data-adapter.test.ts, apps/control-room/src/v2/goals/approve-plan.test.tsx). Record the CURRENT digest and the CURRENT file list — if a fifth mirror has appeared, it joins this row's owned paths.\n2. `grep -n \"commands.size).toBe(\" packages/contracts/src/runtime/runtime-contract.test.ts` — the literal to move. It read `toBe(104)` at :105 earlier today and `toBe(110)` at :108 at 19:47Z.\n3. `grep -n \"repository.publish\\|deployment.deploy\" packages/contracts/src/runtime/runtime-vocabulary.ts` — find the sorted neighbours `deployment.migrate_down` belongs between. A PEER ROW (task-44760ed17c714ccc8bdc5a36b630a17a) is publishing `deployment.set_target` and `deployment.deploy` into this same tuple; if its entries are present, yours sorts among them.\n4. `git grep -c \"migrate_down\" -- packages/contracts apps/daemon/src` must return NOTHING. If a peer already published it, STOP rather than landing a duplicate.\n\nREBASE, NEVER REVERT: expect roster entries you did not write. Deleting a peer's entry to clean your diff is the failure this step exists to prevent.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/contracts/src/runtime/runtime-contract.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T22:18:42.833Z"
     },
     {
       "stepId": "step-2",
@@ -73,7 +74,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -83,10 +84,17 @@
   "parentTaskId": "task-537320eed95348dc9bc3afc879dc0563",
   "priority": "HIGH",
   "order": 112.55,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-295aae252d5842ec92bdbbd64ace30a7",
+      "author": "worker-7bdbffac",
+      "content": "Step1 read-only measurement after claim: generated digest f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd. git grep -n -F <digest> -- . ':!.moe' ':!.serena' => exact4 mirrors: apps/control-room/src/data/data-adapter.test.ts:18; apps/control-room/src/v2/goals/approve-plan.test.tsx:255; packages/control-room-client/src/generated-coverage.test.ts:36; packages/control-room-client/src/generated/generated-client.ts:919. Hand literal commands.size=110 at runtime-contract.test.ts108. Roster neighbours deployment.deploy and deployment.set_target at runtime-vocabulary.ts91. git grep -n migrate_down -- packages/contracts apps/daemon/src => no hits. All6 planned paths clean on git status --porcelain; no edits/tests/generation performed.\nIMPORTANT runtime premise changed since approved plan: live get_context dependsOn and dependsOnUnmet both contain task-64d2757c06494c1f9016c5e2ffdf19fc ('One digest rotation: publish every pending command kind on the shared runtime contract at once'), epicSiblings status PLANNING, landed=false, no verification/completionSummary. This consolidating producer owns the planned rotation, so independently rotating here would defeat declared build order/duplicate authority. Step1 has no active amendment. Claim_next_task offered this WORKING row despite unmet declared prerequisite; reporting dependency wait, not a foreign-WIP block.",
+      "timestamp": "2026-09-05T22:19:37.875Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:43:25.436Z",
-  "updatedAt": "2026-09-05T19:49:58.282Z",
+  "updatedAt": "2026-09-05T22:19:38.410Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:15.735Z",
     "plannedStepCount": 6,
@@ -102,5 +110,19 @@
     "approachesConsidered": "HAND-EDITING THE GENERATED CLIENT. Rejected by task rail and by mechanics: the digest is computed by the generator from `canonicalContractSurface()`, so a hand edit produces a value `contract-digest.test.ts` immediately contradicts — it derives the digest independently and compares.\n\nREPLACING THE TRANSCRIBED ROSTER WITH A DERIVED ONE while editing it. Rejected: the file's own header records that a derived expectation is exactly the vacuous arm the transcription replaced.\n\nWRITING THE MEASURED COUNT (110) INTO THE PLAN AS A TARGET. Rejected. It was 104 a few hours ago and a peer row publishing two more kinds is in flight against the same file. The plan instructs re-measurement and treats the leg's printed expected-vs-received as authoritative.\n\nDOING THE DAEMON SIDE HERE. Rejected — it is the parent's plan (task-537320eed95348dc9bc3afc879dc0563, already submitted), and a second edit to daemon-command-vocabulary.ts from this row would collide in the shared worktree. This row proves it stayed out with `git status --porcelain`.\n\nSize: 6 files, 6 steps.",
     "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05 19:47Z. I measured these same values a few hours earlier and BOTH HAVE ALREADY MOVED — which is this row's most important operating fact, not a footnote:\n  digest  ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076  ->  f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd\n  count   `expect(commands.size).toBe(104)` at :105  ->  `toBe(110)` at :108\nSix kinds landed between the two readings, and the assertion moved three lines. Every number below is a 19:47Z reading with the same short half-life. RE-MEASURE IN STEP 1 and take what the leg PRINTS as authoritative — this epic's rail forbids freezing a count in a gate precisely because sibling kind-publishing rows move these literals first.\n\nA CONCURRENT PEER IS EDITING THE SAME FILES: task-44760ed17c714ccc8bdc5a36b630a17a publishes `deployment.set_target` and `deployment.deploy` through this exact roster, this exact transcription and these exact four mirrors. Expect entries you did not write. REBASE onto them; never delete a peer's entry to make your own diff clean.\n\nTHE MIRROR SET HELD across both readings — four files, and three of them hard-code the hex without ever naming the symbol:\n  packages/control-room-client/src/generated/generated-client.ts  (generated; REGENERATED, never hand-edited)\n  packages/control-room-client/src/generated-coverage.test.ts     (`const CONTRACT_DIGEST = \"...\"`)\n  apps/control-room/src/data/data-adapter.test.ts                 (bare hex)\n  apps/control-room/src/v2/goals/approve-plan.test.tsx            (`contractSchemaHash:` — a .tsx, invisible to a *.ts-only grep)\nA `git grep GENERATED_CONTRACT_DIGEST` finds only the generated file and its symbol IMPORTERS (contract-pins.ts:7 re-export, contract-digest.ts derive-and-compare, apps/daemon/src/cutover/v2-readiness-evidence-{collector,producers}), and would wrongly suggest regeneration cascades everywhere. It does not: the three transcribed mirrors are hand edits.\n\nTHE ROSTER: `RUNTIME_COMMAND_KINDS` is a flat FROZEN, SORTED tuple of kind strings at runtime-vocabulary.ts:85. runtime-contract.test.ts:117-125 asserts it equals its own sort AGAINST THE PRODUCTION TUPLE, and its comment records why — `product_contract.approve_gate_1` once landed at the wrong position, was copied into the hand transcription at that same wrong position, and BOTH stayed green.\n\nTHE TRANSCRIPTION IS DELIBERATE: runtime-contract.test.ts:29-34 — \"an expectation computed from the tuple under test can never fail, which is what the previous `commands.size === RUNTIME_COMMAND_KINDS.length` arm did.\" Hand-copy the entry; that deliberate edit IS the test.\n\nNO PER-KIND PAYLOAD SCHEMA EXISTS, deliberately: generator/generate.ts:37-39 — \"Payloads stay JsonObject. No per-kind payload schema exists in the contract, and generating per-kind payload types would invent a contract that does not exist.\" Payload KEYS are the parent's daemon-side edit.\n\nGENERATOR: `pnpm --filter @moe/control-room-client generate` (package.json:18). It emits the command section from a sorted copy of RUNTIME_COMMAND_KINDS (generate.ts:289) and writes the digest at :264, hashing `canonicalContractSurface()` (contract-digest.ts:30, :55).\n\n`deployment.migrate_down` is ABSENT everywhere at 19:47Z — `git grep -c migrate_down -- packages/contracts apps/daemon/src` returns nothing. The gap is real."
   },
-  "planApprovedAt": "2026-09-05T19:49:58.282Z"
+  "planApprovedAt": "2026-09-05T19:49:58.282Z",
+  "dependsOn": [
+    "task-64d2757c06494c1f9016c5e2ffdf19fc"
+  ],
+  "contextFetchedBy": [
+    "worker-7bdbffac"
+  ],
+  "workStartedAt": "2026-09-05T22:18:42.833Z",
+  "blockedReason": "Live get_context declares unmet prerequisite task-64d2757c06494c1f9016c5e2ffdf19fc, consolidated single digest rotation owner, still PLANNING/unlanded with no completion evidence. This row's old unamended plan independently rotates those same shared roster/mirror files; executing it before the declared producer would duplicate that rotation and violate build ordering. Step1 measured current4 mirrors, count110, migrate_down absent; all6 planned paths clean, no edits or tests. This is a declared-dependency wait, not a foreign dirty-path block. Claim_next_task offered it despite dependsOnUnmet; allow consolidation to land then re-evaluate old plan against producer evidence.",
+  "blockedOnTaskIds": [
+    "task-64d2757c06494c1f9016c5e2ffdf19fc"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T22:19:38.410Z"
 }

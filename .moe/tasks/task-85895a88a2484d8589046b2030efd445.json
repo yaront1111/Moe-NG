@@ -20,8 +20,75 @@
     "REBASE, DO NOT DELETE A PEER'S ENTRY: task-a988ca1c, task-33ceae56 and task-84cd2e55 are all editing needs-you-model.ts and needs-you.tsx concurrently.",
     "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT, EXACT-KEY decoders, dev-proxy-paths pin for any new read."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP AND A FRESH ROSTER MEASUREMENT. Four dependencies were unlanded at plan time.\n\nVERIFY ON DISK:\n- `git grep -rn \"/deployments/health/read\" -- apps/daemon/src` — the read (task-509c6c1609174adb9228940bc002f5c3). Confirm it is reachable from the COMPOSED production listener, not only a test server.\n- `git grep -rn \"moe-health-probe\\|incident\" -- apps/daemon/src/monitoring` — the probe ring and incident lifecycle (task-6ec875f4 / task-cc05c473).\n- `git grep -rn \"deployment.rollback\" -- apps/daemon/src` — the rollback the card offers (task-95e68a8d chain).\n- `git grep -c \"cr\\.env\\|environments-screen\\|Environments\" -- apps/control-room/src/v2` — grandchild A's Environments surface (task-df972c274f2a43eda3a9f57d2780c6f9), which DoD 3 asserts against.\nIf any is absent, `moe.report_blocked` with `blockedOnTaskIds`. Do NOT mock the read, do NOT synthesise an offer, do NOT assert DoD 3 against an internal flag instead of A's surface.\n\nRE-MEASURE THE CONTENDED ROSTER — three rows (task-a988ca1c, task-33ceae56, task-84cd2e55) are editing these two files concurrently and none had landed at plan time:\n  `grep -n \"NEEDS_YOU_KINDS\\|KIND_ORDER\" apps/control-room/src/v2/approvals/needs-you-model.ts`\n  `grep -n \"KIND_EYEBROW\" apps/control-room/src/v2/approvals/needs-you.tsx`\nRecord what each contains NOW. REBASE onto peer entries; deleting one to clean your diff is the failure rail 6 names.\n\nAlso read needs-you-model.ts:186-187 and confirm the comparator still dereferences `left.goalId` — step 2 depends on it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE FIFTH KIND, AND THE goalId DECISION (DoD 4, rail 5). Add the incident kind to `NEEDS_YOU_KINDS` (needs-you-model.ts:28) and to the TWO exhaustive `Record<NeedsYouKind, ...>` maps it feeds — `KIND_ORDER` (:72) and `KIND_EYEBROW` (needs-you.tsx:41). Both stop compiling until they gain the key; that coupling is why this is a two-file change rather than one, and `needs-you.tsx` imports only the TYPE, so a symbol grep never names it.\n\nKIND_ORDER IS A PRIORITY, NOT A FORMALITY. An incident is an outage in progress; choose its position relative to PLAN_APPROVAL, ESCALATION, GATE_1 and READY_TO_CLOSE deliberately and say why in the note. Getting it wrong buries an outage under routine approvals.\n\nTHE goalId DECISION, which rail 5 requires be made deliberately and which is MECHANICAL, not just semantic: needs-you-model.ts:186-187 sorts with `... || left.goalId.localeCompare(right.goalId)`. `goalId` is required on every item and is DEREFERENCED there. An incident routes to an ENVIRONMENT. Do NOT put an environment id in `goalId` — every existing consumer assumes that field means what it says, and the comparator would be silently comparing two different kinds of identifier.\nChoose one and record it: a discriminated member carrying the environment, or an optional routing target with the comparator taught to handle its absence. Whichever you pick, assert the OTHER FOUR kinds still sort exactly as before — that is the regression this decision risks.\n\nASCII-only, apostrophe-free JSX text (the scheduler boundary scan reds on an apostrophe in JSX), and `wc -l` both files against the 250 ceiling — they were 198 and 211.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE READ CLIENT AND ITS PROXY PIN (rail 7). Create the live read module under apps/control-room/src/live/ for `/deployments/health/read`, following the neighbouring live read clients.\n\nEXACT-KEY DECODING: an unknown key and a missing key each REFUSE with a specific code, asserted with the code AND the layer that refused — never merely that decoding failed.\n\nCARRY THE LAST ERROR LINE THROUGH UNCHANGED. The decoder must not truncate, trim, summarise or re-case it. This is the one field the whole card exists to show, and a decoder that tidies it defeats the row as surely as a card that omits it.\n\nADD THE PROXY PIN to `DEV_PROXY_PATHS` in apps/control-room/src/live/dev-proxy-paths.ts (frozen list at :5), keeping the file's existing ordering. Note `/design/read` is NOT pinned there, so a pin is not automatic for every route — without it the dev lane cannot reach the read at all.\n\nDecode the OPEN INCIDENT and the PREVIOUS DEPLOY SHA as first-class members: step 4 renders the error line and step 5 needs the sha at the confirm.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-deployments-health-read.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-deployments-health-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CARD AND ITS ERROR LINE (DoD 1). Render the incident item in needs-you.tsx: 'production unhealthy since <t>' with THE LAST ERROR LINE VERBATIM.\n\nASSERT THE EXACT ERROR TEXT reaches the rendered card — seed a distinctive error string through the decoder and assert that exact string is in the output. DoD 1 is explicit that asserting 'some error-ish string is present' does not count, and the reason is concrete: a card showing only 'unhealthy' sends the operator to the logs this card was built to replace. Assert against the whole rendered container, not one node.\n\nDo not truncate the error line for layout. If it is long, wrap or scroll it — an ellipsis in the middle of a stack line is the same failure in a nicer font. If a bound is genuinely needed, say what it is and why in the note.\n\nRender the 'since <t>' from the incident's opened-at, not from the last probe timestamp: the operator wants how long this has been happening, not when it was last checked. Those diverge exactly when it matters.\n\nASCII-only and apostrophe-free JSX text.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/approvals/needs-you.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE ROLL BACK CONTROL: OFFERED, AND THE CONFIRM NAMES THE SHA (DoD 2 and 5).\n\nOFFERED BY THE DAEMON, NEVER SYNTHESISED (DoD 5, rail 4). Use the existing `offerFor(surface, commandKind, target)` at needs-you-model.ts:77, exactly as the other four kinds do. It returns `undefined` when `surface.outcome !== \"SURFACE\"`.\nASSERT THE CONTROL IS ABSENT when the daemon offers no rollback — absent, not disabled. Query for the testid and find nothing. A card that offers an action the command path will refuse is the dead-button hazard this board has already shipped once.\n\nTHE CONFIRM NAMES THE TARGET SHA (DoD 2, rail 2), and the assertion is specifically about WHERE: assert the sha is in THE CONFIRM SURFACE ITSELF, not merely in the card behind it. The confirm is the moment the operator commits, and rolling back to the wrong sha during an incident is a second incident. Arm-then-confirm, following the PUBLISH card's shape.\n\nAssert the sha shown is the PREVIOUS deploy receipt's sha from the read — compare against that value, not against a pattern. A pattern passes for the wrong sha, and this is the one number the operator is trusting.\n\nAlso assert the confirm names the ENVIRONMENT. 'Roll back to <sha>' without saying which environment is the same class of error one level up.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/approvals/needs-you.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DISMISS IS NOT RESOLVE (DoD 3, rail 3) — the row's subtlest property, asserted in BOTH directions because either alone permits the bug.\n\nDIRECTION 1: after dismissing, the environment STILL READS DOWN on grandchild A's Environments surface. Assert against that surface, not against this card's own state. A dismiss that clears the card and leaves the operator believing the environment recovered is how an outage gets forgotten.\n\nDIRECTION 2: the card RETURNS at the next failure threshold rather than staying silent. That threshold is the probe row's lifecycle (task-cc05c473: one open incident per outage, closed on recovery, a new one at the next three consecutive failures) — assert against that lifecycle rather than inventing a re-raise rule here.\n\nONE DIRECTION ALONE PERMITS A DISMISS THAT QUIETLY ENDS MONITORING, which is why DoD 3 names both. Write them as two arms so a future edit cannot delete one and leave a green suite.\n\nMake the dismiss's scope explicit in the note: does it dismiss this incident, or mute the environment? They differ on the second outage, and the answer must match direction 2.\n\nMUTATE AND CONFIRM RED: make dismiss also clear the environment state, run direction 1, confirm RED; restore. Make dismiss suppress the next raise, run direction 2, confirm RED; restore. These files are TRACKED, so `git diff -- <path>` is a valid restore proof; `git status --porcelain` them first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+        "apps/control-room/src/v2/approvals/needs-you.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "ROSTER ARMS, GATES AND SELF-REVIEW (DoD 4 and 6).\n\nROSTER (DoD 4): assert ALL FIVE kinds are present — the four that existed plus the incident — so adding the fifth provably disturbed none. Do NOT assert a hard COUNT of roster members: three peer rows are adding entries concurrently and a frozen count would red on their landing rather than on a defect. Assert membership of each named kind instead.\nAssert the other four still SORT as before (step 2's goalId decision is what could break this).\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/control-room test` — the row's named verification command and its ONLY real evidence.\n- `pnpm typecheck`.\nState explicitly that root `pnpm test` covers NO apps/** file, so it is not evidence for anything this row owns.\n`wc -l` both edited files and quote them against the 250 ceiling (198 and 211 at plan time — a peer may have grown them).\n\nSELF-REVIEW:\n- Is there a non-goal id in ANY `goalId` field? Grep the new item construction. This is rail 5 and the comparator at :186-187 is what makes it bite.\n- Does the error line survive verbatim from decoder to DOM — no trim, no truncate, no case change? Round-trip a string with leading whitespace and punctuation.\n- Does the confirm still name the sha when the card is re-rendered mid-incident by a surface poll? A card re-keyed by a poll losing its armed state is the board-chain hazard in a new place.\n- Did a peer's roster entry survive your rebase? Re-read both files and confirm you deleted nothing.\n- Does any rendered string carry a URL with embedded credentials from a probe error (epic rail 3)? A health-check failure can echo a connection string.\n\nPATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when EMPTY. Disclose foreign red verbatim with paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+        "apps/control-room/src/v2/approvals/needs-you-model.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,12 +98,30 @@
   "parentTaskId": "task-f008f29a38d54ae7a10e97cad1c4443d",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
-    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4"
+    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
+    "task-509c6c1609174adb9228940bc002f5c3",
+    "task-df972c274f2a43eda3a9f57d2780c6f9"
   ],
   "priority": "HIGH",
   "order": 123.2,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-05T20:05:32.557Z"
+  "updatedAt": "2026-09-05T22:21:01.587Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T22:15:51.129Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T22:20:59.455Z",
+  "planningNotes": {
+    "approachesConsidered": "FILING THE READ AS A PREREQUISITE vs BUILDING IT HERE. Building it here was rejected twice over: the daemon route plus its .js bridge, its test and the listener composition across four files is six-plus paths on top of this row's roster, card, decoder, proxy pin and tests; and this is a UI row whose rails confine it to the control room. The rails' answer to a missing prerequisite is a production row measured symbol by symbol, which is what task-509c6c16 is.\n\nOVERLOADING /health/read INSTEAD. Rejected and written into the new row's rails: it serves daemon liveness, and putting an environment outage behind it would make one route mean two unrelated things.\n\nWHERE THE INCIDENT ROUTES. Not resolved unilaterally - it is a deliberate decision the row asks for, and step 2 makes the worker state it in the record. What IS settled here is the constraint: whatever shape is chosen must not put a non-goal id in `goalId`, because :186-187 dereferences it in a comparator that the other four kinds rely on.\n\nSYNTHESISING THE ROLL BACK CONTROL IN THE BROWSER. Rejected by DoD 5 and by the existing seam: `offerFor` is right there at :77 and the other four kinds all use it. A synthesised control offers what the command path can refuse.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06.\n\nTHE ROSTER HAS NOT GROWN YET, despite three rows editing it. needs-you-model.ts:28 still reads exactly `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"]`, KIND_ORDER at :72-74 still has four entries, and KIND_EYEBROW at needs-you.tsx:41-46 still has four. So this row is likely to land the FIFTH first - but task-a988ca1c, task-33ceae56 and task-84cd2e55 are all WORKING on these two files, so re-measure at execution and rebase. Files are 198 and 211 lines.\n\nTHE goalId HAZARD IS MECHANICAL, NOT ONLY SEMANTIC - this is the measurement that matters most for rail 5. needs-you-model.ts:186-187 sorts items with:\n  .sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind] || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId))\n`goalId` is REQUIRED on every item and is DEREFERENCED in the comparator. An incident routes to an ENVIRONMENT, so there is no goal id to put there - and putting an environment id in it does not merely mislead a reader, it feeds `localeCompare` a value the whole surface assumes is a goal. Decide the shape deliberately (a discriminated member, or an optional routing target with the comparator taught to handle its absence) and say why in the record. Leaving `goalId` holding a non-goal is the failure rail 5 names.\n\nTHE DAEMON-OFFER SEAM EXISTS AND IS NAMED: needs-you-model.ts:77 `offerFor(surface, commandKind, target)` returns the offer from the SurfaceFrame or `undefined` when `surface.outcome !== \"SURFACE\"`. That is how the existing four kinds rest on a daemon offer, and it is what DoD 5 requires the Roll back control to use. A browser-synthesised control is the dead-button hazard this board has shipped once already.\n\nTHE READ DID NOT EXIST AND IS NOW A PREREQUISITE ROW. `ls apps/daemon/src/http/ | grep -i incident` returned nothing. `/health/read` EXISTS but is NOT this: health-read.ts (217 lines, mounted at daemon-store-foundation-composition.ts:51, pinned at dev-proxy-paths.ts:24) serves the DAEMON's provider-pause and repository-reservation state, not deployment environments. I filed task-509c6c1609174adb9228940bc002f5c3 (order 123.05) to serve `/deployments/health/read` - derived state, last probe, THE LAST ERROR LINE VERBATIM, the open incident, and the previous deploy receipt's sha - and composed into the production listener in the same row. Grandchild A needs the same read, so it is filed once for both.\n\nDEPENDENCIES NOW FOUR (previousDependsOn had two): the probe/incident row, the backups/rollback row, the new read row, and GRANDCHILD A task-df972c274f2a43eda3a9f57d2780c6f9 (the Environments surface, order 123.1). A is added because DoD 3 asserts the environment \"still reads DOWN on the Environments surface\" - that surface is A's, and asserting against it requires it to exist. That is ordering fixable by declaring the dependency, not a block.\n\nTHE INCIDENT ITSELF is written by task-cc05c473 under the probe row: `moe-health-probe/1`, a ring bounded at 1440, UP/DEGRADED/DOWN DERIVED from the ring (never stored), and exactly one open incident per outage, closed on recovery and reopened at the next threshold. DoD 3's \"the card returns at the next failure threshold\" is that lifecycle - assert against it rather than inventing a re-raise rule here."
+  },
+  "planApprovedAt": "2026-09-05T22:21:01.586Z"
 }

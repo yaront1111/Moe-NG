@@ -76,7 +76,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:10:57.448Z",
-  "updatedAt": "2026-09-05T19:16:37.596Z",
+  "updatedAt": "2026-09-05T22:20:32.813Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:13:26.060Z",
     "plannedStepCount": 5,
@@ -109,5 +109,8 @@
       "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T19:16:37.596Z"
+  "planApprovedAt": "2026-09-05T19:16:37.596Z",
+  "contextFetchedBy": [
+    "worker-f72a1438"
+  ]
 }
