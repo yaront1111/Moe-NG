@@ -43,6 +43,12 @@ export interface PlanningOfferInput {
    */
   readonly closeReadiness: (goalId: string) => GoalCloseReadiness["kind"];
   readonly compilerLane: CompilerLanePort;
+  /**
+   * Whether any node of this goal has been landed as a commit. A FACT and LAZY for the same
+   * reasons as `closeReadiness` above: the ladder stays pure, and the goal's graph walk plus
+   * the review-ledger read happen only for a goal that could actually be offered a publish.
+   */
+  readonly landedCommit: (goalId: string) => boolean;
   readonly ledger: DurableLedger;
   readonly mintId: (kind: string) => string;
   readonly projectId: string;
@@ -146,10 +152,18 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
       offer(input, "approval.decide_intent", goal.planningRunRef),
     ];
   }
-  // Publishing is offered on every goal whose graph has been activated (its work may be
-  // landed locally), targeting the goal's publish aggregate so the decision's own version
-  // fence never moves the goal's.
-  const publish = offer(input, "repository.publish", `publish:${goal.goalId}`);
+  // Publishing is offered only once at least one node of the goal is landed as a commit — a
+  // goal with nothing to push gets no PUBLISH card. The surface used to mint one for every
+  // activated goal, so an operator was handed a Publish control directly above the words "No
+  // node of this goal is landed as a commit yet" (seen live on UnAI 2026-09-04). Targets the
+  // goal's publish aggregate so the decision's own version fence never moves the goal's; read
+  // here rather than above so the landing walk is skipped for a goal that could not publish.
+  const publish = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING"
+    || lifecycle === "COMPLETED"
+    ? (input.landedCommit(goal.goalId)
+      ? [offer(input, "repository.publish", `publish:${goal.goalId}`)]
+      : [])
+    : [];
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
     // A goal is offered to close only when its product is DONE: every approved criterion of its
     // Product Contract is verified. A goal with no contract — the seed/Foundation journey — is
@@ -159,10 +173,10 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
     // above so the coverage walk is skipped for every goal that could not be offered one.
     const readiness = input.closeReadiness(goal.goalId);
     return readiness === "NO_CONTRACT" || readiness === "READY"
-      ? [offer(input, "goal.close", goal.goalId), publish]
-      : [publish];
+      ? [offer(input, "goal.close", goal.goalId), ...publish]
+      : [...publish];
   }
-  if (lifecycle === "COMPLETED") return [publish];
+  if (lifecycle === "COMPLETED") return [...publish];
   return [];
 }
 

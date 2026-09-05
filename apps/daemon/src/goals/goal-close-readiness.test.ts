@@ -498,10 +498,17 @@ describe("/affordances/read withholds goal.close until the product is verified",
     const { store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
 
     // Set-equality, never `not.toContain`: the arm has to show the REST of the surface is
-    // unchanged, or withholding everything would pass it just as well.
-    expect(goalOffers(store)).toEqual([`repository.publish@publish:${GOAL_ID}`]);
+    // unchanged. This world has landed no commit, so `repository.publish` is absent throughout
+    // by task-f6f33a39's gate (owned by goal-landing-facts.test.ts) — the final assertion lands
+    // one, which both restores the "rest of the surface" witness and shows the two gates are
+    // independent: the close turns on verification, the publish on a commit.
+    expect(goalOffers(store)).toEqual([]);
 
     acceptNode(store, "node-slice");
+
+    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+
+    seedLandingReceipt(store, "node-slice", "COMMITTED");
 
     expect(goalOffers(store)).toEqual([
       `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
@@ -511,6 +518,9 @@ describe("/affordances/read withholds goal.close until the product is verified",
   it("takes the offer away again when a new contract adds an unverified criterion", () => {
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
     acceptNode(store, "node-slice");
+    // Landed here so the roster below is NON-EMPTY: the arm must show the close alone was
+    // withdrawn, not that the whole per-goal ladder went dark.
+    seedLandingReceipt(store, "node-slice", "COMMITTED");
     expect(goalOffers(store)).toContain(`goal.close@${GOAL_ID}`);
 
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);

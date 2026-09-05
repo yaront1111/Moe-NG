@@ -16,6 +16,7 @@ import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
 
+import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
@@ -263,6 +264,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     // within a single answer — one roster is what makes the map and the node steps consistent.
     const nodes = config.nodes?.() ?? [];
     const ledger = readDurableLedger(config.store, config.projectId);
+    const landings = createGoalLandingReader(config.store, config.projectId, ledger);
     const planning = resolvePlanningOffers({
       // Derived per call, never cached: an acceptance that lands between two polls shows up on
       // the next one. The ladder invokes this only for a goal it could offer a close.
@@ -271,6 +273,11 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       compilerLane: createCompilerLanePort({
         ledger, projectId: config.projectId, store: config.store,
       }),
+      // ONE reader for the whole poll, reusing the ledger folded just above: its graph and
+      // review-ledger walks are deferred to the first publishable goal and then shared by all of
+      // them, so the surface cost does not multiply by the goal count. Derived per call for the
+      // same reason readiness is — a commit that lands between two polls shows up on the next.
+      landedCommit: landings.hasLandedCommit,
       ledger, mintId: config.mintId, projectId: config.projectId,
     });
     offers.push(...planning.offers);

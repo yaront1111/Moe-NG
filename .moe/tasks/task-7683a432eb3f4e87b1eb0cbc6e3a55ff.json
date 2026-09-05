@@ -17,8 +17,39 @@
     "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
     "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-6ec875f4dd5f4f2ab97e46f71bf57b2b (the durable probe loop, the bounded ring, exactly one incident), task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4 (backups proven restorable, retention, deployment.rollback), task-f008f29a38d54ae7a10e97cad1c4443d (the Deployments status, the incident card, the Health Environments section, the live drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (probe loop, one incident, bounded ring, survives restart with no double schedule) -> child task-6ec875f4; DoD 2 (store and pg_dump backups, restore-to-temp sha256 per receipt, retention listing pruned refs) -> child task-95e68a8d; DoD 3 (deployment.rollback human-only with roster backfill, previous image redeployed, DB restore only when requested, four refusals with code + layer) -> child task-95e68a8d; DoD 4 (Deployments card, incident card, Health Environments section, Playwright) -> child task-f008f29a; DoD 5 (the 10-minute live probe, forced failure, rollback) -> child task-f008f29a; DoD 6 (runbook, README, gates) -> child task-f008f29a. NOTE THE SIBLING SEAM EXPLICITLY: this whole feature reads the deploy receipt that task-04b3ce7e349743c2a156d32ee5550ba5 keeps, under a DIFFERENT parent (containerized deployment) that this row may not depend on. Record whether that row landed and whether the receipt shape the children built against matches what actually shipped — a mismatch makes every rollback resolve to nothing.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. `pnpm test` covers no apps/** (global rail 18) but IS real evidence here because child 2 touched packages/contracts and the generated client for the rollback kind. STATE WHETHER THE DOCKER-DEPENDENT AND TIME-DEPENDENT ARMS RAN: the live drive needs a deployed environment and ten minutes of real probing, and the restore checks need a real PostgreSQL — a gate output that looks complete while those never executed is the failure mode here. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. This is an INCIDENT feature: every defect here surfaces when someone is already having a bad day. (a) THE FLAPPING ENVIRONMENT: an environment that fails three probes, recovers, fails three again — does it raise a second incident, or reuse a closed one, and does the operator see a history or just the latest? Child 1 proved one-incident-per-outage; nobody proved the behaviour across repeated outages. (b) ROLLBACK TO A ROLLBACK: after rolling back from sha B to sha A, what does the 'previous' receipt point at, and can the operator roll forward again? A rollback that makes B unreachable strands them. (c) THE PROBE AND THE ROLLBACK DISAGREEING: the rollback redeploys and waits for health; the probe loop is also running. Can they race such that the probe records DOWN for the new deployment and raises an incident for a rollback that actually succeeded? (d) A BACKUP RESTORED INTO THE WRONG ENVIRONMENT: child 2 restores to temp for proof, but the rollback's optional DB restore targets a real database — confirm the environment is bound to the backup and cannot be crossed. That is the one path here that destroys data rather than availability. Where an answer is 'not covered', add it to the owning child's DoD or as a comment here (global rail 21).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMPLETE THE ROLL-UP. Name, item by item, which child discharged which DoD clause and where the evidence lives (task.verification, completionSummary, reviewSummary, landing shas). State EXPLICITLY: (a) whether the LIVE DRIVE ran — a deployed PREVIEW environment probed for at least ten minutes, a forced failure raising the incident card, and a rollback restoring the previous sha — quoting the probe-ring excerpt and the receipts, or saying plainly that no environment was deployed because the containerized-deployment row (a sibling) had not landed; (b) whether every backup in the live drive carried a PROVEN restore, since an unproven backup listed as present is the exact false comfort this feature exists to remove. Confirm the runbook and README describe the MEASURED state — what is probed, how often, what raises an incident, and what rollback does and does not restore. Detail over the 2000-char cap goes in a row comment under ~4500 chars (global rail 14). This row writes no production code: a gap found here is a comment on the owning child plus report_blocked.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +62,31 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-04T09:13:59.198Z"
+  "updatedAt": "2026-09-05T00:55:01.100Z",
+  "dependsOn": [
+    "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
+    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
+    "task-f008f29a38d54ae7a10e97cad1c4443d"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-05T00:54:09.078Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T00:54:58.934Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a durable probe scheduler with a bounded ring and incident lifecycle, a backup scheduler with per-receipt restore proofs and retention, a new human-only rollback command with roster backfill, three UI surfaces including an incident card and a sparkline, a Playwright journey and a ten-minute live drive — far past the 12-step/10-file thresholds, so task rail 1 mandates the SPIDR split. REJECTED, folding backups into the probe row: they share nothing but a schedule, and the restore-proof work is the heaviest single clause in the parent. REJECTED, letting child 3 own any part of the rollback effect: a proof row that repairs its own subject retires the question unanswered (global rail 4). REJECTED, expressing the deploy-receipt seam as dependsOn: task-04b3ce7e sits under the containerized-deployment parent, a SIBLING feature row, which the parent rail forbids depending on — so the children build against the receipt shape recorded there and this roll-up checks the match at step 2, which is the only place the mismatch would be visible before an operator hits it.",
+    "codebaseInsights": "MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb. THE GAP IS REAL: `/health/read` reports the DAEMON's own health only (apps/daemon/src/http/health-read.ts); `grep -rn 'moe-health-probe|rollback|BACKUP_' --include=*.ts apps/ packages/` finds no probe of a deployed product, no rollback kind and no backup schedule — only a BACKUP directory convention at bootstrap/activation-receipts-measure.ts:32-33 (BACKUP_DIRECTORY '.moe-next', BACKUP_LEAF 'backups'), which children 2 reuses rather than inventing a second tree. THE SEAM THAT MATTERS MOST: this entire feature resolves through the deploy receipt kept by task-04b3ce7e349743c2a156d32ee5550ba5 under the containerized-deployment parent — a sibling, so no dependsOn is allowed, and a receipt-shape mismatch would make every rollback resolve to nothing. THE MIGRATIONS ROW (task-78eedd8ebc2b43c581ac21ea28648a9a, another sibling parent's child) writes pg_dump backups into the SAME `.moe-next/backups` tree, so the two must agree on layout rather than interleaving schemes. UI CONSTRAINTS: ops-screens.tsx is 228 lines against a 250 ceiling so the Environments section needs its own module; needs-you-model.ts's NEEDS_YOU_KINDS roster (:28) is being extended concurrently by task-a988ca1c, task-33ceae56 and task-84cd2e55; every live read client decodes EXACT-KEY and needs a dev-proxy-paths pin.",
+    "risks": "BIGGEST RISK — false comfort. A backup listed as present but never restored, or an environment reported UP because its probe URL is missing, both tell an operator they are safe when they are not, and the discovery happens during an incident. Child 1 refuses PROBE_URL_MISSING rather than reporting UP; child 2 records a restore proof per receipt; step 5 requires stating whether the live drive's backups were actually proven. SECOND — an incident surface that floods: a per-probe raise puts a card a minute into Needs-you exactly when it must stay readable, which is why 'exactly one incident' is a DoD clause and why step 4(a) pushes on the flapping case nobody covered. THIRD — a silently doubled probe schedule after a restart, whose only symptom is a store filling twice as fast. FOURTH — the sibling receipt-shape mismatch, which would make rollback resolve to nothing; step 2 checks it. FIFTH — a DB restore crossing environments: child 2 proves restores into a temp database, but the rollback's optional restore targets a real one, and that is the single path in this feature that destroys DATA rather than availability (step 4(d)). SIXTH — time- and docker-dependent arms that never ran on the machine producing the gate output, leaving a complete-looking record for work that did not execute.",
+    "keyFiles": [
+      "apps/daemon/src/http/health-read.ts",
+      "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+      "apps/control-room/src/v2/ops/ops-screens.tsx",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/daemon/src/repository/landing-receipt-contracts.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T00:55:01.100Z"
 }
