@@ -10,6 +10,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { GOAL_CREATED_EVENT_TYPE, decodeGoalCatalogEntry } from "./goal-catalog-entry.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 const MAX_GOAL_PAGES = 16;
 const GOAL_PAGE_SIZE = 256;
@@ -70,20 +71,14 @@ export function lastDecidedAt(
 ): ReadonlyMap<string, string> {
   const latest = new Map<string, string>();
   if (aggregateIds.size === 0) return latest;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, DECISION_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      if (!aggregateIds.has(decision.targetAggregateId)) continue;
-      const seen = latest.get(decision.targetAggregateId);
-      if (seen === undefined || decision.decidedAt > seen) {
-        latest.set(decision.targetAggregateId, decision.decidedAt);
-      }
+  for (const decision of decisionsOf(store, DECISION_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
+    if (!aggregateIds.has(decision.targetAggregateId)) continue;
+    const seen = latest.get(decision.targetAggregateId);
+    if (seen === undefined || decision.decidedAt > seen) {
+      latest.set(decision.targetAggregateId, decision.decidedAt);
     }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
   }
   return latest;
 }

@@ -16,6 +16,7 @@ import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.j
 import { catalogBoundGoals } from "./document-coverage-goals.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 export const ACTIVITY_READ_PATH = "/activity/read" as const;
 const LAYER = "ACTIVITY_READ" as const;
@@ -138,28 +139,22 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
       const limit = goalId === null ? PROJECT_LIMIT : GOAL_LIMIT;
       const entries: ActivityEntry[] = [];
       let totalDecisions = 0;
-      let cursor = 0n;
-      for (;;) {
-        const page = store.readCommandDecisionsAfter(cursor, DECISION_PAGE_SIZE);
-        for (const decision of page.items) {
-          if (decision.key.projectId !== projectId) continue;
-          if (targets !== null && !targets.has(decision.targetAggregateId)) continue;
-          if (isSeatRecord(decision.commandKind, decision.targetAggregateId)) continue;
-          totalDecisions += 1;
-          const committed = decision.effectDisposition === "EFFECTS_COMMITTED";
-          entries.push(Object.freeze({
-            commandKind: decision.commandKind,
-            decidedAt: decision.decidedAt,
-            disposition: committed ? "COMMITTED" as const : "VERSION_CONFLICT" as const,
-            principalId: decision.key.principalId,
-            targetAggregateId: decision.targetAggregateId,
-            verdict: committed ? verdictOf(decision.commandKind, decision.resultBytes) : null,
-            version: committed ? decision.currentVersion : null,
-          }));
-          if (entries.length > limit) entries.shift();
-        }
-        if (!page.hasMore || page.nextCursor === null) break;
-        cursor = page.nextCursor;
+      for (const decision of decisionsOf(store, DECISION_PAGE_SIZE)) {
+        if (decision.key.projectId !== projectId) continue;
+        if (targets !== null && !targets.has(decision.targetAggregateId)) continue;
+        if (isSeatRecord(decision.commandKind, decision.targetAggregateId)) continue;
+        totalDecisions += 1;
+        const committed = decision.effectDisposition === "EFFECTS_COMMITTED";
+        entries.push(Object.freeze({
+          commandKind: decision.commandKind,
+          decidedAt: decision.decidedAt,
+          disposition: committed ? "COMMITTED" as const : "VERSION_CONFLICT" as const,
+          principalId: decision.key.principalId,
+          targetAggregateId: decision.targetAggregateId,
+          verdict: committed ? verdictOf(decision.commandKind, decision.resultBytes) : null,
+          version: committed ? decision.currentVersion : null,
+        }));
+        if (entries.length > limit) entries.shift();
       }
       entries.reverse();
       return Object.freeze({

@@ -60,6 +60,7 @@ export type {
   ServiceRefused,
   ServiceRefusedBy,
 } from "./bootstrap-ledger-vocabulary.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 const LEDGER_PAGE_SIZE = 200;
 const encoder = new TextEncoder();
@@ -97,21 +98,15 @@ export function readDurableLedger(store: SqliteEventStore, projectId: string): D
   const aggregates = new Map<string, DurableAggregate>();
   const kinds = new Set<string>();
   let decisionCount = 0;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      decisionCount += 1;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      kinds.add(decision.commandKind);
-      aggregates.set(decision.targetAggregateId, {
-        currentVersion: decision.currentVersion,
-        result: decodeResult(decision.resultBytes),
-      });
-    }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
+  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    decisionCount += 1;
+    if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
+    kinds.add(decision.commandKind);
+    aggregates.set(decision.targetAggregateId, {
+      currentVersion: decision.currentVersion,
+      result: decodeResult(decision.resultBytes),
+    });
   }
   return Object.freeze({ aggregates, decisionCount, kinds });
 }

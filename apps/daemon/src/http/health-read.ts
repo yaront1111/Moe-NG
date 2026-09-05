@@ -18,6 +18,7 @@ import { catalogBoundGoals } from "./document-coverage-goals.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 export const HEALTH_READ_PATH = "/health/read" as const;
 const LAYER = "HEALTH_READ" as const;
@@ -112,15 +113,9 @@ function pausedAgent(
 /** The latest committed decision instant for this project, one page walk. */
 function lastDecidedAt(store: SqliteEventStore, projectId: string): string | null {
   let last: string | null = null;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, DECISION_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      if (last === null || decision.decidedAt > last) last = decision.decidedAt;
-    }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
+  for (const decision of decisionsOf(store, DECISION_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    if (last === null || decision.decidedAt > last) last = decision.decidedAt;
   }
   return last;
 }

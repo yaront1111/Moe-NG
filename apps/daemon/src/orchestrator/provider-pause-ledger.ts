@@ -9,6 +9,7 @@ import {
 import type {
   ProviderPauseRecordV1, SeatExitCause, SeatExitRecordV1,
 } from "./provider-pause-contracts.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 /**
  * DURABLE WRAPPER FACTS: why a seat exited, and how long a provider is unusable.
@@ -204,26 +205,20 @@ export function readProviderPause(
   // An unreadable clock must not park the fleet forever: no answer beats an unbounded pause.
   if (!Number.isFinite(nowMs)) return null;
   let latest: ProviderPauseRecordV1 | null = null;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId
-        || decision.effectDisposition !== "EFFECTS_COMMITTED"
-        || decision.commandKind !== PROVIDER_PAUSE_COMMAND_KIND
-        || decision.key.principalId !== AGENT_WRAPPER_PRINCIPAL_ID
-        || decision.targetAggregateId !== aggregateId) {
-        continue;
-      }
-      const decoded = decodeProviderPauseBytes(decision.resultBytes);
-      if (!decoded.ok || decoded.record.provider !== provider
-        || decoded.record.projectId !== projectId) {
-        continue;
-      }
-      latest = decoded.record;
+  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId
+      || decision.effectDisposition !== "EFFECTS_COMMITTED"
+      || decision.commandKind !== PROVIDER_PAUSE_COMMAND_KIND
+      || decision.key.principalId !== AGENT_WRAPPER_PRINCIPAL_ID
+      || decision.targetAggregateId !== aggregateId) {
+      continue;
     }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
+    const decoded = decodeProviderPauseBytes(decision.resultBytes);
+    if (!decoded.ok || decoded.record.provider !== provider
+      || decoded.record.projectId !== projectId) {
+      continue;
+    }
+    latest = decoded.record;
   }
   if (latest === null) return null;
   return Date.parse(latest.resetAt) > nowMs ? latest : null;

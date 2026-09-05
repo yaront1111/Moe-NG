@@ -85,6 +85,7 @@ import type { CommandAdapterDeps, CommandAuthorityPlanePort } from "./http/http-
 import { admitV2ActiveInstallation } from "./cutover/cutover-v2-authority.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
+import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
 
 export interface StoreDependencyConfig {
   /** Optional deterministic command identity source for bounded harness composition. */
@@ -153,6 +154,9 @@ export function createStoreDependencies(
     projectId: config.projectId, storePath: config.storePath,
     verificationCatalogPath: config.verificationCatalogPath, workspaceCatalogPath: config.workspaceCatalogPath,
   });
+  // A long-lived handle keeps its decoded decision ledger: every read model over it tops up
+  // from the last position instead of re-walking the whole ledger per request.
+  enrollDecisionLedgerMemo(store);
   const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
     catalogSource: foundation.foundationCatalogSource,
     clock,

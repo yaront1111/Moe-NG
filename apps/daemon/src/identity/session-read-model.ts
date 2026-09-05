@@ -9,6 +9,7 @@ import {
   isPlainJsonObject,
 } from "./session-contracts.js";
 import { isRecoveryAuthenticationRef } from "./recovery-authentication-binding.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 /**
  * The read half of the session composition: every committed session decision for one project,
@@ -117,59 +118,53 @@ export function readSessionLedger(store: SqliteEventStore, projectId: string): S
   const sessions = new Map<string, SessionRecord>();
   let decisionCount = 0;
   let unreadable = false;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      if (!KIND_SET.has(decision.commandKind)) continue;
-      decisionCount += 1;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      const result = decodeResult(decision.resultBytes);
-      if (decision.commandKind === "session.open") {
-        const opened = parseOpened(result);
-        if (opened === undefined) {
-          unreadable = true;
-          continue;
-        }
-        sessions.set(opened.sessionId, {
-          ...opened,
-          status: "OPEN",
-          version: decision.currentVersion,
-        });
-        continue;
-      }
-      const sessionId = isPlainJsonObject(result) && isRef(result["sessionId"])
-        ? result["sessionId"]
-        : null;
-      const existing = sessionId === null ? undefined : sessions.get(sessionId);
-      if (existing === undefined) {
+  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    if (!KIND_SET.has(decision.commandKind)) continue;
+    decisionCount += 1;
+    if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
+    const result = decodeResult(decision.resultBytes);
+    if (decision.commandKind === "session.open") {
+      const opened = parseOpened(result);
+      if (opened === undefined) {
         unreadable = true;
         continue;
       }
-      if (decision.commandKind === "session.close") {
-        sessions.set(existing.sessionId, {
-          ...existing,
-          status: "CLOSED",
-          version: decision.currentVersion,
-        });
-        continue;
-      }
-      const expiresAt = isPlainJsonObject(result) && isIsoInstant(result["expiresAt"])
-        ? result["expiresAt"]
-        : null;
-      if (expiresAt === null) {
-        unreadable = true;
-        continue;
-      }
-      sessions.set(existing.sessionId, {
-        ...existing,
-        expiresAt,
+      sessions.set(opened.sessionId, {
+        ...opened,
+        status: "OPEN",
         version: decision.currentVersion,
       });
+      continue;
     }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
+    const sessionId = isPlainJsonObject(result) && isRef(result["sessionId"])
+      ? result["sessionId"]
+      : null;
+    const existing = sessionId === null ? undefined : sessions.get(sessionId);
+    if (existing === undefined) {
+      unreadable = true;
+      continue;
+    }
+    if (decision.commandKind === "session.close") {
+      sessions.set(existing.sessionId, {
+        ...existing,
+        status: "CLOSED",
+        version: decision.currentVersion,
+      });
+      continue;
+    }
+    const expiresAt = isPlainJsonObject(result) && isIsoInstant(result["expiresAt"])
+      ? result["expiresAt"]
+      : null;
+    if (expiresAt === null) {
+      unreadable = true;
+      continue;
+    }
+    sessions.set(existing.sessionId, {
+      ...existing,
+      expiresAt,
+      version: decision.currentVersion,
+    });
   }
   return Object.freeze({ decisionCount, sessions, unreadable });
 }

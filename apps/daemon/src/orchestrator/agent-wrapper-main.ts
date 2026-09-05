@@ -54,6 +54,7 @@ export type {
   WrapperRuntimeShutdownResources,
   WrapperStopSignal,
 } from "./process-runner-lifecycle.js";
+import { enrollDecisionLedgerMemo } from "../decision-ledger-memo.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -172,6 +173,7 @@ async function main(): Promise<void> {
     // those refuse PROJECT_SCOPE_REQUIRED on an unasserted handle — which would
     // fail every ONCE pass at its staffing commit.
     verifierStore = SqliteEventStore.openForProject(config.storePath, config.projectId);
+    enrollDecisionLedgerMemo(verifierStore);
 
     // Every node the verifier and the lander look at: spec-dir nodes, plus the
     // compiled nodes of every active graph (a compiled delivery would otherwise
