@@ -1,0 +1,35 @@
+{
+  "id": "task-b3888068c0e2481cb1463524ee7f2895",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The two environment kinds reach the shared runtime contract and the generated client",
+  "description": "Prerequisite LEAF carved out of task-a2409cba9ad841a690961692a2948c41 by worker-caece97b (acting as architect on a claimed PLANNING row), 2026-09-05. Second of two leaves; the other is task-d0d1cb5c3f034d50bd84b7ed56b7e812 (the MCP/human-only fence). a2409cba measured 13 forced file edits against the 10-file cap and submit_plan refused it at 11 with [CONSTRAINT_VIOLATION]. Parent chain: SPIDR child 1b of task-9ae492b373fa4e7aa6b1e91585f6e612.\n\nWHY THIS SEAM IS REAL, unlike the one tried first. The daemon's PAYLOAD_KEYS roster and the shared RUNTIME_COMMAND_KINDS roster are deliberately NOT set-equal, and the codebase says so in its own words at apps/daemon/src/goals/goal-create-with-source.ts:35 - \"kind `goal.create_with_source` is in `RUNTIME_COMMAND_KINDS` but NOT in\" the daemon table. A kind may therefore exist on the shared contract with no daemon registry entry: an established, deliberate state, not a hole this row invents.\n\nCONTRAST, so nobody re-proposes the OTHER split: apps/daemon/src/daemon-store-dependencies.test.ts:238 DOES weld the daemon's PAYLOAD_KEYS to the v2 registry by set-equality, which is why the daemon vocabulary and the daemon registry cannot be separated and stay together in a2409cba.\n\nWHAT THIS ROW OWNS: RUNTIME_COMMAND_KINDS in packages/contracts, its hand-transcribed test roster, and the REGENERATED control-room client. NO daemon vocabulary, NO PAYLOAD_KEYS, NO registry, NO handler, NO MCP roster - a2409cba and task-d0d1cb5c own those.\n\nMEASURED SEAMS (worker-caece97b at HEAD f3b94eaa):\n- packages/contracts/src/runtime/runtime-vocabulary.ts:85-117 - RUNTIME_COMMAND_KINDS, a frozen alphabetical tuple. runtime-contract.test.ts:124 asserts sortedness, so insert in sorted position.\n- packages/contracts/src/runtime/runtime-contract.test.ts:103-104 - `expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS)` against a HAND-TRANSCRIBED list, plus a LITERAL count of 102. That file's own header at :30-32 explains a derived expectation would be vacuous. Transcribe by hand; do NOT replace it with RUNTIME_COMMAND_KINDS.length.\n- packages/contracts/src/runtime/runtime-vocabulary.js is `export * from \"./runtime-vocabulary.ts\";` - a star re-export. NO EDIT NEEDED.\n- packages/control-room-client/src/generated/generated-client.ts:907 - GENERATED_CONTRACT_DIGEST, currently ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076. Re-read it rather than trusting this value.\n- packages/control-room-client/package.json:18 - the generator is `pnpm --filter @moe/control-room-client generate`.\n- TWO GREEN-CHECKS, NOT EDITS: src/contract-digest.test.ts:21 (deriveContractDigest equals the pin) and src/generated-coverage.test.ts:89-90 (generated builder set equals RUNTIME_COMMAND_KINDS, asserted in BOTH directions). Both go green on their own once the generator runs. If either needs hand-editing, the generator did not run or the contract edit was wrong.\n- apps/daemon/src/cutover/v2-surface-manifest.ts:86 builds GLOBAL_COMMANDS from RUNTIME_COMMAND_KINDS. Check it does not demand a matching daemon entry before assuming the daemon suite stays green.",
+  "definitionOfDone": [
+    "`environment.set_variable` and `environment.unset_variable` are members of RUNTIME_COMMAND_KINDS in packages/contracts, inserted in SORTED position (runtime-contract.test.ts:124 asserts sortedness).",
+    "runtime-contract.test.ts gains both kinds in its HAND-TRANSCRIBED EXPECTED_COMMAND_KINDS and its literal count moves 102 -> 104, with the transcribed form preserved - replacing it with a derived length is a regression that file's header at :30-32 forbids. Prove the arm still bites: remove ONE kind from the production roster, confirm the test REDS, restore.",
+    "The generated client is REGENERATED with `pnpm --filter @moe/control-room-client generate`, never hand-edited, and BOTH the OLD and NEW GENERATED_CONTRACT_DIGEST are quoted verbatim in the completion record.",
+    "contract-digest.test.ts and generated-coverage.test.ts are GREEN WITHOUT BEING EDITED - quote their `Test Files N passed` count line. If either required an edit, say so and explain why, because it means the generator was bypassed.",
+    "PROVE THE DAEMON IS UNDISTURBED, since this row deliberately leaves both kinds absent from the daemon's PAYLOAD_KEYS: run `pnpm --filter @moe/daemon test` and attribute any red per global rail 3 (HEAD failures minus merge-base failures, intersected with owned paths). Name `goal.create_with_source` as the precedent that makes this intermediate state legitimate.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm test` (the root include DOES cover packages/**, so this row is genuinely covered by it), `pnpm typecheck`, and the daemon run above as the attribution baseline."
+  ],
+  "taskRails": [
+    "NEVER HAND-EDIT the generated client. Run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST.",
+    "ADD ONLY, IN SORTED POSITION. Do not reorder or remove any existing kind - runtime-contract.test.ts asserts both the exact roster and its sortedness, and a reorder is the silent edit those arms exist to catch.",
+    "NO DAEMON WORK. Do not touch daemon-command-vocabulary.ts, PAYLOAD_KEYS, the registry, the MCP roster or HUMAN_ONLY_STEPS - those belong to task-a2409cba and task-d0d1cb5c. Adding these kinds to the daemon's PAYLOAD_KEYS here would red daemon-store-dependencies.test.ts:238.",
+    "A kind on the shared contract with no daemon registry entry is a DELIBERATE, EXISTING state - goal.create_with_source is the precedent (goal-create-with-source.ts:35). Do not 'complete' the wiring to make it look finished."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 101.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:10:14.031Z",
+  "updatedAt": "2026-09-05T14:10:14.031Z"
+}

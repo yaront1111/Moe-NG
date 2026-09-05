@@ -232,6 +232,7 @@ export interface GeneratedCommandBuilders {
   readonly ["planning.submit_decomposition"]: CommandBuilder<"planning.submit_decomposition">;
   readonly ["policy.install"]: CommandBuilder<"policy.install">;
   readonly ["policy.validate"]: CommandBuilder<"policy.validate">;
+  readonly ["preview.decide"]: CommandBuilder<"preview.decide">;
   readonly ["product_contract.answer_clarification"]: CommandBuilder<"product_contract.answer_clarification">;
   readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
   readonly ["product_contract.ask_clarification"]: CommandBuilder<"product_contract.ask_clarification">;
@@ -339,6 +340,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["planning.submit_decomposition"]: commandBuilderFor("planning.submit_decomposition"),
     ["policy.install"]: commandBuilderFor("policy.install"),
     ["policy.validate"]: commandBuilderFor("policy.validate"),
+    ["preview.decide"]: commandBuilderFor("preview.decide"),
     ["product_contract.answer_clarification"]: commandBuilderFor("product_contract.answer_clarification"),
     ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
     ["product_contract.ask_clarification"]: commandBuilderFor("product_contract.ask_clarification"),
@@ -902,7 +904,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28";
+export const GENERATED_CONTRACT_DIGEST = "ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

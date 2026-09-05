@@ -89,12 +89,19 @@
     {
       "stepId": "step-6",
       "description": "ADVERTISE IT, BY HAND, ON PURPOSE. Add \"design.read\" to MCP_SERVED_QUERY_KINDS in apps/daemon/src/mcp-tool-allowlist.ts:27. DO NOT import servedMcpQueryKinds() to derive it (risk R2): the file header at :15-24 states that the query half is hand-kept precisely so it is an INDEPENDENT oracle, and importing the served set would make mcp-tool-allowlist.test.ts's set-equality assertion tautological. Then reconcile the count pins in apps/daemon/src/mcp-tool-allowlist.test.ts, taking the numbers from the assertion's PRINTED expected-vs-received and never from this plan: the literal object at :164 (`{ excluded: 6, queries: 6, vocabulary: 46, wired: 46 }`) moves on BOTH `queries` and `wired`, because :126-129 and :147-150 compute wired as commands plus MCP_SERVED_QUERY_KINDS.length. Leave :142 alone - that pins MCP_EXCLUDED_COMMAND_KINDS, a different roster this row does not touch. Rail 19 enumeration is already done and recorded in planningNotes: graph-preview-query.test.ts:224 uses only toContain and needs NO edit; mcp-main.test.ts and mcp-http-host.test.ts carry zero references to this roster.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/mcp-tool-allowlist.ts",
         "apps/daemon/src/mcp-tool-allowlist.test.ts"
       ],
-      "startedAt": "2026-09-05T13:59:30.724Z"
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-design-read-query.ts",
+        "apps/daemon/src/mcp-design-read-query.js",
+        "apps/daemon/src/mcp-design-read-query.test.ts"
+      ],
+      "note": "STEP EXECUTED, THEN REVERTED ON A MEASUREMENT THAT INVALIDATES MY OWN PLANNING NOTE. Advertising design.read before task-06ac0da1 lands would stop the MCP server from CONSTRUCTING. Details, because the correction matters more than the step:\n\nWHAT I DID: added \"design.read\" to MCP_SERVED_QUERY_KINDS, composed a real design port in the allowlist test (mirroring `contract`), added its PAYLOAD_FOR probe entry and the store close, and reconciled the count pin from the PRINTED expected-vs-received to `{excluded: 6, queries: 7, vocabulary: 46, wired: 47}`.\n\nWHAT THAT SURFACED: `Error: MCP_TOOL_ALLOWLIST_UNKNOWN_KIND: design.read has no generated tool`, thrown from packages/mcp/src/stdio/stdio-tool-schemas.ts:240.\n\nTHE CHAIN, measured end to end:\n- `generateStdioToolEntries()` (stdio-tool-schemas.ts:199-204) derives one tool per kind from RUNTIME_COMMAND_KINDS and RUNTIME_QUERY_KINDS — the packages/contracts vocabularies, nothing else.\n- `allowlistedToolEntries()` (:230-244) THROWS on any allowlisted kind with no generated entry, deliberately: its own doc says \"It REFUSES rather than dropping ... silently advertising a shorter list would hide that until an agent called a tool that was never there.\"\n- Both MCP servers construct through it: stdio-server.ts:235 and http/http-tool-bridge.ts:53.\n- Both production entries pass `toolAllowlist: wiredMcpToolKinds()` (mcp-main.ts:135, mcp-http-host.ts), and `wiredMcpToolKinds()` spreads MCP_SERVED_QUERY_KINDS (mcp-tool-allowlist.ts:89).\nSo the roster entry does not merely red a test — it makes the daemon's MCP entry throw at startup. Strictly worse than not shipping.\n\nI WAS WRONG IN planningNotes.codebaseInsights FACT 1, and precisely where. The measurement was right — `dispatchQueryBytes` routes only on `Object.hasOwn(QUERY_HANDLERS, kind)` and consults no vocabulary — but I generalised it from the DISPATCH path to the ADVERTISEMENT path, and DoD 1 requires the advertisement. The row's declared dependency on task-06ac0da1 was correct and my note overturning it was not. approachesConsidered item 1 (block on 06ac0da1) was the right call for a reason I had not found yet.\n\nREVERTED, exactly three tracked files, via `git checkout --` on named paths: mcp-tool-allowlist.ts, mcp-tool-allowlist.test.ts, mcp-dispatch-port.ts (step 5's wiring goes with it — a handler served but unadvertised reds the parity arm in the other direction, so the pair cannot land half). `grep -c design.read` on all three => 0, 0, 0. Peer dirt at apps/daemon/src/http/http-listener-read-dispatch.test.ts is worker-b33940f5's on task-bc4617d6 and was NOT touched.\n\nWHAT SURVIVES, green and standalone: apps/daemon/src/mcp-design-read-query.{ts,js,test.ts} — the answerer, its bridge, its 11 drilled arms. Verified after the revert: `npx tsc --project tsconfig.json --noEmit` EXIT 0; `npx vitest run --root . --config package.json --no-file-parallelism src/mcp-design-read-query.test.ts src/mcp-tool-allowlist.test.ts src/mcp-dispatch-port.test.ts` => `Test Files 3 passed (3)` / `Tests 54 passed (54)`, EXIT 0. The tree is GREEN at every leg I own.\n\nThe module has no consumer edge yet (global rail 4 clause 1). Its consumer is THIS row's steps 5 and 6, which are three lines each and resume the moment task-06ac0da1 puts design.read on RUNTIME_QUERY_KINDS. Reporting blocked on that row next.",
+      "startedAt": "2026-09-05T13:59:30.724Z",
+      "completedAt": "2026-09-05T14:03:32.874Z"
     },
     {
       "stepId": "step-7",
@@ -123,7 +130,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -136,15 +143,22 @@
   ],
   "priority": "HIGH",
   "order": 61.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-e6ac2ad45f464e1eafef01b1696348bc",
+      "author": "worker-d6e44333",
+      "content": "FOR task-06ac0da1's WORKER, and for whoever resumes this row. The remaining work here is SIX LINES. Everything else is landed, green and drilled.\n\nWHAT IS ALREADY ON THE BRANCH (untracked at the time of writing, carried by this row's wip checkpoint): apps/daemon/src/mcp-design-read-query.ts (111 lines), its one-line .js bridge, and mcp-design-read-query.test.ts (11 arms, all drilled to red and restored). `npx tsc --project tsconfig.json --noEmit` EXIT 0; targeted vitest over the three MCP files `Test Files 3 passed (3)` / `Tests 54 passed (54)` EXIT 0.\n\nWHAT UNBLOCKS IT: `design.read` must be a member of `RUNTIME_QUERY_KINDS` in packages/contracts/src/runtime/runtime-vocabulary.ts:74. Nothing else. That roster is what `generateStdioToolEntries()` (packages/mcp/src/stdio/stdio-tool-schemas.ts:199-204) iterates to build one tool per kind, and `allowlistedToolEntries()` (:230-244) THROWS `MCP_TOOL_ALLOWLIST_UNKNOWN_KIND` for any allowlisted kind it cannot find there. Both MCP servers construct through that function (stdio-server.ts:235, http/http-tool-bridge.ts:53) on `toolAllowlist: wiredMcpToolKinds()`, so an advertised-but-ungenerated kind is a STARTUP THROW, not a test red.\n\nTHE SIX LINES, once that lands:\n1. mcp-tool-allowlist.ts:27 — add `\"design.read\",` to MCP_SERVED_QUERY_KINDS. By hand, NOT derived: the file header at :16-24 says the query half is hand-kept so it stays an independent oracle, and importing servedMcpQueryKinds() would make the parity assertion tautological.\n2. mcp-dispatch-port.ts — import `answerDesignReadQuery` and the `DesignReadPort` type; add `design?: DesignReadPort | undefined` to McpDispatchPortConfig; add a five-line `answerDesignRead` adapter and the `\"design.read\": answerDesignRead` key to QUERY_HANDLERS. SERVED_QUERY_KINDS and servedMcpQueryKinds() follow automatically. FILE SIZE WARNING: that edit takes the file 376 -> 394 lines against a 400 split bar. Six lines of headroom.\n3. mcp-tool-allowlist.test.ts — compose the port (`design: createDesignReadPort({ store: designStore })` with its own `SqliteEventStore.openForProject(storePath, PROJECT)` and a `designStore.close()` in afterAll), add `\"design.read\": { goalRef: \"goal-allowlist-probe\" }` to PAYLOAD_FOR, and move the count pin to `{excluded: 6, queries: 7, vocabulary: 46, wired: 47}`. Take those numbers from the PRINTED expected-vs-received, not from this comment.\n\nTHE COMPOSITION IS NOT OPTIONAL. The arm \"names only query kinds the production port actually serves\" dispatches EVERY advertised kind through the real port and requires it not to return the generic INPUT_INVALID. An uncomposed `design` port refuses exactly that way, making design.read indistinguishable from a kind the daemon does not serve. `createDesignReadPort({store})` is already exported from mcp-design-read-query.ts for this.\n\nTWO THINGS I MEASURED THAT ARE NOT WRITTEN DOWN ANYWHERE ELSE:\n- `DesignReadInput` needs `projectId`, and DoD 4's \"payload is {goalRef} plus optional version\" is only consistent because projectId is taken from the AUTHENTICATED PRINCIPAL. That is load-bearing: `readDesignRevision` (design-store.ts:196-201) checks the stored record against the INPUT, so a caller-supplied projectId would agree with itself and hand out a cross-project read. Two arms pin it — a payload naming projectId is refused, and a principal bound to another project gets DESIGN_RECORD_MALFORMED. The drill that proves it is NOT the obvious one: replacing the principal read with `payload.projectId ?? principal.projectId` stays GREEN, because the unknown-key whitelist refuses that payload first. Hard-coding the projectId is the mutation that bites.\n- `mcp-main.ts:121` composes NO `contract` port either, so `product_contract.read` is already advertised-but-uncomposed on the stdio entry at HEAD. Pre-existing, not this row's, but design.read will inherit the same condition unless someone wires both. Worth a row.",
+      "timestamp": "2026-09-05T14:03:55.532Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:30:16.693Z",
-  "updatedAt": "2026-09-05T13:59:30.724Z",
+  "updatedAt": "2026-09-05T14:04:24.121Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:41:35.541Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -155,7 +169,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T13:46:27.085Z",
@@ -173,5 +188,12 @@
     ]
   },
   "planApprovedAt": "2026-09-05T13:46:29.295Z",
-  "workStartedAt": "2026-09-05T13:46:31.647Z"
+  "workStartedAt": "2026-09-05T13:46:31.647Z",
+  "blockedReason": "ADVERTISING design.read NOW WOULD STOP THE MCP SERVER FROM CONSTRUCTING. Measured by doing it: `Error: MCP_TOOL_ALLOWLIST_UNKNOWN_KIND: design.read has no generated tool`, from packages/mcp/src/stdio/stdio-tool-schemas.ts:240. Handoff detail in comment-e6ac2ad4.\n\nCHAIN: `generateStdioToolEntries()` (:199-204) builds one tool per kind from RUNTIME_COMMAND_KINDS + RUNTIME_QUERY_KINDS and nothing else; `allowlistedToolEntries()` (:230-244) THROWS on an allowlisted kind with no generated entry, by design (\"REFUSES rather than dropping\"); both MCP servers construct through it (stdio-server.ts:235, http-tool-bridge.ts:53) on `toolAllowlist: wiredMcpToolKinds()`, which spreads MCP_SERVED_QUERY_KINDS. So DoD 1 is a daemon STARTUP THROW until design.read is on RUNTIME_QUERY_KINDS — packages/contracts, which task rail 2 forbids me editing and task-06ac0da1 owns.\n\nI GOT THIS WRONG AT PLAN TIME AND AM CORRECTING IT. planningNotes fact 1 measured truly that `dispatchQueryBytes` routes only on `Object.hasOwn(QUERY_HANDLERS, kind)` with no vocabulary check, then wrongly generalised from the DISPATCH path to the ADVERTISEMENT path. The row's declared dependsOn was right.\n\nDELIVERED AND GREEN on the wip checkpoint: apps/daemon/src/mcp-design-read-query.{ts,js,test.ts} — answerer (111 lines), bridge, 11 arms each drilled to red and restored (SHA256-proved; module untracked, so git diff certifies nothing). After the revert: tsc --noEmit EXIT 0; targeted vitest over the three MCP files => Test Files 3 passed (3) / Tests 54 passed (54), EXIT 0.\n\nREVERTED exactly three tracked paths by name. Step 5's wiring went with them: a served-but-unadvertised kind reds the parity arm the other way, so the pair cannot land half. Peer dirt at http-listener-read-dispatch.test.ts (worker-b33940f5) untouched.\n\nRESUMING IS SIX LINES, enumerated in comment-e6ac2ad4 with the count pin, the required test-side port composition, and a warning that the port file lands at 394 of its 400-line bar.",
+  "blockedOnTaskIds": [
+    "task-06ac0da1ace64032855affc4ab0c1a4e"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T14:04:24.121Z"
 }

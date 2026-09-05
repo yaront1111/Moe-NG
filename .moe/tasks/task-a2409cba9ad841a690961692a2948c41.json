@@ -18,8 +18,95 @@
     "HUMAN_ONLY_STEPS has exactly ONE definition (agent-spawn-contract.ts:195); agent-wrapper.ts:24 re-exports it. Do not look for a second.",
     "NEVER HAND-EDIT the generated client; run the generator and quote both digests."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, NO EDITS. Both prerequisites must be DONE before this row is claimable; confirm what they landed so you do not redo or contradict it. (a) `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts` - BOTH kinds must already be present in MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS (task-d0d1cb5c). If absent, STOP and report_blocked on task-d0d1cb5c rather than doing its work here: registering these kinds before the fence exists advertises an operator-only command to every agent over MCP. (b) `grep -n 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` - both kinds must be in RUNTIME_COMMAND_KINDS (task-b3888068). Then re-measure this row's own seams, since the plan's line numbers are from f3b94eaa and rail 6 makes them stale: `sed -n '178,186p' apps/daemon/src/daemon-command-vocabulary.ts` (FAMILY_TABLES and its member list), `grep -n 'toHaveLength(46)\\|registry.size).toBe(46)' apps/daemon/src/daemon-command-registry.test.ts` (the three counts), `sed -n '236,240p' apps/daemon/src/daemon-store-dependencies.test.ts` (the weld). Record every command and its result in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE DAEMON VOCABULARY. In apps/daemon/src/daemon-command-vocabulary.ts: (a) declare the two kind constants following the file's existing `*_COMMAND_KIND` convention; (b) add both to the `WiredCommandKind` union at :160; (c) add an ENVIRONMENT_FAMILY table mapping both to a capability and ADD IT TO `FAMILY_TABLES` at :180 - familyCapabilityOf walks only that array, so a table not listed there is dead and the capability resolves null; (d) add both to PAYLOAD_KEYS with ORDERED allow-lists, [\"environment\", \"name\", \"value\"] for set and [\"environment\", \"name\"] for unset, sorted as the neighbouring entries are because the registry asserts ORDER not just membership; (e) add both to OPERATOR_PRINCIPAL_KINDS at :344 with a comment in the file's convention saying why - an agent that could set a variable could set one the deploy then delivers to a production process. CAPABILITY CHOICE, stated so it is not re-derived: use CAPABILITIES.ADMIN. ADMIN fences REACH; the human-only fence is OPERATOR_PRINCIPAL_KINDS plus the MCP exclusion, exactly as the file's own comment at :341-343 says of `resource.confirm_released`. Watch the line count: the file is at 372 against a 400 hard split.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE FAMILY WIRING AND THE FIRST PAYLOAD TEST TABLE. Add the environment family to apps/daemon/src/daemon-command-families.ts following the shape of its neighbours, so an entry's demanded capability and an agent's granted set keep coming from one list. Then add both kinds' rows to the payload-key table in apps/daemon/src/daemon-command-vocabulary.test.ts (~:170-182) - that table is invisible to a grep for the kind literal in production source, which is why the row description calls it out. Gate this step alone: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts`, quoting the `Test Files N passed` count line. EXPECT daemon-store-dependencies.test.ts:238 TO BE RED from here until step 5 registers the handlers - that is the weld doing its job. Say so in the step note; do NOT 'fix' it by editing that file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE HANDLERS, in a NEW apps/daemon/src/daemon-command-environment.ts plus its one-line `.js` bridge (`export * from './daemon-command-environment.ts';`, the convention every daemon module here follows). Thin adapters ONLY: validate nothing the store already validates, translate the envelope into the store's input, and pass the ENVELOPE'S commandId through to setEnvironmentVariable / unsetEnvironmentVariable so a retried command dedupes in the store instead of double-writing - the optional commandId field exists for exactly this caller. Return the store's EnvironmentReadResult refusals UNCHANGED; catching and re-wrapping them silently rewrites the layer. Build EnvironmentStoreConfig {store, projectId, now, credential} from the daemon's existing dependencies and resolve the credential the way the rest of the daemon does rather than reading a file here. TDD: write the test file first and confirm it REDS with `Cannot find module './daemon-command-environment.js'` before any production byte exists; quote that red in the note.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.ts",
+        "apps/daemon/src/daemon-command-environment.js",
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "REGISTRY WIRING AND THE THREE HARD COUNTS. Register both kinds in apps/daemon/src/daemon-command-registry.ts via `entryOf` (~:205-212) following the neighbouring entries; the file is already 436 lines past the 400 split, so add the minimum and keep bodies in the new module. Then apps/daemon/src/daemon-command-registry.test.ts: add both rows to the payload table (~:197-203) AND to the flat roster REGISTRATION_ORDER (~:283-300, transcribed BY HAND from PAYLOAD_KEYS, whose ORDER is asserted at :827), and change all three counts 46 -> 48 at :818, :819 and :826. Then confirm the weld released: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-store-dependencies.test.ts` must be GREEN with NO edit to that file. If it is red, a kind is in PAYLOAD_KEYS but not in the registry - fix the registry, never that test.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE INGRESS CANARY - THIS ROW'S REASON FOR EXISTING (DoD 3), in the new test module. It covers the ONE surface task-d0c63cd8's canary provably cannot: that row greps the store, events, reads and receipts, and environment-store.ts:99-103 already writes commandBytes carrying only {environment, kind, name}. THE ENVELOPE, BY CONTRAST, CARRIES THE VALUE. Push a fresh `MOE_CANARY_<randomBytes(16).toString('hex')>` - fresh PER TEST, because a shared constant can be matched by an unrelated fixture and turn a leak green - through the REAL command path, then search FOR THE PLAINTEXT OVER BYTES, never over parsed values, in: (a) the refusal detail of a DELIBERATELY MALFORMED request that still carries a valid value, since the classic leak is an error string echoing what was submitted; (b) the command decision record; (c) the request-bytes digest path; (d) every daemon log line the dispatch writes. ZERO occurrences on all four. ANTI-VACUITY CONTROL, MANDATORY: assert each surface is NON-EMPTY and that something you EXPECT to be there IS found (the variable name, the command id) - otherwise 'no plaintext' is satisfied by searching nothing, which is exactly how this class of test lies. Copy the shape from apps/daemon/src/environment/environment-canary.test.ts, which does this for the store.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE FENCE ASSERTED BEHAVIOURALLY, AND THE FOUR CODES AT THE EDGE (DoD 1, 2, 4). (a) BIDIRECTIONAL SET-EQUALITY enumerating the SERVED kinds FROM THE DISPATCH SEAM - the registry's handled kinds - not from the roster constant: global rail 9, because a test that iterates the roster shrinks its own iteration when an entry is deleted and stays green. Verify by DELETING each of the two entries from EACH side in turn and confirming every deletion REDS; record all four outcomes. (b) An AGENT-authenticated dispatch of each kind is REFUSED with the code asserted, while an OPERATOR-authenticated one REACHES the handler. Roster membership is not the assertion - the behaviour is; the membership half already landed with task-d0d1cb5c. (c) All four store refusal codes surface at the command edge with code AND layer asserted - ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_STORE_KEY_UNAVAILABLE/KEY - and NONE of their messages contains the submitted value. Assert that explicitly per surface: an error string is where this leaks.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL REVIEW AND DRILLS (global rail 1). Read your own diff as an attacker first. Then drill, each recorded with its outcome: (1) make the refusal detail interpolate the submitted value - the step-6 canary MUST red; (2) delete one kind from OPERATOR_PRINCIPAL_KINDS - the agent-refused arm MUST red; (3) delete one kind from the registry while leaving it in PAYLOAD_KEYS - daemon-store-dependencies.test.ts:238 MUST red. RESTORE PROOF (global rail 13): run `git status --porcelain` on the mutated paths FIRST. The new module and its test are UNTRACKED, so `git diff` is blind to them and certifies nothing - prove those restores by SHA256 against an out-of-tree backup in %TEMP% suffixed with your worker id, in a call SEPARATE from the restore. Tracked files may use `git diff`. Also answer in the note: what happens on a concurrent double-set of the same variable (you pass the envelope commandId - show the store dedupes rather than double-writing), and what happens when a null, undefined or non-string value arrives over the wire.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "GATES AND COMPLETION (DoD 6). Run both legs in the FOREGROUND, quoting each `Test Files N passed` count line - an exit code alone is not evidence (global rail 8) and a background run dies with a one-shot session. (1) `pnpm --filter @moe/daemon test`; (2) `pnpm typecheck`, confirming the `apps/daemon typecheck$ tsc` script echo is present since that echo is the execution evidence. `pnpm test` is NOT required of this row as re-scoped: the root vitest include is [adapters,packages,tests,tools]/** with no apps/**, and the packages/** half of the original DoD moved to task-b3888068. SAY THAT EXPLICITLY rather than quoting a vacuous run. For any foreign red apply global rail 3: record failures at the merge-base and at HEAD, subtract, intersect with this row's owned paths, and disclose the red VERBATIM with file and line. Known at plan time: src/work/foundation-* reds with timeout-only failures unrelated to this row. Do NOT run two suites concurrently while measuring - it moves the red count on an unchanged tree. The completion record must carry: the three 46->48 counts, the four roster-deletion drill outcomes, the canary's four surfaces, and the confirmation that daemon-store-dependencies.test.ts is green UNEDITED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,5 +122,33 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T08:42:20.804Z"
+  "updatedAt": "2026-09-05T14:11:35.911Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:01:30.843Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "worker-caece97b"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:11:33.649Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLIT DAEMON VOCABULARY FROM DAEMON REGISTRY - the obvious cut, tried first. REJECTED on measurement: daemon-store-dependencies.test.ts:238 welds them by set-equality. Do not re-propose it.\n\nONE KIND PER ROW (set_variable, then unset_variable) - REJECTED: the same files are touched twice and the second row re-opens every roster. Reduces nothing, doubles the merge surface.\n\nSPLIT THE FENCE OUT (task-d0d1cb5c) - ADOPTED. The only piece that detaches, and only in the exclude-before-register direction.\n\nSPLIT THE SHARED CONTRACT OUT (task-b3888068) - ADOPTED after checking the seam is not welded: goal-create-with-source.ts:35 documents that `goal.create_with_source` is in RUNTIME_COMMAND_KINDS but NOT in the daemon table, so contract-without-daemon-entry is an established deliberate state.\n\nPUT THE HANDLERS IN AN EXISTING FILE to save a path against the cap - REJECTED: daemon-command-registry.ts is already 436 lines, past the 400 hard split, and daemon-command-edges.ts is 273. A new module is the compliant home and the two leaves bought the budget for it.",
+    "codebaseInsights": "MEASURED AT HEAD f3b94eaa by worker-caece97b 2026-09-05. Every claim in the row description was re-checked; two were incomplete and one seam was wrong.\n\nSCOPE NARROWED TWICE AT PLAN TIME. The row as filed measured 13 forced file edits and submit_plan refused it at 11 with [CONSTRAINT_VIOLATION] (newFiles count toward the 10 cap). Two prerequisite leaves were carved out and this row now owns the DAEMON HALF ONLY:\n- task-d0d1cb5c (order 101.2) - the MCP exclusion + HUMAN_ONLY_STEPS fence. Must land FIRST: excluding a kind that does not exist is a provable no-op, whereas registering before excluding advertises an operator-only command to every agent over MCP. Ordering here is SAFETY, not paperwork.\n- task-b3888068 (order 101.3) - RUNTIME_COMMAND_KINDS in packages/contracts plus the regenerated client.\nThis row therefore does NOT touch mcp-tool-allowlist.ts, agent-spawn-contract.ts, daemon-command-registry-human-approver.test.ts, packages/contracts or packages/control-room-client. DoD 5's client-regeneration clause and the MCP/HUMAN_ONLY half of DoD 1 and 2 moved with those leaves; what remains here is the daemon roster, the handlers, the behavioural fence assertions and the ingress canary.\n\nCONFIRMED AS THE DESCRIPTION SAYS: OPERATOR_PRINCIPAL_KINDS is a ReadonlySet at daemon-command-vocabulary.ts:344. FAMILY_TABLES at :180 is the searched list and familyCapabilityOf walks ONLY that array, so a new family table not added there is dead code and the kind's capability resolves null. PAYLOAD_KEYS is at :256 and the registry asserts payload ORDER, not just membership.\n\nINCOMPLETE IN THE DESCRIPTION - forced edits it does not name, invisible to a grep for the kind literals: daemon-command-registry.test.ts:818-826 carries `expect(ROWS).toHaveLength(46)`, `expect(deps.registry.size).toBe(46)` and `expect(REGISTRATION_ORDER).toHaveLength(46)`. All three become 48. REGISTRATION_ORDER (~:281) is transcribed BY HAND from PAYLOAD_KEYS and its ORDER is asserted separately at :827.\n\nTHE WELD THAT DEFINES THIS ROW'S SHAPE: daemon-store-dependencies.test.ts:238 asserts set-equality between the v2 plane's registry keys and Object.keys(PAYLOAD_KEYS) minus `planning.submit_decomposition`. Adding to PAYLOAD_KEYS without registering BOTH handlers reds it. That is why vocabulary and registry are one row. THAT FILE NEEDS NO EDIT - it stays green once both kinds are registered, and it is the TRIPWIRE for a half-done job, not a file to change.\n\nTHE STORE SURFACE THIS ROW CONSUMES (landed by task-d0c63cd8, which I reviewed and approved): setEnvironmentVariable(config, {commandId?, environment, name, value}) and unsetEnvironmentVariable(config, {commandId?, environment, name}), both returning EnvironmentReadResult; readEnvironmentVariables(config, environment). EnvironmentStoreConfig = {store, projectId, now, credential: EnvironmentCredentialSource}. The optional commandId was added BY THAT ROW SPECIFICALLY SO THIS ONE CAN PASS THE ENVELOPE'S commandId and get store-level dedupe - use it, do not let the store mint its own. Same package (apps/daemon), relative import, so global rail 7's dependency-edge check does not apply.\n\nALREADY SAFE UPSTREAM, do not redo it: environment-store.ts:99-103 writes commandBytes carrying only {environment, kind, name} - the command record deliberately holds NO value. This row's exposure is the DAEMON ENVELOPE path, which DOES carry the value.",
+    "risks": "LINE CAPS ARE ALREADY BREACHED BEFORE THIS ROW STARTS. daemon-command-registry.ts is 436 lines (past the 400 hard split) and daemon-command-vocabulary.ts is 372 and rising. Adding two kinds to each pushes both further. Add the minimum, keep handler BODIES in the new module, and if vocabulary crosses 400 split it by responsibility (kind constants vs payload table) rather than by line count, saying so in the step note. A pre-existing breach is not licence to widen it.\n\nTHE VALUE IS IN THE ENVELOPE ON THIS PATH, unlike child 1a's. Everything generic the ingress does with payloads - a refusal detail echoing the request, a decision record, a request-bytes digest, a debug line - is a leak for environment.set_variable and for no other kind on this board. Step 6 is the row's reason for existing; do not thin it because the store already passed a canary. Child 1a's canary provably cannot see this surface.\n\nTHE FOUR REFUSAL CODES ARE RAISED BY THE STORE. A handler that catches and re-wraps them silently changes the layer. Pass them through and assert code AND layer at the command edge (global rail 1).\n\nA LOST VERSION-CONFLICT RACE propagates the store's ExpectedVersionConflictError and is deliberately NOT a fifth refusal code (task-d0c63cd8's step-7 note records the reasoning). Do not convert it into one; pass the envelope commandId so the store dedupes a retry instead.\n\nIF daemon-store-dependencies.test.ts:238 REDS, a kind reached PAYLOAD_KEYS without reaching the registry. Fix the registry; never edit that arm.\n\nBOTH PREREQUISITES MUST BE DONE FIRST. If the fence (task-d0d1cb5c) has not landed, the moment this row registers the kinds they are MCP-ADVERTISED to every agent. That is the one ordering in this chain that is a security constraint rather than a convenience.\n\nHOST CONDITION as of 2026-09-05: the daemon suite takes 13-14 minutes and reds in src/work/foundation-* with timeout-only failures unrelated to this work (evidence in my review comment on task-d0c63cd8). Attribute by reachability, and NEVER run two suites at once on this box - doing so moved the red count from 3 to 8 on an unchanged tree.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/environment/environment-store.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/environment/environment-canary.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:11:35.911Z"
 }
