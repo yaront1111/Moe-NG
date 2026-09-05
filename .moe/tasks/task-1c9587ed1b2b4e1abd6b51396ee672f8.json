@@ -113,7 +113,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:26.694Z",
-  "updatedAt": "2026-09-05T09:35:08.280Z",
+  "updatedAt": "2026-09-05T09:35:58.373Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:37:46.242Z",
     "plannedStepCount": 6,
@@ -153,7 +153,8 @@
   },
   "planApprovedAt": "2026-09-05T08:39:19.319Z",
   "contextFetchedBy": [
-    "worker-75411639"
+    "worker-75411639",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T08:39:54.079Z",
   "reviewStartedAt": "2026-09-05T09:14:23.761Z",
@@ -179,7 +180,9 @@
     "apps/control-room/src/v2/goals/prd-panel.tsx",
     "apps/control-room/src/live/live-document-dossier.test.ts",
     ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
-    ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json"
+    ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
+    ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
+    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
   ],
   "completionSummary": "BROWSER-ONLY, NO DAEMON ROUTE (`git diff --stat -- apps/daemon/src` = 0 lines).\n\nNEW GATE-1 READ CLIENT live/live-product-contract-gate-1.ts: POSTs exactly { ref } to /product-contract/gate-1/read, EXACT-KEY at both frame levels (envelope [\"gate\",\"outcome\"], gate [\"advisoryOnly\",\"gate\",\"ok\",\"revisionDigest\"]), forwarding every refusal at the code+layer its owner stamped. Proxy pin added to dev-proxy-paths.ts (/documents/dossier/read was already at :16, not duplicated) and to the toStrictEqual roster in live-document-proxy.test.ts that pins it.\n\nCORRECTION THAT SHAPED THE ROW, measured in step 1 and NOT in the description: /product-contract/gate-1/read serves a FOUR-KEY VERDICT {advisoryOnly, gate:\"GATE_1\", ok, revisionDigest} (core product-contract-acceptance-binding.ts:169-172, returned verbatim by the resolver) - it carries NO requirement, criterion or coverage state, so DoD 1's dossier cannot come from it alone. /documents/coverage/read serves exactly those, plus the revision triple the gate read needs as input. So v2/goals/contract-dossier.tsx COMPOSES the two: coverage gives the approved revision id, the requirements count and EVERY CRITERION WITH ITS COVERAGE STATE; gate-1 gives the durable human-authority verdict per revision (v2/goals/contract-gates.ts, keyed by the full triple). Mounted on the opened goal beside the Gate 1 card. Personas/journeys/assumptions/decisions/versions for the approved revision were measured ALREADY RENDERED there by Gate1Card's CURRENT branch (gate1-card.tsx:216-245) - not rebuilt.\n\nPRD DOSSIER IN v2 by REUSE: v2/goals/prd-dossier.tsx consumes the EXISTING createLiveDocumentDossierFeed and document-dossier-state module (no second decoder) and is mounted in the PRD panel. Its presentation is v2-native on a measurement: the legacy component's sheet is reachable only through the v1 control-room.css chain and 8 of its 16 custom properties are undefined in v2 tokens, so the card would lose its surface and rail; importing the v1 chain is",
   "commits": [
@@ -210,6 +213,23 @@
       "treeId": "0ae20af8f3c6d0a53bfc2b061d17d9c775162d46",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "e1ce07b0fcbc56411733926432d32854d0c9fd7e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T09:35:09Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-5e90317e80ac4b86a9704b6b8ba8874a.json",
+        ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T09:35:15.349Z",
+      "treeId": "ea2180c7030e8c8d365a7ef8f89cae5287f5f685",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -227,12 +247,17 @@
     "apps/control-room/src/v2/goals/contract-dossier.tsx",
     "apps/control-room/src/v2/goals/contract-gates.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-05T08:39:39Z",
-    "at": "2026-09-05T09:15:30.066Z"
+    "kind": "checkpoint",
+    "sessionId": "worker-75411639@2026-09-05T09:35:09Z",
+    "at": "2026-09-05T09:35:15.349Z"
   },
   "reviewCompletedAt": "2026-09-05T09:35:05.432Z",
   "rejectionDetails": {
