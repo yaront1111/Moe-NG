@@ -115,3 +115,19 @@ export function freshnessWords(readAtMs: number, nowMs: number): string {
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`;
 }
+
+/**
+ * Why only so many nodes are moving, in a person's words. Says "is set to run" rather than
+ * "is running": the daemon states the limit it was LAUNCHED with, and it does not observe
+ * the wrapper — a daemon started with no wrapper beside it is still, truthfully, set to
+ * that number. Nothing here interprets: both numbers come from the daemon's own answer.
+ */
+export function seatLimitWords(concurrency: { readonly activeSeats: number; readonly configuredAgentLimit: number }): string {
+  const { activeSeats, configuredAgentLimit } = concurrency;
+  const setting = `This daemon is set to run ${String(configuredAgentLimit)} agent${configuredAgentLimit === 1 ? "" : "s"} at once.`;
+  if (activeSeats === 0) return `${setting} No agent is working right now.`;
+  if (activeSeats >= configuredAgentLimit) {
+    return `${setting} Every seat is busy, so the next ready node waits for one to finish.`;
+  }
+  return `${setting} ${String(activeSeats)} of them ${activeSeats === 1 ? "is" : "are"} working.`;
+}

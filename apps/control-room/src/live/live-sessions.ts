@@ -22,9 +22,21 @@ export interface SessionView {
   readonly status: "CLOSED" | "OPEN";
 }
 
+/**
+ * What the daemon STATED about concurrency. `configuredAgentLimit` is the agent limit the
+ * daemon process was launched with — configured, not a live measurement of the wrapper;
+ * `activeSeats` is live seats holding work at the read's clock. Shaped verbatim: the
+ * browser adds no interpretation of its own.
+ */
+export interface SessionsConcurrency {
+  readonly activeSeats: number;
+  readonly configuredAgentLimit: number;
+}
+
 export type SessionsOutcome =
   | {
     readonly status: "SESSIONS";
+    readonly concurrency: SessionsConcurrency;
     readonly readAt: string;
     readonly sessions: readonly SessionView[];
     readonly totals: { readonly closed: number; readonly expired: number; readonly live: number };
@@ -102,15 +114,24 @@ function sessionOf(value: unknown): SessionView | null {
   });
 }
 
+/**
+ * The daemon's SESSIONS frame, key for key. Exported so a test can hold it against the
+ * daemon's own `SessionsView` members: this decode is EXACT-ARITY, so a member added on
+ * one side and not the other does not degrade the Seats screen, it BLANKS it.
+ */
+export const SESSIONS_FRAME_KEYS = ["concurrency", "outcome", "readAt", "sessions", "totals", "unreadable"] as const;
+
 /** Maps only an exact daemon SESSIONS frame; every other answer is REFUSED or ERROR. PURE. */
 export function mapSessionsAnswer(status: number, response: unknown): SessionsOutcome {
   const refusal = refusalFrom(response);
   if (refusal !== null) return refusal;
   if (status !== 200) return invalidResponse();
-  const record = exactDataRecord(response, ["outcome", "readAt", "sessions", "totals", "unreadable"]);
+  const record = exactDataRecord(response, SESSIONS_FRAME_KEYS);
   if (record === null || record.outcome !== "SESSIONS" || !nonEmptyString(record.readAt) || typeof record.unreadable !== "boolean") return invalidResponse();
   const totals = exactDataRecord(record.totals, ["closed", "expired", "live"]);
   if (totals === null || !count(totals.closed) || !count(totals.expired) || !count(totals.live) || !Array.isArray(record.sessions)) return invalidResponse();
+  const concurrency = exactDataRecord(record.concurrency, ["activeSeats", "configuredAgentLimit"]);
+  if (concurrency === null || !count(concurrency.activeSeats) || !count(concurrency.configuredAgentLimit)) return invalidResponse();
   const sessions: SessionView[] = [];
   for (const raw of record.sessions) {
     const session = sessionOf(raw);
@@ -118,6 +139,7 @@ export function mapSessionsAnswer(status: number, response: unknown): SessionsOu
     sessions.push(session);
   }
   return Object.freeze({
+    concurrency: Object.freeze({ activeSeats: concurrency.activeSeats, configuredAgentLimit: concurrency.configuredAgentLimit }),
     readAt: record.readAt, sessions: Object.freeze(sessions), status: "SESSIONS" as const,
     totals: Object.freeze({ closed: totals.closed, expired: totals.expired, live: totals.live }), unreadable: record.unreadable,
   });

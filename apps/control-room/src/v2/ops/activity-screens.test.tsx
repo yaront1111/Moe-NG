@@ -24,6 +24,7 @@ const ACTIVITY: ActivityOutcome = {
   refusalsRecorded: false, scope: { goalId: "goal-1", targets: 3 }, status: "ACTIVITY", totalDecisions: 12,
 };
 const SESSIONS: SessionsOutcome = {
+  concurrency: { activeSeats: 2, configuredAgentLimit: 2 },
   readAt: "2026-09-03T10:00:00.000Z",
   sessions: [
     { capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", sessionId: "sess-wrap-abc", status: "OPEN" },
@@ -140,6 +141,45 @@ describe("SessionsPanel", () => {
     cleanup();
     render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
     expect(screen.queryByTestId("cr.sessions.paused")).toBeNull();
+  });
+
+  /**
+   * The two readings an operator actually sees. Spelled out here, never built by calling
+   * `seatLimitWords`: an expectation that called the production formatter would pass for
+   * whatever it happens to return.
+   */
+  it("says why only two nodes are moving when every seat is busy", () => {
+    expect(SESSIONS.status === "SESSIONS" && SESSIONS.concurrency).toEqual({ activeSeats: 2, configuredAgentLimit: 2 });
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 2 agents at once. Every seat is busy, so the next ready node waits for one to finish.");
+  });
+
+  it("still states the limit when nothing is working, so the number is not a busy-only banner", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 0, configuredAgentLimit: 2 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 2 agents at once. No agent is working right now.");
+  });
+
+  it("renders the daemon's number, not a 2 baked into the screen", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 1, configuredAgentLimit: 5 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 5 agents at once. 1 of them is working.");
+    cleanup();
+    // One seat: the sentence must not read "1 agents".
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 0, configuredAgentLimit: 1 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 1 agent at once. No agent is working right now.");
+  });
+
+  it("says nothing about seats when the read REFUSES, and never NaN or undefined", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ code: "SESSIONS_READ_UNREADABLE", layer: "SESSIONS_READ", status: "REFUSED" }} />);
+    // The panel is still on screen with its refusal note - it does not vanish.
+    const root = screen.getByTestId("cr.sessions.root");
+    expect(screen.getByTestId("cr.sessions.refusal").textContent).toContain("SESSIONS_READ_UNREADABLE");
+    expect(screen.queryByTestId("cr.sessions.limit")).toBeNull();
+    expect(root.textContent).not.toContain("NaN");
+    expect(root.textContent).not.toContain("undefined");
   });
 
   it("says (no output) rather than trailing off when the seat died without printing a line", () => {

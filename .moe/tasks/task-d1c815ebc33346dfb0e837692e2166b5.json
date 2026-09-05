@@ -96,7 +96,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:24.328Z",
-  "updatedAt": "2026-09-05T03:55:43.685Z",
+  "updatedAt": "2026-09-05T03:55:53.302Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:12:52.157Z",
     "plannedStepCount": 3,
@@ -150,7 +150,8 @@
   "filesModified": [
     ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
     ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
-    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+    ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json"
   ],
   "completionSummary": "VERIFICATION-ONLY PARENT: 0 files owned, 0 files created or modified. Children all DONE and landed on moe/work-2026-09-04 (main is 123 commits behind; nothing in this epic is on main yet): task-ae6fd9aca46c42d8af940ff6f336afbb (live leg, completion 3b8000bb), task-8145137ca3c144f0878deb83d05bab63 (criteria readiness + offer gate, 416ecc6b), task-8fdd81b81c0f4dc88c16203de139e2ba (Needs-you/board/docs/live drive, 856e0da9; QA-approved SCOPE-NARROWED).\n\nDoD 5 IS NOT DELIVERED — no UnAI goal was ever closed, and I did not fabricate one. Re-measured read-only (step 2): the live store has ZERO GoalClosed/GoalCompleted events (GoalCreated 5, GoalExecutionEnabled 3) and NO `goal.close` decision at all; `approval.decide` COMMITTED=0 (only `approval.decide_intent` x3). Booting HEAD's daemon against a COPY of the store: `/affordances/read` offers goal.close for goal-c9d9850b, goal-da4b8e1e and goal-live-1 while the SAME frame carries steps[goal.close] {status:\"BLOCKED\", missing:[\"approval.decide\"]}; coverage reads 10/10 verified for the two contract-bearing goals and DOCUMENT_COVERAGE_READ_GOAL_UNBOUND for goal-live-1. So children 1-2 behave as specified on live bytes; the blocker is the project-wide bootstrap prerequisite (task-ebbcbdb4), not a GOAL_CLOSE_* code.\n\nFour re-anchorings of comment-b2d62aab all hold as measured: verifier receipt reader is review/verifier-receipt-ledger.ts (not orchestrator/); the offer already existed and was NARROWED, not added; the leg lives in derived-ref preimages plus a `legs` field, never a witness key; the one new code is GOAL_CLOSE_CRITERIA_UNVERIFIED (child 2).\n\nDEVIATION: DoD 2's \"its test file unchanged\" is NOT literally met — goal-qualification.test.ts is in child 1's e74ccaa7 (+27/-7): the roster assertion gained \"legs\" and two RECEIPT_ABSENT arms were re-aimed to the live leg. Foundation behaviour and codes preserved; detail in the step-3 note.\n\nGates + foreign-red attribution: comment-377968d0.",
   "commits": [
@@ -170,16 +171,30 @@
       "treeId": "7222355f1362d69e9bf87a3ba4fed0ecac5d281b",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "482b0eed709284cf1bea36356786f18bed2c3143",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T03:42:09Z",
+      "paths": [
+        ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
+        ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T03:55:53.302Z",
+      "treeId": "24807786d6b76fbc106deb91ed99cfaa1ca56611",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/v2/cordum-app.test.tsx"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-05T02:00:49Z",
-    "at": "2026-09-05T02:43:47.280Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T03:42:09Z",
+    "at": "2026-09-05T03:55:53.302Z"
   },
   "completedAt": "2026-09-05T03:55:43.685Z",
   "reviewCompletedAt": "2026-09-05T03:55:43.685Z",

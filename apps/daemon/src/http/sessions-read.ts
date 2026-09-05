@@ -24,6 +24,28 @@ export const SESSIONS_READ_CODES = Object.freeze([
 ] as const);
 
 export type SessionLiveness = "CLOSED" | "EXPIRED" | "LIVE";
+/**
+ * How many agents may work at once, and how many are. The two halves are NOT the same
+ * kind of fact and the names say so.
+ *
+ * `configuredAgentLimit` is CONFIGURED, never observed: the MOE_WRAPPER_MAX_AGENTS this
+ * DAEMON PROCESS was launched with, parsed by the wrapper's own `readWrapperKnobs`. The
+ * daemon and the wrapper are separate processes; `moe up` spawns both from one child
+ * environment, so in the launched configuration they agree. A daemon started standalone,
+ * or beside a wrapper launched separately with a different value, reports a limit no
+ * wrapper is honouring. Nothing here measures the wrapper.
+ *
+ * `activeSeats` IS measured, from the same ledgers this read already folds: live seats
+ * holding at least one active claim at `readAt`. It can lag the wrapper's own in-process
+ * count by one pass — a seat is counted from the moment its claim commits, not from the
+ * moment its child process starts.
+ */
+export interface SessionsConcurrency {
+  /** Live seats holding at least one active claim, at this read's clock. Measured. */
+  readonly activeSeats: number;
+  /** The agent limit this daemon process was launched with. Configured, not observed. */
+  readonly configuredAgentLimit: number;
+}
 export interface SessionView {
   readonly capabilities: readonly string[];
   readonly expiresAt: string;
@@ -35,6 +57,7 @@ export interface SessionView {
   readonly status: "CLOSED" | "OPEN";
 }
 export interface SessionsView {
+  readonly concurrency: SessionsConcurrency;
   readonly outcome: "SESSIONS";
   readonly readAt: string;
   readonly sessions: readonly SessionView[];
@@ -52,6 +75,13 @@ const refused = (code: string): SessionsRefused => Object.freeze({ code, layer: 
 
 export interface SessionsReadOptions {
   readonly clock?: () => string;
+  /**
+   * REQUIRED, and not defaulted on purpose: a member that quietly falls back to the
+   * wrapper's default would publish "2" from a daemon that was never told the limit,
+   * and no test could tell that apart from the real knob. Production supplies
+   * `readWrapperKnobs(process.env).maxAgents` at the composition site.
+   */
+  readonly configuredAgentLimit: number;
   readonly projectId: string;
   readonly readClaims?: (store: SqliteEventStore, projectId: string) => WorkClaimLedger;
   readonly readSessions?: (store: SqliteEventStore, projectId: string) => SessionLedger;
@@ -77,14 +107,20 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
       }
       const sessions: SessionView[] = [];
       const totals = { closed: 0, expired: 0, live: 0 };
+      let activeSeats = 0;
       for (const record of ledger.sessions.values()) {
         const liveness: SessionLiveness = record.status === "CLOSED" ? "CLOSED"
           : record.expiresAt > now ? "LIVE" : "EXPIRED";
         totals[liveness === "CLOSED" ? "closed" : liveness === "LIVE" ? "live" : "expired"] += 1;
+        const holding = Object.freeze([...(holdings.get(record.principalId) ?? []), ...(record.principalId === record.sessionId ? [] : holdings.get(record.sessionId) ?? [])].sort());
+        // A seat counts against the limit when it is LIVE and holding work. A paired
+        // browser holds nothing and an expired seat is not working, so neither is a seat
+        // the wrapper could have staffed instead.
+        if (liveness === "LIVE" && holding.length > 0) activeSeats += 1;
         sessions.push(Object.freeze({
           capabilities: record.capabilities,
           expiresAt: record.expiresAt,
-          holding: Object.freeze([...(holdings.get(record.principalId) ?? []), ...(record.principalId === record.sessionId ? [] : holdings.get(record.sessionId) ?? [])].sort()),
+          holding,
           liveness,
           principalId: record.principalId,
           sessionId: record.sessionId,
@@ -95,6 +131,7 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
         ? right.expiresAt.localeCompare(left.expiresAt)
         : (left.liveness === "LIVE" ? -1 : right.liveness === "LIVE" ? 1 : left.liveness === "EXPIRED" ? -1 : 1)));
       return Object.freeze({
+        concurrency: Object.freeze({ activeSeats, configuredAgentLimit: options.configuredAgentLimit }),
         outcome: "SESSIONS" as const, readAt: now, sessions: Object.freeze(sessions),
         totals: Object.freeze(totals), unreadable: ledger.unreadable || claims.unreadable,
       });

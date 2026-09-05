@@ -7,7 +7,7 @@ import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { pauseSeatWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
-import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
+import { agoWords, isSeatRecord, kindWords, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -128,6 +128,9 @@ export function SessionsPanel({ nowMs, outcome, paused }: SessionsPanelProps): J
           {paused === undefined || paused === null ? null : (
             <p className="cr2-needs-note" data-testid="cr.sessions.paused">{pauseSeatWords(paused)}</p>
           )}
+          {/* Above the seat list: the reason a person is looking at fewer moving nodes
+              than they expected. Only what the daemon stated, both numbers. */}
+          <p className="cr2-needs-note" data-testid="cr.sessions.limit">{seatLimitWords(outcome.concurrency)}</p>
           <p className="cr2-needs-note" data-testid="cr.sessions.count">
             {`${String(outcome.totals.live)} live ${MIDDOT} ${String(outcome.totals.expired)} expired ${MIDDOT} ${String(outcome.totals.closed)} closed`
               + (outcome.unreadable ? ` ${MIDDOT} some session records did not read` : "")}

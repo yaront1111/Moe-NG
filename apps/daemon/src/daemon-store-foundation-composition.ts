@@ -45,6 +45,7 @@ import { createActivityReadPort } from "./http/activity-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import { createSessionsReadPort } from "./http/sessions-read.js";
 import type { SessionsReadPort } from "./http/sessions-read.js";
+import { readWrapperKnobs } from "./orchestrator/wrapper-knobs.js";
 import { createRepositoryRemoteReadPort } from "./http/repository-remote-read.js";
 import type { RepositoryRemoteReadPort } from "./http/repository-remote-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
@@ -356,8 +357,17 @@ export function createStoreDependencies(
   });
   /** What the daemon decided, latest first, for the project or one goal. */
   const activity = (): ActivityReadPort => createActivityReadPort({ projectId: config.projectId, store });
-  /** Who holds a seat, with the work each seat claims, at this root clock. */
-  const sessions = (): SessionsReadPort => createSessionsReadPort({ projectId: config.projectId, store });
+  /**
+   * Who holds a seat and what it claims, at this root clock — plus the agent limit this
+   * daemon was LAUNCHED with (configured, not observed; see SessionsConcurrency). Taken from
+   * the wrapper's own strict parser, never re-parsed here: wrapper-knobs.ts:1-8 says why a
+   * lenient read is catastrophic. Read here, not inside the port, so the port stays testable.
+   */
+  const sessions = (): SessionsReadPort => createSessionsReadPort({
+    configuredAgentLimit: readWrapperKnobs(process.env).maxAgents,
+    projectId: config.projectId,
+    store,
+  });
   /** The remote the first publish bound for this project, at this root clock. */
   const repositoryRemote = (): RepositoryRemoteReadPort =>
     createRepositoryRemoteReadPort({ clock, projectId: config.projectId, store });
