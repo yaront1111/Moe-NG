@@ -237,7 +237,7 @@ describe("createAgentWrapper", () => {
     expect(report.active).toBe(2);
   });
 
-  it("never staffs the human approval or goal-closure actions", async () => {
+  it("never staffs the human approval, goal-closure or environment-variable actions", async () => {
     const forbidden = createAgentWrapper({
       affordances: {
         boundProjectId: "proj-human-actions",
@@ -258,6 +258,22 @@ describe("createAgentWrapper", () => {
               aggregateId: "goal-human-1", claim: null, claimAggregateVersion: 0,
               kind: "goal.close",
               missing: [], status: "READY", version: 2,
+            },
+            // task-d0d1cb5c: the environment kinds are fenced in HUMAN_ONLY_STEPS BEFORE they
+            // exist as vocabulary, so until task-a2409cba lands them no other arm can see the
+            // membership — the offer surface's test only holds `approval.*` against the set.
+            // Asserted HERE, through runOnce()'s own loop, because that is the production
+            // consumer: a test that read HUMAN_ONLY_STEPS.has() directly would restate the
+            // constant instead of proving the wrapper obeys it.
+            {
+              aggregateId: "env-human-1", claim: null, claimAggregateVersion: 0,
+              kind: "environment.set_variable",
+              missing: [], status: "READY", version: 3,
+            },
+            {
+              aggregateId: "env-human-2", claim: null, claimAggregateVersion: 0,
+              kind: "environment.unset_variable",
+              missing: [], status: "READY", version: 4,
             },
           ],
         }),
