@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T23:18:58.629Z",
+  "updatedAt": "2026-09-05T23:20:18.908Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -236,6 +236,28 @@
       "treeId": "e97880ac7216de66b40b8b94e6ac3daf47765793",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "114c0521e6a5f0fa08387461168b919ae6e0c5ed",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:19:39Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:20:18.908Z",
+      "treeId": "ea4b573aa5f04467e6f3c822846a7e1c0dcaf140",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -246,13 +268,15 @@
     ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
     ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
     "apps/daemon/src/daemon-command-payload-keys.js",
-    "apps/daemon/src/daemon-command-payload-keys.ts"
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
   ],
   "unattributedPaths": [
     "apps/control-room/src/live/live-effect-read.test.ts",
     "apps/control-room/src/live/live-effect-read.ts",
     "apps/control-room/src/v2/goals/publish-port.ts",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
@@ -269,8 +293,8 @@
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
     "apps/daemon/src/repository/git-publication-native.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
     "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-bootstrap-command.ts",
     "apps/daemon/src/repository/repository-execution-recovery.ts",
     "apps/daemon/src/repository/repository-landing-attempt.js",
     "apps/daemon/src/repository/repository-landing-attempt.test.ts",
@@ -309,8 +333,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T23:04:59Z",
-    "at": "2026-09-05T23:18:58.629Z"
+    "sessionId": "worker-caece97b@2026-09-05T23:19:39Z",
+    "at": "2026-09-05T23:20:18.908Z"
   },
   "blockedReason": null,
   "blockedOnTaskIds": null,
