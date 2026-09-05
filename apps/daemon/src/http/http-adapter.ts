@@ -213,9 +213,12 @@ export async function handleAsyncCommandRequest(
     );
   }
 
+  // The same stamped, frozen input the sync door hands out: the transport origin is a
+  // server-known fact and an async handler that gates on it (the way Gate 1 does) must see it,
+  // not `undefined` — which reads as "unstamped" and would let such a gate fail open.
   return answer(await decisions.decideAsync(
     decisionKey(envelope, principal),
     envelope.requestDigest,
-    async () => await asyncHandler({ envelope, principal }),
+    async () => await asyncHandler(handlerInput(envelope, principal, origin[0])),
   ));
 }
