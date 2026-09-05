@@ -176,7 +176,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:38:40.884Z",
-  "updatedAt": "2026-09-05T03:40:30.302Z",
+  "updatedAt": "2026-09-05T03:41:37.948Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:24:10.181Z",
     "plannedStepCount": 7,
@@ -245,7 +245,9 @@
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
     ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
     ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
-    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+    ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
   ],
   "completionSummary": "ONE PUBLISH CONTROL SHIPPED. The remote belongs to the PROJECT: bound once by the first publish, reused after, changed from the card, visible on Health. localStorage gone.\n\nDELIVERED\n- NEW live/live-repository-remote.ts (126) + test: the read client child 1's DoD 4 promised but NEVER LANDED (re-verified in step 1: `grep -rn 'repository/remote/read' apps/control-room/src` = 0). Exact-key decoder; `/repository/remote/read` added to DEV_PROXY_PATHS and its toStrictEqual pin.\n- goal-publish.tsx 141->173: BOUND -> no input, names the remote + the landed commits, payload byte-exact `{\"goalId\":\"goal-1\",\"remoteUrl\":null}` through the REAL createPublishPort. UNBOUND -> field once, sends the typed url. Change reveals it, next publish rebinds. NOTHING LANDED -> `container.innerHTML === \"\"`. `grep -rn \"moe.publish.remoteUrl\" apps/control-room/src` = **0**, no localStorage left (committed source-text arm re-asserts it, key assembled so the repo grep stays 0). publish-port.ts takes `string | null`.\n- NEW ops/repository-card.tsx (80) on Health: bound remote + boundAt/boundBy from the real frame, unbound wording, Change; on the OPS POLLER via `useRepositoryRemote` (arm proves >1 call).\n- NEW tests/e2e/control-room/publish-remote.spec.ts: real daemon, real pairing.\n- runbook Publishing section + README clause rewritten, same commit.\n\nPLAN CORRECTION: the plan named a FOUR-key REMOTE frame; the real one has FIVE (`readAt`). A four-key decoder would refuse every real answer. Both fixtures RECORDED off the daemon's own production port and re-confirmed over HTTP by the e2e run: `{\"boundAt\":null,\"boundBy\":null,\"outcome\":\"REMOTE\",\"readAt\":\"2026-09-05T01:52:58.755Z\",\"remoteUrl\":null}`.\n\nTWO THINGS I FIXED THAT NOTHING ASKED FOR\n1. A daemon TEST red child 1 planted FOR this row: `UNPROXIED_SERVED_PATHS` listed the route with \"REMOVING this line is what that row's proxy edit has to do\". Removed; arm green. No daemon PRODUCTION file touched (`git diff --name-only -- apps/daemon/src | grep -v ",
   "commits": [
@@ -296,6 +298,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "28d66619859f78ddab0a021ec5146b2add59a10e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T03:22:47Z",
+      "paths": [
+        ".moe/tasks/task-2723a9b400984ab7b1b10f97c3523c81.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T03:41:37.948Z",
+      "treeId": "72439924ef324220dada7049de42e3c48ac243b3",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -320,9 +339,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-12c76c19@2026-09-05T01:28:50Z",
-    "at": "2026-09-05T02:41:13.929Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T03:22:47Z",
+    "at": "2026-09-05T03:41:37.948Z"
   },
   "completedAt": "2026-09-05T03:40:30.302Z",
   "reviewCompletedAt": "2026-09-05T03:40:30.302Z",
