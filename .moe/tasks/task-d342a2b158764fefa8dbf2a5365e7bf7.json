@@ -65,8 +65,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-caece97b",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -84,11 +84,23 @@
       "author": "worker-d6e44333",
       "content": "CLARIFICATION ON MY OWN DoD 2, from the row that filed this one. I wrote \"passes UNCHANGED\"; that is one word too strong and I am fixing it here rather than leaving a contradiction for the worker.\n\n`tests/e2e/control-room/activation-fresh-project.spec.ts` lands PARKED. Its first statement is:\n\n```ts\ntest.fixme(true, \"blocked on task-d342a2b158764fefa8dbf2a5365e7bf7: the browser activation chain never installs the policy, so project.activate refuses ACTIVATION_POLICY_UNMEASURED\");\n```\n\nDELETING THAT ONE LINE IS THE WHOLE OF THE RE-ENABLE, and it is expected work for this row. Nothing else in the spec may change. Read DoD 2 as: every assertion below that line passes with no assertion relaxed, no timeout inflated, no `toContain` softened to a truthiness check, and no arm deleted.\n\nWHY IT IS PARKED RATHER THAN LEFT RED: the branch is shared, and a knowingly-red lane costs every other row a false attribution — a peer running `pnpm test:e2e:browser` would find a failure that is neither theirs nor news. It is `fixme` rather than `skip` so the reason travels with it in the runner output.\n\nWHAT THE SPEC ALREADY PROVES, verified live before it was parked — the failure is the LAST step, not the first, and everything ahead of it is real evidence you can rely on while fixing:\n- `lane.seedPid` is null, so the store was never seeded;\n- a real pairing handshake completes (`operatorChannel: true`, the label read from the page and typed back on the daemon's own channel — `liveCredentials: \"ATTACHED\"` alone does NOT pair the tab, the app refuses with \"Moe was started without a terminal it can listen on\");\n- `cr.activate.root` mounts with `cr.activate.refusal` absent, so `/activation/read` answered with receipts;\n- `cr.activate.reason.repository` contains the lane's real `git rev-parse HEAD`, and no receipt row reads as a `<projectId>-*` placeholder;\n- a pre-activation `goal.create_with_source` is REFUSED and the refusal text is the copy task-ac9d5e2d rewrote (asserted not to contain the old terminal-bound sentence);\n- `project.register`, `project.bind_repository` and `provider.probe` all reach `data-ok=\"true\"`.\n\nOnly `cr.activate.step.project.activate` is `data-ok=\"false\"`. That is your one target.\n\nTWO LANE FACTS THAT COST ME ROUND TRIPS, so they do not cost you any:\n- `cr.goals.newgoal.prd.input` is a `type=\"file\"` input (new-goal-form.tsx:130), so it needs `setInputFiles({buffer, mimeType, name})`, not `.fill()`. Without a real attachment the browser sends brief-only `goal.create`, a different kind than DoD 1 asks for.\n- `cr.goals.newgoal.prd.status` states the sha256 the BROWSER computed, not the filename — assert the digest.\n- The accepted create renders `Goal created: <title>` (live-goal-create.ts:131), never the wire's enums.\n\nAlso note for whoever plans this: `pnpm test:e2e:browser -- <name>` does NOT filter; it runs the whole lane. Use `npx playwright test -c tests/e2e/control-room/playwright.config.ts <name>`.",
       "timestamp": "2026-09-05T14:29:33.568Z"
+    },
+    {
+      "id": "comment-aa79a78bd94e4f56a7d7609ec5815b61",
+      "author": "worker-2739fee7",
+      "content": "STEP-1 FALLOUT MEASUREMENT (worker-2739fee7). Step 1(d) triage outcome: STOP AND REPORT. 39 new failing daemon files, NONE among the plan's seven.\n\nMEASURED, not reasoned. The one-line edit applied was exactly `\"policy.install\",` into COMMAND_PREREQUISITES[\"project.activate\"] (bootstrap-sequence.ts:35). Nothing else.\n\nBASELINE (rail 3), `pnpm --filter @moe/daemon test`, before the edit:\n  Test Files  10 failed | 423 passed (433)   Exit status 1\nTen foreign pre-existing files, 19 of ~25 arms are 30000ms TIMEOUTS (the spawn-latency cliff; foundation-attempt-service.test.ts alone ran 1174213ms). The baseline is FLAKY: an earlier identical run gave `17 failed | 416 passed`. None of the 10 is in this row's seven.\n\nAFTER the one line:\n  Test Files  49 failed | 387 passed (436)   Exit status 1\n\nNOTE the tree moved under me mid-run: HEAD went c35d75d5 -> e6d02867 (peers landed, incl. 9bad1694 \"project.activate admits the command before it measures receipts\", which edits bootstrap-services.ts + daemon-command-registry.ts). So the whole-suite delta is NOT a clean control. I therefore attributed with a targeted control/treatment pair at ONE fixed HEAD (e6d02867):\n\n  CONTROL (line reverted): 6 files -> Test Files 6 passed, Tests 160 passed (160), 0 failed\n  TREATMENT (line applied): 6 files -> Test Files 4 failed | 2 passed, Tests 9 failed | 151 passed\n  and separately: control 3 files -> 64 passed / 0 failed; treatment -> 14 failed | 50 passed\n\nSo the flips are MINE, not the peers'. `demo-seed-plan.test.ts` stayed GREEN both ways, exactly as planningNotes predicted.\n\nROOT CAUSE OF 33 OF THE 39: ONE unnamed shared fixture. All 445 failure lines are the identical error\n  Error: seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\nfunnelling through `seedReadyProject` at apps/daemon/src/recovery/restore-test-harness.ts:182 (via `send` at :167). Every other harness in the trace (attempt-finalization-test-harness.ts:251, budget-settlement-fixtures.ts:116/156, foundation-registry-fixtures.ts:437/471) calls into it. planningNotes verified bootstrap-test-fixtures.ts:747-750 was already correctly ordered - true, but restore-test-harness.ts is a SECOND shared seeder and was never enumerated.\n\nTHE 4 FILES THAT NEED REAL EDITS (not the harness), with their 9 arms:\n  src/bootstrap/activation-command-entry.test.ts:108 (1) \"refuses POLICY_UNMEASURED on a store where no policy is installed\"\n  src/http/affordance-read.test.ts:125 (1) \"offers only the chain roots on a fresh ledger, blocking the rest by name\" - pins the literal `missing:` roster\n  src/activation/admission-gate-resolver.test.ts:753,775,967,981 (4)\n  src/daemon-foundation-command.test.ts:113,143,232 (3)\n\nNOT reliably mine: bootstrap-services.test.ts and daemon-entry-ops.test.ts failed in the whole-suite run but PASSED in both targeted runs at fixed HEAD - peer/flake, do not attribute to this row.\n\nSCOPE CONSEQUENCE: the minimum honest roster is 7 + restore-test-harness.ts + those 4 = 12 owned paths, past the 10-file ceiling the plan was built under. That is a split/amend decision, not a worker judgement call (global rail 18; planningNotes risks para 1 says so explicitly).\n\nTREE LEFT CLEAN. All seven paths reverted to session-start bytes: five tracked prove empty `git diff`; the untracked spec proves SHA256 caeff7ce2c5b8eef55d124178c896e0c58c1c39df970538627963d9b47c713d8 against an out-of-tree backup. No drill mutant is stranded and the shared branch is not left knowingly red.",
+      "timestamp": "2026-09-05T17:50:26.502Z"
+    },
+    {
+      "id": "comment-a9a48879212b474782cb453e073c98f8",
+      "author": "worker-2739fee7",
+      "content": "THE DESIGN COLLISION: option (a) MAKES THE ROW'S PROTECTED REFUSAL UNREACHABLE. This is the finding that matters more than the file count, and it is measured.\n\nRow rail 1 says the ACTIVATION_POLICY_UNMEASURED refusal \"is CORRECT behaviour and must stay reachable\". DoD-3 requires that with the policy step omitted, `project.activate` \"still refuses exactly ACTIVATION_POLICY_UNMEASURED at layer DAEMON_ACTIVATION_RECEIPTS\".\n\nAdding `policy.install` to COMMAND_PREREQUISITES[\"project.activate\"] BREAKS that. The admission gate now refuses first, so the receipt layer is never reached. Verbatim, from apps/daemon/src/bootstrap/activation-command-entry.test.ts:108 with the one line applied:\n\n  AssertionError: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'\n  Expected: \"ACTIVATION_POLICY_UNMEASURED\"\n  Received: \"BOOTSTRAP_PREREQUISITE_MISSING\"\n\nThat arm's own comment explains why it is load-bearing: \"this is the arm that separates a live override from a defaulted one, because a defaulted `installedPolicySliceRefs` produces this SAME code on the store above too.\" Its sibling assertion `outcome.refusedBy === \"DAEMON_ACTIVATION_RECEIPTS\"` goes with it.\n\nThis is precisely the hazard global rail 1 names: \"a second refusal layer can answer first and the test stays green while no longer testing its subject.\" Here it does not even stay green - it reds, which is the honest outcome, but the fix cannot be to re-point that arm at BOOTSTRAP_PREREQUISITE_MISSING. Doing so would retire the receipt-layer question unanswered and would gut the defaulted-vs-measured distinction the activation receipts exist to draw. I did not touch it.\n\nSO THE OPEN DESIGN CALL IS NOT SETTLED THE WAY THE PLAN ASSUMED. planningNotes chose (a) over (b) on the argument that the table is \"WRONG, not merely incomplete\" because activation \"genuinely cannot succeed without an installed policy\". That argument is sound about SUCCESS but it silently changes WHICH LAYER REFUSES, and this row's own rail 1 protects that layer. The two cannot both hold as written.\n\nFOR THE ARCHITECT - the three live options, none of which I took:\n1. Keep (a) and accept that the fresh-store refusal becomes BOOTSTRAP_PREREQUISITE_MISSING at the admission gate. Then rail 1 and DoD-3 must be amended, and activation-command-entry.test.ts:95-110 must be rewritten to reach the receipt layer another way (e.g. drive through policy.install then supersede/uninstall) so the receipt arm keeps a subject. Roster grows to >=12 paths -> split.\n2. Take (b) after all: add `policy.install` to ACTIVATION_CHAIN_KINDS ALONE. Cost is exactly what its docblock forbids (the control room becoming the authority on daemon ordering) - but it is a 4-file change, touches no daemon behaviour, leaves every refusal layer reachable, and DoD-2's e2e journey would still go green because the browser installs the policy before activating. The docblock objection is real but it is a DOCUMENTED drift, not a broken refusal.\n3. Split: land (b) now as the smallest production-reachable working slice (delivery-bias rail), and file the table correction as its own row carrying restore-test-harness.ts plus the 4 asserters and the rail-1/DoD-3 amendment.\n\nMy read, offered not acted on: option 2 or 3. (a)'s cost is not the 12 files - it is that it removes a fail-closed refusal this row was explicitly chartered to preserve.\n\nI have NOT made this call and have reverted everything; see the fallout comment for the revert proof. Blocking for an amendment rather than choosing silently, per plan step 1(d) and global rail 18.",
+      "timestamp": "2026-09-05T17:50:48.585Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:32.672Z",
-  "updatedAt": "2026-09-05T15:08:57.918Z",
+  "updatedAt": "2026-09-05T17:53:07.994Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:30:41.029Z",
     "plannedStepCount": 6,
@@ -116,7 +128,8 @@
   },
   "planApprovedAt": "2026-09-05T14:34:51.512Z",
   "contextFetchedBy": [
-    "worker-caece97b"
+    "worker-caece97b",
+    "worker-2739fee7"
   ],
   "workStartedAt": "2026-09-05T14:35:36.521Z",
   "commits": [
@@ -197,6 +210,21 @@
       "treeId": "21a6ad798be148f6bbbfc89bc199897a53495ae5",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "7032a076c91301d24c1c4fa5292e4e21dc7cd2b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T15:09:31Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:09:39.856Z",
+      "treeId": "fa955845f2e2ac9f0e3f4a52e1e938efec31e6bc",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -213,7 +241,11 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T15:08:48Z",
-    "at": "2026-09-05T15:08:57.918Z"
-  }
+    "sessionId": "worker-caece97b@2026-09-05T15:09:31Z",
+    "at": "2026-09-05T15:09:39.856Z"
+  },
+  "blockedReason": "Step 1(d) triage fired: STOP AND REPORT per that step's own text and global rail 18. Needs an architect amendment/split; I have NOT made the design call. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) + comment-a9a48879212b474782cb453e073c98f8 (collision). Control/treatment pair at fixed HEAD e6d02867, not inferred.\n\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, NONE among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated, restore-test-harness.ts:182 seedReadyProject (445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). bootstrap-test-fixtures.ts was rightly verified as ordered - just not the only seeder. 4 files need real edits (9 arms): activation-command-entry.test.ts:108, affordance-read.test.ts:125, admission-gate-resolver.test.ts:753/775/967/981, daemon-foundation-command.test.ts:113/143/232. Minimum roster = 12 paths, past the plan's 10-file ceiling.\n\n2. THE BLOCKER, outranking the file count: option (a) MAKES THIS ROW'S PROTECTED REFUSAL UNREACHABLE - the admission gate answers before the receipt layer. Verbatim at activation-command-entry.test.ts:108: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'. Contradicts task rail 1 and DoD-3 verbatim; the second-refusal-layer hazard of global rail 1. Re-pointing that arm is not available - its comment says it separates a live override from a defaulted one.\n\nRULING NEEDED: (a) keep the table change, then amend rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths; (b) policy.install into ACTIVATION_CHAIN_KINDS alone - 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green; (c) land (b) now, file the table fix as its own row. My read: (b) or (c).\n\nTREE CLEAN. See mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T17:53:07.994Z"
 }
