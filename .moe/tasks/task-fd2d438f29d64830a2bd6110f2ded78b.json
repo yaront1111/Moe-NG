@@ -16,8 +16,81 @@
     "MEASURE THE FORCED-EDIT ROSTER BEFORE WRITING CODE and split at plan time if it exceeds the ceiling - a worker discovering it at step 5 is the failure this rail exists to prevent.",
     "DO NOT CONSUME THE FIELD HERE. The unset-set report and .env.example are grandchild C."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE THE FORCED-EDIT ROSTER AND RECORD IT (DoD 3). Do this BEFORE writing code; DoD 3 makes the measurement itself a deliverable and rail 3 exists because discovering it at step 5 is the failure mode.\n\nRun and record all four, with output:\n1. `git grep -rln \"dependsOnRequirementIds\" -- apps packages` — 24 files at plan time, 27 at filing. The number moves; what matters is which of them your chosen shape actually FORCES.\n2. THE SHAPE GREP, not just the symbol — the literal requirement object in test expectations and any hard-coded count over a requirement list: `git grep -rn \"supersedesRequirementId\" -- apps packages` and `git grep -rn \"deploymentRequirements\" -- apps packages`. A symbol grep alone misses a test that spells the object out.\n3. `grep -n \"REQUIREMENT_KEYS\" apps/control-room/src/v2/goals/gate1-contract-shape.ts packages/core/src/product-contract/product-contract-v2-admission.ts packages/core/src/product-contract/product-contract-admission.ts` — THREE rosters exist. The first two are v2 and in scope; product-contract-admission.ts:28 is the V1 contract and is NOT.\n4. Confirm the strict-exact semantics this plan rests on: `sed -n '100,112p' apps/control-room/src/v2/goals/gate1-data-snapshot.ts` and `sed -n '182,194p' packages/core/src/planning/planning-snapshot.ts`. Both must still test `ownKeys.length === keys.length`. If either has gained optional-key support since, say so — approach (D) in planningNotes becomes available and is cleaner.\n\nIF THE FORCED SET EXCEEDS THE 10-FILE CEILING, STOP AND SPLIT. Do not submit over it. Do not make the field required to keep the diff tidy.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/gate1-contract-shape.ts",
+        "packages/core/src/product-contract/product-contract-v2-admission.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE TYPE (packages/core/src/product-contract/product-contract-v2-contract.ts). Add the variable-names carrier as a DEPLOYMENT-SPECIFIC type, not a widening of the shared one.\n\n`ProductContractV2Requirement` (:95-100) is shared by SIX requirement sections — adding a field there gives it to all six, which is not what this row's title says. Instead declare a deployment requirement type that extends it with an OPTIONAL names carrier, and type `ProductContractRevisionV2.deploymentRequirements` with that.\n\nNAME THE FIELD SO ITS CONTENT IS UNAMBIGUOUS — `environmentVariableNames` or equally explicit. Rail 1: NAMES ONLY, NEVER VALUES. This is contract text that is displayed, stored, and reaches a published repository through grandchild C; a field name like `environment` or `variables` invites a value into it later.\n\nCHECK THE SPREAD AT gate1-contract-shape.ts:182-188: `gate1Requirements()` spreads all six sections into one `readonly ProductContractV2Requirement[]`. A deployment SUBTYPE assigns cleanly into that (subtype to supertype), so this should not ripple — but typecheck it rather than assuming, and say so in the note.\n\nDo NOT consume the field anywhere (rail 4). The unset-set report and .env.example are grandchild C.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/product-contract/product-contract-v2-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE CORE VALIDATOR (packages/core/src/product-contract/product-contract-v2-admission.ts).\n\nAdd `DEPLOYMENT_REQUIREMENT_KEYS` = the existing five plus the new name, and validate deploymentRequirements by ACCEPTING EITHER SHAPE:\n  exact(value, REQUIREMENT_KEYS) || exact(value, DEPLOYMENT_REQUIREMENT_KEYS)\nThat is the only shape that satisfies DoD 1 and DoD 2 together, because `exact` at planning-snapshot.ts:182 is STRICT: `Reflect.ownKeys(value).length === keys.length`. A key added to a single roster is a key made REQUIRED, and every contract lacking it becomes invalid.\n\nLeave `REQUIREMENT_KEYS` and the five other requirement sections UNTOUCHED — they share the same validator and none of them is this row's subject.\n\nVALIDATE THE NAMES THEMSELVES, since this is the boundary that keeps a value out (rail 1): each entry is a string, matches an environment-variable name grammar (the conventional `[A-Z_][A-Z0-9_]*` unless you measure a reason to differ), is bounded in length, and the list is bounded in count and free of duplicates. A permissive validator here is what lets `DB_PASSWORD=hunter2` be stored as a NAME.\n\nRefuse with the existing refusal machinery (`invalid()` / `productContractV2Refusal`) — do not mint a new code path or a new layer constant.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/product-contract/product-contract-v2-admission.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CONTROL-ROOM MIRROR (apps/control-room/src/v2/goals/gate1-contract-shape.ts, 188 lines).\n\nMake the SAME change with the SAME semantics: a deployment-specific key roster and an either-shape check, using `exactGate1Row` (gate1-data-snapshot.ts:100), which is strict-exact in exactly the same way.\n\nThe six sections are validated by one shared `requirement` function at :167-172. Give deploymentRequirements its OWN validator at :172 and leave the other five pointed at the shared one — do not widen `requirement` itself.\n\nMIRROR THE NAME VALIDATION TOO, character for character with the core. This roster is a hand transcription of the core's (both currently read `[\"dependsOnRequirementIds\", \"priority\", \"requirementId\", \"statement\", \"supersedesRequirementId\"]` byte for byte), and a divergence between them is invisible until a contract round-trips — which is precisely what DoD 4 is about and what step 6 asserts.\n\nKeep the file under its ceiling: `wc -l` it after editing and quote the number.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/gate1-contract-shape.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE ACCEPTANCE AND REJECTION ARMS (DoD 1 and DoD 2), on BOTH sides. Note the test homes, which are not where you would guess: `product-contract-v2-admission.ts` has NO test file of its own and its v2 arms live in `packages/core/src/product-contract/product-contract-v2-codec.test.ts` — extend that. `gate1-contract-shape.ts` has none either, so create `apps/control-room/src/v2/goals/gate1-contract-shape.test.ts`. Put the SAME cases on both sides.\n\nDoD 2 FIRST, because it is the property a required-field implementation silently breaks. Assert BOTH forms explicitly:\n(a) a deployment requirement with the names field ABSENT ENTIRELY validates exactly as today;\n(b) one with an EMPTY list validates.\nAnd assert that an existing full contract fixture — apps/control-room/src/v2/goals/gate1-v2-test-fixture.ts, mirrored at apps/daemon/src/planning/v2-compiler/compiler.test.ts:45-48 — still validates UNCHANGED. Absence and emptiness are different states and only one of them is the common case.\n\nDoD 1: a requirement WITH names validates, and a requirement carrying a VALUE-SHAPED entry does NOT. Make the rejection concrete rather than gestural: `[\"DB_PASSWORD=hunter2\"]`, `[\"DB_PASSWORD: hunter2\"]`, a lowercase name, a name with a space, an empty string, a duplicate, and a list past the bound. Assert each refuses with its specific reason — never merely that validation failed.\n\nDO NOT COMMIT A REALISTIC SECRET even in a rejection fixture (epic rail 3): the point is the SHAPE `NAME=value`, so use an obviously fake value.\n\nAssert the OTHER FIVE requirement sections still REJECT the new key — it is a deployment-requirement field, and a functionalRequirement carrying it must be invalid. That arm is what proves the change stayed scoped.\n\nMutate each rejection: make the name validator permissive, confirm the value-shaped arm goes RED, restore. product-contract-v2-codec.test.ts is TRACKED so `git diff` proves its restore; the new shape test is UNTRACKED, so back it up out of tree and prove the restore by SHA256 in a separate call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/product-contract/product-contract-v2-codec.test.ts",
+        "apps/control-room/src/v2/goals/gate1-contract-shape.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/gate1-contract-shape.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE MIRROR AGREES (DoD 4) — asserted, not assumed, in the new gate1-contract-shape.test.ts.\n\nThe requirement key roster is TRANSCRIBED in two places (gate1-contract-shape.ts:21 and product-contract-v2-admission.ts:49) and they are byte-identical today. A divergence is invisible until a contract round-trips, which is the failure DoD 4 names.\n\nAssert the two agree. Prefer comparing the ACTUAL exported rosters where the dependency edge allows it — gate1-contract-shape.ts:1 already imports `ProductContractRevisionV2` from \"@moe/core\", so the edge exists; if the core roster is exported, import it and assert set-equality against the control-room one. That is a real agreement test.\n\nIf the core roster is module-private and exporting it is out of scope, fall back to a SOURCE-TEXT assertion: read both files and assert the two key lists match, following the pattern at apps/control-room/src/v2/goals/goal-publish.test.tsx:204-215 (readFileSync of a named path, then a content assertion). Say which form you used and why — an imported comparison is strictly better and the fallback should be justified, not defaulted to.\n\nAssert agreement for BOTH rosters: the shared REQUIREMENT_KEYS and the new deployment one. A test that only pins the new one lets the old pair drift.\n\nMUTATE: add a stray key to one side only and confirm the arm reds. Restore and prove it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/gate1-contract-shape.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES (DoD 5). Run each leg standalone and quote its `Test Files N passed` count line — the OUTPUT, never the exit code. An exit-0 leg with no count line RAN NOTHING.\n\n- `pnpm --filter @moe/daemon test` — the row's named verification command.\n- `pnpm --filter @moe/control-room test` — NOT OPTIONAL: the shape and its validator live under apps/control-room, and the root vitest include has no apps/**, so no root run can cover them.\n- `pnpm typecheck`.\n- Also run `pnpm test` — packages/core is in the ROOT lane and this row edits three files there, so the root count line IS valid evidence for the core half. Say which leg covers which half rather than quoting them as interchangeable.\n\nTHE TYPECHECK IS THE REAL BLAST-RADIUS TEST HERE. A widened type ripples through callers silently until tsc says otherwise, so read its output for files you did not touch — particularly anything consuming `gate1Requirements()` or `ProductContractRevisionV2.deploymentRequirements`. If it names a file outside this plan's roster, STOP and report rather than taking the extra path.\n\nPATH-ATTRIBUTED BASELINE: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths. Complete only when that intersection is EMPTY; disclose any foreign red verbatim with its exact failing lines and file paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/product-contract/product-contract-v2-contract.ts",
+        "apps/control-room/src/v2/goals/gate1-contract-shape.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nTHE ROW'S ONE REAL RISK IS A VALUE ENTERING A NAMES FIELD (rail 1), because this text is displayed, stored, and published to a repository by grandchild C. Answer each:\n- Does the validator accept `\"DB_PASSWORD=hunter2\"`, `\"DB_PASSWORD hunter2\"`, `\"DB_PASSWORD: hunter2\"`, or a name containing whitespace, a quote, a newline, or a NUL? Each must refuse.\n- Is the list bounded in COUNT and each name bounded in LENGTH? An unbounded list is a storage and display problem even with no secret in it.\n- Are duplicates rejected or silently kept? Say which and why.\n- Does a name survive normalization the way the neighbouring `text()` validator requires (well-formed, NFC)? Match the file's existing discipline rather than inventing a looser one.\n\nBLAST RADIUS:\n- Did the OTHER FIVE requirement sections stay strictly unchanged? Assert a functionalRequirement carrying the new key is INVALID.\n- Does an existing contract fixture round-trip byte-identically through encode/decode with the field absent? That is DoD 2 at the codec layer rather than the validator layer, and product-contract-v2-codec.test.ts is where it belongs.\n- Did anything begin CONSUMING the field? `git grep -rn \"<fieldName>\" -- apps packages` must show only the type, the two validators and the tests. Rail 4: the report and .env.example are grandchild C, and a producer with an accidental consumer here would collide with that row.\n\nMUTATION DRILL: `git status --porcelain` the exact paths first. Four of the five files are TRACKED, so `git diff -- <path>` is a valid restore proof for them; gate1-contract-shape.test.ts is NEW and untracked, so `git diff` certifies nothing for it — back it up out of tree under %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/product-contract/product-contract-v2-admission.ts",
+        "apps/control-room/src/v2/goals/gate1-contract-shape.ts",
+        "packages/core/src/product-contract/product-contract-v2-contract.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +103,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:10:18.244Z",
-  "updatedAt": "2026-09-05T19:10:18.244Z"
+  "updatedAt": "2026-09-05T19:19:04.656Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:12:51.765Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 5
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:19:02.485Z",
+  "planningNotes": {
+    "approachesConsidered": "Four shapes, measured against DoD 2 (every existing contract stays valid) and the 10-file ceiling.\n\n(A) ADD THE KEY TO THE SHARED `REQUIREMENT_KEYS`. REJECTED on measurement: both validators are strict-exact, so the key becomes REQUIRED and every contract lacking it is invalid — DoD 2 fails on the first assertion, and it forces the 24-file fixture sweep the row rails warn about. This is the \"tidy\" answer rail 2 exists to forbid.\n\n(B) A DEPLOYMENT-ONLY KEY ROSTER validated with `exact(value, DEPLOYMENT_REQUIREMENT_KEYS)`. REJECTED for the same reason one step later: strict-exact still demands the key be PRESENT, so existing deployment requirements without it become invalid.\n\n(C) ACCEPT EITHER SHAPE FOR deploymentRequirements ONLY — `exact(value, REQUIREMENT_KEYS) || exact(value, DEPLOYMENT_REQUIREMENT_KEYS)`. CHOSEN. Existing contracts validate on the first arm exactly as today (DoD 2), new ones on the second (DoD 1), the other five requirement sections are untouched, and no shared helper changes. Blast radius: two validators, one type, two test files — five files.\n\n(D) GIVE `exact`/`exactGate1Row` AN OPTIONAL-KEY PARAMETER defaulted to empty, mirroring runtime-guards.ts:81. Cleaner in the abstract and every existing caller would still compile. REJECTED for this row: `exact` is a hot shared primitive with callers across packages/core (capability-catalog, delivery-profile, and more), and changing its contract to buy one optional field on one section is a blast radius out of proportion to the ask. Recorded so a later row needing optional keys in several places can pick it up deliberately.\n\nIf the worker measures (C) as larger than this plan predicts, STOP and split — DoD 3 says so explicitly and a mid-flight discovery is the failure rail 3 names.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05. DoD 3 asks for the forced-edit roster AT PLAN TIME; here it is, with the measurement that decides the field shape.\n\nTHE ROSTER HAS ALREADY MOVED: `git grep -rln \"dependsOnRequirementIds\" -- apps packages` returns 24 FILES, not the 27 the description states. Re-run it; the number is not the point, the SHAPE below is.\n\nTHE DECISIVE MEASUREMENT — BOTH VALIDATORS ARE STRICT-EXACT AND NEITHER SUPPORTS AN OPTIONAL KEY:\n- apps/control-room/src/v2/goals/gate1-data-snapshot.ts:100 `exactGate1Row(value, keys)` — `:104` `if (actual.length !== keys.length ...) return null`.\n- packages/core/src/planning/planning-snapshot.ts:182 `exact(value, keys)` — `:188` `Reflect.ownKeys(value).length === keys.length && keys.every(...)`.\nSo \"add an optional key to REQUIREMENT_KEYS\" DOES NOT EXIST as an option. Adding the key to either roster makes it REQUIRED, which invalidates every contract that lacks it and breaks DoD 2 outright.\n\nTWO BYTE-IDENTICAL ROSTERS, and they are the mirror DoD 4 names:\n  apps/control-room/src/v2/goals/gate1-contract-shape.ts:21  REQUIREMENT_KEYS, consumed at :79 `exactGate1Row(value, REQUIREMENT_KEYS)`\n  packages/core/src/product-contract/product-contract-v2-admission.ts:49  REQUIREMENT_KEYS, consumed at :189 `if (!exact(value, REQUIREMENT_KEYS)) return invalid()`\nBoth read exactly `[\"dependsOnRequirementIds\", \"priority\", \"requirementId\", \"statement\", \"supersedesRequirementId\"]`. (A THIRD, v1 roster exists at product-contract-admission.ts:28/:90 — that is the v1 contract and is NOT in scope; do not touch it.)\n\nNEITHER PRODUCTION FILE HAS ITS OWN TEST FILE — measured, and it shaped the plan: `packages/core/src/product-contract/` has product-contract-v2-admission.ts but NO product-contract-v2-admission.test.ts; its v2 arms live in product-contract-v2-codec.test.ts. `apps/control-room/src/v2/goals/` has gate1-contract-shape.ts but no gate1-contract-shape.test.ts; the nearest asserter is gate1-card.test.tsx. So the core arms EXTEND the codec test and the control-room arms go in a NEW dedicated shape test.\n\nTHE REQUIREMENT VALIDATOR IS SHARED BY SIX SECTIONS, not just deployment. gate1-contract-shape.ts:167-172 runs the same `requirement` validator over functionalRequirements, nonFunctionalRequirements, securityPrivacyRequirements, technologyRequirements, uxAccessibilityRequirements AND deploymentRequirements. So a naive edit to `REQUIREMENT_KEYS` changes ALL SIX kinds, which is not what this row's title says and widens the blast radius for nothing.\n\nTHE CANONICAL TYPE: packages/core/src/product-contract/product-contract-v2-contract.ts:95-100 `ProductContractV2Requirement extends ProductContractV2Statement`. Note gate1-contract-shape.ts:182-188 `gate1Requirements()` SPREADS all six sections into one `readonly ProductContractV2Requirement[]` — a deployment SUBTYPE still assigns cleanly into that array (subtype to supertype), so widening deployment only should not ripple there. Verify rather than assume.\n\nA PRECEDENT WORTH KNOWING BUT NOT USING HERE: packages/contracts/src/runtime/runtime-guards.ts:81 `hasExactKeys(record, required, optional)` ALREADY implements required-plus-optional semantics (`:87` bounds the length between required.length and required.length + optional.length). It is the shape `exact` would need. Different helper, different package — cite it as the design precedent, do not import it across the boundary without checking the dependency edge."
+  },
+  "planApprovedAt": "2026-09-05T19:19:04.656Z"
 }
