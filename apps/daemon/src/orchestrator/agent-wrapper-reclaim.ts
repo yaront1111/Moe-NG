@@ -121,6 +121,25 @@ function commandIdFor(action: string, key: string, attempt: number): string {
     .digest("hex").slice(0, 24)}`;
 }
 
+/**
+ * Whether the session that recorded a pid-less child is itself gone: CLOSED, absent from the
+ * ledger, or past its expiry at `now`. `null` when the ledger cannot be read — "cannot tell" is
+ * kept, never reclaimed.
+ */
+function recordingSessionDead(
+  config: ReclaimPassConfig, sessionId: string, now: string,
+): boolean | null {
+  try {
+    const ledger = readSessionLedger(config.store, config.projectId);
+    if (ledger.unreadable) return null;
+    const record = ledger.sessions.get(sessionId);
+    if (record === undefined || record.status === "CLOSED") return true;
+    return record.expiresAt <= now;
+  } catch {
+    return null;
+  }
+}
+
 /** Closes the dead seat FIRST: the daemon never admits a live holder's release. */
 function closeSeat(
   config: ReclaimPassConfig, dispatch: ReclaimDispatch, sessionId: string,
@@ -195,20 +214,31 @@ export function runReclaimPass(config: ReclaimPassConfig): readonly ReclaimRepor
   for (const child of enumerateLiveChildren(store, log)) {
     const { sessionId, workItemId } = child;
     if (child.childPid === null) {
-      keep(child, "KEPT_PID_UNKNOWN", null, "pid unknown");
-      continue;
-    }
-    let alive: boolean;
-    try {
-      alive = isProcessAlive(child.childPid);
-    } catch {
-      // "Cannot tell" is not "dead" — the same posture the fence takes.
-      keep(child, "KEPT_LIVENESS_UNKNOWN", null, "liveness unknown");
-      continue;
-    }
-    if (alive) {
-      keep(child, "KEPT_ALIVE", null, "child alive");
-      continue;
+      // A pid-less ADMITTED row is the provisional staffing record: the wrapper writes it
+      // before the spawn is admitted and upgrades it with the pid in the same process the
+      // instant the spawn event fires. One that is still pid-less can only be a wrapper that
+      // died between the two writes — and keeping it forever wedged the work item (the fence
+      // read it UNREADABLE, nothing retired it). The recording SESSION is the evidence a
+      // pid cannot give: closed, gone or expired means the wrapper is gone too.
+      const sessionDead = recordingSessionDead(config, sessionId, now);
+      if (sessionDead !== true) {
+        keep(child, "KEPT_PID_UNKNOWN", null,
+          sessionDead === null ? "pid unknown, session ledger unreadable" : "pid unknown");
+        continue;
+      }
+    } else {
+      let alive: boolean;
+      try {
+        alive = isProcessAlive(child.childPid);
+      } catch {
+        // "Cannot tell" is not "dead" — the same posture the fence takes.
+        keep(child, "KEPT_LIVENESS_UNKNOWN", null, "liveness unknown");
+        continue;
+      }
+      if (alive) {
+        keep(child, "KEPT_ALIVE", null, "child alive");
+        continue;
+      }
     }
     const closeRefusal = closeSeat(config, dispatch, sessionId);
     if (closeRefusal !== null) {

@@ -271,6 +271,37 @@ describe("runReclaimPass", () => {
     expect(harness.logged).toEqual([`[wrapper] kept ${ITEM}: pid unknown`]);
   });
 
+  it("reclaims a pid-less record once its recording session has expired", () => {
+    // The provisional staffing row lands before the spawn is admitted and is upgraded with the
+    // pid in the same process; a wrapper killed between the two writes left a pid-less row that
+    // was kept for ever, and the fence then read the item UNREADABLE: wedged with no retire path.
+    const harness = harnessFor("pidless-expired");
+    // The seat expires in 30 minutes; the claim outlives it, so the release leg must run too.
+    openSeat(harness, SEAT, new Date(NOW + 1_800_000).toISOString());
+    writeClaim(harness, "work.claim", SEAT, 0, "cmd-seed-claim", ITEM, NOW + 7_200_000);
+    recordChild(harness, null);
+    const afterExpiry = NOW + 3_600_000;
+
+    const reports = runReclaimPass({
+      clock: () => afterExpiry,
+      deps: harness.deps,
+      isProcessAlive: () => { throw new Error("the probe must never run without a pid"); },
+      log: (line: string) => { harness.logged.push(line); },
+      mintSecret: () => "reclaimtestnonce",
+      operatorCredential: OPERATOR,
+      projectId: harness.projectId,
+      store: harness.store,
+    });
+
+    expect(reports).toEqual([{
+      code: null, outcome: "RECLAIMED", sessionId: SEAT, workItemId: ITEM,
+    }]);
+    expect(eventTypes(harness, `work/${ITEM}`)).toEqual(["WorkClaimed", "WorkReleased"]);
+    expect(eventTypes(harness, staffingAggregateId(ITEM)))
+      .toEqual(["AgentStaffingAdmitted", "AgentStaffingRetired"]);
+    expect(harness.logged).toEqual([`[wrapper] reclaimed ${ITEM} from ${SEAT}`]);
+  });
+
   it("keeps a record whose liveness probe throws", () => {
     const harness = harnessFor("probe-down");
     seedDeadSeat(harness);
