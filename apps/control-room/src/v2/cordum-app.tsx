@@ -37,6 +37,7 @@ import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
 import { HEALTH_FAILURE, LiveHealth, LivePolicy, useOpsRead } from "./ops/live-ops.js";
+import { LiveActivate } from "./ops/activation-screen.js";
 import { readHealth } from "../live/live-ops.js";
 import type { HealthOutcome } from "../live/live-ops.js";
 import { ProviderPauseProvider } from "./shell/pause-context.js";
@@ -358,6 +359,15 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         <>
           {!live.setup.ok && <LiveRefusalNotice
             busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
+          />}
+          {/*
+            THE ACTIVATE CARD LIVES HERE, not behind a nav id of its own: this is where the
+            operator hits the wall, because New goal below is refused until the project is
+            activated. It reads on the pause poll's cadence rather than the ops screens' 5 s
+            one - the daemon MEASURES on every activation read (git HEAD, store, manifest).
+          */}
+          {live.setup.ok && <LiveActivate
+            headers={live.setup.headers} pollMs={PAUSE_POLL_MS} setup={live.setup}
           />}
           <LiveGoalsHome
             createDisabledReason={createDisabledReason}

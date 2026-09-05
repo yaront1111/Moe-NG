@@ -93,7 +93,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:48:00.466Z",
-  "updatedAt": "2026-09-05T02:43:34.699Z",
+  "updatedAt": "2026-09-05T02:44:44.405Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:12:15.323Z",
     "plannedStepCount": 3,
@@ -139,7 +139,8 @@
   },
   "filesModified": [
     ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
-    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json"
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
   ],
   "completionSummary": "SPIDR PARENT, VERIFICATION ONLY - zero edits, zero owned paths. All four children landed on moe/work-2026-09-04 (NOT main; main is behind this epic's delivery branch), each DONE and QA-approved.\n\nTHE FOUR CHILDREN AND THEIR LANDED SHAs\n- 3a task-278faf81 -> 9dc78777. /health/read gains ONE key, `agents: {paused}`; KNOWN_PROVIDERS [\"claude\",\"codex\"], claude wins a tie; one `now = clock()` per read feeds both the pause window and readAt; control-room decoder roster live-ops.ts:233 + Health screen.\n- 3b task-66dc4869 -> 5395db14. New pause-context.tsx; cordum-app polls readHealth every 15 s while attached and publishes ONE shell-wide fact; status-strip banner.\n- 3c task-53160801 -> ae3c0be7. Seats banner with the seat's last line; the WORKING next-step names the reset; hosts read the context, no screen polls health twice.\n- 3d task-c81cc93d -> 745305c7. Playwright journey over the REAL daemon + shipped seed + shipped agent-wrapper-main.ts with only the SEAT stood in; runbook `### Provider limits` (:382).\n\nWHAT EACH SURFACE SAYS (one sentence each, all interpolating `paused.provider` - grep proves ZERO hard-coded provider names in any pause surface)\n- shell strip (status-strip.tsx:114): `Agents paused: <provider> limit, resumes <local time>`\n- Seats (activity-screens.tsx:129): that sentence + ` - last line from the seat: <line>`, or `(no output)`\n- Health (ops-screens.tsx:230): Agents fact = `paused: <provider> limit, resumes <local time>` / `not paused`\n- opened goal, WORKING (goal-status.ts:102): `Waiting for the provider limit to reset at <local time>`\n\nGATES RE-RUN FRESH AT THE DELIVERED TREE (HEAD 856e0da9)\n- `pnpm --filter @moe/control-room test` EXIT 0 - Test Files 138 passed (138) / Tests 1737 passed (1737)\n- `pnpm typecheck` EXIT 0 - 19 packages Done incl. apps/daemon + apps/control-room, zero `error TS`\n- `pnpm --filter @moe/daemon test` EXIT 1 - Tests 6 failed | 8298 passed (8304)\n- `pnpm test:e2e:browser` EXIT 1 - 2 failed / 22 passed (3.5m), with THIS FEATU",
   "commits": [
@@ -158,14 +159,31 @@
       "treeId": "87052d1dc05c334db72b1466004c49ead0e6f305",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "5c0a9903e622069efeeb4039ec2b9cdb42e9f344",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T02:26:35Z",
+      "paths": [
+        ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T02:44:44.405Z",
+      "treeId": "e6831364f12d91735fb3a76b7705ea4b30de3695",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/cordum-app.test.tsx"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-56ac23da@2026-09-05T01:53:16Z",
-    "at": "2026-09-05T02:12:34.975Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T02:26:35Z",
+    "at": "2026-09-05T02:44:44.405Z"
   },
   "completedAt": "2026-09-05T02:43:34.699Z",
   "reviewCompletedAt": "2026-09-05T02:43:34.699Z",

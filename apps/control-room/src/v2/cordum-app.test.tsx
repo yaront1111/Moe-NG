@@ -870,9 +870,39 @@ const V1_PENDING_BODY = Object.freeze({
 });
 
 interface WiredApp {
+  readonly activationReads: RequestInit[];
   readonly pendingReads: string[];
   readonly planningReads: string[];
 }
+
+/**
+ * The activation receipts the Activate card renders on the goals screen: one member missing,
+ * so the card has something to say. Shaped exactly as apps/daemon/src/http/activation-read.ts
+ * states it — nine frame keys, seven per receipt, five on signing.
+ */
+const ACTIVATION_FRAME = Object.freeze({
+  blocking: ["provider"],
+  distribution: { kind: "SOURCE_CHECKOUT", root: "D:/projexts/moe-next" },
+  measuredAt: "2026-09-05T05:00:00.000Z",
+  members: [
+    {
+      code: null, hash: "b".repeat(64), layer: null, measured: true, member: "repository",
+      reason: "HEAD is at b1b1b1b1", ref: "repo/head",
+    },
+    {
+      code: "ACTIVATION_PROVIDER_UNMEASURED", hash: null, layer: "ACTIVATION_RECEIPTS",
+      measured: false, member: "provider", reason: "no provider profile has been probed", ref: null,
+    },
+  ],
+  outcome: "ACTIVATION",
+  repository: { headSha: "b".repeat(40), toplevel: "D:/projexts/moe-next" },
+  schemaVersion: "moe-activation-receipts/1",
+  signing: {
+    measured: false, member: "signing", reason: "signing is out of scope for this release",
+    ref: "signing/unsigned-source-checkout", trustBoundary: false,
+  },
+  store: { storePath: "D:/projexts/moe-next/.moe-next/store.sqlite" },
+});
 
 /** Attaches the app over a daemon that offers approval for exactly this run. */
 function renderWiredApp(
@@ -883,6 +913,7 @@ function renderWiredApp(
 ): WiredApp {
   bootstrapPlane = plane;
   commandHook = command ?? null;
+  const activationReads: RequestInit[] = [];
   const pendingReads: string[] = [];
   const planningReads: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
@@ -901,6 +932,10 @@ function renderWiredApp(
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
+    if (input === "/activation/read") {
+      activationReads.push(init ?? {});
+      return Promise.resolve(jsonResponse(ACTIVATION_FRAME));
+    }
     if (input === "/v2/product-contract/pending/read"
       || input === "/product-contract/pending/read") {
       pendingReads.push(`${input} ${String(init?.body ?? "")}`);
@@ -913,7 +948,7 @@ function renderWiredApp(
     return handshakeResponse(input, init);
   }));
   render(<CordumApp liveSetup={attachedSetup()} />);
-  return { pendingReads, planningReads };
+  return { activationReads, pendingReads, planningReads };
 }
 
 function currentBodyForProject(projectId: string): unknown {
@@ -949,6 +984,57 @@ async function openTheDurableBoard(): Promise<void> {
   expect((open as HTMLButtonElement).disabled).toBe(false);
   await userEvent.click(open);
 }
+
+/**
+ * REACHABILITY, not existence. These render the MOUNTED app and look for the card where a
+ * person would meet it — on Goals, beside the New goal control that is refused until the
+ * project is activated. A screen test that renders ActivateScreen in isolation proves the
+ * component compiles; only this proves anybody can get to it.
+ */
+describe("the Activate card is reachable on the goals screen", () => {
+  it("renders the daemon's activation receipts beside the New goal control", async () => {
+    const app = renderWiredApp();
+
+    // Awaited on a RECEIPT, not on the root: the root is present in the card's loading
+    // branch too, so awaiting it would let the arm assert against a card that has not read.
+    const repository = await screen.findByTestId("cr.activate.receipt.repository");
+    expect(screen.getByTestId("cr.activate.root")).not.toBeNull();
+    // Beside New goal: both are on the goals screen, with no navigation in between.
+    expect(screen.getByTestId("cr.goals.new")).not.toBeNull();
+
+    expect(repository.getAttribute("data-measured")).toBe("true");
+    const provider = screen.getByTestId("cr.activate.receipt.provider");
+    expect(provider.getAttribute("data-measured")).toBe("false");
+    expect(screen.getByTestId("cr.activate.reason.provider").textContent)
+      .toBe("no provider profile has been probed");
+    expect(screen.getByTestId("cr.activate.code.provider").textContent)
+      .toBe("ACTIVATION_PROVIDER_UNMEASURED @ ACTIVATION_RECEIPTS");
+    // Signing is stated, and is NOT one of the two counted receipts.
+    expect(screen.getByTestId("cr.activate.signing").getAttribute("data-trust-boundary")).toBe("false");
+    expect(screen.getByTestId("cr.activate.count").textContent).toContain("1 of 2 receipts measured");
+
+    // The read spends the credential the RUNTIME handshake minted, never a baked one.
+    expect(app.activationReads.length).toBeGreaterThan(0);
+    const sent = new Headers(app.activationReads[0]?.headers);
+    expect(sent.get("x-moe-session-credential")).toBe(CLAIMED.sessionCredential);
+    expect(sent.get("x-moe-csrf")).toBe(BOOTSTRAP.csrfToken);
+  });
+
+  it("offers the Activate button to an attached session and does not spend it on render", async () => {
+    const sentCommands: string[] = [];
+    renderWiredApp([APPROVAL_OFFER], { outcome: "NONE" }, "V1", (body) => {
+      sentCommands.push(body);
+      return { ok: true };
+    });
+
+    const button = await screen.findByTestId("cr.activate.button") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain("Activate the project");
+    expect(screen.queryByTestId("cr.activate.nowire")).toBeNull();
+    // Reading is not acting: nothing is dispatched until the operator presses it.
+    expect(sentCommands).toHaveLength(0);
+  });
+});
 
 describe("CordumApp wires the durable run and the daemon's approval grant", () => {
   it("binds CURRENT admission to the project attached by the runtime handshake", async () => {
