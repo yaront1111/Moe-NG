@@ -59,7 +59,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b33940f5",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,7 +102,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T13:32:25.468Z",
+  "updatedAt": "2026-09-05T15:08:51.509Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 5,
@@ -137,7 +137,8 @@
     "architect-a4dc84cf",
     "architect-3c27f2ab",
     "worker-fa42c94f",
-    "architect-b63fabf3"
+    "architect-b63fabf3",
+    "worker-b33940f5"
   ],
   "workStartedAt": "2026-09-04T23:14:51.216Z",
   "blockedReason": null,

@@ -95,7 +95,12 @@ try {
   }
 
   # Second window: the seat watcher, reading the log this window is about to write.
-  Set-Content -LiteralPath $logFile -Value "" -Encoding utf8
+  # Truncate through a share-tolerant handle: a watcher window (or any `tail -f`) still
+  # reading the previous run's log must not stop this run from starting. Set-Content
+  # asks for exclusive access and failed on exactly that (2026-09-05).
+  $logStream = [System.IO.File]::Open($logFile, [System.IO.FileMode]::Create,
+    [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+  $logStream.Close()
   $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
   $watcher = Start-Process $shell -PassThru -ArgumentList @(
     "-NoExit", "-NoProfile",
