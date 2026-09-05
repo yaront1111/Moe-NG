@@ -81,7 +81,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:27:30.045Z",
-  "updatedAt": "2026-09-05T23:29:13.423Z",
+  "updatedAt": "2026-09-05T23:30:15.346Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:43:17.427Z",
     "plannedStepCount": 3,
@@ -153,6 +153,21 @@
       "recordedBy": "worker-afd89b78",
       "recordedAt": "2026-09-05T23:29:13.423Z",
       "treeId": "19b00e4e80d8d35d2cbdfa30f367286f9cc7995f",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "e455261df8fc066504a12f49496e6b91a0af3877",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-afd89b78@2026-09-05T23:29:48Z",
+      "paths": [
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json"
+      ],
+      "recordedBy": "worker-afd89b78",
+      "recordedAt": "2026-09-05T23:30:15.346Z",
+      "treeId": "8e845afb73d2a5e819af770683d68a3be4f80f8d",
       "status": "WORKING",
       "pushed": true
     }
@@ -360,12 +375,14 @@
     "packages/runner/src/verification/criterion-check-executor.test.ts",
     "packages/runner/src/verification/criterion-check-executor.ts",
     "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
-    "tests/e2e/control-room/repository-workflows.spec.ts"
+    "tests/e2e/control-room/repository-workflows.spec.ts",
+    "tests/e2e/foundation/e2e-harness.test.ts",
+    "tests/integration/control-room/compiled-product-journey.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-afd89b78@2026-09-05T23:28:49Z",
-    "at": "2026-09-05T23:29:13.423Z"
+    "sessionId": "worker-afd89b78@2026-09-05T23:29:48Z",
+    "at": "2026-09-05T23:30:15.346Z"
   }
 }
