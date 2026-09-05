@@ -102,7 +102,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-3c27f2ab",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T00:23:34.184Z",
+  "updatedAt": "2026-09-05T11:04:36.286Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 6,
@@ -160,7 +160,9 @@
   },
   "planApprovedAt": "2026-09-04T23:07:21.794Z",
   "contextFetchedBy": [
-    "worker-56ac23da"
+    "worker-56ac23da",
+    "architect-a4dc84cf",
+    "architect-3c27f2ab"
   ],
   "workStartedAt": "2026-09-04T23:14:51.216Z",
   "blockedReason": null,
