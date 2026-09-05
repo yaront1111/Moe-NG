@@ -8,13 +8,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_COMMAND_KINDS, decodeBootstrapRequestBytes } from "./bootstrap-contracts.js";
 import {
-  commitAccepted, humanReviewWitness, missingPrerequisites, readDurableLedger,
+  commitAccepted, humanReviewWitness, missingPrerequisites, readDurableLedger, stateOf,
 } from "./bootstrap-ledger.js";
 import { PREREQUISITE_ALTERNATIVES } from "./bootstrap-sequence.js";
 import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import {
   ACTIVATION_WITNESS,
   FIXTURE_ACTIVATION_RECEIPTS,
+  FIXTURE_PUBLICATION_APPROVAL,
   GOAL_CREATE_COMMAND_ID,
   GOAL_ID,
   OBSERVATION,
@@ -56,6 +57,7 @@ import { seedActivationWorldWithGatePolicy } from "../activation/activation-worl
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import { readApprovedNodeScope } from "../goals/goal-close-prerequisite.js";
 import { scanGlobalEvents, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
+import { qualifyGoalClosure } from "../goals/goal-qualification.js";
 import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 
 /**
@@ -749,23 +751,133 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
   }
 
   /**
+   * The ONE execution-bearing node of the graph the shipped journey seals
+   * (`bootstrap-test-fixtures.ts:149`, `nodeIds: ["node-a"]`, which `journey-authority-bodies.ts:166`
+   * turns into `nodes: [{ executionBearing: true, nodeKey }]`).
+   *
+   * A GOLDEN LITERAL, deliberately, rather than a value re-derived here from the store. Deriving
+   * it in the test would be a second copy of the very derivation the mint now performs, and the
+   * two would move together — a scope naming the wrong node would then agree with itself and the
+   * arm would stay green. It is NOT `node-1`: that literal is the caller-authored scope on the
+   * `approval.decide` fixture record (`bootstrap-test-fixtures.ts:732`) and `seedReviewAcceptance`'s
+   * default, and the distance between the two is exactly what a size-only assertion would miss.
+   */
+  const SEALED_EXECUTION_NODE = "node-a";
+
+  /** The goal's durable lifecycle, folded off the committed ledger rather than off a return value. */
+  function goalLifecycle(store: SqliteEventStore): unknown {
+    const state = stateOf(readDurableLedger(store, PROJECT_ID), GOAL_ID);
+    return state === undefined || state === null || typeof state !== "object"
+      || Array.isArray(state)
+      ? undefined
+      : (state as Record<string, unknown>)["lifecycle"];
+  }
+
+  /** The world the browser leaves behind once its node has been reviewed and accepted. */
+  function intentApprovedAcceptedWorld(commandId: string): SqliteEventStore {
+    const store = intentApprovedWorld(commandId);
+    seedReviewAcceptance(store, SEALED_EXECUTION_NODE);
+    return store;
+  }
+
+  /**
+   * THE HEADLINE: A BROWSER-APPROVED GOAL CLOSES FOR REAL.
+   *
+   * This is the journey the product is named for and it was unreachable end to end until this
+   * row: the operator approved in the browser, was offered a Close, clicked it, and was refused
+   * forever, because the intent seam minted an EMPTY `approvedNodeScope` and an empty scope reads
+   * as "unknown" to `goal-close-prerequisite.ts:87`.
+   *
+   * The assertion is on the DURABLE record, not on the absence of a throw and not merely on the
+   * refusal having changed: `goalLifecycle` folds the committed decisions and answers COMPLETED,
+   * the same terminal `j1-command-path.test.ts:206` asserts for the seeded `approval.decide`
+   * journey. A close that answered `ok` while parking the goal would fail here.
+   */
+  it("closes a goal approved ONLY through approval.decide_intent", () => {
+    const store = intentApprovedAcceptedWorld("cmd-intent-approve-closes");
+
+    const closed = send(
+      store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
+
+    expect(closed.ok, closed.ok ? "" : `${closed.code}@${closed.refusedBy}`).toBe(true);
+    expect(goalLifecycle(store)).toBe("COMPLETED");
+  }, 90_000);
+
+  /**
+   * THE SCOPE IS NAMED, AND IT NAMES THE RIGHT NODES.
+   *
+   * Asserted by SET EQUALITY on the whole record, never by `scope.length`: a scope of the right
+   * size naming the wrong node would send `goal-qualification.ts:163` walking receipts that
+   * belong to nobody, and — because a node with no receipt falls through to the live leg — could
+   * still close the goal against evidence it never had. `approvalRef` is asserted alongside it
+   * because the mint derives both from the same run identity.
+   */
+  it("names the sealed revision's execution-bearing nodes as the approved node scope", () => {
+    const store = intentApprovedWorld("cmd-intent-approve-scope");
+
+    expect(readApprovedNodeScope(store, GOAL_ID))
+      .toEqual({ approvalRef: `approval:${RUN_ID}`, scope: [SEALED_EXECUTION_NODE] });
+  });
+
+  /**
+   * FAIL-CLOSED AT THE CLOSE IS UNCHANGED: an approved node the live loop never accepted still
+   * refuses, and the ACCEPTANCE fence is provably the one that answered.
+   *
+   * THE DISCRIMINATOR IS THE MESSAGE, and it has to be. `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`
+   * at `DAEMON_PREREQUISITE` is ALSO what the scope fence answers, so an arm reading the code and
+   * the layer alone would have passed before this row shipped — while testing nothing about
+   * acceptance at all. `qualifyGoalClosure` carries the exact sentence each fence raises, so the
+   * two are told apart; the non-null scope assertion is the second leg of the same proof.
+   */
+  it("still refuses the close when no review acceptance names the approved node", () => {
+    const store = intentApprovedWorld("cmd-intent-approve-unaccepted");
+    // The scope fence is SATISFIED — so it cannot be what refuses below.
+    expect(readApprovedNodeScope(store, GOAL_ID))
+      .toEqual({ approvalRef: `approval:${RUN_ID}`, scope: [SEALED_EXECUTION_NODE] });
+
+    const closed = send(
+      store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
+
+    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({
+      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+      layer: "DAEMON_PREREQUISITE",
+      message: "no durable review acceptance names this approved node",
+      ok: false,
+    });
+  });
+
+  /**
    * `goal.close` REACHES THE GOAL'S OWN AUTHORITY, which is the whole of what this row owns.
    *
    * Before the fix this dispatch died at the SEQUENCE gate with a code that names nothing about
    * goals — the live UnAI symptom. After it, the sequence gate has nothing left to report and the
    * refusal that answers is the goal's own, from the closure vocabulary an operator can act on.
    *
-   * It is NOT accepted in THIS world, and the reason is measured rather than shrugged at: the
-   * intent seam mints `approvedNodeScope: Object.freeze([])` (approval-intent-sources.ts:137,
-   * deliberately — "an initial-graph approval approves the sealed revision, and there is no
-   * durable per-node selection for it to restate"), and `readApprovedNodeScope` answers null for
-   * an empty scope (goal-close-prerequisite.ts:87). So the browser-approved goal is still short
-   * one fence, one layer deeper than the one this row corrects. That gap is filed, not hidden;
-   * this arm pins it, so whoever closes it has to come here and say so.
+   * THE ANSWER MOVED, AND HERE IS WHY (task-8bdd14af). This arm used to assert the opposite: a
+   * NULL scope and a `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED` refusal. It was written that way on
+   * purpose, as a tripwire, because the intent seam then minted
+   * `approvedNodeScope: Object.freeze([])` on the reasoning that "an initial-graph approval
+   * approves the sealed revision, and there is no durable per-node selection for it to restate" —
+   * while `goal-close-prerequisite.ts:87` reads an EMPTY scope as "unknown", and an unknown
+   * closure confers nothing. A browser-approved goal was therefore refused forever, one fence
+   * deeper than the one task-ebbcbdb4 corrected. The mint now derives the sealed revision's
+   * execution-bearing nodes from the graph body its own bodies event names, so the scope is no
+   * longer null and the goal's own authority proceeds to the receipt walk instead of stopping at
+   * the scope fence.
+   *
+   * WHAT THIS ARM STILL GUARDS is unchanged: `goal.close` REACHES THE GOAL'S OWN AUTHORITY, past
+   * a sequence gate that reports nothing missing. That is asserted on the production reader
+   * rather than inferred from the refusal, because more than one authority shares this code and
+   * layer. Its `seedReviewAcceptance(store)` setup is kept VERBATIM, and it now carries a second
+   * meaning worth having: the default seeds `node-1`, which is NOT the sealed revision's node, so
+   * this world proves an acceptance naming a node OUTSIDE the approved scope confers nothing. The
+   * accepted close — acceptance on the node the scope actually names — is the arm above.
    */
   it("lets goal.close past the sequence gate, where the GOAL's own authority answers", () => {
     const store = intentApprovedWorld();
     seedReviewAcceptance(store);
+    expect(SEALED_EXECUTION_NODE).not.toBe("node-1");
     // The sequence gate is SATISFIED — asserted on the production reader, not inferred from the
     // refusal, because the fence below reuses this same code and layer for its own reasons.
     expect(missingPrerequisites(readDurableLedger(store, PROJECT_ID), "goal.close")).toEqual([]);
@@ -774,7 +886,8 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
     expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
-    expect(readApprovedNodeScope(store, GOAL_ID)).toBeNull();
+    expect(readApprovedNodeScope(store, GOAL_ID))
+      .toEqual({ approvalRef: `approval:${RUN_ID}`, scope: [SEALED_EXECUTION_NODE] });
   });
 
   it("accepts repository.publish on a goal approved through approval.decide_intent", () => {
@@ -782,7 +895,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
 
     const published = send(store, envelope(
       "repository.publish", 0,
-      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+      { approval: FIXTURE_PUBLICATION_APPROVAL, goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
     ));
 
     expect(published.ok, published.ok ? "" : `${published.code}@${published.refusedBy}`).toBe(true);
@@ -824,7 +937,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
 
     const published = send(store, envelope(
       "repository.publish", 0,
-      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+      { approval: FIXTURE_PUBLICATION_APPROVAL, goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
     ));
 
     expect(published.ok).toBe(false);
@@ -884,7 +997,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
     const published = send(store, envelope(
       "repository.publish", 0,
-      { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
+      { approval: FIXTURE_PUBLICATION_APPROVAL, goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish",
     ));
 
     // Neither is accepted. The rejection enabled no execution, so the goal never reached a
@@ -892,6 +1005,12 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
     expect(label(published)).toBe("BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE");
     expect(readDurableLedger(store, PROJECT_ID).kinds.has("repository.publish")).toBe(false);
+    // WHICH FENCE ANSWERED, named rather than inferred, and load-bearing since the mint began
+    // deriving a real `approvedNodeScope`: a rejection enables no execution, so there is no
+    // `GoalExecutionEnabled` for `readApprovedNodeScope` to read and the closure fence answers on
+    // an UNKNOWN scope. A rejection that minted a scope would close this goal, and this is the
+    // assertion that would redden.
+    expect(readApprovedNodeScope(store, GOAL_ID)).toBeNull();
   });
 });
 

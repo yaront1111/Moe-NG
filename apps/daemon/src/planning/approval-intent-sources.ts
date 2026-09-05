@@ -5,6 +5,7 @@ import { payloadObject, payloadRef, readDurableLedger, stateOf }
   from "../bootstrap/bootstrap-ledger.js";
 import type { ServiceRefusedBy } from "../bootstrap/bootstrap-ledger.js";
 import { verifyApprovedRunBinding } from "./approval-run-binding.js";
+import { readGraphBody } from "./graph-body-record.js";
 import { planningAuthorityAggregateId } from "./planning-authority-persistence.js";
 
 /**
@@ -83,6 +84,60 @@ function sealedCriteriaDigest(store: SqliteEventStore, runId: string): string | 
   return typeof digest === "string" && digest.length > 0 ? digest : null;
 }
 
+/**
+ * The APPROVED NODE SCOPE, derived from the same sealed bodies `sealedCriteriaDigest` reads.
+ *
+ * THE DERIVATION IS TWO HOPS AND BOTH ARE SEALED. The bodies event carries `graphContentHash`,
+ * not node keys, so the nodes come from the CONTENT-ADDRESSED graph body that hash names — the
+ * same `snapshot.nodes.filter(executionBearing)` derivation `runs-read.ts:102` and
+ * `compiled-node-source.ts:132` already use. It is deliberately NOT `readCurrentActiveGraph`:
+ * at this moment the revision is not active yet (this very approval is what enables execution),
+ * so that read answers ACTIVE_GRAPH_ABSENT — measured, not assumed. It is deliberately not the
+ * plan revision's `affectedNodeIds` either: that is a plan-side list, not the graph's
+ * execution-bearing set, and the closure qualifier walks the graph's.
+ *
+ * NULL ON EVERY FAILURE, INCLUDING AN EMPTY DERIVATION, and never a throw: the null feeds the
+ * UNSEALED refusal below rather than a crash, and an empty result must refuse rather than mint,
+ * because an empty scope is exactly the unusable record this function exists to stop producing.
+ */
+function sealedNodeScope(
+  store: SqliteEventStore, projectId: string, runId: string,
+): readonly string[] | null {
+  let events;
+  try {
+    events = store.readEvents(planningAuthorityAggregateId(runId));
+  } catch {
+    return null;
+  }
+  const bodies = events.find((event) => event.eventType === BODIES_EVENT_TYPE);
+  if (bodies === undefined) return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(decoder.decode(bodies.payload));
+  } catch {
+    return null;
+  }
+  const graphContentHash = own(payload, "graphContentHash");
+  if (typeof graphContentHash !== "string" || graphContentHash.length === 0) return null;
+  // The DERIVATION is inside the try, not only the read: a body that decoded but carries no
+  // snapshot would throw on `.filter`, and this function's contract is a null the guard below
+  // turns into a refusal — never an exception escaping the mint.
+  try {
+    const body = readGraphBody(store, projectId, graphContentHash);
+    if (!body.ok) return null;
+    const scope = [...new Set(body.content.snapshot.nodes
+      .filter((node) => node.executionBearing)
+      .map((node) => node.nodeKey)
+      // Non-empty strings only. `goal-close-prerequisite.ts:87` rejects a whole scope containing
+      // a blank ref, so a blank one minted here would produce the same unclosable goal by a
+      // quieter route; refusing at the mint keeps the failure where it can be acted on.
+      .filter((nodeKey) => typeof nodeKey === "string" && nodeKey.trim().length > 0))].sort();
+    return scope.length === 0 ? null : Object.freeze(scope);
+  } catch {
+    return null;
+  }
+}
+
 const sourceRefusal = (code: string, layer: ServiceRefusedBy): ApprovalIntentRefused =>
   Object.freeze({ code, layer, ok: false as const });
 
@@ -123,8 +178,9 @@ export function readApprovalIntentSources(
     ? null
     : payloadRef(payloadObject(state, "sealedHashes") ?? {}, "qualityHash");
   const criteriaRef = sealedCriteriaDigest(store, runId);
+  const approvedNodeScope = sealedNodeScope(store, projectId, runId);
   if (submissionHash === null || goalRef === null || graphRevisionRef === null
-    || qualityHash === null || criteriaRef === null) {
+    || qualityHash === null || criteriaRef === null || approvedNodeScope === null) {
     return sourceRefusal("APPROVAL_AUTHORITY_UNSEALED", "APPROVAL_RUN_BINDING");
   }
   return Object.freeze({
@@ -132,9 +188,15 @@ export function readApprovalIntentSources(
     // SERVER-MINTED off the run identity. A caller names the run as INTENT and nothing else, so
     // it cannot present an approval ref that cites some other approval.
     approvalRef: `approval:${runId}`,
-    // No per-node narrowing: an initial-graph approval approves the sealed revision, and there is
-    // no durable per-node selection for it to restate.
-    approvedNodeScope: Object.freeze([]),
+    // THE SEALED REVISION'S EXECUTION-BEARING NODES, RESTATED. This used to be an empty array on
+    // the reasoning that an initial-graph approval approves the whole sealed revision and has no
+    // per-node selection to narrow. It reads as the opposite downstream: `goal-qualification.ts:163`
+    // consumes the scope as the per-node receipt WALK, and `goal-close-prerequisite.ts:87` reads
+    // an empty scope as "unknown" — and an unknown closure confers nothing. A browser-approved
+    // goal was therefore unclosable forever. Sorted and deduped at the MINT because the reader
+    // normalises with `[...new Set(scope)].sort()`: minting it normalised means the durable bytes
+    // and the reader's view agree directly, not only after normalisation.
+    approvedNodeScope,
     criteriaRef,
     exactRevisionHash: submissionHash,
     goalRef,

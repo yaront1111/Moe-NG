@@ -27,6 +27,7 @@ import {
   GOAL_ID,
   PROJECT_ID,
   RUN_ID,
+  SEALED_GRAPH_CONTENT_HASH,
   bootstrapSequence,
   closeStores,
   driveThrough,
@@ -38,6 +39,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { planningAuthorityAggregateId } from "./planning-authority-persistence.js";
 import { activeGraphSlotAggregateId } from "./active-graph-slot.js";
+import { graphBodyAggregateId } from "./graph-body-record.js";
 import {
   assembleActivationInput,
   commitIntentActivation,
@@ -268,6 +270,23 @@ function withStoreFacade(
   });
 }
 
+/**
+ * THE SEALED GRAPH BODY THE APPROVED SCOPE IS DERIVED FROM, MADE UNREADABLE — and nothing else.
+ *
+ * Every other durable fact the sources reader needs stays exactly as the shipped journey left it:
+ * the bodies event, the envelope, the run's PLAN_REVIEW state, the goal. Only
+ * `graphBodyAggregateId(PROJECT_ID, SEALED_GRAPH_CONTENT_HASH)` answers empty, which is precisely
+ * what `readGraphBody` sees as `GRAPH_BODY_ABSENT`. That isolation is the point: it makes the
+ * refusal below attributable to the SCOPE derivation rather than to any of the four other reads
+ * that already answer `APPROVAL_AUTHORITY_UNSEALED`.
+ */
+function unreadableGraphBody(store: SqliteEventStore): SqliteEventStore {
+  const hidden = graphBodyAggregateId(PROJECT_ID, SEALED_GRAPH_CONTENT_HASH);
+  return withStoreFacade(store, (property) => property === "readEvents"
+    ? (aggregateId: string) => (aggregateId === hidden ? [] : store.readEvents(aggregateId))
+    : undefined);
+}
+
 function unreadableSources(store: SqliteEventStore) {
   let reads = 0;
   const facade = withStoreFacade(store, (property) => property === "readEvents"
@@ -283,6 +302,14 @@ function unreadableSources(store: SqliteEventStore) {
  * Nth-read transient fault injection: storage still supplies real bytes and every production
  * reader/validator runs. A stable SQLite tamper is correctly stopped earlier as STORE_CORRUPT by
  * the decision-leg roster, so it cannot isolate the validator fence this arm grades.
+ *
+ * THE INDEX IS AN ORDINAL OVER THE AUTHORITY AGGREGATE AND IT MOVES WHEN THE MINT'S READ SHAPE
+ * MOVES. It was 4 while `readApprovalIntentSources` read that aggregate ONCE per call; the mint
+ * now also derives the approved node scope from the same sealed bodies, so each call reads it
+ * twice and the ordinal that lands on the digest the record carries is 5. The arm still grades
+ * exactly what it always graded — the validator fence answering
+ * APPROVAL_INTENT_RECORD_INVALID — and the code is what proves the fault landed where intended;
+ * a wrong ordinal shows up immediately as an ACCEPTED dispatch, which is how this was measured.
  */
 function criteriaValidatorFault(store: SqliteEventStore) {
   const authorityId = planningAuthorityAggregateId(RUN_ID);
@@ -290,7 +317,7 @@ function criteriaValidatorFault(store: SqliteEventStore) {
   const facade = withStoreFacade(store, (property) => property === "readEvents"
     ? (aggregateId: string) => {
         const events = store.readEvents(aggregateId);
-        if (aggregateId !== authorityId || ++reads !== 4) return events;
+        if (aggregateId !== authorityId || ++reads !== 5) return events;
         return events.map((event) => event.eventType !== BODIES_EVENT_TYPE
           ? event
           : {
@@ -749,6 +776,38 @@ describe("the server-owned approval and activation assembly", () => {
     )).toEqual({
       code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING", ok: false,
     });
+  });
+
+  /**
+   * AN UNDERIVABLE APPROVED SCOPE REFUSES AT THE MINT, NOT AT THE CLOSE.
+   *
+   * The mint derives `approvedNodeScope` from the sealed revision's own graph body, because an
+   * EMPTY scope is read as "unknown" by `goal-close-prerequisite.ts:87` and an unknown closure
+   * confers nothing — a goal approved with one can never close. So a scope that cannot be derived
+   * must refuse HERE, where the operator is told the authority is unsealed, rather than being
+   * minted empty and answering GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED forever afterwards. That is
+   * the same fail-closed direction `sealedCriteriaDigest` already takes, folded into the same
+   * guard, which is why the code and layer are the ones this seam already publishes.
+   *
+   * ONLY THE GRAPH BODY IS HIDDEN. Every other source the reader consults is untouched, so the
+   * refusal is attributable to the scope derivation rather than to one of the four other reads
+   * that share this code — and it commits nothing, asserted rather than assumed.
+   */
+  it("refuses at the mint when the approved node scope cannot be derived", () => {
+    const store = reviewableStore();
+    const blind = unreadableGraphBody(store);
+    // NON-VACUITY: with the body readable the same world derives a scope and mints an approval.
+    const readable = readApprovalIntentSources(store, PROJECT_ID, RUN_ID);
+    expect(readable.ok && readable.approvedNodeScope).toEqual(["node-a"]);
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(readApprovalIntentSources(blind, PROJECT_ID, RUN_ID)).toEqual({
+      code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING", ok: false,
+    });
+    // And it reaches the operator through the shipped command, not only through the reader.
+    expect(refusalOf(dispatch(blind, INTENT, { commandId: "cmd-intent-scope-underivable" })))
+      .toEqual({ code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING" });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
   });
 
   it("refuses when the supplied ledger has no durable goal state", () => {
@@ -2035,7 +2094,10 @@ describe("one approval intent decision activates, records, and burns atomically"
     expect(refusalOf(reviewedDispatch(faulted.store, commandId))).toEqual({
       code: "APPROVAL_INTENT_RECORD_INVALID", layer: "DAEMON_APPROVAL_INTENT",
     });
-    expect(faulted.reads()).toBe(6);
+    // 9, not 6, and it counts the FAULTED dispatch alone: the mint reads the authority aggregate
+    // TWICE per `readApprovalIntentSources` call now that the approved node scope is derived from
+    // the same sealed bodies, and the seam calls that reader on more than one leg.
+    expect(faulted.reads()).toBe(9);
     expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
     expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
     expect(reviewedDispatch(faulted.store, commandId).ok).toBe(true);

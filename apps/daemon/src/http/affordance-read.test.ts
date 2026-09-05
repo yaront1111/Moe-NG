@@ -18,12 +18,16 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
+  GOAL_ID as BOOTSTRAP_GOAL,
   PROJECT_ID as BOOTSTRAP_PROJECT,
   RUN_ID as BOOTSTRAP_RUN_ID,
+  acceptancePayload,
   closeStores as closeBootstrapStores,
   driveThrough,
   openStore as openBootstrapStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { readApprovedNodeScope } from "../goals/goal-close-prerequisite.js";
+import { seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { runApprovalIntentCommand } from "../planning/approval-intent.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
@@ -1191,18 +1195,36 @@ describe("the offer roster and the step projection agree on a browser-approved g
   });
 
   /**
-   * `goal.close` DISPATCHED FROM ITS OWN OFFER — the honest half.
+   * `goal.close` DISPATCHED FROM ITS OWN OFFER — and it now CLOSES.
    *
-   * The sequence gate no longer answers: it reports nothing missing, which is the whole of what
-   * this row corrects. The refusal that remains is the GOAL's own, from the closure vocabulary,
-   * and it is there because `approval-intent-sources.ts:137` mints an EMPTY `approvedNodeScope`
-   * for an initial-graph approval while `goal-close-prerequisite.ts:87` reads an empty scope as
-   * "no approval names an approved node scope". That is a SECOND instance of this same defect
-   * class one fence deeper, in a module this row does not own; it is filed rather than papered
-   * over, and this arm pins the current answer so closing it has to be deliberate.
+   * THE ANSWER MOVED, AND HERE IS WHY (task-8bdd14af). This arm used to assert a REFUSAL: past
+   * the sequence gate, but stopped by the goal's own closure fence, because
+   * `approval-intent-sources.ts` minted an EMPTY `approvedNodeScope` for an initial-graph
+   * approval while `goal-close-prerequisite.ts:87` reads an empty scope as "no approval names an
+   * approved node scope". It was written that way on purpose, as a tripwire on a defect one fence
+   * deeper than the one task-ebbcbdb4 fixed. The mint now names the sealed revision's
+   * execution-bearing nodes, so with that node's review acceptance seeded the offer the frame
+   * makes is an offer the command path HONOURS — which is the headline journey, "close a finished
+   * goal from the browser", reachable end to end for the first time.
+   *
+   * WHAT THIS ARM IS FOR IS UNCHANGED: the OFFER and the COMMAND PATH must agree on ONE real
+   * frame. Every ROUTING parameter below is still taken from the frame's own offer rather than
+   * hand-built — kind, target, expected version, command id, schema version — because that is
+   * what makes it an agreement test instead of two independent assertions. The PAYLOAD is the
+   * operator's, as in production: an offer names what may be done, not the acceptance witnesses
+   * the human supplies.
+   *
+   * AND THAT PAYLOAD IS WHY THE OLD ARM WAS WEAKER THAN IT READ. It sent `{ goalId }` alone and
+   * asserted only that the code was not the sequence gate's; measured while updating it, that
+   * dispatch was answered BOOTSTRAP_PAYLOAD_INVALID at DAEMON_INGRESS — so it never reached the
+   * goal's authority at all, and its name was a claim its assertions could not support. The full
+   * `acceptancePayload()` is what carries the dispatch past ingress to the fence being graded.
    */
-  it("dispatches the goal.close offer past the sequence gate to the goal's own authority", () => {
+  it("dispatches the goal.close offer past the sequence gate and the goal closes", () => {
     const worldStore = browserApprovedStore();
+    // The one execution-bearing node of the sealed revision (bootstrap-test-fixtures.ts:149),
+    // which is what the intent approval's `approvedNodeScope` now names.
+    seedReviewAcceptance(worldStore, "node-a");
     const frame = frameOf(worldStore);
     const offered = frame.nextAllowedCommands.find(
       (command) => command.commandKind === "goal.close");
@@ -1214,19 +1236,22 @@ describe("the offer roster and the step projection agree on a browser-approved g
       decidedAt: "2026-09-05T12:00:00.000Z",
       expectedVersion: offered.expectedVersion,
       kind: offered.commandKind,
-      payload: { goalId: offered.targetAggregateId },
+      payload: acceptancePayload({ goalId: offered.targetAggregateId }),
       principalId: "operator-local",
       projectId: BOOTSTRAP_PROJECT,
       schemaVersion: offered.inputSchemaVersion,
     })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
     FIXTURE_ACTIVATION_RECEIPTS);
 
-    expect(dispatched.ok).toBe(false);
-    if (dispatched.ok) throw new Error("expected the closure fence to answer");
-    // NOT the sequence gate, and asserted on the production reader rather than on the code —
-    // `publishRepository` proves two authorities can share one code and one layer here.
+    expect(dispatched.ok, dispatched.ok ? "" : `${dispatched.code}@${dispatched.refusedBy}`)
+      .toBe(true);
+    // NOT admitted by the sequence gate alone, and asserted on the production reader rather than
+    // on the code — `publishRepository` proves two authorities can share one code and one layer.
     expect(missingPrerequisites(readDurableLedger(worldStore, BOOTSTRAP_PROJECT), "goal.close"))
       .toEqual([]);
-    expect(dispatched.code).not.toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    // The approved scope the closure walked, named rather than assumed: an accepted close against
+    // a scope that named some other node would have walked receipts belonging to nobody.
+    expect(readApprovedNodeScope(worldStore, BOOTSTRAP_GOAL))
+      .toEqual({ approvalRef: `approval:${BOOTSTRAP_RUN_ID}`, scope: ["node-a"] });
   });
 });
