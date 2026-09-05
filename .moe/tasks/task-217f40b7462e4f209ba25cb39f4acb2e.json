@@ -1,0 +1,41 @@
+{
+  "id": "task-217f40b7462e4f209ba25cb39f4acb2e",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The affordance surface offers a design step after Gate 1, and skips it when the goal is marked skipped",
+  "description": "SPIDR prerequisite of task-de0598236f3b4d95aa3b6098b9d56995 (architect-b63fabf3, 2026-09-05), cut on the INTERFACE axis. That row measured at ~10 distinct files across three subsystems - surface, wrapper, mission text - with two files already at or over the per-file cap. This row is the SURFACE third. The wrapper and mission thirds stay on task-de059823, which dependsOn this row.\n\nOBJECTIVE: the chain surface offers a design step in exactly the window where a design is possible and wanted, and offers nothing when the goal was marked skipped.\n\nDELIVERABLE WHEN DONE: `createAffordancePort` composes a design step whose status is driven by three measured facts - Gate 1 approved, decomposition not yet run, no design and no skip marker on `design:<goalId>` - and stops offering it the moment any of those stops holding.\n\nMEASURED AT HEAD f3b94eaa (branch moe/work-2026-09-04) by architect-b63fabf3:\n- `apps/daemon/src/http/affordance-read.ts` is 468 LINES - ALREADY OVER the 400 per-file cap at merge-base. This is a pre-existing condition you must not worsen. Compose the new step from a SMALL FOCUSED MODULE (`affordance-design-step.ts`, target <=250 lines) and keep the edit inside affordance-read.ts to the composition call itself. Do not reformat the file, and do not attempt to split it - that is a different row.\n- `ChainStep.kind` at `apps/daemon/src/http/affordance-contract.ts:64` is a plain `string`, NOT a closed union. So the surface can name a new step kind with no type widening anywhere - a rare piece of good news on this board. `ChainStepStatus` at :45 is the closed one.\n- `workItemIdFor(kind, aggregateId)` at affordance-read.ts:120 builds `${kind}@${aggregateId ?? \"-\"}` - the same key the wrapper and the live board fence on. The design step MUST use it rather than minting its own id, or the wrapper cannot dedupe or claim it.\n- `apps/daemon/src/design/` (task-5e90317e, DONE at sha 34baaf52) already exposes `designAggregateId(goalId)` and a `designRead` whose result distinguishes present from absent. The SKIP marker it must additionally distinguish is task-365e5d978ba24c92a91b3ee19ab90558's, declared in dependsOn.\n- `design.submit` / `design.read` are NOT yet on any command roster - `git grep -n 'design\\.submit|design\\.read' -- . ':!.moe'` hits only design-store.ts:155, a record field. task-06ac0da1 publishes them and is declared in dependsOn: a surface that offers a step whose kind no registry serves is an offer nothing can take.\n- Two test files already assert against this surface and BOTH may need an arm: `affordance-read.test.ts` and `affordance-read-planning.test.ts`. Check both before writing; naming only one is how a peer's count assertion reds later.\n\nNOT IN SCOPE - owned by named rows:\n- The wrapper staffing the step, its ordering rank against `node.deliver`, and every line of mission text - task-de0598236f3b4d95aa3b6098b9d56995.\n- The SKIPPED marker's shape, decoder and refusal codes - task-365e5d97 (this row READS it; it does not define it).\n- Publishing the kinds or serving them over MCP - task-06ac0da1, task-7f9f20c7.\n- Any UI - task-8a6d6660's child 3.\n- Splitting affordance-read.ts to fix its pre-existing 468 lines.\n\nVERIFICATION COMMAND for moe.complete_task: `pnpm --filter @moe/daemon test`. Also run `pnpm typecheck` and quote its count line. Root `pnpm test` is NOT evidence for this row: vitest.config.ts:32 includes no `apps/**`.",
+  "definitionOfDone": [
+    "The surface offers a design step for a goal whose Gate 1 contract is APPROVED and whose decomposition has NOT run, and stops offering it once a design exists. Assert BOTH transitions against a real store built by the production journey, and assert the step is ABSENT before Gate 1 approval - a design step offered on an unapproved contract would staff a seat with nothing to design against. Three states, three assertions; two of them cannot tell the third apart.",
+    "When the goal carries the SKIPPED marker from task-365e5d978ba24c92a91b3ee19ab90558, the surface offers NO design step at all, and the goal still reaches a decomposition. Assert the whole chain still completes with the design step absent - THE LOOP MUST NEVER BLOCK ON THIS STEP, so a test that only checks the step is missing has proven half of what matters.",
+    "The step's work-item id comes from `workItemIdFor(kind, aggregateId)` (affordance-read.ts:120), not a hand-built string, and its `aggregateId` is `designAggregateId(goalRef)`. Assert the produced id by value: the wrapper, the claim ledger and the live board all fence on this exact key, so an id that merely looks right is a step nothing can claim.",
+    "The new logic lives in its own module (target <=250 lines) and the edit to apps/daemon/src/http/affordance-read.ts is the composition call only. That file is 468 lines at merge-base - ALREADY over the 400 cap - so `wc -l` it before and after and show the delta is small; growing it further is a QA rejection and reformatting it hides the diff.",
+    "Both existing asserting consumers are checked and updated where needed: apps/daemon/src/http/affordance-read.test.ts AND affordance-read-planning.test.ts. Say in the completion record which one(s) actually needed an arm and why the other did not - \"I only looked at one\" is how a hard-coded step count reds for the next row.",
+    "MUTATION DRILL, quoted with its failing line, restored and proved: remove the Gate-1-approved precondition so the step is offered on an unapproved contract, and confirm the DoD-1 absent-before-approval arm goes RED. `git status --porcelain` the mutated paths FIRST; prove restore with an empty `git diff -- <path>` for tracked files, and by SHA256 against an out-of-tree backup for the NEW module (it is untracked, so `git diff` certifies nothing about it) - in a call SEPARATE from the restore.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. An exit-0 leg with no count line ran nothing and is not evidence. Attribute any foreign red by the merge-base/HEAD failing-path delta intersected with this row's owned paths, and disclose it verbatim rather than fabricating green."
+  ],
+  "taskRails": [
+    "SURFACE ONLY. This row composes a step into the affordance surface. It staffs no seat, writes no mission text, publishes no command kind and renders no UI. If a step needs the wrapper or a mission to be meaningful, it belongs to task-de0598236f3b4d95aa3b6098b9d56995 - say so and move on.",
+    "THE LOOP MUST NEVER BLOCK ON THIS STEP. A goal must always be able to reach a plan: with a design, or with the skip marker set. Prove the skipped path reaches decomposition, not merely that the step is absent.",
+    "affordance-read.ts IS ALREADY 468 LINES, over the 400 cap, before your diff. Add a focused module and compose it; do not grow that file beyond a composition call, do not reformat it, and do not split it.",
+    "USE `workItemIdFor`. The wrapper, the claim ledger and the board all fence on `${kind}@${aggregateId ?? \"-\"}`. A hand-built id produces a step that renders but cannot be claimed.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-365e5d978ba24c92a91b3ee19ab90558",
+    "task-06ac0da1ace64032855affc4ab0c1a4e"
+  ],
+  "priority": "HIGH",
+  "order": 61.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:23:30.489Z",
+  "updatedAt": "2026-09-05T14:23:30.489Z"
+}

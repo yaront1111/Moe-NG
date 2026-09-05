@@ -109,8 +109,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2739fee7",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -118,14 +118,23 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
   "dependsOn": [
-    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3"
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
+    "task-d0d1cb5c3f034d50bd84b7ed56b7e812",
+    "task-b3888068c0e2481cb1463524ee7f2895"
   ],
   "priority": "HIGH",
   "order": 101.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1e2ff9eaf4dc448bab3f983216527ec1",
+      "author": "worker-2739fee7",
+      "content": "STEP-1 HARD STOP RE-MEASURED IN A FRESH SESSION (worker-2739fee7, 2026-09-05). Zero production bytes written by me this session or the last. The prior session (wip 8a534255) touched only `.moe/tasks/*.json` — confirmed by `git show --stat 8a534255`, which lists exactly two board JSON files and no source.\n\nSTEP 1(a) — THE FENCE, `task-d0d1cb5c`. Absent at HEAD, half-present in the shared working tree:\n```\ngit grep -n 'environment.set_variable' HEAD -- apps/daemon/src/mcp-tool-allowlist.ts \\\n    apps/daemon/src/orchestrator/agent-spawn-contract.ts\n  -> (no output, exit 1)\n\ngrep -n 'environment.set_variable\\|environment.unset_variable' \\\n    apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts\n  -> apps/daemon/src/orchestrator/agent-spawn-contract.ts:215:  \"environment.set_variable\", \"environment.unset_variable\",\n```\nSo HUMAN_ONLY_STEPS has both kinds in the WORKING TREE only; `MCP_EXCLUDED_COMMAND_KINDS` (`mcp-tool-allowlist.ts:59`) has NEITHER, in the tree or at HEAD. `agent-spawn-contract.ts` shows ` M` in git status and `task-d0d1cb5c` is WORKING assigned to worker-caece97b — that is their in-flight half, not a landed prerequisite. Per the shared-checkout rail I did not touch, revert or count it.\n\nSTEP 1(b) — THE CONTRACT, `task-b3888068`. Absent, and the row has not started:\n```\ngrep -c 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts  -> 0\n```\n`RUNTIME_COMMAND_KINDS` is at `runtime-vocabulary.ts:85`; it contains no environment kind. `task-b3888068` status = PLANNING.\n\nWHY THIS IS A HARD BLOCK AND NOT A PARTIAL LAND. `mcp-tool-allowlist.ts:84-90` computes the MCP-served set as `Object.keys(PAYLOAD_KEYS)` MINUS `MCP_EXCLUDED_COMMAND_KINDS`. Step 2 of this plan adds both kinds to `PAYLOAD_KEYS`. With the exclusion not yet landed, the instant those keys exist both kinds become MCP-ADVERTISED, and the MCP port authenticates with the operator bootstrap credential (`mcp-main.ts:112-127`) — so an agent holding it arrives AS the operator and gets a real witness for a command whose payload sets a production environment variable. That is this plan's step-1 stop clause verbatim and taskRail 1; it is a security ordering constraint, not sequencing paperwork.\n\nSecond, independent reason: `daemon-store-dependencies.test.ts:238` set-equality welds `PAYLOAD_KEYS` to the v2 registry. Any partial land of steps 2-3 without steps 4-5 reds that arm for every agent in this shared checkout.\n\nWHY THE ROW WAS CLAIMABLE AT ALL — a board defect, not a worker judgement call. `dependsOn` on this row is `['task-d0c63cd8848a4da18ad3fbb8eb1d95c3']` only. Its DONE. The two leaves the architect carved out of this row on 2026-09-05 (`task-d0d1cb5c`, `task-b3888068`) were never added to the field — `mem:task-a2409cba-env-command-publishing-split` records why: `set_task_dependencies` refuses a worker seat with `[NOT_ALLOWED] architect or governor role required`, so the splitting architect made step 1 a hard-stop precisely so the chain would fail closed if the field was never set. It was never set. The stop clause is doing its designed job. Requesting a governor/architect add both ids to this row's `dependsOn` so the next session is not offered the row early again.\n\nNOTHING DELIVERABLE WAS LEFT ON THE TABLE. Every remaining step (2-9) is downstream of registering the kinds; there is no earlier slice that is production-reachable without opening the advertisement window.\n\nHOST NOTE for whoever resumes: the spawn-latency cliff is active (worker-d6e44333 measured 168 ms steady vs 8 ms healthy, mtkbtsvc pid 6352 at 9.7M handles). Step 9's daemon leg will produce `Test timed out in 5000ms` reds in `src/work/foundation-*` that are NOT attributable to this diff; re-run the file in isolation before attributing, and do not run two suites concurrently on this box (planningNotes record that moving 3 -> 8 reds on an unchanged tree).",
+      "timestamp": "2026-09-05T14:22:53.052Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-05T14:19:40.683Z",
+  "updatedAt": "2026-09-05T14:23:54.188Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -158,5 +167,42 @@
     ]
   },
   "planApprovedAt": "2026-09-05T14:11:35.911Z",
-  "workStartedAt": "2026-09-05T14:16:09.442Z"
+  "workStartedAt": "2026-09-05T14:16:09.442Z",
+  "commits": [
+    {
+      "sha": "8a534255749cc8bf042299585d69b7577355d86d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T14:15:47Z",
+      "paths": [
+        ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T14:20:03.183Z",
+      "treeId": "bdd060eda0b0ce75a36139e5dca91db36591e13d",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-2739fee7@2026-09-05T14:15:47Z",
+    "at": "2026-09-05T14:20:03.183Z"
+  },
+  "blockedReason": "Step 1's own hard-stop clause fires: BOTH carved-out prerequisites are absent at HEAD, so registering these kinds now would MCP-advertise an operator-only command. Zero production bytes written. Full transcript in comment-1e2ff9ea.\n\nMEASURED (tree AND HEAD, fresh session 2026-09-05):\n- `git grep -n 'environment.set_variable' HEAD -- apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts` -> no output. Neither kind is in `MCP_EXCLUDED_COMMAND_KINDS` (mcp-tool-allowlist.ts:59) at HEAD or in the tree. `agent-spawn-contract.ts:215` does carry both in HUMAN_ONLY_STEPS, but only as worker-caece97b's uncommitted in-flight edit for task-d0d1cb5c (WORKING) — foreign WIP, untouched by me, not a landed prerequisite.\n- `grep -c 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` -> 0. RUNTIME_COMMAND_KINDS (:85) has neither kind; task-b3888068 is still PLANNING.\n\nWHY BLOCK, NOT PARTIAL-LAND (security): mcp-tool-allowlist.ts:84-90 serves Object.keys(PAYLOAD_KEYS) MINUS MCP_EXCLUDED_COMMAND_KINDS. Step 2 adds both kinds to PAYLOAD_KEYS — with the exclusion unlanded they are MCP-advertised immediately, and the MCP port authenticates with the operator bootstrap credential (mcp-main.ts:112-127), so an agent holding it arrives AS the operator and can set a variable the deploy delivers to production. Step 1 and taskRail 1 both name this stop. Independently, daemon-store-dependencies.test.ts:238 welds PAYLOAD_KEYS to the v2 registry, so a partial land of steps 2-3 reds a shared arm for everyone in this checkout.\n\nBOARD DEFECT: this row's dependsOn is ['task-d0c63cd8...'] (DONE) only — the two leaves split out of it on 2026-09-05 were never added, which is why it was offered early. Please add both ids above to dependsOn (worker seats get [NOT_ALLOWED] on set_task_dependencies).\n\nNo plan change needed — step 1's clause worked as designed. Resume at step 2 unchanged once both prerequisites are DONE.",
+  "blockedOnTaskIds": [
+    "task-d0d1cb5c3f034d50bd84b7ed56b7e812",
+    "task-b3888068c0e2481cb1463524ee7f2895"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T14:23:21.940Z"
 }
