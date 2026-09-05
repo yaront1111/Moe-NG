@@ -16,7 +16,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": "architect-20a6d1eb",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -25,10 +25,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1005.3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-5a8278d76aa24b44989a906caaef589b",
+      "author": "architect-20a6d1eb",
+      "content": "ROOT CAUSE IS DEEPER THAN THIS ROW'S TITLE, and the fix changes (architect-20a6d1eb, 2026-09-05, owner decision taken in the planning REPL).\n\nWHAT THE FILER MEASURED IS REAL AND I REPRODUCED THE MECHANISM. But \"gate the offer on the bootstrap prerequisite too\" treats the SYMPTOM. Measured at HEAD:\n\n  apps/daemon/src/bootstrap/bootstrap-sequence.ts:18-25\n    \"goal.close\":         Object.freeze([\"approval.decide\"]),\n    \"repository.publish\": Object.freeze([\"approval.decide\"]),\n\n  apps/daemon/src/http/affordance-read.ts:175-176 accepts EITHER approval kind:\n    entry.commandKind === \"approval.decide\" || entry.commandKind === \"approval.decide_intent\"\n\nThe browser's PAIRED SESSION approves through `approval.decide_intent` (mint + activation, task-6093483c) - affordance-read.ts's own comment at :341-345 records that a goal enabled that way \"must surface its code nodes exactly as the seeded approval.decide journey always has\", and notes the first real project's approved goal sat EXECUTION_ENABLED with zero node.deliver steps behind exactly this gate.\n\nSO: a goal approved IN THE BROWSER never commits an `approval.decide`. Its prerequisite for `goal.close` and `repository.publish` is therefore UNSATISFIABLE FOREVER. That is why the live UnAI goal sits at 10/10 criteria VERIFIED and refuses BOOTSTRAP_PREREQUISITE_MISSING - not because the offer was premature, but because the command path does not recognise how the goal was approved.\n\nWITHHOLDING THE OFFER WOULD SHIP A DEAD END. The button would stop lying, and the goal would still be permanently uncloseable and unpublishable. The operator would be told, honestly, that there is nothing they can do - which is worse than the current bug in the one way that matters: the current bug is fixable by a click that fails, the withheld version is fixable by nothing.\n\nOWNER DECISION: make `approval.decide_intent` SATISFY the prerequisite for `goal.close` and `repository.publish`, so both authorities agree at the cause. Fail-closed is preserved - a goal with NEITHER approval kind still refuses. The accepted set widens by exactly one equivalent human act, the one the browser actually performs.\n\nAMENDED SCOPE (supersedes DoD 1 and DoD 3 as written):\n- DoD 1' : the two authorities agree because the PREREQUISITE now accepts either approval kind. For a goal approved via decide_intent, /affordances/read offers goal.close AND the command path ACCEPTS it - assert the dispatch succeeds, on the same frame that carries the offer. For a goal with NEITHER approval kind, no offer and a refusal.\n- DoD 3' : the command-path gate is not REMOVED, it is CORRECTED. bootstrap-services.ts:259 still answers BOOTSTRAP_PREREQUISITE_MISSING for a goal whose project has neither approval kind committed - pinned by an arm that dispatches without any approval. What changes is which committed kinds satisfy the requirement, not whether it is enforced.\n- DoD 4 stands and gets easier: repository.publish shares the identical prerequisite line (bootstrap-sequence.ts:25), so the same fix covers it - do BOTH in this row and assert both, rather than recording publish as out of scope.\n\nQA: grade DoD 1' and 3'. A plan that only withholds the offer leaves the UnAI goals unreachable and does not discharge this row.",
+      "timestamp": "2026-09-05T10:11:18.855Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T01:23:28.234Z",
-  "updatedAt": "2026-09-05T09:28:31.317Z",
+  "updatedAt": "2026-09-05T10:11:37.794Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T09:28:31.317Z"
   }

@@ -4,6 +4,7 @@ import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
+import type { ActivationReadPort } from "./http/activation-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import type { SessionsReadPort } from "./http/sessions-read.js";
@@ -47,6 +48,8 @@ export interface OptionalDaemonPortProvider {
   runs?(): RunsReadPort;
   /** Installed policy and evaluations, bound to this daemon own project. */
   policy?(): PolicyReadPort;
+  /** The six activation receipts, MEASURED per request, bound to this daemon own project. */
+  activation?(): ActivationReadPort;
   /** The daemon process and ledger facts, bound to this daemon own project. */
   health?(): HealthReadPort;
   /** What the daemon decided, bound to this daemon own project. */
@@ -101,6 +104,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly documentCoverage?: DocumentCoverageReadPort;
   readonly runs?: RunsReadPort;
   readonly policy?: PolicyReadPort;
+  readonly activation?: ActivationReadPort;
   readonly health?: HealthReadPort;
   readonly activity?: ActivityReadPort;
   readonly sessions?: SessionsReadPort;
@@ -135,7 +139,7 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs", "policy", "health", "activity", "sessions", "repositoryRemote", "goalSource",
+  "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "goalSource",
   "sessionHandshake",
 ] as const);
 
@@ -262,6 +266,18 @@ export function resolveOptionalDaemonPorts(
     const policy = policyFactory?.call(provider);
     if (policy !== undefined
       && (!hasMethods(policy, ["readPolicy"]) || typeof Reflect.get(policy, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const activationFactory = provider.activation;
+    if (activationFactory !== undefined && typeof activationFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    // `boundProjectId` is load-bearing, not decoration: the handler refuses
+    // ACTIVATION_READ_PROJECT_MISMATCH by comparing it to the authenticated principal.
+    const activation = activationFactory?.call(provider);
+    if (activation !== undefined
+      && (!hasMethods(activation, ["readActivation"])
+        || typeof Reflect.get(activation, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const healthFactory = provider.health;
@@ -395,6 +411,7 @@ export function resolveOptionalDaemonPorts(
       ...(documentCoverage === undefined ? {} : { documentCoverage }),
       ...(runs === undefined ? {} : { runs }),
       ...(policy === undefined ? {} : { policy }),
+      ...(activation === undefined ? {} : { activation }),
       ...(health === undefined ? {} : { health }),
       ...(activity === undefined ? {} : { activity }),
       ...(sessions === undefined ? {} : { sessions }),

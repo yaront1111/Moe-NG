@@ -37,6 +37,11 @@ import type { DocumentCoverageReadPort } from "./http/document-coverage-contract
 import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js";
 import { createRunsReadPort } from "./http/runs-read.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
+import {
+  activationReceiptInput, activationReceiptPorts,
+} from "./bootstrap/activation-command-entry.js";
+import { createActivationReadPort } from "./http/activation-read.js";
+import type { ActivationReadPort } from "./http/activation-read.js";
 import { createPolicyReadPort } from "./http/policy-read.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
 import { createHealthReadPort } from "./http/health-read.js";
@@ -342,6 +347,19 @@ export function createStoreDependencies(
   const runs = (): RunsReadPort => createRunsReadPort({ projectId: config.projectId, store });
   /** Installed policy, its evaluations and the verifier standing, from this root store. */
   const policy = (): PolicyReadPort => createPolicyReadPort({ projectId: config.projectId, store });
+  /**
+   * The six activation receipts as a READ. Constructed once — `readActivation` re-measures on
+   * every call, and caching the RESULT would certify a tree the operator has since changed.
+   * The two DURABLE readers are handed in deliberately: without them `nodeActivationReceiptPorts`
+   * defaults `committedProbeRef` to null and `installedPolicySliceRefs` to [], so provider and
+   * policy would read UNMEASURED forever on a project that has in fact probed and installed.
+   * `createActivationReadPort` then applies `readOnlyActivationPorts`, which neuters `backup`
+   * and `fs.mkdir` — so this stays a read and never creates `<projectRoot>/.moe-next/backups/`.
+   */
+  const activation = (): ActivationReadPort => createActivationReadPort({
+    input: activationReceiptInput(config.projectId),
+    ports: activationReceiptPorts(store, config.projectId),
+  });
   /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
   const composedAt = (config.clock ?? (() => new Date().toISOString()))();
   const health = (): HealthReadPort => createHealthReadPort({
@@ -458,6 +476,7 @@ export function createStoreDependencies(
   });
 
   return Object.freeze({
+    activation,
     activity,
     affordances,
     budgetCommitment,

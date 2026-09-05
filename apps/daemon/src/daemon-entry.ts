@@ -279,6 +279,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       ? {} : { documentCoverage: resolved.documentCoverage }),
     ...(resolved.runs === undefined ? {} : { runs: resolved.runs }),
     ...(resolved.policy === undefined ? {} : { policy: resolved.policy }),
+    ...(resolved.activation === undefined ? {} : { activation: resolved.activation }),
     ...(resolved.health === undefined ? {} : { health: resolved.health }),
     ...(resolved.activity === undefined ? {} : { activity: resolved.activity }),
     ...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions }),
