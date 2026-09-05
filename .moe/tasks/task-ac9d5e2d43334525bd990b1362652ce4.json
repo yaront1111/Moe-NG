@@ -103,7 +103,7 @@
       "completedAt": "2026-09-05T14:29:59.001Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -138,7 +138,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T18:27:08.090Z",
+  "updatedAt": "2026-09-05T23:11:00.328Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -178,13 +178,11 @@
     "worker-d6e44333"
   ],
   "workStartedAt": "2026-09-05T03:22:38.352Z",
-  "blockedReason": "THE THING THIS ROW EXISTS TO PROVE DOES NOT WORK. All 6 steps COMPLETE and the journey is written, but DoD 1, 4 and 7 are unreachable at HEAD, so complete_task would be a false completion.\n\nMEASURED LIVE, real daemon, `seed: \"NONE\"`: three chain steps go green, the fourth refuses\n  `Activate the project - refused ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS`\nACTIVATION_CHAIN_KINDS (activation-port.ts:29) mirrors COMMAND_PREREQUISITES[\"project.activate\"] (bootstrap-sequence.ts:31-35), which omits policy.install — but the witness measures the policy receipt as the digest of the INSTALLED SLICE SET (activation-receipts.ts:38). /activation/read returns blocking:[\"provider\",\"policy\"]; provider.probe clears provider, nothing clears policy. demo-seed-plan.ts:91-95 documents this exact refusal: task-4b9c394d made the receipt load-bearing and updated DEMO_SEED_KINDS but not COMMAND_PREREQUISITES. Every other lane seeds, so only `seed: \"NONE\"` exposes it.\n\nNOT PATCHED HERE (row rail 2). Filed task-d342a2b1 with the causal chain and the design call left open; evidence on owning row task-3506e04a as comment-f64e380c; lane gotchas in comment-a8d35fc6.\n\nLANDED AND GREEN on the wip checkpoint:\n- step 4: `grep -c \"cannot drive the pre-activation chain\"` => 0; both asserters moved to the NEW sentence by exact toBe. control-room => 149 files / 1853 tests passed, EXIT 0.\n- step 5: README clause removed + re-dated + positive bullet added; runbook's false \"no production writer\" sentence replaced, fail-closed half kept. DoD 3 met.\n- step 3: the journey, PARKED with one `test.fixme` naming task-d342a2b1, NOT ONE assertion relaxed => 1 skipped, EXIT 0, so the shared lane is not knowingly red.\n\nBefore the broken step the spec proved: seedPid null, a real pairing handshake, the card mounting with receipts, the repository row carrying the lane's real HEAD sha, no `<projectId>-*` placeholder, and a pre-activation create refused in the NEW copy.",
-  "blockedOnTaskIds": [
-    "task-d342a2b158764fefa8dbf2a5365e7bf7"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T14:30:43.049Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "36e501b88cd882de912c7261fbe0c2d8e27c1c8f",
