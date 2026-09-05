@@ -123,7 +123,7 @@
       "completedAt": "2026-09-05T09:03:19.892Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -145,16 +145,24 @@
       "author": "worker-cceb207f",
       "content": "STEP 3 FINDING: AN UNNAMED CONSUMER OF THE FREEZE, plus the structural consequence of unfreezing the LAST unbuilt destination. Filed per global rail 20; disclosing rather than quietly absorbing.\n\n1. THE UNNAMED CONSUMER. The plan named the nav roster test (cordum-app.test.tsx). It did NOT name apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx, which also pins the frozen rendering and went RED on the route change with two failures:\n\n  FAIL src/v2/styles/cordum-shell-responsive.test.tsx > the narrow rail keeps every name it stops drawing > keeps a daemon-supplied count inside the button's own text, which is its name\n  AssertionError: expected 'Resources7' to contain 'not available yet'\n  FAIL ... > targets the badge of an item that will not press, which keeps a visible title\n  (at :126 `expect(approvals.hasAttribute(\"disabled\")).toBe(true)`)\n\nNeither arm is ABOUT Resources. Their subjects are (a) the SOON chip is what the NAV_BADGE selector selects and a non-pressing item still explains itself by a visible title, and (b) a daemon-supplied count stays inside a disabled button's own accessible name -- the arms that exist because `display:none` on the narrow rail once dropped a wired count out of the accessible name without trace. `resources` was merely the one destination this build had not shipped, so it was the convenient stand-in; the local variable is even still named `approvals`, from the copy it was made from. A symbol grep for `resources` would have found it; the plan's affectedFiles did not.\n\nI did NOT rename or reformat the producer to evade the check (rail 20's prohibition). I injected an unbuilt roster through the shell's EXISTING `navDestinations` prop, so both arms keep testing exactly what they always tested. Same treatment, same reason, in cordum-app.test.tsx.\n\n2. THE STRUCTURAL CONSEQUENCE, which is the more important half. `resources` was the LAST destination on the `NAV_DESTINATION_NOT_BUILT` branch. `resolveNavDestinations()` now reports SIX reachable and ZERO unavailable. Every existing arm that read the disabled/SOON behaviour as `resolveNavDestinations().filter((d) => d.reason !== null)` would now iterate ZERO entries and pass while asserting NOTHING -- a textbook vacuous green, and it would have hidden the whole chip mechanism silently rather than loudly. Three arms were in that position (two in cordum-shell-responsive.test.tsx, one in cordum-app.test.tsx's \"keeps an unavailable destination disabled and naming its reason while a navigator is wired\").\n\nOnly ONE of them said so out loud: the roster test carried `expect(unavailable.length).toBeGreaterThan(0)`, which failed and pointed at the rest. That guard is the reason this was caught at all.\n\nEvery one now drives the arm from an injected all-unbuilt roster (`UNBUILT_ROSTER`), so the machinery stays covered on its own terms and does not depend on the accident of some destination remaining unshipped. The chip machinery, the reason codes and the `shell-routes.ts:12-15` design are untouched, exactly as step 3 required -- `resources` only moved from one branch of the construction to the other.\n\n3. THE ROSTER TEST'S COUNTS ARE NOW SET EQUALITY, NOT NUMBERS. It previously read `expect(reachable).toHaveLength(5)` and `expect(unavailable).toHaveLength(NAV_IDS.length - 5)`. A hard-coded 5 with a derived complement re-encodes the same number twice and says nothing about WHICH destinations are reachable. It now asserts `reachable.map(d => d.id)` EQUALS `[...NAV_IDS]` and `unavailable` is empty, so a destination added to the rail without a route reds here instead of quietly shrinking a count that still matched some other arithmetic. `CORDUM_ROUTE_KINDS` went 6 -> 7 at cordum-app.test.tsx:613, the one hard-coded count consumer measured in step 1.",
       "timestamp": "2026-09-05T08:52:00.204Z"
+    },
+    {
+      "id": "comment-90d5ccd2380342de947e347f8d0317f2",
+      "author": "qa-3fd61a21",
+      "content": "QA EVIDENCE (qa-3fd61a21, 2026-09-05) -- detail that exceeds the reviewSummary cap.\n\nCOMMIT AUDITED: 039911cd301f0c0d13c349d0e16248a70b8e66fd, `kind: completion`, on\nmoe/work-2026-09-04 (`git branch --contains` = that branch alone). 13 paths,\n1362 insertions / 31 deletions. `git show --stat --name-only | grep -c apps/daemon/src`\n= 0, so DoD 5's no-daemon-route clause holds on the DELIVERED bytes, not on a claim.\n\nGATES RE-RUN BY ME, not taken from the record:\n- `pnpm --filter @moe/control-room test` -> `Test Files 147 passed (147)` /\n  `Tests 1843 passed (1843)`, EXIT=0. The COUNT LINE is present and nonzero, so the\n  leg executed (global rail 8). Matches task.verification exactly.\n- `pnpm typecheck` -> EXIT=0 with the per-package `$ tsc --project tsconfig.json`\n  echoes for all 19 packages, which is the execution evidence for this leg.\n- `pnpm test` NOT quoted as evidence: root vitest carries no apps/**, per global rail 18.\n  The worker said so rather than quoting it. Correct.\n\nDRILLS I RAN MYSELF (global rail 1 -- I did not take the worker's drill on trust):\n\nDRILL A, the credential fence. Mutated `providerSection` in resources-model.ts:144-146\nto render the receipt's `ref` on the unrecognised branch and to append the free-form\n`reason` on the recognised branch -- i.e. exactly the two leak paths the module claims\nto close. RESULT: `Tests 4 failed | 6 passed (10)`. All three hostile arms fired plus\nthe sign-in-file arm; the failure text shows `sk-ant-api03-...` reaching\n`cr.resources.value.provider.cli` AND `.credential`. The hostile grep is real.\n\nDRILL B, the unfreeze. Commented out `resources: Object.freeze({ kind: \"resources\" })`\nin shell-routes.ts:94 (BUILT_NAV_ROUTES). RESULT: `Tests 2 failed | 52 passed (54)` --\nthe set-equality roster arm (\"expected [...2 more] to deeply equal [...3 more]\") AND\nthe chip-absence arm (\"expected <span class=cr2-statuschip> to be null\"). DoD 1 is\nasserted on the rendered marker, not on a string grep, and it is non-vacuous.\n\nRESTORE PROVEN, both targets TRACKED so `git diff` is a valid proof (global rail 13):\n`git status --porcelain -- <both paths>` EMPTY in a call SEPARATE from the restore, and\nresources-model.ts sha256 back to its pre-drill\n1c597c71f7ff97b06f72cba09b827d940253256ae20c5c034a02126a2d2e74aa. Re-green after both\nrestores: `Test Files 4 passed (4) / Tests 74 passed (74)`, EXIT=0.\n\nTHE VACUITY TRAP WAS HANDLED, and this is the part I checked hardest. `resources` was\nthe LAST unbuilt destination, so three existing arms that read the SOON behaviour off\n`resolveNavDestinations().filter(d => d.reason !== null)` would now iterate ZERO entries\nand pass while asserting nothing. The worker did not delete them and did not leave a\ndestination unbuilt to feed them: both `NavRail` and `CordumShell` already take an\ninjected roster, and all three arms (cordum-app.test.tsx plus the TWO in\nstyles/cordum-shell-responsive.test.tsx, which the plan's affectedFiles did NOT name)\nnow render against a frozen all-unbuilt `UNBUILT_ROSTER`. The count pair\n`toHaveLength(5)` / `NAV_IDS.length - 5` was also replaced by SET EQUALITY against\nNAV_IDS -- drill B proves the count form would have stayed green.\n\nTWO DoD-NAMED FACTS HAVE NO READ ANYWHERE, and I re-measured rather than accepting it:\nrepository BRANCH and store SIZE. `grep -rniE \"storeSize|sizeBytes|storeBytes\"` over\napps/control-room/src/live/ and apps/daemon/src/http/ returns NOTHING; no live reader\ncarries a checked-out branch (the `branch` hits in live-runs.ts are a run's LANDING\nbranch, a different fact). Both render as `RESOURCES_FACT_NOT_SERVED @\nCONTROL_ROOM_RESOURCES` rather than being omitted, which is what task rail 1 requires\nand is the honest answer -- an omitted row would read as \"this project has no such\nresource\". Adding them needs a daemon read, i.e. a different row.\n\nDISCLOSED, NOT A REJECTION -- the contested shared file. The commit's own trailer says\n`Moe-Contested: apps/control-room/src/v2/cordum-app.tsx (task-1c9587ed...)`. That file\ncarries a peer's in-flight LiveContractDossier work, and its three imports\n(`./goals/contract-dossier.js`, `./goals/contract-gates.js`,\n`../live/live-product-contract-gate-1.js`) are NOT in the committed tree --\n`git ls-tree -r 039911cd` confirms their absence. So a clean checkout of 039911cd alone\nwould not resolve them. This is NOT this row's defect and NOT worker-fixable: a shared\nfile cannot be committed line-wise, and reverting a peer's lines is forbidden. It\nclears when task-1c9587ed (status WORKING, worker-75411639) lands its own files, which\nare present and green in this shared worktree today. Flagging for the epic-final row.",
+      "timestamp": "2026-09-05T09:10:57.901Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:00.435Z",
-  "updatedAt": "2026-09-05T09:05:58.921Z",
+  "updatedAt": "2026-09-05T09:12:53.500Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:36:05.863Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-05T09:12:53.500Z",
+    "wallClockMs": 2207637
   },
   "stepsCompleted": [
     "step-1",
@@ -180,7 +188,8 @@
   },
   "planApprovedAt": "2026-09-05T08:37:44.456Z",
   "contextFetchedBy": [
-    "worker-cceb207f"
+    "worker-cceb207f",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T08:38:17.477Z",
   "reviewStartedAt": "2026-09-05T09:05:58.921Z",
@@ -202,7 +211,67 @@
     "apps/control-room/src/v2/cordum-app.test.tsx",
     "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx",
     "apps/control-room/src/v2/resources/resources-refusals.test.tsx",
-    "apps/control-room/src/v2/resources/resources-frames.fixture.ts"
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
+    ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json"
   ],
-  "completionSummary": "Resources is LIVE: the nav entry has a real route, the SOON chip is gone, and the screen renders 13 measured project facts from reads that already existed. No daemon route, no new command kind, no second decoder.\n\nGATES (fresh): `pnpm --filter @moe/control-room test` -> Test Files 147 passed (147) / Tests 1843 passed (1843), exit 0. `pnpm typecheck` -> all 19 packages Done, exit 0. Baseline at step 1 was 142/1792, so this row adds 5 files and 51 tests. `pnpm test` is NOT quoted: the root vitest include carries no apps/**, so it runs zero tests against this code (global rail 18).\n\nDoD 1 - LIVE. The freeze was a ROUTE, not a flag. Both the parent row and this row's description named `live: boolean` at shell-model.ts:25; that field belongs to `ConnectionDescriptor` and governs nothing here. The real mechanism is absence from `BUILT_NAV_ROUTES`, which makes `resolveNavDestinations()` emit `NAV_DESTINATION_NOT_BUILT` and drives nav-rail.tsx:80/:90/:118-121. Three lines in shell-routes.ts (route kind, union arm, map entry) and the chip disappeared on its own -- nav-rail.tsx untouched, the chip machinery and reason codes intact. Asserted as DoD 1 requires: `queryByTestId(\"cr.nav.resources.unavailable\")` is null, the button is not disabled, no aria-describedby, no data-unavailable-reason.\n\nDoD 2 - THE FACTS. 13 facts, one per row, four sections: repository (root, HEAD, bound remote), provider (CLI, credential source), store (path, backup, distribution), policy revision, seat limit + seats in use. Sources: /activation/read, /health/read, /policy/read, /sessions/read, /repository/remote/read -- all already served AND already decoded in the browser. Named values asserted by exact string. Frames are not hand-waved: each goes through the PRODUCTION exact-key decoder and a `decoded()` helper asserts the SUCCESS arm, so a drifted fixture reds at the decode instead of quietly rendering refusals. NOTE: there is NO live control-room daemon on this host (both ports answer http 426 Upg"
+  "completionSummary": "Resources is LIVE: the nav entry has a real route, the SOON chip is gone, and the screen renders 13 measured project facts from reads that already existed. No daemon route, no new command kind, no second decoder.\n\nGATES (fresh): `pnpm --filter @moe/control-room test` -> Test Files 147 passed (147) / Tests 1843 passed (1843), exit 0. `pnpm typecheck` -> all 19 packages Done, exit 0. Baseline at step 1 was 142/1792, so this row adds 5 files and 51 tests. `pnpm test` is NOT quoted: the root vitest include carries no apps/**, so it runs zero tests against this code (global rail 18).\n\nDoD 1 - LIVE. The freeze was a ROUTE, not a flag. Both the parent row and this row's description named `live: boolean` at shell-model.ts:25; that field belongs to `ConnectionDescriptor` and governs nothing here. The real mechanism is absence from `BUILT_NAV_ROUTES`, which makes `resolveNavDestinations()` emit `NAV_DESTINATION_NOT_BUILT` and drives nav-rail.tsx:80/:90/:118-121. Three lines in shell-routes.ts (route kind, union arm, map entry) and the chip disappeared on its own -- nav-rail.tsx untouched, the chip machinery and reason codes intact. Asserted as DoD 1 requires: `queryByTestId(\"cr.nav.resources.unavailable\")` is null, the button is not disabled, no aria-describedby, no data-unavailable-reason.\n\nDoD 2 - THE FACTS. 13 facts, one per row, four sections: repository (root, HEAD, bound remote), provider (CLI, credential source), store (path, backup, distribution), policy revision, seat limit + seats in use. Sources: /activation/read, /health/read, /policy/read, /sessions/read, /repository/remote/read -- all already served AND already decoded in the browser. Named values asserted by exact string. Frames are not hand-waved: each goes through the PRODUCTION exact-key decoder and a `decoded()` helper asserts the SUCCESS arm, so a drifted fixture reds at the decode instead of quietly rendering refusals. NOTE: there is NO live control-room daemon on this host (both ports answer http 426 Upg",
+  "commits": [
+    {
+      "sha": "039911cd301f0c0d13c349d0e16248a70b8e66fd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-05T08:37:52Z",
+      "paths": [
+        ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
+        ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/resources/live-resources.tsx",
+        "apps/control-room/src/v2/resources/resources-credential.ts",
+        "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+        "apps/control-room/src/v2/resources/resources-model.ts",
+        "apps/control-room/src/v2/resources/resources-refusals.test.tsx",
+        "apps/control-room/src/v2/resources/resources-screen.test.tsx",
+        "apps/control-room/src/v2/resources/resources-screen.tsx",
+        "apps/control-room/src/v2/shell/shell-routes.ts",
+        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-05T09:06:15.902Z",
+      "treeId": "66b3278b6d5ac1705711666a75ccf75bdff99135",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/cordum-app.tsx",
+          "taskId": "task-1c9587ed1b2b4e1abd6b51396ee672f8"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/resources/resources-screen.tsx",
+    "apps/control-room/src/v2/resources/live-resources.tsx",
+    "apps/control-room/src/v2/resources/resources-refusals.test.tsx",
+    "apps/control-room/src/v2/resources/resources-screen.test.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/resources/resources-model.ts",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/resources/resources-credential.ts",
+    "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx",
+    "apps/control-room/src/v2/shell/shell-routes.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-cceb207f@2026-09-05T08:37:52Z",
+    "at": "2026-09-05T09:06:15.902Z"
+  },
+  "completedAt": "2026-09-05T09:12:53.500Z",
+  "reviewCompletedAt": "2026-09-05T09:12:53.500Z",
+  "reviewSummary": "APPROVED. Commit 039911cd (completion, moe/work-2026-09-04): 13 paths, ZERO files under apps/daemon/src -> DoD 5 holds on delivered bytes. Full evidence: comment-90d5ccd2.\n\nGATES RE-RUN BY ME: `pnpm --filter @moe/control-room test` -> Test Files 147 passed (147) / Tests 1843 passed (1843), EXIT=0; count line present, matches task.verification exactly. `pnpm typecheck` -> EXIT=0 with per-package `$ tsc` echoes. `pnpm test` correctly not quoted (root vitest has no apps/**).\n\nDRILLS I RAN MYSELF. (A) Mutated providerSection (resources-model.ts:144-146) to render receipt.ref on the unrecognised branch and append the free-form reason on the other: 4 failed | 6 passed, sk-ant-api03-... visibly reaching cr.resources.value.provider.cli AND .credential -- the hostile grep is real. (B) Removed `resources` from BUILT_NAV_ROUTES (shell-routes.ts:94): 2 failed | 52 passed, both the set-equality roster arm and the chip-absence arm. RESTORE PROVEN: git status --porcelain on both TRACKED targets empty in a SEPARATE call, sha256 back to 1c597c71; re-green 74 tests EXIT=0.\n\nVACUITY TRAP HANDLED: `resources` was the last unbuilt destination, so three arms filtering resolveNavDestinations() for reason!==null would have gone vacuous -- two in cordum-shell-responsive.test.tsx, never named by the plan. Fixed with an injected all-unbuilt roster and set equality against NAV_IDS replacing the count pair; drill B proves the count form stayed green.\n\nDoD 1-4: chip absence asserted on rendered testid cr.nav.resources.unavailable, not a grep. 13 facts one per row, every frame through the PRODUCTION exact-key decoder; refusals verbatim as CODE @ LAYER, >=5 distinct codes asserted; each partial-read arm asserts BOTH halves. BRANCH and store SIZE truly have no read (re-measured), so they render RESOURCES_FACT_NOT_SERVED per task rail 1.\n\nDISCLOSED: trailer flags Moe-Contested cordum-app.tsx (task-1c9587ed) -- peer work, clears when that row lands."
 }
