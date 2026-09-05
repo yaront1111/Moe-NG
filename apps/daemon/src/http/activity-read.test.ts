@@ -76,6 +76,31 @@ describe("createActivityReadPort", () => {
     expect(view.entries.some((entry) => entry.targetAggregateId === "goal-2")).toBe(false);
     expect(port.readActivity({ goalRef: "goal-never" })).toMatchObject({ code: "ACTIVITY_READ_GOAL_UNKNOWN" });
   });
+
+  it("answers UNREADABLE, not GOAL_UNKNOWN, when the goal catalog cannot be decoded", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const first = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build it.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Watched goal",
+    }, GOAL_CREATE_COMMAND_ID));
+    if (!first.ok) throw new Error(`fixture bind refused: ${first.code}`);
+    // A GoalCreated row whose payload is not the catalog's one-element array: the catalog walk
+    // refuses it, and the goal-scoped read used to report every goal — this real one included —
+    // as unknown, absence claimed on evidence that was never read.
+    const bytes = encoder.encode("{}");
+    const response = store.commitExpectedVersionDecision({
+      commandKind: "goal.create", committedResultBytes: bytes, correlationId: "corr-broken-goal",
+      decidedAt: "2026-09-05T12:00:00.000Z",
+      events: [{ eventId: "evt-broken-goal", eventType: "GoalCreated", payload: bytes }],
+      expectedVersion: 0, key: { commandId: "cmd-broken-goal", principalId: "operator-local", projectId: PROJECT_ID },
+      requestBytes: bytes, targetAggregateId: "goal-broken",
+    });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("fixture row refused");
+    const port = createActivityReadPort({ projectId: PROJECT_ID, store, readActive: () => [] });
+    expect(port.readActivity({ goalRef: GOAL_ID })).toMatchObject({ code: "ACTIVITY_READ_UNREADABLE" });
+    expect(port.readActivity({ goalRef: "goal-never" })).toMatchObject({ code: "ACTIVITY_READ_UNREADABLE" });
+  });
 });
 
 describe("handleActivityReadRequest", () => {

@@ -117,11 +117,18 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
   const readActive = options.readActive
     ?? ((s: SqliteEventStore, p: string) => activeCompiledGraphs(s, p, ACTIVITY_LIFECYCLES));
 
-  /** The aggregates a goal's activity lives on: the goal, its run, its sealed nodes. */
-  const targetsOf = (goalRef: string): ReadonlySet<string> | null => {
+  /**
+   * The aggregates a goal's activity lives on: the goal, its run, its sealed nodes. A catalog
+   * that cannot be read is UNREADABLE, not "the goal does not exist": the two nulls used to
+   * collapse and a store whose first GoalCreated row no longer decodes answered GOAL_UNKNOWN for
+   * every goal — absence claimed on evidence that was never read (the sibling runs and coverage
+   * reads answer their UNREADABLE for the same null).
+   */
+  const targetsOf = (goalRef: string): ReadonlySet<string> | "UNKNOWN" | "UNREADABLE" => {
     const goals = catalogBoundGoals(store, projectId);
-    const goal = goals?.find((row) => row.goalId === goalRef);
-    if (goals === null || goal === undefined) return null;
+    if (goals === null) return "UNREADABLE";
+    const goal = goals.find((row) => row.goalId === goalRef);
+    if (goal === undefined) return "UNKNOWN";
     const targets = new Set<string>([goal.goalId]);
     if (goal.planningRunRef !== null) targets.add(goal.planningRunRef);
     for (const graph of readActive(store, projectId)) {
@@ -134,8 +141,10 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
   const readActivity = (selector: ActivitySelector): ActivityReadResult => {
     try {
       const goalId = "goalRef" in selector ? selector.goalRef : null;
-      const targets = goalId === null ? null : targetsOf(goalId);
-      if (goalId !== null && targets === null) return refused("ACTIVITY_READ_GOAL_UNKNOWN");
+      const scoped = goalId === null ? null : targetsOf(goalId);
+      if (scoped === "UNREADABLE") return refused("ACTIVITY_READ_UNREADABLE");
+      if (scoped === "UNKNOWN") return refused("ACTIVITY_READ_GOAL_UNKNOWN");
+      const targets = scoped;
       const limit = goalId === null ? PROJECT_LIMIT : GOAL_LIMIT;
       const entries: ActivityEntry[] = [];
       let totalDecisions = 0;
