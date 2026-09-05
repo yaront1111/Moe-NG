@@ -35,13 +35,24 @@ export function isDecisionLedgerMemoized(store: SqliteEventStore): boolean {
   return memos.has(store);
 }
 
+/**
+ * Walks pages from `from` into `into`, telling `advanced` the last position held after
+ * EACH page. A store can throw between pages (SQLITE_BUSY under a concurrent seat, an
+ * integrity re-proof, a nested transaction); a memo that learned its position only after
+ * the whole walk kept the pages it had decoded and then decoded them again on the retry,
+ * holding every decision twice for the life of the handle. Advancing per page keeps
+ * "what is held" and "where to resume" in step no matter where the walk stops.
+ */
 function walk(
   store: SqliteEventStore, from: bigint, pageSize: number, into: CommandDecisionRecord[],
+  advanced: (last: bigint) => void,
 ): CommandDecisionRecord[] {
   let cursor = from;
   for (;;) {
     const page = store.readCommandDecisionsAfter(cursor, pageSize);
     for (const decision of page.items) into.push(decision);
+    const newest = page.items.at(-1);
+    if (newest !== undefined) advanced(newest.decisionPosition);
     if (!page.hasMore || page.nextCursor === null) break;
     cursor = page.nextCursor;
   }
@@ -57,9 +68,7 @@ export function decisionsOf(
   store: SqliteEventStore, pageSize: number,
 ): readonly CommandDecisionRecord[] {
   const memo = memos.get(store);
-  if (memo === undefined) return walk(store, 0n, pageSize, []);
-  walk(store, memo.last, pageSize, memo.items);
-  const newest = memo.items.at(-1);
-  if (newest !== undefined) memo.last = newest.decisionPosition;
+  if (memo === undefined) return walk(store, 0n, pageSize, [], () => undefined);
+  walk(store, memo.last, pageSize, memo.items, (last) => { memo.last = last; });
   return memo.items;
 }

@@ -87,6 +87,37 @@ describe("decisionsOf", () => {
     expect(pages()).toBe(5);
   });
 
+  it("keeps the memo consistent when the store throws mid-walk: no page is held twice", () => {
+    const raw = openStore();
+    for (let n = 1; n <= 5; n += 1) commit(raw, n);
+    let failOnPage = 2;
+    let pages = 0;
+    const store = new Proxy(raw, {
+      get(target, property, receiver) {
+        if (property === "readCommandDecisionsAfter") {
+          return (...args: Parameters<SqliteEventStore["readCommandDecisionsAfter"]>) => {
+            pages += 1;
+            if (pages === failOnPage) {
+              failOnPage = -1;
+              throw new Error("SQLITE_BUSY: database is locked");
+            }
+            return target.readCommandDecisionsAfter(...args);
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    enrollDecisionLedgerMemo(store);
+    expect(() => decisionsOf(store, 2)).toThrow(/SQLITE_BUSY/);
+    // The page decoded before the throw is kept AND its position is remembered, so the
+    // retry resumes after it instead of decoding it a second time.
+    const recovered = decisionsOf(store, 2);
+    expect(recovered.map((d) => d.decisionPosition)).toEqual([1n, 2n, 3n, 4n, 5n]);
+    expect(recovered).toHaveLength(5);
+    expect(decisionsOf(store, 2)).toHaveLength(5);
+  });
+
   it("keeps memos per handle: a second handle on the same file is its own reader", () => {
     const raw = openStore();
     commit(raw, 1);
