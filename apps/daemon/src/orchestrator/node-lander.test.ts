@@ -232,6 +232,27 @@ describe("createNodeLander", () => {
     expect(await made.landOnce()).toEqual([]);
   });
 
+  it("reports a held git index without recording anything, so the next pass retries", async () => {
+    const git = fakeGit(observation([]));
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });
+    await made.baseline(NODE);
+    git.observations = [observation([{ blobId: BLOB_B, path: "src/new.ts" }])];
+    git.commitResult = {
+      code: "GIT_COMMIT_FAILED", ok: false,
+      detail: "fatal: Unable to create 'D:/ws/project/.git/index.lock': File exists.",
+    };
+    expect(await made.landOnce()).toEqual([{
+      detail: "fatal: Unable to create 'D:/ws/project/.git/index.lock': File exists.",
+      nodeRef: NODE, outcome: "GIT_INDEX_LOCKED",
+    }]);
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok).toBe(false);
+    // The lock is gone on the next pass: the same acceptance lands.
+    git.commitResult = { ok: true, receipt: { branch: "main", parentSha: "f".repeat(40), sha: SHA } };
+    expect((await made.landOnce())[0]?.outcome).toBe("COMMITTED");
+    expect(git.commits).toHaveLength(2);
+  });
+
   it("reports a transient git failure without recording anything, so the next pass retries", async () => {
     const git = fakeGit(observation([]));
     const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });

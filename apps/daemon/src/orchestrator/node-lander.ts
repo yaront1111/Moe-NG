@@ -199,6 +199,12 @@ export function createNodeLander(config: NodeLanderConfig) {
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
     const committed = await config.git.commit(brief.workspace, paths, message);
     if (!committed.ok) {
+      // Another git process holding the index (an operator commit, a seat's own git call) is
+      // a moment, not a verdict: report it and let the next pass try again. Recording it
+      // durably lost a verified node's landing for good (boot-sweep on UnAI, 2026-09-05).
+      if (/index\.lock/u.test(committed.detail)) {
+        return { detail: committed.detail, nodeRef, outcome: "GIT_INDEX_LOCKED" };
+      }
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: committed.code, detail: committed.detail,
       });
