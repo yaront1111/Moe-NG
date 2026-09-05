@@ -115,7 +115,7 @@
       "completedAt": "2026-09-05T01:50:12.688Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -140,16 +140,24 @@
       "author": "worker-56ac23da",
       "content": "LIVE DRIVE ON UnAI (DoD 4, step 6) — RUN 2026-09-05. NO FABRICATED CLOSE. The goal did NOT close; the exact refusal and its cause are below.\n\nLANE: shipped `apps/daemon/src/daemon-main.ts` on the LIVE store D:/projexts/UnAI/.moe-next/store.sqlite (MOE_PROJECT_ID=unai), hosting the freshly built control-room bundle (`vite build` exit 0, VITE_MOE_LIVE_* cleared), paired over `--operator-stdin`. Real chromium.\n\nWHAT THE BROWSER SHOWED (this part WORKS, and is DoD 1's positive state proven live):\n- Needs you count: `2 decisions need you`. Two READY_TO_CLOSE cards rendered, each WITH the Close action:\n  - `cr.needsyou.item.ready-to-close.goal-da4b8e1e-89df-46fe-9555-e58067af1f27` \"Uai memory kernel from PRD\"\n  - `cr.needsyou.item.ready-to-close.goal-c9d9850b-ccef-4c14-8893-a162e3aaf679` \"UnAI kernel from PRD (real seats)\"\n  - card text verbatim: \"Everything the contract states is verified / All 10 acceptance criteria verified by the daemon's verifier. Close the goal when you are satisfied with the evidence.\"\n- The two-step arm works: control `cr.needsyou.close.goal-c9d9850b-...` reads \"Close the goal\", first click swaps its label to \"Confirm: close the goal\" and renders the `...close....cancel` control (\"Keep it open\").\n\nCOVERAGE READ (before), goal-c9d9850b-ccef-4c14-8893-a162e3aaf679:\n  totals {\"contracts\":1,\"criteria\":10,\"goals\":2,\"planned\":0,\"requirements\":7,\"unattributable\":0,\"verified\":10}  => n/n = 10/10 VERIFIED\n  lifecycle EXECUTION_ENABLED (both goals). document PRD.md sha256 e1033b0dbb2c5fb4d6b4fe7e7469001b36ae2f5643d8c062311d71e6c37fd93e, gate1 APPROVED.\n\nAFFORDANCE READ (before) — the goal.close offer EXISTS, real bytes:\n  {\"commandEnvelopeVersion\":\"moe-runtime-command/1\",\"commandId\":\"c3606f5b-1e81-4b6d-a48d-981ec90d35d8\",\"commandKind\":\"goal.close\",\"expectedVersion\":2,\"inputSchemaVersion\":\"moe-bootstrap-command/1\",\"targetAggregateId\":\"goal-c9d9850b-ccef-4c14-8893-a162e3aaf679\"}\n\nTHE CLOSE, FROM THE BROWSER: armed, confirmed, and the card rendered its own failure at its own layer VERBATIM:\n  \"That didn't go through. Details  TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT\"\n\nTHE SAME CLOSE, SAME OFFER, SAME PAYLOAD, DISPATCHED WITHOUT THE CLIENT TIMEOUT — the daemon's own answer in 212 ms:\n  {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"BOOTSTRAP_PREREQUISITE_MISSING\",\"detail\":\"BOOTSTRAP_PREREQUISITE_MISSING\",\"httpStatus\":422,\"layer\":\"DAEMON_PREREQUISITE\"},\"stage\":\"DISPATCH\"}\n\nAFTER: goal.close offer STILL PRESENT, lifecycle STILL EXECUTION_ENABLED, `GoalCompleted` rows on /events/read = 0. Nothing was committed. No GoalCompleted event id exists to report, because none was minted.\n\nROOT CAUSE, MEASURED NOT GUESSED. `bootstrap-sequence.ts:22` `\"goal.close\": Object.freeze([\"approval.decide\"])`, enforced at `bootstrap-services.ts:257-260` (`missingPrerequisites` -> refuse BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE) BEFORE any goal handler runs. The UnAI project never committed `approval.decide` — its goals were activated through the browser's `approval.decide_intent` path. The daemon's OWN step projection agrees: in the same /affordances/read frame, `approval.decide` is status READY (COMMITTED=0) and **`goal.close` is status BLOCKED**.\n\nTHE DEFECT (daemon-side; task rail 1 forbids me fixing it here). ONE frame contains both `steps[goal.close].status = \"BLOCKED\"` and a live `nextAllowedCommands` entry offering `goal.close`. The offer gate at `affordance-planning-offers.ts:170-178` consults only `closeReadiness` (child 2's criteria gate) and never `missingPrerequisites`, which the command path WILL enforce. So the surface offers a close the command refuses — the exact dead-button hazard the plan's risk section names, shipped and reachable on the live loop. Worse, the code that reaches the operator is the generic `BOOTSTRAP_PREREQUISITE_MISSING`, not one of the nine `GOAL_PREREQUISITE_REFUSAL_CODES`, so it names nothing about goals or criteria.\n\nCONSEQUENCE FOR THIS ROW: DoD 2 (\"after a committed close\") and DoD 3 (\"-> Close -> Done\") both require a committed close, which is unreachable at HEAD on any store whose goals were approved via approval.decide_intent. Recorded, not worked around.",
       "timestamp": "2026-09-05T01:11:13.361Z"
+    },
+    {
+      "id": "comment-17b51bc4394643f080017e582a2b98c0",
+      "author": "qa-3fd61a21",
+      "content": "QA REVIEW (qa-3fd61a21, 2026-09-05). APPROVED AS A SCOPE-NARROWED ROW. READ THIS BEFORE TREATING THIS ROW AS \"close works from the browser\" - IT DOES NOT.\n\nWHAT IS *NOT* DELIVERED, stated so no sweep can read DONE as the title:\n- DoD 3 (Playwright `-> Close -> Done` journey against a real daemon): NOT DELIVERED. No such spec exists; `git show 856e0da9 --stat` lands zero files under tests/e2e/.\n- DoD 2 (\"after a committed close\"): PARTIAL. No close was ever committed anywhere. The transition test drives RECORDED live daemon bytes through the real decoders, then moves EXACTLY ONE field (`goals[GOAL].lifecycle` -> \"COMPLETED\") to synthesise the after-frame. Disclosed in the file header and in goal-close-transition.test.tsx:20-32, not hidden.\n- DoD 4: delivered on its explicitly-allowed HONEST branch. No GoalCompleted event id exists because none was minted.\n\nI INDEPENDENTLY CONFIRMED THE IMPOSSIBILITY (did not take the worker's word):\n- `bootstrap-sequence.ts:22` `\"goal.close\": Object.freeze([\"approval.decide\"])`, enforced by `bootstrap-services.ts` before any goal handler. UnAI never committed `approval.decide`.\n- Past that gate, closure needs a durable review acceptance whose verifier receipt reads back (`goal-qualification.ts:66-90`). `grep -rn recordVerifierReceipt apps/daemon/src | grep -v '\\.test\\.'` returns exactly ONE production writer: `orchestrator/node-verifier.ts:182`. It is NOT a dispatchable command kind - `REVIEW_HANDLERS` (review-services.ts:190) serves only escalation.decide / integration.accept_output / qualification.replan / review.submit. The only other caller is `review/review-test-fixtures.ts`, which is planted state and DoD 3 forbids it.\nSo a committed close is unreachable at HEAD for any actor on this row: it requires a REAL agent seat delivering a node. No worker action satisfies DoD 3. Routing it back would be ping-pong, and per the board's reopen semantics would reset all 7 completed steps.\n\nBLOCKER ROW: task-ebbcbdb4967748daa84f314b39bd3960 (the offer/command split - `/affordances/read` advertises goal.close while the command path refuses BOOTSTRAP_PREREQUISITE_MISSING). DoD 2 and DoD 3 should be re-planned onto that row's successor, NOT assumed delivered here.\n\nWHAT I VERIFIED GREEN:\n- Completion commit 856e0da9 on moe/work-2026-09-04, 8 paths, `git branch --contains` confirms. ZERO files under apps/daemon/src (task rail 1 holds).\n- `pnpm --filter @moe/control-room test` re-run by me: `Test Files 138 passed (138)` / `Tests 1737 passed (1737)`, EXIT=0 - reproduces task.verification exactly.\n- Explicit filter run proving the new arms execute (not silently excluded): `pnpm exec vitest run goal-close-transition.test.tsx goal-close-port.test.ts needs-you-model.test.ts` -> `Test Files 3 passed (3)` / `Tests 26 passed (26)`.\n- DoD 1 is genuinely strong: both card states over the SAME 3/3 coverage moving only the offer, and the negative arm targets a DIFFERENT goal so matching is by target not by count; the offer is asserted carried through by reference plus exact 6-key roster; COMPLETED lifecycle drops the item entirely so a spent offer cannot be re-clicked; refusal codes asserted as literal `CODE @ LAYER` across a 10-code sweep plus a no-code fallback arm.\n- Per-file cap: 263 / 106 / 109 / 259 lines, all under 400.\n- Docs at HEAD: README.md \"Goal closure\" bullet (in 856e0da9); docs/agent-stack-runbook.md:491-520 present at HEAD - note it landed inside PEER wip commit ef555b3a (task-c81cc93d's wrapper sweep), not in this row's commit. Bytes are delivered; attribution is a peer sweep artifact.\n- The three disclosed foreign reds re-attributed by me at review time, all outside this row's owned paths: daemon roster red = peer's UNCOMMITTED `dev-proxy-paths.ts` hunk (`repository/remote/read` count 0 at HEAD, 1 in worktree); typecheck red = UNTRACKED peer file `apps/daemon/src/planning/plan-reject-test-fixtures.ts`; e2e:browser red = peer commit b5c83644 \"speak the board in words\" vs `prd-to-approval.spec.ts:130` still expecting `/\\d+ GOAL/u`. Global rail 3 intersection with owned paths is EMPTY.",
+      "timestamp": "2026-09-05T01:57:49.558Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:19:20.564Z",
-  "updatedAt": "2026-09-05T01:52:24.931Z",
+  "updatedAt": "2026-09-05T01:59:35.424Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:23:08.915Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-05T01:59:35.424Z",
+    "wallClockMs": 5786509
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -180,7 +188,8 @@
   },
   "planApprovedAt": "2026-09-05T00:24:07.742Z",
   "contextFetchedBy": [
-    "worker-56ac23da"
+    "worker-56ac23da",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T00:25:03.839Z",
   "reviewStartedAt": "2026-09-05T01:52:24.930Z",
@@ -198,7 +207,58 @@
     "apps/control-room/src/v2/goals/goal-close-transition.test.tsx",
     "apps/control-room/src/v2/goals/live-close-frames.fixture.ts",
     "README.md",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json"
   ],
-  "completionSummary": "DELIVERED: DoD 1, 4 and 5 in full; DoD 2 partially (through the real decoders, with one disclosed projection); DoD 3 NOT delivered, because a committed close is unreachable at HEAD. ZERO production files changed in any package — tests, one recorded fixture, and docs only (task rail 1 proven: filtering my 7 paths for ^apps/daemon/src returns none).\n\nTHE ROW'S REAL FINDING. The live drive worked and exposed a shipped defect: ONE /affordances/read frame carries BOTH `steps[goal.close].status === \"BLOCKED\"` AND a live `goal.close` offer. `affordance-planning-offers.ts:170-178` gates the OFFER on criteria readiness only; `bootstrap-services.ts:257-260` + `bootstrap-sequence.ts:22` gate the COMMAND on a committed `approval.decide` and refuse first. UnAI has COMMITTED=0 for `approval.decide` (its goals came through the browser's `approval.decide_intent` path), so every n/n-verified goal is advertised with a Close that answers BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE — a generic code naming nothing about goals. This is the \"dead button\" the plan's risk section named, live. Filed as task-ebbcbdb4967748daa84f314b39bd3960 (PLANNING, HIGH) per task rail 1, not patched here.\n\nDoD 4 (live drive) — DONE, honest branch, comment-41108de3b6b44efc844fec78a522bcee. Real daemon on the live UnAI store, real built bundle, operator-stdin pairing, real chromium. Needs you read \"2 decisions need you\" and rendered two READY_TO_CLOSE cards WITH Close; the two-step arm worked; the card rendered TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT verbatim, and the same offer dispatched without the client timeout got the daemon's own 422 in 212 ms. Coverage 10/10 VERIFIED so there are NO unverified criterion ids to list. NO GoalCompleted id is reported because none was minted — nothing was fabricated.\n\nDoD 1 — DONE. Both card states over the SAME coverage, moving only the offer (negative arm uses an offer targeting a DIFFERENT goal, so matching is by target not by count); fixtures repla"
+  "completionSummary": "DELIVERED: DoD 1, 4 and 5 in full; DoD 2 partially (through the real decoders, with one disclosed projection); DoD 3 NOT delivered, because a committed close is unreachable at HEAD. ZERO production files changed in any package — tests, one recorded fixture, and docs only (task rail 1 proven: filtering my 7 paths for ^apps/daemon/src returns none).\n\nTHE ROW'S REAL FINDING. The live drive worked and exposed a shipped defect: ONE /affordances/read frame carries BOTH `steps[goal.close].status === \"BLOCKED\"` AND a live `goal.close` offer. `affordance-planning-offers.ts:170-178` gates the OFFER on criteria readiness only; `bootstrap-services.ts:257-260` + `bootstrap-sequence.ts:22` gate the COMMAND on a committed `approval.decide` and refuse first. UnAI has COMMITTED=0 for `approval.decide` (its goals came through the browser's `approval.decide_intent` path), so every n/n-verified goal is advertised with a Close that answers BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE — a generic code naming nothing about goals. This is the \"dead button\" the plan's risk section named, live. Filed as task-ebbcbdb4967748daa84f314b39bd3960 (PLANNING, HIGH) per task rail 1, not patched here.\n\nDoD 4 (live drive) — DONE, honest branch, comment-41108de3b6b44efc844fec78a522bcee. Real daemon on the live UnAI store, real built bundle, operator-stdin pairing, real chromium. Needs you read \"2 decisions need you\" and rendered two READY_TO_CLOSE cards WITH Close; the two-step arm worked; the card rendered TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT verbatim, and the same offer dispatched without the client timeout got the daemon's own 422 in 212 ms. Coverage 10/10 VERIFIED so there are NO unverified criterion ids to list. NO GoalCompleted id is reported because none was minted — nothing was fabricated.\n\nDoD 1 — DONE. Both card states over the SAME coverage, moving only the offer (negative arm uses an offer targeting a DIFFERENT goal, so matching is by target not by count); fixtures repla",
+  "commits": [
+    {
+      "sha": "856e0da981df51790856ee7ee324022e4129c6a4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-05T00:24:40Z",
+      "paths": [
+        ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+        ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+        "apps/control-room/src/v2/approvals/goal-close-port.test.ts",
+        "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+        "apps/control-room/src/v2/goals/goal-close-transition.test.tsx",
+        "apps/control-room/src/v2/goals/live-close-frames.fixture.ts",
+        "README.md"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-05T01:52:44.304Z",
+      "treeId": "85d0dfadc9a74399a19337dd2668b1698a1de547",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/approvals/goal-close-port.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "docs/agent-stack-runbook.md",
+    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+    "apps/control-room/src/v2/goals/goal-close-transition.test.tsx",
+    "README.md",
+    "apps/control-room/src/v2/goals/live-close-frames.fixture.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-05T00:24:40Z",
+    "at": "2026-09-05T01:52:44.304Z"
+  },
+  "completedAt": "2026-09-05T01:59:35.424Z",
+  "reviewCompletedAt": "2026-09-05T01:59:35.424Z",
+  "reviewSummary": "APPROVED AS SCOPE-NARROWED - THIS ROW DOES NOT SHIP \"close a goal from the browser\"; no close was ever committed. DoD 3 (Playwright -> Close -> Done) NOT DELIVERED: zero tests/e2e/ files in 856e0da9. DoD 2 PARTIAL: recorded live frames through the real decoders, then EXACTLY ONE field (lifecycle -> COMPLETED) projected, disclosed at goal-close-transition.test.tsx:20-32. DoD 4 on its allowed honest branch; no GoalCompleted id, none minted. Detail: comment-17b51bc4394643f080017e582a2b98c0.\n\nIMPOSSIBILITY CONFIRMED BY ME: bootstrap-sequence.ts:22 needs a committed approval.decide (UnAI has none); past it goal-qualification.ts:66-90 needs a verifier receipt, and grep for recordVerifierReceipt outside tests gives EXACTLY ONE production writer - orchestrator/node-verifier.ts:182, not a dispatchable kind. Only a real agent seat delivering a node mints it; DoD 3 forbids planted rows. No worker action satisfies DoD 3; rejecting would be ping-pong that also resets 7 done steps. DoD 2+3 must be re-planned onto a successor of task-ebbcbdb4967748daa84f314b39bd3960, NOT assumed delivered here.\n\nGREEN: re-ran pnpm --filter @moe/control-room test -> Test Files 138 passed (138) / Tests 1737 passed (1737) EXIT=0, matching task.verification; proved the new arms execute via explicit pnpm exec vitest run on the 3 files -> Test Files 3 passed (3) / Tests 26 passed (26). Commit 856e0da9 on moe/work-2026-09-04 (branch --contains), 8 paths, ZERO under apps/daemon/src - rail 1 holds. Files 263/106/109/259 lines, under 400. DoD 1 strong: both card states over the SAME 3/3 coverage moving only the offer, negative arm targets a DIFFERENT goal, COMPLETED drops the item so a spent offer cannot be re-clicked, 10-code sweep asserts literal CODE @ LAYER. Docs: README bullet here; runbook:491-520 at HEAD but landed in PEER wip ef555b3a. Three foreign reds re-attributed, owned-path intersection EMPTY."
 }
