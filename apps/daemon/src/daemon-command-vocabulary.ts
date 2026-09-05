@@ -29,6 +29,9 @@ import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
   from "./journal/journal-contracts.js";
 import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
 import {
+  PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_DECIDE_PAYLOAD_KEYS,
+} from "./preview/preview-contracts.js";
+import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
 } from "./product-contract/product-contract-gate-1-contract.js";
 import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS }
@@ -157,6 +160,11 @@ export const COMPILER_FAMILY: Readonly<Record<string, string>> = Object.freeze({
   [PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND]: CAPABILITIES.PLANNING,
 });
 
+/** REVIEW capability, on its own table: REVIEW_FAMILY membership would set review:true
+ *  and dispatch this kind to runReviewCommand. Family membership is not the human gate. */
+export const PREVIEW_FAMILY: Readonly<Record<typeof PREVIEW_DECIDE_COMMAND_KIND, string>> =
+  Object.freeze({ [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW });
+
 export type WiredCommandKind =
   | BootstrapCommandKind | GraphMutationCommandKind
   | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
@@ -164,6 +172,7 @@ export type WiredCommandKind =
   | typeof PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND
+  | typeof PREVIEW_DECIDE_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
@@ -174,12 +183,12 @@ export type WiredCommandKind =
   | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
   | StepLifecycleCommandKind;
 
-/** The five capability tables, searched in order and named ONCE. `daemon-command-families.js`
+/** The eight capability tables, searched in order and named ONCE. `daemon-command-families.js`
  *  reads the same list, so an entry's demanded capability and an agent's granted set can never
  *  come from different tables. */
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
-  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY,
-  SESSION_FAMILY, WORK_FAMILY,
+  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, GRAPH_FAMILY, PREVIEW_FAMILY,
+  REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -194,6 +203,7 @@ export function familyCapabilityOf(kind: string): string | null {
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
+  if (kind === PREVIEW_DECIDE_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -311,6 +321,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "integration.accept_output": ["receiptId", "subjectRef"],
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],
+    [PREVIEW_DECIDE_COMMAND_KIND]: PREVIEW_DECIDE_PAYLOAD_KEYS,
     // RECOGNISED IN ORDER TO BE REFUSED, not accepted (task-4b9c394d). The daemon MINTS the
     // activation witness, so a well-behaved caller sends `{}`. `"witness"` stays listed because
     // this roster is the HTTP ingress ALLOW-LIST (http-command-ingress.ts:118-126): an UNLISTED
@@ -356,6 +367,9 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // an agent presenting an answer would be the quiet invention the clarification
   // fence exists to refuse. MCP-excluded on the same standing contract.
   PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
+  // Deciding a product preview is the operator's own act; an agent presenting
+  // APPROVE/REJECT would staff the human gate. MCP-excluded on the same standing.
+  PREVIEW_DECIDE_COMMAND_KIND,
   "goal.close",
   // Publishing pushes the operator's repository to a remote the operator named: the human's
   // own act on their own code, and MCP-unreachable for the same reason as the approvals.

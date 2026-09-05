@@ -21,25 +21,35 @@
     {
       "stepId": "step-1",
       "description": "VERIFY, NO EDITS. This step confirms the seam this row now sits behind; it re-derives nothing. (a) CONFIRM THE LEAF LANDED. task-c672815d5adc408683d11f91ab3f0a72 owns the shared runtime roster and the four digest mirrors; this row dependsOn it, so the daemon files below cannot typecheck until it is DONE. Prove it at the tree, not from the board: `grep -n 'preview.decide' packages/contracts/src/runtime/runtime-vocabulary.ts` must return a line. If it returns nothing, the runtime is offering this row early - call moe.report_blocked with blockedOnTaskIds ['task-c672815d5adc408683d11f91ab3f0a72'] and stop. Read that row's completionSummary from get_context.epicSiblings for the NEW contract digest and the moved `commands.size` literal instead of re-measuring them. (b) CONFIRM THE ALREADY-DELIVERED HALF. apps/daemon/src/preview/preview-contracts.ts (249 lines), its .js bridge and preview-contracts.test.ts (30 tests) were landed by an earlier session of THIS row. Do NOT recreate, edit or re-drill them. Confirm these exports still resolve: PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66 (=== PREVIEW_REJECT_PAYLOAD_KEYS, so ['decision','findings','previewRef']), PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. (c) CONFIRM THE DAEMON GAP IS STILL REAL: `git grep -n 'preview\\.decide' -- apps/daemon/src ':!apps/daemon/src/preview'` must be empty. (The hit at apps/daemon/src/release/release-dossier-sections.ts:131 is the expression `preview.decidedAt`, not the kind.) (d) If this re-measure names any file outside the SIX in planningNotes.keyFiles, STOP and report - the roster is at its ceiling and has no headroom.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "VERIFY ONLY, no edits. (a) LEAF LANDED: grep -n preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts -> line 101: \"policy.install\", \"policy.validate\", \"preview.decide\". task-c672815d completionSummary (from mem:task-task-c672815d5adc408683d11f91ab3f0a72-handoff, commit 0d1d6c46): commands.size 103->104, NEW GENERATED_CONTRACT_DIGEST ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076. (b) ALREADY-DELIVERED HALF confirmed: PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66 === PREVIEW_REJECT_PAYLOAD_KEYS [decision,findings,previewRef], PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. .js bridge present at apps/daemon/src/preview/preview-contracts.js. Do not recreate/edit. (c) DAEMON GAP STILL REAL: git grep preview.decide in apps/daemon/src excluding preview/ is empty except the false-positive release-dossier-sections.ts:131 (preview.decidedAt). daemon-command-*.ts greps for PREVIEW_DECIDE|preview.decide = ZERO hits. (d) Re-measure names no file outside the six keyFiles; remaining work stays in those six. Peer dirt noted and left alone: README.md, live-goal-create.ts/.test.ts, document-coverage-read.ts, node-lander.ts/.test.ts, current-planning-run.ts, docs/agent-stack-runbook.md, untracked mcp-design-read-query.*, activation-fresh-project.spec.ts, plus .moe/.grok board state.",
+      "startedAt": "2026-09-05T15:09:42.819Z",
+      "completedAt": "2026-09-05T15:10:16.309Z"
     },
     {
       "stepId": "step-2",
       "description": "WIRE THE DAEMON VOCABULARY. apps/daemon/src/daemon-command-vocabulary.ts ONLY (372 lines at HEAD f3b94eaa - stay under 400). Import PREVIEW_DECIDE_COMMAND_KIND and PREVIEW_DECIDE_PAYLOAD_KEYS from \"./preview/preview-contracts.js\" - the .js bridge exists, and a bare \"./preview/preview-contracts\" specifier kills the daemon at boot with ERR_MODULE_NOT_FOUND. Do NOT restate the payload keys; spread the constant, exactly as the comment at :257-260 demands, so the advertised roster and the enforced one cannot drift. Five edits: (a) add `| typeof PREVIEW_DECIDE_COMMAND_KIND` to the WiredCommandKind union at :160-176. (b) Add `export const PREVIEW_FAMILY: Readonly<Record<typeof PREVIEW_DECIDE_COMMAND_KIND, string>> = Object.freeze({ [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW })` and put it in FAMILY_TABLES at :180-183. This is not decoration: familyCapabilityOf returns null for an unclaimed kind and daemon-command-families.ts requiredCapabilityOf THROWS on that null at registry build time. While there, fix the FAMILY_TABLES doc comment - it says 'The five capability tables' while listing seven; state the count you leave behind or drop the number. (c) In agentCapabilitiesFor at :194, return null for this kind, in the same shape and for the same reason as PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND at :195-196 - never staffable, whatever its family capability says. Put it beside that line, not at the end of the function. (d) Add the kind to OPERATOR_PRINCIPAL_KINDS at :344 with a one-line why-comment in the neighbours' style. (e) Add `[PREVIEW_DECIDE_COMMAND_KIND]: PREVIEW_DECIDE_PAYLOAD_KEYS` to PAYLOAD_KEYS at :256. PAYLOAD_KEYS KEY ORDER IS THE SERVED ORDER - daemon-command-registry.ts:432 maps Object.keys(PAYLOAD_KEYS) through entryOf - so place the key at exactly the index you will transcribe into REGISTRATION_ORDER in step 4. DO NOT add the kind to REVIEW_FAMILY: that sets review:true in commandFamilyFacts and dispatches it to runReviewCommand at registry.ts:400.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "note": "Wired preview.decide in daemon-command-vocabulary.ts ONLY (386 lines, was 372; under 400). Import from ./preview/preview-contracts.js (bridge confirmed). Five edits: (a) WiredCommandKind union + typeof PREVIEW_DECIDE_COMMAND_KIND; (b) PREVIEW_FAMILY {preview.decide: REVIEW} on its own table, added to FAMILY_TABLES (now 8; doc comment was 'five' listing seven, now states eight); NOT in REVIEW_FAMILY; (c) agentCapabilitiesFor returns null beside product_contract.answer_clarification; (d) OPERATOR_PRINCIPAL_KINDS with neighbour-style comment; (e) PAYLOAD_KEYS spreads PREVIEW_DECIDE_PAYLOAD_KEYS after policy.validate / before project.activate — that is the served index for REGISTRATION_ORDER in step 4. Tests are the dedicated step-4 roster work, not this file. Peer dirt unchanged and untouched.",
+      "startedAt": "2026-09-05T15:10:59.472Z",
+      "completedAt": "2026-09-05T15:11:32.946Z"
     },
     {
       "stepId": "step-3",
       "description": "SERVE IT, FAIL CLOSED. (1) apps/daemon/src/daemon-command-families.ts (163 lines): add `readonly preview: boolean` to CommandFamilyFacts with a one-line doc comment; add `preview: kind === PREVIEW_DECIDE_COMMAND_KIND` to membershipOf, importing the kind from ./preview/preview-contracts.js. In requiredCapabilityOf, return CAPABILITIES.REVIEW for member.preview BEFORE the familyCapabilityOf call at the bottom. Step 2's PREVIEW_FAMILY makes that call succeed too and the two must agree - taking the explicit branch keeps the reason readable at the site. Leave schemaVersionOf ALONE: preview falls through to BOOTSTRAP_SCHEMA_VERSION, which is correct precisely because this kind never reaches requestOf. Do NOT set review:true. This is a field add on a flat readonly-boolean interface, and its only consumers are registry.ts:252-255 (destructure) and the v2 registry (.requiredCapability only), so no full-object snapshot breaks. (2) apps/daemon/src/daemon-command-registry.ts is 436 lines and was ALREADY over the 400 cap at merge-base - that is a pre-existing condition this diff must not worsen. Keep the addition to ~10 lines and reformat nothing else. Destructure `preview` in the commandFamilyFacts destructure at :252-255. Insert the branch INSIDE the handler, AFTER the disjoint-shape group that ends at :387 and BEFORE `const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId)` at :388 - preview has no codec, so reaching requestOf would throw the wrong error entirely: `if (preview) { const decoded = decodePreviewDecidePayload(envelope.payload); if (!decoded.ok) throw new DomainRefusal(decoded.code, decoded.layer, 'preview.decide payload refused'); const refusal = previewRefusal('PREVIEW_GOAL_NOT_LANDED'); throw new DomainRefusal(refusal.code, refusal.layer, 'preview runner is not landed'); }`. DomainRefusal's signature is (code, layer, detail, httpStatus = 422) at daemon-command-dispatch.ts:41. THE LAYER MUST COME FROM previewRefusal / PREVIEW_CODE_LAYERS, never a string literal - that closed map is DoD-4's entire point, and a literal there is exactly the (code, layer) disagreement it exists to make impossible. Consequences to state in the step note: an empty or malformed payload reaches PREVIEW_DECISION_INVALID @ REQUEST (the allow-list admits the kind; the decoder refuses it), and a WELL-FORMED payload fails closed at PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY until task-f5a74c23 replaces this stub with the real runner. Do NOT invent a fifth code, and do NOT write a test arm whose only job is to reach the stub.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-families.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T15:11:59.386Z"
     },
     {
       "stepId": "step-4",
@@ -102,12 +112,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T15:08:51.509Z",
+  "updatedAt": "2026-09-05T15:11:59.386Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "dependsOn": [
     "task-c672815d5adc408683d11f91ab3f0a72"
@@ -115,7 +125,10 @@
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T13:31:54.162Z",
   "planningNotes": {
@@ -241,6 +254,22 @@
       "treeId": "a42475a95941404f58c0007bac68aa6d5c1eafb1",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "7dcf061f573eeb8c62ae36a69f4851da82d80a22",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        "scripts/up.ps1"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:08:56.915Z",
+      "treeId": "401acc1ca5b243cebeabd81604af96e49ebc280b",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -259,7 +288,8 @@
     ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
     ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
     ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
-    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json"
+    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+    "scripts/up.ps1"
   ],
   "touchedFiles": [
     "apps/daemon/src/preview/preview-contracts.js",
@@ -267,19 +297,15 @@
     "apps/daemon/src/preview/preview-contracts.test.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/daemon-command-dispatch.ts",
-    "apps/daemon/src/daemon-command-edges.ts",
-    "apps/daemon/src/daemon-foundation-verification-command.ts",
-    "apps/daemon/src/daemon-v2-command-registry.ts",
-    "apps/daemon/src/planning/compiled-authority-bodies.ts",
-    "apps/daemon/src/product-contract/product-contract-propose-service.ts",
-    "apps/daemon/src/product-contract/product-contract-provenance.ts"
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
-    "at": "2026-09-05T11:32:34.718Z"
+    "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
+    "at": "2026-09-05T15:08:56.915Z"
   },
   "priorBlockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
   "blockedOnTaskIds": null,
