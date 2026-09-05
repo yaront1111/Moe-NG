@@ -223,13 +223,20 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
     const nodeKeys = new Set(nodes.map((node) => node.nodeKey));
     const reviews = readReviews(store, projectId, nodeKeys);
     const carried = new Map<string, Carrier>();
+    // A criterion carried by several nodes folds by a TOTAL order, so the answer cannot depend
+    // on definition order: UNATTRIBUTABLE outranks VERIFIED outranks PLANNED. A shared or
+    // unreadable carrier taints the criterion however another carrier reads — that verification
+    // is exactly the evidence the criterion cannot be attributed on — and the goal.close offer is
+    // gated on every criterion VERIFIED, so it must not appear or vanish on a re-ordered graph.
+    // Ties keep the first carrier, so the reported nodeKey stays stable.
+    const rank: Record<CriterionCoverageStatus, number> = { PLANNED: 0, UNATTRIBUTABLE: 2, UNPLANNED: -1, VERIFIED: 1 };
     for (const node of nodes) {
       const facts = reviews.get(node.nodeKey);
       const status: CriterionCoverageStatus = (counts.get(node.nodeKey) ?? 0) > 1 || facts?.unreadable === true
         ? "UNATTRIBUTABLE" : facts?.accepted !== undefined ? "VERIFIED" : "PLANNED";
       for (const criterionId of node.criterionIds) {
         const current = carried.get(criterionId);
-        if (current === undefined || (current.status === "PLANNED" && status !== "PLANNED")) {
+        if (current === undefined || rank[status] > rank[current.status]) {
           carried.set(criterionId, { nodeKey: node.nodeKey, status });
         }
       }

@@ -171,14 +171,29 @@ function rawAcceptance(store: SqliteEventStore, subjectRef: string): void {
 
 /** The REAL compile of a one-node plan carrying crit-1 under the given key, for a given goal. */
 function graphFor(goalRef: string, nodeKey: string): ActiveCompiledGraph {
+  return graphWith(goalRef, [nodeKey]);
+}
+
+/**
+ * The same compile with every listed key carrying crit-1 as an independent leaf. The codec
+ * canonicalises definitions in key order with dependencies first, so with more than one leaf a
+ * closing `z-done` node that depends on all of them carries crit-1 too (one completion node
+ * reachable from every other) and the leaves must be passed in sorted order.
+ */
+function graphWith(goalRef: string, nodeKeys: readonly string[]): ActiveCompiledGraph {
+  const single = nodeKeys.length === 1 ? nodeKeys[0] : undefined;
+  const closing = single === undefined ? "z-done" : undefined;
+  const leaf = (nodeKey: string, dependsOn: readonly string[]) => ({
+    capability: "capability-implement", criterionIds: ["crit-1"], dependsOn: [...dependsOn], nodeKey, objective: "Keep fields.",
+    readScopes: ["src"], resources: [`resource-${nodeKey}`], verificationRecipeRefs: ["recipe-a"], writeScopes: [`src/evidence/${nodeKey}`],
+  });
   const compiled = compiledPlanAuthority({
-    authorRef: "principal-compiler", completionNodeKey: nodeKey,
+    authorRef: "principal-compiler", completionNodeKey: single ?? closing ?? "",
     criteria: [{ criterionId: "crit-1", statement: "Every evidence row keeps its fields." }],
     graphRevisionRef: `graph-revision-${goalRef}`, idPrefix: `coverage-${goalRef}`, knownCapabilities: null,
-    nodes: [{ capability: "capability-implement", criterionIds: ["crit-1"], dependsOn: [], nodeKey, objective: "Keep fields.",
-      readScopes: ["src"], resources: ["resource-a"], verificationRecipeRefs: ["recipe-a"], writeScopes: ["src/evidence"] }],
+    nodes: [...nodeKeys.map((nodeKey) => leaf(nodeKey, [])), ...(closing === undefined ? [] : [leaf(closing, nodeKeys)])],
   });
-  if (!compiled.ok) throw new Error(`fixture compile refused: ${compiled.code}`);
+  if (!compiled.ok) throw new Error(`fixture compile refused: ${JSON.stringify(compiled)}`);
   const decoded = decodeGraphContent(Buffer.from(compiled.graphContentBytesBase64, "base64"));
   if (!decoded.ok) throw new Error("fixture graph did not decode");
   return Object.freeze({ content: decoded.value.content, goalRef });
@@ -283,6 +298,28 @@ describe("createDocumentCoverageReadPort", () => {
     }).readCoverage({ contentSha256: sha }));
     expect(statusOf(unique)["crit-1"]).toEqual(["VERIFIED", "implement"]);
     expect(unique.totals).toMatchObject({ unattributable: 0, verified: 1 });
+  });
+
+  it("folds a criterion carried by a shared key and a verified node the same way in either definition order", () => {
+    const { sha, store } = boundWorld();
+    const other = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build the other product.", source: { displayPath: "docs/other.md", mediaType: "text/markdown", text: OTHER_PRD }, title: "Other goal",
+    }, "2"));
+    if (!other.ok) throw new Error(`second bind refused: ${other.code}`);
+    proposeRevision(store, sha);
+    // One leaf is shared with goal-2's plan (UNATTRIBUTABLE), the other is uniquely accepted
+    // (VERIFIED). Definitions are canonical in key order, so the two worlds differ only in which
+    // carrier sorts first; the fold used to keep whichever came first and answered VERIFIED or
+    // UNATTRIBUTABLE for the same durable facts — and with it the goal.close offer.
+    rawAcceptance(store, "b-verified");
+    rawAcceptance(store, "a-verified");
+    for (const [shared, verified] of [["a-shared", "b-verified"], ["b-shared", "a-verified"]] as const) {
+      // Compiled outside the read so a fixture refusal surfaces as itself, not as UNREADABLE.
+      const active = [graphWith(GOAL_ID, [shared, verified].sort()), graphFor("goal-2", shared)];
+      const view = coverage(portFor(store, { readActive: () => active }).readCoverage({ contentSha256: sha }));
+      expect(statusOf(view)["crit-1"]).toEqual(["UNATTRIBUTABLE", shared]);
+      expect(view.totals).toMatchObject({ planned: 0, unattributable: 1, verified: 0 });
+    }
   });
 
   it("counts one revision per contract: the approved one, else the one the Gate 1 card offers", () => {
