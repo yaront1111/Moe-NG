@@ -166,7 +166,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T23:20:59.332Z",
+  "updatedAt": "2026-09-05T23:21:51.275Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -286,6 +286,21 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "2c1af9c5f3f672fc7ba26c91964a0373501e2158",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T23:21:33Z",
+      "paths": [
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T23:21:51.275Z",
+      "treeId": "72efcd08e83523398f9019741ad3b0852ac995d4",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -298,6 +313,7 @@
     "apps/control-room/src/live/live-document-proxy.test.ts",
     "apps/control-room/src/live/live-effect-read.test.ts",
     "apps/control-room/src/live/live-effect-read.ts",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
@@ -309,7 +325,9 @@
     "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
     "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
     "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
     "apps/daemon/src/repository/publication-approval.test.ts",
@@ -350,7 +368,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-05T23:08:33Z",
-    "at": "2026-09-05T23:20:59.332Z"
+    "sessionId": "qa-f2906c26@2026-09-05T23:21:33Z",
+    "at": "2026-09-05T23:21:51.275Z"
   }
 }
