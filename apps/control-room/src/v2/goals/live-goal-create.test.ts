@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import type { GoalDraft } from "./goal-model.js";
+import type { SurfaceReader } from "./live-goal-create.js";
 import { createGoalDispatcher, goalCreateOffer, goalCreateRefusal } from "./live-goal-create.js";
 import { labelForMissing } from "./work-labels.js";
 
@@ -100,9 +101,8 @@ describe("live goal.create surface reading", () => {
       steps: [step({ missing: ["project.activate"], status: "BLOCKED", version: null })],
     });
     expect(goalCreateRefusal(blocked)).toBe(
-      "goal.create is blocked until Activate the project commits. Next step: finish the project"
-      + " bootstrap from the terminal (moe init / demo seed); the browser cannot drive the"
-      + " pre-activation chain.",
+      "goal.create is blocked until Activate the project commits. Next step: use the Activate"
+      + " project card on this screen; it drives the whole chain from the browser.",
     );
     const twoTokens = frame({
       offers: [],
@@ -112,8 +112,8 @@ describe("live goal.create surface reading", () => {
     });
     expect(goalCreateRefusal(twoTokens)).toBe(
       "goal.create is blocked until Activate the project and Probe the model provider commits."
-      + " Next step: finish the project bootstrap from the terminal (moe init / demo seed); the"
-      + " browser cannot drive the pre-activation chain.",
+      + " Next step: use the Activate project card on this screen; it drives the whole chain"
+      + " from the browser.",
     );
   });
 
@@ -179,5 +179,131 @@ describe("live goal.create dispatch", () => {
     expect(result.ok).toBe(true);
     expect(result.report).toBe("Goal created: Second goal");
     expect(result.report).not.toMatch(/^[A-Z_]+ [A-Z_]+$/u);
+  });
+});
+
+/**
+ * task-9ade7f88 - THE PREREQUISITE THAT COMMITTED BETWEEN THE POLL AND THE CLICK.
+ *
+ * The frame the dispatcher reads is a 2000 ms poll (live-goals.tsx), so an operator
+ * who activates the project and immediately opens New Goal was refused against a
+ * PRE-ACTIVATION surface - and never told otherwise, because the report is a one-shot
+ * submit result rather than a polled one. The fix re-reads /affordances/read once on
+ * the refusal path and decides on THAT frame.
+ *
+ * These arms drive the sequence through the INJECTED reader, never by timing: a 2 s
+ * race can pass an e2e run by luck, so a green browser run is not evidence the defect
+ * is closed. The refusal SENTENCES are written out here rather than imported from the
+ * module under test, following this file's own rule at "reports an accepted create":
+ * an imported literal is a fixed point a hardcoded-return mutant would satisfy.
+ */
+
+const BLOCKED_ON_ACTIVATE = "goal.create is blocked until Activate the project commits."
+  + " Next step: use the Activate project card on this screen; it drives the whole chain"
+  + " from the browser.";
+const BLOCKED_ON_PROBE = "goal.create is blocked until Probe the model provider commits."
+  + " Next step: use the Activate project card on this screen; it drives the whole chain"
+  + " from the browser.";
+
+/** The pre-activation surface the 2 s poll is still holding. */
+function blockedOn(missing: string): SurfaceFrame {
+  return frame({ offers: [], steps: [step({ missing: [missing], status: "BLOCKED", version: null })] });
+}
+
+/** Counts its calls so an arm can prove the happy path never re-reads. */
+function readerOf(frames: SurfaceFrame[]): { calls: number; read: SurfaceReader } {
+  const reader = {
+    calls: 0,
+    read: (): Promise<SurfaceFrame> => {
+      const next = frames[reader.calls] ?? frames[frames.length - 1];
+      reader.calls += 1;
+      return Promise.resolve(next as SurfaceFrame);
+    },
+  };
+  return reader;
+}
+
+describe("live goal.create dispatch re-reads the surface before refusing", () => {
+  it("dispatches when the prerequisite committed after the poll that fed the frame", async () => {
+    const sent: SentEnvelope[] = [];
+    const setup = setupWith(sent);
+    const reader = readerOf([frame()]);
+    // Polled BEFORE the activation committed; the re-read sees the committed surface.
+    const result = await createGoalDispatcher(
+      setup, () => blockedOn("project.activate"), reader.read,
+    )(DRAFT);
+    // The command reached the transport - not merely "the result was ok".
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.commandId).toBe("c1");
+    expect(sent[0]?.commandKind).toBe("goal.create");
+    expect(result.ok).toBe(true);
+    expect(result.report).toBe("Goal created: Second goal");
+    expect(reader.calls).toBe(1);
+  });
+
+  it("builds the refusal from the re-read frame, not the stale one", async () => {
+    const sent: SentEnvelope[] = [];
+    const setup = setupWith(sent);
+    // Still no offer on the re-read, but a DIFFERENT prerequisite is outstanding, so
+    // the two frames produce different sentences and the arm can tell them apart. A
+    // fix that re-read for the LOOKUP but refused from the cached frame passes the
+    // arm above and still describes a surface that no longer exists; this is the arm
+    // that catches it.
+    const reader = readerOf([blockedOn("provider.probe")]);
+    const result = await createGoalDispatcher(
+      setup, () => blockedOn("project.activate"), reader.read,
+    )(DRAFT);
+    expect(result.ok).toBe(false);
+    expect(result.report).toBe(BLOCKED_ON_PROBE);
+    expect(result.report).not.toBe(BLOCKED_ON_ACTIVATE);
+    expect(sent).toHaveLength(0);
+    expect(setup.transport.sendCommand).toHaveBeenCalledTimes(0);
+  });
+
+  it("keeps the frame in hand when the re-read rejects, with no new error class", async () => {
+    const sent: SentEnvelope[] = [];
+    const setup = setupWith(sent);
+    const result = await createGoalDispatcher(
+      setup,
+      () => blockedOn("project.activate"),
+      () => Promise.reject(new DOMException("signal timed out", "TimeoutError")),
+    )(DRAFT);
+    expect(result.ok).toBe(false);
+    // The behaviour from before the re-read existed: the daemon's own prerequisite
+    // words, NOT a transport error and NOT the not-connected sentence.
+    expect(result.report).toBe(BLOCKED_ON_ACTIVATE);
+    expect(result.report).not.toContain("TimeoutError");
+    expect(sent).toHaveLength(0);
+  });
+
+  it("keeps the frame in hand when the re-read answers an unreadable surface", async () => {
+    const sent: SentEnvelope[] = [];
+    // `frameOfSurface` does NOT throw on a body it cannot read - it answers a
+    // LAGGING/UNREADABLE frame - so a bare try/catch would adopt it and the operator
+    // would be told the board is disconnected instead of what is actually missing.
+    for (const answered of [
+      frame({ connection: "LAGGING", detail: "UNREADABLE", offers: [], outcome: "UNREADABLE", steps: [] }),
+      frame({ connection: "DISCONNECTED", offers: [], steps: [] }),
+    ]) {
+      const setup = setupWith(sent);
+      const result = await createGoalDispatcher(
+        setup, () => blockedOn("project.activate"), readerOf([answered]).read,
+      )(DRAFT);
+      expect(result.ok).toBe(false);
+      expect(result.report).toBe(BLOCKED_ON_ACTIVATE);
+      expect(result.report).not.toBe(NOT_CONNECTED_SENTENCE);
+    }
+    expect(sent).toHaveLength(0);
+  });
+
+  it("makes no extra request when the polled frame already carries the offer", async () => {
+    const sent: SentEnvelope[] = [];
+    const reader = readerOf([frame()]);
+    const result = await createGoalDispatcher(setupWith(sent), () => frame(), reader.read)(DRAFT);
+    expect(result.ok).toBe(true);
+    // The happy path pays nothing: the re-read lives inside the branch that was
+    // already about to fail.
+    expect(reader.calls).toBe(0);
+    expect(sent).toHaveLength(1);
   });
 });

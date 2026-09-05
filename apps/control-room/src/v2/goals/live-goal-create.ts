@@ -8,6 +8,7 @@ import type {
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { readSurfaceOnce } from "../ops/policy-install-port.js";
 import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
 import { labelForMissing } from "./work-labels.js";
 
@@ -88,9 +89,14 @@ export function goalCreateRefusal(
   }
   const step = frame.steps.find((entry) => entry.kind === kind);
   if (step?.status === "BLOCKED" && step.missing.length > 0) {
+    // NEXT STEP NAMES THE CARD ON THIS SCREEN. Since task-3506e04a the Activate card runs
+    // project.register, project.bind_repository, provider.probe and project.activate from one
+    // button, so the old sentence -- which sent the operator to `moe init` or the demo seed --
+    // was the product's own copy contradicting the product. The prerequisite half still comes
+    // from `labelForMissing`, never a paraphrase, and no sentence carries a credential or token.
     return `${kind} is blocked until ${step.missing.map(labelForMissing).join(" and ")}`
-      + " commits. Next step: finish the project bootstrap from the terminal (moe init / demo"
-      + " seed); the browser cannot drive the pre-activation chain.";
+      + " commits. Next step: use the Activate project card on this screen; it drives the"
+      + " whole chain from the browser.";
   }
   return `${kind} is not offered by this daemon (step ${step?.status ?? "ABSENT"}).`
     + ` Next step: restart the daemon from a build that offers ${kind} on every read.`;
@@ -193,21 +199,66 @@ async function buildForDraft(
   };
 }
 
+/** Reads the affordance surface once. Injectable so a test can drive the re-read. */
+export type SurfaceReader = (headers: Readonly<Record<string, string>>) => Promise<SurfaceFrame>;
+
+/**
+ * The re-read, made unable to make things worse. `readSurfaceOnce` fetches under a
+ * deadline, so it can REJECT (network fault, abort), and it can answer a body that
+ * `frameOfSurface` maps to a LAGGING / UNREADABLE frame rather than throwing. Neither
+ * is news an operator can act on when a readable frame is already in hand, and refusing
+ * on one would replace the prerequisite sentence with a connectivity sentence that is
+ * less true. Both degrade to null and the caller keeps the polled frame, so the worst
+ * case is the behaviour from before this re-read existed. SurfaceFrame carries no
+ * version or timestamp, so "newer" is ordering by REQUEST, not by content: this fetch
+ * is issued after the poll that wrote the cached frame.
+ */
+async function rereadSurface(
+  read: SurfaceReader, headers: Readonly<Record<string, string>>,
+): Promise<SurfaceFrame | null> {
+  try {
+    const frame = await read(headers);
+    return frame.outcome === "SURFACE" && frame.connection === "CONNECTED" ? frame : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createGoalDispatcher(
   setup: LiveSetup,
   getFrame: () => SurfaceFrame | null,
+  readSurface: SurfaceReader = readSurfaceOnce,
 ): (draft: GoalDraft) => Promise<GoalCreateResult> {
   return async (draft: GoalDraft): Promise<GoalCreateResult> => {
-    // ONE read of the frame: the refusal must describe the same surface the offer
-    // was looked for on, not a later poll's.
-    const frame = getFrame();
+    // ONE FRAME PER DECISION: the refusal must describe the same surface the offer was
+    // looked for on. Up to two reads reach that frame, never a mix of both. The polled
+    // frame is up to POLL_INTERVAL_MS (2 s, live-goals.tsx) old and a prerequisite can
+    // commit inside that window - the Activate card drives the whole chain, but a worker
+    // seat or a second operator commits one just as easily. Refusing on the cached frame
+    // told an operator who clicked promptly to go do the thing they had just done, and
+    // never self-corrected: the report is a one-shot submit result, not a polled surface.
+    // So with no offer found, read /affordances/read ONCE more and decide on THAT frame -
+    // look for the offer on it AND, if still absent, build the refusal from it. Do not
+    // "simplify" this back into a single read, and do not reach for `getFrame()` as the
+    // second read: it is synchronous over a ref only the poll writes, so a second call
+    // returns the same stale object.
+    let frame = getFrame();
     // A selected PRD decides the KIND, because the source can only travel inside
     // the command that carries it; with no PRD the brief-only path is unchanged.
     const kind: GoalCreateKind = draft.prd === undefined
       ? "goal.create"
       : "goal.create_with_source";
-    const offer = goalCreateOffer(frame, kind);
-    if (offer === null) return { ok: false, report: goalCreateRefusal(frame, kind) };
+    let offer = goalCreateOffer(frame, kind);
+    if (offer === null) {
+      // Only ever on a path that was already about to fail: the happy path makes no
+      // extra request, because it never reaches here.
+      const reread = await rereadSurface(readSurface, setup.headers);
+      if (reread !== null) {
+        frame = reread;
+        offer = goalCreateOffer(reread, kind);
+      }
+      if (offer === null) return { ok: false, report: goalCreateRefusal(frame, kind) };
+    }
     const prepared = await buildForDraft(draft, offer, setup);
     if ("report" in prepared) return { ok: false, report: prepared.report };
     const built = prepared.built;
