@@ -154,11 +154,17 @@
       "author": "worker-75411639",
       "content": "WORKER EVIDENCE, worker-75411639, 2026-09-05 - detail that exceeds the completion-summary cap.\n\n== DoD 4, THE THREE NAMED DIGEST MIRRORS: VERIFIED BY RUNNING, NONE EDITED ==\nThe step told me to run each rather than edit for symmetry. All three pass UNCHANGED and none of them pins this surface:\n1. packages/control-room-client/src/generated-coverage.test.ts - `pnpm --filter @moe/control-room-client test` -> Test Files 10 passed (10), Tests 96 passed (96). It pins GENERATED_FILE_SHA256 / CONTRACT_DIGEST over the generated client and the @moe/contracts runtime command+query registries. `grep -n 'product-contract|dossier|coverage/read|gate-1'` in it returns NOTHING. This row adds no contract registry entry, so nothing to update.\n2. apps/control-room/src/data/data-adapter.test.ts (272 lines) - green; same grep returns NOTHING.\n3. apps/control-room/src/v2/goals/approve-plan.test.tsx - green; same grep returns NOTHING.\nEditing any of them would have been an edit made to satisfy a list rather than a failure.\n\nTHE MIRROR THAT DID EXIST was not on the list: apps/control-room/src/live/live-document-proxy.test.ts pins DEV_PROXY_PATHS with a `toStrictEqual` literal roster. Found by grepping DEV_PROXY_PATHS consumers BEFORE editing dev-proxy-paths.ts, and updated in the same step; without it the new /product-contract/gate-1/read pin would have reddened that roster.\n\n== DRILL (global rail 1 + rail 13), FULL TRANSCRIPT ==\nTarget: apps/control-room/src/live/live-product-contract-gate-1.ts. `git status --porcelain` BEFORE drilling: `?? apps/control-room/src/live/live-product-contract-gate-1.ts` - UNTRACKED, so `git diff` is blind to it and an empty diff would certify nothing.\nBackup: copied to %TEMP%/live-product-contract-gate-1.worker-75411639.bak. Pre-drill SHA256 of both, identical:\n  6ea9643a3b5e83d5de27ee3b2ec2eb01cb384af20a501985226490e72376a510\nMutation (exact-key fence relaxed to tolerate an extra key):\n  -    if (keys.length !== expectedKeys.length\n  -      || keys.some((key) => typeof key !== \"string\" || !expectedKeys.includes(key))) return null;\n  +    if (keys.some((key) => typeof key !== \"string\")) return null;\nRESULT: RED, and on the right arm - \"refuses a frame with an EXTRA key, at the envelope and inside the gate\", live-product-contract-gate-1.test.ts:40. Received `{advisoryOnly: true, gate: \"GATE_1\", revisionDigest: \"fd050a1a0b3a70cb98fae166bc30d61942cd9c19897cb12e657eeb5cbf0c7f7c\", status: \"GATE\"}` where the arm expects `PRODUCT_CONTRACT_GATE_1_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_PRODUCT_CONTRACT`. Test Files 1 failed (1), Tests 1 failed | 7 passed (8).\nRestore: a SEPARATE call copied the backup back. Proof in a THIRD, separate call - SHA256 of the restored file equals the pre-drill value byte for byte (6ea9643a...f7c7f7510 as above) and `grep -n \"keys.length !== expectedKeys.length\"` finds it again at line 65.\n\n== ROOT LANE, PATH-ATTRIBUTED (global rail 3) ==\n`pnpm test` -> Test Files 6 failed | 420 passed | 2 skipped (428); Tests 13 failed | 10255 passed | 60 skipped (10328). DISCLOSED VERBATIM, none attributable to this row:\n- tools/packaging/pack-source.test.ts, 4 failures (\"refuses 'bearer authorization' / 'private key' / 'session credential' bytes on an ordinary tracked path\"). GREEN IN ISOLATION: 143 passed | 2 skipped (145). 202s in the full run vs 97s alone - the spawn-contention flake, not a defect in the tree.\n- tests/integration/release/release-version-surfaces.test.ts, 2 failures: unclassified version literals in README.md (\"0.1.0\") and apps/daemon/src/bootstrap/activation-receipts.{ts,test.ts} + apps/daemon/src/http/activation-read.{ts,test.ts} (\"v0.1\"). Those paths are tracked and UNMODIFIED (`git status --porcelain` empty for each), and none of my files contains \"0.1.0\" or \"v0.1\" (grepped, no hits).\n- tests/integration/portability/goal-brief-mcp-readback.test.ts: `seeding refused at project.activate: BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS` (14 skipped after the suite-level throw).\n- tests/integration/control-room/compiled-product-journey.test.ts: `expected [ 'goal.create', ...(8) ] to include 'goal.close'`.\n- tests/integration/import/legacy-import-commit.test.ts: `expected 'IMPORT_COMMIT_FAILED' to be 'COMMAND_ID_CONFLICT'`.\nATTRIBUTION: the root vitest include is `[\"adapters/**/*.test.ts\",\"packages/**/*.test.ts\",\"tests/**/*.test.ts\",\"tools/**/*.test.ts\"]` (vitest.config.ts:32) - apps/** is NOT collected, so this lane never loads a single file this row changed. None of the five failing files imports an apps/control-room source (checked: the only \"control-room\" strings in them are package.json / dist path rosters and packages/control-room-client). (HEAD failures minus merge-base failures) intersected with owned paths = EMPTY.\nPer global rail 18, `pnpm test` is BASELINE evidence only here: I touched NO packages/ file, so the root lane carries no evidence for this row's surface and does not cover apps/**. The owned-package legs do.\n\n== FOLLOW-UP, RECORDED HERE RATHER THAN AS A ROW (global rail 16) ==\nThe opened goal now polls /documents/coverage/read TWICE for the same goal: PrdCoverage at 5s (pre-existing, inside the \"Everything else\" fold) and LiveContractDossier at 10s. Sharing one coverage read would mean hoisting that state into cordum-app.tsx, which a peer session is editing concurrently; I kept the added cadence to 10s instead. Worth folding together when someone next owns cordum-app.tsx alone.",
       "timestamp": "2026-09-05T09:13:24.104Z"
+    },
+    {
+      "id": "comment-cb69029f66634508aac11770b21c0c68",
+      "author": "qa-3fd61a21",
+      "content": "HEADS-UP FROM QA ON A SIBLING ROW (qa-3fd61a21, reviewing task-70a7ccd3). Not a ruling on this row — just the attribution, pre-derived, so this row's QA does not spend a cycle re-measuring it.\n\n`pnpm --filter @moe/daemon test` at HEAD (79d4c263) is RED, exactly one test, and it attributes to THIS row's commit:\n\n```\nFAIL  src/http/http-listener-read-dispatch.test.ts:165\n      > the read-route roster and the surface it advertises agree in BOTH directions\n      > proxies every served JSON route in development, bar a named census\nAssertionError: expected [] to strictly equal [ '/product-contract/gate-1/read' ]\n```\nFull run: `Test Files  1 failed | 421 passed (422)` / `Tests  1 failed | 8442 passed (8443)`, exit 1.\n\nMEASURED, per ref — `product-contract/gate-1/read` in `apps/control-room/src/live/dev-proxy-paths.ts` vs the daemon's `UNPROXIED_SERVED_PATHS` census in `apps/daemon/src/http/http-listener-read-dispatch.test.ts`:\n\n| ref | in dev-proxy-paths | in UNPROXIED census |\n| --- | --- | --- |\n| 039911cd | 0 | 2 |\n| 1c464208 | 0 | 2 |\n| 85aceb0d | 0 | 2 |\n| HEAD 79d4c263 | 1 | 2 |\n\n`git log -S'product-contract/gate-1/read' -- apps/control-room/src/live/dev-proxy-paths.ts` => `79d4c263 feat(task-1c9587ed1b2b4e1abd6b51396ee672f8)`.\n\nWHAT IT MEANS: 79d4c263 started proxying `/product-contract/gate-1/read` in development but left it listed in the daemon's named \"served but deliberately unproxied\" census, so the two directions of the roster now disagree. This is the bidirectional-roster rail (global rail 9) firing as designed — the census is the advertised side and it went stale when the served side changed. The fix is the roster backfill: drop `/product-contract/gate-1/read` from `UNPROXIED_SERVED_PATHS` now that it is genuinely proxied.\n\nI confirmed it is NOT task-70a7ccd3's: that row's commit 1c464208 touches zero files under `apps/daemon/src/http/` or `apps/control-room/`, and the mismatch does not exist at 1c464208. Approving task-70a7ccd3 on a path-attributed baseline (global rail 3) with this red disclosed verbatim.",
+      "timestamp": "2026-09-05T09:23:26.805Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:26.694Z",
-  "updatedAt": "2026-09-05T09:14:23.761Z",
+  "updatedAt": "2026-09-05T09:23:26.805Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:37:46.242Z",
     "plannedStepCount": 6,
@@ -216,7 +222,61 @@
     "apps/control-room/src/v2/goals/prd-dossier.tsx",
     "apps/control-room/src/v2/goals/prd-dossier.test.tsx",
     "apps/control-room/src/v2/goals/prd-panel.tsx",
-    "apps/control-room/src/live/live-document-dossier.test.ts"
+    "apps/control-room/src/live/live-document-dossier.test.ts",
+    ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+    ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json"
   ],
-  "completionSummary": "BROWSER-ONLY, NO DAEMON ROUTE (`git diff --stat -- apps/daemon/src` = 0 lines).\n\nNEW GATE-1 READ CLIENT live/live-product-contract-gate-1.ts: POSTs exactly { ref } to /product-contract/gate-1/read, EXACT-KEY at both frame levels (envelope [\"gate\",\"outcome\"], gate [\"advisoryOnly\",\"gate\",\"ok\",\"revisionDigest\"]), forwarding every refusal at the code+layer its owner stamped. Proxy pin added to dev-proxy-paths.ts (/documents/dossier/read was already at :16, not duplicated) and to the toStrictEqual roster in live-document-proxy.test.ts that pins it.\n\nCORRECTION THAT SHAPED THE ROW, measured in step 1 and NOT in the description: /product-contract/gate-1/read serves a FOUR-KEY VERDICT {advisoryOnly, gate:\"GATE_1\", ok, revisionDigest} (core product-contract-acceptance-binding.ts:169-172, returned verbatim by the resolver) - it carries NO requirement, criterion or coverage state, so DoD 1's dossier cannot come from it alone. /documents/coverage/read serves exactly those, plus the revision triple the gate read needs as input. So v2/goals/contract-dossier.tsx COMPOSES the two: coverage gives the approved revision id, the requirements count and EVERY CRITERION WITH ITS COVERAGE STATE; gate-1 gives the durable human-authority verdict per revision (v2/goals/contract-gates.ts, keyed by the full triple). Mounted on the opened goal beside the Gate 1 card. Personas/journeys/assumptions/decisions/versions for the approved revision were measured ALREADY RENDERED there by Gate1Card's CURRENT branch (gate1-card.tsx:216-245) - not rebuilt.\n\nPRD DOSSIER IN v2 by REUSE: v2/goals/prd-dossier.tsx consumes the EXISTING createLiveDocumentDossierFeed and document-dossier-state module (no second decoder) and is mounted in the PRD panel. Its presentation is v2-native on a measurement: the legacy component's sheet is reachable only through the v1 control-room.css chain and 8 of its 16 custom properties are undefined in v2 tokens, so the card would lose its surface and rail; importing the v1 chain is"
+  "completionSummary": "BROWSER-ONLY, NO DAEMON ROUTE (`git diff --stat -- apps/daemon/src` = 0 lines).\n\nNEW GATE-1 READ CLIENT live/live-product-contract-gate-1.ts: POSTs exactly { ref } to /product-contract/gate-1/read, EXACT-KEY at both frame levels (envelope [\"gate\",\"outcome\"], gate [\"advisoryOnly\",\"gate\",\"ok\",\"revisionDigest\"]), forwarding every refusal at the code+layer its owner stamped. Proxy pin added to dev-proxy-paths.ts (/documents/dossier/read was already at :16, not duplicated) and to the toStrictEqual roster in live-document-proxy.test.ts that pins it.\n\nCORRECTION THAT SHAPED THE ROW, measured in step 1 and NOT in the description: /product-contract/gate-1/read serves a FOUR-KEY VERDICT {advisoryOnly, gate:\"GATE_1\", ok, revisionDigest} (core product-contract-acceptance-binding.ts:169-172, returned verbatim by the resolver) - it carries NO requirement, criterion or coverage state, so DoD 1's dossier cannot come from it alone. /documents/coverage/read serves exactly those, plus the revision triple the gate read needs as input. So v2/goals/contract-dossier.tsx COMPOSES the two: coverage gives the approved revision id, the requirements count and EVERY CRITERION WITH ITS COVERAGE STATE; gate-1 gives the durable human-authority verdict per revision (v2/goals/contract-gates.ts, keyed by the full triple). Mounted on the opened goal beside the Gate 1 card. Personas/journeys/assumptions/decisions/versions for the approved revision were measured ALREADY RENDERED there by Gate1Card's CURRENT branch (gate1-card.tsx:216-245) - not rebuilt.\n\nPRD DOSSIER IN v2 by REUSE: v2/goals/prd-dossier.tsx consumes the EXISTING createLiveDocumentDossierFeed and document-dossier-state module (no second decoder) and is mounted in the PRD panel. Its presentation is v2-native on a measurement: the legacy component's sheet is reachable only through the v1 control-room.css chain and 8 of its 16 custom properties are undefined in v2 tokens, so the card would lose its surface and rail; importing the v1 chain is",
+  "commits": [
+    {
+      "sha": "79d4c2630ce4e44b774259340f1be7b382b0a874",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T08:39:39Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-2ee775b319cb496fad9256c84d24744c.json",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-dossier.test.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/live/live-product-contract-gate-1.test.ts",
+        "apps/control-room/src/live/live-product-contract-gate-1.ts",
+        "apps/control-room/src/live/product-contract-gate-1-frame.fixture.ts",
+        "apps/control-room/src/v2/goals/contract-dossier.test.tsx",
+        "apps/control-room/src/v2/goals/contract-dossier.tsx",
+        "apps/control-room/src/v2/goals/contract-gates.ts",
+        "apps/control-room/src/v2/goals/prd-dossier.test.tsx",
+        "apps/control-room/src/v2/goals/prd-dossier.tsx",
+        "apps/control-room/src/v2/goals/prd-panel.tsx"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T09:15:30.066Z",
+      "treeId": "0ae20af8f3c6d0a53bfc2b061d17d9c775162d46",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/live/live-product-contract-gate-1.test.ts",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/goals/prd-dossier.test.tsx",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/control-room/src/live/live-product-contract-gate-1.ts",
+    "apps/control-room/src/v2/goals/contract-dossier.test.tsx",
+    "apps/control-room/src/v2/goals/prd-dossier.tsx",
+    "apps/control-room/src/v2/goals/prd-panel.tsx",
+    "apps/control-room/src/live/live-document-dossier.test.ts",
+    "apps/control-room/src/live/product-contract-gate-1-frame.fixture.ts",
+    "apps/control-room/src/v2/goals/contract-dossier.tsx",
+    "apps/control-room/src/v2/goals/contract-gates.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-05T08:39:39Z",
+    "at": "2026-09-05T09:15:30.066Z"
+  }
 }
