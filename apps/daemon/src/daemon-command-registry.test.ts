@@ -67,6 +67,8 @@ import type { ProductContractGate1Authority }
  * the kind, also transcribed rather than recomputed from `capability`.
  */
 interface Row {
+  readonly httpStatus?: number;
+  readonly nonOperatorRefusal?: { readonly code: string; readonly layer: string };
   readonly agent: readonly string[] | null;
   /** Served only on the asynchronous entry: its service returns a promise. */
   readonly asyncOnly?: true;
@@ -99,6 +101,10 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
     kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
     payloadKeys: ["decision", "decisionReason", "dependencyChanges", "runId"] },
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_HUMAN_REQUIRED", kind: "criterion_check.approve", httpStatus: 403,
+    layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "criterionId", "check"] },
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_HUMAN_REQUIRED", kind: "criterion_check.verify", httpStatus: 403,
+    layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "integratedSha", "approvals"] },
   // task-b8272ee0. The SHIPPED daemon supplies no cutover evidence root, so the composition
   // root's own fail-closed branch answers here — registered and refusing, never removed from
   // the roster. The arm that proves the kind REACHES `activateCutover` builds ports WITH the
@@ -218,7 +224,7 @@ const ROWS: readonly Row[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
-    layer: PREREQ_LAYER, payloadKeys: ["goalId", "remoteUrl"] },
+    layer: PREREQ_LAYER, payloadKeys: ["approval", "goalId", "remoteUrl"] },
   // ADMIN is the reach fence only: an empty payload never reaches the R3
   // approval gate, which is what actually makes this command human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
@@ -271,6 +277,9 @@ const ROWS: readonly Row[] = [
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
   { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.start",
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "label"] },
+  { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", kind: "repository.recover", httpStatus: 403, asyncOnly: true,
+    nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
+    layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -291,6 +300,7 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   "approval.decide", "approval.decide_intent",
   "planning.submit_decomposition", "product_contract.answer_clarification",
   "product_contract.ask_clarification", "product_contract.propose_revision",
@@ -317,6 +327,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // BOTH approval wires. The intent seam derives the activation witness and the record the
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
@@ -856,18 +867,18 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the forty-seven characterized kinds and nothing else", () => {
+  it("serves exactly the fifty characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(47);
-    expect(deps.registry.size).toBe(47);
+    expect(ROWS).toHaveLength(50);
+    expect(deps.registry.size).toBe(50);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(47);
+    expect(REGISTRATION_ORDER).toHaveLength(50);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -897,7 +908,7 @@ describe("registered command table", () => {
       ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {})
       : send(`cmd-empty-${row.kind}`, row.kind, {});
     expect(answered).toMatchObject({
-      httpStatus: 422,
+      httpStatus: row.httpStatus ?? 422,
       ok: false,
       outcome: "PORT_REFUSED",
       refusal: { code: row.code, layer: row.layer },
@@ -1036,9 +1047,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the twelve transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(12);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(12);
+    it("gates exactly the fifteen transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(15);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(15);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1049,9 +1060,9 @@ describe("authorization ordering under a real session", () => {
       expect(answered).toMatchObject({
         httpStatus: gated ? 403 : 422,
         outcome: "PORT_REFUSED",
-        refusal: gated
+        refusal: row.nonOperatorRefusal ?? (gated
           ? { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" }
-          : { code: row.code, layer: row.layer },
+          : { code: row.code, layer: row.layer }),
         stage: "DISPATCH",
       });
     });
@@ -1719,7 +1730,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(47);
+    expect(ports.registry.size).toBe(50);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1741,7 +1752,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(47);
+    expect(supplied.registry.size).toBe(50);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1773,7 +1784,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(47);
+    expect(snapshotPorts.registry.size).toBe(50);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

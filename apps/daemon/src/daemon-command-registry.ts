@@ -11,6 +11,10 @@ import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-led
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
+import { createPublishRepository } from "./repository/publish-services.js";
+import type { PublicationCandidateReader } from "./repository/publication-approval-contracts.js";
+import { createRepositoryRecoveryCommandEntry } from "./repository/repository-recovery-command.js";
+import type { RepositoryRecoveryCommandPort } from "./repository/repository-recovery-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -27,6 +31,9 @@ import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
+import { CRITERION_PRINCIPAL } from "./criterion-evidence/criterion-contracts.js";
+import { runCriterionCommandEdge } from "./criterion-evidence/criterion-command-edge.js";
+import type { CriterionCommandPort } from "./criterion-evidence/criterion-command-edge.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
@@ -93,6 +100,9 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  readonly criterionEvidence?: CriterionCommandPort;
+  readonly repositoryRecovery?: RepositoryRecoveryCommandPort;
+  readonly readPublicationCandidate?: PublicationCandidateReader;
   /** Which durable cutover authority must admit every registry entry. */
   readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
@@ -158,7 +168,7 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
   const commandAuthority = createCommandAuthorityGate(store, projectId, options.authorityPlane);
-  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
+  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID || operatorPrincipalId === CRITERION_PRINCIPAL) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
   const authorityClock = (): number => Date.parse(clock());
@@ -194,6 +204,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
 
   const bootstrapTable: HandlerTable = Object.freeze({
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
+    "repository.publish": createPublishRepository({ ...(options.readPublicationCandidate === undefined
+      ? {} : { readPublicationCandidate: options.readPublicationCandidate }) }),
   });
 
   /**
@@ -242,6 +254,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   });
 
   const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> = {
+    "repository.recover": createRepositoryRecoveryCommandEntry({ store, projectId, operatorPrincipalId,
+      port: options.repositoryRecovery, assertAuthority: commandAuthority.assert }),
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
       projectId, store,
@@ -265,7 +279,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       return commandAuthority.wrapAsync(asyncEntry);
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
-      confirmReleased, continuation, cutover, eventResume,
+      confirmReleased, continuation, criterion, cutover, eventResume,
       graph, journal, preview, productContractGate1, reconcile, recovery, requiredCapability,
       review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
@@ -292,7 +306,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         // Trustworthy on principal identity alone only while each kind stays
         // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
         // operator ruling comment-18dc557c.
-        && !((approvalIntent
+        && !((approvalIntent || criterion || kind === "repository.publish"
           || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND)
           && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(
@@ -301,6 +315,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           "this command requires the configured operator principal",
           403,
         );
+      }
+      if (criterion) {
+        return runCriterionCommandEdge(store, input, options.criterionEvidence);
       }
       // goal.create carried a `goalId` comparison here while the payload could still name one.
       // It cannot: the kind's allow-list is prose only, so `prepareCommand` refuses `goalId`
@@ -430,7 +447,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           store,
           bytes,
           undefined,
-          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID],
+          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID, CRITERION_PRINCIPAL],
         ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
