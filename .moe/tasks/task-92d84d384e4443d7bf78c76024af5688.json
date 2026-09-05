@@ -161,7 +161,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:07.326Z",
-  "updatedAt": "2026-09-05T04:15:40.589Z",
+  "updatedAt": "2026-09-05T04:15:53.901Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:49:30.658Z",
     "plannedStepCount": 8,
@@ -219,7 +219,62 @@
     "apps/control-room/src/live/live-sessions.test.ts",
     "apps/control-room/src/v2/ops/activity-words.ts",
     "apps/control-room/src/v2/ops/activity-screens.tsx",
-    "apps/control-room/src/v2/ops/activity-screens.test.tsx"
+    "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+    ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
   ],
-  "completionSummary": "Parallel seats are now PINNED and the limit is DISCLOSED end to end. Full evidence in comment-64ef90b2 (gates, drills, denominators, exemplar sentences, follow-ups); design record in mem:task-task-92d84d384e4443d7bf78c76024af5688-handoff.\n\nRE-MEASURED FIRST: parallel staffing already worked (agent-wrapper.ts:352 breaks only at `activeCount() >= maxAgents`) and the prerequisite task-1d7b9df2 had landed (a8b67152; `depends:` at affordance-read.ts:443, NodeSpec.dependsOn required). The staffing loop was NOT touched.\n\nPROOF (5 wrapper arms, all by WORK-ITEM ID, never array length): two independent READY nodes spawn in ONE pass with both ids and `active === 2` and two DISTINCT agent sessions; maxAgents 2 vs THREE READY spawns exactly [lim-a, lim-b] with lim-c absent by id AND unclaimed in the durable ledger; maxAgents 1 vs the same three spawns exactly one; a node BLOCKED on `depends:dep-a` is withheld while a seat is FREE (`active === 1` under maxAgents 2 — so the DEPENDENCY withheld it, not the limit) and is spawned on the next pass once the surface reports it READY, with dep-a's claim still OPEN v1 so the second pass is the dependency moving, not a replay; plus a source-text arm pinning the `depends:` token to the producer.\n\nDISCLOSURE: SessionsView gains `concurrency { activeSeats, configuredAgentLimit }`. The limit is REQUIRED (not defaulted — that is how a hard-code hides) and sourced at the composition site from `readWrapperKnobs(process.env).maxAgents`, the wrapper's own strict parser, so it inherits the NaN refusal. Named CONFIGURED, not observed, in the field name, doc comment and operator wording (\"This daemon is SET TO RUN N agents at once\"), because a standalone daemon reports a limit no wrapper honours. `activeSeats` is the measured half: LIVE seats holding an active claim.\n\nBROWSER MOVED IN THE SAME ROW (exact-arity decode would otherwise BLANK Seats): live-sessions.ts key roster is now the exported SESSIONS_FRAME_KEYS, `concurrency` decoded with the same "
+  "completionSummary": "Parallel seats are now PINNED and the limit is DISCLOSED end to end. Full evidence in comment-64ef90b2 (gates, drills, denominators, exemplar sentences, follow-ups); design record in mem:task-task-92d84d384e4443d7bf78c76024af5688-handoff.\n\nRE-MEASURED FIRST: parallel staffing already worked (agent-wrapper.ts:352 breaks only at `activeCount() >= maxAgents`) and the prerequisite task-1d7b9df2 had landed (a8b67152; `depends:` at affordance-read.ts:443, NodeSpec.dependsOn required). The staffing loop was NOT touched.\n\nPROOF (5 wrapper arms, all by WORK-ITEM ID, never array length): two independent READY nodes spawn in ONE pass with both ids and `active === 2` and two DISTINCT agent sessions; maxAgents 2 vs THREE READY spawns exactly [lim-a, lim-b] with lim-c absent by id AND unclaimed in the durable ledger; maxAgents 1 vs the same three spawns exactly one; a node BLOCKED on `depends:dep-a` is withheld while a seat is FREE (`active === 1` under maxAgents 2 — so the DEPENDENCY withheld it, not the limit) and is spawned on the next pass once the surface reports it READY, with dep-a's claim still OPEN v1 so the second pass is the dependency moving, not a replay; plus a source-text arm pinning the `depends:` token to the producer.\n\nDISCLOSURE: SessionsView gains `concurrency { activeSeats, configuredAgentLimit }`. The limit is REQUIRED (not defaulted — that is how a hard-code hides) and sourced at the composition site from `readWrapperKnobs(process.env).maxAgents`, the wrapper's own strict parser, so it inherits the NaN refusal. Named CONFIGURED, not observed, in the field name, doc comment and operator wording (\"This daemon is SET TO RUN N agents at once\"), because a standalone daemon reports a limit no wrapper honours. `activeSeats` is the measured half: LIVE seats holding an active claim.\n\nBROWSER MOVED IN THE SAME ROW (exact-arity decode would otherwise BLANK Seats): live-sessions.ts key roster is now the exported SESSIONS_FRAME_KEYS, `concurrency` decoded with the same ",
+  "commits": [
+    {
+      "sha": "d87335e46d0c5e6f3c2d3bc5db240f377d71bc4b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-05T03:13:56Z",
+      "paths": [
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json",
+        "apps/control-room/src/live/live-sessions.test.ts",
+        "apps/control-room/src/live/live-sessions.ts",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/activity-words.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/http/sessions-read.test.ts",
+        "apps/daemon/src/http/sessions-read.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-05T04:15:53.901Z",
+      "treeId": "bbe0d051f080abba0651de5e4d4f09c201ee3636",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.ts",
+          "taskId": "task-33ceae56edc348e9864bc592430fa1d0"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/sessions-read.ts",
+    "apps/control-room/src/v2/ops/activity-screens.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/daemon/src/http/sessions-read.test.ts",
+    "apps/control-room/src/live/live-sessions.test.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper.test.ts",
+    "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/control-room/src/live/live-sessions.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-05T03:13:56Z",
+    "at": "2026-09-05T04:15:53.901Z"
+  }
 }
