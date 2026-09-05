@@ -232,12 +232,13 @@ describe("live goal.create dispatch re-reads the surface before refusing", () =>
     const result = await createGoalDispatcher(
       setup, () => blockedOn("project.activate"), reader.read,
     )(DRAFT);
+    // Show the exact stale-frame refusal if this regression returns before dispatch.
+    expect(result.report).toBe("Goal created: Second goal");
     // The command reached the transport - not merely "the result was ok".
     expect(sent).toHaveLength(1);
     expect(sent[0]?.commandId).toBe("c1");
     expect(sent[0]?.commandKind).toBe("goal.create");
     expect(result.ok).toBe(true);
-    expect(result.report).toBe("Goal created: Second goal");
     expect(reader.calls).toBe(1);
   });
 
