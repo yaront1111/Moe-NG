@@ -115,7 +115,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-b33940f5",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -162,7 +162,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:34:58.974Z",
-  "updatedAt": "2026-09-05T16:47:40.494Z",
+  "updatedAt": "2026-09-05T18:16:19.457Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:29:26.800Z",
     "plannedStepCount": 10,
@@ -410,6 +410,17 @@
           "description": "DoD 4 asks for before/after screenshots from the live lane; comment-18d86d09 records only after-closed.png and after-open.png against a static ?fixtures=1 bundle at 127.0.0.1:4178. Capture the before state (or state plainly that the control is new so no before exists) against the live lane."
         }
       ]
+    }
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Nothing in this review round. The row came back from a QA rejection (reopenCount 1) and ALL 10 steps were reset to pending; worker-b33940f5 claimed it, sat in READING_CONTEXT for 88 minutes and never started a step. Its prior round DID land: completion commit 666f70f40e7e, 18 paths, 0 unattributed, pushed. That is the tree you inherit.",
+      "whatRemains": "Re-do the row against the QA rejection. Findings are in comment-a1b7e957; the fix plus gate attribution is in comment-c8ccd5e0. Reviewed at commit 666f70f4. QA said the roster work is good and the step-3 drills are real and SHA256-restored, so DoD 1's verify-both-by-doing-them is already discharged - do not redo the drills. Work the rejection items only.",
+      "pitfalls": "1) The stranded drill mutant in apps/control-room/src/data/data-adapter.test.ts is FIXED (governor restored it 14:53, verified Test Files 1 passed / Tests 16 passed). If the rejection or any transcript you read shows 16 failures with 'compat gate refused the matching report', that red is GONE - re-measure, do not inherit it. 2) Root `pnpm test` is NOT admissible for contracts-layer claims: all 8 root node_modules/@moe/* are Windows junctions into C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-glance-to-main, a foreign worktree predating preview.decide. Use per-package legs and quote count lines. 3) Spawn cliff: CreateProcess costs ~1s against a 0.1ms in-process control. A timeout-shaped red on a shell-out test is suspect - re-run it alone before believing it, and do not charge it to this row. 4) This row declared 7 paths including apps/daemon/src/http/http-listener-read-dispatch.test.ts, which collides with task-7ca9dca3 - check for peer dirt before you edit it, and never revert a foreign path.",
+      "openQuestions": "None from governance. The QA rejection is self-contained in the two comments named above; read them before re-planning anything.",
+      "releasedAt": "2026-09-05T18:16:19.455Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Human-approved release. worker-b33940f5 silent 5265s (88 min, isAlive false) holding this row at READING_CONTEXT with 0/10 steps started. Pinged in #workers at 16:55 per the escalation ladder; no reply, no activity change. Operator confirmed the release. Not an idle-time release: the seat is confirmed gone and the human gave the nod."
     }
   ]
 }

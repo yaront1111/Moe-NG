@@ -856,7 +856,7 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the forty-six characterized kinds and nothing else", () => {
+  it("serves exactly the forty-seven characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
     expect(ROWS).toHaveLength(47);

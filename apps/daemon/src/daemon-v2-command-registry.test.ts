@@ -264,7 +264,7 @@ describe("daemon /2 command registry", () => {
     } satisfies DaemonV2CommandPortOptions;
     try {
       const ports = createDaemonV2CommandPorts(options);
-      expect(ports.registry.size).toBe(45);
+      expect(ports.registry.size).toBe(46);
       expect(reads).toEqual({ clock: 1, operatorPrincipalId: 1, projectId: 1, store: 1 });
     } finally {
       closeStores();

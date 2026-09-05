@@ -5,7 +5,7 @@ import {
   BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, GRAPH_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
-  PAYLOAD_KEYS, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
+  PAYLOAD_KEYS, PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
   agentCapabilitiesFor, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 
@@ -21,7 +21,7 @@ import {
  * is where the next command kind will be registered.
  */
 type Family =
-  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "GRAPH" | "REVIEW" | "SESSION"
+  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "GRAPH" | "PREVIEW" | "REVIEW" | "SESSION"
   | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
@@ -174,6 +174,13 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["slice"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "policy.validate",
     payloadKeys: ["input"] },
+  // HUMAN wire: `agent` is null (never staffable) and OPERATOR_ONLY below is the fence.
+  // Deciding a rendered product preview is the operator's own verdict; an agent presenting
+  // that verdict would be quiet invention with a human label. Its family is PREVIEW at REVIEW
+  // -- NOT standalone: `PREVIEW_FAMILY` claims the kind, so `familyCapabilityOf` answers for
+  // it, and calling it standalone would assert the opposite of what ships.
+  { agent: null, capability: REVIEW, family: "PREVIEW", kind: "preview.decide",
+    payloadKeys: ["decision", "findings", "previewRef"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "project.activate",
     payloadKeys: ["witness"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP",
@@ -207,6 +214,7 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   COMPILER: new Map(Object.entries(COMPILER_FAMILY)),
+  PREVIEW: new Map(Object.entries(PREVIEW_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
   GRAPH: new Map(Object.entries(GRAPH_FAMILY)),
@@ -215,7 +223,8 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 };
 
 const FAMILY_NAMES = [
-  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "GRAPH", "REVIEW", "SESSION", "STEP", "WORK",
+  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "GRAPH", "PREVIEW", "REVIEW", "SESSION", "STEP",
+  "WORK",
 ] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
@@ -234,14 +243,16 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "resource.confirm_released", "session.open",
   // The one-way GA activation: the act that makes v2 authoritative for good.
   "cutover.activate",
+  // Deciding a rendered product preview is the operator's own verdict.
+  "preview.decide",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the forty-six wired kinds in their registration order", () => {
+  it("carries exactly the forty-seven wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(46);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(46);
+    expect(ROWS).toHaveLength(47);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(47);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -279,8 +290,13 @@ describe("command vocabulary", () => {
   });
 
   it("holds no family entry beyond the transcribed kinds", () => {
+    // FIRST, both directions over the ROSTER ITSELF. Every sweep below indexes FAMILY_MAPS by
+    // FAMILY_NAMES, so a shipped family table missing from FAMILY_NAMES is INVISIBLE to all of
+    // them: its kinds would pass the STANDALONE arm above while sitting in a real family map.
+    // That is exactly how `preview.decide` was nearly transcribed as standalone.
+    expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(35);
+    expect(declared).toHaveLength(36);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -290,6 +306,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(12);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
+    expect(FAMILY_MAPS.PREVIEW.size).toBe(1);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);
     expect(FAMILY_MAPS.STEP.size).toBe(3);
@@ -304,6 +321,7 @@ describe("command vocabulary", () => {
     expect(Object.isFrozen(COMPILER_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_MUTATION_COMMAND_KINDS)).toBe(true);
+    expect(Object.isFrozen(PREVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(REVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(SESSION_FAMILY)).toBe(true);
     expect(Object.isFrozen(STEP_FAMILY)).toBe(true);
@@ -324,11 +342,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly eleven kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(11);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(11);
+  it("gates exactly twelve kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(12);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(12);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // thirty-five that must stay open, one dropped reddens on the eleven that must not.
+    // thirty-five that must stay open, one dropped reddens on the twelve that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }
