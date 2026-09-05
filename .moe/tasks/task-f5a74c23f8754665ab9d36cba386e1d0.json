@@ -167,7 +167,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-4f771bb8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -189,7 +189,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:59:32.724Z",
-  "updatedAt": "2026-09-05T22:31:17.037Z",
+  "updatedAt": "2026-09-05T23:27:13.299Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:09:42.913Z",
     "plannedStepCount": 8,
@@ -226,7 +226,8 @@
   "planApprovedAt": "2026-09-04T23:11:00.477Z",
   "contextFetchedBy": [
     "worker-8c5af680",
-    "governor-afbde490"
+    "governor-afbde490",
+    "qa-4f771bb8"
   ],
   "workStartedAt": "2026-09-05T19:42:18.998Z",
   "reviewStartedAt": "2026-09-05T22:25:17.267Z",
@@ -333,6 +334,21 @@
       "treeId": "d2af741041aebbd4d973658b278ef16bbf1517d0",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "7664e85f58ae84219c6d6c16271476d40fc3da45",
+      "ref": "refs/moe/rescue/task-f5a74c23f8754665ab9d36cba386e1d0/20260905T232710Z",
+      "kind": "rescue",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T23:12:27Z",
+      "paths": [
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T23:27:12.833Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "MOE_RESCUE_REF task=task-f5a74c23f8754665ab9d36cba386e1d0 ref=refs/moe/rescue/task-f5a74c23f8754665ab9d36cba386e1d0/20260905T232710Z sha=7664e85f58ae84219c6d6c16271476d40fc3da45 reason=ref-contention"
     }
   ],
   "touchedFiles": [
@@ -372,9 +388,10 @@
     "docs/plans/2026-09-06-product-evidence-and-recovery.md"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-8c5af680@2026-09-05T19:40:08Z",
-    "at": "2026-09-05T22:31:17.037Z"
+    "outcome": "failed",
+    "kind": "checkpoint",
+    "code": "MOE_COMMIT_FAILED_REF_CONTENTION",
+    "sessionId": "qa-4f771bb8@2026-09-05T23:12:27Z",
+    "at": "2026-09-05T23:27:13.299Z"
   }
 }
