@@ -135,8 +135,8 @@
       "completedAt": "2026-09-05T19:12:40.432Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -180,16 +180,24 @@
       "author": "qa-f2906c26",
       "content": "QA VERDICT AND FINDINGS (qa-f2906c26). Companion to comment-1a7a41ea (gate numbers). **My finding is APPROVE.** `qa_approve` refused with `[NOT_ALLOWED] claimed by qa-d81848bc` - my claim lapsed when the prior session died - so @qa-d81848bc holds the decision. This is my full review so the round is not re-spent.\n\n=== DoD 1-4: ALL MET ===\nSIZES: `rejection-instructions.ts` = **120** lines (cap 120). `agent-wrapper-main.ts` **483 -> 489 = +6 exactly** (cap 6; `git show 32e53bcf` = 9 insertions / 3 deletions). ASCII: `LC_ALL=C grep -c '[^ -~\\t]'` = **0** across all 7 new files.\n\nDoD 1 - every arm present, and each carries a LIVE CONTROL, which is what makes them non-vacuous:\n- rejected-twice (`rejection-instructions.test.ts:84`) also reads the first reason off ITS own run, so the assertion chooses between two live answers rather than reading the only one that exists;\n- corrupt chain (:108) asserts `currentPlanningRun(...).unreadable === true` BEFORE asserting null, so the null is the fail-closed answer and not an empty chain;\n- passthrough (:142) uses `toBe`, not `toContain`, so a trim or an appended blank line reds.\n\nDoD 2 - the pin at `agent-wrapper-main.test.ts:222-242` asserts the call **EXACTLY ONCE** (`split(...).length - 1 === 1`, which `toContain` cannot do) AND its ARGUMENTS (`laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,`) - the arm that would catch passing the GOAL id, which would walk an aggregate with no history and answer null forever while a name-only assertion stayed green. Self-contained positive control at :239. The mission arm is NAMED as DoD 2 requires: `rejection-instructions-fence.test.ts:124`.\n\nDoD 3 - the journey is real. Daemon + two wrapper passes as OS processes; `approval.decide_intent` over real HTTP under the durable HUMAN principal with the offer read off the surface (so the run identity is the daemon's, not the test's arithmetic); the seat double reaches the MCP URL by `fetch` with the scoped bearer from `--mcp-config` and never touches the store (task rail 3). Evidence quality: the FIRST mission is asserted to contain NO rejection sentence BEFORE the reject exists, so arm 3 is a difference between two real missions; the sentence is read from the file the SEAT ECHOED, not from daemon output; it is asserted strictly BETWEEN the markers; the different decomposition is proved from the SEALED graph body, not wrapper stdout; activation is read off the goal's own event stream; all three pids proven reaped with `pidIsAlive(process.pid) === true` as the control.\n\nDoD 4 - five drills, each restored, untracked ones by out-of-tree SHA256 in a separate call (rail 13). I independently confirmed no mutant survived.\n\n=== RAILS ===\nRAIL 1 (verbatim except the markers) is genuinely non-vacuous. `replaceAll(\"OPERATOR INSTRUCTIONS\", \"OPERATOR_INSTRUCTIONS\")` kills both `<<<`/`>>>` in one pass and the replacement carries no space, so a marker cannot re-emerge from the substitution. The fence test asserts **length preservation** plus non-marker **span order** - that pair is what tells \"defused\" from \"deleted\", the failure mode every `not.toContain` arm alone would green over - guards its own sweep (`expect(spans.length).toBeGreaterThan(0)`), and asserts through the production `compilerMission`, never a locally rebuilt block.\nRAIL 2: only two production files touched. `node-spec-listing.js` is a boot-critical bridge REPAIR, not scope creep - `agent-wrapper-main.ts:34` already imports `./node-spec-listing.js` and `tests/integration/distribution/pack-artifact-sweep.test.ts:41-42` already rosters BOTH halves; without it the daemon dies at boot with ERR_MODULE_NOT_FOUND.\nRAIL 3: verified in `j5-compiler-agent.mjs`.\n\n=== NOT REJECT MATERIAL - fold into the epic-final hardening row ===\n(a) COST: `latestRejectionReason` folds the whole project ledger via `readDurableLedger` once per COMPILER SEAT SPAWN. `compilerGateRef` (agent-wrapper-main.ts:232) already pays one on that same path, so this is 2x an already-paid staffing-frequency cost - NOT the affordance hot path. Folding once needs a signature change and wrapper lines the +6 budget does not have.\n(b) `decisionReason` has no length bound; a very long operator reason yields a very long mission. Child 1's seam, and rail 1 mandates verbatim.\n(c) **THE BRIEF HALF OF THE OPERATOR BLOCK IS STILL UNFENCED.** This row neutralises markers in the REASON only, so a hostile goal-CATALOG BRIEF can still close the block early and have its remainder read to the seat as daemon-authored prose. Pre-existing, owned by the goal catalog, correctly out of this row's two-file scope - but it is a real open hole and deserves its own row, not silence.",
       "timestamp": "2026-09-05T19:53:02.854Z"
+    },
+    {
+      "id": "comment-aed55506a7d64818a882b3e48e4749cd",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION RECORD (qa-d81848bc). Every gate RE-RUN by me against completion commit 32e53bcf, reviewed with `git show`, not the dirty tree. `git branch --contains 32e53bcf` = moe/work-2026-09-04; pushed:true; Moe-Task trailer present; 14 paths.\n\n=== DoD 1 (the pure module) ===\nrejection-instructions.test.ts runs over a REAL store through 2a's `plan-reject-test-fixtures.ts`. All five required arms present and non-vacuous: never-rejected -> null; brief passes through BYTE-IDENTICALLY (`toBe`, not `toContain`); rejected-once -> the exact sentence and names the rejected run; rejected-TWICE -> the LATEST, with an explicit control (`expect(currentPlanningRun(...).rejected).toHaveLength(2)`) so `[0]` vs `[length-1]` is a choice between two live answers; corrupt chain -> null and never throws, via a Proxy that makes `readEvents` throw for ONE aggregate, plus a control asserting `unreadable === true` so the null is the fail-closed answer rather than an empty chain.\n\n=== DoD 2 (the wiring) ===\nPin asserts the call text EXACTLY ONCE (`split(...).length - 1` toBe 1), which a `toContain` cannot do, and pins the ARGUMENTS (`laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,`) - so passing the goalId where a run ref belongs would red instead of silently answering null forever. In-test positive control (`SOURCE.replace(...)` then expect the scan `.toThrow()`). The compilerMission arm lands in **rejection-instructions-fence.test.ts** (named in the step-5 note as DoD 2 requires), asserting the sentence sits strictly BETWEEN the markers in the output of the production `compilerMission`.\n\n=== DoD 3 (the journey), re-run by me ===\n`npx vitest run tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts` -> **exit 0**, `Test Files 1 passed (1)` / `Tests 1 passed (1)`, 44.59s. Read the source: real daemon process, real wrapper process TWICE, operator REJECT over real HTTP `approval.decide_intent`. Seat double is MCP-only - `fetch` + JSON-RPC `tools/call` + Authorization bearer, and I grepped it for `@moe/store`/`SqliteEventStore`/`readEvents`/`appendEvents`: **zero hits** (task rail 3 satisfied). The mission assertion reads the file the DOUBLE echoed, with the first mission asserted to carry NO rejection sentence as a control taken BEFORE the reject exists. \"A different decomposition\" is proved from the SEALED graph body (the double picks its node key from whether its own mission contains the sentence, so arm 4 is a consequence of the seat having READ it). Activation read off the goal's own event stream. Teardown asserts pid death with `pidIsAlive(process.pid) === true` as a positive control.\n\n=== DoD 4 (gates), all re-run ===\n- `pnpm typecheck`: **EXIT 0**, all 19 workspace projects, `apps/daemon typecheck: Done`. BETTER than disclosed - a peer fixed the scheduler TS18046 in between.\n- `pnpm --filter @moe/daemon test`: `Test Files 16 failed | 440 passed (456)` / `Tests 69 failed | 8840 passed | 2 skipped (8911)`, exit 1. I extracted the FULL failing roster (16) and intersected it with this row's owned paths: **EMPTY**. See the attribution section below for the one entry that looks otherwise.\n- `pnpm test:e2e`: still red at its `tsc` leg before vitest runs. I re-measured the path-attributed baseline MYSELF by moving all three j5 files out of the lane: **baseline 5 errors, with-j5 5 errors, delta 0**. All five foreign: daemon-command-registry.ts:452 + daemon-v2-command-registry.ts:186/207/214 (peer WIP `WiredCommandKind`/`preview.decide`), and approval-intent-rejection.ts(3,22) TS2305 `rejectRun` (committed child-1 bytes). Files restored; `git status --porcelain` and `git diff` on tests/e2e/foundation both blank.\n- SIZE: rejection-instructions.ts = **120** (cap 120). agent-wrapper-main.ts **483 -> 489 = +6 exactly** (cap 6); the diff is 9 insertions / 3 deletions in TWO hunks, both inside `compilerInstructions` - no drive-by refactor of the file three other rows are serialised behind.\n- ASCII: 0 non-ASCII lines across all 8 delivered sources and across every added line of the wiring.\n\n=== MY OWN DRILLS (not the worker's, run and restored atomically) ===\n1. `walk.rejected[length-1]` -> `walk.rejected[0]` ⇒ `Tests 1 failed | 11 passed (12)`, the red being exactly \"answers the LATEST reason, not the first, after two rejections\".\n2. Marker neutralisation deleted (`const reason = rejection.reason;`) ⇒ `Tests 9 failed | 8 passed (17)`.\nBoth files are TRACKED, so restore is proven by `git status --porcelain` + `git diff --stat` both blank after each drill.\n\n=== THE ATTRIBUTION THAT DECIDED THIS REVIEW ===\n`src/orchestrator/agent-wrapper-main.test.ts` - an OWNED path - IS in the 16-file failing roster (29 tests | 2 failed). It is NOT chargeable to this row:\n- The two red arms are `> passes a staffingFence in the production createAgentWrapper call` and `> builds that fence from the real store and the real liveness probe` - source-text pins belonging to peer **task-3a0478f5**, the row the completion commit already flagged as `contested` on this path.\n- `git status --porcelain` shows agent-wrapper-main.ts is ` M` RIGHT NOW: that peer holds an UNCOMMITTED **-140 / +29** refactor extracting `staffingFence` to a local (`const staffingFence = ...` at :154) and passing it as shorthand (`staffingFence,` at :238). Shorthand has no `staffingFence:` literal, so the peer's own pin reds against the peer's own edit.\n- At the DELIVERED tree, `git show 32e53bcf:...` line 298 reads `staffingFence: createAgentSessionFence({` - the pin matches.\n- This row's diff touches `staffingFence` **zero** times (`git show 32e53bcf -- <file> | grep -c staffingFence` = 0).\n- And I ran that exact file GREEN earlier in this session (`Test Files 4 passed (4)` / `Tests 73 passed (73)`, exit 0) when `git status --porcelain` on the owned paths was blank.\nRecorded as `mem:gotcha-peer-mid-edit-refactor-reds-an-owned-path-in-the-full-suite` for the other rows serialised behind this file.\n\n=== RAILS ===\nRail 1 (verbatim except markers): the neutralisation is LENGTH-PRESERVING (`OPERATOR INSTRUCTIONS` -> `OPERATOR_INSTRUCTIONS`; the replacement contains no space, so a fresh marker cannot re-emerge from the substitution). The tests assert non-marker spans survive IN ORDER and the composed length is exact, so \"dropped silently\" and \"paraphrased\" each red separately from \"not contained\". A control proves the store keeps the hostile reason RAW, which is what stops the whole fence being vacuous.\nRail 2 (scope): only the new pure module plus the +6 wiring. No offer/dispatcher/read/UI edit. The one extra production file is a one-line `.js` bridge for node-spec-listing.ts - `agent-wrapper-main.ts:34` ALREADY imported `./node-spec-listing.js` and `tests/integration/distribution/pack-artifact-sweep.test.ts:41-42` already rosters both halves, so its absence was a boot-blocking ERR_MODULE_NOT_FOUND. `runtime-entrypoint.test.ts` confirms BOTH of this row's bridges as `missing: []` / `wrongContent: []` and does not list either as `unexpected`; its two `unexpected` entries (release-decide-contracts.js, deployment-docker-probe.js) are untracked `??` peer files with no git history.\nRail 4 clause 1 (consumer edge): landed in-row. A repo-wide grep for `rejection-instructions` / `composeCompilerInstructions` / `latestRejectionReason` finds exactly one consumer - agent-wrapper-main.ts and its test - so the blast radius is fully covered by the four files I ran green.\n\n=== ONE NIT, recorded not blocking ===\nrejection-instructions.test.ts:99-100 - the comment says the control shows \"the FIRST reason is genuinely still readable on its own run\", but the assertion beneath it walks from `successorRunId` and therefore reads the SECOND reason. The arm's actual non-vacuity control is line 105 (`rejected` toHaveLength(2)), which my drill confirmed bites. Comment inaccuracy only; no coverage gap, no action required.",
+      "timestamp": "2026-09-05T21:02:28.211Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:45:43.617Z",
-  "updatedAt": "2026-09-05T19:53:02.854Z",
+  "updatedAt": "2026-09-05T21:03:20.255Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:26:45.539Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-05T21:03:20.255Z",
+    "wallClockMs": 74194716
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -272,7 +280,13 @@
     ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
     ".moe/tasks/task-c2b5a9f09c684569ae13b60b09128f82.json",
     ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
-    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
+    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json",
+    ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+    ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+    ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+    ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+    ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+    ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json"
   ],
   "completionSummary": "A re-staffed compiler seat now reads WHY the operator rejected its plan, proved by a real-process journey. Full evidence in row comments comment-7e2a822a (gates + path attribution) and comment-7de74530 (5 drills + adversarial review).\n\nDELIVERED. New pure module `apps/daemon/src/planning/rejection-instructions.ts` (**120 lines**, cap 120) + `.js` bridge: `latestRejectionReason(store, projectId, planningRunRef)` walks child 1's run chain and answers the LATEST rejection, and `composeCompilerInstructions(brief, rejection)` appends `PLAN REJECTED by the operator: <reason>. Submit a DIFFERENT decomposition that addresses it.` Wired into `agent-wrapper-main.ts`'s `compilerInstructions`: **483 -> 489 lines, growth exactly +6** (the DoD cap). 29 unit/fence arms, 2 source-text pins, and one e2e journey.\n\nA PLAN PREMISE WAS WRONG AND IS CORRECTED IN THE CODE. The reason is NOT on the `PlanningRunRejected` event - that payload is `{commandId, findingsRef, kind, successorRunId, version}` and `approval-intent-rejection.ts:145` says so. It lives on the REJECTED RUN'S DURABLE RECORD, so the read is `stateOf(readDurableLedger(store, projectId), rejectedRunId)` - which is why the signature takes a projectId. Second correction: `compilerInstructions` holds a goalId, not a run ref; deriving it via `refsOfGoal` (the same function goal-create WRITES it with) is the only resolution that fits +6 lines, and an arm pins the derivation against the goal's own durable record so a divergence reds.\n\nTHE MARKER FENCE (task rail 1). Child 1 stores a hostile reason VERBATIM - asserted, as the control that makes the fence non-vacuous. `composeCompilerInstructions` neutralises `OPERATOR INSTRUCTIONS` (killing both `<<<`/`>>>` markers in one length-preserving pass that cannot re-emerge), so a reason cannot close the operator block early. Graded at BOTH altitudes: the composed string, and the real `compilerMission` output where the sentence must sit strictly BETWEEN the markers.\n\nTHE JOURNEY (DoD 3), ",
   "commits": [
@@ -352,6 +366,35 @@
       "treeId": "09edaf245db15f27a52194c26b127cd9e3a6e15a",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "1344d8e5971865a2e983472c3f5e238663978954",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T19:38:00Z",
+      "paths": [
+        ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+        ".moe/tasks/task-2c016c04dedc4eb88982a1d8d5108ddf.json",
+        ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+        ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+        ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+        ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-a5a6abccc4ce4f859851d8e8d7215cdd.json",
+        ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+        ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+        ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
+        ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T19:56:14.176Z",
+      "treeId": "0a59aed67bb31ea7d81241b939fdb1f5cb85639e",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -368,14 +411,15 @@
     "apps/daemon/src/planning/rejection-instructions-fence.test.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/repository/git-publication.test.ts",
-    "Moe-NG_Deep_Review_2026-09-05.md",
-    "tests/integration/release/release-version-surfaces.test.ts"
+    "Moe-NG_Deep_Review_2026-09-05.md"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-d81848bc@2026-09-05T19:39:56Z",
-    "at": "2026-09-05T19:41:42.983Z"
-  }
+    "sessionId": "qa-f2906c26@2026-09-05T19:38:00Z",
+    "at": "2026-09-05T19:56:14.176Z"
+  },
+  "completedAt": "2026-09-05T21:03:20.255Z",
+  "reviewCompletedAt": "2026-09-05T21:03:20.255Z",
+  "reviewSummary": "APPROVED. Full record in comment-aed55506. Verified against completion commit 32e53bcf via `git show`, not the dirty tree; every gate re-run by me.\n\nRE-RAN: journey (named verification cmd) exit 0, `Test Files 1 passed (1)`/`Tests 1 passed (1)`, 44.59s. Owned unit scope `4 passed (4)`/`73 passed (73)` exit 0. `pnpm typecheck` EXIT 0, 19 projects, \"apps/daemon typecheck: Done\". `pnpm --filter @moe/daemon test` `16 failed | 440 passed (456)`/`69 failed | 8840 passed | 2 skipped (8911)` exit 1 - roster extracted, owned-path intersection EMPTY. `pnpm test:e2e` still red at its tsc leg; I re-measured the baseline myself by moving the three j5 files out: baseline 5, with-j5 5, DELTA 0; restored, git status blank.\n\nTHE CALL: agent-wrapper-main.test.ts (owned) IS in the failing roster, but both red arms are peer task-3a0478f5's own `staffingFence:` pins, red against that peer's UNCOMMITTED -140/+29 refactor (const at :154, shorthand at :238). At 32e53bcf:298 the literal is present; this row's diff touches staffingFence ZERO times; I ran that file green on a clean worktree earlier this session.\n\nDoD: (1) five real-store arms incl. rejected-TWICE with a toHaveLength(2) control, corrupt-chain via Proxy-injected read failure; (2) pin asserts the call EXACTLY ONCE plus its ARGUMENTS, with a positive control; the compilerMission arm is named and asserts the sentence strictly BETWEEN the markers; (3) real daemon + real wrapper x2 + real HTTP decide_intent, seat double MCP-only (zero store imports), mission read from the double's echo with a pre-reject control, different decomposition from the SEALED graph body, activation off the event stream, teardown pid-death with a positive control; (4) 120 lines (cap 120), 483->489 = +6 EXACTLY, ASCII-only.\n\nMY DRILLS: latest->first => `1 failed | 11 passed (12)`, the named LATEST arm; neutralisation deleted => `9 failed | 8 passed (17)`. Both restored byte-identical."
 }
