@@ -17,8 +17,8 @@ export interface AgentWrapperStaffingStart {
   readonly cleanupAuthority: AgentAuthorityCleanup;
   readonly kind: string;
   /**
-   * Reads this seat's exit. A `PROVIDER_LIMIT` reading means the PROVIDER refused,
-   * not the work item, so the process failure is dropped; absent = today's behaviour.
+   * Reads this seat's exit for attempt reporting and provider pause bookkeeping.
+   * Observer failures remain fatal even when the child failure was contained.
    */
   readonly onExit?: ((report: SeatExitReport) => SeatExitReading) | undefined;
   readonly request: SpawnRequest;
@@ -91,9 +91,8 @@ class AgentWrapperStaffingState implements AgentWrapperStaffing {
   };
 
   /**
-   * Reads the exit, then does exactly what it always did: clean authority, retire the
-   * durable row, release the slot — once, on both paths. The reading only decides
-   * whether the process failure is REPORTED; a provider limit is not the item's failure.
+   * Reports the attempt before cleaning authority, retiring the durable row and
+   * releasing the slot once on both paths. Failure to observe remains a wrapper fault.
    */
   private observe(
     input: AgentWrapperStaffingStart, facts: SeatExitReport,
@@ -120,8 +119,12 @@ class AgentWrapperStaffingState implements AgentWrapperStaffing {
         this.recordFailures(...failures, ...input.cleanupAuthority(true), ...retire());
       },
       (error: unknown) => {
-        const { failures, reading } = this.observe(input, factsOf(error));
-        const process = reading === "PROVIDER_LIMIT" ? [] : [processFailure(error)];
+        const { failures } = this.observe(input, factsOf(error));
+        // A typed process failure is a completed attempt; the wrapper's existing
+        // attempt bound controls retry. Unknown errors and containment failures
+        // cannot prove completion and remain fatal, regardless of provider reading.
+        const process = error instanceof AgentProcessFailureError && failures.length === 0
+          ? [] : [processFailure(error)];
         this.recordFailures(
           ...failures, ...process, ...input.cleanupAuthority(true), ...retire(),
         );

@@ -21,7 +21,7 @@ import { SEAT_EXIT_KINDS } from "./seat-exit-classifier.js";
 /**
  * The gate is the WRAPPER'S READING of one seat exit, tested over a REAL store:
  * a limit exit must park the provider, refund the item's attempt and leave a
- * durable record, while every other exit keeps today's behaviour untouched.
+ * durable record. Ordinary contained failures retain their charged attempt.
  *
  * Both provider lines are copied VERBATIM from child 1's committed fixtures in
  * seat-exit-classifier.test.ts — never retyped from memory.
@@ -393,23 +393,23 @@ describe("staffing exit hook", () => {
     expect(cleanups).toEqual([true]);
   });
 
-  it("keeps a FAILED reading wedging the wrapper exactly as today", async () => {
+  it("releases staffing after a contained FAILED attempt", async () => {
     const { cleanups, exit, staffing } = await staffed(() => "FAILED");
 
     exit.reject(new AgentProcessFailureError("EXIT_NONZERO", 1, null, ["TypeError: boom"]));
-    await expect(staffing.settle()).rejects.toThrowError("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+    await expect(staffing.settle()).resolves.toBeUndefined();
 
-    expect(staffing.failureOutcome()).toBe("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+    expect(staffing.failureOutcome()).toBeNull();
     expect(cleanups).toEqual([true]);
   });
 
-  it("behaves identically with no observer at all", async () => {
+  it("releases staffing after a contained failure without an observer", async () => {
     const { cleanups, exit, staffing } = await staffed(undefined);
 
     exit.reject(new AgentProcessFailureError("EXIT_NONZERO", 1, null, ["TypeError: boom"]));
-    await expect(staffing.settle()).rejects.toThrowError("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+    await expect(staffing.settle()).resolves.toBeUndefined();
 
-    expect(staffing.failureOutcome()).toBe("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+    expect(staffing.failureOutcome()).toBeNull();
     expect(cleanups).toEqual([true]);
   });
 
@@ -606,7 +606,7 @@ describe("createAgentWrapper with a provider pause", () => {
     }
   });
 
-  it("leaves an ordinary crash wedging the wrapper byte for byte as today", async () => {
+  it("records an ordinary crash without pausing or refunding its attempt", async () => {
     const projectId = "proj-pause-wrapper-failed";
     const harness = wrapperHarness(projectId);
     try {
@@ -615,19 +615,25 @@ describe("createAgentWrapper with a provider pause", () => {
       seat.exit.reject(new AgentProcessFailureError(
         "EXIT_NONZERO", 1, null, ["TypeError: boom", "    at main (x.ts:1:1)"],
       ));
-      await expect(harness.wrapper.settle())
-        .rejects.toThrowError("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+      await expect(harness.wrapper.settle()).resolves.toBeUndefined();
 
-      expect(await harness.wrapper.runOnce()).toEqual({
-        active: 0,
-        spawned: [],
-        surfaceOutcome: "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
+      const next = await harness.wrapper.runOnce();
+      expect(next.surfaceOutcome).toBe("SURFACE");
+      expect(next.spawned).toContainEqual({
+        kind: "policy.install", outcome: "STAFFING_ATTEMPTS_EXHAUSTED", refusal: null,
+        sessionId: null, workItemId: seat.workItemId,
+      });
+      expect(harness.spawns).toBe(2);
+      expect(next.spawned[1]).toMatchObject({
+        outcome: "SPAWNED", workItemId: `project.register@${projectId}`,
       });
       expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([
         { kind: "FAILED", lastLine: "    at main (x.ts:1:1)", sessionId: seat.sessionId },
       ]);
       expect(readProviderPause(harness.reader, projectId, "claude", nowIso(NOW))).toBeNull();
       expect(harness.logs).toEqual([]);
+      harness.exits[1]?.resolve();
+      await harness.wrapper.settle();
     } finally {
       harness.dispose();
     }
