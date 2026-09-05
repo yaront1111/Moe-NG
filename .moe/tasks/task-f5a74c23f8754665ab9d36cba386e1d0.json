@@ -147,16 +147,27 @@
     {
       "stepId": "step-8",
       "description": "RECEIPT READ-BACK, DRILLS, GATES. (a) Read the durable receipt back from a real store and assert EVERY member, including that a REFUSED receipt carries its code and NO url — a refusal that still advertises a url is a preview the operator would click into nothing. Assert the receipt id is stable across a repeated run for the same (projectId, goalId, sha), proving the restart-idempotence the id function exists for. (b) MUTATION DRILLS recorded in a step note (global rail 1): make the cleanup path a no-op and confirm the three PID arms go RED; make the capture write a zero-byte file and confirm the PNG-decode arm goes RED (that is the drill that matters — a file-exists assertion would have passed). The new modules under apps/daemon/src/preview/ are UNTRACKED until committed, so `git diff` is blind to them: prove each restore by SHA256 against an out-of-tree backup in %TEMP% suffixed by worker id, in a call SEPARATE from the restore (global rail 13). (c) GATES, standalone and foreground, each `Test Files N passed` count line quoted verbatim (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm typecheck`. `pnpm test` covers no apps/** (global rail 18); say so rather than quoting it. Named verification command for completion: `pnpm --filter @moe/daemon test`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/preview/preview-runner.test.ts",
         "apps/daemon/src/preview/preview-runner.ts"
       ],
-      "startedAt": "2026-09-05T20:36:03.101Z"
+      "modifiedFiles": [
+        "apps/daemon/src/preview/preview-ledger.test.ts",
+        "apps/daemon/src/preview/preview-supervisor.test.ts",
+        "apps/daemon/src/preview/preview-supervisor.ts",
+        "apps/daemon/src/preview/preview-process.ts",
+        "apps/daemon/src/preview/preview-capture.ts",
+        "apps/daemon/src/preview/preview-runner.test.ts",
+        "apps/daemon/src/preview/preview-test-fixtures.ts"
+      ],
+      "note": "RECEIPT READ-BACK, THREE DRILLS WITH SHA256 RESTORE PROOFS, AND THE GATES. Two REAL defects found in my own code by this step.\n\n(a) RECEIPT READ-BACK — new preview-ledger.test.ts, 17 arms, every one against `readPreviewReceipt`'s output rather than the object handed to the writer. A STARTED receipt reads back with `toStrictEqual` over ALL ELEVEN members; aggregate versions assert `GOAL = 0` and `preview:<goal> = 1`, so a preview provably moves no version the planner reads against. A REFUSED receipt carries its code, `url: null`, `pid: null`, `screenshots: []`, and `previewReceiptLayer` re-derives RUNNER from the vocabulary's closed map. A refusal is a RECORD not an absence: PREVIEW_RECEIPT_NOT_FOUND before, readable after.\nIDEMPOTENCE: a second `recordPreviewReceipt` for the same (projectId, goalId, sha) returns `replayed: true`, the SAME receiptId, a `toStrictEqual` receipt, and leaves the aggregate at version 1 — the replay wrote nothing. A stronger arm: recording a REFUSAL for a revision already STARTED replays the STARTED receipt rather than overwriting it, so a later refusal cannot erase the preview an operator is looking at. Nine decoder arms perturb one member at a time (REFUSED-with-url, STARTED-without-url, STARTED-without-pid, STARTED-with-code, REFUSED-with-screenshots, an off-vocabulary code, four escaping screenshot paths, a receiptId that is not its own hash, an extra key, a missing key) and a final arm ACCEPTS the shape the writer emits, so the eight refusals are not vacuous.\n\n(b) THREE DRILLS. `git status --porcelain` FIRST: both mutated modules are `??` UNTRACKED, so `git diff` is blind to them and every restore is proven by SHA256 against an out-of-tree backup in /tmp suffixed by worker id, in a call SEPARATE from the restore (global rail 13).\nBaselines: preview-process.ts `1b6413ff3d6dcc08defe137f94a5077977ec5c85d4950f1f823eb2e5e1f7f83c`, preview-capture.ts `ce8eb18fd30848039462de7b5427bc04e4094587cc55b27515b41224fe044be2`.\nDRILL 1 — `await killTree(...)` -> `void killTree;`: ARM 1 (APPROVE), ARM 2 (REJECT), ARM 4 (SHUTDOWN) and the post-shutdown-start arm went RED. ARM 3 STAYED GREEN. That is the finding: `SILENT_SERVER` holds no port and writes to stdout on a timer, so destroying the parent's pipe ends gives it EPIPE and it dies of its own accord — ARM 3 was not a discriminator for the cleanup path at all. FIXED rather than noted: added `SILENT_BOUND_SERVER`, which binds a real socket, writes its port to `port.txt` instead of stdout, and never writes again; ARM 3 now asserts the pid gone AND that bound port free, and pre-asserts the fixture really bound (`awaitFixturePort`) so the port claim is not vacuous.\nDRILL 2 — same mutation, re-run against the strengthened arms: FIVE of six RED, ARM 3 among them. Restore proven: live SHA256 == backup SHA256, `grep -c DRILL` = 0.\nDRILL 3 — capture's `page.screenshot(...)` -> `writeFileSync(path, Buffer.alloc(0))`: the three DECODE arms went RED (both capture arms and the end-to-end receipt arm). The containment and unreachable-origin arms stayed green, correctly — they do not decode. This is the drill the plan called the one that matters, and a file-exists assertion would have passed all three. Restore proven by SHA256; `grep -rn DRILL apps/daemon/src/preview/` = 0 across ALL my sources.\n\nTWO REAL DEFECTS FOUND IN MY OWN CODE BY THE ADVERSARIAL PASS, both fixed with arms:\n1. CHECK-THEN-ACT ON START. Two concurrent `supervisor.start` calls for the same revision both passed the landed gate and both spawned a server; the second could not bind the port the first took and refused PREVIEW_START_TIMEOUT — a preview that failed for no reason an operator could act on. The receipt's idempotence does NOT prevent this: it dedupes the RECORD, by which time two processes are running. Fixed by serialising in-flight starts on the deterministic receipt id (known BEFORE the run, which is what makes the guard possible). New arm asserts two concurrent starts return the SAME pid and SAME port with `active()` length 1, then that both are gone after close.\n2. HANDLE BURN. The start loop opened a TCP probe every 25ms; against the 30-minute production budget that is ~72,000 sockets for a product that never listens, on a host measurably sensitive to handle leaks. Now backs off to 1s after a 10s fast window — ~1,800 probes instead, with fast detection preserved for a server that comes up normally.\n\nA RED THAT WAS GENUINELY MINE, found and fixed. `src/runtime-entrypoint.test.ts` reported `unexpected: [\"preview\\\\preview-supervisor.js\", \"repository\\\\deployment\\\\deployment-docker-probe.js\"]`. The FIRST was mine: `runtimeTierModules` (runtime-entrypoint.test.ts:155) seeds the runtime tier from the entry module plus every module carrying its OWN `<name>.test.ts` sibling, then takes the forward import closure. `preview-supervisor.ts` had neither a sibling (its arms lived in `preview-lifecycle.test.ts`) nor a runtime importer, so it was test-tier and its bridge was forbidden. I ren",
+      "startedAt": "2026-09-05T20:36:03.101Z",
+      "completedAt": "2026-09-05T22:24:27.560Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-8c5af680",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,15 +179,22 @@
   ],
   "priority": "HIGH",
   "order": 32,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-bf0c4bbea8154fb187491a2a4387dfc6",
+      "author": "worker-8c5af680",
+      "content": "FOREIGN-RED ROSTER AND GATE EVIDENCE for task-f5a74c23 (worker-8c5af680). Held here because it exceeds the 2000-char completionSummary cap.\n\n## `pnpm --filter @moe/daemon test` — EXIT 1 BOTH RUNS, FOREIGN\n\nRun A: `Test Files 18 failed | 446 passed (464)` / `Tests 86 failed | 8891 passed | 2 skipped (8979)`, 2534.79s.\nRun B: `Test Files 11 failed | 457 passed (468)` / `Tests 43 failed | 8947 passed | 2 skipped (8992)`, 2363.46s.\n\nTHE ROSTER MOVED BETWEEN RUNS ON AN UNCHANGED TREE (18->11 files, 86->43 tests). That is the tell that these are contention/timeout reds rather than diff-caused: a deterministic break does not halve itself.\n\nFull run-B failing roster (recovered from a complete capture — my first run was piped through `tail -60`, which threw the roster away and cost a 40-minute re-run; `mem:gotcha-tail-truncated-suite-output-loses-the-failing-file-roster`):\n\n    src/evidence/foundation-verification-service.test.ts\n    src/http/foundation-registry.test.ts\n    src/http/foundation-registry-hostile.test.ts\n    src/mcp-dispatch-port.test.ts\n    src/orchestrator/agent-wrapper-main.test.ts\n    src/repository/deployment/deployment-infrastructure-generator.test.ts\n    src/runtime-entrypoint.test.ts\n    src/work/foundation-attempt-service.test.ts\n    src/work/foundation-attempt-windows.test.ts\n    src/work/foundation-capture-lifecycle.test.ts\n    src/work/foundation-capture-producer.test.ts\n\nZERO under `src/preview/`. Every readable failure reason is `Test timed out in 30000ms` in a shell-out fixture — `mem:process-spawn-latency-cliff-makes-every-gate-inadmissible`. Two rows (`repository/deployment/deployment-infrastructure-generator.test.ts` and part of `runtime-entrypoint.test.ts`) come from `?? apps/daemon/src/repository/deployment/`, an UNTRACKED peer directory that cannot exist at a clean checkout; it was already recorded as a known foreign red in `task-task-40e52fa8...-handoff` §4, hours before this row started.\n\nPath-attributed baseline per global rail 3: failing-path set INTERSECT owned paths = **EMPTY**.\n\n## THE ONE INTERSECTION THAT DID EXIST — fixed, not excused\n\n`runtime-entrypoint.test.ts` reported `unexpected: [\"preview\\\\preview-supervisor.js\", \"repository\\\\deployment\\\\deployment-docker-probe.js\"]`. The FIRST was mine. `runtimeTierModules` (runtime-entrypoint.test.ts:155) seeds the runtime tier from the entry module plus every module carrying its OWN `<name>.test.ts` sibling, then takes the forward import closure; `preview-supervisor.ts` had neither a sibling (its arms were in `preview-lifecycle.test.ts`) nor a runtime importer, so it was test-tier and its `.js` bridge was forbidden. Renamed `preview-lifecycle.test.ts` -> `preview-supervisor.test.ts` — also the truer name, since that file's subject IS the supervisor. Re-run confirms my entry is gone and only the peer's remains.\n\nQA: if you re-run `runtime-entrypoint.test.ts` and see ONLY `repository\\deployment\\deployment-docker-probe.js`, that is the expected disclosed state.\n\n## GATES THAT ARE GREEN\n\n- `pnpm typecheck` — EXIT 0, all 20 packages `Done`, including `apps/daemon typecheck$ tsc --project tsconfig.json` / `Done`. Every foreign typecheck error I disclosed in steps 3-4 (health-read.test.ts x10, agent-wrapper.test.ts, repository-execution-port.test.ts) has since been fixed by peers; the repo typechecks clean.\n- OWNED SCOPE, the completion verification: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000 src/preview` -> EXIT 0, `Test Files 7 passed (7)` / `Tests 93 passed (93)`, 40.12s.\n- `pnpm test` covers NO apps/** (root vitest include has no apps/**; global rail 18), so it is not quoted as evidence for anything here.\n\nNOTE ON THE GATE SHAPE: `pnpm --filter <pkg> test -- <path>` does NOT scope — the double dash reaches vitest as a name filter and the whole package runs anyway (`mem:pnpm-filter-test-double-dash-does-not-filter`). `pnpm --filter <pkg> exec vitest run --root . --config package.json <path>` is the shape that actually scopes, and it prints a real count line.\n\n## PER-FILE LINE COUNTS (cap: target 250, hard 400)\n\npreview-process 296, preview-receipt-contracts 207, preview-runner 197, preview-command-resolution 170, preview-ledger 154, preview-supervisor 138, preview-capture 119, preview-goal-landing 94. Tests: preview-runner.test 329, preview-supervisor.test 267, preview-ledger.test 245, preview-capture.test 184, preview-command-resolution.test 184, preview-test-fixtures 132.\n\n## PEER ACTIVITY INSIDE MY OWN DIRECTORY — disclosed, not reverted\n\nA peer session is mid-flight on a node-identity refactor (bare nodeKey -> scoped execution ref): `apps/daemon/src/orchestrator/compiled-execution-ref.ts` is UNTRACKED, `compiled-node-identity.ts` and `repository/goal-landing-facts.ts` are ` M`. At 23:19 that peer REWROTE my `apps/daemon/src/preview/preview-goal-landing.ts` to map each graph-local nodeKey to its scoped ref before reading the ledger, and added `apps/daemon/src/preview/preview-goal-landing.test.ts`. Their edit is CORRECT against the new model — my bare-key version would have answered \"not landed\" for every properly-landed goal. I kept it, did not revert or stash, and did NOT claim their test file as mine. I do keep `preview-goal-landing.ts` in modifiedFiles because I created it and it is this row's deliverable.\n\nThat refactor also exposed a real defect in MY test helper: `ledgerOutcome` read the ledger by BARE key and so answered null for a receipt that really existed. The REFUSED and sibling arms would have stayed GREEN while their independent-read discriminator proved nothing. Now keyed on the scoped ref.",
+      "timestamp": "2026-09-05T22:24:56.715Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:59:32.724Z",
-  "updatedAt": "2026-09-05T22:18:54.961Z",
+  "updatedAt": "2026-09-05T22:25:17.268Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:09:42.913Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -188,7 +206,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T23:10:58.287Z",
@@ -209,5 +228,41 @@
     "worker-8c5af680",
     "governor-afbde490"
   ],
-  "workStartedAt": "2026-09-05T19:42:18.998Z"
+  "workStartedAt": "2026-09-05T19:42:18.998Z",
+  "reviewStartedAt": "2026-09-05T22:25:17.267Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000 src/preview",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  7 passed (7)\n      Tests  93 passed (93)\n   Start at  01:22:58\n   Duration  40.12s (transform 15.75s, setup 0ms, import 22.50s, tests 63.12s, environment 0ms)\n\nVERIFY_EXIT=0",
+    "reportedAt": "2026-09-05T22:25:17.267Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "pnpm-lock.yaml",
+    "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+    "apps/daemon/src/preview/preview-receipt-contracts.ts",
+    "apps/daemon/src/preview/preview-receipt-contracts.js",
+    "apps/daemon/src/preview/preview-ledger.ts",
+    "apps/daemon/src/preview/preview-ledger.js",
+    "apps/daemon/src/preview/preview-command-resolution.ts",
+    "apps/daemon/src/preview/preview-command-resolution.js",
+    "apps/daemon/src/preview/preview-goal-landing.ts",
+    "apps/daemon/src/preview/preview-goal-landing.js",
+    "apps/daemon/src/preview/preview-process.ts",
+    "apps/daemon/src/preview/preview-process.js",
+    "apps/daemon/src/preview/preview-runner.ts",
+    "apps/daemon/src/preview/preview-runner.js",
+    "apps/daemon/src/preview/preview-command-resolution.test.ts",
+    "apps/daemon/src/preview/preview-runner.test.ts",
+    "apps/daemon/src/preview/preview-test-fixtures.ts",
+    "apps/daemon/src/preview/preview-capture.ts",
+    "apps/daemon/src/preview/preview-capture.js",
+    "apps/daemon/src/preview/preview-capture.test.ts",
+    "apps/daemon/src/preview/preview-supervisor.ts",
+    "apps/daemon/src/preview/preview-supervisor.js",
+    "apps/daemon/src/preview/preview-lifecycle.test.ts",
+    "apps/daemon/src/preview/preview-ledger.test.ts",
+    "apps/daemon/src/preview/preview-supervisor.test.ts"
+  ],
+  "completionSummary": "The daemon-side preview runner: starts the product, captures it with a real browser, records a durable receipt, and ALWAYS stops the process. No UI (task rail 1).\n\nDELIVERED — 8 production modules + .js bridges under apps/daemon/src/preview/, 6 test files, 93 tests. preview-receipt-contracts (moe-preview-receipt/1, deterministic id, exact-key decoder), preview-ledger (durable write/read-back), preview-command-resolution, preview-goal-landing, preview-process, preview-capture, preview-supervisor, preview-runner.\n\nDEPENDENCY EDGE PROVEN 3 WAYS (global rail 7): apps/daemon/package.json:32 declares \"playwright\": \"1.62.1\"; pnpm-lock.yaml carries the @moe/daemon importer stanza (`playwright: specifier 1.62.1, version 1.62.1`, +3 lines); a bare-specifier probe typechecked EXIT 0 and was deleted in the same command, with a NEGATIVE CONTROL (bogus specifier -> TS2307 exit 1) proving the green was not vacuous.\n\nTHE PORT ASSERTION CAUGHT A REAL LEAK. My first killTree spawned `taskkill /T /F` and immediately SIGKILLed the shell without waiting. `shell: true` makes the direct child cmd.exe and the server its GRANDCHILD, so the shell died first and orphaned node: every PID assertion passed while the port stayed BOUND. Fixed by awaiting taskkill's exit (0 or 128) before any fallback kill. Asserting only by pid would have shipped it.\n\nFOUR CLEANUP ARMS, ALL PRESENT — APPROVE, REJECT, forced TIMEOUT, and DAEMON SHUTDOWN. The plan permitted admitting the 4th was unreachable; instead I made the composition allow it (createPreviewSupervisor owns the live roster, close() sweeps it, arm holds two previews open). Each asserts pid gone AND port free, polled to a budget over the PRODUCTION probe `probeProcessAlive`.\n\nTWO DEFECTS FOUND BY ADVERSARIAL REVIEW, both fixed with arms: concurrent starts of one revision spawned two servers (now serialised on the deterministic receipt id); the start loop opened ~72,000 sockets over a 30-min budget (now backs off after 10s).\n\nDRILLS (SHA256 restore "
 }

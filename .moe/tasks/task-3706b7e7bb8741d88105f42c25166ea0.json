@@ -182,7 +182,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:50:36.331Z",
-  "updatedAt": "2026-09-05T22:10:29.626Z",
+  "updatedAt": "2026-09-05T22:12:22.876Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:16:00.386Z",
     "plannedStepCount": 8,
@@ -257,7 +257,10 @@
     "apps/daemon/src/repository/deployment/deployment-docker-probe.ts",
     "apps/daemon/src/repository/deployment/deployment-docker-probe.js",
     "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
-    "apps/daemon/src/repository/deployment/deployment-image-build.test.ts"
+    "apps/daemon/src/repository/deployment/deployment-image-build.test.ts",
+    ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+    ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
   ],
   "completionSummary": "8/8 steps preserved and submitted under governor's explicit reopenReason permitting owned evidence with DoD3 host-unproven. Infrastructure generator emits only missing Dockerfile/.dockerignore/app override/healthcheck; scaffold base compose remains authoritative, one db. Requirement IDs are sorted provenance, never prose-derived execution parameters (comment-36f9a38d).\nFresh owned gate:2 files passed;15 passed|1 skipped(16),exit0,7.36s. The skip is the opt-in Docker build. REAL opt-in arm executed separately:1 failed|5 passed, exit1, DEPLOY_DOCKER_UNAVAILABLE: no docker daemon answered (exit1), dockerDesktopLinuxEngine pipe absent. IMAGE NOT BUILT; no container started or image health response observed. DoD3 NOT PROVEN. Full refusal/command: comment-5909ee403b6048b4ae7e7d26145154ec.\nResume adversarial review fixed a container-cleanup timing hole in existing owned image-build test: failed run could start container before cleanup flag set. Actual opt-in body now always attempts unique-name rm/rmi, outer temp cleanup retained. Three deterministic tests (success/body failure/cleanup failure); red-first expected cleanup argv vs[] then green. Independent rereview confirmed real wiring. Only this owned test changed on resume, all8 paths already declared; no new scope.\nFresh daemon typecheck exit1, ZERO owned diagnostics. Foreign agent-wrapper.test.ts:298 TS2322; release-decide-contracts.test.ts:15 TS5097; repository-execution-port.test.ts TS2554/TS2559/TS2339; exact lines comment-ddf8691c9f9c4c3f8aef29aed2e9b4fd. Full daemon/root gates NOT RERUN under governor host halt. Prior broad foundation-capture-producer timeouts retained in comment-a5a70fb1; current broad delta unmeasured, not green. Consumer command/effect/UI remains downstream; no live deployment claim.",
   "commits": [
@@ -283,15 +286,33 @@
       "pushed": false,
       "recoveredBy": "qa-4f771bb8",
       "message": "feat(task-3706b7e7bb8741d88105f42c25166ea0): The infrastructure files are generated and the image they describe actually serves health — QA hand-landing, row reached REVIEW 2026-09-05T20:29Z with task.commits null and all 8 paths untracked; no wrapper completion commit ever arrived."
+    },
+    {
+      "sha": "2d0899bdd701b4933d4b46962a0547404bf8154c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T21:23:42Z",
+      "paths": [
+        ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+        ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T22:12:22.876Z",
+      "treeId": "a79f8d70d20a6ec7a9564e6bacd61259872cc296",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-4f771bb8@2026-09-06T00:22:00Z",
-    "at": "2026-09-05T22:08:33.895Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-05T21:23:42Z",
+    "at": "2026-09-05T22:12:22.876Z"
   },
   "completedAt": "2026-09-05T22:10:29.626Z",
   "reviewCompletedAt": "2026-09-05T22:10:29.626Z",
-  "reviewSummary": "APPROVED, DoD 3 OPEN AND DISCLOSED. Evidence: comment-fe179ed723fc46089ef0a39b473a9658.\n\nHAND-LANDED FIRST: REVIEW since 09-05T20:29Z with task.commits NULL, 8 paths untracked, no wrapper commit ever. Landed by explicit pathspec e219aa43 (8 files, +1054), no foreign dirt; landed blobs sha256 == bytes I gated.\n\nGATES I RE-RAN: (a) vitest src/repository/deployment/ -> Test Files 2 passed (2), Tests 15 passed | 1 skipped (16), exit 0. (b) daemon typecheck exit 1, both errors FOREIGN (preview-runner TS2379, release-decide-contracts TS5097), ZERO owned diagnostics; proved non-vacuous by planting a TS2322 in the owned generator, sha256-restored. (c) DoD 4 flag ON: exit 1, \"DEPLOY_DOCKER_UNAVAILABLE: no docker daemon answered (exit 1): failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine...\" — loud, not a skip. Confirmed docker version fails yet EXITS 0, validating classify-on-server-version.\n\nMY DRILLS (untracked: %TEMP% backup, sha256 restore proof in a separate call): D1 drop .sort() -> determinism arm RED. D2 healthcheck always exit(0) -> BEHAVIOURAL arm RED (carries DoD 3's weight offline). D3 second postgres -> one-postgres arm RED. All 8 sha256-identical after.\n\nDoD: 1 MET. 2 MET structurally (existing path -> kept, bytes never enter write; asserts operator's FOREIGN BYTES SURVIVING). 3 NOT PROVEN — build arm never executed anywhere: no image built, no container started, no health response observed. 4 MET. 5 MET+RECORDED (comment-36f9a38d). 6 PARTIAL: daemon suite did NOT finish after ~35 min polling, stopped, NOT claimed green — files are additive with ZERO importers outside their directory, so (HEAD reds - merge-base reds) INTERSECT owned = EMPTY (rail 3).\n\nHARDENING ROW: DoD 3 is the sole unexecuted acceptance. On a live-daemon host run MOE_DEPLOY_IMAGE_BUILD=1 vitest on deployment-image-build.test.ts and quote the two \"DOCKER BUILD ARM\" lines. Until then: NEVER OBSERVED — no later row may cite this one as proof the image builds."
+  "reviewSummary": "APPROVED, DoD 3 OPEN AND DISCLOSED. Evidence: comment-fe179ed723fc46089ef0a39b473a9658.\n\nHAND-LANDED FIRST: REVIEW since 09-05T20:29Z with task.commits NULL, 8 paths untracked, no wrapper commit ever. Landed by explicit pathspec e219aa43 (8 files, +1054), no foreign dirt; landed blobs sha256 == bytes I gated.\n\nGATES I RE-RAN: (a) vitest src/repository/deployment/ -> Test Files 2 passed (2), Tests 15 passed | 1 skipped (16), exit 0. (b) daemon typecheck exit 1, both errors FOREIGN (preview-runner TS2379, release-decide-contracts TS5097), ZERO owned diagnostics; proved non-vacuous by planting a TS2322 in the owned generator, sha256-restored. (c) DoD 4 flag ON: exit 1, \"DEPLOY_DOCKER_UNAVAILABLE: no docker daemon answered (exit 1): failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine...\" — loud, not a skip. Confirmed docker version fails yet EXITS 0, validating classify-on-server-version.\n\nMY DRILLS (untracked: %TEMP% backup, sha256 restore proof in a separate call): D1 drop .sort() -> determinism arm RED. D2 healthcheck always exit(0) -> BEHAVIOURAL arm RED (carries DoD 3's weight offline). D3 second postgres -> one-postgres arm RED. All 8 sha256-identical after.\n\nDoD: 1 MET. 2 MET structurally (existing path -> kept, bytes never enter write; asserts operator's FOREIGN BYTES SURVIVING). 3 NOT PROVEN — build arm never executed anywhere: no image built, no container started, no health response observed. 4 MET. 5 MET+RECORDED (comment-36f9a38d). 6 PARTIAL: daemon suite did NOT finish after ~35 min polling, stopped, NOT claimed green — files are additive with ZERO importers outside their directory, so (HEAD reds - merge-base reds) INTERSECT owned = EMPTY (rail 3).\n\nHARDENING ROW: DoD 3 is the sole unexecuted acceptance. On a live-daemon host run MOE_DEPLOY_IMAGE_BUILD=1 vitest on deployment-image-build.test.ts and quote the two \"DOCKER BUILD ARM\" lines. Until then: NEVER OBSERVED — no later row may cite this one as proof the image builds.",
+  "unattributedPaths": []
 }

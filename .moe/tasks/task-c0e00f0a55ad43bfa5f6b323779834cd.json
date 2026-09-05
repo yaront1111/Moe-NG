@@ -86,12 +86,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan hand-back: worker-afd89b78 hit plan step 1(b)'s own named stop outcome (22:22Z, evidence comment-790e601a83d14280b2aeaf2ea9fd860c). STATE: the shipped infrastructure has NO switch point — docker-compose.override.yml (task-3706b7e7, DONE) runs one `app` service publishing `3000:3000` directly; base compose (task-4a0f7064, DONE) ships `db` only; zero proxy/`docker service`/`start-first` hits anywhere. A published host port is fixed at container create, so a candidate cannot start beside the incumbent and DoD-2's recorded atomic-replace call order is not executable; stop-then-start called atomic would be a fabrication (task rail 2). Both producers are DONE, so nothing auto-clears this. ARCHITECT RULING NEEDED, one of: (1) a prerequisite row adding a flippable upstream (proxy) in 3706b7e7's dockerComposeOverride, DoD-2 unchanged; (2) network-alias switch, DoD-2 amended to the internal service name; (3) DoD-2 amended to what the infrastructure backs, outage window named. Worker notes steps 2-3 (moe-deploy-receipt/1 contract + ports) are orthogonal and rollback (task-7683a432) needs that shape — consider letting them ship ahead of the ruling. Baseline daemon typecheck exit 0, zero files touched; checkpoint e2b1ced86585 carried 11 paths (see banner).",
   "createdBy": "WORKER",
   "parentTaskId": "task-04b3ce7e349743c2a156d32ee5550ba5",
   "dependsOn": [
@@ -115,7 +115,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:53:06.168Z",
-  "updatedAt": "2026-09-05T22:22:05.718Z",
+  "updatedAt": "2026-09-05T22:27:37.348Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:58:28.560Z",
     "plannedStepCount": 6,
@@ -148,8 +148,59 @@
     "worker-afd89b78"
   ],
   "workStartedAt": "2026-09-05T22:14:01.036Z",
-  "blockedReason": "DoD-2 UNSATISFIABLE ON THE SHIPPED INFRASTRUCTURE - plan step 1(b)'s OWN named stop outcome (\"If the generated infrastructure has NO switch point ... STOP AND REPORT with the compose file quoted\"), antecedent measures TRUE. Step 1 complete; evidence + the three rulings in comment-790e601a83d14280b2aeaf2ea9fd860c.\n\nMEASURED. docker-compose.override.yml (task-3706b7e7, DONE) ships ONE service, `app`, binding the public port directly: `ports:` / `- \"3000:3000\"`. Base docker-compose.yml (task-4a0f7064, DONE) ships `db` only. ZERO nginx/traefik/caddy/reverse-proxy hits and ZERO `docker stack`/`update_config`/`start-first`/`docker service` hits across apps packages adapters tools. No proxy row among the epic's 44.\n\nWHY IT BLOCKS. A published host port is fixed at container create time and two containers cannot bind 0.0.0.0:3000 at once, so the engine cannot start the candidate alongside the incumbent and has nothing to flip: DoD-2's recorded call ORDER is not executable. Both workarounds are worse than a refusal - stop-then-start called atomic is the fabrication task rail 2 prevents; ephemeral-port-then-recreate-on-3000 means the container that finally takes traffic was never health-probed, defeating DoD-3 too. The proxy belongs in task-3706b7e7's `dockerComposeOverride`, which rail 1 forbids me to touch.\n\nNEEDED - ONE RULING (detailed in the comment): (1) prerequisite row adding a flippable upstream, DoD-2 unchanged; (2) network-alias switch, DoD-2 amended to the internal service name; (3) DoD-2 amended to what the infrastructure can back, outage window named. NOT blocked on a row - both producers are DONE.\n\nSALVAGEABLE ON YOUR WORD: steps 2-3 (`moe-deploy-receipt/1` contract + ports) are orthogonal, and rollback (task-7683a432) cannot depend on this row yet needs the shape. Amend the plan to allow them ahead of the ruling and they ship in one session.\n\nBASELINE: daemon typecheck exit 0 GREEN. ZERO files created/modified; 75 peer dirty paths untouched.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T22:22:05.718Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "commits": [
+    {
+      "sha": "e2b1ced865851ae079b148ac1a5a3d6d446b7168",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-afd89b78@2026-09-05T22:13:23Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+        ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+        ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+        ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
+        ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "worker-afd89b78",
+      "recordedAt": "2026-09-05T22:23:59.588Z",
+      "treeId": "3de00da2779ef1c3680af2d25efb5988e82196ac",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+    ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
+    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+    ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+    ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
+    ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/preview/preview-supervisor.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-afd89b78@2026-09-05T22:13:23Z",
+    "at": "2026-09-05T22:23:59.588Z"
+  },
+  "priorBlockedReason": "DoD-2 UNSATISFIABLE ON THE SHIPPED INFRASTRUCTURE - plan step 1(b)'s OWN named stop outcome (\"If the generated infrastructure has NO switch point ... STOP AND REPORT with the compose file quoted\"), antecedent measures TRUE. Step 1 complete; evidence + the three rulings in comment-790e601a83d14280b2aeaf2ea9fd860c.\n\nMEASURED. docker-compose.override.yml (task-3706b7e7, DONE) ships ONE service, `app`, binding the public port directly: `ports:` / `- \"3000:3000\"`. Base docker-compose.yml (task-4a0f7064, DONE) ships `db` only. ZERO nginx/traefik/caddy/reverse-proxy hits and ZERO `docker stack`/`update_config`/`start-first`/`docker service` hits across apps packages adapters tools. No proxy row among the epic's 44.\n\nWHY IT BLOCKS. A published host port is fixed at container create time and two containers cannot bind 0.0.0.0:3000 at once, so the engine cannot start the candidate alongside the incumbent and has nothing to flip: DoD-2's recorded call ORDER is not executable. Both workarounds are worse than a refusal - stop-then-start called atomic is the fabrication task rail 2 prevents; ephemeral-port-then-recreate-on-3000 means the container that finally takes traffic was never health-probed, defeating DoD-3 too. The proxy belongs in task-3706b7e7's `dockerComposeOverride`, which rail 1 forbids me to touch.\n\nNEEDED - ONE RULING (detailed in the comment): (1) prerequisite row adding a flippable upstream, DoD-2 unchanged; (2) network-alias switch, DoD-2 amended to the internal service name; (3) DoD-2 amended to what the infrastructure can back, outage window named. NOT blocked on a row - both producers are DONE.\n\nSALVAGEABLE ON YOUR WORD: steps 2-3 (`moe-deploy-receipt/1` contract + ports) are orthogonal, and rollback (task-7683a432) cannot depend on this row yet needs the shape. Amend the plan to allow them ahead of the ruling and they ship in one session.\n\nBASELINE: daemon typecheck exit 0 GREEN. ZERO files created/modified; 75 peer dirty paths untouched.",
+  "blockedOnTaskIds": null
 }

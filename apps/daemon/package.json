@@ -28,7 +28,8 @@
     "@moe/review": "workspace:*",
     "@moe/runner": "workspace:*",
     "@moe/scheduler": "workspace:*",
-    "@moe/store": "workspace:*"
+    "@moe/store": "workspace:*",
+    "playwright": "1.62.1"
   },
   "scripts": {
     "start": "node ./src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=39123",

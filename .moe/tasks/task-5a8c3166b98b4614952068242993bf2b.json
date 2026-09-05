@@ -74,12 +74,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved plan rotated the shared runtime-contract digest itself (six files: runtime-vocabulary.ts, generated-client.ts, runtime-contract.test.ts, generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx). That publish now belongs to task-64d2757c (deployment.migrate_down with the other four pending kinds, ONE rotation); dependsOn already points there. worker-7bdbffac parked it 22:19Z as a dependency wait with 0 edits (step 1 measured: 4 mirrors, count 110, migrate_down absent). Re-plan WITHOUT any packages/contracts or generated-client step; keep only what this row does with deployment.migrate_down once published, or archive it if 64d2757c leaves nothing.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-537320eed95348dc9bc3afc879dc0563",
   "priority": "HIGH",
@@ -94,7 +94,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:43:25.436Z",
-  "updatedAt": "2026-09-05T22:19:38.410Z",
+  "updatedAt": "2026-09-05T22:27:26.578Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:15.735Z",
     "plannedStepCount": 6,
@@ -118,11 +118,10 @@
     "worker-7bdbffac"
   ],
   "workStartedAt": "2026-09-05T22:18:42.833Z",
-  "blockedReason": "Live get_context declares unmet prerequisite task-64d2757c06494c1f9016c5e2ffdf19fc, consolidated single digest rotation owner, still PLANNING/unlanded with no completion evidence. This row's old unamended plan independently rotates those same shared roster/mirror files; executing it before the declared producer would duplicate that rotation and violate build ordering. Step1 measured current4 mirrors, count110, migrate_down absent; all6 planned paths clean, no edits or tests. This is a declared-dependency wait, not a foreign dirty-path block. Claim_next_task offered it despite dependsOnUnmet; allow consolidation to land then re-evaluate old plan against producer evidence.",
-  "blockedOnTaskIds": [
-    "task-64d2757c06494c1f9016c5e2ffdf19fc"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T22:19:38.410Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Live get_context declares unmet prerequisite task-64d2757c06494c1f9016c5e2ffdf19fc, consolidated single digest rotation owner, still PLANNING/unlanded with no completion evidence. This row's old unamended plan independently rotates those same shared roster/mirror files; executing it before the declared producer would duplicate that rotation and violate build ordering. Step1 measured current4 mirrors, count110, migrate_down absent; all6 planned paths clean, no edits or tests. This is a declared-dependency wait, not a foreign dirty-path block. Claim_next_task offered it despite dependsOnUnmet; allow consolidation to land then re-evaluate old plan against producer evidence."
 }

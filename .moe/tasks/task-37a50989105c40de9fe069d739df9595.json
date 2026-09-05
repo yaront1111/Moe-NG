@@ -63,12 +63,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved plan rotated the shared runtime-contract digest itself (runtime-vocabulary.ts, generated-client.ts, runtime-contract.test.ts, generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx). That publish now belongs to task-64d2757c, which adds deployment.rollback with the other four pending kinds in ONE rotation; dependsOn already points there. Re-plan WITHOUT any packages/contracts or generated-client step: keep only the daemon/consumer half (what this row does with deployment.rollback once published). Row was unassigned with 0/5 steps started; nothing in flight.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -76,7 +76,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:20.683Z",
-  "updatedAt": "2026-09-05T22:17:58.260Z",
+  "updatedAt": "2026-09-05T22:27:20.404Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.027Z",
     "plannedStepCount": 5,

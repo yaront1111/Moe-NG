@@ -42,12 +42,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved 3-step plan rotated the shared runtime-contract digest itself for project.set_agent_provider. That publish now belongs to task-64d2757c (all five pending kinds, ONE rotation); dependsOn already points there. Row was unassigned with 0/3 steps started. Re-plan WITHOUT any packages/contracts or generated-client step: if 64d2757c publishes the kind and rotates all four mirrors, this row reduces to verification (or archive it and repoint task-8e793ae3's dependsOn to 64d2757c).",
   "createdBy": "WORKER",
   "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
   "dependsOn": [
@@ -58,7 +58,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:40.763Z",
-  "updatedAt": "2026-09-05T22:18:06.973Z",
+  "updatedAt": "2026-09-05T22:27:30.275Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:55:15.753Z",
     "plannedStepCount": 3,

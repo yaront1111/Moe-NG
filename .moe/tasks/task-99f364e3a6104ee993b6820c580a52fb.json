@@ -19,8 +19,84 @@
     "RE-MEASURE BEFORE PLANNING. At filing, 22 of this epic's 23 rows were unstarted - so nearly everything this row certifies will be recently built by many hands. Treat every claim in this description as stale by default and read the dependsOn rows' completionSummary and reviewSummary from epicSiblings first.",
     "FEATURES ONLY (inherited): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE THE TWO THINGS THAT DECIDE WHETHER THIS ROW CAN COMPLETE, before any code.\n\nA. THE FIVE BANDS. All five dependsOn parents were unlanded at plan time. For each, read `completionSummary` and `reviewSummary` from `get_context.epicSiblings` FIRST (rail 5 directs that instead of re-measuring HEAD), then spot-check on disk what they do not cover:\n  `git grep -c \"deployment.deploy\\|deployment.rollback\\|moe-migration-receipt\\|moe-health-probe\\|environment.set_variable\" -- apps packages`\nEach returned NOTHING at plan time. A gap found here becomes a PREREQUISITE PRODUCTION ROW measured symbol by symbol (rail 1) - never a narrowed DoD, never a mock, never authority reimplemented in a test.\n\nB. DOCKER. Run `docker version --format \"{{.Server.Version}}\"` and record the verbatim output. At plan time this host answered:\n  failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine ... The system cannot find the file specified.\nIF DOCKER IS STILL ABSENT, DoD 2, 3 AND 4 CANNOT BE HONESTLY MET: DoD 2 demands an HTTP response from a running environment rather than a receipt, DoD 3 demands the previous sha be SERVING, DoD 4 demands live resources enumerated by real query. Do steps 2, 6 and 7 (which need no docker), then `moe.report_blocked` with this measurable unblock condition:\n  \"a host with a running docker daemon; verify with `docker version --format {{.Server.Version}}` returning a version\"\nquoting the failure verbatim and listing exactly which DoD items remain. That is the shape task-3706b7e7 used and the governor endorsed. DO NOT assert a receipt in place of a response, DO NOT mock the container, DO NOT skip the arm - each converts a blocked clause into a false green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-docker-probe.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "FULL REGRESSION (DoD 1) — runs regardless of docker, so do it before any blocking decision.\n\nEach leg standalone, each quoted with its `Test Files N passed` count line. An exit-0 leg with NO count line RAN NOTHING, and `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for a name that is not a workspace package — so resolve every leg BY PACKAGE NAME, never by directory:\n- `pnpm --filter @moe/daemon test`\n- `pnpm --filter @moe/control-room test`\n- `pnpm typecheck`\n- `pnpm test` (root lane)\n- plus whatever package the scaffold and infrastructure rows created. Find its NAME first: `git grep -l '\"name\"' -- '**/package.json'` and match against what those rows shipped.\n\nState plainly that root `pnpm test` covers NO `apps/**` file, so the two app legs are not optional and a bare root count line is not evidence for them.\n\nEXPECT FOREIGN RED AND ATTRIBUTE IT RATHER THAN CHASING IT: the governor's 19:26Z/19:30Z logs record `mtkbtsvc` handle exhaustion making full-suite runs time out at 30 s in files nobody owns (`src/work/foundation-capture-producer.test.ts` named repeatedly). Apply the path-attributed baseline — merge-base failures, HEAD failures, subtract, intersect with this row's owned paths. Disclose foreign red verbatim with paths; do NOT re-run a full suite repeatedly, which degrades every other seat's gate.\n\nKeep this run: it is the merge-base half of the baseline the completion record needs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-pipeline.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/platform-pipeline.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "ONE GOAL REACHES A RUNNING ENVIRONMENT (DoD 2) — needs docker; skip to step 6 and block if step 1 found none.\n\nIn `tests/e2e/foundation/platform-pipeline.e2e.test.ts`, drive the whole pipeline on ONE goal, each link through the REAL path its band ships:\n1. scaffold a repository from a PRD (the controlled-profile generator, landed at sha 2feed27b, emits a 22-file tree);\n2. deploy it at a landed sha;\n3. set its variables and prove they reach the process;\n4. migrate its schema;\n5. probe its health.\n\nASSERT THE DEPLOYED THING SERVES. DoD 2 is explicit: an HTTP RESPONSE from the running environment, NOT a receipt saying it should be up. A receipt asserts intent; a response asserts reality, and the entire point of an epic-final row is to tell those apart. Name the sha and quote the probe result.\n\nAssert the served build corresponds to the LANDED SHA — not merely that something answers on the port. Something answering is compatible with a stale container from a previous run, which is exactly the confusion a leaked resource creates.\n\nMOCK NOTHING IN THE CHAIN (rail 1). Doubles are permitted only outside it — a clock, an external registry. Name each and why it is not a link.\n\nReuse the real-process harness shape from tests/e2e/foundation/ (e2e-harness.ts, j1-loop-harness.ts) rather than inventing a fifth. Teardown in a `finally`, and step 5 will verify it actually happened.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-pipeline.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "AND BACK OUT AGAIN (DoD 3) — same file, needs docker.\n\nAfter the deploy in step 3, roll the environment back and prove THE PREVIOUS SHA IS NOW SERVING — again BY RESPONSE, not by receipt. Assert the response identifies the previous build, so \"something is up\" cannot pass for \"the rollback worked\".\n\nASSERT THE ROLLBACK IS REACHABLE FROM THE INCIDENT PATH A REAL OPERATOR WOULD USE, not only from a test harness. DoD 3 names this specifically, and it is the clause that catches a rollback proven only in isolation: the operator's route is the incident card's offered control, which rests on a daemon offer. Drive it that way.\n\nA DEPLOY PATH WITH NO PROVEN EXIT IS A ONE-WAY DOOR. This is the half most likely to have been tested only within its own band, because every band can rehearse its own rollback against its own fixture and none of them exercises the sequence after a real migration.\n\nAssert what happened to the SCHEMA across the rollback: the migration ran before the rollback, so state whether the schema stayed migrated or was reverted, and confirm that matches what the migration and rollback rows actually shipped. A rollback that silently leaves a forward schema under a previous build is a cross-band defect no single band can see — exactly this row's subject.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-pipeline.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "NOTHING LEAKS ON A FAILURE PATH (DoD 4) — `tests/e2e/foundation/platform-teardown-failure-paths.e2e.test.ts`. Needs docker.\n\nTHREE ARMS, all on FAILURE paths, because the happy-path teardown is each band's own and the leaks live here:\n1. a FAILED deploy;\n2. a FAILED migration;\n3. an INTERRUPTED verifier.\n\nFor each, ENUMERATE LIVE RESOURCES BEFORE AND AFTER BY REAL QUERY — `docker ps`, a port probe, a process list. DoD 4 forbids trusting a cleanup function that returned, and rail 2 says the same: a returned cleanup is not evidence the resource is gone. Diff the before and after sets and assert the delta is empty.\n\nAssert the container, the disposable database AND the port — all three, per arm. A test that checks containers and leaves a port bound has proven the least interesting third.\n\nINTERRUPT MEANS INTERRUPT: kill the verifier rather than returning an error from it. A function that returns an error unwinds its own `finally`; a killed process does not, and that difference is the whole reason this arm exists.\n\nThis test must not itself leak while proving others do not — its own teardown runs in a `finally`, and it records what it started so a failure names the orphan. A leaked container or port makes every later gate on this board inadmissible, and this row's neighbours are already blocked on exactly that class of failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-teardown-failure-paths.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/platform-teardown-failure-paths.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "NO SECRET SURFACES ANYWHERE (DoD 5) — `tests/e2e/foundation/platform-secret-canary.e2e.test.ts`. The COMMITTED-ARTIFACT half runs WITHOUT docker; do that half even when blocking.\n\nPLANT A CANARY variable value, then PROVE IT WAS PLANTED AND ACTUALLY REACHED THE DEPLOYED PROCESS. DoD 5 and rail 3 both say a sweep that cannot prove delivery proves nothing: a grep finding zero hits is equally consistent with perfect secrecy and with a canary that was never set. Assert delivery first, then sweep. Without docker, prove delivery as far as the pipeline reaches and say exactly where the proof stops.\n\nTHEN GREP EVERY DELIVERED ARTIFACT for the canary and assert ZERO hits: deploy logs, probe output, incident cards, receipts, error paths, generated infrastructure files, and any fixture committed to the tree. Quote the exact paths swept — an unenumerated sweep is not reproducible.\n\nQUOTE THE CANARY'S SHAPE, NEVER ITS VALUE (DoD 5). And choose a value that cannot occur naturally but does NOT look like a real credential: a plausible-looking secret in a test trips credential scanners and becomes its own incident.\n\nSWEEP THE ERROR PATHS DELIBERATELY, not just the success ones — that is where a value leaks. A failed health probe echoing a connection string, a migration error quoting a DSN, a docker command logged with `-e` arguments: each is a real shape and each is invisible on a green run.\n\nAlso sweep the GENERATED INFRASTRUCTURE FILES from the scaffold and infrastructure rows — a value baked into a generated docker-compose or Dockerfile is committed, not merely logged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE ADVERSARIAL PASS OVER THE WHOLE EPIC DIFF (DoD 6, first half) — no docker needed, so do it regardless.\n\nNot a re-review of any band. Look for what the five bands got wrong ABOUT EACH OTHER, because here they are a PIPELINE and that is where nearly all the risk sits. Hunt each of these specifically, with a command:\n- A SCAFFOLD THAT GENERATES INFRASTRUCTURE THE DEPLOY PATH CANNOT CONSUME. Diff the generated Dockerfile/compose against what the deploy effect's argv actually expects.\n- A VARIABLE NAME THE APP EXPECTS AND THE ENVIRONMENT STORE SPELLS DIFFERENTLY. Compare the scaffold's `.env.example` names against the required-names the contract carries and against what delivery sets. This is a pure cross-band defect and no band's own tests can see it.\n- A MIGRATION THAT WORKS ALONE BUT NOT IN SEQUENCE AFTER A ROLLBACK (step 4 exercises it; record the finding here).\n- A PROBE SCHEDULE THAT OUTLIVES THE ENVIRONMENT IT PROBES — tear an environment down and confirm the schedule stops rather than probing a dead URL forever.\n- A REFUSAL CODE WHOSE LAYER DISAGREES ACROSS TWO BANDS. Grep each band's codes and compare their layer literals; the same code attributed to two layers is a real defect this board has produced before.\n- THE DIGEST MIRRORS (rail 4): census BY HEX across ALL file types, never by symbol — three of four mirrors hard-code the hex and one is a `.tsx`. Confirm every mirror carries the CURRENT digest, and run `pnpm --filter @moe/control-room test`, which is the only leg that can see two of them.\n\nRECORD WHAT WAS CHECKED AND WHAT WAS FOUND. A pass that finds nothing MUST say what it looked for — an unqualified \"no issues\" is not a result. Put the list in a row comment under ~4500 chars. Anything found that is not this row's to fix becomes a prerequisite row or a comment, never a silent fix inside an epic-final row.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/agent-stack-runbook.md"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE DOCS SWEEP AND THE COMPLETION RECORD (DoD 6, second half) — no docker needed.\n\nDOCS, in ONE pass, held back from the individual rows so the same file is not re-edited five times: the operator-facing words for ALL FIVE bands (repository, deploy, secrets, migrations, monitoring) and any doc that still describes the platform as unbuilt. Read `docs/agent-stack-runbook.md`, `README.md` and `docs/VISION.md` — VISION:141 lists Stage 2 as \"repository bootstrapping; infrastructure generation; preview and production deployment; secrets and environment management; database migrations; monitoring, backup, and rollback; release evidence\".\n\nMARK SHIPPED ONLY WHAT THIS ROW ACTUALLY PROVED. If step 1 blocked on docker, say so in the docs: the machinery is verified and the live pipeline is pending a docker host. Overstating Stage 2 retires questions no one has answered, and this is the one row whose docs a reader will trust as the platform's status. If a doc needed no change, name the files you READ.\n\nCOMPLETION RECORD — state explicitly:\n- which DoD items were met and which are blocked, with the docker output verbatim if blocked;\n- the canary's SHAPE and the exact paths swept;\n- the adversarial pass's checklist and findings;\n- the path-attributed baseline (step 2's run vs the final run, subtracted, intersected with owned paths) — complete only when that intersection is EMPTY.\n\nThe verification command recorded on `moe.complete_task` is `pnpm --filter @moe/daemon test`. If the row blocks instead, `moe.report_blocked` carries the same evidence plus the measurable unblock condition from step 1.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "docs/agent-stack-runbook.md",
+        "README.md",
+        "docs/VISION.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -47,5 +123,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T16:47:01.388Z",
-  "updatedAt": "2026-09-05T20:06:06.108Z"
+  "updatedAt": "2026-09-05T22:25:15.484Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T22:21:02.102Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T22:25:13.304Z",
+  "planningNotes": {
+    "approachesConsidered": "PLANNING AROUND THE MISSING DOCKER DAEMON. Rejected, and this is the row's central judgement. The available shortcuts are all forbidden: asserting a receipt instead of an HTTP response narrows DoD 2's explicit wording; mocking the container fabricates the authority the row exists to certify; and skipping the arm silently converts a blocked clause into a green one. DELIVERY BIAS permits a hard block exactly when proceeding would fabricate authority, and this is that case. The plan therefore does every docker-independent clause, and blocks on the rest with a measurable unblock condition - the same shape task-3706b7e7 used and the governor endorsed.\n\nWHAT IS STILL PROVABLE WITHOUT DOCKER, and it is not nothing: the full regression legs (DoD 1), the canary sweep over COMMITTED artifacts and GENERATED INFRASTRUCTURE FILES (part of DoD 5), the cross-band adversarial pass over the whole epic diff (DoD 6), and the docs sweep (DoD 6). Those are planned to run regardless, so a docker host later has only the live clauses left.\n\nSPLITTING THE ROW. Rejected. Its whole value is that ONE row sees what five bands got wrong about each other; splitting it by clause would recreate the smeared verification the epic-final pattern exists to prevent. Six files, eight steps.\n\nWRITING A FIFTH HARNESS for the journey. Rejected - tests/e2e/foundation already has four real-process harnesses; reuse their store-construction and teardown shape.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06. Rail 5 says treat the description as stale; it is, in two ways that change what this row can do.\n\n1. THIS HOST HAS NO DOCKER DAEMON, AND DoD 2, 3 AND 4 CANNOT BE HONESTLY MET WITHOUT ONE. Measured directly:\n  `docker version --format '{{.Server.Version}}'` -> `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`\nDoD 2 requires an HTTP RESPONSE from a running environment (\"not a receipt saying it should be up\"), DoD 3 requires the previous sha to be SERVING after a rollback, and DoD 4 requires enumerating live resources by REAL QUERY (`docker ps`, a port probe). None of those is reachable without a docker daemon. This is not a code gap and not something a prerequisite row can close - it is a host capability.\nTHE PRECEDENT IS ALREADY ON THIS BOARD AND IT IS THE RIGHT ONE: task-3706b7e7 delivered 8/8 steps and BLOCKED rather than fabricate its docker-dependent clause, with its arm refusing loudly (`DEPLOY_DOCKER_UNAVAILABLE`) instead of skipping. The governor's 19:30Z log records that as the model for how to file such a block. Step 1 makes the same call explicit, with a measurable unblock condition.\n\n2. THE EPIC IS 47 ROWS, NOT 23. `grep -l epic-3f9b9556 .moe/tasks/*.json` by status: 32 WORKING, 7 DONE, 3 REVIEW, 3 BLOCKED, 2 PLANNING. The description's \"22 of 23 unstarted, the least-started third of the board\" is stale in the direction its own rail 5 predicted - most of what this row certifies is being built right now by many hands, and ALL FIVE band parents in dependsOn were still unlanded at plan time.\n\n3. THE PIPELINE IS A CHAIN OF ROWS THAT MOSTLY DO NOT EXIST YET. Spot-measured: `git grep -c \"deployment.deploy|deployment.rollback|moe-migration-receipt|moe-health-probe\" -- apps packages` returns nothing for each. The scaffold generator DID land (task-4a0f7064, sha 2feed27b, 22-file emitted tree, child build green in 27.43s) and `apps/daemon/src/repository/deployment/` exists from task-3706b7e7 (deployment-docker-probe.ts, infrastructure generator and templates). Everything between them - deploy effect, environment delivery, migrations, probe, rollback - is in flight.\n\n4. THE DIGEST MIRRORS MOVED AGAIN TODAY and rail 4 is right that this epic no longer owns them. Census BY HEX, never by symbol: three of the four mirrors hard-code the hex and never name `GENERATED_CONTRACT_DIGEST`, and one is a `.tsx` a `*.ts`-only grep cannot see. Between two readings hours apart the digest went ed5f6b87... -> f07b77e4... and `runtime-contract.test.ts`'s count went `toBe(104)` at :105 to `toBe(110)` at :108. The four mirror FILES held: generated-client.ts:907, generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255.\n\n5. HOST GATE CONDITIONS THAT WILL AFFECT THE REGRESSION LEG: the governor's 19:26Z and 19:30Z logs record `mtkbtsvc` handle exhaustion (1.1M handles and climbing) making full-suite runs time out at 30 s in files nobody owns - `src/work/foundation-capture-producer.test.ts` named repeatedly - and warn against re-running full suites, which degrades every other seat's gate.\n\nHARNESS PRECEDENT for the journey: tests/e2e/foundation/ carries the real-process harnesses (e2e-harness.ts, j1-loop-harness.ts, j3-crash-harness.ts, j4-replan-harness.ts) and runs under `pnpm test:e2e`. Read them before inventing a fifth shape."
+  },
+  "planApprovedAt": "2026-09-05T22:25:15.484Z"
 }

@@ -22,12 +22,13 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AT CLAIM. This row is dependency-free, so there is nothing to wait on — but re-measure the two facts it rests on.\n\n  (a) `grep -rn 'setInterval' apps/daemon/src --include=*.ts | grep -v '\\.test\\.'` — at plan time (2026-09-05, branch moe/work-2026-09-04) this returned ZERO. If a recurring loop has appeared since, STOP and report: someone else built the daemon's first scheduler and this row would be a silent duplicate. Read `git log -- <that file>` to find the owner.\n  (b) `grep -n 'shutdown\\|SIGINT\\|SIGTERM' apps/daemon/src/daemon-main.ts` — the shutdown chain this row hooks into. Measured: `daemon-main.ts` is 235 lines with `shutdownWithOperator` at :201, `started.shutdown()` at :205, and SIGINT/SIGTERM handlers at :228-232 that call `shutdown(trigger)` then `process.exit(0)`. That chain is where DoD 4's timer release belongs — not a new signal handler of your own, which would race the existing one.\n\nThere is NO settings directory in the daemon (`ls apps/daemon/src/settings` — absent), so durable records go in the EVENT STORE. Copy the commit shape from `apps/daemon/src/environment/environment-store.ts:91-115` — aggregate id helper, `commandBytes` carrying the subject only, `commandId ?? randomUUID()`, `committedAt: config.now()`, one event with a JSON payload, `expectedVersion: store.getAggregateVersion(aggregateId)` — and fold on read the way `environment-projection.ts:80-87` does. The `@moe/store` dependency edge is already proven: apps/daemon/package.json:31 declares it and environment-projection.ts:1 imports the bare specifier and typechecks today.\n\nRead `apps/daemon/src/orchestrator/verifier-process-runner.ts` before writing any lifecycle: injectable `spawn`/`timeoutMs`/`killGraceMs`/`killProcessGroup` options (:45-56), and ONE idempotent `cleanup()` clearing every timer, called on every exit path (:107-118). That is the shape to copy.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-main.ts",
         "apps/daemon/src/orchestrator/verifier-process-runner.ts",
         "apps/daemon/src/environment/environment-store.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T22:20:15.799Z"
     },
     {
       "stepId": "step-2",
@@ -62,7 +63,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -72,10 +73,17 @@
   "parentTaskId": "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
   "priority": "HIGH",
   "order": 121.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-7a56b0ad93c44c168a0554aea0f36c09",
+      "author": "worker-7bdbffac",
+      "content": "Step1 measurements, NO source edits: tracked git grep setInterval excluding *.test.ts yields0. Full disk Get-ChildItem/Select-String finds only preview/preview-test-fixtures.ts85, an embedded SILENT_SERVER child fixture string (not daemon recurring scheduler); no rival scheduler. daemon-main.ts201 shutdownWithOperator/205 started.shutdown/228-232 existing signals confirmed. environment-store.ts91-115 real EventStore commit shape and environment-fold.ts current-state drop policy read; verifier-process-runner.ts cleanup at118+ idempotent timers inspected. @moe/store dependency manifest31 and lock apps/daemon importer166 link:../../packages/store present. No settings directory / recurring modules created.\nMEASURED COMPOSITION GAP, independently confirmed by read-only agent: Step5 explicitly says 'SHUTDOWN AND COMPOSITION — the only edit to an existing file in this row' and names daemon-main.ts. No active amendment. Main loads frozen default at44-58; DaemonDependencyProvider (daemon-entry.ts68-72) and StartedDaemon (93-100) expose NO store/scheduler. CommandAdapterDeps (http/http-contract.ts218-224) has authenticator/decisions/eventStreamAccess/registry only. Existing store is lexical at daemon-store-foundation-composition.ts158-162, not returned506-540; fromEnv private daemon-store-dependencies.ts59-62. Recalling acquireFoundationStore opens another handle at daemon-store-acquisition.ts28, not reuse.\nAn injectable MainOptions.startRecurring hook is feasible but would not wire shipped CLI, whose actual call daemon-main.ts221-233 supplies only operatorInput/onStarted. Do not substitute a test-injected hook for production composition. Smallest real provider edge requires additionally owning daemon-store-foundation-composition.ts (factory over existing store), daemon-store-dependencies.ts (forward factory), daemon-store-dependencies.test.ts (exact providerKeys roster752-763). Or architect explicitly approves intermediate injectable lifecycle seam and assigns actual default wiring to consumer B. Consumer B task-cc05c47362dc41b0b2b416a70ad45b42 DOES dependOn this row, but its current plan has no provider/default-CLI wiring path. Asked @architect-aa54e231 in msg-16c809dd5fae422c92e546ef3ff91c75; no source changes or broad gates started.",
+      "timestamp": "2026-09-05T22:25:29.071Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:47.487Z",
-  "updatedAt": "2026-09-05T19:57:02.174Z",
+  "updatedAt": "2026-09-05T22:25:29.577Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:54:49.847Z",
     "plannedStepCount": 6,
@@ -96,5 +104,13 @@
       "apps/daemon/src/environment/environment-fold.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T19:57:02.174Z"
+  "planApprovedAt": "2026-09-05T19:57:02.174Z",
+  "contextFetchedBy": [
+    "worker-7bdbffac"
+  ],
+  "workStartedAt": "2026-09-05T22:20:15.799Z",
+  "blockedReason": "Unamended step5 limits existing-file edits to daemon-main.ts while requiring durable scheduler composition into its shutdown chain. Measured main's provider and StartedDaemon expose no EventStore/scheduler; actual store is lexical in daemon-store-foundation-composition.ts158-162 and private fromEnv/default forwarder in daemon-store-dependencies.ts59-62. MainOptions-only injection would leave shipped CLI unwired; second acquisition opens a new handle rather than the existing composition. Real edge minimally needs ownership of daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, and exact providerKeys asserter daemon-store-dependencies.test.ts752-763, currently forbidden by step5. Need architect amend those paths or explicitly stage injectable lifecycle with an actual consumer-wiring owner. Consumer B dependsOn this row but current plan owns no default-provider wiring. No source modified; first-scheduler premise holds (only setInterval disk hit is embedded preview test fixture). Full measurements in task comment; no foreign-dirt or redundant-proof block.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-05T22:25:29.577Z"
 }

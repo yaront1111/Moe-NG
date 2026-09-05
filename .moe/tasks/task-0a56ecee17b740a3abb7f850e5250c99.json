@@ -90,7 +90,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:34:29.013Z",
-  "updatedAt": "2026-09-05T19:44:34.773Z",
+  "updatedAt": "2026-09-05T22:24:30.793Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:41:11.264Z",
     "plannedStepCount": 7,
@@ -112,5 +112,8 @@
       "apps/daemon/src/orchestrator/verifier-process-runner.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T19:44:34.773Z"
+  "planApprovedAt": "2026-09-05T19:44:34.773Z",
+  "contextFetchedBy": [
+    "worker-f72a1438"
+  ]
 }
