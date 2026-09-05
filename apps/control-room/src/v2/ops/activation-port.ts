@@ -5,7 +5,7 @@ import type { OfferOutcome, OfferWire } from "../approvals/offer-wire.js";
 
 /**
  * ACTIVATING THE PROJECT from the browser, one button. A fresh project cannot open a goal
- * until four commands are committed in the daemon's own prerequisite order, and until now
+ * until five commands are committed in the daemon's own prerequisite order, and until now
  * only a seeded script could drive them. This port spends the daemon's own offer once per
  * command, RE-READING the affordance surface before every step because each commit moves the
  * aggregate's version and the daemon re-offers at the new one — a cached offer is a stale
@@ -22,12 +22,27 @@ import type { OfferOutcome, OfferWire } from "../approvals/offer-wire.js";
 export { readSurfaceOnce } from "./policy-install-port.js";
 
 /**
- * The daemon's prerequisite order (COMMAND_PREREQUISITES,
- * apps/daemon/src/bootstrap/bootstrap-sequence.ts), not this module's preference. The chain
- * is fixed: a caller cannot reorder it, because the order IS the prerequisite.
+ * The daemon's prerequisite order, not this module's preference. The chain is fixed: a caller
+ * cannot reorder it, because the order IS the prerequisite.
+ *
+ * `project.activate` has TWO prerequisite authorities in the daemon and this roster satisfies
+ * BOTH. The first is the admission table (COMMAND_PREREQUISITES,
+ * apps/daemon/src/bootstrap/bootstrap-sequence.ts), which refuses BOOTSTRAP_PREREQUISITE_MISSING
+ * and lists only the three commands before it here. The second is the MEASURED activation
+ * receipts (ACTIVATION_RECEIPT_MEMBERS, apps/daemon/src/bootstrap/activation-receipts.ts): the
+ * `policy` member is the digest of the INSTALLED SLICE SET, so a store with none is unmeasured
+ * and the activate refuses ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS. That is
+ * why `policy.install` is a member HERE while the admission table omits it — the second
+ * authority is the one it answers to, and mirroring only the first is what let a fresh store
+ * run three steps green and refuse at the fourth (task-d342a2b1).
+ *
+ * Both mirrors are HAND-TRANSCRIBED: apps/control-room cannot import apps/daemon (no workspace
+ * edge, no tsconfig `paths`, and a deep relative import is TS6059), so this roster must be
+ * re-checked whenever EITHER authority moves.
  */
 export const ACTIVATION_CHAIN_KINDS = Object.freeze([
-  "project.register", "project.bind_repository", "provider.probe", "project.activate",
+  "project.register", "project.bind_repository", "provider.probe", "policy.install",
+  "project.activate",
 ] as const);
 
 export type ActivationChainKind = (typeof ACTIVATION_CHAIN_KINDS)[number];

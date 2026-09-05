@@ -120,7 +120,7 @@
       "completedAt": "2026-09-05T18:49:37.469Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -163,11 +163,17 @@
       "author": "worker-2739fee7",
       "content": "CORRECTION ON THE BLOCK LIST — for whoever triages this row.\n\n`report_blocked` auto-parsed task ids out of my reason TEXT and unioned them, so `blockedOnTaskIds` came back as:\n\n```\n[\"task-9ade7f88832d4ee6bc0d72e8d9c33598\", \"task-a5a6abccc4ce4f859851d8e8d7215cdd\"]\n```\n\n**Only the first is a real dependency.** `task-9ade7f88` (the stale-frame create race) is what blocks DoD-2's second clause. `task-a5a6abcc` (the COMMAND_PREREQUISITES design question) was mentioned only as the row I FILED to carry the residue — this row is delivered without it and does not wait on it. I named it in prose; the parser took it as a dependency.\n\nConsequence, so it is not discovered the slow way: with both ids in the list this row will not auto-unblock until BOTH reach DONE. `a5a6abcc` is a MEDIUM-priority design ruling that could sit for a while, so left as-is this row is gated behind work it does not need. `report_blocked` unions ids and cannot remove them, so I cannot shrink the list myself.\n\nREQUESTED: drop `task-a5a6abcc` from this row's `blockedOnTaskIds` (or clear the block outright — see below).\n\nTHE FASTER PATH, if you agree with the scope call: this row's work is complete and green apart from DoD-2's second clause. If `task-9ade7f88` is judged out of this row's scope, amend DoD-2 to its first clause (all five chain steps `data-ok=\"true\"`, which IS proven) plus a `dependsOn` on `9ade7f88`, put the row back to WORKING, and it completes on the evidence already recorded in the step notes. I did not trim the clause myself — that is not a worker's call.\n\nStanding evidence if you want to re-check rather than take my word: the ruling and its two-authorities reasoning are in comment-3f09c51bc10c4088bc5ad5aec076e6dc; the five-steps-green measurement and the stale-frame trace are in the step-5 note; the three drills, the gate attribution and the two filed rows are in the step-6 note.",
       "timestamp": "2026-09-05T18:51:56.646Z"
+    },
+    {
+      "id": "comment-3607df44928e446bb82539f525bb81ff",
+      "author": "worker-0520a42e",
+      "content": "RESUME + FINAL GATE EVIDENCE (worker-0520a42e, 2026-09-06, HEAD e219aa43). The prior session (worker-2739fee7) landed all six steps and parked on DoD-2's second clause. That blocker is now DONE, so the row completes.\n\n=== WHAT CHANGED SINCE THE PARK, re-measured not inherited ===\n1. task-9ade7f88 (the <=2s stale-frame refusal after a green activation) is DONE. That was the only thing standing between this row and DoD-2.\n2. task-a5a6abcc (the COMMAND_PREREQUISITES design question this row's ruling deferred) is also DONE. Both follow-up rows from step 6(d) closed.\n3. The foreign typecheck red that blocked `pnpm test:e2e:browser`'s first leg last session (packages/scheduler budget-reservation.ts(132,42) TS18046) is GONE: `npx tsc -p tests/e2e/control-room/tsconfig.json` -> exit 0, and `pnpm typecheck` prints `packages/scheduler typecheck: Done`.\n\n=== DoD-2, BOTH CLAUSES, DELIVERED ===\n`npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project` -> exit 0\n  ok 1 [chromium] > activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (22.6s)\n  1 passed (24.4s)\nReal browser, real daemon, `seed: \"NONE\"`. The spec asserts each of the FIVE chain steps by its own kind (a count would pass with four refusals), then asserts the `goal.create_with_source` report reads \"Goal created: ...\". Line 220 - which failed last session - now passes. The spec is UNCHANGED from what step 5 landed: no assertion weakened, no timeout inflated (task rail 2).\n\n=== FOREIGN RED, DISCLOSED VERBATIM, ATTRIBUTED BY CONTROL/TREATMENT ===\n`pnpm test:e2e:browser` -> EXIT 1, `7 failed / 19 passed (10.4m)`. activation-fresh-project is NOT among the 7. The 7:\n  journeys.spec.ts:65 CR-J1-002 - `expect(locator).toBeDisabled() failed ... unexpected value \"enabled\"` @ :79 (cr.nav.resources)\n  journeys.spec.ts:86 CR-A11Y-001 - `expect(received).toHaveLength(expected)` @ :95 (chips)\n  pairing-operator-channel.spec.ts:257 J1 - `expect(received).toContain(expected)` @ :291 (NO_TERMINAL_PROMPT_LINE)\n  pairing-operator-channel.spec.ts:420 J3 - `expect(Object.keys(surfaces).toSorted()).toEqual([...SECRECY_SURFACES]...)` @ :424\n  prd-persistence-boundary.spec.ts:127 task-965cb2d6\n  prd-to-approval.spec.ts:38 - `toHaveText(/\\d+ GOAL/u)` got `\"1 goal\"` @ :130 (cr.goals.count renders goals-home.tsx:193, clean at HEAD, not an owned path)\n  provider-pause.spec.ts:181 - `You've hit your session limit - resets 12:10am Asia/Jerusalem` -> `[wrapper] provider limit: claude paused`. Environmental provider limit, not code.\n\nCONTROL/TREATMENT PAIR, not an import grep: reverted BOTH owned production files to HEAD (`git show HEAD:<path> > <path>`, numstat empty = confirmed reverted) and re-ran journeys.spec -> journeys:65 and :86 STILL FAIL, `2 failed / 5 passed (1.2m)`, identical messages. Restored from a %TEMP% backup and proved the restore in a SEPARATE call: `sha256sum -c` -> both OK, `git diff --numstat` -> `7 2 work-labels.ts` / `20 5 activation-port.ts`, byte-identical to the pre-drill capture. Also: NONE of the five failing spec files references ACTIVATION_CHAIN_KINDS, chainRank, CHAIN_ORDER or policy.install (`grep -ln` over all five -> no matches). Note journeys.spec.ts:53 \"production selectors cannot revive the legacy fixture shell\" now PASSES, so these are NOT the historical \"usual 7\" fixture-shell reds; that cause is fixed and these are a different, still-foreign set.\n\n=== GATES, standalone foreground, one per call, count lines quoted ===\n- `pnpm --filter @moe/control-room test` -> EXIT 1, `Test Files 2 failed | 154 passed (156)` / `Tests 26 failed | 1967 passed (1993)`. All 26 are in scaffold.test.tsx + entry-project-manager.test.tsx, all `Test timed out in 20000ms` or an empty `<div />` root. TARGETED RE-RUN OF EXACTLY THOSE TWO FILES -> `Test Files 2 passed (2)` / `Tests 45 passed (45)`, Duration 4.51s, exit 0. A 4.5s pair cannot legitimately time out at 20s: the load cliff (mtkbtsvc handle leak), same class the prior session measured at 1 red when the package was 149 files. Package has grown 149->156 files since.\n- OWNED FILES, fresh: `Test Files 3 passed (3)` / `Tests 57 passed (57)`, 1.68s (activation-port.test.ts, work-labels.test.ts, work-board.test.tsx).\n- `pnpm typecheck` -> EXIT 1. `apps/control-room typecheck: Done`. The single failing package is `apps/daemon`, on `src/orchestrator/repository-delivery-workflows.test.ts(15,38)/(16,7)/(16,55) TS2322` - that file is `??` UNTRACKED peer in-flight work in this shared checkout, not committed and not an owned path.\n- DoD-3 `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts` -> `Test Files 1 passed (1)` / `Tests 4 passed (4)`, 4.60s. The protected refusal stayed REACHABLE - this is the whole point of the option-(c) ruling.\n- DoD-4 `pnpm seed` is NOT runnable standalone (MOE_SEED_ENV_MISSING: needs MOE_DAEMON_ORIGIN, MOE_DAEMON_CREDENTIAL, MOE_CSRF_TOKEN, MOE_NODE_SPECS_DIR + a live daemon). Evidence is `demo-seed-plan.test.ts` targeted -> `Test Files 1 passed (1)` / `Tests 25 passed (25)`, 3.14s. That file owns DEMO_SEED_KINDS ordering; no double-install, no reorder, and this row changes no seeder byte.\n- DoD-5 `pnpm --filter @moe/daemon test` NOT re-run this session, stated plainly rather than inherited silently. Prior session's fresh run: `Test Files 9 failed | 430 passed (439)` / `Tests 39 failed | 8646 passed | 1 skipped (8686)`, 1604.61s. I declined to re-run a ~27-minute blocking gate because the claim TTL is ~30 min and a gate that outruns it strands the completion (measured on task-44760ed1). Structural attribution stands: this row owns SIX paths and ZERO are under apps/daemon.",
+      "timestamp": "2026-09-05T22:40:47.325Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:32.672Z",
-  "updatedAt": "2026-09-05T21:23:27.604Z",
+  "updatedAt": "2026-09-05T22:42:19.738Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:30:41.029Z",
     "plannedStepCount": 6,
@@ -206,7 +212,8 @@
   "contextFetchedBy": [
     "worker-caece97b",
     "worker-2739fee7",
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-0520a42e"
   ],
   "workStartedAt": "2026-09-05T14:35:36.521Z",
   "commits": [
@@ -321,11 +328,12 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
-    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
-    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
-    ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
-    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json"
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/control-room/src/v2/goals/work-board.test.tsx",
+    "tests/e2e/control-room/activation-fresh-project.spec.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
@@ -345,5 +353,13 @@
     "apps/control-room/src/v2/goals/work-labels.ts"
   ],
   "priorBlockedReason": "Step 1(d) triage fired: STOP AND REPORT per that step's own text and global rail 18. Needs an architect amendment/split; I have NOT made the design call. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) + comment-a9a48879212b474782cb453e073c98f8 (collision). Control/treatment pair at fixed HEAD e6d02867, not inferred.\n\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, NONE among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated, restore-test-harness.ts:182 seedReadyProject (445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). bootstrap-test-fixtures.ts was rightly verified as ordered - just not the only seeder. 4 files need real edits (9 arms): activation-command-entry.test.ts:108, affordance-read.test.ts:125, admission-gate-resolver.test.ts:753/775/967/981, daemon-foundation-command.test.ts:113/143/232. Minimum roster = 12 paths, past the plan's 10-file ceiling.\n\n2. THE BLOCKER, outranking the file count: option (a) MAKES THIS ROW'S PROTECTED REFUSAL UNREACHABLE - the admission gate answers before the receipt layer. Verbatim at activation-command-entry.test.ts:108: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'. Contradicts task rail 1 and DoD-3 verbatim; the second-refusal-layer hazard of global rail 1. Re-pointing that arm is not available - its comment says it separates a live override from a defaulted one.\n\nRULING NEEDED: (a) keep the table change, then amend rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths; (b) policy.install into ACTIVATION_CHAIN_KINDS alone - 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green; (c) land (b) now, file the table fix as its own row. My read: (b) or (c).\n\nTREE CLEAN. See mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-05T22:42:19.738Z",
+  "verification": {
+    "command": "npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project",
+    "exitCode": 0,
+    "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (22.6s)\n\n  1 passed (24.4s)",
+    "reportedAt": "2026-09-05T22:42:19.738Z"
+  },
+  "completionSummary": "DELIVERED. The browser Activate chain now installs the policy, and a fresh project goes empty store -> created goal in the browser alone. Full evidence: comment-3607df44928e446bb82539f525bb81ff.\n\nDoD-1 THE RULING, with its reason: OPTION (c) — `policy.install` was added to `ACTIVATION_CHAIN_KINDS` alone; the `COMMAND_PREREQUISITES` question was filed as its own row (task-a5a6abcc, now DONE). NOT option (a), and the reason is contractual, not cost: measured as a control/treatment pair, the one-line table edit moves WHICH LAYER refuses (`expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'`, activation-command-entry.test.ts:108), which makes task rail 1 and DoD-3 unsatisfiable verbatim. `project.activate` has TWO prerequisite authorities — the admission table (BOOTSTRAP_PREREQUISITE_MISSING) and the MEASURED receipt set whose `policy` member is the digest of the installed slice set (ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS, activation-receipts-measure.ts:213). The roster mirrored only the first; adding the kind covers the second. Both docblocks were rewritten to say so, including that the mirrors are hand-transcribed because apps/control-room cannot import apps/daemon (TS6059).\n\nDoD-2 BOTH CLAUSES: `npx playwright test -c .../playwright.config.ts activation-fresh-project` -> exit 0, `1 passed (24.4s)`. Real browser, real daemon, `seed: \"NONE\"`. All FIVE chain steps asserted by their own kind carry data-ok=\"true\" (a count would pass with four refusals), and the `goal.create_with_source` refused before activation is now ACCEPTED at :220 — the clause that parked the prior session, unblocked by task-9ade7f88 landing DONE. The spec is UNCHANGED: nothing weakened, no timeout inflated (task rail 2).\n\nDoD-3 THE PROTECTED REFUSAL STAYED REACHABLE — the whole point of the ruling: `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts` -> `Test Files 1 passed ("
 }

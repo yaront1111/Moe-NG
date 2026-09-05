@@ -127,6 +127,11 @@ describe("work-labels orders a column by the daemon's real prerequisite chain", 
     expect(chainRank("plan.propose")).toBeLessThan(chainRank("approval.decide"));
     expect(chainRank("approval.decide")).toBeLessThan(chainRank("goal.close"));
     expect(chainRank("policy.install")).toBeLessThan(chainRank("policy.validate"));
+    // The activation witness is minted from MEASURED receipts and the `policy` receipt is the
+    // digest of the INSTALLED SLICE SET, so an activate with no policy installed refuses
+    // ACTIVATION_POLICY_UNMEASURED. This edge is absent from COMMAND_PREREQUISITES, which is
+    // exactly why CHAIN_ORDER had it backwards while this suite stayed green (task-d342a2b1).
+    expect(chainRank("policy.install")).toBeLessThan(chainRank("project.activate"));
   });
 
   it("sorts an unknown kind last rather than guessing where it belongs", () => {

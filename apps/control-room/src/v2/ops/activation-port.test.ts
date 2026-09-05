@@ -61,11 +61,12 @@ const kindsOf = (steps: readonly ActivationStep[]): readonly string[] => steps.m
 describe("ACTIVATION_CHAIN_KINDS", () => {
   it("is the daemon's prerequisite order, and every kind in it has a stated caller half", () => {
     expect([...ACTIVATION_CHAIN_KINDS]).toEqual([
-      "project.register", "project.bind_repository", "provider.probe", "project.activate",
+      "project.register", "project.bind_repository", "provider.probe", "policy.install",
+      "project.activate",
     ]);
     // The roster is only worth asserting if it was actually enumerated: a sweep that yields
     // zero cases would otherwise pass silently.
-    expect(ACTIVATION_CHAIN_KINDS).toHaveLength(4);
+    expect(ACTIVATION_CHAIN_KINDS).toHaveLength(5);
     for (const kind of ACTIVATION_CHAIN_KINDS) {
       expect(activationBodyFor(kind), `no caller half stated for ${kind}`).not.toBeNull();
     }
@@ -91,10 +92,10 @@ describe("driveActivationChain", () => {
 
     expect(kindsOf(steps)).toEqual([...ACTIVATION_CHAIN_KINDS]);
     expect(steps.every((step) => step.state === "ANSWERED" && step.outcome.ok)).toBe(true);
-    expect(readSurface).toHaveBeenCalledTimes(4);
+    expect(readSurface).toHaveBeenCalledTimes(5);
     expect(sent).toEqual([
       ["project.register", 0], ["project.bind_repository", 1],
-      ["provider.probe", 2], ["project.activate", 3],
+      ["provider.probe", 2], ["policy.install", 3], ["project.activate", 4],
     ]);
   });
 
@@ -125,15 +126,15 @@ describe("driveActivationChain", () => {
 
     const steps = await driveActivationChain(port, () => Promise.resolve(withoutActivate));
 
-    expect(steps).toHaveLength(4);
-    const last = steps[3];
+    expect(steps).toHaveLength(5);
+    const last = steps[4];
     expect(last?.kind).toBe("project.activate");
     expect(last?.state === "ANSWERED" ? last.outcome : null).toEqual({
       code: ACTIVATION_COMMAND_NOT_OFFERED, layer: ACTIVATION_LAYER, ok: false,
     });
     expect(ACTIVATION_COMMAND_NOT_OFFERED).toBe("ACTIVATION_COMMAND_NOT_OFFERED");
     expect(ACTIVATION_LAYER).toBe("CONTROL_ROOM_ACTIVATION");
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(4);
     expect(sent.map(([kind]) => kind)).not.toContain("project.activate");
   });
 
@@ -141,7 +142,7 @@ describe("driveActivationChain", () => {
     // The common re-run: register and bind succeeded on a previous click, so they are no
     // longer offered. Reporting them as refusals would tell an operator finished work failed.
     const partly = surface(
-      [offerFor("provider.probe", 2), offerFor("project.activate", 2)],
+      [offerFor("provider.probe", 2), offerFor("policy.install", 2), offerFor("project.activate", 2)],
       [committedStep("project.register"), committedStep("project.bind_repository")],
     );
     const { port, sent } = recordingPort();
@@ -149,9 +150,10 @@ describe("driveActivationChain", () => {
     const steps = await driveActivationChain(port, () => Promise.resolve(partly));
 
     expect(steps.map((step) => step.state)).toEqual([
-      "ALREADY_COMMITTED", "ALREADY_COMMITTED", "ANSWERED", "ANSWERED",
+      "ALREADY_COMMITTED", "ALREADY_COMMITTED", "ANSWERED", "ANSWERED", "ANSWERED",
     ]);
-    expect(sent.map(([kind]) => kind)).toEqual(["provider.probe", "project.activate"]);
+    expect(sent.map(([kind]) => kind))
+      .toEqual(["provider.probe", "policy.install", "project.activate"]);
   });
 
   it("records a surface read that threw as its own code and attempts nothing after it", async () => {

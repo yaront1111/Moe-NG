@@ -55,7 +55,12 @@ export const WORK_KIND_LABELS: Readonly<Record<string, WorkKindLabel>> = Object.
 /**
  * The daemon's own prerequisite chain (COMMAND_PREREQUISITES,
  * apps/daemon/src/bootstrap/bootstrap-sequence.ts:18-34) flattened topologically,
- * with the session and node kinds after it. The surface iterates
+ * with the session and node kinds after it. ONE EDGE IS NOT IN THAT TABLE:
+ * policy.install precedes project.activate because the activation witness is minted
+ * from MEASURED receipts and the `policy` receipt is the digest of the installed
+ * slice set, so an activate with no policy installed refuses
+ * ACTIVATION_POLICY_UNMEASURED (activation-receipts.ts). The table carries the
+ * admission authority only; this order carries both (task-d342a2b1). The surface iterates
  * BOOTSTRAP_COMMAND_KINDS in its own array order, which is alphabetical - so the
  * Committed column opens on "approval.decide" and ends on "provider.probe", the
  * reverse of the order the work actually happened in. Presentation only: no field
@@ -65,8 +70,8 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
   "project.register",
   "project.bind_repository",
   "provider.probe",
-  "project.activate",
   "policy.install",
+  "project.activate",
   "policy.validate",
   "goal.create",
   "plan.propose",
