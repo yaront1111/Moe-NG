@@ -200,8 +200,12 @@ const ENTRY = "stdio";
  *
  * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
  * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 6 x 2 = 12, and the arm below
+ * them, so the row's total case count is kinds x entries = 11 x 2 = 22, and the arm below
  * asserts both this file's share and that documented total.
+ *
+ * HAND-WRITTEN: the operator-only kinds of `OPERATOR_PRINCIPAL_KINDS` less `session.open` (the
+ * operator's own scoped-session mint over the bearer-authorized MCP HTTP path). Production
+ * derives its exclusion from that set, so this literal is the independent side of the comparison.
  */
 const MCP_TRANSPORT_ENTRY_COUNT = 2;
 const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
@@ -209,8 +213,13 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "approval.decide_intent",
   "product_contract.answer_clarification",
   "cutover.activate",
+  "goal.close",
   "graph.approve",
+  "graph.supersede",
+  "integration.accept_output",
+  "preview.decide",
   "repository.publish",
+  "resource.confirm_released",
 ]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
@@ -225,9 +234,9 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(6);
+    expect(EXCLUSION_CASES.length).toBe(11);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(12);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(22);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

@@ -315,12 +315,15 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
   });
 
   it("serves approval.decide from the registry while MCP neither advertises nor serves it", () => {
+    // The operator-only class less `session.open` (the operator's own scoped-session mint over
+    // the bearer-authorized MCP HTTP path); production derives this from the vocabulary.
     const expectedExclusions: readonly string[] = Object.freeze([
-      "approval.decide", "approval.decide_intent", "cutover.activate", "graph.approve",
-      "product_contract.answer_clarification", "repository.publish",
+      "approval.decide", "approval.decide_intent", "cutover.activate", "goal.close",
+      "graph.approve", "graph.supersede", "integration.accept_output", "preview.decide",
+      "product_contract.answer_clarification", "repository.publish", "resource.confirm_released",
     ]);
-    expect(expectedExclusions).toHaveLength(6);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(6);
+    expect(expectedExclusions).toHaveLength(11);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(11);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

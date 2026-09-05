@@ -6,7 +6,7 @@ import { allowlistedToolEntries } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
@@ -139,8 +139,15 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(6);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(11);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
+    // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
+    // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
+    // roster with no edit here. `session.open` is the documented exception.
+    const operatorOnly = [...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort();
+    expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual(operatorOnly);
+    for (const kind of operatorOnly) expect(wiredMcpToolKinds()).not.toContain(kind);
+    expect(wiredMcpToolKinds()).toContain("session.open");
 
     // The DERIVED denominator, from live imports on both sides, so it stays true as the
     // vocabulary grows and reds the moment the subtraction stops happening.
@@ -156,12 +163,14 @@ describe("wiredMcpToolKinds command half", () => {
     // human-approver fence widening moved excluded alone by one more
     // (`approval.decide_intent` left the MCP roster the moment paired HUMAN principals
     // could take the witness); `wired` moves only when the subtraction itself changes.
+    // Deriving the exclusion from OPERATOR_PRINCIPAL_KINDS (less `session.open`) moved
+    // excluded from 6 to 11: the five operator-only kinds that had stayed advertised left.
     expect({
       excluded: MCP_EXCLUDED_COMMAND_KINDS.length,
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 6, queries: 6, vocabulary: 46, wired: 46 });
+    }).toEqual({ excluded: 11, queries: 6, vocabulary: 47, wired: 42 });
   });
 
   it("is deterministic and frozen", () => {

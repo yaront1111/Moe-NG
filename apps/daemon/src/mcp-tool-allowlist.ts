@@ -1,4 +1,4 @@
-import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 
 /**
  * The tools this daemon may honestly advertise over MCP.
@@ -56,29 +56,26 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
  * pair whose alternative was a server-set transport-origin field. RE-ADMITTING EITHER KIND TO
  * THIS ROSTER INVALIDATES THAT CONTRACT and requires the origin field to land first.
  */
+/**
+ * The one operator-only kind that stays on the MCP roster: minting a scoped daemon session is
+ * the operator's OWN act on the MCP HTTP bearer path (the host authorizes every command as the
+ * request bearer, never as its bootstrap identity), it mints no human-review witness, and the
+ * registry's principal fence already refuses it to any non-operator bearer.
+ */
+const MCP_REACHABLE_OPERATOR_KINDS: ReadonlySet<string> = new Set(["session.open"]);
+
 export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
-  "approval.decide",
-  // The intent wire joined the fence-widening (operator ruling comment-18dc557c on
-  // task-6093483c): the registry now admits durably-minted HUMAN paired principals
-  // to `approval.decide_intent` and mints the human-review witness for them on
-  // principal identity alone — which is trustworthy under exactly the contract
-  // above, so the kind must be unreachable over MCP the moment that widening
-  // exists. Same either/or as the two originals: re-admission needs the
-  // server-set transport-origin field first.
-  "approval.decide_intent",
-  // The operator ANSWERS a material product question; an agent transport
-  // presenting that answer would be quiet invention with a human label. Same
-  // standing contract as the approval kinds.
-  "product_contract.answer_clarification",
-  // The one-way GA activation. It joins the two approval kinds on the same contract rather
-  // than on analogy: `daemon-command-registry.ts` mints the human-review witness on operator
-  // PRINCIPAL identity alone, and that mint is trustworthy only while the human-only kinds are
-  // unreachable over MCP -- an MCP caller authenticating with the operator bootstrap credential
-  // would otherwise arrive as the operator and be indistinguishable from a browser one.
-  "cutover.activate",
-  "graph.approve",
-  // The push to the operator's remote is the operator's own act on their own repository.
-  "repository.publish",
+  // DERIVED, NOT HAND-KEPT: every kind the vocabulary reserves for the operator principal,
+  // less the one above. The hand list used to name six of them (the two approval kinds, the
+  // intent wire, the clarification answer, the one-way activation, the remote publish) while
+  // `graph.supersede`, `goal.close`, `integration.accept_output`, `resource.confirm_released`
+  // and `preview.decide` — operator-only by the same table — stayed advertised. The stdio entry
+  // authenticates with the operator secret as `fallbackCredential`, so an MCP caller reached
+  // `graph.supersede` AS the operator and the registry minted the human-review witness for it:
+  // exactly the scenario the contract above declares invalid. Deriving keeps
+  // `daemon-command-vocabulary.ts` the single place the human-only class is stated: a kind that
+  // becomes operator-only leaves the MCP roster with no edit here.
+  ...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort(),
 ]);
 
 const WIRED_KINDS: readonly string[] = Object.freeze([
