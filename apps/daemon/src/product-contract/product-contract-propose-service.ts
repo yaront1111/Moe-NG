@@ -59,6 +59,8 @@ export interface ProposeRevisionInput {
 
 export interface ProposeRevisionRefused {
   readonly code: string;
+  /** Which fence refused, in words the seat can correct against; absent, the code is all. */
+  readonly detail?: string;
   readonly layer: string;
   readonly ok: false;
 }
@@ -66,8 +68,12 @@ export type ProposeRevisionResult =
   | Extract<ProductContractRevisionCommitResult, { readonly ok: true }>
   | ProposeRevisionRefused;
 
-function refused(code: ProductContractProposeCode): ProposeRevisionRefused {
-  return Object.freeze({ code, layer: LAYER, ok: false });
+function refused(code: ProductContractProposeCode, detail?: string): ProposeRevisionRefused {
+  return Object.freeze(
+    detail === undefined
+      ? { code, layer: LAYER, ok: false }
+      : { code, detail, layer: LAYER, ok: false },
+  );
 }
 
 const ID_KEYED_ARRAYS = Object.freeze({
@@ -122,15 +128,22 @@ export function runProductContractProposeRevision(
   if (payload === null
     || Object.keys(payload).length !== PRODUCT_CONTRACT_PROPOSE_PAYLOAD_KEYS.length
     || typeof payload["goalRef"] !== "string") {
-    return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
+    return refused(
+      "PRODUCT_CONTRACT_PROPOSE_MALFORMED", "payload must be exactly {draft, goalRef: string}",
+    );
   }
   const listed = record(payload["draft"]);
-  if (listed === null) return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
+  if (listed === null) {
+    return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED", "draft must be an object");
+  }
   const draft = canonicalDraftOrder(listed);
 
   // v0: first-admitted-wins, no parent chains — see module doc.
   if (draft["lineage"] !== null) {
-    return refused("PRODUCT_CONTRACT_PROPOSE_LINEAGE_UNSUPPORTED");
+    return refused(
+      "PRODUCT_CONTRACT_PROPOSE_LINEAGE_UNSUPPORTED",
+      "draft.lineage must be null: v0 admits no parent revision",
+    );
   }
 
   const provenance = validateRevisionProvenance(
@@ -140,7 +153,9 @@ export function runProductContractProposeRevision(
 
   const contractId = draft["contractId"];
   if (typeof contractId !== "string" || contractId.length === 0) {
-    return refused("PRODUCT_CONTRACT_PROPOSE_MALFORMED");
+    return refused(
+      "PRODUCT_CONTRACT_PROPOSE_MALFORMED", "draft.contractId must be a non-empty string",
+    );
   }
   const clarifications = input.clarifications ?? CLOSED_EMPTY_CLARIFICATIONS;
   if (clarifications.openMaterialClarificationIds(contractId).length > 0) {

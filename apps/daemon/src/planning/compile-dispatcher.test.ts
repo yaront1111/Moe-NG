@@ -190,6 +190,51 @@ describe("runSubmitDecomposition", () => {
     expect(shuffled.graphContentHash).toBe(canonical.graphContentHash);
   });
 
+  it("seals the roster in the AGENT'S listing order: completion node last is the natural shape", () => {
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    const sealedHash = (nodes: readonly Record<string, unknown>[]): string => {
+      const store = boundWorld();
+      const ref = committedRevision(store, true);
+      approveGate1(store, ref);
+      const sealed = submit(store, ref, { structure: chainStructure(nodes) });
+      if (!sealed.ok) throw new Error(`sealed refused: ${sealed.code} ${sealed.detail ?? ""}`);
+      return sealed.graphContentHash;
+    };
+    // c, b, a is how a planner writes a chain — and what refused GRAPH_CONTENT_FIELD_INVALID
+    // for every real seat on 2026-09-05, because the graph codec wants the roster ascending.
+    expect(sealedHash([nodeC!, nodeB!, nodeA!])).toBe(sealedHash([nodeA!, nodeB!, nodeC!]));
+    // A producer named twice is one edge, not a duplicate-edge refusal one layer down.
+    expect(sealedHash([nodeA!, { ...nodeB!, dependsOn: ["node-a", "node-a"] }, nodeC!]))
+      .toBe(sealedHash([nodeA!, nodeB!, nodeC!]));
+  });
+
+  it("answers a criterion-free join node with the producer's words, never a bare 500", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    // Coverage holds — node-a takes crit-worker — so the join node's emptiness is the refusal.
+    expect(submit(store, ref, { structure: chainStructure([
+      { ...nodeA!, criterionIds: ["crit-api", "crit-worker"] }, nodeB!,
+      { ...nodeC!, criterionIds: [] },
+    ]) })).toMatchObject({
+      code: "COMPILED_PLAN_MALFORMED", detail: "node node-c binds no criterion",
+      layer: PRODUCER, ok: false,
+    });
+    // Every refusal the dispatcher forwards keeps the refusing authority's detail.
+    expect(submit(store, ref, { structure: chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, dependsOn: ["node-ghost"] },
+    ]) })).toMatchObject({ detail: "dependsOn node-ghost of node-c", ok: false });
+    expect(runSubmitDecomposition(store, {
+      correlationId: "c", decidedAt: "2026-08-30T12:01:00.000Z", payload: {},
+      principalId: "principal-1", projectId: PROJECT_ID,
+    })).toMatchObject({
+      code: "SUBMIT_DECOMPOSITION_MALFORMED",
+      detail: "payload must be exactly {gateRef, goalRef, structure}", ok: false,
+    });
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
   it("refuses node text the plan codec cannot admit as a SHAPE refusal, never a producer throw", () => {
     const store = boundWorld();
     const ref = committedRevision(store);

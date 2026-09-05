@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
 import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
 
 const EXPIRES = "2026-08-30T13:00:00.000Z";
@@ -23,6 +24,12 @@ describe("compilerMission", () => {
     expect(text).toContain("Never invent a product decision");
     expect(text).toContain('"draft"');
     expect(text).toContain("lineage must be null");
+    // The draft grammar, stated: a real seat spent fifteen submissions guessing the digest
+    // shape and never learned the other required keys (2026-09-05).
+    expect(text).toContain("BARE lowercase sha256 hex strings");
+    expect(text).toContain("never objects");
+    expect(text).toContain("supersedesCriterionId: null");
+    expect(text).toContain("retiredRequirementIds: [], retiredCriterionIds: []");
     expect(text).toContain("work_release");
     expect(text).not.toContain("Suggested development payload");
   });
@@ -42,6 +49,9 @@ describe("compilerMission", () => {
     expect(text).toContain(
       "No self-edge, no unknown target, and nothing may depend on the completionNodeKey.",
     );
+    expect(text).toContain("Every node binds at least one criterion");
+    expect(text).toContain(`of at most ${String(COMPILED_NODE_KEY_MAX_CHARS)} characters`);
+    expect(text).toContain("the daemon sorts nodes, criterionIds and dependsOn itself");
     // The seat is no longer told to plan one node — the daemon stopped refusing more, so the
     // retired instruction must not creep back in and starve the graph the compiler now seals.
     expect(text).not.toContain("exactly ONE node");
@@ -51,6 +61,18 @@ describe("compilerMission", () => {
     expect(text).not.toContain("Suggested development payload");
     // No triple supplied: the brief stays generic rather than inventing one.
     expect(text).not.toContain("The Gate 1 approval for this goal");
+  });
+
+  it("names the project the wrapper serves in the graph_get payload, for every builder", () => {
+    expect(compilerMission(
+      "planning.submit_decomposition@goal-1", "planning.submit_decomposition", EXPIRES, "goal-1",
+      null, null, "proj-1",
+    )).toContain('graph_get takes exactly {"projectId": "proj-1"} and nothing else');
+    expect(mission("plan.propose@run-1", "plan.propose", EXPIRES, null, "proj-1"))
+      .toContain('{"projectId": "proj-1"}');
+    expect(codeMission("review.submit@node-1", "node-1", EXPIRES, {
+      instructions: "do the thing", test: "pnpm test", title: "T", workspace: "/w",
+    }, { accept: null, submit: null }, "proj-1")).toContain('{"projectId": "proj-1"}');
   });
 
   it("carries the goal's own operator instructions between markers, and none when absent", () => {

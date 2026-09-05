@@ -1,5 +1,6 @@
 import type { JsonObject } from "@moe/contracts";
 
+import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
 
 /**
@@ -31,15 +32,23 @@ const RETRY_ON_CONFLICT =
   + "resend that one command ONCE with expectedVersion = n, then stop and report if it "
   + "refuses again.";
 
-const READ_FACTS =
-  "graph_get takes exactly {\"projectId\": \"<your project id>\"} and nothing else. "
-  + "You have no file-write tool in this session: report findings in your final message, "
-  + "do not try to write memories or files.";
+/**
+ * The project id is the wrapper's to say: the MCP port carries none and no read a seat holds
+ * answers it, so a brief that only said "<your project id>" left graph_get uncallable (a real
+ * seat reported exactly that, 2026-09-05). The placeholder survives only for a caller that
+ * did not name one.
+ */
+function readFacts(projectId: string | null): string {
+  return `graph_get takes exactly {"projectId": "${projectId ?? "<your project id>"}"} and `
+    + "nothing else. You have no file-write tool in this session: report findings in your "
+    + "final message, do not try to write memories or files.";
+}
 
 /** Exported for its text contract: the agent learns the release payload shape from here. */
 export function codeMission(
   workItemId: string, nodeRef: string, expiresAt: string, brief: NodeMission,
   hints: { accept: JsonObject | null; submit: JsonObject | null },
+  projectId: string | null = null,
 ): string {
   const lines = [
     `You are a moe-next coding agent. You hold the durable claim on code node "${nodeRef}"`,
@@ -60,7 +69,7 @@ export function codeMission(
     "Every refusal carries a stable reason code — read it, correct the request, never",
     "work around a refusal, and report what the daemon actually answered.",
     RETRY_ON_CONFLICT,
-    READ_FACTS,
+    readFacts(projectId),
   ];
   if (hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
@@ -79,6 +88,7 @@ export function compilerMission(
   workItemId: string, kind: string, expiresAt: string, goalRef: string | null,
   gateRef: Readonly<Record<string, unknown>> | null = null,
   instructions: string | null = null,
+  projectId: string | null = null,
 ): string {
   const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
   const shared = [
@@ -93,11 +103,17 @@ export function compilerMission(
   ];
   const step = kind === "product_contract.propose_revision"
     ? [
-      "Draft a Product Contract revision from that text: requirements (each a single",
-      "testable statement), criteria (each bound to one requirement, statement spelled",
-      "so a verifier can falsify it), sourceDocumentDigests naming the PRD's",
-      "contentSha256 from your read. Submit via the offered command with payload",
-      "{\"draft\": {...}, \"goalRef\": \"...\"}. lineage must be null.",
+      "Draft a Product Contract revision from that text and submit it via the offered command",
+      "with payload {\"draft\": {...}, \"goalRef\": \"...\"}. The draft carries EXACTLY these",
+      "keys:",
+      "authorRef (your principal id), contractId and revisionId (plain string ids you choose),",
+      "lineage (lineage must be null), requirements: [{requirementId, statement,",
+      "supersedesRequirementId: null}] (each a single testable statement), criteria:",
+      "[{criterionId, requirementId, statement, supersedesCriterionId: null}] (each bound to",
+      "one requirement, its statement spelled so a verifier can falsify it),",
+      "retiredRequirementIds: [], retiredCriterionIds: [], and sourceDocumentDigests: an array",
+      "of BARE lowercase sha256 hex strings - the contentSha256 documents_source_read answered",
+      "for the PRD - never objects. Listing order does not matter; the daemon sorts.",
       "If the PRD leaves a MATERIAL product decision genuinely open (two readings that",
       "yield different criteria), do not guess: call product_contract_ask_clarification",
       "with {\"contractId\", \"question\", \"options\": [{optionId, label, projection:",
@@ -124,7 +140,10 @@ export function compilerMission(
       "the approved revision bound by a single node, none left unbound and none bound",
       "twice, and dependsOn naming the hard build order - a node lists the nodeKeys",
       "that must land before it. No self-edge, no unknown target, and nothing may",
-      "depend on the completionNodeKey. The daemon",
+      "depend on the completionNodeKey. Every node binds at least one criterion (a",
+      "criterion-free join node is refused), a nodeKey is lowercase [a-z0-9-] of at most",
+      `${String(COMPILED_NODE_KEY_MAX_CHARS)} characters, and listing order is not a plan fact:`,
+      "the daemon sorts nodes, criterionIds and dependsOn itself. The daemon",
       "compiles and drives the chain itself and states every risk fact (capability,",
       "scopes, resources) from host policy; you submit the plan, never authority",
       "bytes, hashes, witnesses or host facts.",
@@ -145,13 +164,14 @@ export function compilerMission(
     "a stable reason code - read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
     RETRY_ON_CONFLICT,
-    READ_FACTS,
+    readFacts(projectId),
   ];
   return [...shared, ...step, ...operator, ...close].join(" ");
 }
 
 export function mission(
   workItemId: string, kind: string, expiresAt: string, hint: JsonObject | null,
+  projectId: string | null = null,
 ): string {
   const lines = [
     `You are a moe-next agent. You hold the durable claim on work item "${workItemId}"`,
@@ -165,7 +185,7 @@ export function mission(
     "a stable reason code — read it, correct the request, never work around a refusal,",
     "and report what the daemon actually answered.",
     RETRY_ON_CONFLICT,
-    READ_FACTS,
+    readFacts(projectId),
   ];
   if (hint !== null) {
     lines.push(`Suggested development payload for ${kind}: ${JSON.stringify(hint)}`);

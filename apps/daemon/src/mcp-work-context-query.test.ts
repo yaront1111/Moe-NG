@@ -43,6 +43,11 @@ const SIBLING = step({
   status: "BLOCKED" as const,
 });
 const UNKEYED = step({ aggregateId: GOAL, claimAggregateVersion: 1, kind: "goal.close" });
+/** A compiler step is keyed on its GOAL, not a run: the run→goal map can never answer it. */
+const COMPILED_GOAL = "goal-compiled";
+const COMPILER = step({
+  aggregateId: COMPILED_GOAL, claimAggregateVersion: 1, kind: "planning.submit_decomposition",
+});
 const ORPHAN = step({ aggregateId: null, kind: "node.deliver" });
 
 function offer(commandId: string, targetAggregateId: string): NextAllowedCommand {
@@ -57,6 +62,11 @@ function offer(commandId: string, targetAggregateId: string): NextAllowedCommand
 }
 
 const MATCHING_OFFER = offer("cmd-run", RUN);
+const COMPILER_OFFER: NextAllowedCommand = Object.freeze({
+  ...offer("cmd-compile", COMPILED_GOAL),
+  commandKind: "planning.submit_decomposition" as NextAllowedCommand["commandKind"],
+  inputSchemaVersion: "moe-product-contract-compiler/1",
+});
 const OTHER_OFFER = offer("cmd-goal", GOAL);
 
 const AUTHORITY = Object.freeze({
@@ -70,13 +80,13 @@ const AUTHORITY = Object.freeze({
 });
 
 const SURFACE: AffordanceSurface = Object.freeze({
-  nextAllowedCommands: Object.freeze([MATCHING_OFFER, OTHER_OFFER]),
+  nextAllowedCommands: Object.freeze([MATCHING_OFFER, OTHER_OFFER, COMPILER_OFFER]),
   outcome: "SURFACE" as const,
   planningAuthorityByRun: Object.freeze({ [RUN]: AUTHORITY }),
   planningGoalRefs: Object.freeze({ [RUN]: GOAL }),
   planningGoalRef: GOAL,
   steps: Object.freeze([
-    CLAIMED, SIBLING, UNKEYED, ORPHAN,
+    CLAIMED, SIBLING, UNKEYED, ORPHAN, COMPILER,
     ...Array.from({ length: 18 }, (_unused, index) => step({
       aggregateId: `aggregate-${index}`,
       claimAggregateVersion: index,
@@ -176,6 +186,13 @@ describe("answerWorkContextQuery", () => {
     expect(unkeyed.nextAllowedCommands).toEqual([OTHER_OFFER]);
     expect(unkeyed.planningGoalRef).toBeNull();
     expect(unkeyed.planningAuthority).toBeNull();
+  });
+
+  it("answers a compiler step's goal as its own aggregate: the run-keyed map cannot", () => {
+    const compiler = itemFor(workItemIdFor("planning.submit_decomposition", COMPILED_GOAL));
+    expect(compiler.nextAllowedCommands).toEqual([COMPILER_OFFER]);
+    expect(compiler.planningGoalRef).toBe(COMPILED_GOAL);
+    expect(compiler.planningAuthority).toBeNull();
   });
 
   it("answers prototype-key ids with a refusal instead of throwing or inheriting", () => {

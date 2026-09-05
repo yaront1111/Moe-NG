@@ -69,6 +69,8 @@ export interface SubmitDecompositionAccepted {
 }
 export interface SubmitDecompositionRefused {
   readonly code: string;
+  /** The refusing authority's own words when it has any; absent, the code is the whole story. */
+  readonly detail?: string;
   readonly layer: string;
   readonly ok: false;
   /** True when the plan sealed up to the policy gate: install tiers, re-dispatch. */
@@ -84,8 +86,18 @@ const COMPILE_HANDLERS: HandlerTable = Object.freeze({
   ...PLANNING_HANDLERS,
 });
 
-function refused(code: string, layer: string = LAYER): SubmitDecompositionRefused {
-  return Object.freeze({ code, layer, ok: false });
+function refused(
+  code: string, layer: string = LAYER, detail?: string,
+): SubmitDecompositionRefused {
+  return Object.freeze(
+    detail === undefined ? { code, layer, ok: false } : { code, detail, layer, ok: false },
+  );
+}
+
+/** An upstream refusal's `detail`, forwarded verbatim when it carries one. */
+function detailOf(value: object): string | undefined {
+  const detail = (value as { readonly detail?: unknown }).detail;
+  return typeof detail === "string" && detail.length > 0 ? detail : undefined;
 }
 
 function record(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -148,7 +160,10 @@ export function runSubmitDecomposition(
   const payload = record(input.payload);
   if (payload === null
     || Object.keys(payload).length !== SUBMIT_DECOMPOSITION_PAYLOAD_KEYS.length) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "payload must be exactly {gateRef, goalRef, structure}",
+    );
   }
   const gateRef = record(payload["gateRef"]);
   const structure = record(payload["structure"]);
@@ -156,7 +171,10 @@ export function runSubmitDecomposition(
   if (gateRef === null || structure === null || !stringField(goalRef)
     || !stringField(gateRef["contractId"]) || !stringField(gateRef["revisionId"])
     || !stringField(gateRef["revisionDigest"])) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "goalRef must be a string and gateRef exactly {contractId, revisionDigest, revisionId}",
+    );
   }
   const ref = {
     contractId: gateRef["contractId"] as string,
@@ -166,26 +184,35 @@ export function runSubmitDecomposition(
 
   // THE HUMAN GATE, resolved durably; then the exact approved revision.
   const gate = resolveProductContractGate1(store, { projectId: input.projectId, ref });
-  if (!gate.ok) return refused(gate.code, "layer" in gate ? String(gate.layer) : LAYER);
+  if (!gate.ok) {
+    return refused(gate.code, "layer" in gate ? String(gate.layer) : LAYER, detailOf(gate));
+  }
   if (gate.revisionDigest !== ref.revisionDigest) {
     return refused("SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH");
   }
   const revisionRead = readProductContractRevision(store, { projectId: input.projectId, ref });
   if (!revisionRead.ok) {
-    return refused(revisionRead.code, "layer" in revisionRead ? String(revisionRead.layer) : LAYER);
+    return refused(
+      revisionRead.code, "layer" in revisionRead ? String(revisionRead.layer) : LAYER,
+      detailOf(revisionRead),
+    );
   }
   const revision = revisionRead.revision;
 
   const provenance = validateRevisionProvenance(
     store, input.projectId, goalRef, revision.sourceDocumentDigests,
   );
-  if (!provenance.ok) return refused(provenance.code, provenance.layer);
+  if (!provenance.ok) return refused(provenance.code, provenance.layer, provenance.detail);
   const runId = provenance.planningRunRef;
 
   const completionNodeKey = structure["completionNodeKey"];
   const nodes = structure["structureNodes"] ?? structure["nodes"];
   if (!stringField(completionNodeKey) || !Array.isArray(nodes)) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "structure must be {completionNodeKey, nodes: [{nodeKey, objective, criterionIds, "
+      + "dependsOn}]}",
+    );
   }
   // NODE COUNT IS UNCONSTRAINED HERE: an INITIAL run seals the WHOLE graph. What a plan must
   // satisfy is DAG COHERENCE, enforced by `compiledPlanAuthority` below — an unknown or
@@ -206,14 +233,20 @@ export function runSubmitDecomposition(
     if (node === null || !canonicalText(node["nodeKey"]) || !canonicalText(node["objective"])
       || !Array.isArray(criterionIds) || !criterionIds.every(canonicalText)
       || !Array.isArray(dependsOn) || !dependsOn.every(canonicalText)) {
-      return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+      return refused(
+        "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+        `node ${String(sealedNodes.length + 1)}: nodeKey and objective must be non-empty NFC `
+        + "strings, criterionIds and dependsOn arrays of such strings",
+      );
     }
     sealedNodes.push(Object.freeze({
       capability: COMPILED_NODE_RISK_PROFILE.capability,
       // A SET, never the agent's listing: order and repeats are not plan facts, and the
       // plan codec admits only an ascending, duplicate-free set.
       criterionIds: Object.freeze([...new Set(criterionIds)].sort()),
-      dependsOn: dependsOn as readonly string[],
+      // The build order is a set too: a producer named twice is ONE edge, and the graph
+      // codec refused the repeat one layer down, where the reason named no node.
+      dependsOn: Object.freeze([...new Set(dependsOn as readonly string[])].sort()),
       nodeKey: node["nodeKey"] as string,
       objective: node["objective"] as string,
       readScopes: [...COMPILED_NODE_RISK_PROFILE.readScopes],
@@ -222,6 +255,14 @@ export function runSubmitDecomposition(
       writeScopes: [...COMPILED_NODE_RISK_PROFILE.writeScopes],
     }));
   }
+  // THE ROSTER IS A SET AS WELL. The graph codec admits node authorities only in strictly
+  // ascending nodeKey order (code-unit order, its own comparison), and a planner naturally
+  // lists the completion node LAST: every real seat submission on 2026-09-05 refused
+  // GRAPH_CONTENT_FIELD_INVALID on that alone, across seven graph shapes. Sorting here makes
+  // "listing order is not a plan fact" true for nodes, as it already was for criteria.
+  sealedNodes.sort((left, right) => (
+    left.nodeKey < right.nodeKey ? -1 : left.nodeKey > right.nodeKey ? 1 : 0
+  ));
   const compiled = compiledPlanAuthority({
     authorRef: input.principalId,
     completionNodeKey,
@@ -233,7 +274,7 @@ export function runSubmitDecomposition(
     knownCapabilities: input.knownCapabilities ?? null,
     nodes: sealedNodes,
   });
-  if (!compiled.ok) return refused(compiled.code, compiled.layer);
+  if (!compiled.ok) return refused(compiled.code, compiled.layer, compiled.detail);
 
   const ids = idsOf(ref.revisionDigest, runId);
   // MEASURED, not inferred: the whole propose fold commits ONE run event (v1)
@@ -290,7 +331,7 @@ export function runSubmitDecomposition(
         }),
       },
     ]);
-    if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING");
+    if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING", detailOf(proposed));
   } else if (runVersion !== 1) {
     // A run someone else advanced to an unexpected shape is not this seam's to force.
     return refused("SUBMIT_DECOMPOSITION_ALREADY_FINALIZED");

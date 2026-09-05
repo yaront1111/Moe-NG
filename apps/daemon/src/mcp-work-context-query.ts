@@ -6,6 +6,9 @@ import type {
 } from "./http/affordance-contract.js";
 import type { PlanningAuthorityEntry } from "./http/affordance-planning-authorities.js";
 import { workItemIdFor } from "./http/affordance-read.js";
+import {
+  PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION,
+} from "./product-contract/product-contract-command-contracts.js";
 
 /**
  * `work.get_context`, answered for ONE work item.
@@ -92,6 +95,24 @@ function ownEntry<T>(map: Readonly<Record<string, T>>, key: string | null): T | 
 }
 
 /**
+ * The goal a step plans. A run-keyed step (`plan.propose@run-…`) reads it from the run→goal
+ * map. A COMPILER step is keyed on the goal ITSELF (`planning.submit_decomposition@goal-…`),
+ * so that map can never answer it and the aggregate is the goal — a real seat read
+ * `planningGoalRef: null` beside its READY compiler offer and suspected a missing planning
+ * authority (2026-09-05). The offer's schema is the marker: only compiler kinds carry it.
+ */
+function plannedGoalOf(
+  surface: AffordanceSurface, step: ChainStep, offers: readonly NextAllowedCommand[],
+): string | null {
+  const keyed = ownEntry(surface.planningGoalRefs, step.aggregateId);
+  if (keyed !== null) return keyed;
+  const compiler = offers.some(
+    (offer) => offer.inputSchemaVersion === PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION,
+  );
+  return compiler ? step.aggregateId : null;
+}
+
+/**
  * `targetAggregateId` is `NextAllowedCommand`'s subject field (packages/contracts/src/runtime/
  * runtime-affordance.ts:27). Filtering here is what keeps the answer small: an offer for another
  * aggregate is not an offer this seat can act on.
@@ -141,12 +162,13 @@ export function answerWorkContextQuery(
   // result cuts from the END. `planningAuthority` carries `graphContentBytesBase64`, which is
   // as big as the graph, so any other order would put the version this row exists to expose
   // behind the one member that can grow without bound.
+  const offers = offersFor(surface.nextAllowedCommands, step.aggregateId);
   return Object.freeze({
     step,
     outcome: SURFACE_ITEM,
     readAt,
-    nextAllowedCommands: offersFor(surface.nextAllowedCommands, step.aggregateId),
-    planningGoalRef: ownEntry(surface.planningGoalRefs, step.aggregateId),
+    nextAllowedCommands: offers,
+    planningGoalRef: plannedGoalOf(surface, step, offers),
     planningAuthority: ownEntry(surface.planningAuthorityByRun, step.aggregateId),
   });
 }

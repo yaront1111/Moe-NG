@@ -98,6 +98,8 @@ export interface AgentWrapperConfig {
   readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
   /** The goal's own operator instructions (a replan's findings live there); null when absent. */
   readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
+  /** The project the seat's MCP host serves, named in every brief so graph_get is callable. */
+  readonly projectId?: string | undefined;
   /**
    * Bearer lifetime per spawn, independent of the claim's. The exit-path
    * release runs under the agent's own secret, so the bearer must outlive the
@@ -273,7 +275,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
           accept: null,
           submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
-        });
+        }, config.projectId ?? null);
       } else if (COMPILER_STEPS.has(step.kind)) {
         // The planning lane gets its OWN brief and NO payload hint: the demo
         // `payloadFor` table proposing a hard-coded graph against a real PRD is
@@ -282,10 +284,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
           step.kind === "planning.submit_decomposition"
             ? config.compilerGateRef?.(step.aggregateId) ?? null
             : null,
-          config.compilerInstructions?.(step.aggregateId) ?? null);
+          config.compilerInstructions?.(step.aggregateId) ?? null, config.projectId ?? null);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
-        missionText = mission(workItemId, step.kind, expiresAt, hint);
+        missionText = mission(workItemId, step.kind, expiresAt, hint, config.projectId ?? null);
       }
     } catch {
       return failSetup("mission", true);

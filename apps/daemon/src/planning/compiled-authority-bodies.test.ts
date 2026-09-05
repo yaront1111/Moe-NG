@@ -14,6 +14,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import * as compiledAuthorityNamespace from "./compiled-authority-bodies.js";
 import { compiledPlanAuthority } from "./compiled-authority-bodies.js";
+import { COMPILED_NODE_KEY_MAX_CHARS } from "./compiled-authority-contracts.js";
 import type { CompiledPlanInput } from "./compiled-authority-contracts.js";
 
 afterEach(closeStores);
@@ -143,8 +144,11 @@ describe("compiledPlanAuthority", () => {
       .not.toBe(CRITERIA[0]!.statement);
   });
 
-  it("pins every local refusal fence with a nonzero seven-row denominator", () => {
+  it("pins every local refusal fence with a nonzero nine-row denominator", () => {
     const nodes = inputOf().nodes;
+    // One character past the bound: `dep-<key>--<key>` no longer fits the graph codec's key.
+    const longKey = `node-${"x".repeat(COMPILED_NODE_KEY_MAX_CHARS - 4)}`;
+    expect(longKey).toHaveLength(COMPILED_NODE_KEY_MAX_CHARS + 1);
     const many = Array.from({ length: 25 }, (_, index) => ({
       ...nodes[0]!, criterionIds: ["crit-api"], dependsOn: [], nodeKey: `node-${index}`,
     }));
@@ -163,13 +167,30 @@ describe("compiledPlanAuthority", () => {
         "COMPILED_PLAN_MALFORMED", "dependsOn node-ghost of node-ui"],
       [inputOf({ completionNodeKey: "node-0", nodes: many }),
         "COMPILED_PLAN_BUDGET_EXCEEDED", "25 nodes exceed the compile budget of 24"],
+      // Coverage holds (node-api binds both), so the join node's emptiness is the refusal —
+      // the shape the approval codec used to reject as a producer THROW.
+      [inputOf({ nodes: [
+        { ...nodes[0]!, criterionIds: ["crit-api", "crit-ui"] }, { ...nodes[1]!, criterionIds: [] },
+      ] }), "COMPILED_PLAN_MALFORMED", "node node-ui binds no criterion"],
+      [inputOf({ nodes: [nodes[0]!, { ...nodes[1]!, nodeKey: longKey }] }),
+        "COMPILED_PLAN_MALFORMED", `node key ${longKey}`],
     ] as const;
-    expect(cases).toHaveLength(7);
+    expect(cases).toHaveLength(9);
     for (const [input, code, detail] of cases) {
       const refusal = compiledPlanAuthority(input);
       expect(refusal).toEqual({ code, detail, layer: "COMPILED_PLAN_PRODUCER", ok: false });
       expect(Object.isFrozen(refusal)).toBe(true);
     }
+  });
+
+  it("admits a node key AT the bound: the fence is the codec's, one character wide", () => {
+    const nodes = inputOf().nodes;
+    const key = `node-${"y".repeat(COMPILED_NODE_KEY_MAX_CHARS - 5)}`;
+    expect(key).toHaveLength(COMPILED_NODE_KEY_MAX_CHARS);
+    const compiled = compiledPlanAuthority(inputOf({
+      completionNodeKey: key, nodes: [nodes[0]!, { ...nodes[1]!, nodeKey: key }],
+    }));
+    expect(compiled.ok, compiled.ok ? "" : `${compiled.code} ${compiled.detail}`).toBe(true);
   });
 
   it("keeps top approval, scheduler-limit, and plain node-plan failures distinct", () => {

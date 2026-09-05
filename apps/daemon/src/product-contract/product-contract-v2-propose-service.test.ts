@@ -151,6 +151,7 @@ describe("runProductContractProposeRevisionV2", () => {
       draft: draft({ sourceDocumentDigests: ["ab".repeat(32)] }), goalRef: GOAL_ID,
     }))).toEqual({
       code: "PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING",
+      detail: expect.stringContaining("must include the goal's own PRD sha") as string,
       layer: "PRODUCT_CONTRACT_PROVENANCE",
       ok: false,
     });

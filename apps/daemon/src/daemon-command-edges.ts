@@ -19,7 +19,7 @@ import { runResourceConfirmReleasedCommand }
   from "./work/resource-confirm-released-command.js";
 import { runResourceReconcileCommand } from "./work/resource-reconcile-command.js";
 import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
-import { DomainRefusal } from "./daemon-command-dispatch.js";
+import { DomainRefusal, domainRefusalOf } from "./daemon-command-dispatch.js";
 import { OPERATOR_CAPABILITIES } from "./daemon-command-vocabulary.js";
 
 /**
@@ -97,7 +97,7 @@ export function runProposeRevisionEdge(context: CommandEdgeContext): DurableDeci
     principalId: principal.principalId,
     projectId,
   });
-  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  if (!outcome.ok) throw domainRefusalOf(outcome);
   return Object.freeze({
     commandId: envelope.commandId,
     disposition: outcome.disposition,
@@ -120,7 +120,7 @@ export function runSubmitDecompositionEdge(context: CommandEdgeContext): Durable
     principalId: principal.principalId,
     projectId,
   });
-  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  if (!outcome.ok) throw domainRefusalOf(outcome);
   return Object.freeze({
     commandId: envelope.commandId,
     disposition: outcome.disposition,
@@ -140,7 +140,7 @@ export function runAskClarificationEdge(context: CommandEdgeContext): DurableDec
     principalId: principal.principalId,
     projectId,
   });
-  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  if (!outcome.ok) throw domainRefusalOf(outcome);
   return Object.freeze({
     commandId: envelope.commandId,
     disposition: outcome.disposition,
@@ -160,7 +160,7 @@ export function runAnswerClarificationEdge(context: CommandEdgeContext): Durable
     principalId: principal.principalId,
     projectId,
   });
-  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  if (!outcome.ok) throw domainRefusalOf(outcome);
   return Object.freeze({
     commandId: envelope.commandId,
     disposition: outcome.disposition,

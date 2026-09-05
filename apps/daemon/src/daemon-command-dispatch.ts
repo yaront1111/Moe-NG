@@ -47,6 +47,21 @@ export class DomainRefusal extends Error {
   }
 }
 
+/**
+ * The refusing authority's OWN words, when it has any. Every edge used to pass the code as
+ * its own detail, so a seat read `{"code":"X","detail":"X"}` and could correct nothing: one
+ * real planning seat bisected seven graph shapes against a refusal whose cause it was never
+ * told (2026-09-05). The code stays the floor for authorities that never say more.
+ */
+export function domainRefusalOf(
+  outcome: Readonly<{ code: string; detail?: unknown; layer: string }>,
+): DomainRefusal {
+  const detail = typeof outcome.detail === "string" && outcome.detail.length > 0
+    ? outcome.detail
+    : outcome.code;
+  return new DomainRefusal(outcome.code, outcome.layer, detail);
+}
+
 export interface CommandAuthorityGate {
   readonly assert: () => void;
   readonly wrapAsync: (entry: CommandRegistryEntry) => CommandRegistryEntry;
@@ -70,9 +85,7 @@ export function createCommandAuthorityGate(
     const authority = authorityPlane === "V2"
       ? admitV2ActiveInstallation(store, { projectId })
       : admitV1AuthoritativeCommand(store, { projectId });
-    if (!authority.ok) {
-      throw new DomainRefusal(authority.code, authority.layer, authority.code);
-    }
+    if (!authority.ok) throw domainRefusalOf(authority);
   };
   const wrapAsync = (entry: CommandRegistryEntry): CommandRegistryEntry => {
     if (authorityPlane === "V1") return entry;

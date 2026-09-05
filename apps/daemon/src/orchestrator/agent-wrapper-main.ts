@@ -221,6 +221,9 @@ async function main(): Promise<void> {
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
+      // Named in every brief: the MCP port does not know the project, and a seat has no
+      // read that answers it, so graph_get was uncallable without this (2026-09-05).
+      projectId: config.projectId,
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
       // The dispatcher mission's Gate 1 triple, resolved fresh per staffing from
