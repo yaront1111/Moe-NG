@@ -26,6 +26,7 @@ export function validExecutionState(value: unknown): value is RepositoryExecutio
   if ((baseline !== null && !ref(baseline)) || (session !== null && !ref(session))
     || (pid !== null && (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0))) return false;
   if (value["phase"] === "RESERVED") return session === null && pid === null;
+  if (value["phase"] === "PUBLISHING") return baseline === null && session === null && pid === null;
   if (value["phase"] === "BLOCKED") return true;
   return baseline !== null && session !== null;
 }

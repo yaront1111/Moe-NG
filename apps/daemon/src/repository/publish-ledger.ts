@@ -7,6 +7,8 @@ import {
   decodePublishReceiptBytes, publishAggregateId, publishReceiptId, remoteAggregateId,
 } from "./publish-receipt-contracts.js";
 import type { PublishReceiptV1, PublishRefusal } from "./publish-receipt-contracts.js";
+import { decodePublicationCandidate } from "./publication-approval-contracts.js";
+import type { PublicationCandidate } from "./publication-approval-contracts.js";
 
 /**
  * Durable reads and writes for publishing. A human's `repository.publish` decision
@@ -26,6 +28,7 @@ const REMOTE_BOUND_KEYS = ["boundAt", "boundBy", "remoteUrl"] as const;
 export type ProjectRemote = Readonly<{ boundAt: string; boundBy: string; remoteUrl: string }>;
 
 export interface PublishRequest {
+  readonly candidate: PublicationCandidate | null;
   readonly decidedAt: string;
   readonly decisionId: string;
   readonly goalId: string;
@@ -72,6 +75,7 @@ function decodeRequest(decision: CommandDecisionRecord): PublishRequest | null {
   const remoteUrl = (parsed as Record<string, unknown>)["remoteUrl"];
   if (typeof goalId !== "string" || goalId === "" || typeof remoteUrl !== "string" || remoteUrl === "") return null;
   return Object.freeze({
+    candidate: decodePublicationCandidate((parsed as Record<string, unknown>)["candidate"]),
     decidedAt: decision.decidedAt,
     decisionId: decision.decisionId,
     goalId,

@@ -1,4 +1,4 @@
-import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
+import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 
 export const REPOSITORY_DELIVERY_LAYER = "REPOSITORY_DELIVERY" as const;
 export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
@@ -7,6 +7,7 @@ export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
   "REPOSITORY_EXECUTION_TRANSITION_INVALID", "REPOSITORY_EXECUTION_BASELINE_MISMATCH",
   "REPOSITORY_EXECUTION_CONTROLLER_MISMATCH", "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE",
   "REPOSITORY_DELIVERY_LANDING_REQUIRED", "REPOSITORY_DELIVERY_WORKSPACE_REQUIRED",
+  "REPOSITORY_DELIVERY_CLOSED",
 ] as const);
 export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPOSITORY_DELIVERY_LAYER;
   code: RepositoryExecutionCode | typeof REPOSITORY_DELIVERY_REFUSAL_CODES[number] }>;
@@ -17,7 +18,7 @@ export interface RepositoryDeliveryConfig {
   readonly facts: (nodeRef: string) => RepositoryDeliveryFacts;
   readonly isProcessAlive: (pid: number) => boolean;
   /** RETRY is permitted only for a known refusal before any commit/ref effect. */
-  readonly land: (nodeRef: string, baselineId: string, reservedRoot: string) => Promise<"RETRY" | void>;
+  readonly land: (nodeRef: string, baselineId: string, reservedRoot: string, handle: RepositoryExecutionHandle) => Promise<"RETRY" | void>;
   readonly port: RepositoryExecutionPort;
   readonly projectId: string;
   /** Both durable claim and staffing evidence must permit retirement. */

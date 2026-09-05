@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { createGitLandingPort } from "../repository/git-landing-port.js";
+import { createGitPublicationPort } from "../repository/git-publication-port.js";
+import { createCriterionEvidenceService } from "../criterion-evidence/criterion-service.js";
+import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
 import { createVerifiedWorkspacePort } from "../repository/git-verified-workspace-port.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { resolveRepositoryExecutionIdentity } from "../repository/repository-execution-identity.js";
@@ -57,9 +60,10 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     const identity = resolveRepositoryExecutionIdentity(brief.workspace);
     return identity.ok && identity.identity.root === root ? brief : null;
   };
-  const landerFor = (nodeRef: string, root: string, baselineId: string | null) => createNodeLander({
+  const landerFor = (nodeRef: string, root: string, baselineId: string | null, reservationHandle?: RepositoryExecutionHandle) => createNodeLander({
     git, verifiedWorkspace, nodeMission: missionIn(root), nodes: () => [{ nodeRef }], projectId, store,
     baselineId: () => baselineId,
+    ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   const coordinator = createRepositoryDeliveryCoordinator({
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
@@ -90,27 +94,36 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
         nodeMission: missionIn(root), nodes: () => [{ nodeRef }] });
       for (const report of await verifier.verifyOnce()) config.log(`[verifier] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
     },
-    land: async (nodeRef, baselineId, root) => {
+    land: async (nodeRef, baselineId, root, reservationHandle) => {
       if (!config.landingOn) {
         config.log(`[lander] ${nodeRef}: REPOSITORY_DELIVERY_LANDING_REQUIRED`);
         return "RETRY";
       }
-      const reports = await landerFor(nodeRef, root, baselineId).landOnce();
+      const reports = await landerFor(nodeRef, root, baselineId, reservationHandle).landOnce();
       for (const report of reports) config.log(`[lander] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
       return reports.some((report) => report.outcome === "GIT_INDEX_LOCKED") ? "RETRY" : undefined;
     },
   });
-  const publisher = createNodePublisher({ git, projectId, store, workspace: config.compiledWorkspace });
+  const storeId = realpathSync.native(config.storePath);
+  const publisher = createNodePublisher({ git: createGitPublicationPort(), repository, storeId,
+    controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
+    projectId, store, workspace: config.compiledWorkspace });
+  const criteria = createCriterionEvidenceService({ store, projectId, storeId,
+    workspace: config.compiledWorkspace, clock: () => new Date().toISOString() });
+  let closed = false;
+  const close = (): Promise<void> => { closed = true; return criteria.close(); };
   const start: (spawn: AgentSpawnStart) => AgentSpawnStart = (spawn) => async (request) => {
+    if (closed) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");
     if (request.kind === "node.deliver" && !config.landingOn) return deliveryRefusal("REPOSITORY_DELIVERY_LANDING_REQUIRED");
     return coordinator.start(request, spawn);
   };
   const advance = async (): Promise<void> => {
+    if (closed) return;
     await coordinator.advance();
-    if (config.compiledWorkspace === null) return;
-    const inspected = repository.inspect(config.compiledWorkspace);
-    if (!inspected.ok || inspected.reservation !== null) return;
+    if (closed) return;
+    await criteria.advance();
+    if (closed || config.compiledWorkspace === null) return;
     for (const report of await publisher.publishOnce()) config.log(`[publisher] ${report.goalId}: ${report.outcome} (${report.detail})`);
   };
-  return Object.freeze({ start, advance });
+  return Object.freeze({ start, advance, close });
 }

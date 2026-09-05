@@ -10,6 +10,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { COMPILED_EXECUTION_REF_PREFIX } from "./compiled-execution-ref.js";
+import { isRepositoryWorkflowRef } from "../repository/repository-workflow-ref.js";
 
 export interface NodeSpecListing {
   readonly nodes: readonly { readonly nodeRef: string }[];
@@ -32,6 +33,10 @@ export function listNodeSpecs(dir: string): NodeSpecListing {
       const nodeRef = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
         ? (parsed as { nodeRef?: unknown }).nodeRef
         : undefined;
+      if (typeof nodeRef === "string" && isRepositoryWorkflowRef(nodeRef)) {
+        skipped.push(`${name}: REPOSITORY_WORKFLOW_REF_RESERVED`);
+        continue;
+      }
       if (typeof nodeRef === "string" && nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX)) {
         skipped.push(`${name}: COMPILED_EXECUTION_REF_RESERVED`);
       } else if (typeof nodeRef === "string" && nodeRef.length > 0) nodes.push({ nodeRef });

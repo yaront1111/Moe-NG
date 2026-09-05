@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   GOAL_ID,
+  FIXTURE_PUBLICATION_APPROVAL,
   PROJECT_ID,
   closeStores,
   decisionCount,
@@ -20,6 +21,7 @@ import {
   REPOSITORY_PUBLISH_COMMAND_KIND,
   publishAggregateId,
   remoteAggregateId,
+  admitRemoteUrl,
 } from "../repository/publish-receipt-contracts.js";
 
 /**
@@ -51,7 +53,10 @@ function publish(
   payload: Record<string, unknown>,
   commandId: string,
 ): ReturnType<typeof send> {
-  return send(store, envelope("repository.publish", expectedVersion, payload, commandId));
+  const remote = payload["remoteUrl"] === null ? readProjectRemote(store, PROJECT_ID)?.remoteUrl ?? REMOTE_A
+    : admitRemoteUrl(payload["remoteUrl"]) ?? REMOTE_A;
+  return send(store, envelope("repository.publish", expectedVersion,
+    { approval: { ...FIXTURE_PUBLICATION_APPROVAL, remoteUrl: remote }, ...payload }, commandId));
 }
 
 /** The publish payload as production sends it: exactly the two rostered keys. */
@@ -137,7 +142,7 @@ describe("repository.publish binds the project remote", () => {
     // Restated by hand at the point of use. A future key added to carry the binding would be the
     // roster backfill this design exists to avoid, and would redden here as well as in the two
     // vocabulary pins.
-    expect(PAYLOAD_KEYS["repository.publish"]).toEqual(["goalId", "remoteUrl"]);
+    expect(PAYLOAD_KEYS["repository.publish"]).toEqual(["approval", "goalId", "remoteUrl"]);
   });
 
   it("commits the publish request unchanged AND binds the remote in one decision", () => {
@@ -153,8 +158,10 @@ describe("repository.publish binds the project remote", () => {
     expect(decisionCount(store)).toBe(before + 1);
     // The result shape is FROZEN — the publisher, the receipt and the runs read all decode it.
     const result = resultOf(outcome.decision);
-    expect(Object.keys(result).sort()).toEqual(["goalId", "remoteUrl", "requestedAt"]);
-    expect(result).toEqual({ goalId: GOAL_ID, remoteUrl: REMOTE_A, requestedAt: DECIDED_AT });
+    expect(Object.keys(result).sort()).toEqual(["candidate", "goalId", "remoteUrl", "requestedAt"]);
+    expect(result).toEqual({ candidate: { approval: FIXTURE_PUBLICATION_APPROVAL,
+      identity: { root: "D:/fixture/repo", gitDirectory: "D:/fixture/repo/.git" } },
+      goalId: GOAL_ID, remoteUrl: REMOTE_A, requestedAt: DECIDED_AT });
     // The publish leg landed on the goal's publish aggregate, exactly as before.
     expect(store.readEvents(publishAggregateId(GOAL_ID)).map((event) => event.eventType))
       .toEqual(["RepositoryPublishRequested"]);
@@ -178,7 +185,9 @@ describe("repository.publish binds the project remote", () => {
     // The RESOLVED url is in the result, which is what keeps the publisher untouched: it reads
     // `request.remoteUrl` off the publish ledger and never learns the binding exists.
     expect(resultOf(outcome.decision))
-      .toEqual({ goalId: GOAL_ID, remoteUrl: REMOTE_A, requestedAt: DECIDED_AT });
+      .toEqual({ candidate: { approval: FIXTURE_PUBLICATION_APPROVAL,
+        identity: { root: "D:/fixture/repo", gitDirectory: "D:/fixture/repo/.git" } },
+        goalId: GOAL_ID, remoteUrl: REMOTE_A, requestedAt: DECIDED_AT });
     // Reusing a remote is not rebinding it: still exactly ONE binding event.
     expect(boundEvents(store)).toHaveLength(1);
     expect(store.readEvents(publishAggregateId(GOAL_ID))).toHaveLength(2);
@@ -295,7 +304,7 @@ describe("repository.publish binds the project remote", () => {
     // A goal that does not exist: the lifecycle gate answers, and a handler that had bound the
     // remote first would leave a binding behind for a publish that never happened.
     const outcome = send(store, envelope(
-      "repository.publish", 0, { goalId: "goal-absent", remoteUrl: REMOTE_A }, "cmd-publish-1",
+      "repository.publish", 0, { approval: FIXTURE_PUBLICATION_APPROVAL, goalId: "goal-absent", remoteUrl: REMOTE_A }, "cmd-publish-1",
     ));
 
     expectRefusal(outcome, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");

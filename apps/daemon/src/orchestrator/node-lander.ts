@@ -15,6 +15,8 @@ import type { NodeMission } from "./agent-wrapper.js";
 import { untrackedImports } from "./landing-imports.js";
 import { checkLandingVerification } from "./node-lander-verification.js";
 import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
+import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
+import { commitJournaledLanding, landingJournalGate } from "./node-lander-journal.js";
 
 /**
  * THE LANDER: once the daemon has accepted a node (a verifier receipt consumed
@@ -35,6 +37,7 @@ import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../reposit
  */
 
 export interface NodeLanderConfig {
+  readonly reservationHandle?: RepositoryExecutionHandle;
   readonly verifiedWorkspace?: VerifiedWorkspacePort;
   /** Test injection; production reads the exact accepted verifier receipt from the store. */
   readonly readVerifiedBinding?: (nodeRef: string, receiptId: string) => VerifiedWorkspaceBinding | null;
@@ -170,6 +173,8 @@ export function createNodeLander(config: NodeLanderConfig) {
     if (existing.code === "LANDING_RECEIPT_INVALID") {
       return { detail: existing.code, nodeRef, outcome: existing.code };
     }
+    const journalCode = landingJournalGate(config.store, config.reservationHandle);
+    if (journalCode !== null) return { detail: journalCode, nodeRef, outcome: journalCode };
     const brief = config.nodeMission(nodeRef);
     if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
     const selectedBaseline = config.baselineId?.(nodeRef);
@@ -215,8 +220,10 @@ export function createNodeLander(config: NodeLanderConfig) {
       readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
     });
     if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
-    const committed = await checked.port.commit(brief.workspace, paths, message, checked.binding);
+    const committed = await commitJournaledLanding({ handle: config.reservationHandle, store: config.store,
+      port: checked.port, workspace: brief.workspace, paths, message, binding: checked.binding, verifierReceiptId });
     if (!committed.ok) {
+      if (committed.code.startsWith("REPOSITORY_RECOVERY_")) return { detail: committed.detail, nodeRef, outcome: committed.code };
       // Only the strict port's no-effect refusal permits retry. Error prose cannot prove
       // whether a commit or ref update happened before the failure.
       if (committed.code === "VERIFIED_WORKSPACE_INDEX_LOCKED") {
@@ -226,7 +233,8 @@ export function createNodeLander(config: NodeLanderConfig) {
         code: committed.code, detail: committed.detail,
       });
     }
-    const recorded = recordLandingReceipt(config.store, {
+    let recorded: ReturnType<typeof recordLandingReceipt>;
+    try { recorded = recordLandingReceipt(config.store, {
       commit: {
         branch: committed.receipt.branch, files: paths, message,
         parentSha: committed.receipt.parentSha, sha: committed.receipt.sha,
@@ -237,7 +245,7 @@ export function createNodeLander(config: NodeLanderConfig) {
       subjectRef: nodeRef,
       verifierReceiptId,
       workspace: brief.workspace,
-    });
+    }); } catch { return { detail: "LANDING_RECEIPT_INVALID", nodeRef, outcome: "LANDING_RECEIPT_INVALID" }; }
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     const imports = carried.length === 0 ? "" : `, ${String(carried.length)} imported untracked file(s) carried`;
     const attempts = earlier.length === 0 ? "" : `, ${String(earlier.length)} from an earlier attempt`;

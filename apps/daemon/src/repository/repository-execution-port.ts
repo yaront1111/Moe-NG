@@ -6,10 +6,11 @@ import { executionHandle, sameExecutionOwner, validExecutionController, validExe
 import type { RepositoryExecutionRecord } from "./repository-execution-record.js";
 
 const NEXT: Readonly<Record<RepositoryExecutionPhase, readonly RepositoryExecutionPhase[]>> = {
-  RESERVED: ["RESERVED", "EXECUTING", "BLOCKED"],
+  RESERVED: ["RESERVED", "EXECUTING", "PUBLISHING", "CRITERION_VERIFYING", "BLOCKED"],
   EXECUTING: ["EXECUTING", "RESERVED", "VERIFYING", "BLOCKED"],
   VERIFYING: ["RESERVED", "AWAITING_LANDING", "BLOCKED"],
   AWAITING_LANDING: ["LANDING", "BLOCKED"], LANDING: ["AWAITING_LANDING", "BLOCKED"], BLOCKED: [],
+  PUBLISHING: ["PUBLISHING", "BLOCKED"], CRITERION_VERIFYING: ["CRITERION_VERIFYING", "BLOCKED"],
 };
 function checkOwner(record: RepositoryExecutionRecord | null, owner: RepositoryExecutionOwner, revision: number) {
   if (record === null || !validExecutionOwner(owner) || !sameExecutionOwner(record.owner, owner)) {
@@ -82,7 +83,8 @@ export function createRepositoryExecutionPort(): RepositoryExecutionPort {
         }
         const nextState: RepositoryExecutionState = { phase: state.phase, baselineId: state.baselineId, sessionId: state.sessionId, pid: state.pid,
           controllerId: state.controllerId, controllerPid: state.controllerPid };
-        const next = { ...prior, state: nextState, revision: prior.revision + 1, everExecuted: prior.everExecuted || state.phase === "EXECUTING" };
+        const next = { ...prior, state: nextState, revision: prior.revision + 1,
+          everExecuted: prior.everExecuted || ["EXECUTING", "PUBLISHING", "CRITERION_VERIFYING"].includes(state.phase) };
         return { ok: true, record: next, value: executionHandle(next, resolved.identity) };
       });
       return result.ok ? { ok: true, handle: result.value } : result;
@@ -94,6 +96,8 @@ export function createRepositoryExecutionPort(): RepositoryExecutionPort {
         const prior = checked.record;
         if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure("REPOSITORY_EXECUTION_CONTROLLER_MISMATCH");
         const allowed = reason === "LANDED" ? prior.state.phase === "LANDING"
+          : reason === "PUBLISHED" ? prior.state.phase === "PUBLISHING"
+          : reason === "CRITERIA_COMPLETED" ? prior.state.phase === "CRITERION_VERIFYING"
           : reason === "ABORTED_BEFORE_EXECUTION" && prior.state.phase === "RESERVED" && !prior.everExecuted;
         if (!allowed) return repositoryExecutionFailure("REPOSITORY_EXECUTION_TRANSITION_INVALID");
         return { ok: true, record: null, value: true as const };

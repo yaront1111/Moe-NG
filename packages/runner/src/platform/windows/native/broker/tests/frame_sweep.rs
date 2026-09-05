@@ -414,11 +414,11 @@ fn each_of_the_three_channels_bounds_its_own_frames_at_its_own_cap() {
 }
 
 #[test]
-fn the_inbound_vocabulary_is_launch_cancel_and_the_curated_project_stack_launch() {
-    assert_eq!(Inbound::ALL.len(), 3);
+fn the_inbound_vocabulary_preserves_existing_launches_and_adds_approved_image_launch() {
+    assert_eq!(Inbound::ALL.len(), 4);
     assert_eq!(
         Inbound::ALL,
-        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch]
+        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch, Inbound::ApprovedImageLaunch]
     );
     // Pinned by hand: the opcode bytes are the frozen wire contract, not
     // whatever declaration order happens to produce.
@@ -431,7 +431,9 @@ fn the_inbound_vocabulary_is_launch_cancel_and_the_curated_project_stack_launch(
     assert_eq!(Inbound::from_opcode(3), Some(Inbound::ProjectStackLaunch));
     // No open command space: every other byte maps to nothing at all.
     assert_eq!(Inbound::from_opcode(0), None);
-    assert_eq!(Inbound::from_opcode(4), None);
+    assert_eq!(Inbound::from_opcode(4), Some(Inbound::ApprovedImageLaunch));
+    assert_eq!(Inbound::ApprovedImageLaunch.opcode(), 4);
+    assert_eq!(Inbound::from_opcode(5), None);
     assert_eq!(Inbound::from_opcode(u8::MAX), None);
     // Every command must be REACHABLE from the wire. Without this, adding a
     // variant would compile (ALL forces the listing, but `from_opcode`'s byte
@@ -439,6 +441,22 @@ fn the_inbound_vocabulary_is_launch_cancel_and_the_curated_project_stack_launch(
     for command in Inbound::ALL {
         assert_eq!(Inbound::from_opcode(command.opcode()), Some(command));
     }
+}
+
+#[test]
+fn approved_image_launch_requires_an_exact_lowercase_sha256_before_the_ordinary_payload() {
+    let ordinary = launch_payload("C:\\w\\t.exe", &["--a"], "C:\\w", &[]);
+    let digest = "a".repeat(64);
+    let mut payload = vec![64, 0]; payload.extend(digest.as_bytes()); payload.extend(&ordinary);
+    let accepted = offer(&mut AcceptState::new(), frame(4, &payload)).unwrap();
+    let Accepted::Launch(request) = accepted else { panic!("expected guarded launch"); };
+    assert_eq!(request.approved_image_sha256(), Some(digest.as_str()));
+    assert_eq!(request.executable(), "C:\\w\\t.exe");
+    payload[2] = b'A';
+    assert!(offer(&mut AcceptState::new(), frame(4, &payload)).is_err());
+    assert!(offer(&mut AcceptState::new(), frame(4, &ordinary)).is_err());
+    let Accepted::Launch(old) = offer(&mut AcceptState::new(), frame(1, &ordinary)).unwrap() else { panic!("old launch"); };
+    assert_eq!(old.approved_image_sha256(), None);
 }
 
 #[test]
@@ -692,14 +710,15 @@ fn the_outbound_vocabulary_is_exactly_started_completed_and_refused() {
 
 #[test]
 fn the_refusal_layers_are_exactly_descriptor_protocol_native_and_store_lock() {
-    assert_eq!(RefusalLayer::ALL.len(), 4);
+    assert_eq!(RefusalLayer::ALL.len(), 5);
     assert_eq!(
         RefusalLayer::ALL,
         [
             RefusalLayer::Descriptor,
             RefusalLayer::Protocol,
             RefusalLayer::Native,
-            RefusalLayer::StoreLock
+            RefusalLayer::StoreLock,
+            RefusalLayer::ApprovedImage
         ]
     );
     assert_eq!(RefusalLayer::Descriptor.wire(), 1);
@@ -711,7 +730,9 @@ fn the_refusal_layers_are_exactly_descriptor_protocol_native_and_store_lock() {
     // what pins the fourth wire byte to the fourth layer.
     assert_eq!(RefusalLayer::from_wire(4), Some(RefusalLayer::StoreLock));
     assert_eq!(RefusalLayer::from_wire(0), None);
-    assert_eq!(RefusalLayer::from_wire(5), None);
+    assert_eq!(RefusalLayer::from_wire(5), Some(RefusalLayer::ApprovedImage));
+    assert_eq!(RefusalLayer::ApprovedImage.wire(), 5);
+    assert_eq!(RefusalLayer::from_wire(6), None);
     for layer in RefusalLayer::ALL {
         assert_eq!(RefusalLayer::from_wire(layer.wire()), Some(layer));
     }

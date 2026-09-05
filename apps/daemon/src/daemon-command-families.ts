@@ -33,6 +33,7 @@ import {
   familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.js";
+import { CRITERION_APPROVE, CRITERION_VERIFY, CRITERION_SCHEMA_VERSION } from "./criterion-evidence/criterion-contracts.js";
 
 /**
  * Which family answers a kind, and the two facts that follow from it: the request schema
@@ -45,6 +46,7 @@ import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.j
  * kind's mapping lives.
  */
 export interface CommandFamilyFacts {
+  readonly criterion: boolean;
   readonly activation: boolean;
   /** The daemon-owned approval seam, answered by its own edge from an exact intent shape. */
   readonly approvalIntent: boolean;
@@ -83,6 +85,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
   CommandFamilyFacts, "requiredCapability" | "schemaVersion"
 > {
   return {
+    criterion: kind === CRITERION_APPROVE || kind === CRITERION_VERIFY,
     activation: kind === EFFECT_ACTIVATE_COMMAND_KIND,
     approvalIntent: kind === APPROVAL_DECIDE_INTENT_COMMAND_KIND,
     clarification: kind === PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
@@ -107,6 +110,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
 }
 
 function schemaVersionOf(member: ReturnType<typeof membershipOf>): string {
+  if (member.criterion) return CRITERION_SCHEMA_VERSION;
   if (member.graph) return GRAPH_COMMAND_SCHEMA_VERSION;
   if (member.productContractGate1) return PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION;
   if (member.clarification || member.compilerDecompose || member.compilerPropose) {

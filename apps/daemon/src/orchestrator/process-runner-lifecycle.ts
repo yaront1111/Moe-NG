@@ -140,6 +140,7 @@ export function createWrapperStopSignal(
 }
 
 export interface WrapperRuntimeShutdownResources {
+  readonly closeRepositoryDelivery?: (() => Promise<void>) | undefined;
   readonly closeAgentSpawner?: (() => Promise<void>) | undefined;
   readonly closeProvider?: (() => void) | undefined;
   readonly closeVerifierRunner?: (() => Promise<void>) | undefined;
@@ -156,7 +157,7 @@ const asError = (value: unknown): Error =>
 export async function shutdownWrapperRuntime(
   resources: WrapperRuntimeShutdownResources,
 ): Promise<void> {
-  const childStops = [resources.closeVerifierRunner, resources.closeAgentSpawner]
+  const childStops = [resources.closeVerifierRunner, resources.closeAgentSpawner, resources.closeRepositoryDelivery]
     .filter((stop): stop is () => Promise<void> => stop !== undefined)
     .map(async (stop) => stop());
   const childResults = await Promise.allSettled(childStops);

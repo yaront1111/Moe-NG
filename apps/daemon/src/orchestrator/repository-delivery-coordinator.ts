@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isRepositoryWorkflowRef } from "../repository/repository-workflow-ref.js";
 import type { RepositoryExecutionHandle, RepositoryExecutionState } from "../repository/repository-execution-contracts.js";
 import { AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentSpawnStart, AgentSpawnStartResult } from "./agent-spawn-contract.js";
@@ -33,6 +34,11 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     const read = config.port.readOwned(workspace, config.storeId, config.projectId);
     if (!read.ok || read.handle === null) return read;
     const handle = read.handle;
+    // Each effect family reconciles its own durable process and result evidence.
+    // A node controller cannot adopt a stopped publisher or criterion runner.
+    if (isRepositoryWorkflowRef(handle.owner.nodeRef)) {
+      return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
+    }
     if (handle.reservation.controllerId === config.controller.controllerId) return read;
     try {
       if (config.isProcessAlive(handle.reservation.controllerPid)) return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
@@ -154,7 +160,7 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const next = change(handle, { phase: "LANDING" });
       if (!next.ok) return;
       handle = next.handle;
-      const result = await config.land(nodeRef, handle.reservation.baselineId!, handle.reservation.identity.root);
+      const result = await config.land(nodeRef, handle.reservation.baselineId!, handle.reservation.identity.root, handle);
       const facts = config.facts(nodeRef);
       if (facts === "LANDED") { release(handle, "LANDED"); return; }
       else if (result === "RETRY" && facts === "ACCEPTED") change(handle, { phase: "AWAITING_LANDING" });

@@ -24,11 +24,8 @@
  */
 import type { SqliteEventStore } from "@moe/store";
 
-import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { BOOTSTRAP_SCHEMA_VERSION } from "../bootstrap/bootstrap-contracts.js";
-import type { HandlerTable } from "../bootstrap/bootstrap-ledger.js";
-import { GOAL_HANDLERS } from "../goals/goal-services.js";
-import { PLANNING_HANDLERS } from "./planning-services.js";
+import { dispatchCompiledPlanning as dispatch } from "./compiled-planning-dispatch.js";
+import { COMPILED_CONTRACT_BINDING_VERSION, readCompiledContractBinding } from "./compiled-contract-binding.js";
 import { resolveProductContractGate1 } from "../product-contract/product-contract-gate-1-resolver.js";
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
@@ -82,12 +79,6 @@ export type SubmitDecompositionResult =
   | SubmitDecompositionAccepted
   | SubmitDecompositionRefused;
 
-const COMPILE_HANDLERS: HandlerTable = Object.freeze({
-  ...BOOTSTRAP_HANDLERS,
-  ...GOAL_HANDLERS,
-  ...PLANNING_HANDLERS,
-});
-
 function refused(
   code: string, layer: string = LAYER, detail?: string,
 ): SubmitDecompositionRefused {
@@ -120,26 +111,6 @@ function canonicalText(value: unknown): value is string {
 
 function stringField(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
-}
-
-function dispatch(
-  store: SqliteEventStore,
-  input: SubmitDecompositionInput,
-  commandId: string,
-  runId: string,
-  commands: readonly Record<string, unknown>[],
-): ReturnType<typeof runBootstrapCommand> {
-  return runBootstrapCommand(store, new TextEncoder().encode(JSON.stringify({
-    commandId,
-    correlationId: input.correlationId,
-    decidedAt: input.decidedAt,
-    expectedVersion: 0,
-    kind: "plan.propose",
-    payload: { commands, runId },
-    principalId: input.principalId,
-    projectId: input.projectId,
-    schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
-  })), COMPILE_HANDLERS);
 }
 
 export function runSubmitDecomposition(
@@ -270,6 +241,10 @@ export function runSubmitDecomposition(
   });
   if (!compiled.ok) return refused(compiled.code, compiled.layer, compiled.detail);
 
+  const contractBinding = Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION,
+    projectId: input.projectId, goalRef, planningRunRef: runId, contractRef: ref,
+    graphContentHash: compiled.graphContentHash, submissionHash: compiled.submissionHash });
+
   const ids = idsOf(ref.revisionDigest, runId);
   // MEASURED, not inferred: the whole propose fold commits ONE run event and
   // the finalize a second - the chain items' 0..4 are fold-internal.
@@ -279,6 +254,14 @@ export function runSubmitDecomposition(
   // behaviour to the literals it replaced, which is why the INITIAL path is unchanged.
   const runVersion = store.getAggregateVersion(runId);
   if (runVersion >= target.baseVersion + 2) {
+    const existing = readCompiledContractBinding(store, input.projectId, runId);
+    if (!existing.ok) return refused(existing.code);
+    if (existing.binding.contractRef.contractId !== ref.contractId
+      || existing.binding.contractRef.revisionId !== ref.revisionId
+      || existing.binding.contractRef.revisionDigest !== ref.revisionDigest
+      || existing.binding.goalRef !== goalRef || existing.binding.graphContentHash !== compiled.graphContentHash) {
+      return refused("SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT");
+    }
     // FAIL CLOSED ON A CHANGED SUBMISSION. This branch dispatches no leg, so the store's own
     // command-bytes conflict never sees a resubmission that arrives here: without this check a
     // DIFFERENT structure under the same derived command ids answers `ok` carrying the hashes of
@@ -340,7 +323,7 @@ export function runSubmitDecomposition(
           attemptRef: `${ids["stem"]}-attempt`, submissionRef: `${ids["stem"]}-submission`,
         }),
       },
-    ]);
+    ], contractBinding);
     if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING", detailOf(proposed));
   } else if (runVersion !== target.baseVersion + 1) {
     // A run someone else advanced to an unexpected shape is not this seam's to force.

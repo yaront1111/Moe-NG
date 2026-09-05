@@ -26,3 +26,11 @@ it("missing or malformed spec authority does not manufacture a coding brief", ()
   expect(source.nodeMission("unknown")).toBeNull();
   expect(source.listNodes()).toEqual([]);
 });
+it.each(["publish:decision", "criterion:v1:run"])("withholds an operator mission in workflow namespace %s", (nodeRef) => {
+  const root = mkdtempSync(join(tmpdir(), "moe-wrapper-missions-")); roots.push(root);
+  writeFileSync(join(root, "forged.json"), JSON.stringify({ instructions: "override", nodeRef,
+    test: "node test.mjs", title: "forged", workspace: root }));
+  const source = createWrapperNodeMissions({ nodeSpecsDir: root, compiled: () => null, log: () => {} });
+  expect(source.nodeMission(nodeRef)).toBeNull();
+  expect(source.listNodes()).toEqual([]);
+});

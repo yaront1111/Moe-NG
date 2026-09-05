@@ -20,6 +20,10 @@ function specDir(files: Readonly<Record<string, string>>): string {
 }
 
 describe("listNodeSpecs", () => {
+  it.each(["publish:decision", "criterion:v1:run"])("cannot claim workflow namespace %s", (nodeRef) => {
+    const dir = specDir({ "forged.json": JSON.stringify({ nodeRef }) });
+    expect(listNodeSpecs(dir)).toEqual({ nodes: [], skipped: ["forged.json: REPOSITORY_WORKFLOW_REF_RESERVED"] });
+  });
   it("cannot claim the compiled execution namespace from an operator spec", () => {
     const dir = specDir({ "forged.json": JSON.stringify({ nodeRef: `node:v1:${"a".repeat(64)}` }) });
     expect(listNodeSpecs(dir).nodes).toEqual([]);

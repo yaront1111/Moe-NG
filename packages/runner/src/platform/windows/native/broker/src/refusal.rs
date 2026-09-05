@@ -31,6 +31,7 @@ use moe_windows_job_core::{NativeError, NativeOp};
 use crate::descriptors::DescriptorError;
 use crate::protocol::ProtocolError;
 use crate::store_lock::StoreLockError;
+use crate::approved_image::ApprovedImageError;
 
 /// layer, reason ordinal, numeric code.
 pub const REFUSED_PAYLOAD_BYTES: usize = 1 + 2 + 4;
@@ -46,15 +47,18 @@ pub enum RefusalLayer {
     Native,
     /// The curated project store could not be owned exclusively.
     StoreLock,
+    /// The executable image or its directory path could not be pinned to its approval.
+    ApprovedImage,
 }
 
 impl RefusalLayer {
     /// Every variant, in declaration order. The length is part of the type.
-    pub const ALL: [RefusalLayer; 4] = [
+    pub const ALL: [RefusalLayer; 5] = [
         RefusalLayer::Descriptor,
         RefusalLayer::Protocol,
         RefusalLayer::Native,
         RefusalLayer::StoreLock,
+        RefusalLayer::ApprovedImage,
     ];
 
     /// The frozen wire byte. Deliberately 1-based: a zero byte is then an
@@ -65,6 +69,7 @@ impl RefusalLayer {
             Self::Protocol => 2,
             Self::Native => 3,
             Self::StoreLock => 4,
+            Self::ApprovedImage => 5,
         }
     }
 
@@ -76,6 +81,7 @@ impl RefusalLayer {
             2 => Some(Self::Protocol),
             3 => Some(Self::Native),
             4 => Some(Self::StoreLock),
+            5 => Some(Self::ApprovedImage),
             _ => None,
         }
     }
@@ -130,6 +136,9 @@ impl Refused {
             reason: ordinal(error.reason().ordinal()),
             code: error.code(),
         }
+    }
+    pub fn approved_image(error: ApprovedImageError) -> Self {
+        Self { layer: RefusalLayer::ApprovedImage, reason: error.reason().ordinal(), code: error.code() }
     }
 
     pub const fn layer(&self) -> RefusalLayer {

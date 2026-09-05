@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 
 import type { AgentCredential } from "./agent-credential.js";
 import { SEEDED_LOW_RISK_TASK } from "./foundation-fixtures.js";
+import { initializeJ1Repository } from "./j1-repository-fixture.js";
 
 /** Exactly what `stdio: ["ignore", "pipe", "pipe"]` produces: no stdin, both readers piped. */
 export type PipedChild = ChildProcessByStdio<null, Readable, Readable>;
@@ -62,6 +63,7 @@ export type AgentArm =
   | "complete" | "fail-verify" | "forge-credential" | "multi-node" | "skip-review";
 
 export interface J1Scratch {
+  readonly compiledExecution?: true;
   readonly agentPidFile: string;
   readonly credential: string;
   readonly projectId: string;
@@ -77,7 +79,7 @@ export interface J1Scratch {
  * deliberately absent — the spawned agent has to write it, and the verifier's exit code is
  * the only thing that decides whether it did.
  */
-export function createJ1Scratch(): J1Scratch {
+export function createJ1Scratch(options: { readonly compiledExecution?: true } = {}): J1Scratch {
   const root = mkdtempSync(join(tmpdir(), "moe-e2e-j1-"));
   const specsDir = join(root, "specs");
   const workspace = join(root, "workspace");
@@ -97,7 +99,9 @@ export function createJ1Scratch(): J1Scratch {
     'console.log("math.mjs passes");',
     "",
   ].join("\n"), "utf8");
+  if (options.compiledExecution === true) initializeJ1Repository(workspace);
   return {
+    ...options,
     agentPidFile: join(root, "agent.pid"),
     credential: OPERATOR_CREDENTIAL,
     projectId: PROJECT_ID,
@@ -111,6 +115,7 @@ export function createJ1Scratch(): J1Scratch {
 /** The store trio plus the node spec directory: what every one of the three entries reads. */
 function storeEnvironment(scratch: J1Scratch): Record<string, string> {
   return {
+    ...(scratch.compiledExecution === true ? { MOE_NODE_WORKSPACE: scratch.workspace, MOE_NODE_TEST_COMMAND: "node test.mjs" } : {}),
     MOE_DAEMON_CREDENTIAL: scratch.credential,
     MOE_NODE_SPECS_DIR: scratch.specsDir,
     MOE_PROJECT_ID: scratch.projectId,
@@ -357,6 +362,8 @@ function wrapperEnvironment(
 ): Record<string, string> {
   return {
     ...storeEnvironment(scratch),
+    // The seed retains its raw input spec; execution uses only the sealed compiled subjects.
+    ...(scratch.compiledExecution === true ? { MOE_NODE_SPECS_DIR: "" } : {}),
     MOE_AGENT_COMMAND: writeAgentShim(scratch, arm),
     MOE_WRAPPER_MAX_AGENTS: "1",
     MOE_WRAPPER_ONCE: "1",

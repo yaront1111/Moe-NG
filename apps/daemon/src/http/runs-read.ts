@@ -22,6 +22,7 @@ import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import type { GoalPublishState } from "../repository/publish-ledger.js";
+import { readRunGoalPublication } from "./run-goal-publication.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { ReviewLedger, ReviewLedgers } from "../review/review-read-model.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
@@ -35,26 +36,9 @@ import { createPlanningRunReadPort } from "./planning-run-read.js";
 import type { PlanningRunReadResult } from "./planning-run-read.js";
 import { runsRefused as refused } from "./runs-read-contract.js";
 import type {
-  RunGoalPublish, RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
+  RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
   RunsReadResult, RunsSelector, RunsView,
 } from "./runs-read-contract.js";
-
-/** The latest publish request and its receipt, as one view; null when never requested. */
-function publishOf(state: GoalPublishState | undefined): RunGoalPublish | null {
-  const request = state?.requests[state.requests.length - 1];
-  if (state === undefined || request === undefined) return null;
-  const receipt = state.receipts.get(request.decisionId);
-  return Object.freeze({
-    branch: receipt?.branch ?? null,
-    code: receipt?.refusal?.code ?? null,
-    decisionId: request.decisionId,
-    outcome: receipt === undefined ? "PENDING" : receipt.outcome,
-    remoteUrl: request.remoteUrl,
-    requestedAt: request.decidedAt,
-    sha: receipt?.sha ?? null,
-    url: receipt?.url ?? null,
-  });
-}
 
 const RUN_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 /** The review kernel's escalation limit (`REVIEW_ESCALATION_ROUND_LIMIT`), spelled here so the
@@ -213,7 +197,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned),
         });
       })),
-      publish: publishOf(publishes.get(goal.goalId)),
+      publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),
       run: run === null || run.outcome !== "RUN" ? null : Object.freeze({
         approval: run.approval, lifecycle: run.lifecycle, reviewable: run.reviewable, runId: run.runId,
       }),

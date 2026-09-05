@@ -1,7 +1,8 @@
 export const REPOSITORY_EXECUTION_PHASES = Object.freeze([
-  "RESERVED", "EXECUTING", "VERIFYING", "AWAITING_LANDING", "LANDING", "BLOCKED",
+  "RESERVED", "EXECUTING", "VERIFYING", "AWAITING_LANDING", "LANDING", "BLOCKED", "PUBLISHING", "CRITERION_VERIFYING",
 ] as const);
 export type RepositoryExecutionPhase = typeof REPOSITORY_EXECUTION_PHASES[number];
+export type RepositoryExecutionReleaseReason = "ABORTED_BEFORE_EXECUTION" | "LANDED" | "PUBLISHED" | "CRITERIA_COMPLETED";
 
 /** Daemon-only authority. Never serialize an owner or handle onto a public surface. */
 export interface RepositoryExecutionOwner {
@@ -55,7 +56,7 @@ export interface RepositoryExecutionPort {
     state: RepositoryExecutionState): RepositoryExecutionResult<{ handle: RepositoryExecutionHandle }>;
   /** Caller supplies successful landing evidence; this primitive never infers a Git commit. */
   release(workspace: string, owner: RepositoryExecutionOwner, expectedRevision: number,
-    reason: "ABORTED_BEFORE_EXECUTION" | "LANDED", controllerId: string): RepositoryExecutionResult<{ released: true }>;
+    reason: RepositoryExecutionReleaseReason, controllerId: string): RepositoryExecutionResult<{ released: true }>;
 }
 
 export function repositoryExecutionFailure(code: RepositoryExecutionCode): RepositoryExecutionResult<never> {

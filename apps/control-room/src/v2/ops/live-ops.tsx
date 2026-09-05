@@ -17,6 +17,7 @@ import type { PolicyInstallState } from "./ops-screens.js";
 import { createPolicyInstallPort, installStandardPolicy, readSurfaceOnce } from "./policy-install-port.js";
 import type { PolicyInstallPort } from "./policy-install-port.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import { LiveRepositoryRecovery } from "./live-repository-recovery.js";
 
 /**
  * The LIVE policy and health screens: one read on mount and every few seconds after, each
@@ -120,17 +121,19 @@ export function LivePolicy({ headers, installPort, onConnection, pollMs, read, r
 }
 
 export interface LiveHealthProps extends LiveOpsProps<HealthOutcome> {
+  readonly setup?: LiveSetup | undefined;
   /** Injectable for tests; the default reads POST /repository/remote/read with the same headers. */
   readonly readRemote?: (() => Promise<RepositoryRemoteOutcome>) | undefined;
 }
 
-export function LiveHealth({ headers, onConnection, pollMs, read, readRemote }: LiveHealthProps): JSX.Element {
+export function LiveHealth({ headers, onConnection, pollMs, read, readRemote, setup }: LiveHealthProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<HealthOutcome> => readHealth(headers)));
   const { nowMs, outcome } = useOpsRead(reader, HEALTH_FAILURE, pollMs ?? POLL_MS, onConnection);
   const remote = useRepositoryRemote(headers, pollMs, readRemote);
   return (
     <>
       <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
+      {setup !== undefined && <LiveRepositoryRecovery setup={setup} />}
       <LiveSessions headers={headers} pollMs={pollMs} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />
     </>

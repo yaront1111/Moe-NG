@@ -75,6 +75,7 @@ async function main(): Promise<void> {
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
+  let delivery: ReturnType<typeof createRepositoryDeliveryRuntime> | undefined;
   let agentSpawner: AgentSpawnStarter | undefined;
   let wrapper: ReturnType<typeof createAgentWrapper> | undefined;
   let mcpHost: ReturnType<typeof createMcpHttpHost> | undefined;
@@ -83,6 +84,7 @@ async function main(): Promise<void> {
     // Signal callbacks cannot await. Starting both idempotent closes here wakes
     // an in-flight verifier immediately; the finally gate below observes them.
     void verifierRunner?.close().catch(() => undefined);
+    void delivery?.close().catch(() => undefined);
     void agentSpawner?.close().catch(() => undefined);
   });
 
@@ -155,7 +157,7 @@ async function main(): Promise<void> {
       isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,
     });
     verifierRunner = createVerifierProcessRunner({ onFatalContainment: () => { stop.request(); } });
-    const delivery = createRepositoryDeliveryRuntime({
+    delivery = createRepositoryDeliveryRuntime({
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
       nodes: listNodes, storePath: config.storePath,
@@ -357,6 +359,7 @@ async function main(): Promise<void> {
         closeAgentSpawner: agentSpawner?.close,
         closeProvider: provider.close,
         closeVerifierRunner: verifierRunner?.close,
+        closeRepositoryDelivery: delivery?.close,
         closeVerifierStore: verifierStore === undefined ? undefined : () => { verifierStore?.close(); },
         settleAgents: wrapper?.settle,
         stopAuthorityHost: mcpHost?.stop,

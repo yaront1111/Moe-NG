@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { NodeMission } from "./agent-wrapper.js";
 import { COMPILED_EXECUTION_REF_PREFIX } from "./compiled-execution-ref.js";
 import { listNodeSpecs } from "./node-spec-listing.js";
+import { isRepositoryWorkflowRef } from "../repository/repository-workflow-ref.js";
 
 interface WrapperNodeMissionsConfig {
   readonly nodeSpecsDir?: string | undefined;
@@ -16,7 +17,8 @@ interface WrapperNodeMissionsConfig {
 /** Operator specs and sealed graph identities have disjoint execution namespaces. */
 export function createWrapperNodeMissions(config: WrapperNodeMissionsConfig) {
   const specMission = (nodeRef: string): NodeMission | null => {
-    if (nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX) || config.nodeSpecsDir === undefined) return null;
+    if (nodeRef.startsWith(COMPILED_EXECUTION_REF_PREFIX) || isRepositoryWorkflowRef(nodeRef)
+      || config.nodeSpecsDir === undefined) return null;
     let names: string[];
     try { names = readdirSync(config.nodeSpecsDir).filter((name) => name.endsWith(".json")); }
     catch { return null; }

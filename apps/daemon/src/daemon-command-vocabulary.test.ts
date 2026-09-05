@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPROVAL_INTENT_FAMILY,
+  CRITERION_FAMILY, REPOSITORY_RECOVERY_FAMILY,
   BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, GRAPH_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
@@ -21,6 +22,7 @@ import {
  * is where the next command kind will be registered.
  */
 type Family =
+  | "CRITERION" | "REPOSITORY_RECOVERY"
   | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "GRAPH" | "PREVIEW" | "REVIEW" | "SESSION"
   | "STANDALONE" | "STEP" | "WORK";
 
@@ -43,6 +45,12 @@ const WORK = "work.write";
  * Map in. Alphabetical would agree with a reshuffled table; this does not.
  */
 const ROWS: readonly VocabularyRow[] = [
+  { agent: null, capability: ADMIN, family: "CRITERION", kind: "criterion_check.approve",
+    payloadKeys: ["goalRef", "planningRunRef", "contractRef", "criterionId", "check"] },
+  { agent: null, capability: ADMIN, family: "CRITERION", kind: "criterion_check.verify",
+    payloadKeys: ["goalRef", "planningRunRef", "contractRef", "integratedSha", "approvals"] },
+  { agent: null, capability: ADMIN, family: "REPOSITORY_RECOVERY", kind: "repository.recover",
+    payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP",
     kind: "approval.decide",
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
@@ -190,7 +198,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "provider.probe",
     payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "repository.publish",
-    payloadKeys: ["goalId", "remoteUrl"] },
+    payloadKeys: ["approval", "goalId", "remoteUrl"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "qualification.replan",
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "review.submit",
@@ -211,6 +219,8 @@ const ROWS: readonly VocabularyRow[] = [
 
 /** Views over the production maps, so a value here is always the shipped value. */
 const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<string, string>>> = {
+  CRITERION: new Map(Object.entries(CRITERION_FAMILY)),
+  REPOSITORY_RECOVERY: new Map(Object.entries(REPOSITORY_RECOVERY_FAMILY)),
   APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   COMPILER: new Map(Object.entries(COMPILER_FAMILY)),
@@ -223,11 +233,13 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 };
 
 const FAMILY_NAMES = [
+  "CRITERION", "REPOSITORY_RECOVERY",
   "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "GRAPH", "PREVIEW", "REVIEW", "SESSION", "STEP",
   "WORK",
 ] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // Both approval wires are human-only: the intent seam derives the authority the caller-shaped
   // wire used to accept, so gating one and not the other would leave the derived wire reachable
   // by a non-operator principal and hand back exactly the authority this seam removes.
@@ -248,11 +260,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the forty-seven wired kinds in their registration order", () => {
+  it("carries exactly fifty wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(47);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(47);
+    expect(ROWS).toHaveLength(50);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(50);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -296,13 +308,15 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(36);
+    expect(declared).toHaveLength(39);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
+    expect(FAMILY_MAPS.CRITERION.size).toBe(2);
+    expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(12);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
@@ -317,6 +331,8 @@ describe("command vocabulary", () => {
     // A table moved through a spread silently unfreezes, and a caller that can
     // write a family entry can hand itself any capability it likes.
     expect(Object.isFrozen(APPROVAL_INTENT_FAMILY)).toBe(true);
+    expect(Object.isFrozen(CRITERION_FAMILY)).toBe(true);
+    expect(Object.isFrozen(REPOSITORY_RECOVERY_FAMILY)).toBe(true);
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
     expect(Object.isFrozen(COMPILER_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
@@ -342,11 +358,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly twelve kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(12);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(12);
+  it("gates exactly fifteen kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(15);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(15);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // thirty-five that must stay open, one dropped reddens on the twelve that must not.
+    // thirty-five that must stay open, one dropped reddens on the fifteen that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }

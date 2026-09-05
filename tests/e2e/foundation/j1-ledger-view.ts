@@ -19,6 +19,9 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { readReviewLedger } from "@moe/daemon";
 import { SqliteEventStore } from "@moe/store";
 import type { CommandDecisionRecord } from "@moe/store";
+import { readLandingReceipt } from "../../../apps/daemon/src/repository/landing-ledger.js";
+import { landingReceiptId } from "../../../apps/daemon/src/repository/landing-receipt-contracts.js";
+import type { LandingReceiptV1 } from "../../../apps/daemon/src/repository/landing-receipt-contracts.js";
 
 // The claim fold is not on the daemon's barrel, and this task certifies rather than edits
 // production: the read model is imported at its own path instead of widening an export list.
@@ -28,12 +31,12 @@ import {
 import {
   type J1Scratch,
   type ProcessRun,
-  NODE_REF,
   createJ1Scratch,
   killTree,
   runSeed,
   startDaemon,
 } from "./j1-loop-harness.js";
+import { executionNodeRef } from "./j1-repository-fixture.js";
 
 /** Real processes under fleet load: a tight timeout is a flake, not a signal. */
 export const ARM_TIMEOUT_MS = 240_000;
@@ -65,8 +68,9 @@ export async function runPass(
   sink: J1Scratch[],
   pass: (scratch: J1Scratch) => Promise<ProcessRun>,
   watch?: PassWatcher,
+  scratchOptions: Parameters<typeof createJ1Scratch>[0] = {},
 ): Promise<ArmRun> {
-  const scratch = createJ1Scratch();
+  const scratch = createJ1Scratch(scratchOptions);
   sink.push(scratch);
   const daemon = await startDaemon(scratch);
   const seed = await runSeed(scratch, daemon.origin);
@@ -119,6 +123,8 @@ function decisions(store: SqliteEventStore): readonly CommandDecisionRecord[] {
 }
 
 export interface LedgerView {
+  readonly nodeRef: string;
+  readonly landingReceipt: LandingReceiptV1 | null;
   readonly acceptedReceiptId: string | undefined;
   readonly agentPrincipals: readonly string[];
   readonly receiptEventCount: number;
@@ -128,11 +134,16 @@ export interface LedgerView {
 }
 
 export function readLedgerView(scratch: J1Scratch): LedgerView {
+  const nodeRef = executionNodeRef(scratch);
   return withStore(scratch, (store) => {
-    const ledger = readReviewLedger(store, scratch.projectId, NODE_REF);
+    const ledger = readReviewLedger(store, scratch.projectId, nodeRef);
+    const landed = ledger.accepted === undefined ? null : readLandingReceipt(store, scratch.projectId,
+      landingReceiptId(scratch.projectId, nodeRef, ledger.accepted.verifierReceiptId));
     const rows = decisions(store);
     const submits = rows.filter((row) => row.commandKind === "review.submit");
     return {
+      nodeRef,
+      landingReceipt: landed?.ok === true ? landed.receipt : null,
       acceptedReceiptId: ledger.accepted?.verifierReceiptId,
       agentPrincipals: [...new Set(rows.map((row) => row.key.principalId))].sort(),
       receiptEventCount: store
@@ -159,7 +170,7 @@ export function printRunReceipt(arm: string, run: ArmRun, view: LedgerView): voi
     acceptedVerifierReceiptId: view.acceptedReceiptId ?? null,
     arm,
     daemonOrigin: run.origin,
-    nodeRef: NODE_REF,
+    nodeRef: view.nodeRef,
     pids: { agent: run.agentPid, daemon: run.daemonPid, wrapper: run.wrapper.pid ?? null },
     receiptDecisionId: view.receiptRow?.decisionId ?? null,
     reviewRounds: view.rounds,

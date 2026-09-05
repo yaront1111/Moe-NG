@@ -69,6 +69,11 @@
 // Modules are private: every item has exactly one public path, re-exported
 // below, which is how the core crate is arranged too.
 mod completion;
+mod approved_image;
+#[cfg(windows)]
+mod approved_image_windows;
+#[cfg(windows)]
+mod approved_image_hash;
 mod control;
 mod descriptors;
 mod diagnostics;
@@ -89,6 +94,7 @@ mod watch;
 mod boundary;
 
 pub use completion::{Completion, Outcome, Precondition, Stopped, Unobserved};
+pub use approved_image::{ApprovedImageGuard, ApprovedImageError, ApprovedImageReason};
 pub use control::{AcceptState, Accepted, Inbound, LaunchRequest};
 pub use descriptors::{
     parse_descriptor_block, DescriptorError, DescriptorReason, INVALID_HANDLE,

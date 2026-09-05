@@ -229,6 +229,7 @@ type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "strin
  * itself.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
+  ["CRITERION_CHECK_EXECUTOR_VERSION", "string"], ["createCriterionCheckExecutor", "function"],
   ["ADMITTED_EFFECT_TRANSITIONS", "array"], ["ARTIFACT_ADDRESS_PATTERN", "regexp"],
   ["ATTEMPT_SLICE_STATES", "array"], ["EFFECT_CALLER_CONTRACT", "array"],
   ["EFFECT_COMMANDS", "array"], ["EFFECT_STATES", "array"],
@@ -451,7 +452,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(274);
+  expect(EXPECTED_EXPORTS.length).toBe(276);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {

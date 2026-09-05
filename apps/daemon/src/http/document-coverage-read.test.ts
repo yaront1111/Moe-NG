@@ -307,6 +307,7 @@ describe("createDocumentCoverageReadPort", () => {
     if (!other.ok) throw new Error(other.code);
     approveGate1(store, other.ref, "cmd-gate-other-contract"); sealAndActivate(store, other.ref, "goal-2");
     const view = coverage(portFor(store).readCoverage({ goalRef: "goal-2" }));
+    expect(view.contracts.map((contract) => contract.contractId)).toEqual(["contract-other"]);
     const rows = view.contracts.find((contract) => contract.contractId === "contract-other")!.requirements.flatMap((row) => row.criteria);
     expect(rows).toHaveLength(3);
     expect(rows.map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
@@ -331,15 +332,16 @@ describe("createDocumentCoverageReadPort", () => {
       .map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
   });
 
-  it("does not carry an accepted node into a new approved revision without exact revision provenance", () => {
+  it("keeps the compiler-bound revision after a newer contract revision is approved", () => {
     const { sha, store } = boundWorld(); const first = proposeRevision(store, sha);
     approveGate1(store, first, "cmd-gate-original"); sealAndActivate(store, first); acceptNode(store, "node-slice");
     const newer = proposeRevision(store, sha, "rev-cover-2"); approveGate1(store, newer, "cmd-gate-newer");
     const view = coverage(portFor(store).readCoverage({ goalRef: GOAL_ID }));
-    expect(view.contracts[0]?.revisionId).toBe("rev-cover-2");
+    expect(view.contracts[0]?.revisionId).toBe("rev-cover-1");
     const rows = view.contracts.flatMap((contract) => contract.requirements.flatMap((row) => row.criteria));
-    expect(rows.map((row) => row.status)).toEqual(["UNATTRIBUTABLE", "UNATTRIBUTABLE", "UNATTRIBUTABLE"]);
-    expect(rows.map((row) => row.nodeTestStatus)).toEqual([null, null, null]);
+    expect(rows.map((row) => row.status)).toEqual(["EVIDENCE_REQUIRED", "EVIDENCE_REQUIRED", "EVIDENCE_REQUIRED"]);
+    expect(rows.map((row) => row.nodeTestStatus)).toEqual(["NODE_TEST_PASSED", "NODE_TEST_PASSED", "NODE_TEST_PASSED"]);
+    expect(view.totals.verified).toBe(0);
   });
 
   it("refuses to attribute an acceptance to a node key another activated plan also carries", () => {

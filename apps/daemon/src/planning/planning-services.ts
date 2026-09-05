@@ -40,6 +40,7 @@ import {
 } from "./planning-authority-finalize-ingress.js";
 import { commitFinalizedSubmission } from "./planning-authority-finalize.js";
 import { buildPlanningAuthorityLeg } from "./planning-authority-persistence.js";
+import { compiledContractBindingLeg } from "./compiled-contract-binding-leg.js";
 
 /**
  * Plan proposal and approval — the two authority-bearing commands in this task.
@@ -186,7 +187,9 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   const extraLegs = authority.graphBodyLeg === undefined
     ? [authority.leg]
     : [authority.leg, authority.graphBodyLeg];
-  return commitAcceptedLegs(store, request, plan, extraLegs);
+  const contractBinding = compiledContractBindingLeg(context, runId, folded.state.goalRef, folded.state.submissionHash!);
+  if (!contractBinding.ok) return refuse(request.kind, contractBinding.code, "DAEMON_PREREQUISITE");
+  return commitAcceptedLegs(store, request, plan, [...extraLegs, ...contractBinding.legs]);
 };
 
 interface DurableRun {

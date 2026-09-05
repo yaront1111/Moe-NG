@@ -1,0 +1,22 @@
+import { afterEach, expect, it } from "vitest";
+import { GOAL_ID, PROJECT_ID, closeStores, driveThrough, openStore, FIXTURE_PUBLICATION_APPROVAL } from "../bootstrap/bootstrap-test-fixtures.js";
+import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { publicationGoalIntegrated } from "./publication-goal-integration.js";
+afterEach(closeStores);
+it("requires a current scoped goal landing, and verifies that landing belongs to the approved ancestry", () => {
+  const store = openStore(); driveThrough(store, "repository.publish");
+  const candidate = { approval: FIXTURE_PUBLICATION_APPROVAL, identity: { root: "D:/fixture/repo", gitDirectory: "D:/fixture/repo/.git" } };
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, () => true)).toBe(false);
+  seedReviewAcceptance(store, "unrelated"); seedLandingReceipt(store, "unrelated", "COMMITTED");
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, () => true)).toBe(false);
+  const graph = activeCompiledGraphs(store, PROJECT_ID)[0]!;
+  const nodeRef = compiledExecutionRef(PROJECT_ID, graph, "node-a");
+  seedReviewAcceptance(store, nodeRef); seedLandingReceipt(store, nodeRef, "COMMITTED");
+  let checks = 0;
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, () => { checks += 1; return true; })).toBe(true);
+  expect(checks).toBe(1);
+  expect(publicationGoalIntegrated(store, PROJECT_ID, GOAL_ID, candidate, () => false)).toBe(false);
+  expect(publicationGoalIntegrated(store, PROJECT_ID, "another-goal", candidate, () => true)).toBe(false);
+});

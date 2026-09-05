@@ -11,7 +11,10 @@ import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.
 import type { RunGoalView } from "../../live/live-runs.js";
 import type { OfferWire } from "../approvals/offer-wire.js";
 import { GoalPublish, boundRemoteUrl, landedCommits, publishLine, publishOffer } from "./goal-publish.js";
-import { createPublishPort } from "./publish-port.js";
+import { createPublishPort as createRealPublishPort } from "./publish-port.js";
+const preparedApproval = { branch: "approved-branch", sha: "b".repeat(40), repositoryId: "c".repeat(64), remoteUrl: "https://github.com/owner/unai.git" };
+const createPublishPort = (wire: OfferWire) => createRealPublishPort(wire, async (goalId, remoteUrl) => ({ ok: true,
+  goalId, approval: { ...preparedApproval, remoteUrl: remoteUrl ?? preparedApproval.remoteUrl } }));
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -96,6 +99,20 @@ describe("publishOffer, publishLine, boundRemoteUrl and landedCommits", () => {
 });
 
 describe("GoalPublish with a remote already bound", () => {
+  it("shows the daemon's exact approved commit and branch before submitting, and keeps ambiguous effects held", async () => {
+    const { wire, built } = wireWith({ ok: true });
+    render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={createPublishPort(wire)} remote={BOUND} />);
+    await userEvent.click(screen.getByTestId("cr.publish.button"));
+    expect(screen.getByTestId("cr.publish.candidate").textContent).toContain(preparedApproval.sha);
+    expect(screen.getByTestId("cr.publish.candidate").textContent).toContain("approved-branch");
+    expect(built).toHaveLength(0);
+    await userEvent.click(screen.getByTestId("cr.publish.button"));
+    await waitFor(() => expect(built).toHaveLength(1));
+    expect(built[0]?.["payload"]).toMatchObject({ approval: preparedApproval });
+    expect(publishLine({ branch: preparedApproval.branch, code: "PUBLISH_EFFECT_RECONCILIATION_REQUIRED", decisionId: "d",
+      outcome: "UNKNOWN", remoteUrl: preparedApproval.remoteUrl, requestedAt: "t", sha: preparedApproval.sha, url: null }))
+      .toContain("Repository remains held");
+  });
   it("asks for nothing, names the remote and the commits, and sends remoteUrl NULL", async () => {
     const { built, wire } = wireWith({ ok: true });
     render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={createPublishPort(wire)} remote={BOUND} />);
@@ -113,7 +130,7 @@ describe("GoalPublish with a remote already bound", () => {
     await waitFor(() => { expect(screen.getByTestId("cr.publish.answer").textContent).toContain("Recorded."); });
     // BYTE-EXACT through publish-port.ts: the key is present and its value is null, because a
     // MISSING remoteUrl arrives at the daemon as `undefined` and is read as malformed.
-    expect(payloadOf(built)).toBe("{\"goalId\":\"goal-1\",\"remoteUrl\":null}");
+    expect(JSON.parse(payloadOf(built))).toEqual({ approval: preparedApproval, goalId: "goal-1", remoteUrl: null });
     expect(built[0]?.["affordance"]).toBe(OFFER);
   });
 
@@ -128,7 +145,7 @@ describe("GoalPublish with a remote already bound", () => {
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await waitFor(() => { expect(screen.getByTestId("cr.publish.answer").textContent).toContain("Recorded."); });
-    expect(payloadOf(built)).toBe("{\"goalId\":\"goal-1\",\"remoteUrl\":\"git@github.com:owner/moved.git\"}");
+    expect(JSON.parse(payloadOf(built))).toEqual({ approval: { ...preparedApproval, remoteUrl: "git@github.com:owner/moved.git" }, goalId: "goal-1", remoteUrl: "git@github.com:owner/moved.git" });
   });
 });
 
@@ -146,7 +163,7 @@ describe("GoalPublish with no remote bound", () => {
     expect(built).toHaveLength(0);
     await userEvent.click(button);
     await waitFor(() => { expect(screen.getByTestId("cr.publish.answer").textContent).toContain("Recorded."); });
-    expect(payloadOf(built)).toBe("{\"goalId\":\"goal-1\",\"remoteUrl\":\"https://github.com/o/r.git\"}");
+    expect(JSON.parse(payloadOf(built))).toEqual({ approval: { ...preparedApproval, remoteUrl: "https://github.com/o/r.git" }, goalId: "goal-1", remoteUrl: "https://github.com/o/r.git" });
   });
 
   it("does not yank the field away when the bound remote lands mid-keystroke", async () => {
@@ -163,12 +180,13 @@ describe("GoalPublish with no remote bound", () => {
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await waitFor(() => { expect(screen.getByTestId("cr.publish.answer").textContent).toContain("Recorded."); });
     // What the operator typed is what is sent - never silently replaced by the remote it replaces.
-    expect(payloadOf(built)).toBe("{\"goalId\":\"goal-1\",\"remoteUrl\":\"https://github.com/o/typed.git\"}");
+    expect(JSON.parse(payloadOf(built))).toEqual({ approval: { ...preparedApproval, remoteUrl: "https://github.com/o/typed.git" }, goalId: "goal-1", remoteUrl: "https://github.com/o/typed.git" });
   });
 
   it("reports the daemon's refusal at its own code and layer", async () => {
     const submit = vi.fn(async () => ({ code: "PUBLISH_REMOTE_UNBOUND", layer: "DAEMON_PREREQUISITE", ok: false as const }));
-    render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={{ submit }} remote={UNBOUND} />);
+    render(<GoalPublish frame={FRAME} goal={goal()} goalId="goal-1" port={{ submit,
+      prepare: async () => ({ ok: true, goalId: "goal-1", approval: preparedApproval }) }} remote={UNBOUND} />);
     await userEvent.type(screen.getByTestId("cr.publish.remote"), "git@github.com:o/r.git");
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await userEvent.click(screen.getByTestId("cr.publish.button"));

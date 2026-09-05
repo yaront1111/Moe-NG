@@ -7,6 +7,7 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import type { ActivationReceipts } from "./activation-receipts.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
+import type { CompiledContractBinding } from "../planning/compiled-contract-binding.js";
 
 /**
  * WHAT A BOOTSTRAP REFUSAL MAY SAY, and the shapes a service hands back.
@@ -32,6 +33,7 @@ import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contrac
  */
 export const SERVICE_REFUSED_BY = Object.freeze([
   "DAEMON_INGRESS",
+  "DAEMON_AUTHORIZATION",
   "DAEMON_PREREQUISITE",
   "CORE_REDUCER",
   "DURABLE_STORE",
@@ -235,6 +237,8 @@ export function humanReviewWitness(principalId: string, commandId: string): Huma
 }
 
 export interface HandlerContext {
+  /** Authored only by the approved-contract compiler, outside decoded command bytes. */
+  readonly compiledContractBinding?: CompiledContractBinding;
   readonly humanReview?: HumanReviewWitness;
   readonly ledger: DurableLedger;
   /**

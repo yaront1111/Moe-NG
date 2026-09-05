@@ -76,7 +76,7 @@ export interface RunGoalPublishView {
   readonly branch: string | null;
   readonly code: string | null;
   readonly decisionId: string;
-  readonly outcome: "PENDING" | "PUSHED" | "REFUSED";
+  readonly outcome: "PENDING" | "PUSHED" | "REFUSED" | "UNKNOWN";
   readonly remoteUrl: string;
   readonly requestedAt: string;
   readonly sha: string | null;
@@ -267,7 +267,7 @@ function publishOf(value: unknown): RunGoalPublishView | null {
   if (record === null || !nullableString(record.branch) || !nullableString(record.code) || !nonEmptyString(record.decisionId)
     || !nonEmptyString(record.remoteUrl) || !nonEmptyString(record.requestedAt) || !nullableString(record.sha)
     || !nullableString(record.url)
-    || (record.outcome !== "PENDING" && record.outcome !== "PUSHED" && record.outcome !== "REFUSED")) return null;
+    || (record.outcome !== "PENDING" && record.outcome !== "PUSHED" && record.outcome !== "REFUSED" && record.outcome !== "UNKNOWN")) return null;
   return Object.freeze({
     branch: record.branch, code: record.code, decisionId: record.decisionId, outcome: record.outcome,
     remoteUrl: record.remoteUrl, requestedAt: record.requestedAt, sha: record.sha, url: record.url,

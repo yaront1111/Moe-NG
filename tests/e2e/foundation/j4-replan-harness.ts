@@ -35,7 +35,12 @@ const AFFORDANCE_PATH = "/affordances/read";
  * instants would report "unchanged" across exactly the delta J4 exists to classify.
  */
 export function workspaceDigest(scratch: J1Scratch): string {
-  const names = readdirSync(scratch.workspace).sort();
+  const files = (directory: string, prefix = ""): string[] => readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.name !== ".git").flatMap((entry) => {
+      const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      return entry.isDirectory() ? files(join(directory, entry.name), path) : [path];
+    });
+  const names = files(scratch.workspace).sort();
   const lines = names.map((name) => {
     const bytes = readFileSync(join(scratch.workspace, name));
     return `${name}|${createHash("sha256").update(bytes).digest("hex")}`;

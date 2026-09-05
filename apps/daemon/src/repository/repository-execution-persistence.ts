@@ -8,10 +8,15 @@ import type { RepositoryExecutionRecord } from "./repository-execution-record.js
 
 type Mutation<T> = (record: RepositoryExecutionRecord | null, nextRevision: number) => RepositoryExecutionResult<{ record: RepositoryExecutionRecord | null; value: T }>;
 const unknown = () => repositoryExecutionFailure("REPOSITORY_EXECUTION_UNKNOWN");
+export interface RepositoryExecutionAudit<T> {
+  readonly key: string;
+  readonly requestJson: string;
+  readonly decode: (value: unknown) => T | null;
+}
 
 /** Short SQLite transactions own physical serialization; the logical reservation survives process death. */
 export function accessRepositoryExecution<T>(identity: RepositoryExecutionIdentity, mode: "READ" | "CREATE" | "UPDATE",
-  action: Mutation<T>): RepositoryExecutionResult<{ value: T }> {
+  action: Mutation<T>, audit?: RepositoryExecutionAudit<T>): RepositoryExecutionResult<{ value: T; replayed?: true }> {
   const path = join(identity.gitDirectory, "moe-repository-execution.sqlite");
   const existed = existsSync(path);
   if (!existed && mode === "READ") {
@@ -45,6 +50,19 @@ export function accessRepositoryExecution<T>(identity: RepositoryExecutionIdenti
     if (rows.length > 1) return unknown();
     const row = rows[0]; const record = row === undefined ? null : decodeExecutionRecord(row);
     if ((row !== undefined && record === null) || (record !== null && record.revision !== revision)) return unknown();
+    if (audit !== undefined) {
+      if (mode !== "UPDATE") return unknown();
+      database.exec("CREATE TABLE IF NOT EXISTS recovery_decisions (decision_key TEXT PRIMARY KEY, request_json TEXT NOT NULL, result_json TEXT NOT NULL)");
+      const previous = database.prepare("SELECT request_json, result_json FROM recovery_decisions WHERE decision_key = ?").get(audit.key);
+      if (previous !== undefined) {
+        if (previous["request_json"] !== audit.requestJson) return repositoryExecutionFailure("REPOSITORY_EXECUTION_REVISION_CONFLICT");
+        if (typeof previous["result_json"] !== "string") return unknown();
+        const value = audit.decode(JSON.parse(previous["result_json"]));
+        if (value === null) return unknown();
+        database.exec("COMMIT"); transaction = false;
+        return { ok: true, value, replayed: true };
+      }
+    }
     const result = action(record, revision + 1);
     if (!result.ok) return result;
     if (mode !== "READ") {
@@ -57,6 +75,8 @@ export function accessRepositoryExecution<T>(identity: RepositoryExecutionIdenti
         database.prepare("UPDATE binding SET revision = ? WHERE singleton = 1").run(next.revision);
       }
     }
+    if (audit !== undefined) database.prepare("INSERT INTO recovery_decisions VALUES (?, ?, ?)")
+      .run(audit.key, audit.requestJson, JSON.stringify(result.value));
     database.exec("COMMIT"); transaction = false;
     return { ok: true, value: result.value };
   } catch (error) {

@@ -650,7 +650,7 @@ const ENTRY = "http";
  *
  * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
  * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 11 x 2 = 22, and the arm below
+ * them, so the row's total case count is kinds x entries = 14 x 2 = 28, and the arm below
  * asserts both this file's share and that documented total. The eleven are the vocabulary's
  * operator-only class (`OPERATOR_PRINCIPAL_KINDS`) less `session.open`, which production
  * derives its exclusion from.
@@ -687,9 +687,9 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       }
 
       // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-      expect(EXCLUSION_CASES.length).toBe(11);
+      expect(EXCLUSION_CASES.length).toBe(14);
       expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(22);
+      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(28);
       expect(observed).toHaveLength(EXCLUSION_CASES.length);
       for (const { body, kind } of observed) {
         expect({ denied: body.includes("CAPABILITY_DENIED"), kind })
@@ -718,7 +718,7 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       )));
       const body = await within("tools/list body", response.text());
 
-      expect(EXCLUSION_CASES.length).toBe(11);
+      expect(EXCLUSION_CASES.length).toBe(14);
       for (const { kind } of EXCLUSION_CASES) {
         expect({ advertised: body.includes(`"${toolLabelForKind(kind)}"`), kind })
           .toEqual({ advertised: false, kind });

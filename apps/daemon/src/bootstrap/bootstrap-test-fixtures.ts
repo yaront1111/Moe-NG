@@ -8,6 +8,8 @@ import {
 } from "../budget/budget-commitment.js";
 import type { GenesisApprovedRun } from "../budget/budget-genesis-binding.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
+import { createPublishRepository } from "../repository/publish-services.js";
+import { publicationRepositoryId } from "../repository/publication-approval-contracts.js";
 import {
   APPROVAL_MODE_ENV_KEY,
   SPEED_APPROVAL_MODE,
@@ -201,10 +203,16 @@ export function envelope(
   };
 }
 
+const publicationIdentity = { root: "D:/fixture/repo", gitDirectory: "D:/fixture/repo/.git" };
+export const FIXTURE_PUBLICATION_APPROVAL = Object.freeze({ branch: "main", sha: "a".repeat(40),
+  remoteUrl: "https://github.com/fixture/repo.git", repositoryId: publicationRepositoryId(publicationIdentity) });
 export const ALL_HANDLERS: HandlerTable = Object.freeze({
   ...BOOTSTRAP_HANDLERS,
   ...GOAL_HANDLERS,
   ...PLANNING_HANDLERS,
+  "repository.publish": createPublishRepository({ isHuman: () => true, validateGoal: () => true,
+    readPublicationCandidate: (remoteUrl) => ({ ok: true,
+      candidate: { approval: { ...FIXTURE_PUBLICATION_APPROVAL, remoteUrl }, identity: publicationIdentity } }) }),
 });
 
 /**
@@ -756,7 +764,8 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("plan.propose", 0, { commands: finalizeChain(), runId: RUN_ID }, "cmd-finalize"),
     envelope("approval.decide", 0, approvalPayload()),
     // The publish decision lands on the goal's publish aggregate (fresh, version 0), not the goal.
-    envelope("repository.publish", 0, { goalId: GOAL_ID, remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish"),
+    envelope("repository.publish", 0, { approval: FIXTURE_PUBLICATION_APPROVAL, goalId: GOAL_ID,
+      remoteUrl: "https://github.com/fixture/repo.git" }, "cmd-publish"),
     // The goal is at domain version 2 here: `goal.create` left it at 1 and the approval's
     // activation half advanced it to 2 in the same decision.
     envelope("goal.close", 2, acceptancePayload()),

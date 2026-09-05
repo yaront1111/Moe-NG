@@ -29,6 +29,8 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/product-contract/gate-1/read",
     "/product-contract/pending/read",
     "/repository/remote/read",
+    "/criteria/read",
+    "/repository/recovery/read",
     "/runs/read",
     "/session/challenge-operands/read",
     "/session/pair",

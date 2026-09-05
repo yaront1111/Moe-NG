@@ -96,7 +96,7 @@ export interface RunGoalPublish {
   readonly branch: string | null;
   readonly code: string | null;
   readonly decisionId: string;
-  readonly outcome: "PENDING" | "PUSHED" | "REFUSED";
+  readonly outcome: "PENDING" | "PUSHED" | "REFUSED" | "UNKNOWN";
   readonly remoteUrl: string;
   readonly requestedAt: string;
   readonly sha: string | null;

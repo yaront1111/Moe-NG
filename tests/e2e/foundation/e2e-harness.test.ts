@@ -14,6 +14,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createScanner, LanguageVariant, SyntaxKind } from "typescript/unstable/ast";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -36,6 +37,23 @@ import { readyDaemonOrigin } from "./j1-loop-harness.js";
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const harnessDirectory = "tests/e2e/foundation";
 const REPOSITORY_SCAN_TIMEOUT_MS = 30_000;
+
+function mentionsHarnessDependency(contents: string): boolean {
+  if (!contents.includes("e2e-harness") && !contents.includes("tests/e2e/foundation")) return false;
+  // Tokenize source so a comment naming its regression test is not a dependency.
+  // Retain all other text, including indirect paths and JSON metadata.
+  const scanner = createScanner(false, LanguageVariant.JSX, contents);
+  const code: string[] = [];
+  let end = -1;
+  for (let token = scanner.scan(); token !== SyntaxKind.EndOfFile; token = scanner.scan()) {
+    if (scanner.getTokenEnd() <= end) throw new Error(`source scanner stalled at ${end}`);
+    end = scanner.getTokenEnd();
+    code.push(token === SyntaxKind.SingleLineCommentTrivia || token === SyntaxKind.MultiLineCommentTrivia
+      ? " " : scanner.getTokenText());
+  }
+  const source = code.join("");
+  return source.includes("e2e-harness") || source.includes("tests/e2e/foundation");
+}
 
 /**
  * Every non-test module in this directory, read off disk rather than listed by
@@ -286,15 +304,33 @@ describe("declared-boundary process control", () => {
 });
 
 describe("harness containment", () => {
+  it("ignores documentation comments while scanning dependencies", () => {
+    expect(mentionsHarnessDependency("// Covered by tests/e2e/foundation\nexport const enabled = true;")).toBe(false);
+    expect(mentionsHarnessDependency("/* e2e-harness verifies this boundary */\nexport {};")).toBe(false);
+  });
+
+  it.each([
+    'import { run } from "../../../tests/e2e/foundation/e2e-harness.js";',
+    'export * from "./e2e-harness.js";',
+    'const run = import("./e2e-harness.js");',
+    'const run = require("./e2e-harness.js");',
+    'const path = `tests/e2e/foundation/${name}`;',
+    'const path = `${name}/tests/e2e/foundation`;',
+    'const unrelated = `${name}`; import("./e2e-harness.js");',
+    '{ "dependency": "tests/e2e/foundation" }',
+  ])("detects a harness reference in source: %s", (source) => {
+    expect(mentionsHarnessDependency(source)).toBe(true);
+  });
+
   it("is imported by no package, app, or adapter source", async () => {
     const scanned = (await Promise.all(PRODUCTION_TREES.map(sourceFilesUnder))).flat();
     expect(scanned.length).toBeGreaterThan(100);
     const importers: string[] = [];
     for (const relative of scanned) {
       const text = await readFile(join(repositoryRoot, relative), "utf8");
-      if (text.includes("e2e-harness") || text.includes("tests/e2e/foundation")) {
-        importers.push(relative);
-      }
+      try {
+        if (mentionsHarnessDependency(text)) importers.push(relative);
+      } catch (error) { throw new Error(`dependency scan failed for ${relative}: ${String(error)}`); }
     }
     expect(importers).toEqual([]);
   }, REPOSITORY_SCAN_TIMEOUT_MS);

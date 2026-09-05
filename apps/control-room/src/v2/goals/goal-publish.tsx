@@ -10,6 +10,7 @@ import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
 import type { PublishPort } from "./publish-port.js";
+import type { PublicationApproval } from "../../live/live-publication-candidate.js";
 
 /**
  * THE PUBLISH CARD on an opened goal: ONE control. The remote belongs to the PROJECT, not to
@@ -49,6 +50,7 @@ export function boundRemoteUrl(remote: RepositoryRemoteOutcome | null): string |
 export function publishLine(publish: RunGoalPublishView | null): string {
   if (publish === null) return "Not published yet. Landed commits stay in the workspace's repository until you publish.";
   if (publish.outcome === "PENDING") return `Publishing to ${publish.remoteUrl} ${MIDDOT} waiting for the wrapper to push`;
+  if (publish.outcome === "UNKNOWN") return `Publication outcome unknown ${MIDDOT} Repository remains held while the daemon checks the approved remote branch.`;
   if (publish.outcome === "PUSHED") {
     return `Pushed ${(publish.sha ?? "").slice(0, 10)} on ${publish.branch ?? "?"} to ${publish.remoteUrl}`;
   }
@@ -73,7 +75,7 @@ function landedWords(commits: readonly LandedCommit[]): string {
 export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishProps): JSX.Element | null {
   const [typed, setTyped] = useState("");
   const [changing, setChanging] = useState(false);
-  const [armed, setArmed] = useState(false);
+  const [armed, setArmed] = useState<PublicationApproval | null>(null);
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<OfferOutcome | null>(null);
   const offer = publishOffer(frame, goalId);
@@ -86,12 +88,12 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
   // land mid-keystroke; without this, the field an operator was typing into would vanish under
   // them and their url would be silently dropped in favour of the remote they were replacing.
   const binding = bound === null || changing || typed.trim() !== "";
-  const canPublish = offer !== null && port !== null && !busy && (!binding || typed.trim() !== "");
+  const canPublish = offer !== null && port !== null && !busy && publish?.outcome !== "UNKNOWN" && (!binding || typed.trim() !== "");
   const decide = (): void => {
-    if (offer === null || port === null) return;
+    if (offer === null || port === null || armed === null) return;
     setBusy(true);
-    setArmed(false);
-    void port.submit(offer, goalId, binding ? typed.trim() : null).then((outcome) => {
+    setArmed(null);
+    void port.submit(offer, goalId, binding ? typed.trim() : null, armed).then((outcome) => {
       setAnswer(outcome);
       setBusy(false);
       if (outcome.ok) { setChanging(false); setTyped(""); }
@@ -99,6 +101,14 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
       setAnswer({ code: "PUBLISH_DISPATCH_FAILED", layer: "CONTROL_ROOM_PUBLISH", ok: false });
       setBusy(false);
     });
+  };
+  const prepare = (): void => {
+    if (port === null) return;
+    setBusy(true); setAnswer(null);
+    void port.prepare(goalId, binding ? typed.trim() : null).then((result) => {
+      if (result.ok) setArmed(result.approval); else setAnswer(result);
+      setBusy(false);
+    }, () => { setAnswer({ ok: false, code: "PUBLISH_CANDIDATE_UNREADABLE", layer: "CONTROL_ROOM_PUBLISH" }); setBusy(false); });
   };
   return (
     <section className="cr2-ops-panel" data-testid="cr.publish.root">
@@ -123,7 +133,7 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
           {bound === null ? null : (
             <p className="cr2-slot-kicker" data-testid="cr.publish.bound">
               {`This project publishes to ${bound}`}
-              <button className="cr2-link" data-testid="cr.publish.change" onClick={(): void => { setChanging(!changing); setArmed(false); }} type="button">
+              <button className="cr2-link" data-testid="cr.publish.change" disabled={busy} onClick={(): void => { setChanging(!changing); setArmed(null); }} type="button">
                 {changing ? "Keep this remote" : "Change"}
               </button>
             </p>
@@ -134,25 +144,29 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
               <input
                 className="cr2-input"
                 data-testid="cr.publish.remote"
+                disabled={busy}
                 id={`cr-publish-remote-${goalId}`}
-                onChange={(event): void => { setTyped(event.target.value); setArmed(false); }}
+                onChange={(event): void => { setTyped(event.target.value); setArmed(null); }}
                 placeholder="https://github.com/you/your-repo.git"
                 value={typed}
               />
             </>
           )}
+          {armed === null ? null : <p className="cr2-approve-mono" data-testid="cr.publish.candidate">
+            {`Commit ${armed.sha} on branch ${armed.branch} to ${armed.remoteUrl}`}
+          </p>}
           <ActionButton
             ariaLabel="Publish the landed commits to the remote"
             disabled={!canPublish}
-            onClick={(): void => { if (!armed) { setArmed(true); return; } decide(); }}
+            onClick={(): void => { if (armed === null) { prepare(); return; } decide(); }}
             testId="cr.publish.button"
           >
             {busy ? "Recording your decision..."
-              : armed ? `Confirm: push to ${binding ? typed.trim() : bound ?? ""}`
+              : armed ? `Confirm: push to ${armed.remoteUrl}`
                 : binding ? "Bind this remote and publish" : `Publish to ${bound ?? ""}`}
           </ActionButton>
           {armed && !busy ? (
-            <ActionButton onClick={(): void => setArmed(false)} testId="cr.publish.cancel" variant="secondary">Keep it local</ActionButton>
+            <ActionButton onClick={(): void => setArmed(null)} testId="cr.publish.cancel" variant="secondary">Keep it local</ActionButton>
           ) : null}
         </div>
       )}

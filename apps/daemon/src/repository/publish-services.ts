@@ -10,6 +10,10 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import { isDurableHumanPrincipal } from "../identity/human-approver.js";
+import { decodePublicationApproval, decodePublicationCandidate, samePublicationApproval } from "./publication-approval-contracts.js";
+import type { PublicationCandidateReader } from "./publication-approval-contracts.js";
+import { publicationGoalIntegrated } from "./publication-goal-integration.js";
 import { readProjectRemote } from "./publish-ledger.js";
 import {
   PUBLISH_REMOTE_UNBOUND,
@@ -20,25 +24,8 @@ import {
   remoteAggregateId,
 } from "./publish-receipt-contracts.js";
 
-/**
- * `repository.publish`: the human names a remote once, and every publish after that reuses it.
- *
- * The wrapper's publisher pushes the workspace's current branch to the remote in the decision's
- * RESULT and records a receipt beside the decision. The publish fact lands on the goal's publish
- * aggregate (`publish:<goalId>`), so its version fence never moves the goal's own; the BINDING
- * lands on the project's remote aggregate (`remote:<projectId>`) as a second leg of the SAME
- * decision, so a publish whose remote was never recorded — or a binding for a publish that never
- * happened — is not a state the store can reach. Nothing here touches git: a refusal is about the
- * goal or the url, never about the push.
- *
- * `remoteUrl` carries three meanings in one rostered key, because the payload roster is frozen
- * and a fourth key would be a twenty-file backfill:
- *   a STRING      — bind it (replacing any prior binding) and publish to it;
- *   NULL          — publish to whatever the project is already bound to;
- *   anything else — malformed, INCLUDING a missing key, which arrives as `undefined`.
- * The `undefined` case is why the null test is strict: `undefined == null` is true in JavaScript,
- * and a loose check would read a malformed request as "reuse the bound remote" and push to it.
- */
+/** A durable human approves an exact daemon-observed commit, branch, remote and repository.
+ * The approval and optional project remote binding are recorded atomically before publication. */
 
 const PUBLISHABLE_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 
@@ -71,8 +58,21 @@ function resolveRemote(
   return { bind: true, ok: true, remoteUrl: admitted };
 }
 
-export const publishRepository: CommandHandler = (context): ServiceOutcome => {
+export interface PublishRepositoryConfig {
+  readonly validateGoal?: typeof publicationGoalIntegrated;
+  readonly readPublicationCandidate?: PublicationCandidateReader;
+  /** Explicit fixture seam; production uses durable principal authority. */
+  readonly isHuman?: (store: SqliteEventStore, principalId: string) => boolean;
+}
+
+export function createPublishRepository(config: PublishRepositoryConfig = {}): CommandHandler {
+ return (context): ServiceOutcome => {
   const { ledger, request, store } = context;
+  if (!(config.isHuman ?? isDurableHumanPrincipal)(store, request.principalId)) {
+    return refuse(request.kind, "PUBLISH_HUMAN_REQUIRED", "DAEMON_AUTHORIZATION");
+  }
+  const approval = decodePublicationApproval(request.payload["approval"]);
+  if (approval === null) return refuse(request.kind, "PUBLISH_APPROVAL_REQUIRED", "DAEMON_INGRESS");
   const goalId = payloadRef(request.payload, "goalId");
   if (goalId === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
@@ -92,19 +92,32 @@ export const publishRepository: CommandHandler = (context): ServiceOutcome => {
   if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
     return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
-  // FROZEN SHAPE: the publisher, the receipt and the runs read all decode this object, and the
-  // RESOLVED url is what lands in it — which is why none of them learn the binding exists.
-  const result = { goalId, remoteUrl: remote.remoteUrl, requestedAt: request.decidedAt };
+  const measured = config.readPublicationCandidate?.(remote.remoteUrl);
+  if (measured === undefined) return refuse(request.kind, "PUBLISH_WORKSPACE_UNCONFIGURED", "DAEMON_PREREQUISITE");
+  if (!measured.ok) return refuse(request.kind, measured.code, "DAEMON_PREREQUISITE");
+  const candidate = decodePublicationCandidate(measured.candidate);
+  if (candidate === null || candidate.approval.remoteUrl !== remote.remoteUrl
+    || !samePublicationApproval(candidate.approval, approval)) {
+    return refuse(request.kind, "PUBLISH_APPROVAL_STALE", "DAEMON_PREREQUISITE");
+  }
+  if (!(config.validateGoal ?? publicationGoalIntegrated)(store, request.projectId, goalId, candidate)) {
+    return refuse(request.kind, "PUBLISH_GOAL_NOT_INTEGRATED", "DAEMON_PREREQUISITE");
+  }
+  const result = { candidate: { approval: { ...candidate.approval }, identity: { ...candidate.identity } },
+    goalId, remoteUrl: remote.remoteUrl, requestedAt: request.decidedAt };
   const plan = {
     aggregateId,
-    eventPayload: result,
+    eventPayload: { approval: { ...candidate.approval }, goalId, remoteUrl: remote.remoteUrl, requestedAt: request.decidedAt },
     eventType: "RepositoryPublishRequested",
     expectedVersion: versionOf(ledger, aggregateId),
     result,
   };
   if (!remote.bind) return commitAccepted(store, request, plan);
   return commitAcceptedLegs(store, request, plan, [bindingLeg(store, request, remote.remoteUrl)]);
-};
+ };
+}
+
+export const publishRepository: CommandHandler = createPublishRepository();
 
 /**
  * The binding leg. Its fence comes from `store.getAggregateVersion` and NOT from `versionOf`:

@@ -787,7 +787,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "pairingOpenSessions",
         "planningRuns", "policy", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
-        "provide", "provideV2", "reconciliation", "repositoryRemote", "restore", "runs",
+        "provide", "provideV2", "reconciliation", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",
         "subscriptions",
       ],
@@ -806,6 +806,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
         "approval.decide", "approval.decide_intent",
+        "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
         "effect.activate", "escalation.decide", "events.resume", "foundation.dispatch",
         "foundation.verification",
@@ -821,7 +822,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "product_contract.ask_clarification", "product_contract.propose_revision",
         "project.activate", "project.bind_repository", "project.register",
         "provider.probe", "qualification.replan", "recovery.complete",
-        "repository.publish",
+        "repository.publish", "repository.recover",
         "resource.confirm_released", "resource.reconcile",
         "review.submit",
         "session.close", "session.open", "session.renew",

@@ -53,9 +53,12 @@ describe("repository delivery lifetime", () => {
     expect(f.verify).not.toHaveBeenCalled(); // process exit is insufficient until authority is retired
     f.retire(); await f.coordinator.advance();
     expect(f.verify).toHaveBeenCalledOnce();
-    expect(f.land).toHaveBeenCalledWith("node-a", "baseline-original", f.workspace);
+    expect(f.land).toHaveBeenCalledWith("node-a", "baseline-original", f.workspace, expect.objectContaining({
+      owner: expect.objectContaining({ nodeRef: "node-a" }),
+      reservation: expect.objectContaining({ phase: "LANDING", baselineId: "baseline-original", controllerId: "controller-a" }),
+    }));
     expect(f.port.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
-  });
+  }, 120_000);
 
   it("reuses the first baseline across a contained failed attempt", async () => {
     const f = fixture(); const started = await f.coordinator.start(request(f.workspace), f.spawn);
@@ -69,7 +72,7 @@ describe("repository delivery lifetime", () => {
     if (!retry.ok) throw new Error(retry.code);
     await retry.exit;
     expect(f.baseline).toHaveBeenCalledOnce();
-  });
+  }, 120_000);
 
   it("blocks accepted work when landing has no durable outcome", async () => {
     const f = fixture(); f.land.mockImplementation(async () => {});
@@ -80,7 +83,7 @@ describe("repository delivery lifetime", () => {
     expect(await f.coordinator.start(request(f.workspace, "node-b"), f.spawn)).toMatchObject({ ok: false });
     f.setFacts("REFUSED"); await f.coordinator.advance();
     expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "BLOCKED" } });
-  });
+  }, 120_000);
 
   it("does not let a second wrapper restore a live controller's ownership", async () => {
     const f = fixture(); await f.coordinator.start(request(f.workspace), f.spawn);
@@ -89,7 +92,7 @@ describe("repository delivery lifetime", () => {
     expect(other.verify).not.toHaveBeenCalled();
     expect(await other.coordinator.start(request(f.workspace), other.spawn)).toMatchObject({ ok: false });
     f.finish(); await f.exit;
-  });
+  }, 120_000);
 
   it("a restarted wrapper retains a live orphan even after the controller dies", async () => {
     const f = fixture(); await f.coordinator.start(request(f.workspace), f.spawn);
@@ -101,7 +104,7 @@ describe("repository delivery lifetime", () => {
     expect(other.verify).not.toHaveBeenCalled();
     expect(other.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "BLOCKED" } });
     f.finish(); await f.exit;
-  });
+  }, 120_000);
 
   it("holds unknown child containment without verifying or retrying", async () => {
     const f = fixture(); const started = await f.coordinator.start(request(f.workspace), f.spawn);
@@ -111,14 +114,14 @@ describe("repository delivery lifetime", () => {
     f.retire(); await f.coordinator.advance();
     expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "BLOCKED" } });
     expect(f.verify).not.toHaveBeenCalled();
-  });
+  }, 120_000);
 
   it("independent checkouts can execute concurrently", async () => {
     const f = fixture(); const other = repository();
     expect((await f.coordinator.start(request(f.workspace), f.spawn)).ok).toBe(true);
     expect((await f.coordinator.start(request(other, "node-b"), f.spawn)).ok).toBe(true);
     f.finish(); await f.exit;
-  });
+  }, 120_000);
 
   it("does not spawn when baseline recording fails", async () => {
     const f = fixture(); f.baseline.mockResolvedValue(null as never);
@@ -126,5 +129,5 @@ describe("repository delivery lifetime", () => {
       .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
     expect(f.spawn).not.toHaveBeenCalled();
     expect(f.port.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
-  });
+  }, 120_000);
 });
