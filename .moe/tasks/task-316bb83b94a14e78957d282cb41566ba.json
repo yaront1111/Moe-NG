@@ -17,8 +17,62 @@
     "THE READ NEVER WRITES. `readOnlyActivationPorts` neuters exactly `backup` and `fs.mkdir`; leave `exists`, `stat` and `readBytes` REAL or four members silently degrade to unmeasured.",
     "This is a WIRING row. Do not change the measurer, the receipt vocabulary, the browser reader or the Activate card — those landed on task-741dad13, task-0a5d7212 and task-3506e04a and are graded there."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE DEFECT AND FIND THE CONSTRUCTION SITE, NO EDITS. The filer's diagnosis is exact and I re-verified it at HEAD — confirm it yourself so you are editing from measurement: (a) `grep -rn 'createActivationReadPort' --include=*.ts apps/ packages/ | grep -v '\\.test\\.'` returns EXACTLY ONE line, its own definition at apps/daemon/src/http/activation-read.ts:182 — nothing constructs it. (b) `grep -n 'activation' apps/daemon/src/daemon-entry.ts` returns NOTHING; the listener spread at :263-311 passes 25 optional deps and `activation` is not among them. (c) http-listener.ts:145 `readonly activation?: ActivationReadPort` with its comment 'Absent means the activation receipts read refuses as unavailable' — so the option exists and is permanently undefined. THEN FIND WHERE IT BELONGS: the spread reads `resolved.affordances`, `resolved.documentDossiers`, `resolved.v2Deps` — so there is a RESOLVER that builds those ports. Read it, and construct the activation port there beside its siblings rather than inline in the spread, so it is built the way every other port is.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/http/activation-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "WRITE THE BOOT-SEAM TEST FIRST, RED. The row's DoD 2 is explicit that the test must pin the WIRING AT THE BOOT SEAM, not merely that a port can be constructed in isolation — a test that calls `createActivationReadPort` directly would have passed for the entire life of this defect. Assert that the object daemon-entry hands to `startControlRoomListener` CARRIES an `activation` port. Run it red before touching production, and say in the step note what it asserts against — the resolver's output or the listener options — so a reader can tell it could not pass while the wiring was missing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "WIRE IT. Construct the activation read port in the resolver alongside the other ports and add it to the listener spread in daemon-entry.ts:263-311, following the exact conditional-spread shape its neighbours use (`...(resolved.X === undefined ? {} : { X: resolved.X })`). Change NOTHING in activation-read.ts: the route, handler, ports, guards and dispatch branch all shipped with child C (task-0a5d7212, DONE) and are not the defect — the only missing thing is construction. If you find yourself editing the handler, stop and re-read: that is a sign the diagnosis moved. Step 2 goes green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PROVE IT ON A REAL PRODUCTION BOOT (DoD 1) — the evidence that actually retires this row, because the whole defect is that every in-process test passed while the shipped daemon refused. Boot `daemon-main.ts --dependencies=apps/daemon/src/daemon-store-dependencies.ts --port=0`, POST `/activation/read` with the headers from apps/control-room/src/live/live-config.ts:94-99, and assert HTTP 200 with `outcome: \"ACTIVATION\"` carrying all six members in ACTIVATION_RECEIPT_MEMBERS ORDER plus the `signing` row with `trustBoundary: false`. Quote the response. The filer recorded the pre-fix answer as HTTP 503 `LISTENER_ACTIVATION_UNAVAILABLE` — quote your post-fix answer beside it so the change is legible. Keep the probe's full source in the record (global rail 12: a deleted probe's transcript is a lead, not evidence) or, better, leave it as a committed test.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE READ STILL WRITES NOTHING (DoD 3). After N>=3 reads against a SCRATCH project root, assert `<projectRoot>/.moe-next/backups/` DOES NOT EXIST and the `backup` member reads code ACTIVATION_READ_BACKUP_DEFERRED at layer ACTIVATION_READ — the exact code, not 'no crash'. This matters because the activation RECEIPTS machinery (bootstrap/activation-receipts-measure.ts:32-33, BACKUP_DIRECTORY '.moe-next' + BACKUP_LEAF 'backups') genuinely takes a backup when it measures for real; the READ path must stay deferred, and wiring the port is exactly the moment that could regress.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "REFUSALS AND THE CREDENTIAL CANARY AT THE WIRED SEAM (DoD 4 and 5). (a) Each refusal keeps its stable code AND the layer that answered: ACTIVATION_READ_CAPABILITY_DENIED for a principal without CAPABILITIES.ADMIN (activation-read.ts:238-240 shows this arm), ACTIVATION_READ_PROJECT_MISMATCH for a principal bound elsewhere, LISTENER_ACTIVATION_REQUEST_INVALID for a non-empty body, and the throwing-measurement path. Assert code AND layer on each (global rail 1). (b) THE CANARY: child C found and fixed a credential-scrubbing defect, and wiring the port is precisely when it could come back. Plant a held credential value into a measurement `reason`, drive the WIRED seam, and assert `[redacted]` on the wire — activation-read.ts:118 documents that values are scrubbed because they reach 'the operator's screen and into e2e screenshots'. Assert on the bytes that leave the port, not on an internal value.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/activation-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DRILL AND GATES. (a) DRILL (global rail 1): remove `activation` from the listener spread — the step-2 boot-seam test must go RED and the step-4 probe must return to HTTP 503 LISTENER_ACTIVATION_UNAVAILABLE. That drill is worth more than usual here: it reproduces the exact defect this row fixes, so a green suite afterwards proves the test would have caught it. Restore and prove with `git diff -- apps/daemon/src/daemon-entry.ts` showing empty (tracked file). (b) GATES with the `Test Files N passed` count line quoted VERBATIM, never the exit code (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, and `pnpm test` LABELLED 'root lane only, apps/** not covered' (global rail 18). Grade repo-wide legs as a path-attributed baseline: record failures at the merge-base, at HEAD, and the delta intersected with this row's owned paths (global rail 3); disclose foreign red verbatim. Named verification command: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +85,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T03:29:37.065Z",
-  "updatedAt": "2026-09-05T03:29:37.065Z"
+  "updatedAt": "2026-09-05T09:28:28.457Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T09:27:21.166Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T09:28:26.324Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, touching apps/daemon/src/http/activation-read.ts at all: child C (task-0a5d7212, DONE) shipped the route, handler, read-only ports, listener option field, dispatch branch, guards and dev-proxy entry, and child C2 shipped the browser reader and card. The ONLY missing thing is that nothing calls `createActivationReadPort` — editing the handler would mean the diagnosis moved, so the plan says stop and re-read if that happens. REJECTED, constructing the port inline in the listener spread: its siblings (`resolved.affordances`, `resolved.documentDossiers`, `resolved.v2Deps`) are built in a resolver, and building this one differently is how the next person fails to find it. REJECTED, a test that constructs the port directly: that test would have PASSED throughout this defect's life. DoD 2 demands the pin at the BOOT SEAM — the object daemon-entry hands the listener — which is the only assertion that could have failed. REJECTED, treating the in-process suite as sufficient evidence: the entire defect is that every in-process test was green while the shipped daemon answered 503, so DoD 1's real production boot is the evidence that retires the row.",
+    "codebaseInsights": "RE-MEASURED AT HEAD (branch moe/work-2026-09-04) by architect-20a6d1eb; the filer's diagnosis is exact and reproduces. `grep -rn 'createActivationReadPort' --include=*.ts apps/ packages/ | grep -v '.test.'` returns EXACTLY ONE line — its own definition at apps/daemon/src/http/activation-read.ts:182. `grep -n 'activation' apps/daemon/src/daemon-entry.ts` returns NOTHING, and the listener spread at :263-311 conditionally passes ~25 deps (csrfToken, deps, v2Deps, assetRoot, assetSecrets, host, log, pairingOperatorChannelAvailable, port, affordances, documentDossiers, ...) with no `activation` among them. http-listener.ts:14 imports the type and :144-145 declares `readonly activation?: ActivationReadPort` with the comment 'Absent means the activation receipts read refuses as unavailable' — so the option is real, permanently undefined, and the handler's `port === undefined` branch is the only one production ever takes. THE SCRUBBING SEAM: activation-read.ts:118 documents that values are scrubbed at the boundary because they reach 'the operator's screen and into e2e screenshots' — that is the defect child C found, and the canary in step 6 guards its regression at the newly wired seam. THE BACKUP CONVENTION the read must NOT trigger: bootstrap/activation-receipts-measure.ts:32-33 defines BACKUP_DIRECTORY '.moe-next' and BACKUP_LEAF 'backups', and the read path stays deferred (ACTIVATION_READ_BACKUP_DEFERRED).",
+    "risks": "BIGGEST RISK — fixing it in a way that only the in-process suite can see. This defect survived a DONE row and a DONE consumer because every test constructed the port itself; DoD 1's real production boot and step 7's drill (remove the spread, watch the probe return to 503) are what prove the new test would actually have caught it. SECOND — regressing the credential scrubbing child C already had to fix once. Wiring a port is exactly when a scrub gets bypassed, and the canary must assert on the BYTES leaving the port rather than an internal value. THIRD — the read starting to WRITE. The activation receipts machinery really does take a backup when it measures, and the read path is deliberately deferred; wiring is the moment that could flip, so the assertion is the exact code ACTIVATION_READ_BACKUP_DEFERRED plus the absence of the backups directory. FOURTH — scope creep into activation-read.ts: nothing there is broken, and an edit is a signal the diagnosis moved. FIFTH — this row is CRITICAL priority and blocks task-ac9d5e2d43334525bd990b1362652ce4, which is BLOCKED on it; a partial fix that satisfies a unit test but not a real boot leaves that row blocked while looking done.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/http/activation-read.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/control-room/src/live/live-config.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T09:28:28.457Z"
 }

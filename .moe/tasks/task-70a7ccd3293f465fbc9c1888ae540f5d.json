@@ -159,7 +159,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:30:39.189Z",
-  "updatedAt": "2026-09-05T09:24:52.975Z",
+  "updatedAt": "2026-09-05T09:25:48.617Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T08:34:52.201Z",
     "plannedStepCount": 7,
@@ -217,7 +217,8 @@
     "apps/daemon/src/release/release-dossier-ledger.ts",
     "apps/daemon/src/release/release-dossier-ledger.js",
     "apps/daemon/src/release/release-dossier-ledger.test.ts",
-    ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json"
+    ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json",
+    ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json"
   ],
   "completionSummary": "A PURE release-dossier generator + durable record, all NEW under apps/daemon/src/release/ — no existing file modified. 4 runtime modules, each with a .js bridge, all under the 250 target: contracts 181, dossier 169, sections 140, ledger 139. Plus test-tier fixtures 102 (NO bridge, per review-test-fixtures.ts's convention) and 30 tests across 2 files.\n\nAPI: `renderReleaseDossier(input: DossierInput, sha, ancestry: AncestryPredicate): string`; `recordReleaseDossier` / `readReleaseDossier`; `releaseDossierId(projectId, goalId, sha)`; `releaseDossierAggregateId(goalId)` => `release:<goalId>`.\n\nPURE CORE: takes data, returns markdown. No store handle, no clock, no git. Ancestry is an injected SYNC predicate `(sha) => \"ANCESTOR\"|\"NOT_ANCESTOR\"|\"UNMEASURABLE\"`.\n\nDoD 1 — GOLDEN pins every section with one byte-exact `toBe`: criteria table (criterion -> title -> node -> receipt command/exit/sha -> landing sha), unverified-evidence table, review rounds with refusal codes, preview decision, policy revision. The fixture supplies criteria and rounds OUT of sorted order on purpose, and a second test pins that premise so the sort assertion cannot go vacuous.\n\nDoD 2 — RE-MEASUREMENT, BOTH DIRECTIONS. A non-ancestor landing renders UNKNOWN and the CRITERION ID appears in the listed gap row (asserted on the id, not on \"UNKNOWN somewhere\"), plus `not.toContain` the unverified sha anywhere. `dossier(shaA)` vs `dossier(shaB)`: byte-inequality, each contains its own sha and not the other's; a further arm models the real edge (same landing, ancestor at one sha, not at the other) so the evidence column follows the SHA, not the ledger.\n\nDoD 3 — DETERMINISM asserted as BYTES (`Buffer.equals`), plus a non-mutation arm proving the generator sorts copies. Every list sorted by a NAMED key: criteria by criterionId, gaps by criterionId then code, rounds by nodeKey then round. `localeCompare` was REPLACED with an explicit `byCodeUnit` comparator — ICU collation is locale-sensitive and would let two",
   "commits": [
@@ -246,6 +247,22 @@
       "treeId": "ee610abeed8d79584070e20bfee9dafbee738c7f",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "8c77596c2714f0d7befef16d78372b7e36b78c50",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T09:13:33Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-70a7ccd3293f465fbc9c1888ae540f5d.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T09:25:48.617Z",
+      "treeId": "7bcfc633cd079c6e84fcd4f175ee97a535c3f103",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -264,9 +281,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-12c76c19@2026-09-05T08:36:05Z",
-    "at": "2026-09-05T09:11:20.929Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T09:13:33Z",
+    "at": "2026-09-05T09:25:48.617Z"
   },
   "completedAt": "2026-09-05T09:24:52.975Z",
   "reviewCompletedAt": "2026-09-05T09:24:52.975Z",
