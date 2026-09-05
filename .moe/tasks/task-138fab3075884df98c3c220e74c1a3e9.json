@@ -109,23 +109,26 @@
     {
       "stepId": "step-6",
       "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` / `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo); from apps/daemon `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts src/daemon-command-registry.test.ts src/daemon-command-vocabulary.test.ts` green UNCHANGED (no kind or payload change; count lines quoted). PATH-ATTRIBUTED BASELINE: HEAD failures minus the step 1d baseline, intersected with the nine owned paths, EMPTY; foreign red disclosed verbatim. `wc -l` quoted: affordance-planning-offers.ts <= 200, compile-dispatcher.ts <= 395, activity-read.ts <= 215, affordance-read.ts <= (its landed size + 4, pre-existing over cap, recorded). DRILL (global rail 1): the new fixture module is UNTRACKED -> SHA256 backup in %TEMP%\\moe-drill-<workerId>\\, restore proven in a separate command; tracked files: capture `git diff -- <path>` before, compare after. One mutation at a time, red line quoted: (1) `currentRun` ignored at :115 (planReviewable on the immutable ref) -> the post-reject 'no decide_intent' arm red; (2) `refs[goal.planningRunRef]` kept on the immutable ref -> the planningGoalRefs arm red; (3) the dispatcher takes `provenance.planningRunRef` again -> the successor-compile arm red (ALREADY_FINALIZED or a refusal on the rejected run); (4) `proposalKind: \"INITIAL\"` on the REVISION fold -> the runKind/PLAN_REVIEW arm red (or the core's admission refuses - quote which); (5) verdictOf returns null for decide_intent -> the re-aimed :121 arm red. Record the five red lines + restore proofs in the step note (< 4500 chars).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-planning-offers.ts",
         "apps/daemon/src/planning/compile-dispatcher.ts",
         "apps/daemon/src/http/activity-read.ts",
         "apps/daemon/src/http/affordance-read.ts"
       ],
-      "startedAt": "2026-09-05T14:35:36.951Z"
+      "note": "VERIFICATION GATE + DRILL. No file edits in this step: every drill mutation was restored and PROVEN restored.\n\nGATES (foreground, fresh, this session)\n- `pnpm --filter @moe/daemon test` -> EXIT 1. `Test Files 6 failed | 427 passed (433)` / `Tests 11 failed | 8567 passed (8578)`, Duration 900.23s. ALL SIX failing files are FOREIGN — attribution below.\n- `pnpm typecheck` -> EXIT 0, with the execution echo `apps/daemon typecheck$ tsc --project tsconfig.json` + `Done` per package (19 packages).\n- Roster suites GREEN UNCHANGED: `src/mcp-tool-allowlist.test.ts src/daemon-command-registry.test.ts src/daemon-command-vocabulary.test.ts` -> `Test Files 3 passed (3)` / `Tests 475 passed (475)`. No kind or payload changed; `verdict` gaining values on an existing row shape is not a shape change.\n\nPATH-ATTRIBUTED BASELINE (epic rail 3). Failing files at HEAD, disclosed verbatim, none in this row's nine owned paths:\n  src/decision-ledger-memo.test.ts > decisionsOf > \"keeps the memo consistent when the store throws mid-walk: no page is held twice\"\n    AssertionError: expected [ 1n, 2n, 1n, 2n, 3n, 4n, 5n ] to deeply equal [ 1n, 2n, 3n, 4n, 5n ]  (:116)\n  src/orchestrator/seat-exit-classifier.test.ts > 2 arms\n    AssertionError: expected { kind: 'FAILED', ...(3) } to deeply equal { kind: 'PROVIDER_LIMIT', ...(3) }  (:153)\n    AssertionError: expected [ 'claude/rate-limit', ...(5) ] to deeply equal [ 'claude/rate-limit', ...(4) ]  (:264)\n  src/http/foundation-registry.test.ts, src/work/foundation-attempt-service.test.ts (2), src/work/foundation-attempt-windows.test.ts (2), src/work/foundation-capture-producer.test.ts (3)\n    all `Error: Test timed out in 30000ms.` — the known process-spawn-latency cliff; this run measured single shell-out arms at 42716ms / 41725ms / 31638ms and one FILE at 692289ms.\nATTRIBUTION, measured not asserted: `grep -rln \"activity-read.js|affordance-read.js|affordance-planning-offers.js\"` over apps/daemon/src lists 25 importers and NONE of the six failing files. Their own subjects import nothing of mine either — `decision-ledger-memo.ts` imports only `@moe/store`, `seat-exit-classifier.ts` only `./seat-reset-instant.js`. `decision-ledger-memo.test.ts` was CREATED by foreign commit bffee0c2 (`perf(daemon): read models top up a memoized decision ledger`), and `seat-exit-classifier.test.ts` was last written by 0127cbfe, which is a DESCENDANT of my last commit c03353ef (`git merge-base --is-ancestor` = true). DELTA n OWNED PATHS = EMPTY.\n\nFILE SIZES (DoD 4): affordance-planning-offers.ts 236 (<250; grown to 236 by foreign 9021391d after my 232), activity-read.ts 209 (<250, <=215), affordance-read.ts 468 (pre-existing over cap, my growth +6 = the DoD allowance exactly), compile-dispatcher.ts 388 (<=395, and BYTE-IDENTICAL to HEAD: sha256 ef6297a0bc62acdd2bb78bd42948a425a540d9e9f9de422ee57580a51caad919 — this row changed no dispatcher production byte). Test/fixture: plan-reject-test-fixtures.ts 306, compile-dispatcher-revision.test.ts 425, compile-dispatcher.test.ts 292, affordance-read-planning.test.ts 1034, activity-read.test.ts 213, affordance-planning-offers.test.ts 500.\n\nDRILLS — five, one at a time, each restored and proven before the next. Every target was TRACKED and CLEAN before drilling (`git status --porcelain` empty), backed up to /tmp/moe-drill-worker-2739fee7/, restore proven by SHA256 equality in a SEPARATE call plus an empty `git diff`.\n D1 planReviewable back on `goal.planningRunRef`: `Tests 2 failed | 47 passed (49)` — the unit arm AND the real-store post-compile arm. (The prior session recorded this drill as unit-only; the step-4 post-compile arm now catches it too.)\n D2 `refs[current]` -> `refs[goal.planningRunRef]`: `Tests 4 failed | 45 passed (49)` — both successor unit arms plus both real-store arms.\n D3 `resolveCompileRun` answers `planningRunRef` instead of `current.runId`: `Tests 9 failed | 23 passed (32)` — my post-compile surface arm, my id-family arm, my torn-mint ALREADY_FINALIZED arm, and every prerequisite revision arm.\n D4 `proposalKind: target.runKind` -> `\"INITIAL\"`: `Tests 10 failed | 22 passed (32)`, the core refusing exactly as the code comment predicts — `AssertionError: expected 'ILLEGAL_TRANSITION' to be 'EXPECTED_VERSION_CONFLICT'`.\n D5 both approval kinds dropped from VERDICT_KINDS: `Tests 3 failed | 8 passed (11)` — the verdictOf unit arm and BOTH real-store rows.\nRESTORE PROOFS (post-restore SHA256 == backup SHA256, separate call each): compile-run-resolution.ts 3916f4d7...fcbcfc7d; compile-dispatcher.ts ef6297a0...1caad919; affordance-planning-offers.ts 07bb3551...6a0d68ba; activity-read.ts 7f26c27a...8a23e4ebf5. `git status --porcelain -- apps/daemon/src/` shows ZERO of my paths dirty afterwards (the ten peer-WIP paths it does show were never touched).",
+      "startedAt": "2026-09-05T14:35:36.951Z",
+      "completedAt": "2026-09-05T15:03:33.825Z"
     },
     {
       "stepId": "step-7",
       "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a goal rejected TWICE (reject the successor after it compiles: `rejectPlan(store, successorRunId, ...)` -> a third run) - the resolver follows the chain and the dispatcher compiles run 3 (add the arm: it is the whole point of a bounded 16-hop fold); a stale `approval.decide_intent` for the REJECTED run dispatched by a client that cached the old offer -> child 1's fences refuse (name the code the arm observes); a successor whose PLAN_REVIEW is later APPROVED -> `planningGoalRefs` and the goal.close offer follow the successor (one arm via `approvePlan`); the surface read now resolves one run chain per goal per poll - the fold is a per-aggregate event read, bounded; a corrupt chain (currentPlanningRun refuses) -> the ladder falls back to the immutable ref (no offer loss for healthy goals) - state the behaviour and pin it. Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the `currentRun` fact, the dispatcher's state-driven branch (the three shapes at aggregate version 1), the verdict rule, the fixture module's exports, and every file size. Then `moe.add_comment` on child 2b (task-2c016c04dedc4eb88982a1d8d5108ddf) with the fixture module's exports (rejectedWorld/rejectPlan/approvePlan) and the successor's observed state, and on child 3 (task-a988ca1c240347178c54348c470d07ed) with the surface facts its UI reads (decide_intent target moves to the successor; activity verdict REJECT/APPROVE words). Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1, .moe/messages/* or peer WIP.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/compile-dispatcher.ts",
         "apps/daemon/src/planning/plan-reject-test-fixtures.ts"
-      ]
+      ],
+      "startedAt": "2026-09-05T15:03:36.549Z"
     }
   ],
   "status": "WORKING",
@@ -164,12 +167,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-05T14:35:36.951Z",
+  "updatedAt": "2026-09-05T15:03:36.549Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -179,7 +182,8 @@
     "step-2",
     "step-3",
     "step-5",
-    "step-4"
+    "step-4",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T14:49:05.945Z",
@@ -252,6 +256,25 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "c03353ef93f1f50fa69cb7f4a8a6084713927057",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T14:25:04Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+        ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "apps/daemon/src/planning/compile-dispatcher-revision.test.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T14:38:47.949Z",
+      "treeId": "3bbf2d947ede9bf2604c1c7f56ff03789d94f07f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -263,7 +286,11 @@
     "apps/daemon/src/http/affordance-planning-offers.ts",
     "apps/daemon/src/http/affordance-read.ts",
     "apps/daemon/src/planning/compile-dispatcher.test.ts",
-    "apps/daemon/src/planning/plan-reject-test-fixtures.ts"
+    "apps/daemon/src/planning/plan-reject-test-fixtures.ts",
+    ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/planning/compile-dispatcher-revision.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/http/activity-read.test.ts",
@@ -274,15 +301,14 @@
     "apps/daemon/src/http/affordance-read-planning.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.test.ts",
     "apps/daemon/src/http/activity-read.ts",
-    "apps/daemon/src/planning/zz-probe.test.ts"
+    "apps/daemon/src/planning/zz-probe.test.ts",
+    "apps/daemon/src/planning/compile-dispatcher-revision.test.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-cceb207f@2026-09-05T01:29:01Z",
-    "at": "2026-09-05T02:24:09.502Z"
+    "sessionId": "worker-2739fee7@2026-09-05T14:25:04Z",
+    "at": "2026-09-05T14:38:47.949Z"
   }
 }

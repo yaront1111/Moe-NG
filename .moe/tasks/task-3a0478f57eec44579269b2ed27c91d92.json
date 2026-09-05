@@ -1,0 +1,37 @@
+{
+  "id": "task-3a0478f57eec44579269b2ed27c91d92",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Wrapper honours agentProvider at spawn; pause bookkeeping is per-provider",
+  "description": "SPIDR grandchild D of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05). dependsOn grandchild C (the store must exist to honour).\n\nMEASURED INVARIANT: agent-provider-pause.ts:36 and agent-wrapper.ts:323-325 state ONE MOE_AGENT_COMMAND PER WRAPPER PROCESS. agent-spawner.ts:50 resolves `options.command ?? process.env[\"MOE_AGENT_COMMAND\"] ?? \"claude\"` ONCE at spawnRuntime construction; agent-wrapper-main.ts:291 passes that one provider into createProviderPauseGate. The pause LEDGER is already keyed by (projectId, provider) — readProviderPause(store, projectId, provider, …). Option (a) is the smallest production-reachable slice that satisfies argv[0] changing with the setting inside one wrapper; option (b) would require two wrapper processes the launcher does not start.\n\nWHAT THIS ROW OWNS: per-spawn resolution (new module), spawner uses it inside attemptSpawn (codexSeat becomes per-spawn), wrapper staffing skips only the paused provider's steps, pause gate records/reads per the seat's provider, wrapper-main stops freezing one provider at process start.\n\nNOT IN SCOPE: /sessions/read disclosure (grandchild E), UI, command kind roster.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "A test asserts argv[0] is `codex` when the durable setting says codex and `claude` when it says claude, with MOE_AGENT_COMMAND unset. The assertion is against the spawned argv, not an internal field. The codex-only env allowlist is applied for a codex spawn.",
+    "With MOE_AGENT_COMMAND set, the spawn uses it REGARDLESS of the setting. Assert argv[0] matches the env value.",
+    "Pause is per-provider: a live pause for claude does not prevent staffing a codex goal (and the reverse). A test covers a pause under this model. The comment at agent-wrapper.ts:323-325 no longer claims one MOE_AGENT_COMMAND per wrapper process.",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "INVARIANT DECISION, BINDING: option (a) PER-SPAWN RESOLUTION. The wrapper resolves the provider PER SPAWN (env > goal override > project setting > claude). Pause bookkeeping is per-provider, not per-wrapper. Do not take option (b) (one provider per process, two wrappers). Record this in the step note; a later worker must not re-decide it.",
+    "EXTRACT, DO NOT GROW. agent-spawner.ts is 438 lines and agent-wrapper-main.ts is 482 (both over the 400 cap). New agent-provider-resolve.ts owns precedence. Update the comment at agent-wrapper.ts:323-325 that currently states one MOE_AGENT_COMMAND per process.",
+    "Assert spawned argv[0], not an internal field. Codex-only env allowlist (agent-spawn-environment.ts:22-24) applies when the resolved command is a codex seat.",
+    "MOE_AGENT_COMMAND still wins at spawn. Disclosure of that win on /sessions/read is grandchild E, not this row.",
+    "FEATURES ONLY. No UI, no MCP fence, no contract roster."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "priority": "HIGH",
+  "order": 71.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:41.317Z",
+  "updatedAt": "2026-09-05T14:54:07.366Z",
+  "dependsOn": [
+    "task-c851961b968942f880950acc16dc575a"
+  ]
+}

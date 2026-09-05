@@ -17,8 +17,33 @@
     "NO CODEX MISSION WORK AND NO UI: mission parity and the offline codex e2e are child 2; the Seats screen and the live drive are child 3.",
     "NEVER HAND-EDIT the generated client: run the generator and quote the OLD and NEW GENERATED_CONTRACT_DIGEST."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in six grandchildren and it carries dependsOn on every one. Confirm each is DONE — task-bb0a71316bd343d18453224973563ed0 (A0 shared contract + digest mirrors), task-c422b106af2945b1a1ad4ed49556bf66 (B daemon roster + fail-closed AGENT_PROVIDER_UNCONFIGURED), task-166d375f8ce9492aaf50587233545992 (fence MCP-excluded + HUMAN_ONLY), task-c851961b968942f880950acc16dc575a (C durable store + real handler), task-3a0478f57eec44579269b2ed27c91d92 (D per-spawn honor + per-provider pause), task-3958769c73e1409183b36c538c5468ad (E /sessions/read disclosure + live-sessions exact-key) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it. This row writes no production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RECONCILE THE DoD AND RECORD THE INVARIANT. Mapping: DoD 1 (durable setting, operator-only command, KNOWN_PROVIDERS, unknown-provider code+layer) -> A0 + B + Fence + C. DoD 2 (argv[0] follows setting, codex env allowlist) -> D. DoD 3 (env override wins AND is disclosed on /sessions/read) -> D (wins at spawn) + E (disclosed). DoD 4 (per-wrapper-process invariant resolved, pause test) -> D, option (a) PER-SPAWN, recorded in comment-6d01ac13. DoD 5 (gates) -> this step's command plus the children. Quote each child's verification count line. Confirm KNOWN_PROVIDERS is still the sole name roster (no second list). Confirm agent-wrapper.ts:323-325 no longer claims one MOE_AGENT_COMMAND per process.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "RUN THE GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` (E moved live-sessions.ts), `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test` (A0 rotated the digest), `pnpm typecheck`, and `pnpm test` (root lane is real evidence because A0 touched packages/contracts and the generated client; still covers NO apps/**). Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (none — children own them). Named verification command for completion: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL PASS OVER THE COMPOSED FEATURE, recorded in a step note. (a) PROVIDER MISMATCH: setting says codex, MOE_AGENT_COMMAND says claude — do spawn argv, pause bookkeeping, and /sessions/read all agree, and does sessions/read set the override flag? A disagreement is how an operator concludes the toggle is broken. (b) PAUSE ISOLATION: claude paused, codex goal ready — is the codex goal staffed? The old wrapper paused the whole pass. (c) EXACT-KEY: a missing agentProvider member on the daemon frame must BLANK Seats via SESSIONS_RESPONSE_INVALID, not degrade. (d) UNKNOWN PROVIDER still refuses AGENT_PROVIDER_UNKNOWN at its layer. (e) File caps: agent-spawner.ts and agent-wrapper-main.ts must not have grown past 400; D was required to extract. Where an answer is not covered, comment it here — do not file a new evidence row. Then complete_task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +53,50 @@
   "parentTaskId": "task-969575299465484d9486ea02ff7ae336",
   "priority": "HIGH",
   "order": 71,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-6d01ac13444f424ca64e5fba763768d7",
+      "author": "architect-2e480458",
+      "content": "SPIDR split 2026-09-05 architect-2e480458. This row is now a parent shell; work lives in six grandchildren. Parent dependsOn names all six (rail 22).\n\nINVARIANT DECISION (binding, recorded here so grandchild D does not re-decide): option (a) PER-SPAWN RESOLUTION. The wrapper resolves provider per spawn (MOE_AGENT_COMMAND > goal override > project setting > claude). Pause bookkeeping is per-provider. The pause LEDGER is already keyed by (projectId, provider). Option (b) (one provider per process, two wrappers) is rejected: the launcher starts one MOE_AGENT_COMMAND, and DoD 2 requires argv[0] to follow the setting inside one wrapper.\n\nKind: project.set_agent_provider. Payload keys (grandchild B): [base, goalId, provider]; goalId \"\" = project default.\n\nChildren:\n- A0 task-bb0a71316bd343d18453224973563ed0 contract + digest mirrors (LEAF; waits on preview/release contract rows that own the same six files)\n- B task-c422b106af2945b1a1ad4ed49556bf66 daemon roster + fail-closed AGENT_PROVIDER_UNCONFIGURED (waits A0 + preview roster + release wiring)\n- Fence task-166d375f8ce9492aaf50587233545992 MCP-excluded + HUMAN_ONLY (waits B + preview fence + release fence)\n- C task-c851961b968942f880950acc16dc575a durable store + real handler (waits B; parallel with Fence)\n- D task-3a0478f57eec44579269b2ed27c91d92 spawn honor + per-provider pause (waits C)\n- E task-3958769c73e1409183b36c538c5468ad /sessions/read disclosure + live-sessions exact-key (waits D)\n\nDoD mapping: 1 → A0+B+Fence+C; 2+4 → D; 3 → E.\n\nMeasured at plan: agentProvider grep = 0 in *.ts. KNOWN_PROVIDERS at health-read.ts:34. agent-spawner.ts:50 once-per-process. agent-wrapper.ts:323-325 states the old invariant. sessions-read.ts SessionsView keys = concurrency, outcome, readAt, sessions, totals, unreadable. live-sessions exact-arity. commands.size currently 104; preview.decide present; release.decide absent.",
+      "timestamp": "2026-09-05T14:54:07.697Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:23.042Z",
-  "updatedAt": "2026-09-05T00:39:23.042Z"
+  "updatedAt": "2026-09-05T14:55:05.171Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:45:22.654Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 0
+  },
+  "contextFetchedBy": [
+    "architect-2e480458"
+  ],
+  "dependsOn": [
+    "task-bb0a71316bd343d18453224973563ed0",
+    "task-c422b106af2945b1a1ad4ed49556bf66",
+    "task-166d375f8ce9492aaf50587233545992",
+    "task-c851961b968942f880950acc16dc575a",
+    "task-3a0478f57eec44579269b2ed27c91d92",
+    "task-3958769c73e1409183b36c538c5468ad"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:55:03.013Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, planning this as one row: a new human-only command kind is a 3-4 row job by itself (mem:decision-a-new-command-kind-is-a-three-row-job, measured ~24 files vs 10-file hard cap). Adding durable store, per-spawn resolution that changes a documented pause invariant, and an exact-key /sessions/read disclosure on top is a guaranteed CONSTRAINT_VIOLATION. REJECTED, option (b) one-provider-per-process: the launcher starts one MOE_AGENT_COMMAND, and DoD 2 requires argv[0] to follow the setting inside one wrapper. REJECTED, declaring a second provider-name roster: KNOWN_PROVIDERS already exists at health-read.ts:34. REJECTED, putting the kind in BOOTSTRAP_FAMILY: bootstrap-durability.test.ts asserts one ordered request per BootstrapCommandKind. REJECTED, folding fence into B: preview.decide and release.decide already proved MCP count pins push wiring+fence past 10 files. REJECTED, folding spawn+sessions into one row: 11 distinct files (spawner 438, wrapper-main 482, pause, wrapper staffing comment, sessions-read, live-sessions + tests + new resolve module).",
+    "codebaseInsights": "MEASURED 2026-09-05 by architect-2e480458. agentProvider grep in *.ts = 0. KNOWN_PROVIDERS = [claude,codex] at apps/daemon/src/http/health-read.ts:34, imported only by health-read itself. agent-spawner.ts:50 resolves command ONCE at spawnRuntime construction (438 lines, already over 400). agent-wrapper-main.ts:291 freezes one provider into createProviderPauseGate (482 lines). agent-wrapper.ts:323-325 comments 'One MOE_AGENT_COMMAND per wrapper process, so one provider'. Pause LEDGER is already per-provider: readProviderPause(store, projectId, provider, ...). SessionsView keys = concurrency, outcome, readAt, sessions, totals, unreadable; live-sessions.ts SESSIONS_FRAME_KEYS exact-arity — adding a daemon member without the decoder BLANKS Seats. RUNTIME_COMMAND_KINDS at runtime-vocabulary.ts:85 currently 104 members, preview.decide present, release.decide absent. Digest mirrors: generated-client.ts ed5f6b87..., generated-coverage.test.ts same, approve-plan.test.tsx:255 same, data-adapter.test.ts:18 currently a DIFFERENT hash (foreign WIP). scripts/release/release-subject.mjs derives. HUMAN_ONLY_STEPS one Set at agent-spawn-contract.ts:195. MCP_EXCLUDED_COMMAND_KINDS at mcp-tool-allowlist.ts:59 currently 6 entries including repository.publish. Kind name project.set_agent_provider sorts after project.register, before provider.probe. Payload [base, goalId, provider]; goalId empty string = project default. Precedence for spawn: MOE_AGENT_COMMAND > goal override > project setting > claude.",
+    "risks": "BIGGEST: concurrent kind-publishing rows (preview.decide roster+fence, release.decide contract+wiring+fence) bump the same count literals and the same six contract files. Grandchildren dependOn those rows; workers reconcile to printed expected-vs-received, never to numbers in a description. SECOND: option (a) changes a DONE row's invariant (task-4109c1a0 provider-pause). D must update agent-wrapper.ts:323-325 and make pause per-provider at staffing time — pausing the whole pass when claude is limited would starve a codex goal. THIRD: exact-key decoder — daemon and browser must move in one commit or Seats goes blank. FOURTH: data-adapter.test.ts digest already disagrees with generated-client; A0 must re-census, not revert foreign WIP. FIFTH: growing agent-spawner.ts (438) or wrapper-main.ts (482) is a per-file cap reject — D extracts a resolve module.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "apps/daemon/src/http/health-read.ts",
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/orchestrator/agent-provider-pause.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/http/sessions-read.ts",
+      "apps/control-room/src/live/live-sessions.ts",
+      "apps/daemon/src/mcp-tool-allowlist.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:55:05.171Z"
 }

@@ -1,6 +1,6 @@
 {
   "id": "task-eb2bb09d4efa4691803a519901eb2f97",
-  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
   "title": "Compose the design-read port into the production daemon listener",
   "description": "SPIDR child of task-8a6d6660, spun from task-7ca9dca3 (architect-2e480458, 2026-09-05) because wiring the listener AND composing it into daemon-store-foundation-composition.ts + daemon-entry.ts + FACTORIES + providerKeys exceeds the 10-file cap.\n\nOBJECTIVE: the production daemon (daemon-main / createStoreDependencies) actually supplies the design-read port the listener already knows how to call.\n\nDELIVERABLE: factory in daemon-store-foundation-composition.ts, forwarded in daemon-store-dependencies.ts, listed in FACTORIES (daemon-entry-port-resolution.ts) and providerKeys, spread in daemon-entry.ts onto StartListenerOptions.\n\nNOT IN SCOPE: the HTTP handler and JSON_ROUTES (task-7ca9dca3), UI, MCP.\n\nVERIFICATION: `pnpm --filter @moe/daemon test` plus `pnpm typecheck`.",
   "definitionOfDone": [

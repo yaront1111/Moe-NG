@@ -1,0 +1,88 @@
+{
+  "id": "task-bb0a71316bd343d18453224973563ed0",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "project.set_agent_provider is on the shared runtime contract with digest mirrors rotated",
+  "description": "SPIDR grandchild A0 of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05), INTERFACE axis. TRUE LEAF of a new human-only command kind. dependsOn task-c672815d (preview.decide contract, REVIEW) and task-bda0eeac (release.decide contract, WORKING) because they edit the SAME six files.\n\nWHAT THIS ROW OWNS: add `project.set_agent_provider` to the shared runtime roster and rotate every GENERATED_CONTRACT_DIGEST mirror. Copy task-c672815d / mem:decision-a-new-command-kind-is-a-three-row-job. Payload shape is declared here only as the kind existing; PAYLOAD_KEYS live in grandchild B.\n\nNOT IN SCOPE: daemon vocabulary, MCP fence, store, spawn, /sessions/read, UI.\n\nVERIFY: `pnpm --filter @moe/control-room-client test` (must print Test Files N passed). Also the three other legs in DoD 3.\n\nMEASURED: RUNTIME_COMMAND_KINDS at packages/contracts/src/runtime/runtime-vocabulary.ts:85; EXPECTED_COMMAND_KINDS + commands.size at runtime-contract.test.ts:36/:105 (size currently 104, preview.decide already present, release.decide NOT). Mirrors at claim: generated-client.ts GENERATED_CONTRACT_DIGEST, generated-coverage.test.ts CONTRACT_DIGEST + GENERATED_FILE_SHA256, approve-plan.test.tsx:255, data-adapter.test.ts:18 (currently a different hash — foreign WIP). scripts/release/release-subject.mjs RETIRED (derives).",
+  "definitionOfDone": [
+    "`project.set_agent_provider` is a member of RUNTIME_COMMAND_KINDS and of the hand-transcribed EXPECTED_COMMAND_KINDS, inserted at its sorted slot (after `project.register`, before `provider.probe`). The `commands.size` literal in runtime-contract.test.ts is reconciled to the printed expected-vs-received, not to any number in this description.",
+    "The generator was run (`pnpm --filter @moe/control-room-client generate`). GENERATED_COMMAND_BUILDERS exposes the kind. OLD and NEW GENERATED_CONTRACT_DIGEST are quoted in the step note. Every digest mirror found by grepping the NEW digest is updated in the same commit — including apps/control-room mirrors, which none of `pnpm test` / `pnpm typecheck` / `pnpm --filter @moe/daemon test` execute.",
+    "Gates quoted with `Test Files N passed` count lines: `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test` (the two apps/control-room mirrors hard-throw), and `pnpm test` (root lane is real evidence: packages/contracts and the generated client moved)."
+  ],
+  "taskRails": [
+    "NEVER HAND-EDIT the generated client: run `pnpm --filter @moe/control-room-client generate` and quote OLD and NEW GENERATED_CONTRACT_DIGEST.",
+    "Re-census digest mirrors at claim with a full-tree grep of the NEW digest (all file types). Do not trust a frozen four-file list. data-adapter.test.ts currently holds a DIFFERENT hash than generated-client.ts — reconcile to the generator output, do not revert foreign WIP blindly.",
+    "No count literal in this description is trustworthy: concurrent kind rows move commands.size first. Reconcile to the assertion's PRINTED expected-vs-received.",
+    "FEATURES ONLY. No daemon roster, no store, no spawn, no UI."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE AT CLAIM, then write the RED tests. Grep project.set_agent_provider (must be absent in production source). Print runtime-contract.test.ts commands.size expected-vs-received by reading the literal. Confirm the sorted slot is still after `project.register` and before `provider.probe` (if a concurrent kind now sits between them, pin the new neighbours instead). Census current GENERATED_CONTRACT_DIGEST in generated-client.ts and list every file that currently holds that exact 64-hex string (`git grep` all types). Record OLD digest in the step note. Then edit ONLY runtime-contract.test.ts: insert `project.set_agent_provider` into EXPECTED_COMMAND_KINDS at the same sorted slot as the production tuple will use, and bump `commands.size` toBe(N) to N+1 from the printed literal (currently 104, do not trust 104 at claim). Add a neighbour pin like the preview.decide arm: indexOf(`project.set_agent_provider`) > -1, previous === `project.register`, next === `provider.probe` (or the measured neighbours). Do not implement the tuple yet — this step must be RED. Named TDD file: packages/contracts/src/runtime/runtime-contract.test.ts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-contract.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE KIND AND ROTATE EVERY DIGEST MIRROR. Insert `project.set_agent_provider` into RUNTIME_COMMAND_KINDS in packages/contracts/src/runtime/runtime-vocabulary.ts at the sorted slot (after `project.register`, before `provider.probe` unless step 1 measured different neighbours). Do not add it to RUNTIME_QUERY_KINDS or RUNTIME_TELEMETRY_KINDS. Run `pnpm --filter @moe/control-room-client generate` (never hand-edit generated-client.ts). Quote OLD and NEW GENERATED_CONTRACT_DIGEST in the step note. Update generated-coverage.test.ts GENERATED_FILE_SHA256 (sha256 of the new generated-client.ts bytes) and CONTRACT_DIGEST to the NEW digest. Grep the NEW digest across the whole tree (all file types). Update every remaining hardcoded mirror, currently expected: apps/control-room/src/v2/goals/approve-plan.test.tsx:255 and apps/control-room/src/data/data-adapter.test.ts:18. data-adapter.test.ts currently holds a different hash (foreign WIP) — change only the contractSchemaHash string, do not revert other dirt in that file. scripts/release/release-subject.mjs derives; do not edit it. Confirm GENERATED_COMMAND_BUILDERS contains commandBuilderFor(\"project.set_agent_provider\"). Do not touch daemon vocabulary, MCP allowlist, or approve-plan.tsx.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "VERIFY AND ADVERSARIAL. Run each leg standalone and foreground; quote `Test Files N passed` (global rail 8 — exit 0 with no count line is a vacuous run). Legs: `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test` (the two apps/control-room mirrors hard-throw and are in NONE of the other usual gates), `pnpm test` (root lane is real evidence here), `pnpm typecheck`. Named verification command for complete_task: `pnpm --filter @moe/control-room-client test`. Adversarial: (1) drop the kind from RUNTIME_COMMAND_KINDS but leave EXPECTED_COMMAND_KINDS — the toEqual arm goes RED. (2) drop it from EXPECTED_COMMAND_KINDS only — same arm RED. (3) insert it in the tuple at the wrong sorted slot — the sorted-position test AND the neighbour pin go RED. (4) skip the generator and only bump CONTRACT_DIGEST — generated-coverage GENERATED_FILE_SHA256 or GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS goes RED. Restore tracked paths via git diff; if generated-client.ts is untracked (should be tracked), SHA256 vs %TEMP% per rail 13. Confirm no daemon file and no second provider-name roster landed. Then complete_task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "dependsOn": [
+    "task-c672815d5adc408683d11f91ab3f0a72",
+    "task-bda0eeac02544c1992c6738c2db83178"
+  ],
+  "priority": "HIGH",
+  "order": 71.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:40.763Z",
+  "updatedAt": "2026-09-05T14:56:19.179Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:55:15.753Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:56:17.041Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, landing the daemon roster in this row: ROWS.kind is typed as RuntimeCommandKind, but the shared-contract slice is already six files with zero headroom (vocabulary + contract test + generated client + generated-coverage + two apps/control-room digest mirrors). preview.decide's original combined plan was hard-rejected at 12 files for exactly this reason. REJECTED, hand-editing generated-client.ts: the generator is the only writer; coverage pins GENERATED_FILE_SHA256. REJECTED, a frozen four-mirror list: data-adapter.test.ts currently holds a different hash than generated-client.ts (foreign WIP on the shared checkout); the worker re-censuses by grepping the NEW digest.",
+    "codebaseInsights": "MEASURED 2026-09-05. RUNTIME_COMMAND_KINDS at packages/contracts/src/runtime/runtime-vocabulary.ts:85, currently 104 unique members (runtime-contract.test.ts:105 commands.size toBe(104) — concurrent release.decide will move this; reconcile to printed). preview.decide already present between policy.validate and product_contract.answer_clarification. release.decide ABSENT. Sorted insert slot for project.set_agent_provider: after project.register (line 106), before provider.probe (line 107). Existing neighbour pin for product_contract.approve_gate_1 (runtime-contract.test.ts:137-148) is BEFORE this slot and does not move. EXPECTED_COMMAND_KINDS at runtime-contract.test.ts:36 is hand-transcribed and order-sensitive. Generator: `pnpm --filter @moe/control-room-client generate` -> packages/control-room-client/src/generated/generated-client.ts (GENERATED_CONTRACT_DIGEST at :907 currently ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076). generated-coverage.test.ts:35-36 GENERATED_FILE_SHA256 + CONTRACT_DIGEST (same digest). approve-plan.test.tsx:255 same digest. data-adapter.test.ts:18 currently ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28 — DIFFERENT, foreign WIP; overwrite only the hash constant after generate. scripts/release/release-subject.mjs RETIRED (derives). generated-coverage.test.ts:87-93 asserts GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS both directions, so the generator must actually emit the builder. stdio-server.test.ts derives from RUNTIME_COMMAND_KINDS.length — not a literal pin, do not edit. This row does not touch daemon files. dependsOn task-c672815d and task-bda0eeac (same six files); WORKING is gated until they are DONE.",
+    "risks": "Concurrent kind rows: if release.decide lands in the tuple first, commands.size is already 105 at claim — bump from the PRINTED value, still insert at the sorted slot (project.register / provider.probe), not at the end. Digest mirrors: forgetting apps/control-room leaves two hard-throwing tests behind three green gates (pnpm test, typecheck, daemon test all miss apps/control-room). data-adapter.test.ts is already dirty — do not git checkout it; replace only the contractSchemaHash string. Do not add a neighbour-pin that uses an absolute index. Restore drills on untracked generated output use SHA256 vs %TEMP%.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-contract.test.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/control-room-client/src/generated-coverage.test.ts",
+      "apps/control-room/src/data/data-adapter.test.ts",
+      "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:56:19.179Z"
+}

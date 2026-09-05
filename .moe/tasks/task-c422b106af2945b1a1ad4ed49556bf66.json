@@ -1,0 +1,96 @@
+{
+  "id": "task-c422b106af2945b1a1ad4ed49556bf66",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "project.set_agent_provider is wired in the daemon registry, operator-fenced, refusing fail-closed",
+  "description": "SPIDR grandchild B of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05). Daemon roster + fail-closed sync entry. Copy task-54b74b80 (release.decide wiring) WITHOUT the MCP fence files.\n\ndependsOn: task-40e52fa8 (preview.decide roster) and task-54b74b80 (release.decide wiring) because they move the SAME count literals. Also waits on A0 (set after A0 is filed) for RuntimeCommandKind — ROWS.kind is typed as RuntimeCommandKind so this row cannot typecheck first.\n\nWHAT THIS ROW OWNS: family table, WiredCommandKind union, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS, sync entryOf that refuses AGENT_PROVIDER_UNCONFIGURED, the daemon count pins. REGISTRATION_ORDER is PAYLOAD_KEYS insertion order, not alphabetical.\n\nNOT IN SCOPE: MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS, the store, spawn, /sessions/read, generated client.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "`project.set_agent_provider` is on a new family table (NOT BOOTSTRAP_FAMILY) with CAPABILITIES.ADMIN, on WiredCommandKind, on PAYLOAD_KEYS as [\"base\",\"goalId\",\"provider\"], on OPERATOR_PRINCIPAL_KINDS, and on a sync registry entry. The four hand-written daemon pins are reconciled in the same commit: daemon-command-vocabulary.test.ts, daemon-command-registry.test.ts (ROWS + insertion-ordered REGISTRATION_ORDER + every registry.size toBe(N), currently six toBe(46) at :819/:826/:1678/:1700/:1732 — grep, do not eyeball), daemon-store-dependencies.test.ts registryKinds.",
+    "A well-formed operator dispatch against an unconfigured daemon is refused fail-closed: assert code AGENT_PROVIDER_UNCONFIGURED AND its layer. No durable receipt, event or decision is written on that path.",
+    "A non-operator principal dispatching the kind is refused by the registry operator fence; assert CODE AND LAYER. Mutation drill: remove the kind from OPERATOR_PRINCIPAL_KINDS → the non-operator arm goes RED. Restore proof per global rail 13.",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "Do NOT put the kind in BOOTSTRAP_FAMILY: bootstrap-durability.test.ts asserts one ordered request per BootstrapCommandKind. New SETTINGS_FAMILY (or equivalent) on FAMILY_TABLES, capability CAPABILITIES.ADMIN matching policy.install.",
+    "SYNC entry via entryOf, not asyncEntries. Writing a setting is synchronous. Fail-closed: well-formed operator dispatch refuses AGENT_PROVIDER_UNCONFIGURED at a closed layer, writes NO receipt/event/decision. Grandchild C replaces this handler.",
+    "PAYLOAD_KEYS exact list [\"base\",\"goalId\",\"provider\"]. goalId is the empty string for the project default, a goal id for the per-goal override. Do not add optional keys.",
+    "No count literal is trustworthy. Reconcile vocabulary/registry/store-deps pins to printed expected-vs-received. Concurrent movers: task-40e52fa8 (preview roster) and task-54b74b80 (release wiring).",
+    "Do NOT edit mcp-tool-allowlist.ts, agent-spawn-contract.ts, or the extra MCP count pins — that is the fence grandchild. Do not edit packages/contracts. FEATURES ONLY."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE AT CLAIM, then RED tests. Confirm `project.set_agent_provider` is a RuntimeCommandKind (A0 DONE); if not, report_blocked blockedOnTaskIds [task-bb0a71316bd343d18453224973563ed0]. Print the current count literals (do not trust 46/35/11): vocabulary.test.ts ROWS.toHaveLength, declared.toHaveLength, OPERATOR_ONLY.toHaveLength, OPERATOR_PRINCIPAL_KINDS.size; registry.test.ts every registry.size toBe(N) (grep toBe, currently six at :819/:826/:1678/:1700/:1732 plus ROWS/REGISTRATION_ORDER lengths); store-deps registryKinds membership. Then add the kind to the hand-transcribed tables in the SAME insertion slot as PAYLOAD_KEYS will use (after project.register): vocabulary.test.ts ROWS + Family \"SETTINGS\" + FAMILY_MAPS/FAMILY_NAMES + OPERATOR_ONLY; registry.test.ts REGISTRATION_ORDER + its OPERATOR_ONLY + ROWS payload table; store-deps registryKinds SET. Bump every count from the PRINTED value. Add fail-closed + operator-fence tests in daemon-command-registry.test.ts: well-formed operator dispatch (payload keys base, goalId:\"\", provider:\"codex\") asserts code AGENT_PROVIDER_UNCONFIGURED AND layer DAEMON_COMPOSITION and that no event/decision was written; non-operator principal asserts OPERATOR_PRINCIPAL_REQUIRED AND DAEMON_AUTHORIZATION. These tests are RED until step 2. Do not edit mcp-tool-allowlist.ts or agent-spawn-contract.ts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "MINIMUM WIRING + FAIL-CLOSED. New apps/daemon/src/orchestrator/agent-provider-command.ts (plus one-line .js bridge, copy environment-store.js) exports: AGENT_PROVIDER_COMMAND_KIND = \"project.set_agent_provider\", AGENT_PROVIDER_PAYLOAD_KEYS = [\"base\",\"goalId\",\"provider\"] frozen, and runAgentProviderCommand() that refuses AGENT_PROVIDER_UNCONFIGURED at DAEMON_COMPOSITION (copy cutover's DomainRefusal unconfigured shape) and writes nothing. Keep it under 250 lines. vocabulary.ts: SETTINGS_FAMILY Record with this kind → CAPABILITIES.ADMIN, add it to FAMILY_TABLES, add the kind to the WiredCommandKind union, PAYLOAD_KEYS row (spread AGENT_PROVIDER_PAYLOAD_KEYS, inserted after project.register), OPERATOR_PRINCIPAL_KINDS, and agentCapabilitiesFor early-return null (copy answer_clarification at :196). Freeze SETTINGS_FAMILY; add Object.isFrozen(SETTINGS_FAMILY) next to the other family freeze asserts. registry.ts: import the kind; in entryOf, AFTER the operator fence and BEFORE the bootstrap fallback, `if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(runAgentProviderCommand());`. Do not add a settings boolean to CommandFamilyFacts. Do not put the kind in BOOTSTRAP_FAMILY or asyncEntries. File cap: vocabulary.ts is 372 — stay under 400; registry.ts is 436 — the intercept is one if+return, no new family-facts flag.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.js",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "VERIFY AND ADVERSARIAL. `pnpm --filter @moe/daemon test` and `pnpm typecheck`, each standalone foreground, quote `Test Files N passed`. Named complete_task command: `pnpm --filter @moe/daemon test`. Mutation: remove the kind from OPERATOR_PRINCIPAL_KINDS → the non-operator arm goes RED; restore per rail 13 (`git status --porcelain` first; untracked new module SHA256 vs %TEMP% in a call separate from the restore). Confirm the intercept sits before runBootstrapCommand (a missing intercept would accept as bootstrap). Confirm no MCP allowlist / HUMAN_ONLY_STEPS edit. Confirm KNOWN_PROVIDERS was not copied. Then complete_task. Grandchild C replaces runAgentProviderCommand with the store; unconfigured tests stay in this row.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "dependsOn": [
+    "task-bb0a71316bd343d18453224973563ed0",
+    "task-40e52fa8a85a4921b97bee933b00403f",
+    "task-54b74b8041c64bc2868435bcbdac6dd6"
+  ],
+  "priority": "HIGH",
+  "order": 71.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:40.825Z",
+  "updatedAt": "2026-09-05T14:58:41.455Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:56:36.551Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:58:39.271Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED, putting the kind in BOOTSTRAP_FAMILY: bootstrap-durability.test.ts asserts one ordered request per BootstrapCommandKind, and entryOf's final branch is runBootstrapCommand — a kind that only sits on WiredCommandKind without an intercept FALLS THROUGH to bootstrap. REJECTED, asyncEntries: writing a setting is synchronous; async wrapAsync is a no-op in v1 and would skip the operator fence (the release.decide trap). REJECTED, folding the MCP fence into this row: preview.decide and release.decide already proved extra MCP count pins push past 10 files. REJECTED, growing registry.ts (436 lines, already over 400) with a 20-line handler: extract agent-provider-command.ts so C can swap the body without another registry edit if possible — this row still adds one `if (kind === ...)` intercept BEFORE the bootstrap fallback, which is load-bearing. REJECTED, a second provider-name list: this row does not validate provider names (C does, via KNOWN_PROVIDERS); fail-closed fires for ANY well-formed operator dispatch.",
+    "codebaseInsights": "MEASURED 2026-09-05. Analog: cutover.activate fail-closed throws DomainRefusal(\"CUTOVER_ACTIVATE_UNCONFIGURED\", \"DAEMON_COMPOSITION\", ...) at daemon-command-registry.ts:320-326 BEFORE other work. Operator fence is the existing OPERATOR_PRINCIPAL_KINDS.has(kind) throw DomainRefusal(\"OPERATOR_PRINCIPAL_REQUIRED\", \"DAEMON_AUTHORIZATION\", ..., 403) at :271-288 — adding the kind to the set is sufficient; do not duplicate the fence. SETTINGS_FAMILY is NEW, capability ADMIN, added to FAMILY_TABLES in vocabulary.ts:180. agentCapabilitiesFor must return null for this kind (copy product_contract.answer_clarification at vocabulary.ts:196) so it is never staffable; HUMAN_ONLY_STEPS is the fence grandchild. PAYLOAD_KEYS insert next to project.register (vocabulary.ts:322) as [\"base\",\"goalId\",\"provider\"] so REGISTRATION_ORDER (registry.test.ts:286, PAYLOAD_KEYS insertion order NOT alphabetical) gets the new kind after project.register. commandFamilyFacts does NOT need a new boolean: membership flags stay false, requiredCapabilityOf falls through to familyCapabilityOf → ADMIN, schemaVersion falls through to BOOTSTRAP_SCHEMA_VERSION (unused by the intercept). Do NOT edit daemon-command-families.ts. Vocabulary test Family union and FAMILY_MAPS/FAMILY_NAMES must gain SETTINGS. Current pins (will have moved): ROWS 46, declared 35, OPERATOR_ONLY 11, registry.size toBe(46) at :819 :826 :1678 :1700 :1732 — grep, do not eyeball. store-deps registryKinds is a hand-written SET. A0 must have landed RuntimeCommandKind or this row cannot typecheck (ROWS.kind).",
+    "risks": "Fall-through to runBootstrapCommand if the intercept is missing or placed after the bootstrap return — the kind would look wired while executing a durable bootstrap sequence. Concurrent preview/release roster rows move every count literal; reconcile to printed expected-vs-received. registry.ts is already 436 lines: the intercept must be a kind-equals plus one call, not a new family-facts flag (that would also edit families.ts and the destructure). Do not edit mcp-tool-allowlist or HUMAN_ONLY_STEPS. Payload key order is exact; extra/missing keys are PAYLOAD_SHAPE at ingress, not this row's unknown-provider code.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/orchestrator/agent-provider-command.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:58:41.455Z"
+}

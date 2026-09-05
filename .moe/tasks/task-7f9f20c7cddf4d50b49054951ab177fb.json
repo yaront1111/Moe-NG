@@ -1,6 +1,6 @@
 {
   "id": "task-7f9f20c7cddf4d50b49054951ab177fb",
-  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
   "title": "design.read is served over MCP next to product_contract.read",
   "description": "SPIDR child 1c of task-8a6d6660c31c4e119f962d13e6f1505d, split from task-06ac0da1ace64032855affc4ab0c1a4e (architect-3c27f2ab, 2026-09-05) when the publish row measured 12 files against the 10-file cap. Cut along the INTERFACE axis: 06ac0da1 publishes the two kinds on the daemon roster + shared contract + generated client; THIS row makes design.read REACHABLE over MCP.\n\ndependsOn task-06ac0da1 — the query kind must exist on RUNTIME_QUERY_KINDS before the port can serve it.\n\nWHAT THIS ROW OWNS: MCP advertisement + dispatch for design.read, and the behavioural agent-authenticated arms for BOTH kinds (submit is auto-advertised once PAYLOAD_KEYS has it and it is not in MCP_EXCLUDED_COMMAND_KINDS; read must be added).\n\nMEASURED: MCP_SERVED_QUERY_KINDS at apps/daemon/src/mcp-tool-allowlist.ts:27-34 is HAND-KEPT. QUERY_HANDLERS at mcp-dispatch-port.ts:297-304 is the SERVED set; servedMcpQueryKinds() reads Object.keys of that table. product_contract.read is the shape to copy (answerProductContractRead at :302). The allowlist test already proves exact set-equality both ways between the two enumerations.\n\nNOT this row: daemon command vocabulary, families, registry, contracts runtime lists, generated client. Those are 06ac0da1.",
   "definitionOfDone": [

@@ -1,0 +1,37 @@
+{
+  "id": "task-c851961b968942f880950acc16dc575a",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Durable agentProvider is written by the operator command and read through a store port",
+  "description": "SPIDR grandchild C of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05). dependsOn grandchild B (set after B is filed) so the kind is already on the registry.\n\nWHAT THIS ROW OWNS: the durable store (copy the environment-store event-commit shape, without encryption — this value is not a secret), a closed refusal factory (AGENT_PROVIDER_UNKNOWN plus any store-layer codes), swapping B's fail-closed registry handler for the real one, composition of the store port. New files under apps/daemon/src/orchestrator/ or apps/daemon/src/settings/.\n\nNOT IN SCOPE: RUNTIME_COMMAND_KINDS, MCP fence, spawn argv, pause bookkeeping, /sessions/read, UI.\n\nVERIFY: `pnpm --filter @moe/daemon test`.\n\nCopy: apps/daemon/src/environment/environment-store.ts commitEnvironmentEvent; KNOWN_PROVIDERS at apps/daemon/src/http/health-read.ts:34.",
+  "definitionOfDone": [
+    "A durable per-project `agentProvider` (claude|codex) with a per-goal override is written by `project.set_agent_provider` and read back. goalId \"\" is the project default; a non-empty goalId is the override. A read with no write returns the default `claude`. Assert the stored provider, not an in-memory field.",
+    "An unknown provider name is refused: assert code AGENT_PROVIDER_UNKNOWN AND its layer. The accepted names are taken from KNOWN_PROVIDERS (health-read.ts:34) — a test that mutates production to accept a third name without changing that roster goes RED.",
+    "The registry entry is the real store handler, not the fail-closed stub. A well-formed operator dispatch persists; a second read (new store instance against the same sqlite) returns what was written.",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "REUSE KNOWN_PROVIDERS (health-read.ts:34). Import it. Do not declare a second list of provider names. Do not move the constant (that would touch health-read.ts, a concurrent-risk file).",
+    "Unknown provider refuses with a stable code AND layer (AGENT_PROVIDER_UNKNOWN). Valid names are exactly KNOWN_PROVIDERS.",
+    "Replace grandchild B's fail-closed handler; do not leave both. Unconfigured-daemon tests stay in B.",
+    "New production modules need a one-line .js bridge (copy environment-store.js). Target <=250 lines per production file; agent-spawner.ts is already 438 — do not grow it here.",
+    "FEATURES ONLY. No spawn, no /sessions/read, no UI, no MCP fence files."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "priority": "HIGH",
+  "order": 71.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:41.227Z",
+  "updatedAt": "2026-09-05T14:54:07.258Z",
+  "dependsOn": [
+    "task-c422b106af2945b1a1ad4ed49556bf66"
+  ]
+}

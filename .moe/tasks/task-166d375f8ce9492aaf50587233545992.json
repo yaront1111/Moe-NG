@@ -1,0 +1,40 @@
+{
+  "id": "task-166d375f8ce9492aaf50587233545992",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "project.set_agent_provider is MCP-excluded and human-only, with bidirectional fence tests",
+  "description": "SPIDR grandchild (fence) of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05), INTERFACE axis, same cut as task-20b7d6bb for release.decide. dependsOn grandchild B (set after B is filed) plus task-5f883e4e (preview.decide fence, WORKING) and task-20b7d6bb (release.decide fence, BLOCKED) because they edit the SAME two roster files and the SAME MCP count pins.\n\nWHAT THIS ROW OWNS: MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS, bidirectional set-equality, the MCP unreachable arm, the extra MCP count pins (mcp-tool-allowlist.test.ts; census mcp-main.test.ts / mcp-http-host.test.ts / daemon-command-registry-human-approver.test.ts at claim and name every pin this commit must move).\n\nNOT IN SCOPE: family table, PAYLOAD_KEYS, store, spawn, UI. The kind must already be SERVED by the registry (grandchild B) before this row adds it to the advertised exclusion list — otherwise set-equality reds on an advertised-but-unserved entry.\n\nVERIFY: `pnpm --filter @moe/daemon test`.",
+  "definitionOfDone": [
+    "`project.set_agent_provider` is a member of MCP_EXCLUDED_COMMAND_KINDS and of HUMAN_ONLY_STEPS. mcp-tool-allowlist.test.ts count pins are reconciled to the printed expected-vs-received in the same commit.",
+    "A bidirectional set-equality test enumerates the served set from the dispatch seam and asserts set equality with the advertised roster in both directions. Verify by deleting the entry from each side in turn and confirming both go RED; quote both reds.",
+    "A second arm proves the kind is unreachable over MCP: it hits the port's generic INPUT_INVALID refusal, matching the existing behavioural binding mcp-tool-allowlist.test.ts already holds for the other excluded kinds. Assert CODE AND LAYER.",
+    "Mutation drill, quoted: (a) remove the kind from MCP_EXCLUDED_COMMAND_KINDS → the set-equality test goes RED; (b) remove it from HUMAN_ONLY_STEPS → the staffing arm goes RED. Restore proof per global rail 13 (untracked paths: SHA256 vs %TEMP%, not git diff).",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "HUMAN_ONLY_STEPS is ONE Set at orchestrator/agent-spawn-contract.ts:195 (re-exported by agent-wrapper.ts:24). Do not look for a second.",
+    "Bidirectional set-equality: enumerate the SERVED set from the dispatch seam (registry.keys() for commands, servedMcpQueryKinds() for queries) and assert SET EQUALITY with the advertised roster in BOTH directions. A test that iterates MCP_EXCLUDED_COMMAND_KINDS alone sees only one direction.",
+    "Do not edit daemon-command-registry.ts or daemon-command-vocabulary.ts (grandchild B). Do not add a stub kind to make the fence green.",
+    "No count literal is trustworthy. Reconcile mcp-tool-allowlist.test.ts length and derived arithmetic to printed expected-vs-received. Concurrent movers: task-5f883e4e (preview fence) and task-20b7d6bb (release fence).",
+    "FEATURES ONLY."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "dependsOn": [
+    "task-c422b106af2945b1a1ad4ed49556bf66",
+    "task-5f883e4e12c34842b3cb6c2f218e4256",
+    "task-20b7d6bba60f445faa87a51a09d4b125"
+  ],
+  "priority": "HIGH",
+  "order": 71.25,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:41.137Z",
+  "updatedAt": "2026-09-05T14:54:07.148Z"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "task-3958769c73e1409183b36c538c5468ad",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "/sessions/read discloses effective agent provider and whether MOE_AGENT_COMMAND overrode it",
+  "description": "SPIDR grandchild E of task-8e793ae3c63f41189bcc05f6d7c15605 (architect-2e480458, 2026-09-05). dependsOn grandchild D (effective provider is whatever spawn actually resolved).\n\nWHAT THIS ROW OWNS: extend SessionsView so the operator can see which provider is running and that MOE_AGENT_COMMAND overrode the browser setting when it did. Daemon handler apps/daemon/src/http/sessions-read.ts (172 lines) plus decoder apps/control-room/src/live/live-sessions.ts (SESSIONS_FRAME_KEYS currently [concurrency, outcome, readAt, sessions, totals, unreadable]). Nested object preferred, mirroring SessionsConcurrency: e.g. agentProvider: { effective, envOverride } with exact keys at that level.\n\nNOT IN SCOPE: Seats rendering (child 3), spawn argv, command kind, store writes.\n\nVERIFY: `pnpm --filter @moe/daemon test` AND `pnpm --filter @moe/control-room test` (decoder lives in apps/control-room; a bare pnpm test covers neither).\n\nConcurrent: task-92d84d38 (DONE) already added concurrency to this read; live-sessions.ts:133 pins [\"activeSeats\", \"configuredAgentLimit\"]. Do not regress that.",
+  "definitionOfDone": [
+    "POST /sessions/read success JSON includes the effective provider and whether an env override is in force. A test with MOE_AGENT_COMMAND set and the durable setting saying the other provider asserts both the effective provider AND the override flag. A test with the env unset asserts the override flag is false and the effective provider matches the setting.",
+    "live-sessions.ts decodes the new member(s) under exact-key rules. A test that adds an extra key or drops a key on the new nested object (if nested) returns ERROR SESSIONS_RESPONSE_INVALID at CONTROL_ROOM_LIVE_SESSIONS. SESSIONS_FRAME_KEYS and the daemon SessionsView members stay in lockstep — the existing live-sessions.test.ts source-text pin against sessions-read.ts must stay green.",
+    "Gates quoted with `Test Files N passed`: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Root `pnpm test` is NOT evidence for either apps/** package."
+  ],
+  "taskRails": [
+    "EXACT-KEY: live-sessions.ts SESSIONS_FRAME_KEYS is exact-arity. Adding a member on the daemon and not the decoder BLANKS the Seats screen. Move sessions-read.ts and live-sessions.ts in the SAME commit.",
+    "THE ENV OVERRIDE IS DISCLOSED, NEVER SILENT. Assert the disclosure fields, not just that argv followed the env.",
+    "Do not edit Seats UI (child 3 task-c090faae owns the screen). Do not rebuild spawn resolution (grandchild D).",
+    "FEATURES ONLY."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
+  "priority": "HIGH",
+  "order": 71.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:53:41.401Z",
+  "updatedAt": "2026-09-05T14:54:07.480Z",
+  "dependsOn": [
+    "task-3a0478f57eec44579269b2ed27c91d92"
+  ]
+}

@@ -8,13 +8,17 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   GOAL_ID as REJECT_GOAL,
   PROJECT_ID as REJECT_PROJECT,
+  RUN_ID as REJECT_RUN,
   approveGate1,
+  approvePlan,
   boundWorld,
   closeStores,
   committedRevision,
+  rejectPlan,
   rejectedWorld,
   submit,
 } from "../planning/plan-reject-test-fixtures.js";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
@@ -1031,4 +1035,101 @@ describe("after a REJECT the surface follows the goal's successor run", () => {
     expect(offerPairsOver(world.store)
       .filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
   });
+
+  it("follows a SECOND rejection onto run 3, and re-offers neither earlier run", () => {
+    // The whole point of a BOUNDED chain fold rather than a single hop: an operator may reject
+    // as many times as they like, and the surface must track the head of the chain, not run 2.
+    const world = rejectedWorld("the second slice is missing");
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    const targets = portOver(world.store);
+    // CONTROL: the successor really is the card on offer before the second rejection.
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+
+    const thirdRunId = rejectPlan(world.store, world.successorRunId, "still one node short");
+    expect(thirdRunId).not.toBe(world.successorRunId);
+    expect(thirdRunId).not.toBe(world.originalRunId);
+
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+    expect(refsOver(world.store)).toEqual({ [thirdRunId]: world.goalId });
+    // Neither earlier run is reachable under ANY kind - checked over the whole surface, because
+    // "run 1 is gone" said per-kind only covers the kinds the assertion happens to name.
+    const pairs = offerPairsOver(world.store);
+    expect(pairs.filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
+    expect(pairs.filter((pair) => pair.endsWith(`@${world.successorRunId}`))).toEqual([]);
+    // The walk MADE two hops and is not degraded: without this the arm above could pass on a
+    // fold that gave up early and answered the head by accident.
+    expect(currentPlanningRun(world.store, REJECT_RUN))
+      .toMatchObject({ hops: 2, runId: thirdRunId, unreadable: false });
+  });
+
+  it("refuses a stale approval aimed at the rejected run, by CODE and by refusing layer", () => {
+    // The client that cached the pre-reject offer. Not a version race: the fixture reads the
+    // run's CURRENT version, so the refusal below is the lifecycle fence and not optimistic
+    // concurrency answering first for it.
+    const world = rejectedWorld("the second slice is missing");
+    expect(world.store.getAggregateVersion(world.originalRunId)).toBeGreaterThan(0);
+
+    expect(() => rejectPlan(world.store, world.originalRunId, "stale card", "cmd-stale-reject"))
+      .toThrowError(/REJECT refused: APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING/);
+    expect(() => approvePlan(world.store, world.originalRunId, "cmd-stale-approve"))
+      .toThrowError(/APPROVE refused: APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING/);
+  });
+
+  it("lets the operator approve the SUCCESSOR, and the goal moves on carrying its binding", () => {
+    const world = rejectedWorld("the second slice is missing");
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    const targets = portOver(world.store);
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+
+    approvePlan(world.store, world.successorRunId);
+
+    // The approval landed on the successor: the goal has left DRAFT, so the ladder no longer
+    // offers either approval kind, and the map still names the SUCCESSOR as this goal's run.
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("approval.decide")).toEqual([]);
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+    expect(offerPairsOver(world.store)
+      .filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
+  });
+
+  it("falls back to the goal's immutable ref when the run chain cannot be walked", () => {
+    // FAIL-OPEN ON THE READ, deliberately, and the opposite of the dispatcher's fail-closed
+    // refusal on the same condition: a WRITE onto a stale id seals a plan the operator never
+    // saw, while a read that gave up would cost every healthy goal on the board its offers.
+    const world = rejectedWorld("the second slice is missing");
+    const blind = blindChainStore(world.store, world.originalRunId);
+    expect(currentPlanningRun(blind, world.originalRunId))
+      .toMatchObject({ hops: 0, runId: world.originalRunId, unreadable: true });
+
+    // The surface still ANSWERS - no throw, no refusal - and answers about the immutable ref.
+    const targets = portOver(blind);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+    expect(refsOver(blind)).toEqual({ [world.originalRunId]: world.goalId });
+    // THE CONTROL: the identical read through the UNWRAPPED store names the successor, so the
+    // fallback above is attributable to the injected read failure and not to the Proxy.
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+  });
 });
+
+/**
+ * A store whose per-aggregate event read THROWS for one run id. `SqliteEventStore` freezes
+ * itself, so a method cannot be shadowed by assignment; same Proxy technique as
+ * `unreadableRunStore` in compile-dispatcher-revision.test.ts.
+ */
+function blindChainStore(store: SqliteEventStore, runId: string): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property, receiver): unknown {
+      if (property === "readEvents") {
+        return (aggregateId: string): unknown => {
+          if (aggregateId === runId) throw new Error("injected read failure");
+          return target.readEvents(aggregateId);
+        };
+      }
+      const value: unknown = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

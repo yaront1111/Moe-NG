@@ -1,6 +1,6 @@
 {
   "id": "task-c672815d5adc408683d11f91ab3f0a72",
-  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
   "title": "preview.decide is on the shared runtime command roster with all four contract digest mirrors rotated",
   "description": "SPIDR child, INTERFACE axis, carved out of task-40e52fa8a85a4921b97bee933b00403f by architect-b63fabf3 on 2026-09-05 after that row's plan was HARD-REJECTED at moe.submit_plan: `[CONSTRAINT_VIOLATION] Plan too large: 12 distinct affected files (max 10)`. The cut is between the SHARED CONTRACT SURFACE (this row) and the DAEMON SERVING SURFACE (task-40e52fa8, which now dependsOn this row).\n\nTHIS IS THE LEAF, AND IT IS THE HIGHEST-VALUE ROW ON THE BOARD. apps/daemon imports `RuntimeCommandKind` from `@moe/contracts`, and `daemon-command-registry.test.ts` types its `ROWS.kind` as that union - so nothing daemon-side even TYPECHECKS until this lands. SEVEN rows sit behind task-40e52fa8 (06ac0da1, 33ceae56, 54b74b80, 5f883e4e, bda0eeac, f3edb8fb, f5a74c23), and task-bda0eeac is additionally waiting on the same `commands.size` count literal for `release.decide`.\n\nOBJECTIVE: publish the string `preview.decide` on the shared runtime command roster and carry through every mechanical consequence of doing so.\n\nDELIVERABLE WHEN DONE: `preview.decide` is a member of `RUNTIME_COMMAND_KINDS`; the two coupled assertions in `runtime-contract.test.ts` agree; the client has been REGENERATED; and all four `GENERATED_CONTRACT_DIGEST` mirrors carry the new hex. Six files, no more.\n\nMEASURED AT HEAD f3b94eaa (branch moe/work-2026-09-04) by architect-b63fabf3. Both directions of rail 19 checked:\n- GAP IS REAL: `git grep -n 'preview\\.decide' -- . ':!.moe'` hits ONLY apps/daemon/src/preview/preview-contracts.{ts,test.ts}. (The hit at apps/daemon/src/release/release-dossier-sections.ts:131 is the expression `preview.decidedAt`, not the kind - ignore it.) `grep -c 'preview.decide' packages/contracts/src/runtime/runtime-vocabulary.ts` = 0.\n- NOTHING IS ALREADY DONE: `RUNTIME_COMMAND_KINDS` at runtime-vocabulary.ts:85-115 contains neither `preview.decide` nor `release.decide`. Sorted insert point: after `\"policy.validate\"`, before `\"product_contract.answer_clarification\"`.\n- `runtime-contract.test.ts`: hand-transcribed `EXPECTED_COMMAND_KINDS` at :35; size literal `expect(commands.size).toBe(103)` at :105. The comment at :104 FORBIDS deriving the expected list from the tuple - a derived list is a vacuous assertion. Do NOT freeze 103/104 from this description; run the leg and reconcile against the PRINTED values, because task-bda0eeac may move the same literal.\n- DIGEST MIRROR CENSUS, full tree, all file types: digest = `ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28`. `git grep -n <hex> -- . ':!.moe' ':!pnpm-lock.yaml'` returns EXACTLY FOUR - `packages/control-room-client/src/generated/generated-client.ts:905` (source of truth), `packages/control-room-client/src/generated-coverage.test.ts:36` (beside `GENERATED_FILE_SHA256` at :35), `apps/control-room/src/data/data-adapter.test.ts:18`, `apps/control-room/src/v2/goals/approve-plan.test.tsx:255`. `scripts/release/release-subject.mjs` is NO LONGER a mirror (it derives). Re-census yourself - this set has moved twice.\n- WHY REGENERATION IS MANDATORY: `contract-digest.ts:38` puts `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)` inside `canonicalContractSurface()`, which `deriveContractDigest()` SHA256s. `contract-digest.test.ts:21` pins derive === generated, and `generated-coverage.test.ts:89` pins `GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS`. `packages/control-room-client/package.json:18` defines `generate` = `node --experimental-strip-types generator/generate.ts`, and `generator/generate.ts:299` writes exactly one file.\n- THE TRAP THAT BLOCKED task-40e52fa8 ONCE ALREADY: `apps/control-room` is in NONE of `pnpm test` (root vitest include at vitest.config.ts:32 is adapters/**, packages/**, tests/**, tools/** - no apps/**), `pnpm typecheck` (it is a runtime value compare, not a type), or `pnpm --filter @moe/daemon test`. A forgotten mirror therefore ships two HARD-THROWING tests behind three green gates. `client-compat.ts:168` refuses the stale literal; `data-adapter.test.ts:20` and `approve-plan.test.tsx:257` then `throw new Error(...)`.\n\nNOT IN SCOPE - do not touch any of these, they belong to named rows:\n- Any file under `apps/daemon/` (vocabulary, families, registry and their tests are task-40e52fa8; `apps/daemon/src/preview/preview-contracts.ts` is already DELIVERED at 249 lines with a 30-test sibling and its .js bridge - do not edit or re-drill it).\n- `apps/daemon/src/mcp-tool-allowlist.ts` and both `HUMAN_ONLY_STEPS` rosters (`orchestrator/agent-spawn-contract.ts:194`, `orchestrator/agent-wrapper.ts:116`) - task-5f883e4e.\n- `release.decide` in any form - task-bda0eeac.\n- `packages/control-room-client/src/contract-pins.ts` is a bare re-export; `contract-digest.test.ts` DERIVES. Neither is hand-edited.\n\nVERIFICATION COMMAND for moe.complete_task: `pnpm --filter @moe/control-room test`. It is named because it is the ONLY gate that sees mirrors 3 and 4; run the other four legs too and quote every count line.",
   "definitionOfDone": [
@@ -107,7 +107,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T13:29:53.007Z",
-  "updatedAt": "2026-09-05T14:50:56.624Z",
+  "updatedAt": "2026-09-05T14:53:04.656Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:39:25.260Z",
     "plannedStepCount": 4,
@@ -165,7 +165,23 @@
     ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
     ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
     ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
-    ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json"
+    ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json",
+    ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+    ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json",
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+    ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json",
+    ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
+    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+    ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json"
   ],
   "completionSummary": "`preview.decide` is published on the shared runtime command roster, with all four digest mirrors rotated. VOCABULARY ONLY: this row wires no daemon command, defines no refusal code, fences no principal and renders no UI. task-40e52fa8a85a4921b97bee933b00403f dependsOn this row and does the daemon wiring; seven rows sit behind it.\n\nSIX FILES, NO SEVENTH. `git diff --stat` = 6 files changed, 16 insertions(+), 9 deletions(-). Zero files under apps/daemon/.\n1. runtime-vocabulary.ts:101 — `\"preview.decide\"` inserted in sorted position (policy < preview < product). Sole production change; no `satisfies` annotation (circular).\n2. runtime-contract.test.ts — same insert in the hand-transcribed EXPECTED_COMMAND_KINDS (:51, NOT derived); `commands.size` 103 -> 104 (:105); and the sorted-position arm's neighbour pin updated, since preview.decide is now the product_contract family's left bracket — `[position-2]` -> \"preview.decide\", `[position-3]` -> \"policy.validate\", preserving the old assertion and adding the new kind's own slot pin.\n3. generated-client.ts — REGENERATED via `pnpm --filter @moe/control-room-client generate`, never hand-edited. Diff reviewed: exactly 3 hunks (builder interface entry, builder object entry, digest).\n   OLD GENERATED_CONTRACT_DIGEST ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28\n   NEW GENERATED_CONTRACT_DIGEST ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076\n4. generated-coverage.test.ts — :36 CONTRACT_DIGEST -> new hex; :35 GENERATED_FILE_SHA256 -> 427ad92dfcd86a6f98d69ebeaf31f25509010dd90c40d4fd6539dbcca8faf1a1.\n5. data-adapter.test.ts:18 and 6. approve-plan.test.tsx:255 — contractSchemaHash -> new hex.\ncontract-digest.test.ts and contract-pins.ts GREEN AND UNEDITED (status empty) — proof the generate really applied.\n\nMIRROR CENSUS, full tree, all file types, mine not quoted: BEFORE `git grep -n <old hex> -- . ':!.moe' ':!pnpm-lock.yaml'` = exactly FOUR; AFTER = ZERO (old file-sha256 also zero); new hex = exact",
   "commits": [
@@ -219,6 +235,44 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "01edb7ef43b6be725599830216078ef8129587e0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T14:20:49Z",
+      "paths": [
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-960254c59cd84c46a9f38f8facbc0b7d.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json",
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+        ".moe/tasks/task-c672815d5adc408683d11f91ab3f0a72.json",
+        ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json",
+        ".moe/tasks/task-e7a3d643bde34da7b27495dbda745739.json",
+        ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
+        ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+        ".moe/tasks/task-f79d38b119984ae1ae51eba887a28b7d.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T14:53:04.656Z",
+      "treeId": "ef7289ac75f4a52b00d0ae9ad289589538e04a0e",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/control-room/src/data/data-adapter.test.ts",
+          "taskId": "task-bda0eeac02544c1992c6738c2db83178"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -229,12 +283,23 @@
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "packages/control-room-client/src/generated/generated-client.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    ".tmp-architect-dump.py",
+    ".tmp-architect-sibs.txt",
+    "apps/daemon/src/orchestrator/landing-imports.js",
+    "apps/daemon/src/orchestrator/landing-imports.ts",
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/repository/git-landing-port.test.ts",
+    "apps/daemon/src/repository/git-landing-port.ts",
+    "apps/daemon/src/work/work-claim-services.test.ts",
+    "apps/daemon/src/work/work-claim-services.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-2739fee7@2026-09-05T13:41:31Z",
-    "at": "2026-09-05T14:15:14.417Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-05T14:20:49Z",
+    "at": "2026-09-05T14:53:04.656Z"
   },
   "completedAt": "2026-09-05T14:50:56.624Z",
   "reviewCompletedAt": "2026-09-05T14:50:56.624Z",
