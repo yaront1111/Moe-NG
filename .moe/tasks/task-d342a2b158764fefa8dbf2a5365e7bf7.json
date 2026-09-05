@@ -120,7 +120,7 @@
       "completedAt": "2026-09-05T18:49:37.469Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:32.672Z",
-  "updatedAt": "2026-09-05T18:51:56.646Z",
+  "updatedAt": "2026-09-05T21:23:27.604Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:30:41.029Z",
     "plannedStepCount": 6,
@@ -334,10 +334,10 @@
     "sessionId": "worker-2739fee7@2026-09-05T16:45:56Z",
     "at": "2026-09-05T17:53:30.458Z"
   },
-  "blockedReason": "RULED AND DELIVERED; blocked only on DoD-2's SECOND clause. All 6 steps COMPLETE, 6 files delivered. Full ruling/drills/gates in comment-3f09c51b and the step-1..6 notes. NOT a re-plan request.\n\nRULING (DoD-1) = option (c): policy.install into ACTIVATION_CHAIN_KINDS only; COMMAND_PREREQUISITES filed as task-a5a6abccc4ce4f859851d8e8d7215cdd. Option (a) is refused by this row's OWN contract — task rail 1 and DoD-3 name ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS verbatim, and the table edit moves which LAYER answers. Option (b)'s docblock objection dissolves: project.activate has TWO authorities (admission table; MEASURED receipts, activation-receipts-measure.ts:213) and the roster mirrored one.\n\nSUBJECT IS FIXED — real browser, real daemon, seed:\"NONE\": all FIVE chain steps carry data-ok=\"true\" incl. cr.activate.step.policy.install, asserted BY KIND not by count. Protected refusal still reachable (activation-command-entry.test.ts targeted, 4 passed).\n\ncomplete_task IS IMPOSSIBLE — the plan's named command `pnpm test:e2e:browser` cannot be exit 0, for two reasons, neither mine.\n1. BLOCKER: one step past the chain the next create is refused CLIENT-SIDE on a <=2s stale frame — createGoalDispatcher reads getFrame() once (live-goal-create.ts:201-215), that ref polls every 2000ms (live-goals.tsx:33), LiveActivate's settle refresh() refreshes only its own /activation/read. The daemon is NOT the refuser; project.activate is COMMITTED. Not fixed here: live-goal-create.ts and its test are DIRTY WITH A PEER SESSION'S WORK, and a wait in the spec would mask a defect an operator hits (rail 2).\n2. FOREIGN RED: first leg `tsc -p tests/e2e/.../tsconfig.json` dies on packages/scheduler/src/budget/budget-reservation.ts(132,42) TS18046 — committed at HEAD in e53e3e6a, zero in my paths. Ran playwright directly.\n\nIF 9ade7f88 is out of scope here: amend DoD-2 to clause 1 plus a dependsOn; this row completes on recorded evidence.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T18:51:36.211Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "touchedFiles": [
     "apps/control-room/src/v2/ops/activation-port.test.ts",
     "apps/control-room/src/v2/ops/activation-port.ts",
@@ -345,8 +345,5 @@
     "apps/control-room/src/v2/goals/work-labels.ts"
   ],
   "priorBlockedReason": "Step 1(d) triage fired: STOP AND REPORT per that step's own text and global rail 18. Needs an architect amendment/split; I have NOT made the design call. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) + comment-a9a48879212b474782cb453e073c98f8 (collision). Control/treatment pair at fixed HEAD e6d02867, not inferred.\n\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, NONE among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated, restore-test-harness.ts:182 seedReadyProject (445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). bootstrap-test-fixtures.ts was rightly verified as ordered - just not the only seeder. 4 files need real edits (9 arms): activation-command-entry.test.ts:108, affordance-read.test.ts:125, admission-gate-resolver.test.ts:753/775/967/981, daemon-foundation-command.test.ts:113/143/232. Minimum roster = 12 paths, past the plan's 10-file ceiling.\n\n2. THE BLOCKER, outranking the file count: option (a) MAKES THIS ROW'S PROTECTED REFUSAL UNREACHABLE - the admission gate answers before the receipt layer. Verbatim at activation-command-entry.test.ts:108: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'. Contradicts task rail 1 and DoD-3 verbatim; the second-refusal-layer hazard of global rail 1. Re-pointing that arm is not available - its comment says it separates a live override from a defaulted one.\n\nRULING NEEDED: (a) keep the table change, then amend rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths; (b) policy.install into ACTIVATION_CHAIN_KINDS alone - 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green; (c) land (b) now, file the table fix as its own row. My read: (b) or (c).\n\nTREE CLEAN. See mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
-  "blockedOnTaskIds": [
-    "task-9ade7f88832d4ee6bc0d72e8d9c33598",
-    "task-a5a6abccc4ce4f859851d8e8d7215cdd"
-  ]
+  "blockedOnTaskIds": null
 }

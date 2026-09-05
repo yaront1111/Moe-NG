@@ -88,7 +88,7 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -122,16 +122,24 @@
       "author": "worker-f72a1438",
       "content": "DoD1 REAL BROWSER GREEN, unchanged spec: `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project.spec.ts` exit0, 'ok 1 [chromium] ... a fresh project goes from empty store to a created goal, in the browser alone (28.2s)' / '1 passed (31.6s)'. Source has seed:'NONE', asserts seedPid null, iterates all5 ACTIVATION_CHAIN_KINDS with data-ok true, and exact `Goal created: Browser-only fresh start`. No wait/assertion/timeout edit. E2e SHA before+after 223A359BAB1791B899327721301909FBAD44564815F5FB91426AAE1D6B557CDA, compared with out-of-tree copy in separate call; it is UNTRACKED peer source so empty git diff would be vacuous. We neither own nor declare it.\nFresh `pnpm --filter @moe/control-room typecheck`: exit0, '$ tsc --project tsconfig.json'. Fresh `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json`: exit0. Historical scheduler budget-reservation.ts(132,42) TS18046 is NOT reproduced now; no scheduler edits adopted. Direct Playwright is the one named spec only, not a claim full pnpm test:e2e:browser passed.\nBROAD EVIDENCE recovered from prior worker's full logs, not presented as fresh: %TEMP%/cr-baseline-0520a42e.txt exit1,3failed148passed files/8failed1875passed tests; failures entry-project-manager.test.tsx,scaffold.test.tsx,cordum-shell-layout.test.tsx. %TEMP%/cr-head-0520a42e.txt exit1,1failed152passed files/3failed1900passed tests; only entry-project-manager.test.tsx:72 20000ms timeout, then missing cr.manager.root at103/136. Exact failing-path delta empty for those two captured runs; no owned test failures. Also logged timeout terminating fork for goal-create-disabled.test.tsx, not an assertion failure. Current full UI and root gates NOT RE-RUN under governor host halt (msg-52657b432156438da08bdc4d4d38d45e confirms targeted+recorded evidence for THIS row). Current broad delta remains unmeasured; do not imply fresh repo-wide green. Named verification field will carry actual fresh targeted command, not falsely label it the skipped full command.",
       "timestamp": "2026-09-05T20:11:51.092Z"
+    },
+    {
+      "id": "comment-a78fe24ba2574196b6b13c2b155e03c2",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION LEDGER — qa-d81848bc, 2026-09-06, at the delivered tree (HEAD 99d06bde). Every leg below was RE-RUN BY ME, not read off the worker's record.\n\n1) TARGETED GATE (step-5 amend-1's authoritative leg), cwd apps/control-room:\n`npx vitest run src/v2/goals/live-goal-create.test.ts src/v2/goals/live-goals.test.tsx src/v2/goals/goals-home.test.tsx src/v2/goals/goal-create-disabled.test.tsx src/v2/goals/new-goal-form.test.tsx src/v2/goals/new-goal-prd-recovery.test.tsx --maxWorkers=1`\n-> EXIT 0. `Test Files  6 passed (6)` / `Tests  77 passed (77)`, 39.73s, start 00:09:46. Reproduces the recorded verification exactly.\n\n2) E2E, DoD-1, real daemon seed NONE, spec UNCHANGED:\n`pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project.spec.ts`\n-> EXIT 0. `ok 1 [chromium] > ... a fresh project goes from empty store to a created goal, in the browser alone (29.5s)` / `1 passed (32.5s)`.\nSpec is UNTRACKED (peer file), so git diff is void as proof; SHA256 = 223a359bab1791b899327721301909fbad44564815f5fb91426aae1d6b557cda, byte-equal to the worker's pinned hash. I also read it: the load-bearing assertion at :220 is still the strict `toHaveText(\\`Goal created: ${GOAL_TITLE}\\`)` with NO wait, sleep or extra poll between the create click (:215) and the report assertion (:219). Rail 2 holds. The only `sleep(1_000)` in the file is the pre-existing pairing-card helper at :66, off the create path.\n\n3) MY OWN DRILLS (DoD-2 / global rail 1 — I do not accept a red on the worker's word).\nBackup out-of-tree at %TEMP%/qa-d81848bc-lgc-backup.ts; production file was TRACKED AND CLEAN at drill time, so both SHA256 equality and empty `git status` are valid restore proofs, and I took both, in a call separate from each restore.\nDRILL (i) re-read removed (deleted `rereadSurface` call + adoption) -> `Tests 2 failed | 11 passed (13)`, EXIT 1:\n  arm \"dispatches when the prerequisite committed after the poll that fed the frame\"\n  Expected: \"Goal created: Second goal\"\n  Received: \"goal.create is blocked until Activate the project commits. Next step: use the Activate project card on this screen; it drives the whole chain from the browser.\"\n  — the row's central artifact: the exact stale-frame refusal the e2e caught at :220.\nDRILL (ii) re-read used for the LOOKUP but refusal built from the STALE frame (removed `frame = reread`) -> `Tests 1 failed | 12 passed (13)`, EXIT 1, and ONLY arm 2 red:\n  Expected: \"goal.create is blocked until Probe the model provider commits. ...\"\n  Received: \"goal.create is blocked until Activate the project commits. ...\"\n  — so arm 2 really does pin DoD-4's same-frame invariant; it is not carried by arm 1.\nRESTORE PROOF after each: sha256 = cde096e0528ebfabfc1012b1acf649db9893b43c410c1ec16fbcedc792c2bf61 AND `git status --porcelain -- <path>` empty. No mutant rode into my commit.\n\n4) TYPECHECK, attributed per global rail 3. `pnpm typecheck` -> EXIT 1, but `apps/control-room typecheck: Done`. All three reds are FOREIGN, in apps/daemon, none in this row's owned paths:\n  apps/daemon/src/orchestrator/agent-wrapper.test.ts(298,11) TS2322 (ChainStep.status widened to string)\n  apps/daemon/src/preview/preview-runner.test.ts(282,21) TS2379 (exactOptionalPropertyTypes)\n  apps/daemon/src/release/release-decide-contracts.test.ts(16,8) TS5097 (.ts import extension)\nOwned-path intersection EMPTY. Confirming the worker: the historical `packages/scheduler/src/budget/budget-reservation.ts(132,42) TS18046` no longer reproduces, and no scheduler edit was adopted.\n\n5) HAND-LANDING. task.commits carried only the WORKING checkpoint e4855265; the deliverer's session ended before a completion commit fired. Production `live-goal-create.ts` was already IN HEAD via that checkpoint and byte-equal to the worker's pinned artifact (cde096e0...). The only outstanding bytes were a 2-insert/1-delete assertion REORDER in the test (moves the exact-report assertion ahead of the sent-count so the drill prints the actual refusal — nothing weakened). I landed it under the ratified QA hand-landing rule with an explicit pathspec, then `record_commit`:\n  99d06bde018e98e2407a4ec6696d08f48b2e53f1, tree e3d7965b3d299b3e1ae2075b8b19bd7ef52346f2, kind=completion, role=qa, author of record worker-f72a1438.\nRe-verified at HEAD BYTES not the dirty tree: `git show 99d06bde:<path> | sha256sum` = cde096e0... (production) and 3697ffaf1904b1306f4c667b3baf62d44ee484a2e66438b755e5cac600f63841 (test) — both equal the worker's pinned hashes. Peer dirt (12 modified + 1 untracked sibling under v2/goals/) untouched; the peer's rewritten refusal-copy literals at :102-116 survive intact in HEAD.\n\n6) NOTED, NOT A REJECT. `live-goal-create.ts` is 275 lines — over the 250 target, well under the 400 hard cap (epic rail: per-FILE, and 400 is the split line). Flagging for whoever next touches this module, not charging it here.",
+      "timestamp": "2026-09-05T21:21:16.331Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:42:27.077Z",
-  "updatedAt": "2026-09-05T20:19:34.723Z",
+  "updatedAt": "2026-09-05T21:23:27.416Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:51:00.402Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-05T21:23:27.416Z",
+    "wallClockMs": 9147014
   },
   "stepsCompleted": [
     "step-1",
@@ -158,7 +166,8 @@
   "planApprovedAt": "2026-09-05T18:54:25.065Z",
   "contextFetchedBy": [
     "worker-0520a42e",
-    "worker-f72a1438"
+    "worker-f72a1438",
+    "qa-d81848bc"
   ],
   "workStartedAt": "2026-09-05T19:18:26.479Z",
   "commits": [
@@ -189,6 +198,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "99d06bde018e98e2407a4ec6696d08f48b2e53f1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T00:05:00Z",
+      "paths": [
+        "apps/control-room/src/v2/goals/live-goal-create.test.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T21:20:32.704Z",
+      "treeId": "e3d7965b3d299b3e1ae2075b8b19bd7ef52346f2",
+      "status": "REVIEW",
+      "pushed": false,
+      "recoveredBy": "qa-d81848bc",
+      "message": "test(control-room): assert the create report before the sent-count so the stale-frame drill prints the actual refusal [task-9ade7f88832d4ee6bc0d72e8d9c33598] — QA hand-landing; production fix already in checkpoint e4855265"
     }
   ],
   "filesModified": [
@@ -208,9 +234,9 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-0520a42e@2026-09-05T19:17:46Z",
-    "at": "2026-09-05T19:38:53.623Z"
+    "kind": "completion",
+    "sessionId": "qa-d81848bc@2026-09-06T00:05:00Z",
+    "at": "2026-09-05T21:20:32.704Z"
   },
   "reviewStartedAt": "2026-09-05T20:19:34.723Z",
   "verification": {
@@ -219,5 +245,8 @@
     "outputTail": "cwd D:/projexts/moe-next/apps/control-room\nRUN v4.1.10\nTest Files 6 passed (6)\nTests 77 passed (77)\nStart at 23:17:45\nDuration 34.64s (transform 615ms, setup 0ms, import 1.73s, tests 23.22s, environment 3.90s)\nActual named targeted run under step5 amend-1; full suite deferred under governor halt, not run/claimed green.",
     "reportedAt": "2026-09-05T20:19:34.723Z"
   },
-  "completionSummary": "5/5 completed under step5 amend-1. Seam(a): async readSurfaceOnce before refusing covers every prerequisite writer, unlike Activate-only invalidation. getFrame is synchronous over a2s poll; calling it again would be a no-op. ONE FRAME PER DECISION comment preserved: lookup/refusal use the same adopted frame. Happy path0extra requests; failed/unreadable reads retain cached frame. No invented content freshness/version or exactly-once concurrency claim.\nFresh named targeted gate from apps/control-room:6 files77 tests passed, exit0,34.64s. CR typecheck0; e2e-tsconfig tsc0. Historical scheduler budget-reservation.ts(132,42) TS18046 no longer reproduces; no scheduler edit adopted.\nUNCHANGED real-daemon seed NONE browser journey:1 passed31.6s (journey28.2s), all5 chain steps data-ok true and exact 'Goal created: Browser-only fresh start'. Peer-untracked spec SHA before/after223A359BAB1791B899327721301909FBAD44564815F5FB91426AAE1D6B557CDA.\nBoth mandatory drills RED with exact stale Activate vs Success/Probe sentences; separate SHA restore proof and adversarial review in comment-4110ef025554422caeaaccf0dbaf4399. Full gate ledger/foreign baseline in comment-c3d714646adf4b569533b520c1bb3c11. Historical full baseline/after owned delta empty; current full delta unmeasured. Production in checkpoint e4855265; resume only reorders one test assertion to expose actual refusal, no weakened assertions. Peer hunks preserved; source and test only, no .moe edits.\nFull `pnpm --filter @moe/control-room test` NOT RUN under governor gate halt 20:01Z (host at commit ceiling, seven orphaned index processes resident); targeted owned+consumer legs above are the completion evidence per global rail 3."
+  "completionSummary": "5/5 completed under step5 amend-1. Seam(a): async readSurfaceOnce before refusing covers every prerequisite writer, unlike Activate-only invalidation. getFrame is synchronous over a2s poll; calling it again would be a no-op. ONE FRAME PER DECISION comment preserved: lookup/refusal use the same adopted frame. Happy path0extra requests; failed/unreadable reads retain cached frame. No invented content freshness/version or exactly-once concurrency claim.\nFresh named targeted gate from apps/control-room:6 files77 tests passed, exit0,34.64s. CR typecheck0; e2e-tsconfig tsc0. Historical scheduler budget-reservation.ts(132,42) TS18046 no longer reproduces; no scheduler edit adopted.\nUNCHANGED real-daemon seed NONE browser journey:1 passed31.6s (journey28.2s), all5 chain steps data-ok true and exact 'Goal created: Browser-only fresh start'. Peer-untracked spec SHA before/after223A359BAB1791B899327721301909FBAD44564815F5FB91426AAE1D6B557CDA.\nBoth mandatory drills RED with exact stale Activate vs Success/Probe sentences; separate SHA restore proof and adversarial review in comment-4110ef025554422caeaaccf0dbaf4399. Full gate ledger/foreign baseline in comment-c3d714646adf4b569533b520c1bb3c11. Historical full baseline/after owned delta empty; current full delta unmeasured. Production in checkpoint e4855265; resume only reorders one test assertion to expose actual refusal, no weakened assertions. Peer hunks preserved; source and test only, no .moe edits.\nFull `pnpm --filter @moe/control-room test` NOT RUN under governor gate halt 20:01Z (host at commit ceiling, seven orphaned index processes resident); targeted owned+consumer legs above are the completion evidence per global rail 3.",
+  "completedAt": "2026-09-05T21:23:27.416Z",
+  "reviewCompletedAt": "2026-09-05T21:23:27.416Z",
+  "reviewSummary": "APPROVED. All legs RE-RUN by me at HEAD 99d06bde; full ledger in comment-a78fe24ba2574196b6b13c2b155e03c2.\n\nDoD-1 e2e, real daemon seed NONE, spec UNCHANGED: exit 0, \"1 passed (32.5s)\", journey 29.5s. Spec is UNTRACKED so git diff is void: SHA256 223a359b... = worker's pin, and I read :215-220 - strict toHaveText(\"Goal created: <title>\") intact, no wait inserted. Rail 2 holds.\n\nDoD-2 MY OWN DRILLS. (i) re-read removed -> \"Tests 2 failed | 11 passed (13)\", arm 1 red with the exact defect string \"goal.create is blocked until Activate the project commits. Next step: use the Activate project card...\". (ii) re-read for the lookup but refusal built from the STALE frame -> ONLY arm 2 red (Expected \"...Probe the model provider\" / Received \"...Activate\"), so arm 2 pins DoD-4 and is not carried by arm 1. Restore after each: sha256 cde096e0... AND empty git status, separate calls.\n\nDoD-3 seam (a) only - the point of decision, covering every prerequisite writer, not just the card.\nDoD-4 the :203 comment rewritten, not left lying: up to two reads reach ONE adopted frame.\n\nDoD-5 targeted amend-1 leg exit 0, \"Test Files 6 passed (6)\" / \"Tests 77 passed (77)\". Full CR suite superseded by governor amend-1 under the 20:01Z halt, disclosure verbatim. pnpm typecheck exit 1 but \"apps/control-room typecheck: Done\"; 3 reds all foreign in apps/daemon - owned intersection EMPTY per rail 3.\n\nCOMMIT: only checkpoint e4855265 was recorded, already carrying the production fix byte-equal to its pin. Deliverer's session ended first; the sole outstanding bytes were a 2/1-line assertion reorder, nothing weakened. Landed by explicit pathspec as 99d06bde (tree e3d7965b) under the QA hand-landing rule, kind=completion, author of record worker-f72a1438. Re-verified at HEAD BYTES: cde096e0.../3697ffaf... both match. Peer dirt untouched.\n\nNOTED not charged: live-goal-create.ts is 275 lines, over the 250 target, under the 400 split line."
 }
