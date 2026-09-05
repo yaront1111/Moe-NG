@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-05T02:23:42.848Z",
+  "updatedAt": "2026-09-05T02:24:09.502Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
@@ -210,5 +210,71 @@
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T02:23:42.848Z"
+  "blockedAt": "2026-09-05T02:23:42.848Z",
+  "commits": [
+    {
+      "sha": "f01a4c32c2db9ec71e667ce7f09c142d3c130973",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-cceb207f@2026-09-05T01:29:01Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+        "apps/daemon/src/http/activity-read.test.ts",
+        "apps/daemon/src/http/activity-read.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/planning/compile-dispatcher.test.ts",
+        "apps/daemon/src/planning/plan-reject-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-cceb207f",
+      "recordedAt": "2026-09-05T02:24:09.502Z",
+      "treeId": "8802537e0a29e895a1d8974a0b34727ae442fd6d",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.test.ts",
+          "taskId": "task-5f883e4e12c34842b3cb6c2f218e4256"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read.ts",
+          "taskId": "task-1d7b9df2579c491992b55de791c99f4f"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+    "apps/daemon/src/http/activity-read.test.ts",
+    "apps/daemon/src/http/activity-read.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/planning/compile-dispatcher.test.ts",
+    "apps/daemon/src/planning/plan-reject-test-fixtures.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/activity-read.test.ts",
+    "apps/daemon/src/planning/compile-dispatcher.test.ts",
+    "apps/daemon/src/planning/plan-reject-test-fixtures.ts",
+    "apps/daemon/src/http/affordance-planning-offers.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/http/activity-read.ts",
+    "apps/daemon/src/planning/zz-probe.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-cceb207f@2026-09-05T01:29:01Z",
+    "at": "2026-09-05T02:24:09.502Z"
+  }
 }

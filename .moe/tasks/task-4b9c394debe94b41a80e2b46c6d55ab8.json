@@ -122,7 +122,7 @@
       "completedAt": "2026-09-05T01:57:53.722Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -214,11 +214,17 @@
       "author": "worker-75411639",
       "content": "FOREIGN RED, DISCLOSED VERBATIM (global rail 3). The plan's named verification command `pnpm --filter @moe/daemon test` is EXIT 1 at the delivered tree and I did not submit it as green. What I submitted instead is the owned-path leg, exit 0, `Test Files 48 passed (48)` / `Tests 1449 passed (1449)`. Here is exactly why, so QA can re-measure rather than take my word.\n\nTHE SHARED CHECKOUT HAS 3+ LIVE PEERS EDITING apps/daemon RIGHT NOW. I ran the full lane THREE times and got THREE DIFFERENT red sets, and the executed test count moved 8293 -> 8304 between runs — the tree changed under the gate.\n\nRUN 1: `Test Files 2 failed | 414 passed (416)` / `Tests 3 failed | 8290 passed (8293)`\n  - src/work/foundation-attempt-windows.test.ts:990 `expect(observedBoundaryProbe.launches).toHaveLength(1)` got 0. QA already cleared this one as not mine; it PASSED in runs 2 and 3, so it is flaky (the Windows spawn-latency cliff).\nRUN 2: `Test Files 1 failed | 415 passed (416)` / `Tests 1 failed | 8292 passed (8293)`\nRUN 3: `Test Files 4 failed | 412 passed (416)` / `Tests 8 failed | 8296 passed (8304)`\n  - src/http/activity-read.test.ts (3 arms: verdictOf BOTH approval kinds; REJECT row; APPROVE row)\n  - src/http/affordance-planning-offers.test.ts (3 arms: successor targeting; compiler offer; offers NOTHING for a different goal)\n  - src/http/affordance-read-planning.test.ts (binds the SUCCESSOR run to the goal)\n  - src/http/http-listener-read-dispatch.test.ts (present in all three runs)\n\nATTRIBUTION, MEASURED NOT ASSERTED:\n`git status --porcelain -- apps/daemon` at the delivered tree:\n```\n M apps/daemon/src/http/activity-read.test.ts\n M apps/daemon/src/http/activity-read.ts\n M apps/daemon/src/http/affordance-planning-offers.test.ts\n M apps/daemon/src/http/affordance-planning-offers.ts\n M apps/daemon/src/http/affordance-read-planning.test.ts\n M apps/daemon/src/http/affordance-read.ts\n M apps/daemon/src/planning/compile-dispatcher.test.ts\n?? apps/daemon/src/planning/plan-reject-test-fixtures.ts\n```\nEvery failing file above is a peer's UNCOMMITTED edit. And:\n`git status --porcelain -- apps/daemon/src/bootstrap apps/daemon/src/orchestrator apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/provider-profile` -> BLANK. Every path this row owns is committed and clean.\n\nTHE ONE PERSISTENT RED, root-caused exactly:\n```\nFAIL src/http/http-listener-read-dispatch.test.ts > proxies every served JSON route in development, bar a named census\nAssertionError: expected [ '/product-contract/gate-1/read' ] to strictly equal [ ...(2) ]\n  [ \"/product-contract/gate-1/read\",\n-   \"/repository/remote/read\", ]\n```\nCause is a ONE-LINE UNCOMMITTED peer edit to a CONTROL-ROOM file:\n```\ngit show HEAD:apps/control-room/src/live/dev-proxy-paths.ts | grep 'repository/remote/read'  ->  ABSENT AT HEAD\ngit diff -- apps/control-room/src/live/dev-proxy-paths.ts\n+  \"/repository/remote/read\",\n```\nThe daemon test's own comment (http-listener-read-dispatch.test.ts:92-97) predicts this: \"the proxy list lives in the control-room package and belongs to task-e6000b57, which lands the decoder and the proxy pins together... REMOVING this line is what that row's proxy edit has to do — a census entry that outlives its gap reds here.\" task-e6000b57 is WORKING with worker-12c76c19 live at step 4/7. Their in-flight half lands the pin; the census removal is the half still to come. Not mine to make: I own neither file, and editing the consumer to accommodate a foreign in-flight producer is exactly what global rail 19 forbids.\n\nTYPECHECK, same shape: `pnpm typecheck` exit 1 on ONE error, `apps/daemon/src/planning/plan-reject-test-fixtures.ts(248,5): error TS2322` — an UNTRACKED (`??`) foreign file. `tsc -p tests/e2e/control-room/tsconfig.json` is exit 0.\n\nROOT LANE `pnpm test` exit 1, `Test Files 6 failed | 420 passed | 1 skipped (427)` / `Tests 17 failed | 10250 passed | 58 skipped (10325)`: goal-brief-mcp-readback, tools/packaging/pack-source (13 arms, the spawn-latency cliff), packages/benchmark/freeze-manifest-admission (the activation record pins a SHA by ancestry and reds on every branch rewrite), compiled-product-journey, legacy-import-commit, release-version-surfaces. Five were already attributed foreign at the first delivery; none is an owned path, and the root vitest include has no apps/** at all (global rail 18), so it cannot reach this row's production surface.\n\nI did not revert, stash or commit any foreign path.",
       "timestamp": "2026-09-05T01:58:21.986Z"
+    },
+    {
+      "id": "comment-04df77dee0304809963a86e1cfb1a486",
+      "author": "qa-3fd61a21",
+      "content": "QA ROUND 2 — FULL EVIDENCE (approval summary is capped; this is the record). qa-3fd61a21, HEAD c0a154a2.\n\nTHE ROUND-1 DEFECT IS FIXED, REPRODUCED GREEN BY ME.\n  pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts\n  -> exit 0, \"1 passed (23.0s)\"; all nine clicks ok=true, incl.\n     project.activate@e2e-proj-z0rawv v2 ok=true ANSWERED: DECIDED EFFECTS_COMMITTED\n  Fix is one constant: policy.install swapped above project.activate in CHAIN (:305-316), plus a\n  doc block saying why the prerequisite TABLE cannot express the constraint. Same shape as the seed.\n\nSEED PATH, LIVE: daemon-board.spec.ts -> exit 0, \"1 passed (16.5s)\", seeded node-e2e-ou2c9f.\n\nGREEN LEGS WITH COUNT LINES\n  scoped daemon (src/bootstrap src/orchestrator src/provider-profile daemon-command-vocabulary.test.ts\n    daemon-command-registry.test.ts src/http/affordance-read-planning.test.ts):\n    Test Files 49 passed (49) / Tests 1471 passed (1471), exit 0\n  pnpm --filter @moe/control-room test: Test Files 138 passed (138) / Tests 1738 passed (1738), exit 0\n  src/orchestrator alone: Test Files 26 passed (26) / Tests 447 passed (447), exit 0\n  pnpm typecheck: exit 0, 19 packages, each printing its own `$ tsc --project tsconfig.json` echo\n\nTWO EXIT-1 LEGS, BOTH ATTRIBUTED FOREIGN\n(1) pnpm --filter @moe/daemon test -> Test Files 1 failed | 415 passed (416) / Tests 1 failed | 8303\n    passed (8304). Sole red src/http/http-listener-read-dispatch.test.ts:\n      AssertionError: expected [ '/product-contract/gate-1/read' ] to strictly equal [ ...(2) ]\n      -   \"/repository/remote/read\",\n    Source is a peer's UNCOMMITTED apps/control-room/src/live/dev-proxy-paths.ts (M) plus untracked\n    live-repository-remote.ts. `git show --name-only` on 72d52104+0377f40d+c0a154a2 matches none of\n    dev-proxy-paths | http-listener-read-dispatch | repository-remote. Not this row.\n\n(2) root pnpm test -> tools/packaging/pack-source.test.ts and\n    tests/integration/portability/goal-brief-mcp-readback.test.ts.\n    The SECOND IS IN THIS ROW'S DIFF (72d52104 changed `{witness: ACTIVATION_WITNESS}` to\n    `activatePayload()`), so I did not wave it through. It fails:\n      seeding refused at project.activate: {\"code\":\"BOOTSTRAP_PAYLOAD_INVALID\",\"layer\":\"DAEMON_INGRESS\"}\n    That code is the PRE-CHANGE behaviour and is UNREACHABLE from the new handler\n    (bootstrap-services.ts:147-165 emits only ACTIVATION_WITNESS_CALLER_SUPPLIED or a receipt code).\n    Root cause is the shared node_modules, not the diff:\n      node -e \"console.log(fs.realpathSync('node_modules/@moe/daemon'))\"\n        -> C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-glance-to-main\\apps\\daemon   (that tree HEAD 862e5bfd)\n      node_modules/.bin/moe-mcp-stdio exports NODE_PATH=.../moe-glance-to-main/node_modules/.pnpm/...\n      grep -c ACTIVATION_WITNESS_CALLER_SUPPLIED apps/daemon/src/bootstrap/bootstrap-services.ts       -> 1\n      grep -c ACTIVATION_WITNESS_CALLER_SUPPLIED node_modules/@moe/daemon/src/.../bootstrap-services.ts -> 0\n    Every spawn-based lane (portability harness, moe-mcp-stdio host) executes ANOTHER COMMIT in a child\n    process. Playwright spawns the daemon from the local tree, which is why board-chain and daemon-board\n    saw the new code and this one did not. Rail 3 intersection is empty: the diff never reached that tree.\n\npnpm seed -> exit 1 on \"MOE_SEED_ENV_MISSING MOE_DAEMON_ORIGIN / MOE_DAEMON_CREDENTIAL / MOE_CSRF_TOKEN /\nMOE_NODE_SPECS_DIR\". The env gate refuses BEFORE any command is sent, so this leg certifies nothing in\neither direction. daemon-board.spec.ts is the real DoD-6 evidence and it is green.\n\nDoD 1 PASS - \"commits the MEASURED values, not nine keys of any shape\" does toEqual on the WHOLE committed\nwitness against literals traceable to the injected ports (artifactPathRef carries repo toplevel + HEAD sha,\nbackupPathRef the backup sha256, storeDriverRef, providerMinimumProfileRef, both digests), then asserts\nreceipts.repository/{headSha,toplevel} and receipts.store.storePath exactly.\nDoD 2 PASS - code AND layer asserted as one toEqual object at :800 and :820, plus resolver :512; ledger and\ndecisionCount asserted unchanged.\nDoD 3 PASS - sweep driven from the exported ACTIVATION_RECEIPT_MEMBERS with toHaveLength(6),\nnew Set(MEMBERS).size===6 and new Set(codes).size===6, so a silently-empty sweep cannot pass (rail 1).\nDoD 4 PASS - real-reducer acceptance arm; zero packages/core files in the delivery commit.\nDoD 5 PASS - PAYLOAD_KEYS [\"witness\"] correctly KEPT. checkPayload (http-command-ingress.ts:118-126) is a\npure ALLOW-LIST, so {} passes; emptying it would make ACTIVATION_WITNESS_CALLER_SUPPLIED unreachable from\nthe browser. Both roster tests green in the scoped gate.\nDoD 6 PASS on the satisfiable half - the seed order DID change (policy before activate); that clause is\nmutually unsatisfiable with its own \"pnpm seed keeps working\" half and was cleared in round 1.\nDoD 7 PASS.\n\nPer-file lines: bootstrap-services.ts 271, activation-receipts.ts 217, activation-command-entry.ts 100.\n271 is over the 250 target, under the 400 hard split - noted, not a rejection.",
+      "timestamp": "2026-09-05T02:24:01.170Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:36:03.414Z",
-  "updatedAt": "2026-09-05T01:59:21.190Z",
+  "updatedAt": "2026-09-05T02:25:44.717Z",
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -251,7 +257,9 @@
     "firstClaimAt": "2026-09-04T17:27:44.800Z",
     "executedStepCount": 17,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-05T02:25:44.717Z",
+    "wallClockMs": 32279917
   },
   "planningNotes": {
     "approachesConsidered": "REJECTED, the shape the delivering worker and governor both recommended — land this row at 9 owned paths and migrate the 6 consumers in a FOLLOW-UP row depending on it. Their own finding rules it out: \"any correct implementation stops honouring a payload witness, so these six go red on ANY delivery of this DoD.\" A follow-up therefore leaves 6 test files RED on the shared branch between the two landings, owned by neither row at the moment they break, which global rail 3's merge-base/HEAD attribution would charge to whoever completes next. REJECTED, amending affectedFiles to 15 (the governor's named alternative): the daemon HARD-REJECTS a plan over 10 distinct files, so it would be refused at submit. REJECTED, splitting mint-when-absent from the refusal so this row breaks nothing: mint-when-absent does not close the product gap — a hostile caller's witness would still be honoured — and the row's own description says this is the row that closes it. CHOSEN (user decision 2026-09-05): an INDIRECTION row first. task-960254c59cd84c46a9f38f8facbc0b7d routes all eleven witness-bearing sites through one fixture helper as a pure refactor with zero assertion changes, so the tree is green before AND after it; this row then flips that single helper plus production. Both rows sit under the file cap and no red window exists at any point. The seam that makes it work: all six external files import ONE shared `ACTIVATION_WITNESS` const from bootstrap-test-fixtures.ts:270, which neither the original plan nor the triage noted.",
@@ -422,6 +430,33 @@
       "treeId": "5c1f3672dc9f2541a1eef80f6e6c197a6097a74b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "c0a154a221283fae7acb664e34a86c46e22728ef",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-05T01:17:48Z",
+      "paths": [
+        ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+        "apps/daemon/src/http/affordance-read-planning.test.ts",
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T02:00:17.484Z",
+      "treeId": "5761781ab442419e3d8834d41c497ba4f9ec6fa4",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/affordance-read-planning.test.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        },
+        {
+          "path": "tests/e2e/control-room/board-chain.spec.ts",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -429,14 +464,16 @@
     "apps/daemon/src/bootstrap/bootstrap-services.ts",
     "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
     "apps/daemon/src/provider-profile/provider-profile-resolver.test.ts",
-    "tests/e2e/control-room/board-chain.spec.ts"
+    "tests/e2e/control-room/board-chain.spec.ts",
+    ".moe/tasks/task-8fdd81b81c0f4dc88c16203de139e2ba.json",
+    "apps/daemon/src/http/affordance-read-planning.test.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-3fd61a21@2026-09-05T00:54:52Z",
-    "at": "2026-09-05T01:18:55.974Z"
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-05T01:17:48Z",
+    "at": "2026-09-05T02:00:17.484Z"
   },
   "priorBlockedReason": "PLAN SCOPE INSUFFICIENT — 6 unnamed consumers. Step 1 COMPLETE (all 4 checks passed; registry needs NO edit, as hoped). No code written, tree clean. FULL per-file triage in comment-6b2a932eb60f4bbca50427b7a2ba425b.\n\nStep 6 names TWO witness senders; it grepped SYMBOLS, not the SHAPE. `grep -rn 'envelope(\"project.activate\"' apps/ tests/ --include=*.ts` = 12 hits / 8 files. Six sit outside the owned roster, all via the shared `send` helper (bootstrap-test-fixtures.ts:202), which passes no receipts:\n  bootstrap/bootstrap-durability.test.ts (:83 :99 :229 :263 :299)\n  activation/admission-gate-resolver.test.ts:185\n  planning/node-mission-test-fixtures.ts:262\n  provider-profile/provider-profile-resolver.test.ts (:169 :483)\n  work/foundation-launch-completion-wiring.test.ts:183\n  work/launch-template-producer.test.ts:207\nFixing bootstrapSequence() + teaching `send` receipts rescues the ~63 driveThrough consumers, NOT these six — each writes its own witness-bearing envelope literal.\n\nSTOP, NOT ABSORB: two need SEMANTIC rewrites. durability:94 (\"refuses activation carrying no witness, at the ingress layer\") has its subject INVERTED — the empty payload becomes the correct one. durability:229 STALE_VERSION reaches the handler, so the new refusal answers before CORE_REDUCER. Rewriting another row's contract tests unscoped is what rail 19 forbids. Owned 9 (planningNotes: \"no headroom left\") + 6 = 15 vs the 10 threshold; you pre-authorized a stop-and-report at ONE path over. No smaller working slice exists: any correct implementation stops honoring a payload witness, so these go red on ANY delivery of this DoD.\n\nRECOMMENDED: spin a child row carrying those 6 paths, dependsOn this row. Alternative: amend affectedFiles to 15.\n\nALSO (non-blocking): step 2 says `ActivationReceiptSet`; real export is `ActivationReceipts`. Steps 3/4 must WIRE child A's two default-absent ports — committedProbeRef and installedPolicySliceRefs — or the handler can NEVER mint.",
   "blockedOnTaskIds": null,
@@ -489,9 +526,10 @@
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/src/work/foundation-attempt-windows.test.ts",
     ".moe-tmp-step7.py",
-    "apps/daemon/src/http/affordance-read.test.ts"
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "tests/e2e/control-room/board-chain.spec.ts"
   ],
-  "reviewCompletedAt": "2026-09-05T01:17:47.078Z",
+  "reviewCompletedAt": "2026-09-05T02:25:44.717Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 6 - `pnpm seed` keeps working: satisfied for the seed itself, but the same measured-policy composition leaves the BROWSER bootstrap chain refusing ACTIVATION_POLICY_UNMEASURED; task rail 3 binds board-chain.spec.ts to the DEV_PAYLOADS move and it was never run.",
@@ -548,5 +586,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-05T02:25:44.717Z",
+  "reviewSummary": "APPROVED at HEAD c0a154a2 (completion commit recorded; production bytes in ancestor 72d52104). Full evidence: comment-04df77de.\n\nROUND-1 DEFECT FIXED, reproduced by me: playwright board-chain.spec.ts exit 0, \"1 passed (23.0s)\", project.activate v2 ok=true DECIDED EFFECTS_COMMITTED. policy.install swapped above project.activate in CHAIN. Seed path live-green: daemon-board.spec.ts exit 0, \"1 passed (16.5s)\".\n\nGATES: scoped daemon (bootstrap+orchestrator+provider-profile+roster tests+contested file) 49 passed (49)/1471 passed (1471) exit 0; control-room 138/1738 exit 0; src/orchestrator 26/447 exit 0; typecheck exit 0, 19 packages each with its `$ tsc` echo.\n\nTWO EXIT-1 LEGS, BOTH FOREIGN. (1) daemon lane 1 failed | 8303 passed (8304): http-listener-read-dispatch.test.ts wants /repository/remote/read, from a peer's UNCOMMITTED dev-proxy-paths.ts + untracked live-repository-remote.ts; untouched by this row. (2) root pnpm test: pack-source + goal-brief-mcp-readback. The latter IS in this diff so I chased it: BOOTSTRAP_PAYLOAD_INVALID @ DAEMON_INGRESS, the pre-change code the new handler cannot emit. Cause is shared node_modules: realpath of node_modules/@moe/daemon = Temp\\moe-glance-to-main\\apps\\daemon (foreign tree 862e5bfd); grep -c ACTIVATION_WITNESS_CALLER_SUPPLIED is 1 here, 0 in the resolved package, so spawn lanes run another commit; rail-3 intersection empty. pnpm seed exit 1 on MOE_SEED_ENV_MISSING: env gate refuses before any command is sent, certifies nothing.\n\nDoD 1-7 PASS. D1 toEqual on the whole committed witness vs port-traceable literals. D2 code+layer as one object + no-commit. D3 sweep from exported ACTIVATION_RECEIPT_MEMBERS, toHaveLength(6) + two Set-size-6 guards. D4 real-reducer acceptance; 0 packages/core files delivered. D5 PAYLOAD_KEYS [\"witness\"] correctly kept: checkPayload is a pure allow-list; emptying it makes the refusal code unreachable. D6 seed order change cleared round 1. Per-file 271/217/100, under the 400 split."
 }

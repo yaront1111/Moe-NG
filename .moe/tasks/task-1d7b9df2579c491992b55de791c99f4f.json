@@ -133,7 +133,7 @@
       "completedAt": "2026-09-04T23:34:29.996Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -168,7 +168,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:22:33.322Z",
-  "updatedAt": "2026-09-04T23:43:17.745Z",
+  "updatedAt": "2026-09-05T02:25:44.908Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:47:41.465Z",
     "plannedStepCount": 7,
@@ -217,13 +217,11 @@
     "apps/control-room/src/v2/goals/work-labels.ts",
     "apps/control-room/src/v2/goals/work-labels.test.ts"
   ],
-  "blockedReason": "WAIT, not a design question. All 7 steps done, work delivered and green on its own paths. Only exit 0 on the named command is unreachable; complete_task rejects nonzero and I will not fabricate a green.\n\nPROVEN IN TWO COMMANDS:\n  git show HEAD:apps/daemon/src/bootstrap/bootstrap-services.ts | grep -c ACTIVATION_WITNESS_CALLER_SUPPLIED -> 0\n  grep -c ... same file -> 1\nWorking-tree only, owned by task-4b9c394de (worker-cceb207f, 6/8). runBootstrapCommand gained a 5th `receipts` param; activation-receipts.ts untracked. Un-migrated sender = the PRE-EXISTING inline project.activate witness at affordance-read.test.ts:~227, unchanged at HEAD; its commitBootstrap THROWS in setup and takes all 17 arms in that file down. Proof it is not my arms: the FIRST failure is a pre-existing arm I never wrote.\n\nNOT WORKING AROUND IT deliberately: their surface is uncommitted and still moving, so a green depending on it is not durable; the sweep is their row's DoD; and I asked them (chan-388a290f msg-eaabc6a7) to edit that witness IN PLACE because I hold ~190 uncommitted lines there.\n\nAT PARK TIME: typecheck EXIT 0; control-room EXIT 0 (136 files/1685 tests); scoped daemon EXIT 0 (3 files/51 tests); merge-base step 1 daemon 413/413, 8211/8211 EXIT 0. Both drills RED as designed and restored, proven by SHA256 in a separate call (git diff would have been INVALID — targets tracked but dirty with my own work).\n\nALSO: a peer wrapper PARTIALLY SWEPT this row — affordance-read.ts landed in task-8145137c checkpoint 09fa59ef while 8 siblings stayed dirty, leaving branch HEAD NON-COMPILING. All 9 paths declared; this row's commit is the repair. I reverted/committed nothing of anyone else's.\n\nRESUME: re-run `pnpm --filter @moe/daemon test` once task-4b9c394de lands, then complete_task. Detail: Serena task-task-1d7b9df2579c491992b55de791c99f4f-handoff; comment-3118deb7; comment-74cffdb6.",
-  "blockedOnTaskIds": [
-    "task-4b9c394debe94b41a80e2b46c6d55ab8"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T23:38:10.102Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "9d0ed510cc554076ed296791adbf8e5f775dd0df",
