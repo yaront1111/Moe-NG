@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:19:08.132Z",
-  "updatedAt": "2026-09-05T01:04:27.367Z",
+  "updatedAt": "2026-09-05T01:06:53.887Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:27:56.563Z",
     "plannedStepCount": 6,
@@ -188,7 +188,52 @@
     "tests/e2e/control-room/wrapper-lane.ts",
     "tests/e2e/control-room/wrapper-lane.test.ts",
     "tests/e2e/control-room/provider-pause.spec.ts",
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+    ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+    ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
+  ],
+  "completionSummary": "A scripted seat double pauses the REAL wrapper, the browser says so, the pause clears and staffing resumes. Three new files under tests/e2e/control-room/ plus one runbook section. NO production source touched (task rail 1): `git status --porcelain -- tests/e2e/control-room/ docs/` names exactly wrapper-lane.ts, wrapper-lane.test.ts, provider-pause.spec.ts and docs/agent-stack-runbook.md.\n\nTHE RUN'S EVIDENCE LINE (verification run, printed by the spec itself):\n+6692ms spawned-1 | +7059ms resetAt 2026-09-05T21:10:00.000Z | +7059ms [wrapper] provider limit: claude paused until 2026-09-05T21:10:00.000Z (You've hit your session limit MIDDLEDOT resets 12:10am Asia/Jerusalem) | +7305ms health-stated | +9103ms paired | +9462ms health-screen-says-it | +12498ms clear ok=true | +13017ms spawned-2 | wrapperPid 49272 | daemonPid 52680 | seedPid 28916. (MIDDLEDOT is U+00B7, the byte the claude CLI composes with; this field is ASCII.) resetAt is tomorrow's 12:10am Asia/Jerusalem, so no DEFAULT_PROVIDER_PAUSE_MS suffix - the line carried a real instant.\n\nWHAT IS REAL: apps/daemon/src/daemon-main.ts on an ephemeral port, the SHIPPED demo seed, the SHIPPED apps/daemon/src/orchestrator/agent-wrapper-main.ts (never a stand-in), one SQLite store in WAL shared by daemon + wrapper + spec, and the same dev server every daemon-backed journey opens. STOOD IN: the seat only - a .cmd/.js (win32) or .sh/.js (posix) that ignores the spawner's appended flags, writeSync(2, ...) one line and exits 1.\n\nTHE FIXTURE CONSTANT THE DOUBLE CARRIES: `CLAUDE_SESSION_LIMIT.line` at apps/daemon/src/orchestrator/seat-exit-classifier.test.ts:49. It is declared `const`, NOT exported, so the plan's \"import it\" route does not exist; `LIMIT_LINE` in wrapper-lane.ts is a copy and `readFixtureLimitLine()` proves it byte-for-byte by reading that source and JSON.parsing its `line:` literal - a fixture edit, rename or move reds that arm.\n\nASSERTED, in order: `[wrapper] node.deliver@<lane.nodeRef>: SPAWNED` with the capt",
+  "commits": [
+    {
+      "sha": "745305c78c1face8a966cdd7169b938e07cbe14a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-04T23:53:08Z",
+      "paths": [
+        ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json",
+        ".moe/tasks/task-c81cc93d1190496e870816f486c146ae.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
+        "docs/agent-stack-runbook.md",
+        "tests/e2e/control-room/provider-pause.spec.ts",
+        "tests/e2e/control-room/wrapper-lane.test.ts",
+        "tests/e2e/control-room/wrapper-lane.ts"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-05T01:06:53.887Z",
+      "treeId": "6b49a4e269c4c603e43ea57ca63f8fca9e21a0b2",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-8fdd81b81c0f4dc88c16203de139e2ba"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "tests/e2e/control-room/wrapper-lane.ts",
+    "tests/e2e/control-room/provider-pause.spec.ts",
+    "tests/e2e/control-room/wrapper-lane.test.ts",
     "docs/agent-stack-runbook.md"
   ],
-  "completionSummary": "A scripted seat double pauses the REAL wrapper, the browser says so, the pause clears and staffing resumes. Three new files under tests/e2e/control-room/ plus one runbook section. NO production source touched (task rail 1): `git status --porcelain -- tests/e2e/control-room/ docs/` names exactly wrapper-lane.ts, wrapper-lane.test.ts, provider-pause.spec.ts and docs/agent-stack-runbook.md.\n\nTHE RUN'S EVIDENCE LINE (verification run, printed by the spec itself):\n+6692ms spawned-1 | +7059ms resetAt 2026-09-05T21:10:00.000Z | +7059ms [wrapper] provider limit: claude paused until 2026-09-05T21:10:00.000Z (You've hit your session limit MIDDLEDOT resets 12:10am Asia/Jerusalem) | +7305ms health-stated | +9103ms paired | +9462ms health-screen-says-it | +12498ms clear ok=true | +13017ms spawned-2 | wrapperPid 49272 | daemonPid 52680 | seedPid 28916. (MIDDLEDOT is U+00B7, the byte the claude CLI composes with; this field is ASCII.) resetAt is tomorrow's 12:10am Asia/Jerusalem, so no DEFAULT_PROVIDER_PAUSE_MS suffix - the line carried a real instant.\n\nWHAT IS REAL: apps/daemon/src/daemon-main.ts on an ephemeral port, the SHIPPED demo seed, the SHIPPED apps/daemon/src/orchestrator/agent-wrapper-main.ts (never a stand-in), one SQLite store in WAL shared by daemon + wrapper + spec, and the same dev server every daemon-backed journey opens. STOOD IN: the seat only - a .cmd/.js (win32) or .sh/.js (posix) that ignores the spawner's appended flags, writeSync(2, ...) one line and exits 1.\n\nTHE FIXTURE CONSTANT THE DOUBLE CARRIES: `CLAUDE_SESSION_LIMIT.line` at apps/daemon/src/orchestrator/seat-exit-classifier.test.ts:49. It is declared `const`, NOT exported, so the plan's \"import it\" route does not exist; `LIMIT_LINE` in wrapper-lane.ts is a copy and `readFixtureLimitLine()` proves it byte-for-byte by reading that source and JSON.parsing its `line:` literal - a fixture edit, rename or move reds that arm.\n\nASSERTED, in order: `[wrapper] node.deliver@<lane.nodeRef>: SPAWNED` with the capt"
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-75411639@2026-09-04T23:53:08Z",
+    "at": "2026-09-05T01:06:53.887Z"
+  }
 }
