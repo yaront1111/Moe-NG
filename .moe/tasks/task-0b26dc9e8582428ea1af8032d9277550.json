@@ -89,7 +89,7 @@
       "completedAt": "2026-09-05T03:23:48.786Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -108,16 +108,24 @@
       "author": "architect-20a6d1eb",
       "content": "DoD 1 IS ALREADY SATISFIED AT HEAD - narrowing this row before planning it (architect-20a6d1eb, 2026-09-05, HEAD df5bbfd5). I filed this row yesterday claiming the strip \"does not say the COVERAGE FRACTION in operator words\". Re-measuring before planning (global rail 6 applies to my own filings too) shows that is wrong:\n\n`apps/control-room/src/v2/goals/goal-status-strip.tsx:44`\n  if (progress !== null) facts.push(`${String(progress.verified)} of ${String(progress.criteria)} criteria verified`);\n\nThe fraction is already rendered as a fact chip whenever coverage is readable, on EVERY stage - not only at completion. `goal-status.ts:107-108` already computes `progress` from the coverage totals, and `:45` already renders \"N of M nodes accepted\" beside it. So DoD 1 as written asks for something that shipped.\n\nWHAT IS ACTUALLY MISSING, measured: `agentsOf` (goal-status.ts:71-80) folds the node steps into {accepted, blocked, replanned, total, working} and counts a BLOCKED step only when its `missing` contains \"escalation\" or \"replan\". It has no notion of a node waiting on a DEPENDENCY. Once task-1d7b9df2 lands the `depends:<nodeKey>` token, a 3-node goal with two nodes queued behind their parent will report blocked 0 and working 0, and the WORKING branch (:150-158) will tell the operator \"0 nodes are claimed right now. Nothing needs you until a review is exhausted.\" That sentence is actively misleading: two nodes are waiting on build order, not idle, and nothing on the strip says so.\n\nAMENDED SCOPE for this row (DoD 1 is superseded; DoD 2-6 stand):\n- DoD 1' : `agentsOf` gains a count of nodes BLOCKED on an unmet dependency, folded from the `depends:` prefix in `step.missing` - the same prefix shape task-1d7b9df2 emits and `labelForMissing` reads. A test asserts the count for a 3-node graph with two nodes queued behind one parent.\n- DoD 2 (the multi-node sentence) is where that count is spent: the WORKING branch names how many nodes are waiting and on what, instead of implying they are idle.\n- DoD 3 (READY_TO_CLOSE only at 100%) and DoD 4 (null-progress paths) stay as written and are REGRESSION arms here, not new behaviour - `goal-status.ts:139-143` already gates READY_TO_CLOSE on `progress.verified === progress.criteria`.\n\nQA: grade DoD 1' and not DoD 1. The strip already prints the fraction; asking for it again would be a no-op change dressed as a feature.",
       "timestamp": "2026-09-04T23:02:06.336Z"
+    },
+    {
+      "id": "comment-843d05ef41f64311856ec894f61037f8",
+      "author": "qa-3fd61a21",
+      "content": "QA EVIDENCE (qa-3fd61a21, 2026-09-05) — overflow from the approval summary's 2000-char cap.\n\nANCHOR. Graded the DELIVERED bytes of completion commit 67c96bd8 on moe/work-2026-09-04. Worktree was CLEAN at HEAD for both files and goal-status.ts hashed 165306c5cf96b9634cee473a9250fe647d6a43822b9ab1f738c2fd599dff6878 — identical to the SHA the worker drilled — so I graded the delivered tree, not a superseded draft.\n\nGATES I RE-RAN MYSELF, foreground, standalone:\n- `pnpm --filter @moe/control-room test` -> `Test Files 142 passed (142)` / `Tests 1792 passed (1792)`, exit 0.\n- `pnpm typecheck` -> exit 0 with the `$ tsc --project tsconfig.json` echo (execution evidence, global rail 8).\n\nTHE COUNT-LINE DELTA IS NOT A FALSE CLAIM. The worker recorded 141/1783; I measured 142/1792. The extra file is the UNTRACKED FOREIGN `apps/control-room/src/live/live-sessions.test.ts` from a peer session (`??` in git status), contributing +1 file / +9 tests between the two runs. None of the delta is in this row's files. The worker also disclosed one unreproducible intermittent red; I did not see it in three full runs.\n\nMY OWN MUTATION DRILLS, applied to the delivered bytes, each restored and proven by SHA256 equality plus clean `git status --porcelain` in a call SEPARATE from the restore, 0 mutant lines remaining:\n- MUTANT A — `startsWith(DEPENDS_TOKEN_PREFIX)` -> `token === DEPENDS_TOKEN_PREFIX`: 7 failed / 1785 passed. The permanent-zero failure mode this row exists to avoid is genuinely fenced.\n- MUTANT B — `progress.verified === progress.criteria` -> `progress.verified >= progress.criteria - 1`: reds EXACTLY `still reaches READY_TO_CLOSE only at 100%` at goal-status.test.tsx:238. DoD 3's regression arm is live, not decorative.\nBoth reproduced the worker's claimed drill outcomes.\n\nDoD 1 WAS STALE AND CORRECTLY NOT BUILT. It asked for a coverage fraction the strip has printed since before this row existed (goal-status-strip.tsx:45, a fact chip on EVERY stage). The architect narrowed it in comment-4de0a900 before planning. I verified that comment exists on the row AND re-grepped line 45 myself rather than taking either party's word. Grading the DoD field verbatim would have rejected correct work and forced a no-op change dressed as a feature.\n\nDoD 2 / 4 / 5. The a->b->c arm asserts the exact rendered string, alongside fan-out (one parent named ONCE), singular/plural, a 3-blocker list and 5-blocker summarisation. The null paths — coverage null, DOCUMENT_COVERAGE_READ_GOAL_UNBOUND, and criteria 0 — each assert the LITERAL detail string with progress null: no NaN, no \"undefined\", no \"0 of 0\". The commit touches only apps/control-room sources plus .moe board bookkeeping; no daemon route, no offer kind, no Needs-you entry.\n\nRAILS. No aria-live region (asserted length 0 — task rail 3, the PR #26 finding). Build order is REUSED via DEPENDS_TOKEN_PREFIX imported from work-labels.ts, never re-derived (task rail 2). goal-status.ts is 235 lines, under the 250 target. `waiting` and `waitingOn` fold ONCE through `steps.map(blockersOf)`, so the count and the list it describes cannot drift apart.\n\nCONTESTED-PATH FLAG IS BENIGN. The commit carries `Moe-Contested: goal-status.ts (task-33ceae56)` because that WORKING row also declared the file. The 4 deleted lines are ONLY this row's own inline WORKING-branch ternary, replaced by `workingDetail()`. Nothing foreign was clobbered — read the deletions, not the flag.\n\nFOR THE NEXT AGENT. `agents.waitingOn` has no consumer outside goal-status.ts yet. If the board wants the same reading, CONSUME it rather than re-deriving from `missing`.",
+      "timestamp": "2026-09-05T04:00:28.613Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T20:23:41.200Z",
-  "updatedAt": "2026-09-05T03:28:28.827Z",
+  "updatedAt": "2026-09-05T04:01:11.366Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:01:24.426Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-05T04:01:11.366Z",
+    "wallClockMs": 17986940
   },
   "stepsCompleted": [
     "step-1",
@@ -141,7 +149,8 @@
   },
   "planApprovedAt": "2026-09-04T23:03:00.053Z",
   "contextFetchedBy": [
-    "worker-cceb207f"
+    "worker-cceb207f",
+    "qa-3fd61a21"
   ],
   "workStartedAt": "2026-09-05T03:14:17.786Z",
   "reviewStartedAt": "2026-09-05T03:28:19.034Z",
@@ -195,5 +204,8 @@
     "kind": "completion",
     "sessionId": "worker-cceb207f@2026-09-05T03:14:02Z",
     "at": "2026-09-05T03:28:28.826Z"
-  }
+  },
+  "completedAt": "2026-09-05T04:01:11.366Z",
+  "reviewCompletedAt": "2026-09-05T04:01:11.366Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-843d05ef (overflow from this cap).\n\nANCHOR: graded delivered bytes of completion commit 67c96bd8 on moe/work-2026-09-04; worktree clean at HEAD, goal-status.ts SHA256 165306c5...ff6878 == the bytes the worker drilled.\n\nGATES RE-RUN BY ME, foreground: `pnpm --filter @moe/control-room test` -> `Test Files 142 passed (142)` / `Tests 1792 passed (1792)` exit 0; `pnpm typecheck` exit 0 with the `$ tsc --project tsconfig.json` echo. Worker recorded 141/1783; the +1 file/+9 test delta is the UNTRACKED FOREIGN live-sessions.test.ts from a peer session, none of it in this row's files - not a fabricated gate.\n\nMY OWN DRILLS on the delivered bytes, both restored and proven by SHA256 + clean git status in a SEPARATE call:\n- A `startsWith(DEPENDS_TOKEN_PREFIX)` -> `===`: 7 failed / 1785 passed. The permanent-zero mode is fenced.\n- B `verified === criteria` -> `>= criteria - 1`: reds EXACTLY `still reaches READY_TO_CLOSE only at 100%` (test:238). DoD 3 is live, not decorative.\n\nDoD 1 was STALE and correctly NOT rebuilt: the strip has printed the fraction since before this row (goal-status-strip.tsx:45, every stage). Architect narrowed it in comment-4de0a900; I verified that comment exists AND re-grepped line 45 myself.\nDoD 2: exact rendered string for a->b->c, plus fan-out (parent named once), singular/plural, 3-blocker list, 5-blocker summarisation.\nDoD 4: coverage null, DOCUMENT_COVERAGE_READ_GOAL_UNBOUND and criteria 0 each assert the LITERAL detail with progress null - no NaN, no \"0 of 0\".\nDoD 5: only apps/control-room sources + .moe bookkeeping; no daemon route, no offer kind, no Needs-you entry.\n\nRAILS: no aria-live (asserted length 0); DEPENDS_TOKEN_PREFIX imported from work-labels.ts, build order never re-derived; goal-status.ts 235 ln under the 250 target; waiting/waitingOn fold ONCE so count and list cannot drift. Contested flag vs task-33ceae56 benign - the 4 deletions are this row's own inline ternary."
 }
