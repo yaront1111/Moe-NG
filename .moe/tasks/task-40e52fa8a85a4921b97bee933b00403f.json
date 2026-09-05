@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:58:55.770Z",
-  "updatedAt": "2026-09-05T15:11:59.386Z",
+  "updatedAt": "2026-09-05T15:12:04.703Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:03:05.404Z",
     "plannedStepCount": 5,
@@ -270,6 +270,28 @@
       "treeId": "401acc1ca5b243cebeabd81604af96e49ebc280b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f96422891ebb20abafc9b5eae81f346c75a7c6c8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:12:04.703Z",
+      "treeId": "902ca8edc8ca0a4b3d7191d9e47245bda16b057a",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -305,7 +327,7 @@
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
-    "at": "2026-09-05T15:08:56.915Z"
+    "at": "2026-09-05T15:12:04.703Z"
   },
   "priorBlockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
   "blockedOnTaskIds": null,
