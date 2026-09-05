@@ -20,7 +20,7 @@
     "Check any new testid namespace is free before using it, keep JSX text ASCII-only and apostrophe-free (the scheduler package-boundary scan reds otherwise), and keep every production file under 250 lines."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,15 +34,23 @@
   ],
   "priority": "HIGH",
   "order": 43,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1b7413d5b2ca4ff3a2b5d39d36ce11fd",
+      "author": "worker-d6e44333",
+      "content": "RE-MEASURED AT HEAD (worker-d6e44333, 2026-09-05T13:28Z, branch moe/work-2026-09-04, working tree). Global rail 6 requires the description's disk claims be re-measured; global rail 4 clause 2 requires this proof row's certified capability be verified by grep/probe, not read off the design. Result: the producer surface is STILL ABSENT, exactly as architect-3c27f2ab measured at 11:26Z. Confirming rather than re-litigating, because 3 producer rows have moved since and the gap could plausibly have closed.\n\nGAP, SYMBOL BY SYMBOL — commands and verbatim results:\n\n1. `grep -rn \"release\\.decide\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => `0`\n2. `grep -rn \"RELEASE_EVIDENCE_INCOMPLETE\\|RELEASE_PR_FAILED\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => `0`\n3. `find apps packages adapters -iname \"*release*decide*\"` => no output (no module owns the kind)\n\nDoD clauses 2, 3 and 6 name those three symbols directly: clause 2 demands the literal `RELEASE_EVIDENCE_INCOMPLETE` text be asserted and the missing criterion ids reach the operator; clause 3 demands the card be ABSENT when the daemon offers no `release.decide`, asserted in BOTH the offered and un-offered states; clause 6 demands `RELEASE_PR_FAILED` with its stderr line verbatim when `gh` is missing. None of those three literals exists on disk. A plan written now would have to invent the refusal codes, the offer shape and the receipt shape in the control-room, i.e. a mock-backed journey — forbidden by task rail 1 (\"THIS ROW PROVES, IT DOES NOT REBUILD\"), task rail 4 (REAL FRAMES ONLY: the exact-key decoders reject hand-written frames), and global rail 4 clause 2 (\"a proof that only proves shapes retires the question unanswered; a falsely retired gate cannot be repaired\").\n\nWHAT IS ACTUALLY READY — this row is NOT blocked on its own composition surface, only on the kind:\n- Child 1 IS landed: `apps/daemon/src/release/` holds release-dossier{,-contracts,-ledger,-sections}.ts each with its .js bridge, plus 2 test files. task-70a7ccd3 DONE at 1c464208, reviewSummary confirms 30/30.\n- Every control-room pattern the description names exists: `apps/control-room/src/v2/goals/goal-publish.tsx`, `goals/publish-port.ts`, `approvals/offer-wire.ts` (`spendOffer`, 11 call sites under apps/control-room/src).\n- `NEEDS_YOU_KINDS` is at `apps/control-room/src/v2/approvals/needs-you-model.ts:28` — a FOUR-member roster `[\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"]`. Note the path: the description says needs-you-model.ts:28 without the `approvals/` segment; it lives under v2/approvals/, not v2/needs-you/. Adding a member here is a roster change, so global rail 19 applies — needs-you-model.test.ts and needs-you.test.tsx must be in affectedFiles, and any hard-coded length assertion re-counted.\n- Testid namespace `cr.release.*` is FREE: `grep -rn \"cr\\.release\" apps/control-room/src tests | wc -l` => `0`. Safe to claim (task rail 5).\n\nSo the leaf-first order holds and only the kind is missing. Blocking on the 3 rows that own it rather than filing anything new (global rail 20: a row already owns the capability).",
+      "timestamp": "2026-09-05T13:28:36.112Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-05T11:26:18.168Z",
+  "updatedAt": "2026-09-05T13:29:22.093Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z"
   },
   "contextFetchedBy": [
-    "architect-3c27f2ab"
+    "architect-3c27f2ab",
+    "worker-d6e44333"
   ],
   "priorHandoffs": [
     {
@@ -54,5 +62,14 @@
       "releasedBy": "architect-3c27f2ab",
       "reason": "PLAN IN BUILD ORDER (rail 16). This is a proof/consumer row. Its producer task-f961dc89 (release.decide) is still PLANNING and grep release.decide over apps/ packages/ is ZERO hits. Planning the browser journey first would ship a mock-backed proof (rail 4 clause 2). Releasing so the leaf can be planned first; dependsOn already gates WORKING."
     }
-  ]
+  ],
+  "blockedReason": "PRODUCER KIND ABSENT — cannot plan without a mock-backed journey. Re-measured at HEAD 13:28Z, full evidence in comment-1b7413d5: `grep -rn \"release\\.decide\" apps/ packages/ adapters/` = 0 hits; `RELEASE_EVIDENCE_INCOMPLETE|RELEASE_PR_FAILED` = 0 hits; no *release*decide* module. DoD 2, 3 and 6 assert those exact literals, so any plan now invents the refusal codes, offer shape and receipt shape in the control-room — task rail 1, task rail 4 (exact-key decoders reject hand-written frames), global rail 4 clause 2.\n\nSECOND park for this reason: architect-3c27f2ab released it 11:26Z on the same measurement (rail 16). Releasing again only re-offers it to the PLANNING pool — dependsOn gates WORKING only, so the row keeps reaching planning seats. Blocking is the enforceable park: auto-unblocks when all 3 producers hit DONE.\n\nBLOCKED ON (this epic, none DONE):\n- task-f961dc89 (42, WORKING, already in dependsOn) — release.decide published human-only + proof-carrying PR. Gates DoD 2, 5, 6.\n- task-bda0eeac (41.6, WORKING) — release.decide on the shared contract, 3 refusal codes + closed layer map. Gates DoD 2's verbatim RELEASE_EVIDENCE_INCOMPLETE. NOT in dependsOn; adding here.\n- task-54b74b80 (41.7, PLANNING) — registry wiring + human-only/MCP-excluded fence. Gates DoD 3 (card ABSENT when unoffered): no fence, no offered/un-offered distinction to assert.\n\nNOT blocked on child 1: task-70a7ccd3 DONE at 1c464208, apps/daemon/src/release/ on disk. Composition patterns all exist (goal-publish.tsx, publish-port.ts, offer-wire spendOffer); NEEDS_YOU_KINDS at v2/approvals/needs-you-model.ts:28; `cr.release.*` testid free. Only the kind is missing, so no new rows filed (rail 20).\n\nNEXT ARCHITECT: do not re-run the zero-hit greps as discovery — read the producers' completionSummary from epicSiblings and plan against the shapes they shipped.",
+  "blockedOnTaskIds": [
+    "task-f961dc899a13488da8f119abdc37631f",
+    "task-bda0eeac02544c1992c6738c2db83178",
+    "task-54b74b8041c64bc2868435bcbdac6dd6"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-05T13:29:22.093Z"
 }

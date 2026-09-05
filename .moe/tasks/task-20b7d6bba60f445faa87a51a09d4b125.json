@@ -1,0 +1,67 @@
+{
+  "id": "task-20b7d6bba60f445faa87a51a09d4b125",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "release.decide is MCP-excluded and human-only, with bidirectional fence tests",
+  "description": "SPIDR child of task-f961dc899a13488da8f119abdc37631f, spun from task-54b74b8041c64bc2868435bcbdac6dd6 (architect-2e480458, 2026-09-05) because rail 18 found three extra MCP count pins that push wiring+fence past the 10-file hard cap.\n\nOBJECTIVE: fence `release.decide` to the operator on the two remaining surfaces the wiring row does not own: MCP advertisement and wrapper staffing.\n\nDELIVERABLE: the kind is in MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS; bidirectional MCP set-equality holds against the dispatch seam; a non-advertised MCP dispatch is refused with the existing excluded-kind code; a wrapper pass does not staff a READY release.decide item; the four MCP count-pin files listed in DoD are reconciled in one commit.\n\nNOT IN SCOPE: daemon vocabulary/families/registry/async-entries (task-54b74b80); the gh PR port, receipt and service (task-f961dc89); packages/contracts and the generated client (task-bda0eeac); affordance-planning-offers.test.ts (approval.* only).\n\ndependsOn task-54b74b80 because C2 requires excluded kinds to already be SERVED by the registry, and task-5f883e4e because preview.decide moves the SAME two fence files and the SAME MCP count literals first.\n\nVERIFICATION: `pnpm --filter @moe/daemon test` (quote Test Files N passed) plus `pnpm typecheck`.",
+  "definitionOfDone": [
+    "`release.decide` is a member of MCP_EXCLUDED_COMMAND_KINDS and of HUMAN_ONLY_STEPS (the one Set at orchestrator/agent-spawn-contract.ts). The kind remains SERVED by the command registry.",
+    "A bidirectional set-equality test enumerates the SERVED set from the dispatch seam (registry.keys() for commands, servedMcpQueryKinds() for queries) and asserts SET EQUALITY with the advertised roster in BOTH directions. VERIFY BY DELETING the new MCP_EXCLUDED entry and confirming the set-equality arm goes RED; quote the red.",
+    "A `release.decide` dispatch over MCP is refused with the SAME code the existing excluded kinds already assert (measure mcp-tool-allowlist.test.ts / mcp-main.test.ts / mcp-http-host.test.ts at claim time — DoD names INPUT_INVALID; if production answers CAPABILITY_DENIED, assert that code AND its layer, do not invent a second refusal).",
+    "Every hand-written MCP exclusion count pin is reconciled in the SAME commit: mcp-tool-allowlist.test.ts (excluded length + the {excluded, queries, vocabulary, wired} literal object), daemon-command-registry-human-approver.test.ts (toHaveLength + expectedExclusions list), mcp-main.test.ts (EXPECTED_EXCLUDED_COMMAND_KINDS + EXCLUSION_CASES.length + kinds x entries arithmetic), mcp-http-host.test.ts (EXCLUSION_CASES.length). Take the PRINTED expected-vs-received; never a number from this description.",
+    "Mutation drill, quoted, two arms: (b) remove `release.decide` from MCP_EXCLUDED_COMMAND_KINDS -> the bidirectional set-equality test goes RED; (c) remove it from HUMAN_ONLY_STEPS -> the staffing arm goes RED (no seat spawned for a READY unclaimed release.decide work item, asserted by work-item id). Restore proof per global rail 13.",
+    "Gates quoted WITH their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. A leg with no count line RAN NOTHING."
+  ],
+  "taskRails": [
+    "Do not edit daemon-command-vocabulary.ts, daemon-command-async-entries.ts, daemon-command-registry.ts, or daemon-store-dependencies.test.ts — those belong to task-54b74b80.",
+    "Do not edit packages/contracts or the generated client.",
+    "Do not edit apps/daemon/src/http/affordance-planning-offers.test.ts: it iterates only approval.* kinds; adding release.decide to HUMAN_ONLY_STEPS does not red it.",
+    "No count literal in this description is trustworthy at claim time. Reconcile to the assertion's PRINTED expected-vs-received.",
+    "FEATURES ONLY: join the existing operator/MCP/HUMAN_ONLY rosters; do not invent a new policy engine."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f961dc899a13488da8f119abdc37631f",
+  "dependsOn": [
+    "task-54b74b8041c64bc2868435bcbdac6dd6",
+    "task-5f883e4e12c34842b3cb6c2f218e4256"
+  ],
+  "priority": "HIGH",
+  "order": 41.75,
+  "comments": [
+    {
+      "id": "comment-b3a394657dbf432988b11b84098843fc",
+      "author": "worker-d6e44333",
+      "content": "RE-MEASURED AT HEAD f3b94eaa (worker-d6e44333, 2026-09-05T13:41Z, branch moe/work-2026-09-04, working tree). Rail 6 both directions. The row is correctly specified but not yet buildable; here is the state, symbol by symbol.\n\nTHE FENCE ROSTERS BOTH EXIST and are exactly where the description says:\n- `MCP_EXCLUDED_COMMAND_KINDS` at apps/daemon/src/mcp-tool-allowlist.ts:59 (`Object.freeze([...])`). Current members: `approval.decide`, `approval.decide_intent`, `product_contract.answer_clarification`, and the one-way GA activation kind. Each carries a written contract comment; the header at :55-58 records the standing either/or ruling (comment-4d026de3, task-4c9b1d85) that re-admitting a kind requires a server-set transport-origin field to land first.\n- `HUMAN_ONLY_STEPS` at apps/daemon/src/orchestrator/agent-spawn-contract.ts:195 (`new Set([...])`). Current members: `approval.decide`, `approval.decide_intent`, `goal.close`, `goal.create`, `goal.create_with_source`, `repository.publish`. Consumed at orchestrator/agent-wrapper.ts:353 (`if (HUMAN_ONLY_STEPS.has(step.kind)) continue;`) and re-exported at :24 so the offer surface's test imports it from the wrapper it guards.\n\nTHE SUBJECT KIND DOES NOT EXIST:\n`grep -rn \"release\\.decide\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => `0`.\n\nWHY THAT BLOCKS RATHER THAN JUST DELAYS. DoD 1's second sentence is \"The kind remains SERVED by the command registry\" — it is not served, it is absent. DoD 2 requires a bidirectional set-equality test that enumerates the SERVED set from the dispatch seam (`registry.keys()`, `servedMcpQueryKinds()`) and asserts SET EQUALITY with the advertised roster in BOTH directions. Adding `release.decide` to `MCP_EXCLUDED_COMMAND_KINDS` while the registry does not serve it puts a kind in the advertised-exclusion roster that the served seam does not contain — which is precisely the direction global rail 9 wrote that test to catch. The test would red on my own edit, and the only ways to green it would be to weaken the set-equality to a subset or to stub the kind into the registry. The first guts the row's whole point; the second is task-54b74b80's file (task rail 1 forbids me editing daemon-command-registry.ts). There is no honest slice here, so delivery bias does not apply.\n\nSECOND, INDEPENDENT REASON — COLLISION, not just ordering. task-5f883e4e (WORKING) is doing this same edit for `preview.decide`: same two roster files, same four hand-written MCP count pins that DoD 4 requires be reconciled in ONE commit. `preview.decide` currently appears at only one production site, apps/daemon/src/preview/preview-contracts.ts:43 (`PREVIEW_DECIDE_COMMAND_KIND`), and is in NEITHER fence roster yet — so that row has not landed its half. Two rows incrementing the same count literals concurrently in a shared checkout is a guaranteed conflict, and task rail 4 tells me to reconcile against the assertion's PRINTED expected-vs-received, which cannot be measured until the preview edit is on the branch.\n\nBoth prerequisites are already correct in `dependsOn`. Blocking on them rather than filing anything new.",
+      "timestamp": "2026-09-05T13:40:54.282Z"
+    },
+    {
+      "id": "comment-05acb3e40cbf4062a365127dab5db4de",
+      "author": "architect-2e480458",
+      "content": "Filed by architect-2e480458 while planning task-54b74b80. Measurements at HEAD so you do not re-derive:\n\nMCP_EXCLUDED_COMMAND_KINDS is 6 members in mcp-tool-allowlist.ts:59-82. Extra count pins (the reason this row exists): human-approver.test.ts:317-323 expectedExclusions list + toHaveLength(6); mcp-main.test.ts:207-230 EXPECTED_EXCLUDED_COMMAND_KINDS + EXCLUSION_CASES.length 6 + 6*2=12; mcp-http-host.test.ts:688 EXCLUSION_CASES.length 6.\n\nHUMAN_ONLY_STEPS is ONE Set at orchestrator/agent-spawn-contract.ts:195 (wrapper re-exports). affordance-planning-offers.test.ts:352-360 iterates only startsWith(\"approval.\") — adding release.decide does NOT red it; do not edit that file. Staffing arm belongs in agent-wrapper.test.ts (production skip is agent-wrapper.ts:353).\n\nBidirectional MCP set-equality already lives in mcp-tool-allowlist.test.ts (C1/C2/Q1 vs registry.keys() and servedMcpQueryKinds()). Extend it; do not write a second self-iterating roster test.\n\nWait for task-54b74b80 (kind must be SERVED) and task-5f883e4e (preview.decide moves the same fence files and the same count literals). Reconcile counts to printed expected-vs-received.",
+      "timestamp": "2026-09-05T13:41:35.226Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T13:39:19.570Z",
+  "updatedAt": "2026-09-05T13:41:35.226Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T13:39:41.917Z"
+  },
+  "contextFetchedBy": [
+    "worker-d6e44333"
+  ],
+  "blockedReason": "SUBJECT KIND NOT SERVED + CONCURRENT EDIT ON THE SAME LITERALS. Re-measured at HEAD f3b94eaa 13:41Z; evidence in comment-b3a39465.\n\n`grep -rn \"release\\.decide\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => 0.\n\nDoD 1 says \"The kind remains SERVED by the command registry\" — absent, not served. DoD 2 requires bidirectional SET EQUALITY between the served seam (registry.keys(), servedMcpQueryKinds()) and the advertised roster. Adding release.decide to MCP_EXCLUDED_COMMAND_KINDS while the registry does not serve it puts an advertised entry in the roster the served set lacks — exactly the direction global rail 9 wrote that test to catch. It reds on my own edit, and the only greens are weakening set-equality to subset (guts the row) or stubbing the kind into daemon-command-registry.ts (task rail 1 forbids; that file is task-54b74b80's). No honest slice, so delivery bias does not apply.\n\nSECOND, INDEPENDENT: task-5f883e4e (WORKING) makes this same edit for preview.decide — same two roster files, same four MCP count pins DoD 4 wants reconciled in ONE commit. preview.decide sits at ONE production site (preview/preview-contracts.ts:43) and in NEITHER fence roster, so that half has not landed. Task rail 4 says reconcile to the PRINTED expected-vs-received, unmeasurable until that edit is on the branch. Two rows bumping the same literals concurrently = guaranteed conflict.\n\nMEASURED, DO NOT RE-DERIVE:\n- MCP_EXCLUDED_COMMAND_KINDS: mcp-tool-allowlist.ts:59, Object.freeze. Members: approval.decide, approval.decide_intent, product_contract.answer_clarification, the one-way GA activation kind. Header :55-58 carries the standing either/or ruling (comment-4d026de3).\n- HUMAN_ONLY_STEPS: orchestrator/agent-spawn-contract.ts:195, new Set. Members: approval.decide/.decide_intent, goal.close/.create/.create_with_source, repository.publish. Consumed agent-wrapper.ts:353, re-exported :24.",
+  "blockedOnTaskIds": [
+    "task-54b74b8041c64bc2868435bcbdac6dd6",
+    "task-5f883e4e12c34842b3cb6c2f218e4256"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-05T13:41:31.655Z"
+}

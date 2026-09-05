@@ -120,7 +120,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-05T02:24:09.502Z",
+  "updatedAt": "2026-09-05T14:00:28.686Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
@@ -204,13 +204,11 @@
     "apps/daemon/src/http/activity-read.ts",
     "apps/daemon/src/http/activity-read.test.ts"
   ],
-  "blockedReason": "STEPS 1,2,3,5 DELIVERED AND GREEN (DoD 1 pre-compile half + DoD 3 in full, drilled red). STEP 4 / DoD 2 is unbuildable inside this row's nine owned paths. Blocked on task-4595697e0d944c23b1994b568b081f21 (PLANNING; measurement + 3 routes there).\n\nDEFECT, probed twice: child 1 (task-37801090, DONE) mints a REVISION successor NOTHING CAN ADVANCE. Refused decision row off the store: {commandKind:\"plan.propose\", disposition:\"NO_BUSINESS_EFFECT\", expectedVersion:0, observedVersion:1, resultCode:\"EXPECTED_VERSION_CONFLICT\"}.\nCAUSE: commitIntentRejection (approval-intent-rejection.ts:203-216) commits the successor as an extraLegs leg of a decision targeting the REJECTED run (raw v1). readDurableLedger (bootstrap-ledger.ts:96-117) keys aggregates by decision.targetAggregateId, so stateOf(successor)=undefined and versionOf=0, while proposePlan (planning-services.ts:150-156) fences at that 0 against the store's 1. Structural: CommandDecisionRecordBase (store-contracts.ts:96-119) has one targetAggregateId, no per-leg version.\n\nTWO STEP-4 PREMISES ARE UNWRITABLE; I will not guess past them. (1) \"branch on STATE via stateOf(readDurableLedger(...))\" is undefined for the successor; a working discriminator exists (raw v1 + last event PlanningRunCreated + payload runKind REVISION, recorded in the new row) but the fence still refuses. (2) \"the propose fold WITHOUT the create item\": prior is undefined so foldChain needs the create; the create-less probe gives UNKNOWN_ERROR @ DAEMON_PLANNING.\n\nWHY NOT JUST FIX IT: the one-liner is planning-services.ts:154 versionOf(ledger,runId) -> store.getAggregateVersion(runId). Not in my nine paths; plan.propose is the shared seam the browser drives; and it moves the optimistic fence to commit time, shrinking the window bootstrap-ledger.ts:164-170 guards. Fail-closed, epic rail 4 - architect's call.\n\nNEED: amend this row to own that file, OR let task-4595697e land. Evidence: comment-403ad6ab39ec41a18e710063b74d9bf7. 8 paths declared.",
-  "blockedOnTaskIds": [
-    "task-4595697e0d944c23b1994b568b081f21"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T02:23:42.848Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "f01a4c32c2db9ec71e667ce7f09c142d3c130973",

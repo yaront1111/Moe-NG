@@ -18,8 +18,63 @@
     "No count literal in this description is trustworthy at claim time - task-40e52fa8 and task-5f883e4e move the same numbers first. Reconcile to the assertion's PRINTED expected-vs-received.",
     "FEATURES ONLY (inherited from the parent): no security-boundary or policy work."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ORIENT AND RE-MEASURE, no production edits. (a) Prerequisites: get_context.epicSiblings landing.merged (or `git log --grep \"Moe-Task: task-bda0eeac02544c1992c6738c2db83178\"`) for child A, and the same for task-40e52fa8. If A has not landed, STOP — runtime should not have offered WORKING; report_blocked with blockedOnTaskIds. (b) Confirm A's exports exist: grep RELEASE_DECIDE_COMMAND_KIND, releaseRefusal, RELEASE_PR_FAILED, RELEASE_DECIDE_CODE_LAYER_MAP in apps/daemon/src/release/release-decide-contracts.ts. Do not recreate that module. (c) Confirm the gap this row owns is still open: grep -n \"release.decide\" apps/daemon/src/daemon-command-vocabulary.ts daemon-command-async-entries.ts daemon-command-registry.ts must be empty (A's contract module will match; that is expected). (d) Record the CURRENT count literals you will reconcile to, by reading them: vocabulary.test.ts ROWS/OPERATOR/declared/FAMILY_MAPS sizes; registry.test.ts ROWS/registry.size/REGISTRATION_ORDER plus :1678/:1700/:1732; store-deps registryKinds; mcp-tool-allowlist.test.ts {excluded, queries, vocabulary, wired}; daemon-v2-command-registry.test.ts:267. (e) Read comment-7bf36ca0 (payload [\"base\",\"decision\",\"goalId\",\"sha\"]) and comment-eb460c84 (DoD split — MCP/HUMAN_ONLY are sibling task-20b7d6bb). (f) `git status --porcelain -- apps/daemon/src/` and note peer dirt; never revert it. (g) Dependency edge already present (do not edit manifests): apps/daemon/package.json lists @moe/contracts; pnpm-lock.yaml apps/daemon importer has it; vocabulary.ts already imports RuntimeCommandKind from the bare specifier. Optional compiled probe in apps/daemon importing from \"@moe/contracts\", `pnpm --filter @moe/daemon typecheck`, delete the probe in the same command. Put measured counts in the step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST (skill test-driven-development). Do not implement production yet. Add `release.decide` to every hand-written pin this row owns so the daemon suite reds for a missing kind, then add the two behavioural arms. Reconcile every count to step 1's printed values plus one, never to a number in the task description.\n\n(a) apps/daemon/src/daemon-command-vocabulary.test.ts: add Family member \"RELEASE\"; FAMILY_NAMES; FAMILY_MAPS.RELEASE from RELEASE_FAMILY; a ROWS entry in PAYLOAD_KEYS insertion order immediately after repository.publish — { agent: [GOAL, WORK], capability: GOAL, family: \"RELEASE\", kind: \"release.decide\", payloadKeys: [\"base\",\"decision\",\"goalId\",\"sha\"] }; bump ROWS length / unique-kind size; bump declared (non-STANDALONE) count by 1; FAMILY_MAPS.RELEASE.size 1; add \"release.decide\" to OPERATOR_ONLY and bump that length and OPERATOR_PRINCIPAL_KINDS.size; add Object.isFrozen(RELEASE_FAMILY).\n\n(b) apps/daemon/src/daemon-command-registry.test.ts: ALPHABETICAL ROWS entry between recovery.complete and repository.publish with asyncOnly: true, code: \"RELEASE_PR_FAILED\", layer: \"RUNNER_WORKSPACE\", payloadKeys as above, agent [GOAL, WORK], capability GOAL. REGISTRATION_ORDER: insert \"release.decide\" immediately after \"repository.publish\" (insertion order, not alpha). OPERATOR_ONLY: add the kind; bump the two length-11 pins. Reconcile ALL four registry.size/ROWS/REGISTRATION_ORDER 46 pins including :1678/:1700/:1732. NEW ARMS (code AND layer, not merely refused): (1) well-formed operator sendAsync with payload { base: \"main\", decision: \"APPROVE\", goalId: a fixture goal id, sha: 64 hex chars } -> PORT_REFUSED RELEASE_PR_FAILED @ RUNNER_WORKSPACE, and readCommandDecisionsAfter length plus a broad event-count (or the goal/project aggregates) UNCHANGED; (2) the same well-formed payload from a non-operator session that holds GOAL+WORK -> 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, same zero-write assertion. The existing it.each(ROWS) empty-payload sweep will also pin both once the row is in ROWS/OPERATOR_ONLY with asyncOnly: true — keep it; the well-formed arms are the DoD-4/DoD-3 pins.\n\n(c) apps/daemon/src/daemon-store-dependencies.test.ts: insert \"release.decide\" into the sorted registryKinds list (recovery.complete < release.decide < repository.publish).\n\n(d) apps/daemon/src/mcp-tool-allowlist.test.ts: bump ONLY the vocabulary/wired literals in the {excluded, queries, vocabulary, wired} object. Leave excluded at its current value. Do not edit mcp-tool-allowlist.ts.\n\n(e) apps/daemon/src/daemon-v2-command-registry.test.ts: bump ports.registry.size at :267 (v1 size minus the one withheld planning.submit_decomposition). The keys().sort() vs PAYLOAD_KEYS filter at :301 is derived and must not be restated by hand.\n\nRun `pnpm --filter @moe/daemon test` and quote the reds. A green here means the pins are not load-bearing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM VOCABULARY. apps/daemon/src/daemon-command-vocabulary.ts (372 lines; stay under 400).\n\n- Import RELEASE_DECIDE_COMMAND_KIND from \"./release/release-decide-contracts.js\" (A's module, .js specifier).\n- Add RELEASE_FAMILY as `Readonly<Record<string, string>>` Object.freeze({ [RELEASE_DECIDE_COMMAND_KIND]: CAPABILITIES.GOAL }) with a short comment: GOAL because a release is the operator's act on their own repository, same capability as repository.publish; NOT in BOOTSTRAP_FAMILY because that table is Record<BootstrapCommandKind> and bootstrap-durability.test.ts requires a durable sequence member per kind.\n- Add RELEASE_FAMILY to FAMILY_TABLES so familyCapabilityOf finds it (agentCapabilitiesFor then returns [GOAL, WORK] via the generic family path).\n- Add `| typeof RELEASE_DECIDE_COMMAND_KIND` to WiredCommandKind.\n- PAYLOAD_KEYS: insert `[RELEASE_DECIDE_COMMAND_KIND]: [\"base\", \"decision\", \"goalId\", \"sha\"]` immediately after the \"repository.publish\" entry. Caller intent only — projectId/principalId/correlationId/decidedAt are server facts; an extra key is INPUT_INVALID at PAYLOAD_SHAPE. One-line comment pointing at comment-7bf36ca0.\n- OPERATOR_PRINCIPAL_KINDS: add RELEASE_DECIDE_COMMAND_KIND with a one-line comment that this is the human act; MCP exclusion is the sibling.\n\nDo not edit daemon-command-families.ts. Do not add a CommandFamilyFacts flag. Export RELEASE_FAMILY (the vocabulary test imports the family tables).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "ASYNC FAIL-CLOSED ENTRY + REGISTRY OPERATOR WRAP.\n\n(a) apps/daemon/src/daemon-command-async-entries.ts (87 lines). Add RELEASE_DECIDE_COMMAND_KIND to AsyncCommandKind. In createAsyncCommandEntries, add the third frozen entry: asyncHandler throws domainRefusalOf(releaseRefusal(\"RELEASE_PR_FAILED\", \"no release port is composed for this daemon\")) — import releaseRefusal from \"./release/release-decide-contracts.js\" and domainRefusalOf from \"./daemon-command-dispatch.js\". Do not pass a layer; the factory reads RUNNER_WORKSPACE from A's map. handler: foundationSyncHandler (same as the two Foundation entries; sync dispatch already refuses COMMAND_ASYNC_ENTRY_REQUIRED). payloadKeys: PAYLOAD_KEYS[RELEASE_DECIDE_COMMAND_KIND]. requiredCapability: CAPABILITIES.GOAL. Import CAPABILITIES if not already. Do not write a receipt, event, or DurableDecision on this path — throwing DomainRefusal is what decideAsync's catch maps to PORT_REFUSED without commit().\n\n(b) apps/daemon/src/daemon-command-registry.ts (already 436 lines; wrap only, do not split or reformat). entryOf currently returns commandAuthority.wrapAsync(asyncEntry) BEFORE the OPERATOR_PRINCIPAL_KINDS block, and wrapAsync on V1 returns the entry unchanged — so an async kind in that set is currently reachable by a non-operator. After wrapAsync, if OPERATOR_PRINCIPAL_KINDS.has(kind), return a frozen copy whose asyncHandler (and sync handler) throw the SAME DomainRefusal as the sync block: code OPERATOR_PRINCIPAL_REQUIRED, layer DAEMON_AUTHORIZATION, detail \"this command requires the configured operator principal\", httpStatus 403, when principal.principalId !== operatorPrincipalId. Do NOT copy the durable-human widening (approvalIntent / answer_clarification only). Do not refactor the sync block. createAsyncCommandEntries spread already picks up the new kind; do not add a second asyncEntries literal.\n\nRe-run `pnpm --filter @moe/daemon test`. The step-2 reds must go green. Quote the Test Files N passed line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILL, GATES, ADVERSARIAL SELF-REVIEW (one pass, end of task). Invoke skill adversarial-self-review on the diff.\n\nDRILL (a) only — (b)(c) belong to sibling task-20b7d6bb. Before mutating: `git status --porcelain` the exact paths. All files this row edits are tracked, so empty `git diff -- <path>` after restore is valid. Remove `release.decide` from OPERATOR_PRINCIPAL_KINDS only. Re-run the non-operator well-formed arm (or the it.each gate sweep). Quote that arm going RED (OPERATOR_PRINCIPAL_REQUIRED must vanish so the fail-closed RELEASE_PR_FAILED answers, or the gated? assertion flips). Restore. Prove restore with empty git diff on that file.\n\nGATES, standalone foreground, no pipes, no `;` chains, each Test Files N passed quoted: (1) `pnpm --filter @moe/daemon test` — this IS the complete_task verification command; (2) `pnpm typecheck`. Path-attributed baseline for any foreign red (global rail 3). A filter that prints \"No projects matched\" or a run with no count line is not evidence.\n\nADVERSARIAL: concurrent double dispatch still writes nothing; empty/hostile/huge payload still PAYLOAD_SHAPE or fail-closed, never a receipt; BOOTSTRAP_FAMILY was not widened; mcp-tool-allowlist.ts and agent-spawn-contract.ts untouched; registry.ts wrap does not skip wrapAsync; releaseRefusal still takes no layer argument; vocabulary.ts still <400 lines. Report every touched path in complete_step.modifiedFiles.\n\nNamed verification command for moe.complete_task: `pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,8 +84,7 @@
   "parentTaskId": null,
   "dependsOn": [
     "task-bda0eeac02544c1992c6738c2db83178",
-    "task-40e52fa8a85a4921b97bee933b00403f",
-    "task-5f883e4e12c34842b3cb6c2f218e4256"
+    "task-40e52fa8a85a4921b97bee933b00403f"
   ],
   "priority": "HIGH",
   "order": 41.7,
@@ -40,15 +94,48 @@
       "author": "architect-71b9a4e9",
       "content": "PAYLOAD SHAPE for `release.decide`, decided while planning child C (task-f961dc899a13488da8f119abdc37631f) so your PAYLOAD_KEYS row and C's decoder cannot disagree.\n\n    \"release.decide\": [\"base\", \"decision\", \"goalId\", \"sha\"],\n\nCALLER INTENT ONLY, and that is the guarantee, not an omission. `projectId`, `principalId`, `correlationId` and `decidedAt` are SERVER facts the registry re-attaches from authentication, the envelope and the daemon clock - exactly as `PAYLOAD_KEYS`' existing prose documents for `goal.create` and the five graph kinds. A caller naming one of them is refused INPUT_INVALID at PAYLOAD_SHAPE before any handler runs.\n\nField meanings, for the flag block and the fail-closed stub's decode:\n- `base` - the branch the pull request targets. Present because child C asserts the outgoing PR request BYTE FOR BYTE, so `base` must be an explicit field rather than left to `gh`'s implicit default.\n- `decision` - \"APPROVE\" | \"REJECT\".\n- `goalId`, `sha` - the (goal, sha) pair the dossier was re-measured at; together with the project they derive the dossier id and the release receipt id.\n\nFAMILY: `repository.publish` in BOOTSTRAP_FAMILY on `CAPABILITIES.GOAL` is the closest analogue - a release is the operator's act on their own repository, not a review verdict - but the call is yours; say which you chose and why in the step note.\n\nChild C's plan is AWAITING_APPROVAL and assumes your stub refuses `RELEASE_PR_FAILED` (from child A's closed code->layer map) with a detail naming the unconfigured release port, writing NO durable receipt, event or decision on that path. C step 10 swaps that stub for `createReleaseDecideHandler(...)` and touches no other file you own.",
       "timestamp": "2026-09-05T11:37:53.272Z"
+    },
+    {
+      "id": "comment-eb460c84c4ce456c927ab4ddb32310c4",
+      "author": "architect-2e480458",
+      "content": "SPIDR (architect-2e480458, 2026-09-05). Rail 18 at plan time: adding `release.decide` to MCP_EXCLUDED_COMMAND_KINDS reds THREE extra count pins this row's original 10-file roster missed — daemon-command-registry-human-approver.test.ts:323 (toHaveLength(6) + expectedExclusions list), mcp-main.test.ts:207-230 (EXPECTED_EXCLUDED_COMMAND_KINDS + EXCLUSION_CASES.length 6 + 6x2=12), mcp-http-host.test.ts:688 (EXCLUSION_CASES.length 6). Combined with wiring that is 13 files against the 10-file hard cap.\n\nTHIS ROW keeps the wiring + operator principal + fail-closed async stub. Fence sibling is task-20b7d6bba60f445faa87a51a09d4b125 (MCP-excluded + HUMAN_ONLY_STEPS + those extra pins + staffing arm).\n\nOriginal DoD clauses that MOVE to the sibling (do not implement them here; do not edit mcp-tool-allowlist.ts or agent-spawn-contract.ts):\n- MCP_EXCLUDED_COMMAND_KINDS membership, HUMAN_ONLY_STEPS membership\n- bidirectional MCP set-equality against the dispatch seam\n- MCP INPUT_INVALID / excluded-kind dispatch arm\n- mutation drills (b) and (c)\n\nThis row still owns: family + WiredCommandKind + PAYLOAD_KEYS + asyncEntries + OPERATOR_PRINCIPAL_KINDS; the four kind-roster pins (vocabulary.test, registry.test including REGISTRATION_ORDER insertion order, store-deps registryKinds, mcp-tool-allowlist.test.ts vocabulary/wired count literals ONLY); non-operator OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; fail-closed RELEASE_PR_FAILED with no durable write; drill (a).\n\nParent task-f961dc89 dependsOn now names both children. This row no longer dependsOn task-5f883e4e (no shared fence files).",
+      "timestamp": "2026-09-05T13:39:45.185Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-05T13:11:16.069Z",
+  "updatedAt": "2026-09-05T13:41:05.648Z",
   "metrics": {
-    "firstClaimAt": "2026-09-05T13:00:38.306Z"
+    "firstClaimAt": "2026-09-05T13:00:38.306Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8
   },
   "contextFetchedBy": [
-    "architect-71b9a4e9"
-  ]
+    "architect-71b9a4e9",
+    "architect-2e480458"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T13:41:03.457Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Put `release.decide` in BOOTSTRAP_FAMILY next to `repository.publish` (the description's analogue). Rejected: BOOTSTRAP_FAMILY is `Record<BootstrapCommandKind, string>` and bootstrap-durability.test.ts:138 asserts one ordered durable request per BootstrapCommandKind. Adding the kind there would force bootstrap-contracts.ts plus the durability suite — extra files and a sequence obligation this command does not have. APPROVAL_INTENT_FAMILY / COMPILER_FAMILY exist as `Record<string, string>` precisely to stay outside that table. 2) Keep wiring+MCP+HUMAN_ONLY on this row as originally written. Rejected at rail 18: MCP_EXCLUDED length is also pinned in daemon-command-registry-human-approver.test.ts:323, mcp-main.test.ts:228-230, mcp-http-host.test.ts:688. Combined with wiring that is 13 files vs the 10-file hard cap. Fence sibling task-20b7d6bba60f445faa87a51a09d4b125 owns those. 3) Duplicate the operator check only inside the release async handler. Weaker than wrapping async entries in entryOf from OPERATOR_PRINCIPAL_KINDS.has(kind): a hardcoded kind=== check would stay green when the set membership drill deletes the entry. 4) Add a `release` flag to CommandFamilyFacts. Unnecessary: entryOf returns async entries before commandFamilyFacts; familyCapabilityOf via FAMILY_TABLES is enough for agentCapabilitiesFor.",
+    "codebaseInsights": "MEASURED 2026-09-05 on moe/work-2026-09-04. `git grep -n 'release\\.decide' -- apps packages adapters` and `RELEASE_PR_FAILED` = zero hits. Child A (task-bda0eeac, WORKING, unmet dep on task-40e52fa8) owns RUNTIME_COMMAND_KINDS, RELEASE_DECIDE_COMMAND_KIND, releaseRefusal(code, detail), RELEASE_PR_FAILED -> RUNNER_WORKSPACE. This row must not create those. Dependency edge @moe/contracts already exists: apps/daemon/package.json:22 workspace:*, pnpm-lock.yaml apps/daemon importer :139-141, vocabulary.ts:1 `import type { RuntimeCommandKind } from \"@moe/contracts\"`. Same-package import of `./release/release-decide-contracts.js` after A lands. PAYLOAD_KEYS from comment-7bf36ca0: [\"base\",\"decision\",\"goalId\",\"sha\"] (decision is \"APPROVE\"|\"REJECT\"). Current pins (will have moved after 40e52fa8): vocabulary.test.ts ROWS 46 / OPERATOR 11 / declared 35 / BOOTSTRAP.size 12; registry.test.ts ROWS/registry.size/REGISTRATION_ORDER 46 plus three more size 46 at :1678/:1700/:1732; store-deps registryKinds hand list; mcp-tool-allowlist.test.ts {excluded:6, queries:6, vocabulary:46, wired:46}; daemon-v2-command-registry.test.ts:267 size 45 (= v1 minus withheld planning.submit_decomposition). REGISTRATION_ORDER is PAYLOAD_KEYS insertion order, NOT alphabetical; registry ROWS are alphabetical. HUMAN_ONLY_STEPS has exactly one definition (agent-spawn-contract.ts:195). familyCapabilityOf searches FAMILY_TABLES (APPROVAL_INTENT, BOOTSTRAP, COMPILER, GRAPH, REVIEW, SESSION, WORK) — STEP is standalone via `kind in STEP_FAMILY`. Async entries skip the sync OPERATOR_PRINCIPAL_KINDS block (registry.ts:248-250 returns wrapAsync first; wrapAsync on V1 returns the entry unchanged). createCommandDecisionPort.decideAsync try/catches DomainRefusal with no store write in that module. File sizes: vocabulary.ts 372, async-entries.ts 87, registry.ts 436 (already over 400 — wrap only, do not split the file in this row). isEpicFinal false.",
+    "risks": "Counts in this plan are HEAD-now; task-40e52fa8 lands preview.decide on the SAME vocabulary/registry/store-deps files first — reconcile every literal to the printed expected-vs-received, never to 46/11/6/45. Do not add to BOOTSTRAP_FAMILY. Do not edit mcp-tool-allowlist.ts or agent-spawn-contract.ts (sibling task-20b7d6bb). Do not edit affordance-planning-offers.test.ts (approval.* only). Do not edit packages/contracts. mcp-tool-allowlist.test.ts on THIS row: bump vocabulary/wired only; leaving excluded at 6 is correct until the sibling. If an unnamed consumer reds (especially another registry.size literal), STOP and report — do not take the extra path. registry.ts is 436 lines; the async operator wrap must stay small. Fail-closed must throw DomainRefusal from the asyncHandler (via domainRefusalOf(releaseRefusal(...))) so decideAsync's catch maps it to PORT_REFUSED without a DurableDecision commit. Assert command-decision count AND event count unchanged. Child C (task-f961dc89) will replace this stub in async-entries.ts only.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-async-entries.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/mcp-tool-allowlist.test.ts",
+      "apps/daemon/src/daemon-v2-command-registry.test.ts",
+      "apps/daemon/src/release/release-decide-contracts.ts",
+      "apps/daemon/src/daemon-command-dispatch.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T13:41:05.648Z"
 }

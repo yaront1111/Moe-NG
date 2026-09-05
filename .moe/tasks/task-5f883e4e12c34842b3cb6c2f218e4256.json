@@ -106,11 +106,17 @@
       "author": "architect-3c27f2ab",
       "content": "DoD AMENDMENT (architect-3c27f2ab, 2026-09-05), parent task-40e52fa8 re-plan.\n\nSTRIKE DoD-2 (\"preview.decide is on the shared runtime command roster in runtime-vocabulary.ts\"). That line is now owned by task-40e52fa8 — keeping it here was the cycle (this row dependsOn 40e52fa8, and 40e52fa8 cannot typecheck or reach a handler without RUNTIME_COMMAND_KINDS).\n\nSTRIKE DoD-3 as a regeneration GATE (\"quote OLD and NEW digest\"). task-40e52fa8 now runs `pnpm --filter @moe/control-room-client generate` because generated-coverage.test.ts:89 is a shape consumer of RUNTIME_COMMAND_KINDS: adding the kind without regenerating fails typecheck. After 40e52fa8 is DONE the digest is already changed; running generate again will no-op and a \"digest must change\" clause would falsely fail.\n\nTHIS ROW KEEPS: DoD-1 MCP wired-but-not-advertised + behavioural arm; DoD-4 HUMAN_ONLY_STEPS (one Set at agent-spawn-contract.ts:195, extend affordance-planning-offers.test.ts:209/263); DoD-5 wrapper staffing test; gates.\n\nStep 4 is amended to match. QA: grade DoD-2 and DoD-3 as struck, owned by task-40e52fa8.",
       "timestamp": "2026-09-05T11:21:32.474Z"
+    },
+    {
+      "id": "comment-20c3639d3aa34cf0879d50e787922be1",
+      "author": "architect-b63fabf3",
+      "content": "YOUR DoD-2 AND DoD-3 ARE NOW DELEGATED, NOT DUPLICATED. architect-b63fabf3, 2026-09-05, HEAD f3b94eaa.\n\ntask-40e52fa8's plan was hard-rejected at 12 distinct files (`[CONSTRAINT_VIOLATION] Plan too large: 12 distinct affected files (max 10)`), so I cut a leaf out of it on the INTERFACE axis: task-c672815d5adc408683d11f91ab3f0a72 (PLANNING, CRITICAL, order 30.5, dependsOn []).\n\nThat leaf owns exactly what your DoD-2 and DoD-3 describe:\n- DoD-2 \"`preview.decide` is on the shared runtime command roster in packages/contracts/src/runtime/runtime-vocabulary.ts\" -> leaf DoD-1.\n- DoD-3 \"the generated client was REGENERATED, not hand-edited ... quote OLD and NEW GENERATED_CONTRACT_DIGEST\" -> leaf DoD-2, plus a full-tree mirror census the leaf DoD-3 requires.\n\nI did NOT re-point this row as the leaf (rail 20's extend-before-duplicate) because you are WORKING, you dependsOn task-40e52fa8, and you additionally own the MCP allowlist and both HUMAN_ONLY_STEPS rosters — inverting that edge would deadlock, and folding six more files in would blow your own cap.\n\nWHAT THIS MEANS FOR YOU. You are transitively gated: 5f883e4e -> 40e52fa8 -> c672815d, so by the time you are claimable both halves are DONE. VERIFY DoD-2 and DoD-3 by grep at the delivered tree — `grep -n 'preview.decide' packages/contracts/src/runtime/runtime-vocabulary.ts` and the leaf's completionSummary for the OLD/NEW digest pair — and record that verification. Do NOT re-run `generate` and do NOT re-edit those files: a second regeneration on an unchanged roster is a no-op at best and a digest churn at worst. Your row shrinks to its real scope: mcp-tool-allowlist.ts, both HUMAN_ONLY_STEPS rosters, and the staffing test.\n\nSEPARATE DEFECT, FOR WHOEVER TRIAGES THIS ROW. Your dependsOn names `task-8834ebe68c1a4f81b3be8e7581156755` and that row DOES NOT EXIST on the board — no .moe/tasks entry. Missing ids count as satisfied, so it does not gate you; but your DoD-4 says \"Prove the guard from task-8834ebe6 works by adding it to ONE roster first, quoting the equality test's failure, then adding it to the other\". There is no such guard row and, at HEAD f3b94eaa, HUMAN_ONLY_STEPS is a single Set at apps/daemon/src/orchestrator/agent-spawn-contract.ts:195 which agent-wrapper.ts RE-EXPORTS — the byte-for-byte duplication the parent row described is no longer there. Re-measure that before planning against it: DoD-4 as written may already be unsatisfiable-as-specified and need an architect amendment, not a worker workaround.",
+      "timestamp": "2026-09-05T13:32:40.406Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T11:21:32.637Z",
+  "updatedAt": "2026-09-05T13:32:40.406Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -131,5 +137,8 @@
       "packages/control-room-client/generator/generate.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T23:12:02.298Z"
+  "planApprovedAt": "2026-09-04T23:12:02.298Z",
+  "contextFetchedBy": [
+    "architect-2e480458"
+  ]
 }

@@ -137,14 +137,22 @@
   "dependsOn": [
     "task-70a7ccd3293f465fbc9c1888ae540f5d",
     "task-bda0eeac02544c1992c6738c2db83178",
-    "task-54b74b8041c64bc2868435bcbdac6dd6"
+    "task-54b74b8041c64bc2868435bcbdac6dd6",
+    "task-20b7d6bba60f445faa87a51a09d4b125"
   ],
   "priority": "HIGH",
   "order": 42,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-dbf07e0bbb61428182a22ce9f0850b08",
+      "author": "architect-2e480458",
+      "content": "SPIDR follow-on (architect-2e480458, 2026-09-05). Child B (task-54b74b80) could not carry wiring+fence in one plan: rail 18 found three extra MCP count pins (human-approver.test.ts, mcp-main.test.ts, mcp-http-host.test.ts) that push the combined roster past the 10-file hard cap.\n\nNew child: task-20b7d6bba60f445faa87a51a09d4b125 (MCP-excluded + HUMAN_ONLY_STEPS + bidirectional MCP tests). This parent now dependsOn [task-70a7ccd3, task-bda0eeac, task-54b74b80, task-20b7d6bb]. C's stub-swap in daemon-command-async-entries.ts still waits only on B's wiring landing; the fence child does not touch that file.",
+      "timestamp": "2026-09-05T13:39:45.240Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:14.023Z",
-  "updatedAt": "2026-09-05T11:37:41.393Z",
+  "updatedAt": "2026-09-05T13:39:45.240Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:23:57.854Z",
     "plannedStepCount": 11,
