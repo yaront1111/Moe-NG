@@ -127,7 +127,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:00.337Z",
-  "updatedAt": "2026-09-05T13:20:51.483Z",
+  "updatedAt": "2026-09-05T13:21:53.848Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:36.684Z",
     "plannedStepCount": 9,
@@ -158,5 +158,34 @@
       "tests/security/boundary-roster.security.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T13:20:51.483Z"
+  "planApprovedAt": "2026-09-05T13:20:51.483Z",
+  "commits": [
+    {
+      "sha": "12a642a9fa9570accbdca81d3d4a3d5176be3fd4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-b63fabf3@2026-09-05T13:11:43Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json"
+      ],
+      "recordedBy": "architect-b63fabf3",
+      "recordedAt": "2026-09-05T13:21:53.848Z",
+      "treeId": "b3c740878c5d281f187af399d5eb9d688c6ba704",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-b63fabf3@2026-09-05T13:11:43Z",
+    "at": "2026-09-05T13:21:53.848Z"
+  }
 }

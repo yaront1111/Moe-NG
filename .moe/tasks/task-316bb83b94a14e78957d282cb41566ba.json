@@ -113,8 +113,8 @@
       "completedAt": "2026-09-05T11:58:24.246Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,16 +153,24 @@
       "author": "qa-b5679ba9",
       "content": "QA EVIDENCE 3/3 — GATES AND PATH ATTRIBUTION (qa-b5679ba9). Count lines verbatim, never the exit code (global rail 8).\n\nGATES, ALL RE-RUN BY ME AT HEAD 47a5750e.\n- Recorded verification command (`pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000` over the four owned files): `Test Files  4 passed (4)` / `Tests  35 passed (35)`, PIPESTATUS[0]=0. Reproduces task.verification exactly — the record is accurate.\n- `pnpm --filter @moe/daemon test` (the row's NAMED gate): `Test Files  1 failed | 429 passed (430)` / `Tests  1 failed | 8541 passed (8542)`, exit 1.\n- `pnpm --filter @moe/control-room test`: `Test Files  147 passed (147)` / `Tests  1843 passed (1843)`, exit 0.\n- `pnpm typecheck`: exit 0, with `apps/daemon typecheck$ tsc --project tsconfig.json` / `apps/daemon typecheck: Done` as the execution evidence.\n- `pnpm test` — ROOT LANE ONLY, apps/** NOT COVERED (global rail 18): `Test Files  11 failed | 416 passed | 2 skipped (429)` / `Tests  75 failed | 10199 passed | 60 skipped (10334)`, exit 1.\n\nPATH-ATTRIBUTED BASELINE (global rail 3). Owned paths: daemon-entry.ts, daemon-entry-port-resolution.ts, daemon-store-dependencies.ts, daemon-store-foundation-composition.ts, daemon-store-dependencies.test.ts, daemon-entry-activation.test.ts, daemon-main-activation-boot.test.ts, daemon-entry-activation-refusals.test.ts.\n\nDAEMON LANE — the single red, disclosed VERBATIM:\n  FAIL  src/work/foundation-attempt-service.test.ts > foundation attempt dispatch — pre-launch context seal (task-203a5ca7) > carries each distinct seal refusal code through unrestamped, with zero provider effect\n  Error: Test timed out in 30000ms.\n  ❯ src/work/foundation-attempt-service.test.ts:1215:3\nSETTLED, NOT ASSUMED. I re-ran that exact file ISOLATED at the SAME `--testTimeout=30000`: `Test Files  1 passed (1)` / `Tests  107 passed (107)`, exit 0. A contention timeout on the shared Windows checkout (the file's real-git arms run 400s+ when another heavy job is on the box), not a defect, not an owned path, and it touches nothing activation-related. NOTE FOR THE RECORD: the worker disclosed 7 daemon reds at their run, including a peer-dirty compiled-authority-bodies export mismatch. At HEAD only this one remains — peer commit 18eb7a0b cleared the rest. The disclosed red moved DOWN between completion and review, never up, so nothing was hidden.\n\nROOT LANE — ZERO occurrences of ANY owned path anywhere in the run output (grepped the full transcript for all eight). The only apps/daemon-touching red is tests/integration/release/release-version-surfaces.test.ts, and I read its unclassified set directly:\n  \"path\": \"apps/daemon/src/bootstrap/activation-receipts.ts\"   (task-741dad13, the measurer row)\n  \"path\": \"apps/daemon/src/bootstrap/activation-receipts.test.ts\"\n  \"path\": \"apps/daemon/src/http/activation-read.ts\"            (task-0a5d7212, child C)\n  \"path\": \"apps/daemon/src/http/activation-read.test.ts\"\n  \"path\": \"README.md\"\nNone is owned here, and that is proven BY CONSTRUCTION rather than by assertion: `grep -n \"v0\\.1\\|0\\.1\\.0\"` over all eight owned files returns NOTHING, so this row cannot have contributed an occurrence; and `git diff --stat 711c62dd^..HEAD -- apps/daemon/src/http/activation-read.ts` is EMPTY (last touched by 6c0986ea, child C). This is a pre-existing sibling debt for the epic-final hardening row.\n\nI also ran the root-lane scanners that COULD have shifted on three NEW files landing under apps/daemon/src, since a file-enumerating test is the one shape that can red without importing anything: pack-inventory + distribution-packaging + bin-target-modes -> `Test Files  3 passed (3)`. And the activation-adjacent root integration arms live-approval-activation + dev-payload-parity -> `Test Files  2 passed (2)` / `Tests  8 passed (8)`.\nHEAD failing-path set ∩ owned paths = EMPTY. Rail 3 satisfied.\n\nNOTED, NOT A REJECTION (global rail 16 — recorded here for the epic-final hardening row rather than filed as a new row). Two touched files sit above the 400-line per-file cap: daemon-entry-port-resolution.ts 441 and daemon-store-foundation-composition.ts 511. BOTH WERE ALREADY OVER BEFORE THIS DIFF — 424 and 492 at 711c62dd^, +19 each here, and 15 of foundation-composition's 19 are the explanatory docblock. 22 apps/daemon production files are already over 400 at HEAD, so this is a standing repo condition rather than something this row introduced, and the plan explicitly directed constructing the port in the EXISTING resolver beside its siblings — splitting here would have meant disobeying the plan. daemon-entry.ts is 333. Follow-up split candidate; not a delivery blocker.\n\nCONSUMER NOTE: task-ac9d5e2d43334525bd990b1362652ce4 was BLOCKED on this row and should now auto-unblock.",
       "timestamp": "2026-09-05T13:00:29.162Z"
+    },
+    {
+      "id": "comment-8790f4bb94f3425fb5384861153a0982",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE (qa-f2906c26, 2026-09-05) — detail behind the approval summary.\n\nANCHOR. Source landed in checkpoint 711c62dd (12 paths). Completion commit 1405368c carries ONLY .moe/tasks/*.json — a re-grader must not read the row off `git show 1405368c`. `git branch --contains 1405368c` = moe/work-2026-09-04. `git status --porcelain` on all 7 owned paths is EMPTY, so HEAD == worktree and no step-7 drill mutant survived.\n\nDoD 1 + 3. Re-ran task.verification verbatim: Test Files 4 passed (4), Tests 35 passed (35). Evidence is the COMMITTED arm (rail 12a), not a deleted probe: daemon-main-activation-boot.test.ts spawns `node src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=0` with control-room headers, asserts 200 / outcome ACTIVATION / member ORDER against the PRODUCTION ACTIVATION_RECEIPT_MEMBERS / signing.trustBoundary false. No-write arm: 3 concurrent reads, `existsSync(projectRoot)===true` as the positive control BEFORE the two falses (so the negative is a fact about .moe-next/backups, not about a path that cannot exist), and exact ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ per member. The scratch root is mkdir'd deliberately — the test says why.\n\nDoD 2. Production call site now at daemon-store-foundation-composition.ts:359; spread at daemon-entry.ts:282. The boot-seam pin is TWO-SIDED in one file: positive arm asserts the PROVIDER's sentinel body {ACTIVATION_READ_TEST_ONLY, TEST_READER} plus calls.count===1, and the committed control arm (no reader) returns 503 LISTENER_ACTIVATION_UNAVAILABLE @ CONTROL_ROOM_LISTENER — the exact pre-fix answer. That is the same discriminator a spread-removal drill produces, so the drill claim is settled by committed bytes. daemon-store-dependencies.test.ts providerKeys is `toEqual` EXACT-SET evaluated in a spawned plain-Node child (rail 9 bidirectional).\n\nDoD 4. Each arm asserts the stable code AND the layer that answered. PROJECT_MISMATCH is reachable only PAST the wiring (unwired answers 503). REQUEST_INVALID is 400 @ CONTROL_ROOM_LISTENER — a different layer, which is the point. UNREADABLE drives the REAL createActivationReadPort with a throwing `measure`, not a stub that returns a refusal. CAPABILITY_DENIED would also pass unwired; the worker states that limitation in-file and guards it with calls.count===0. Accepted: that arm's job is the code+layer, and DoD 2 is pinned elsewhere.\n\nDoD 5. The canary asserts the SERIALISED WIRE BYTES: not.toContain(token) + toContain(\"[redacted]\") + exact per-member reason and ref. A scrub applied to one field and missed on another cannot satisfy it.\n\nRAILS. activation-read.ts absent from the 711c62dd stat (untouched). activationReceiptInput reused — no second input builder. The composition entry is a LAZY arrow, so createStoreDependencies behaviour is unchanged for every existing consumer. No response cache.\n\nDoD 6 GATES, path-attributed (rail 3). typecheck green with the `apps/daemon typecheck: Done` script echo. `pnpm --filter @moe/daemon test` 4 failed | 426 passed (430). `pnpm --filter @moe/control-room test` 1 failed | 147 passed (148), Tests 1843 passed (1843). `pnpm test` ROOT LANE ONLY, apps/** NOT COVERED: 7 failed | 421 passed | 1 skipped (429). Owned-path intersection EMPTY. Foreign red disclosed and attributed:\n(a) src/work/foundation-{attempt-windows,capture-producer,capture-lifecycle,attempt-service}.test.ts — `Error: Test timed out in 30000ms`. A per-describe CASE_TIMEOUT overrides --testTimeout, so the flag cannot lift it. 8 red in the full suite but 17 red when those 4 files run ALONE — more failures with fewer tests is a latency flake, not a diff defect. Grepped EACH file: none imports daemon-entry, daemon-entry-port-resolution, daemon-store-dependencies or daemon-store-foundation-composition.\n(b) apps/control-room/src/live/live-graph-get.test.ts — `Failed to resolve import \"./live-graph-get.js\"`. Both files are UNTRACKED (??) with mtimes one minute apart straddling my run: a peer session writing them live.\n(c) tests/integration/control-room/compiled-product-journey.test.ts DOES import an owned path, so it survives a naive path grep — but it fails on `expected [...] to include 'goal.close'`, the affordance surface, owned by in-flight peer row task-8145137ca3c144f0878deb83d05bab63 (the goal.close offer gate). It asserts nothing about provider keys.\n\nINHERITED PER-FILE OVERAGE — disclosed, NOT a rejection reason here. daemon-store-foundation-composition.ts 511 lines and daemon-entry-port-resolution.ts 441. Both were already over 400 before this row: 469/410 at merge-base 68eb1c5d, 492/424 at 711c62dd^. This row added +19/+17 into the exact resolver the plan required it to use. The split belongs to the epic-final hardening row.",
+      "timestamp": "2026-09-05T14:02:17.520Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T03:29:37.065Z",
-  "updatedAt": "2026-09-05T13:12:05.857Z",
+  "updatedAt": "2026-09-05T14:03:16.338Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T09:27:21.166Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-05T14:03:16.338Z",
+    "wallClockMs": 16555172
   },
   "stepsCompleted": [
     "step-1",
@@ -255,6 +263,23 @@
       "treeId": "582dbcc1ad2c018a49fe8b38e3d15afd21f0b4c5",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "f3b94eaa17dea6db05330bfdf9757b9cb2637e62",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T13:11:50Z",
+      "paths": [
+        ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T13:21:57.694Z",
+      "treeId": "89812957a2082717f65c47076885a47c1be338e0",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -270,14 +295,16 @@
     ".moe/tasks/task-316bb83b94a14e78957d282cb41566ba.json",
     ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
     ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json",
-    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json"
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-f2906c26@2026-09-05T13:11:50Z",
-    "at": "2026-09-05T13:12:05.857Z"
+    "at": "2026-09-05T13:21:57.694Z"
   },
   "reviewStartedAt": "2026-09-05T11:59:12.894Z",
   "verification": {
@@ -286,5 +313,8 @@
     "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n ✓ src/daemon-entry-activation.test.ts (2 tests) 75ms\n ✓ src/daemon-entry-activation-refusals.test.ts (5 tests) 82ms\n ✓ src/daemon-store-dependencies.test.ts (26 tests) 1717ms\n   ✓ serves the default provider and its registry bridge under plain Node  1341ms\n ✓ src/daemon-main-activation-boot.test.ts (2 tests) 6529ms\n   ✓ answers the activation receipts read from a real production boot  1952ms\n   ✓ reads repeatedly without ever writing a store backup  2509ms\n\n Test Files  4 passed (4)\n      Tests  35 passed (35)\n   Start at  14:35:05\n   Duration  12.38s (transform 20.61s, setup 0ms, import 26.07s, tests 8.40s, environment 0ms)",
     "reportedAt": "2026-09-05T11:59:12.894Z"
   },
-  "completionSummary": "Wired POST /activation/read into the production daemon. createActivationReadPort is constructed once in daemon-store-foundation-composition.ts from activationReceiptInput (per-request measure, no result cache), exposed on daemon-store-dependencies, resolved in daemon-entry-port-resolution, and spread into startControlRoomListener. activation-read.ts untouched. Committed arms: boot-seam pin, real daemon-main.ts boot (HTTP 200 outcome ACTIVATION, six members, signing.trustBoundary false), no-write (ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ after N>=3), refusals+credential canary at the wired seam. Drill: removing the spread returns 503 LISTENER_ACTIVATION_UNAVAILABLE @ CONTROL_ROOM_LISTENER; restore SHA256+empty git diff. Named daemon suite foreign-red (foundation timeouts + peer-dirty compiled-authority-bodies); owned-path intersection empty. Isolated control-room 147 passed. typecheck exit 0."
+  "completionSummary": "Wired POST /activation/read into the production daemon. createActivationReadPort is constructed once in daemon-store-foundation-composition.ts from activationReceiptInput (per-request measure, no result cache), exposed on daemon-store-dependencies, resolved in daemon-entry-port-resolution, and spread into startControlRoomListener. activation-read.ts untouched. Committed arms: boot-seam pin, real daemon-main.ts boot (HTTP 200 outcome ACTIVATION, six members, signing.trustBoundary false), no-write (ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ after N>=3), refusals+credential canary at the wired seam. Drill: removing the spread returns 503 LISTENER_ACTIVATION_UNAVAILABLE @ CONTROL_ROOM_LISTENER; restore SHA256+empty git diff. Named daemon suite foreign-red (foundation timeouts + peer-dirty compiled-authority-bodies); owned-path intersection empty. Isolated control-room 147 passed. typecheck exit 0.",
+  "completedAt": "2026-09-05T14:03:16.338Z",
+  "reviewCompletedAt": "2026-09-05T14:03:16.338Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-8790f4bb.\n\nANCHOR: source is in checkpoint 711c62dd; completion 1405368c holds only .moe/tasks JSON. Owned paths clean, no drill mutant survived.\n\nDoD1+3: re-ran task.verification myself -> Test Files 4 passed (4), Tests 35 passed (35). Committed real-boot arm spawns daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=0: 200, outcome ACTIVATION, member ORDER vs production ACTIVATION_RECEIPT_MEMBERS, signing.trustBoundary false; 3 reads, existsSync(projectRoot) true as positive control before the two falses, exact ACTIVATION_READ_BACKUP_DEFERRED @ ACTIVATION_READ.\nDoD2: call site foundation-composition.ts:359, spread daemon-entry.ts:282. Boot-seam pin two-sided (provider sentinel TEST_READER + calls.count 1 vs committed 503 LISTENER_ACTIVATION_UNAVAILABLE @ CONTROL_ROOM_LISTENER) - settles the drill from committed bytes. providerKeys toEqual EXACT-SET in a spawned plain-Node child.\nDoD4: every code asserted with its answering layer; PROJECT_MISMATCH reachable only past the wiring; UNREADABLE uses the real port with a throwing measure.\nDoD5: canary asserts wire bytes - no token, [redacted], exact per-member reason/ref.\nRails: activation-read.ts untouched, activationReceiptInput reused, lazy arrow, no cache.\n\nDoD6: typecheck green. daemon 4 failed | 426 passed (430). control-room 1 failed | 147 passed (148). pnpm test ROOT LANE ONLY, apps/** not covered: 7 failed | 421 passed (429). Owned intersection EMPTY. Foreign red: src/work/foundation-* 30000ms CASE_TIMEOUT flakes (8 red in suite, 17 alone, none imports an owned module); peer UNTRACKED live-graph-get.ts; compiled-product-journey \"include goal.close\" = peer row task-8145137c.\n\nDISCLOSED not a reject: foundation-composition.ts 511 lines, port-resolution.ts 441, both over 400 BEFORE this row (469/410 at merge-base). Split belongs to the hardening row."
 }

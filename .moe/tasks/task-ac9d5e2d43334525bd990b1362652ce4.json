@@ -77,7 +77,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -106,7 +106,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T03:32:23.539Z",
+  "updatedAt": "2026-09-05T14:03:16.494Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -141,13 +141,11 @@
     "worker-75411639"
   ],
   "workStartedAt": "2026-09-05T03:22:38.352Z",
-  "blockedReason": "THE CAPABILITY THIS ROW PROVES DOES NOT WORK AT HEAD. `/activation/read` is never wired into the production daemon, so the Activate card never renders receipts and never mounts `cr.activate.button`. Blocked on task-316bb83b94a14e78957d282cb41566ba (filed by me: PLANNING, order 3.5, CRITICAL, parent bb844c28). Measured at moe/work-2026-09-04 HEAD 818174f7. Steps 1-2 done; NOTHING in the tree modified.\n\nSTATIC: `grep -rn \"createActivationReadPort\" --include=*.ts apps/ packages/ | grep -v '\\.test\\.'` returns ONE line, its own definition at apps/daemon/src/http/activation-read.ts:182. daemon-entry.ts:263-311 spreads 25 optional listener deps; `activation` is not among them, so StartListenerOptions.activation (http-listener.ts:145) is permanently undefined and handleActivationReadRequest (activation-read.ts:236) always takes the `port === undefined` branch.\n\nLIVE, real production boot (daemon-main.ts + daemon-store-dependencies.ts):\n  POST /activation/read  -> 503 {\"code\":\"LISTENER_ACTIVATION_UNAVAILABLE\",\"layer\":\"CONTROL_ROOM_LISTENER\"}\n  POST /affordances/read -> 200 {\"outcome\":\"SURFACE\",...}\nProbe's FULL SOURCE is inline in my comment on task-0a5d7212 (global rail 12).\n\nWHY THE WHOLE ROW: live-activation.ts decodes that 2-key body to `{status:\"REFUSED\"}`; ActivateScreen (activation-screen.tsx:113-124) EARLY-RETURNS on `status !== \"ACTIVATION\"`. DoD 1/4/7 unreachable; DoD 2/3 would rewrite copy, README.md:107-112 and docs/agent-stack-runbook.md:47-52 to claim a browser-only fresh start that demonstrably fails — fabricated authority, exactly when DELIVERY BIAS permits a hard block. Row rail 2 forbids fixing it here.\n\nBANKED, DO NOT REDO — row comment comment-02defeb7ada145e8a10d2b6c309190cf and Serena `task-task-ac9d5e2d43334525bd990b1362652ce4-handoff`: gate PASSED (A/B/C/C2 DONE+landed), corrected doc anchors (the DoD mis-quotes two), the `?v1=1` trap, two traps about `cr.goals.new` and `goal.create_with_source`.",
-  "blockedOnTaskIds": [
-    "task-316bb83b94a14e78957d282cb41566ba"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T03:32:07.334Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "36e501b88cd882de912c7261fbe0c2d8e27c1c8f",
