@@ -74,7 +74,21 @@ export interface ActivityReadPort {
 
 const refused = (code: string): ActivityRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
 
-const VERDICT_KINDS: ReadonlySet<string> = new Set(["escalation.decide", "review.submit"]);
+const VERDICT_KINDS: ReadonlySet<string> = new Set([
+  "approval.decide", "approval.decide_intent", "escalation.decide", "review.submit",
+]);
+
+/** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
+ *  a GoalState - no decision word, a `lifecycle` - and the approval seams admit APPROVE ONLY
+ *  (planning-services.ts:290), so for those kinds a lifecycle IS the verdict. Narrow on purpose,
+ *  and not offered to `escalation.decide`: wider, and an unrelated record renders as an approval. */
+function decisionWord(commandKind: string, record: Record<string, unknown>): unknown {
+  const decision = record["decision"];
+  if (typeof decision === "string" && decision.length > 0) return decision;
+  const lifecycle = record["lifecycle"];
+  return commandKind !== "escalation.decide" && typeof lifecycle === "string" && lifecycle.length > 0
+    ? "APPROVE" : undefined;
+}
 
 /** The one word a committed result carries for what was decided, or null. Never throws. */
 export function verdictOf(commandKind: string, resultBytes: Uint8Array): string | null {
@@ -84,10 +98,10 @@ export function verdictOf(commandKind: string, resultBytes: Uint8Array): string 
   const result: unknown = decoded.value;
   if (typeof result !== "object" || result === null || Array.isArray(result)) return null;
   const record = result as Record<string, unknown>;
-  const word = commandKind === "escalation.decide"
-    ? record["decision"]
-    : typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
-      ? (record["routing"] as Record<string, unknown>)["route"] : undefined;
+  const word = commandKind === "review.submit"
+    ? typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
+      ? (record["routing"] as Record<string, unknown>)["route"] : undefined
+    : decisionWord(commandKind, record);
   return typeof word === "string" && word.length > 0 ? word : null;
 }
 

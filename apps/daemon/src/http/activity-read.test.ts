@@ -13,6 +13,10 @@ import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, 
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
+import type { SqliteEventStore } from "@moe/store";
+import {
+  approveGate1, approvePlan, boundWorld, committedRevision, rejectedWorld, submit,
+} from "../planning/plan-reject-test-fixtures.js";
 
 afterEach(closeStores);
 const encoder = new TextEncoder();
@@ -118,9 +122,43 @@ describe("verdictOf", () => {
     expect(verdictOf("escalation.decide", bytes({ decision: "ALLOW_MORE_ATTEMPTS" }))).toBe("ALLOW_MORE_ATTEMPTS");
     expect(verdictOf("review.submit", bytes({ lineage: {}, routing: { layer: "REVIEW", route: "REJECT_IMPLEMENTATION" } }))).toBe("REJECT_IMPLEMENTATION");
     expect(verdictOf("review.submit", bytes({ routing: { route: "ACCEPT" } }))).toBe("ACCEPT");
-    // approval.decide_intent commits a GoalState, not a decision word: it is APPROVE by construction.
-    expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBeNull();
     expect(verdictOf("integration.accept_output", bytes({ decision: "REPLAN" }))).toBeNull();
+  });
+
+  it("reads the approval verdict from the committed result of BOTH approval kinds", () => {
+    // A REJECT commits the run's whole record with the decision word on it
+    // (approval-intent-rejection.ts `rejectionRecord`), so the word is read, never inferred.
+    expect(verdictOf("approval.decide_intent", bytes({
+      decision: "REJECT", decisionReason: "needs two nodes", findingsRef: "f".repeat(64),
+      runId: "run-1", successorRunId: "run-2",
+    }))).toBe("REJECT");
+    expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
+    expect(verdictOf("approval.decide", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
+    // An APPROVE commits a GoalState, which carries a lifecycle and NO decision word: the seam
+    // admits APPROVE only (planning-services.ts:290), so the lifecycle IS the verdict. Asserted
+    // with a real goal lifecycle, not a placeholder, because that is the shape on disk.
+    expect(verdictOf("approval.decide", bytes({
+      goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",
+    }))).toBe("APPROVE");
+    expect(verdictOf("approval.decide_intent", bytes({
+      goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",
+    }))).toBe("APPROVE");
+  });
+
+  it("answers null for an approval result that carries neither a decision nor a lifecycle", () => {
+    // The fallback is a LIFECYCLE, not a bare "it decoded": a result with neither field must not
+    // be read as an approval, or an unrelated record would render as one in the feed.
+    for (const kind of ["approval.decide", "approval.decide_intent"]) {
+      expect(verdictOf(kind, bytes({}))).toBeNull();
+      expect(verdictOf(kind, bytes({ decision: "" }))).toBeNull();
+      expect(verdictOf(kind, bytes({ decision: 7 }))).toBeNull();
+      expect(verdictOf(kind, bytes({ lifecycle: 7 }))).toBeNull();
+      expect(verdictOf(kind, bytes({ lifecycle: "" }))).toBeNull();
+      expect(verdictOf(kind, bytes("x"))).toBeNull();
+      expect(verdictOf(kind, bytes([1, 2]))).toBeNull();
+      expect(verdictOf(kind, encoder.encode("{not json"))).toBeNull();
+      expect(verdictOf(kind, new Uint8Array())).toBeNull();
+    }
   });
 
   it("answers null, never throws, for a result that carries no word or does not decode", () => {
@@ -131,5 +169,45 @@ describe("verdictOf", () => {
     expect(verdictOf("review.submit", bytes([1, 2]))).toBeNull();
     expect(verdictOf("review.submit", encoder.encode("{not json"))).toBeNull();
     expect(verdictOf("escalation.decide", new Uint8Array())).toBeNull();
+  });
+});
+
+/**
+ * The verdict words the feed renders, read off REAL decisions rather than hand-built bytes:
+ * `activity-words.ts` turns them into "rejected the plan" / "approved the plan", so a verdict
+ * that stopped being read would silently downgrade every approval row to a bare command name.
+ */
+describe("approval verdicts over a real store", () => {
+  const rowsFor = (world: { readonly store: SqliteEventStore }): readonly {
+    readonly commandKind: string; readonly targetAggregateId: string;
+    readonly verdict: string | null;
+  }[] => activity(
+    createActivityReadPort({ projectId: PROJECT_ID, store: world.store }).readActivity({}),
+  ).entries.filter((entry) => entry.commandKind.startsWith("approval."));
+
+  it("carries REJECT on the row for the run the operator rejected", () => {
+    const world = rejectedWorld("needs two nodes, not one");
+    expect(rowsFor(world)).toEqual([{
+      commandKind: "approval.decide_intent",
+      decidedAt: expect.any(String),
+      disposition: "COMMITTED",
+      principalId: expect.any(String),
+      targetAggregateId: world.originalRunId,
+      verdict: "REJECT",
+      version: expect.any(Number),
+    }]);
+  });
+
+  it("carries APPROVE on the row for a run the operator approved", () => {
+    // Same seam, same fixture, opposite word: a rule that hard-coded REJECT would pass the arm
+    // above and fail here.
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const sealed = submit(store, ref);
+    if (!sealed.ok) throw new Error(`submit refused: ${sealed.code} @ ${sealed.layer}`);
+    approvePlan(store, sealed.runId);
+    expect(rowsFor({ store }).map((row) => `${row.commandKind}=${row.verdict ?? "null"}`))
+      .toEqual(["approval.decide_intent=APPROVE"]);
   });
 });

@@ -44,6 +44,17 @@ export interface PlanningOfferInput {
   readonly closeReadiness: (goalId: string) => GoalCloseReadiness["kind"];
   readonly compilerLane: CompilerLanePort;
   /**
+   * The goal's CURRENT planning run, resolved from its IMMUTABLE `planningRunRef`.
+   *
+   * A goal carries one `planningRunRef` for life, so after a REJECT mints a REVISION successor
+   * every read that starts at the goal would otherwise land on the run the operator just
+   * rejected: the ladder would keep offering `approval.decide_intent` against it and would never
+   * offer the compiler the successor needs. A FACT, not a store handle, for the same reason
+   * `closeReadiness` and `landedCommit` are - the ladder stays pure and the chain walk is the
+   * composition root's to supply.
+   */
+  readonly currentRun: (planningRunRef: string) => string;
+  /**
    * Whether any node of this goal has been landed as a commit. A FACT and LAZY for the same
    * reasons as `closeReadiness` above: the ladder stays pure, and the goal's graph walk plus
    * the review-ledger read happen only for a goal that could actually be offered a publish.
@@ -125,8 +136,11 @@ function offer(
   });
 }
 
-function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly NextAllowedCommand[] {
-  if (!planReviewable(input.ledger, goal.planningRunRef)) {
+/** `runId` is the goal's CURRENT run, resolved once by the caller and used at every run site. */
+function offersForGoal(
+  input: PlanningOfferInput, goal: DurableGoal, runId: string,
+): readonly NextAllowedCommand[] {
+  if (!planReviewable(input.ledger, runId)) {
     // THE COMPILER LADDER. A source-bound goal is compiled, never hand-planned:
     // `plan.propose` is WITHHELD (the wrapper staffing the demo payload against
     // a real PRD is the race this closes) and the goal offers the writer until
@@ -140,7 +154,7 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
         ? [offer(input, "product_contract.propose_revision", goal.goalId)]
         : [offer(input, "planning.submit_decomposition", goal.goalId)];
     }
-    return [offer(input, "plan.propose", goal.planningRunRef)];
+    return [offer(input, "plan.propose", runId)];
   }
   const lifecycle = goal.state["lifecycle"];
   if (lifecycle === "DRAFT") {
@@ -148,8 +162,8 @@ function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly N
     // carries the seeded approve-and-activate journey, `approval.decide_intent`
     // is the only kind the browser's plan-approval gate authorizes against.
     return [
-      offer(input, "approval.decide", goal.planningRunRef),
-      offer(input, "approval.decide_intent", goal.planningRunRef),
+      offer(input, "approval.decide", runId),
+      offer(input, "approval.decide_intent", runId),
     ];
   }
   // Publishing is offered only once at least one node of the goal is landed as a commit — a
@@ -191,13 +205,18 @@ export function resolvePlanningOffers(input: PlanningOfferInput): PlanningOfferR
   }
   for (const goal of goals) {
     if (runCounts.get(goal.planningRunRef) !== 1) continue;
-    const run = record(record(stateOf(input.ledger, goal.planningRunRef))?.["state"]);
+    // ONE resolution per goal per surface read, used by the ladder AND by the binding below,
+    // so the run an offer targets and the run the authority map binds cannot disagree.
+    const current = input.currentRun(goal.planningRunRef);
+    const run = record(record(stateOf(input.ledger, current))?.["state"]);
     const bound = run?.["goalRef"];
+    // The RUN side of the binding moves to the current run; the GOAL side keeps the immutable
+    // ref, because that is the field the goal's own durable record carries and it never moves.
     if (typeof bound === "string"
       && (bound !== goal.goalId
         || !durableGoalMatches(input.ledger, bound, input.projectId, goal.planningRunRef))) continue;
-    refs[goal.planningRunRef] = goal.goalId;
-    for (const minted of offersForGoal(input, goal)) {
+    refs[current] = goal.goalId;
+    for (const minted of offersForGoal(input, goal, current)) {
       offers.push(minted);
       const kind = COMPILER_OFFER_KINDS.find((compiler) => compiler === minted.commandKind);
       if (kind !== undefined) {

@@ -8,194 +8,25 @@
  * gate picks it up. Refusal arms: no Gate 1 approval; digest retarget;
  * crash-restart resume (second dispatch REPLAYS, no duplicate records).
  */
-import { createHash } from "node:crypto";
-
-import { productContractGate1Authority } from "@moe/core";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  GOAL_CREATE_COMMAND_ID,
-  GOAL_ID,
-  PROJECT_ID,
-  RUN_ID,
-  closeStores,
-  driveThrough,
-  envelope,
-  openStore,
-  send,
-} from "../bootstrap/bootstrap-test-fixtures.js";
-import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { createSessionAuthority } from "../identity/session-authority.js";
-import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
-import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
-import {
-  createProductContractGate1Authority, runProductContractGate1Command,
-} from "../product-contract/product-contract-gate-1-command.js";
-import { PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION, productContractGate1SubjectDigest }
-  from "../product-contract/product-contract-gate-1-contract.js";
-import {
-  runProductContractProposeRevision,
-} from "../product-contract/product-contract-propose-service.js";
 import type { ProductContractRevisionRef } from "@moe/core";
-import { runSubmitDecomposition } from "./compile-dispatcher.js";
 
-const PRD = "# Build the widget\n\nRequirements the operator wrote.\n";
-const PRD_SHA = createHash("sha256").update(PRD, "utf8").digest("hex");
-const NOW_MS = Date.parse("2026-08-30T12:00:00.000Z");
-const encoder = new TextEncoder();
+import { GOAL_ID, PROJECT_ID, RUN_ID, closeStores } from "../bootstrap/bootstrap-test-fixtures.js";
+import { runSubmitDecomposition } from "./compile-dispatcher.js";
+// THE WORLD BUILDERS LIVE IN ONE MODULE, not two. They were authored here (this file's :43-233
+// before task-138fab30) and moved to `plan-reject-test-fixtures.ts` when the REJECT journey's
+// suites needed the SAME world: the successor run id is derived from the run id and the compile
+// ids from the revision digest, so two hand-copied builders that drifted by a literal would
+// produce two different worlds that both still looked plausible, and an arm written against one
+// would assert nothing about the other. Every literal is unchanged, which is why every INITIAL
+// arm below is byte-identical to the one that passed before the move.
+import {
+  approveGate1, boundWorld, committedRevision, nodeOf, structureOf, submit,
+} from "./plan-reject-test-fixtures.js";
 
 afterEach(closeStores);
-
-function boundWorld(): SqliteEventStore {
-  const store = openStore();
-  installTestRecoveryBinding(store);
-  driveThrough(store, "goal.create");
-  const outcome = send(store, envelope("goal.create_with_source", 0, {
-    instructions: "Bind a PRD for the dispatcher journey.",
-    source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
-    title: "Dispatcher journey goal",
-  }, GOAL_CREATE_COMMAND_ID));
-  if (!outcome.ok) throw new Error(`fixture bind refused: ${outcome.code}`);
-  return store;
-}
-
-/** The third criterion exists so a THREE-node graph can bind every criterion exactly once;
- *  it is opt-in so every single-slice arm keeps its two-criterion revision byte-identical. */
-const THIRD_CRITERION = Object.freeze({
-  criterion: Object.freeze({
-    criterionId: "crit-worker", requirementId: "req-worker",
-    statement: "The worker refreshes the record the page renders.",
-    supersedesCriterionId: null,
-  }),
-  requirement: Object.freeze({
-    requirementId: "req-worker",
-    statement: "Operators see the record stay fresh without asking.",
-    supersedesRequirementId: null,
-  }),
-});
-
-function committedRevision(
-  store: SqliteEventStore, thirdCriterion = false,
-): ProductContractRevisionRef {
-  const committed = runProductContractProposeRevision(store, {
-    correlationId: "corr-dispatch-writer",
-    decidedAt: "2026-08-30T12:00:00.000Z",
-    payload: {
-      draft: {
-        authorRef: "compiler-agent-1",
-        contractId: "contract-widget",
-        criteria: [
-          {
-            criterionId: "crit-api", requirementId: "req-api",
-            statement: "The API answers a signed request with the record.",
-            supersedesCriterionId: null,
-          },
-          {
-            criterionId: "crit-ui", requirementId: "req-ui",
-            statement: "The page renders the record the API answered.",
-            supersedesCriterionId: null,
-          },
-          ...(thirdCriterion ? [THIRD_CRITERION.criterion] : []),
-        ],
-        lineage: null,
-        requirements: [
-          {
-            requirementId: "req-api",
-            statement: "Operators can read the record over the API.",
-            supersedesRequirementId: null,
-          },
-          {
-            requirementId: "req-ui",
-            statement: "Operators can see the record in the page.",
-            supersedesRequirementId: null,
-          },
-          ...(thirdCriterion ? [THIRD_CRITERION.requirement] : []),
-        ],
-        retiredCriterionIds: [],
-        retiredRequirementIds: [],
-        revisionId: "revision-0001",
-        sourceDocumentDigests: [PRD_SHA],
-      },
-      goalRef: GOAL_ID,
-    },
-    principalId: "compiler-agent-1",
-    projectId: PROJECT_ID,
-  });
-  if (!committed.ok) throw new Error(`writer refused: ${committed.code}`);
-  return committed.ref;
-}
-
-/** Gate 1 through the PRODUCTION command: a real paired session approves over the
- *  BEARER arm, which the transport-origin fence now admits from MCP transports only
- *  (the browser journey signs instead - task-ffa05408 family). */
-function approveGate1(store: SqliteEventStore, ref: ProductContractRevisionRef): void {
-  const minted = createOperatorSessionHandshakePort({
-    capabilities: OPERATOR_CAPABILITIES,
-    clock: () => NOW_MS,
-    operatorPrincipalId: "principal-1",
-    projectId: PROJECT_ID,
-    sessionTtlMs: 60 * 60 * 1000,
-    store,
-  }).mint();
-  if (!minted.ok) throw new Error(`pairing mint refused: ${minted.code}`);
-  const authority = createProductContractGate1Authority({
-    projectId: PROJECT_ID,
-    sessions: createSessionAuthority(store, { clock: () => NOW_MS, projectId: PROJECT_ID }),
-    store,
-  });
-  const gate = productContractGate1Authority(ref);
-  const commandId = "cmd-gate1-approve";
-  const requestDigest = productContractGate1SubjectDigest({
-    commandId, projectId: PROJECT_ID, workRef: gate.workRef,
-  });
-  const outcome = runProductContractGate1Command(store, encoder.encode(JSON.stringify({
-    commandId,
-    correlationId: "corr-gate1",
-    decidedAt: "2026-08-30T12:00:30.000Z",
-    expectedVersion: 0,
-    kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
-    payload: {
-      authentication: { issuedAt: NOW_MS, kind: "BEARER", requestDigest, requestId: commandId },
-      contractId: ref.contractId,
-      revisionDigest: ref.revisionDigest,
-      revisionId: ref.revisionId,
-    },
-    principalId: minted.principalId,
-    projectId: PROJECT_ID,
-    schemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
-  })), authority, { sessionId: minted.principalId, transportOrigin: "MCP_HTTP" });
-  if (!outcome.ok) throw new Error(`gate 1 refused: ${outcome.code}`);
-}
-
-const NODE_SCOPES = Object.freeze({
-  capability: "capability-implement",
-  readScopes: ["services/api/src"],
-  resources: ["resource-a"],
-  verificationRecipeRefs: ["recipe-a"],
-  writeScopes: ["services/api/src/node"],
-});
-
-function nodeOf(
-  nodeKey: string,
-  criterionIds: readonly string[],
-  dependsOn: readonly string[] = [],
-  objective = `Land the ${nodeKey} slice.`,
-): Record<string, unknown> {
-  return {
-    ...NODE_SCOPES, criterionIds: [...criterionIds], dependsOn: [...dependsOn], nodeKey, objective,
-  };
-}
-
-/** The SINGLE-SLICE default, unchanged: N=1 is one shape the compiler admits, not the only one. */
-function structureOf(
-  nodes: readonly Record<string, unknown>[] = [
-    nodeOf("node-slice", ["crit-api", "crit-ui"], [], "Land the record read and its page."),
-  ],
-  completionNodeKey = "node-slice",
-): Record<string, unknown> {
-  return { completionNodeKey, nodes: nodes.map((node) => ({ ...node })) };
-}
 
 /** c -> b -> a: a REAL hard chain, each criterion bound by exactly one node. Nothing depends
  *  on node-c, so it is the completion node (a dependency ON the completion node is refused). */
@@ -209,27 +40,6 @@ function chainStructure(
   nodes: readonly Record<string, unknown>[] = CHAIN_NODES,
 ): Record<string, unknown> {
   return structureOf(nodes, "node-c");
-}
-
-function submit(
-  store: SqliteEventStore, ref: ProductContractRevisionRef,
-  overrides: Record<string, unknown> = {},
-): ReturnType<typeof runSubmitDecomposition> {
-  return runSubmitDecomposition(store, {
-    correlationId: "corr-submit-decomp",
-    decidedAt: "2026-08-30T12:01:00.000Z",
-    payload: {
-      gateRef: {
-        contractId: ref.contractId, revisionDigest: ref.revisionDigest,
-        revisionId: ref.revisionId,
-      },
-      goalRef: GOAL_ID,
-      structure: structureOf(),
-      ...overrides,
-    },
-    principalId: "principal-1",
-    projectId: PROJECT_ID,
-  });
 }
 
 /** The layer the DAG-coherence refusals carry. The dispatcher forwards the producer's own code

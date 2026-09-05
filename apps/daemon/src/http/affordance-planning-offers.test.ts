@@ -13,18 +13,20 @@
  */
 import { describe, expect, it } from "vitest";
 
-import type { NextAllowedCommand } from "@moe/contracts";
+import type { JsonObject, NextAllowedCommand } from "@moe/contracts";
 
 import type { CompilerLaneFacts, CompilerLanePort } from "./affordance-compiler-lane.js";
 import { resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type { PlanningOfferResolution } from "./affordance-planning-offers.js";
-import type { DurableLedger } from "../bootstrap/bootstrap-ledger-vocabulary.js";
+import type { DurableAggregate, DurableLedger } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { HUMAN_ONLY_STEPS } from "../orchestrator/agent-wrapper.js";
 
 const PROJECT = "project-offers";
 const GOAL_ID = "goal-offers-1";
 const RUN_ID = "run-offers-1";
+/** The REVISION run a REJECT mints. The goal's `planningRunRef` never moves to it. */
+const SUCCESSOR_ID = "run-offers-1-successor";
 
 const LEGACY_LANE: CompilerLanePort = Object.freeze({
   factsFor: (): CompilerLaneFacts => Object.freeze({ lane: "LEGACY" as const }),
@@ -69,6 +71,53 @@ const NO_CONTRACT = (): GoalCloseReadiness["kind"] => "NO_CONTRACT";
  */
 const NOTHING_LANDED = (): boolean => false;
 
+/**
+ * A goal whose run was REJECTED and whose CURRENT run is its successor. The goal's own
+ * `planningRunRef` STAYS on the rejected run: it is immutable, and the whole point of the
+ * `currentRun` fact is that consumers RESOLVE past it rather than rewrite it.
+ *
+ * `successorState` is `null` for the shape child 1's rejection actually leaves behind - the
+ * successor is created by a SECONDARY decision leg, which `readDurableLedger` (keyed on
+ * `decision.targetAggregateId`) cannot see, so the ladder reads no state and no version for it.
+ */
+function ledgerWithSuccessor(
+  successorState: JsonObject | null,
+  goalLifecycle = "DRAFT",
+): DurableLedger {
+  const aggregates = new Map<string, DurableAggregate>([
+    [GOAL_ID, {
+      currentVersion: 3,
+      result: {
+        goalId: GOAL_ID, lifecycle: goalLifecycle, planningRunRef: RUN_ID, projectId: PROJECT,
+      },
+    }],
+    [RUN_ID, {
+      currentVersion: 6,
+      result: { state: { goalRef: GOAL_ID, lifecycle: "REJECTED" } },
+    }],
+  ]);
+  if (successorState !== null) {
+    aggregates.set(SUCCESSOR_ID, { currentVersion: 9, result: { state: successorState } });
+  }
+  return { aggregates, decisionCount: 0, kinds: new Set() };
+}
+
+function resolutionOver(
+  ledger: DurableLedger, currentRun: (planningRunRef: string) => string,
+  lane: CompilerLanePort = LEGACY_LANE,
+): PlanningOfferResolution {
+  let minted = 0;
+  return resolvePlanningOffers({
+    closeReadiness: NO_CONTRACT,
+    compilerLane: lane,
+    currentRun,
+    landedCommit: NOTHING_LANDED,
+    ledger,
+    mintId: () => `cmd-${(minted += 1)}`,
+    projectId: PROJECT,
+  });
+}
+
 function resolutionFor(
   runLifecycle: string, goalLifecycle: string, lane: CompilerLanePort = LEGACY_LANE,
   closeReadiness: (goalId: string) => GoalCloseReadiness["kind"] = NO_CONTRACT,
@@ -78,6 +127,9 @@ function resolutionFor(
   return resolvePlanningOffers({
     closeReadiness,
     compilerLane: lane,
+    // A goal whose run was never rejected IS its own current run: the identity fact keeps every
+    // arm written before the resolver existed asserting exactly today's ladder.
+    currentRun: (planningRunRef) => planningRunRef,
     landedCommit,
     ledger: ledgerWith(runLifecycle, goalLifecycle),
     mintId: () => `cmd-${(minted += 1)}`,
@@ -361,5 +413,75 @@ describe("the compiler ladder on a source-bound goal", () => {
     for (const kind of ["planning.submit_decomposition", "product_contract.propose_revision"]) {
       expect(HUMAN_ONLY_STEPS.has(kind), `${kind} wrongly human-only`).toBe(false);
     }
+  });
+});
+
+/**
+ * AFTER A REJECT THE LADDER FOLLOWS THE SUCCESSOR, not the goal's immutable `planningRunRef`.
+ *
+ * The rejected run is not PLAN_REVIEW, so a ladder still keyed on the immutable ref would offer
+ * the compiler for a goal whose current run is already reviewable, and would keep minting
+ * `approval.decide_intent` against the run the operator just rejected — the exact stale card the
+ * browser would then dispatch. Every arm here is set-equality on `commandKind@target`, because a
+ * subset assertion cannot see an offer that should have disappeared.
+ */
+describe("the offer ladder resolves the goal's CURRENT run", () => {
+  const roster = (resolution: PlanningOfferResolution): string[] => resolution.offers
+    .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
+  const compilerLane = (facts: CompilerLaneFacts): CompilerLanePort =>
+    Object.freeze({ factsFor: (): CompilerLaneFacts => facts });
+
+  it("targets the approval offers at the SUCCESSOR once it is reviewable", () => {
+    const resolution = resolutionOver(
+      ledgerWithSuccessor({ goalRef: GOAL_ID, lifecycle: "PLAN_REVIEW" }),
+      () => SUCCESSOR_ID,
+    );
+    expect(roster(resolution)).toEqual([
+      `approval.decide@${SUCCESSOR_ID}`, `approval.decide_intent@${SUCCESSOR_ID}`,
+    ]);
+    // The version an offer fences on is the SUCCESSOR's, not the rejected run's (6) and not the
+    // goal's (3): a card carrying the wrong run's version would refuse on dispatch.
+    for (const entry of resolution.offers) expect(entry.expectedVersion).toBe(9);
+    // EXACT map, not `toContain`: the rejected run's key must be GONE, or the surface's
+    // authority map would still bind a run nobody may act on to this goal.
+    expect(resolution.planningGoalRefs).toEqual({ [SUCCESSOR_ID]: GOAL_ID });
+  });
+
+  it("offers the compiler for the goal while the successor is created but not yet proposed", () => {
+    // The shape child 1 actually leaves: the successor rides a secondary decision leg, so the
+    // durable ledger holds NO record for it at all. Not reviewable -> the compiler ladder.
+    const resolution = resolutionOver(
+      ledgerWithSuccessor(null), () => SUCCESSOR_ID,
+      compilerLane({ approvedGateRef: GATE_REF, lane: "COMPILER" }),
+    );
+    expect(roster(resolution)).toEqual([`planning.submit_decomposition@${GOAL_ID}`]);
+    expect(resolution.compilerSteps).toEqual([
+      { aggregateId: GOAL_ID, kind: "planning.submit_decomposition" },
+    ]);
+    // The binding still names the goal, so the wrapper can staff the step against the run the
+    // dispatcher will actually compile.
+    expect(resolution.planningGoalRefs).toEqual({ [SUCCESSOR_ID]: GOAL_ID });
+  });
+
+  it("offers NOTHING when the current run is bound to a DIFFERENT goal", () => {
+    // The run->goal binding check has to move with the resolution: applying it to the immutable
+    // ref while OFFERING against the successor would mint cards for a run this goal does not own.
+    const resolution = resolutionOver(
+      ledgerWithSuccessor({ goalRef: "goal-somebody-else", lifecycle: "PLAN_REVIEW" }),
+      () => SUCCESSOR_ID,
+    );
+    expect(roster(resolution)).toEqual([]);
+    expect(resolution.planningGoalRefs).toEqual({});
+    expect(resolution.compilerSteps).toEqual([]);
+  });
+
+  it("still binds the IMMUTABLE ref when no rejection has moved the run", () => {
+    // The identity case, asserted as a case rather than assumed: `refs` keys on whatever
+    // `currentRun` answers, so a goal that was never rejected keys on its own ref.
+    const resolution = resolutionFor("PLAN_REVIEW", "DRAFT");
+    expect(roster(resolution)).toEqual([
+      `approval.decide@${RUN_ID}`, `approval.decide_intent@${RUN_ID}`,
+    ]);
+    expect(resolution.planningGoalRefs).toEqual({ [RUN_ID]: GOAL_ID });
   });
 });

@@ -15,6 +15,7 @@ import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
 
 import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
@@ -273,6 +274,11 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       compilerLane: createCompilerLanePort({
         ledger, projectId: config.projectId, store: config.store,
       }),
+      // The goal's IMMUTABLE ref resolved to the run that matters NOW. The walk is a bounded
+      // per-aggregate event read (16 hops, cycle-guarded) that never throws: a corrupt chain
+      // degrades to the last id it could read, so one broken goal cannot cost the whole surface.
+      currentRun: (planningRunRef): string =>
+        currentPlanningRun(config.store, planningRunRef).runId,
       // ONE reader for the whole poll, reusing the ledger folded just above: its graph and
       // review-ledger walks are deferred to the first publishable goal and then shared by all of
       // them, so the surface cost does not multiply by the goal count. Derived per call for the

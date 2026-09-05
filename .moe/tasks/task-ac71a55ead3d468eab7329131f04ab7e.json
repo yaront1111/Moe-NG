@@ -87,7 +87,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:48:00.466Z",
-  "updatedAt": "2026-09-05T02:11:36.170Z",
+  "updatedAt": "2026-09-05T02:12:34.975Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:12:15.323Z",
     "plannedStepCount": 3,
@@ -128,6 +128,34 @@
     "outputTail": "[provider-pause] +6462ms spawned-1 | +6753ms resetAt 2026-09-05T21:10:00.000Z | +6754ms [wrapper] provider limit: claude paused until 2026-09-05T21:10:00.000Z (You've hit your session limit MIDDLEDOT resets 12:10am Asia/Jerusalem) | +7058ms health-stated | +8779ms paired | +9636ms health-screen-says-it | +9636ms browser-said-it | +12670ms clear ok=true | +13427ms spawned-2 | +14274ms wrapperPid 21704 | +14274ms daemonPid 53064 seedPid 50136\n  ok 1 [chromium] > tests\\e2e\\control-room\\provider-pause.spec.ts:181:1 > a provider limit parks the real wrapper, the browser says so, and clearing it staffs again (15.4s)\n\n  1 passed (16.2s)\nEXIT=0",
     "reportedAt": "2026-09-05T02:11:36.170Z"
   },
-  "filesModified": [],
-  "completionSummary": "SPIDR PARENT, VERIFICATION ONLY - zero edits, zero owned paths. All four children landed on moe/work-2026-09-04 (NOT main; main is behind this epic's delivery branch), each DONE and QA-approved.\n\nTHE FOUR CHILDREN AND THEIR LANDED SHAs\n- 3a task-278faf81 -> 9dc78777. /health/read gains ONE key, `agents: {paused}`; KNOWN_PROVIDERS [\"claude\",\"codex\"], claude wins a tie; one `now = clock()` per read feeds both the pause window and readAt; control-room decoder roster live-ops.ts:233 + Health screen.\n- 3b task-66dc4869 -> 5395db14. New pause-context.tsx; cordum-app polls readHealth every 15 s while attached and publishes ONE shell-wide fact; status-strip banner.\n- 3c task-53160801 -> ae3c0be7. Seats banner with the seat's last line; the WORKING next-step names the reset; hosts read the context, no screen polls health twice.\n- 3d task-c81cc93d -> 745305c7. Playwright journey over the REAL daemon + shipped seed + shipped agent-wrapper-main.ts with only the SEAT stood in; runbook `### Provider limits` (:382).\n\nWHAT EACH SURFACE SAYS (one sentence each, all interpolating `paused.provider` - grep proves ZERO hard-coded provider names in any pause surface)\n- shell strip (status-strip.tsx:114): `Agents paused: <provider> limit, resumes <local time>`\n- Seats (activity-screens.tsx:129): that sentence + ` - last line from the seat: <line>`, or `(no output)`\n- Health (ops-screens.tsx:230): Agents fact = `paused: <provider> limit, resumes <local time>` / `not paused`\n- opened goal, WORKING (goal-status.ts:102): `Waiting for the provider limit to reset at <local time>`\n\nGATES RE-RUN FRESH AT THE DELIVERED TREE (HEAD 856e0da9)\n- `pnpm --filter @moe/control-room test` EXIT 0 - Test Files 138 passed (138) / Tests 1737 passed (1737)\n- `pnpm typecheck` EXIT 0 - 19 packages Done incl. apps/daemon + apps/control-room, zero `error TS`\n- `pnpm --filter @moe/daemon test` EXIT 1 - Tests 6 failed | 8298 passed (8304)\n- `pnpm test:e2e:browser` EXIT 1 - 2 failed / 22 passed (3.5m), with THIS FEATU"
+  "filesModified": [
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+    ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json"
+  ],
+  "completionSummary": "SPIDR PARENT, VERIFICATION ONLY - zero edits, zero owned paths. All four children landed on moe/work-2026-09-04 (NOT main; main is behind this epic's delivery branch), each DONE and QA-approved.\n\nTHE FOUR CHILDREN AND THEIR LANDED SHAs\n- 3a task-278faf81 -> 9dc78777. /health/read gains ONE key, `agents: {paused}`; KNOWN_PROVIDERS [\"claude\",\"codex\"], claude wins a tie; one `now = clock()` per read feeds both the pause window and readAt; control-room decoder roster live-ops.ts:233 + Health screen.\n- 3b task-66dc4869 -> 5395db14. New pause-context.tsx; cordum-app polls readHealth every 15 s while attached and publishes ONE shell-wide fact; status-strip banner.\n- 3c task-53160801 -> ae3c0be7. Seats banner with the seat's last line; the WORKING next-step names the reset; hosts read the context, no screen polls health twice.\n- 3d task-c81cc93d -> 745305c7. Playwright journey over the REAL daemon + shipped seed + shipped agent-wrapper-main.ts with only the SEAT stood in; runbook `### Provider limits` (:382).\n\nWHAT EACH SURFACE SAYS (one sentence each, all interpolating `paused.provider` - grep proves ZERO hard-coded provider names in any pause surface)\n- shell strip (status-strip.tsx:114): `Agents paused: <provider> limit, resumes <local time>`\n- Seats (activity-screens.tsx:129): that sentence + ` - last line from the seat: <line>`, or `(no output)`\n- Health (ops-screens.tsx:230): Agents fact = `paused: <provider> limit, resumes <local time>` / `not paused`\n- opened goal, WORKING (goal-status.ts:102): `Waiting for the provider limit to reset at <local time>`\n\nGATES RE-RUN FRESH AT THE DELIVERED TREE (HEAD 856e0da9)\n- `pnpm --filter @moe/control-room test` EXIT 0 - Test Files 138 passed (138) / Tests 1737 passed (1737)\n- `pnpm typecheck` EXIT 0 - 19 packages Done incl. apps/daemon + apps/control-room, zero `error TS`\n- `pnpm --filter @moe/daemon test` EXIT 1 - Tests 6 failed | 8298 passed (8304)\n- `pnpm test:e2e:browser` EXIT 1 - 2 failed / 22 passed (3.5m), with THIS FEATU",
+  "commits": [
+    {
+      "sha": "019f5d9807dc6970cef694b173c94753456d77d4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-05T01:53:16Z",
+      "paths": [
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+        ".moe/tasks/task-ac71a55ead3d468eab7329131f04ab7e.json"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-05T02:12:34.975Z",
+      "treeId": "87052d1dc05c334db72b1466004c49ead0e6f305",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-56ac23da@2026-09-05T01:53:16Z",
+    "at": "2026-09-05T02:12:34.975Z"
+  }
 }
