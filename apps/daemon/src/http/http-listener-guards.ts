@@ -88,6 +88,9 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The goal-source (PRD text) read: same transport pair.
   "LISTENER_GOAL_SOURCE_REQUEST_INVALID",
   "LISTENER_GOAL_SOURCE_UNAVAILABLE",
+  // The design-revision read: same transport pair.
+  "LISTENER_DESIGN_REQUEST_INVALID",
+  "LISTENER_DESIGN_UNAVAILABLE",
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
@@ -217,6 +220,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE") return 503;
   if (code === "LISTENER_GOAL_SOURCE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;

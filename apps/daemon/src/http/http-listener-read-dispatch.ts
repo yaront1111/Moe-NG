@@ -33,6 +33,7 @@ import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.j
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
 import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "./repository-remote-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
+import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
 } from "./http-listener-guards.js";
@@ -89,6 +90,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   SESSIONS_READ_PATH,
   REPOSITORY_REMOTE_READ_PATH,
   GOAL_SOURCE_READ_PATH,
+  DESIGN_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -359,6 +361,16 @@ function serveGoalSource(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveDesign(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleDesignReadRequest({
+    authenticator: options.deps.authenticator, designReads: options.designReads,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveDocumentIngest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -465,6 +477,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
     return;
   }
+  if (path === DESIGN_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DESIGN_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -535,5 +551,7 @@ export async function serveReadDispatch(
     serveProductContractV2Pending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
+  } else if (path === DESIGN_READ_PATH) {
+    serveDesign(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }

@@ -105,8 +105,10 @@ function proxiedPaths(): ReadonlySet<string> {
  * added and this list is not updated with it, which is exactly how both retirements were
  * caught. Keep the pair edited together; nothing imports this file from the control-room,
  * so only `grep -rn DEV_PROXY_PATHS apps packages tools` finds this asserter.
+ *
+ * `/design/read`: recorded by task-7ca9dca3. Browser consumer / proxy pin is task-e9cb2442.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/design/read"]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -124,8 +126,11 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
  *
  * /graph/get was retired from this census by live-graph-get.ts: POST {}, CSRF
  * and the paired session already held, so no daemon bytes were added.
+ * /design/read: no browser consumer yet; that is task-e9cb2442 (Design tab /
+ * live decoder / proxy pin).
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
+  "/design/read",
   "/events/resume",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
@@ -238,7 +243,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(26);
+    expect(roster.size).toBe(27);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
@@ -281,6 +286,14 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(guardIdentifiers(source).has("REPOSITORY_REMOTE_READ_PATH")).toBe(true);
     expect(JSON_ROUTES).toContain(REPOSITORY_REMOTE_READ_PATH);
     expect(REPOSITORY_REMOTE_READ_PATH).toBe("/repository/remote/read");
+  });
+
+  it("registers the design read in all three seams", () => {
+    const source = dispatchSource();
+    expect(rosterIdentifiers(source).has("DESIGN_READ_PATH")).toBe(true);
+    expect(branchIdentifiers(source).has("DESIGN_READ_PATH")).toBe(true);
+    expect(guardIdentifiers(source).has("DESIGN_READ_PATH")).toBe(true);
+    expect(JSON_ROUTES).toContain("/design/read");
   });
 
   it("proxies every served JSON route in development, bar a named census", () => {
