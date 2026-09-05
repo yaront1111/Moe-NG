@@ -16,7 +16,7 @@ import type {
   ActivationReceipt, ActivationReceiptMember, ActivationReceipts, MeasuredReceipt,
   UnmeasuredReceipt,
 } from "./activation-receipts.js";
-import { measureActivationReceipts, nodeActivationReceiptPorts } from "./activation-receipts-measure.js";
+import { BACKUP_RETENTION, measureActivationReceipts, nodeActivationReceiptPorts } from "./activation-receipts-measure.js";
 import type { ActivationReceiptInput } from "./activation-receipts-measure.js";
 import type { ActivationReceiptFs, ActivationReceiptPorts } from "./activation-receipts-ports.js";
 import type { GitRunResult } from "../repository/git-landing-port.js";
@@ -47,11 +47,13 @@ function fakeFs(state: FakeState): ActivationReceiptFs {
   const exists = (path: string): boolean => state.existing.has(path) || state.bytes.has(path);
   return {
     exists,
+    list: () => [],
     mkdir: (path: string) => {
       if (state.mkdirError !== null) throw new Error(`${state.mkdirError}: ${path}`);
       state.existing.add(path);
     },
     readBytes: (path: string) => state.bytes.get(path) ?? null,
+    remove: (path: string) => { state.existing.delete(path); state.bytes.delete(path); },
     stat: (path: string) => (exists(path) ? { size: state.bytes.get(path)?.length ?? 4096 } : null),
   };
 }
@@ -436,5 +438,46 @@ describe("activation receipt measurement", () => {
       ...ports, sqliteApplicationId: () => null,
     });
     expect(refusalOf(unopenable, "store").detail).toBe("store could not be read through node:sqlite");
+  });
+});
+
+describe("backup retention", () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    while (roots.length > 0) {
+      const path = roots.pop();
+      if (path !== undefined) rmSync(path, { force: true, maxRetries: 5, recursive: true });
+    }
+  });
+  it("keeps the newest five stamped copies and removes the rest, never the one just written", async () => {
+    const projectRoot = realpathSync.native(mkdtempSync(join(tmpdir(), "moe-activation-retention-")));
+    roots.push(projectRoot);
+    const storePath = join(projectRoot, "store.sqlite");
+    const seeded = new DatabaseSync(storePath);
+    seeded.exec(`PRAGMA application_id = ${SQLITE_APPLICATION_ID};`);
+    seeded.close();
+    const directory = join(projectRoot, ".moe-next", "backups");
+    mkdirSync(directory, { recursive: true });
+    // Six earlier activations, oldest first; a stray non-backup file must be left alone.
+    const earlier = ["20260101000000001", "20260102000000002", "20260103000000003",
+      "20260104000000004", "20260105000000005", "20260106000000006"].map((stamp) => `${stamp}.sqlite`);
+    for (const name of earlier) writeFileSync(join(directory, name), "old");
+    writeFileSync(join(directory, "notes.txt"), "keep me");
+    const { ports: fakes } = healthyPorts();
+    const receipts = await measureActivationReceipts(
+      { ...INPUT, projectRoot, storePath },
+      nodeActivationReceiptPorts({
+        committedProbeRef: fakes.committedProbeRef, git: fakes.git,
+        installedPolicySliceRefs: fakes.installedPolicySliceRefs,
+      }),
+    );
+    const written = basename(measuredOf(receipts, "backup").ref.split("@sha256:")[0] ?? "");
+    const remaining = readdirSync(directory).sort();
+    expect(remaining).toContain(written);
+    expect(remaining).toContain("notes.txt");
+    expect(remaining.filter((name) => name.endsWith(".sqlite"))).toHaveLength(BACKUP_RETENTION);
+    expect(remaining).not.toContain(earlier[0]);
+    expect(remaining).not.toContain(earlier[1]);
+    expect(remaining).toContain(earlier[5]);
   });
 });

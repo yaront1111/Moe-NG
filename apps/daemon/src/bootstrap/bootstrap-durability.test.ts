@@ -677,6 +677,8 @@ describe("project.activate mints its own witness and refuses a caller-supplied o
         exists: (path: string) => present.has(path),
         mkdir: (path: string) => { present.add(path); },
         readBytes: () => null,
+        list: () => [],
+        remove: () => undefined,
         stat: (path: string) => (present.has(path) ? { size: 4096 } : null),
       },
       git: (_cwd: string, args: readonly string[]) => Promise.resolve(

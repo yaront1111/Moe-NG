@@ -41,6 +41,8 @@ describe("the daemon's activation receipt ports read the durable store", () => {
         exists: (path: string) => present.has(path),
         mkdir: (path: string) => { present.add(path); },
         readBytes: () => null,
+        list: () => [],
+        remove: () => undefined,
         stat: () => ({ size: 1 }),
       },
       git: () => Promise.resolve({ code: 0, stderr: "", stdout: `${"1".repeat(40)}\n` }),

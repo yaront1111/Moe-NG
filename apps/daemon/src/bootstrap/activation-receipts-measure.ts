@@ -171,8 +171,32 @@ async function measureBackup(
     return unmeasuredReceipt("backup", receiptDetail(String(error)));
   }
   if (!outcome.ok) return unmeasuredReceipt("backup", receiptDetail(outcome.detail));
+  pruneBackups(ports, directory, destination);
   const ref = `${destination}@sha256:${outcome.sha256}`;
   return measuredReceipt("backup", ref, String(outcome.byteLength), outcome.sha256);
+}
+
+/** Every activation used to leave a full store copy behind for ever; this many stay. */
+export const BACKUP_RETENTION = 5;
+const BACKUP_FILE = /^\d{17}\.sqlite$/u;
+
+/**
+ * Keeps the newest BACKUP_RETENTION copies (the stamps sort chronologically) and removes the
+ * rest, never the one just written. Housekeeping only: a listing or removal that fails leaves the
+ * measured receipt exactly as measured — the backup that was taken is real either way.
+ */
+function pruneBackups(ports: ActivationReceiptPorts, directory: string, keep: string): void {
+  try {
+    const stamped = ports.fs.list(directory).filter((name) => BACKUP_FILE.test(name)).sort();
+    const stale = stamped.slice(0, Math.max(0, stamped.length - BACKUP_RETENTION));
+    for (const name of stale) {
+      const path = join(directory, name);
+      if (path === keep) continue;
+      try {
+        ports.fs.remove(path);
+      } catch { /* best effort: the next activation prunes again */ }
+    }
+  } catch { /* an unlistable directory prunes nothing */ }
 }
 
 const sha256Bytes = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");

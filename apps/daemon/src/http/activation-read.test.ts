@@ -86,6 +86,8 @@ function fakeFs(state: FakeState): ActivationReceiptFs {
       state.mkdirCalls.push(path);
     },
     readBytes: () => null,
+    list: () => [],
+    remove: () => undefined,
     stat: (path: string) => (state.existing.has(path) ? { size: 4096 } : null),
   };
 }

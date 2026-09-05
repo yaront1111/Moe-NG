@@ -7,7 +7,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -22,9 +24,13 @@ export const receiptDetail = (text: string): string =>
 
 export interface ActivationReceiptFs {
   exists(path: string): boolean;
+  /** Entry names of a directory; throws when it cannot be listed. */
+  list(directory: string): readonly string[];
   /** Recursive; throws when a plain file already occupies the path. */
   mkdir(path: string): void;
   readBytes(path: string): Uint8Array | null;
+  /** Removes one file; throws when it cannot. */
+  remove(path: string): void;
   stat(path: string): { readonly size: number } | null;
 }
 
@@ -153,6 +159,7 @@ async function copyStore(
 
 const nodeFs: ActivationReceiptFs = Object.freeze({
   exists: (path: string) => existsSync(path),
+  list: (directory: string) => readdirSync(directory),
   mkdir: (path: string) => {
     mkdirSync(path, { recursive: true });
   },
@@ -162,6 +169,9 @@ const nodeFs: ActivationReceiptFs = Object.freeze({
     } catch {
       return null;
     }
+  },
+  remove: (path: string) => {
+    unlinkSync(path);
   },
   stat: (path: string) => {
     try {
