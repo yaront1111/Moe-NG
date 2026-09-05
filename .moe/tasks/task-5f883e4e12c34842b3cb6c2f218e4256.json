@@ -166,7 +166,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T23:08:32.015Z",
+  "updatedAt": "2026-09-05T23:20:59.332Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -259,6 +259,33 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "95ae38bb97f6819ddc815f0c10fb8ed0aed67d71",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T23:08:33Z",
+      "paths": [
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T23:20:59.332Z",
+      "treeId": "3a6d350ec395ffd9b305367aa3b5f44123170717",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -268,13 +295,62 @@
     "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
   ],
   "unattributedPaths": [
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/live-effect-read.test.ts",
+    "apps/control-room/src/live/live-effect-read.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
+    "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.js",
+    "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
-    "apps/daemon/src/preview/preview-ledger.test.ts"
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publish-services.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.js",
+    "apps/daemon/src/repository/repository-landing-attempt.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.ts",
+    "apps/daemon/src/repository/repository-recovery-command.test.ts",
+    "apps/daemon/src/repository/repository-recovery-command.ts",
+    "apps/daemon/src/repository/repository-recovery-git.test.ts",
+    "apps/daemon/src/repository/repository-recovery-native.test.ts",
+    "apps/daemon/src/repository/repository-recovery-service.test.ts",
+    "apps/daemon/src/repository/repository-recovery-service.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_hash.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_windows.rs",
+    "packages/runner/src/platform/windows/native/broker/src/control.rs",
+    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+    "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
+    "packages/runner/src/platform/windows/native/broker/src/session.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+    "packages/runner/src/platform/windows/windows-approved-image-launch.js",
+    "packages/runner/src/platform/windows/windows-approved-image-launch.ts",
+    "packages/runner/src/platform/windows/windows-boundary.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary.ts",
+    "packages/runner/src/platform/windows/windows-process-broker-contract.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.ts",
+    "packages/runner/src/platform/windows/windows-status.ts",
+    "packages/runner/src/verification/criterion-check-executor.test.ts",
+    "packages/runner/src/verification/criterion-check-executor.ts",
+    "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0520a42e@2026-09-05T19:39:36Z",
-    "at": "2026-09-05T22:07:11.625Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-05T23:08:33Z",
+    "at": "2026-09-05T23:20:59.332Z"
   }
 }
