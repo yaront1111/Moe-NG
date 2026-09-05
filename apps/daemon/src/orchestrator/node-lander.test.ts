@@ -175,6 +175,29 @@ describe("createNodeLander", () => {
     expect(receipt.ok && receipt.receipt.commit?.files).toEqual(git.commits[0]?.paths);
   });
 
+  it("lands a dead earlier attempt's files when the re-staffed seat writes nothing new", async () => {
+    // Staffing 1: only operator dirt. The seat writes redaction.ts and dies. Staffing 2: the
+    // baseline now holds redaction.ts as "dirt"; the new seat finds the work done and writes
+    // nothing. Without this, NOTHING_TO_COMMIT and HEAD never gets redaction.ts (UnAI, 2026-09-05).
+    const operator = { blobId: BLOB_A, path: "src/operator-notes.ts" };
+    const redaction = { blobId: BLOB_B, path: "src/kernel/redaction.ts" };
+    const git = fakeGit(observation([operator]));
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });
+    await made.baseline(NODE);
+    git.observations = [observation([operator, redaction])];
+    await made.baseline(NODE);
+    git.observations = [{
+      observation: { entries: [operator, redaction], root: WORKSPACE, untracked: ["src/kernel/redaction.ts"] },
+      ok: true,
+    }];
+    const reports = await made.landOnce();
+    expect(reports[0]?.outcome).toBe("COMMITTED");
+    expect(reports[0]?.detail).toContain("1 file(s), 1 from an earlier attempt");
+    expect(git.commits[0]?.paths).toEqual(["src/kernel/redaction.ts"]);
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.commit?.files).toEqual(["src/kernel/redaction.ts"]);
+  });
+
   it("refuses durably, with its code, when no baseline was recorded for the node", async () => {
     const git = fakeGit(observation([{ blobId: BLOB_B, path: "src/new.ts" }]));
     const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT });

@@ -106,6 +106,28 @@ export function readLatestLandingBaseline(
   return null;
 }
 
+/**
+ * The FIRST baseline recorded for the node: what was dirty when the node was first staffed.
+ * A node re-staffed after a dead seat gets a fresh baseline that already contains that seat's
+ * files, so the latest baseline alone reads the node's own earlier output as operator dirt.
+ */
+export function readEarliestLandingBaseline(
+  store: SqliteEventStore, projectId: string, subjectRef: string,
+): LandingBaselineV1 | null {
+  const aggregateId = landingAggregateId(subjectRef);
+  const version = store.getAggregateVersion(aggregateId);
+  for (let at = 0; at < version; at += 1) {
+    const decision = ownDecision(
+      store, projectId, landingBaselineId(projectId, subjectRef, at), LANDING_BASELINE_COMMAND_KIND,
+    );
+    if (decision === null || decision === "INVALID") continue;
+    const decoded = decodeLandingBaselineBytes(decision.resultBytes);
+    if (decoded.ok && decoded.baseline.subjectRef === subjectRef
+      && decoded.baseline.projectId === projectId) return decoded.baseline;
+  }
+  return null;
+}
+
 export function recordLandingBaseline(
   store: SqliteEventStore, input: RecordLandingBaselineInput,
 ): LandingBaselineRecordResult {

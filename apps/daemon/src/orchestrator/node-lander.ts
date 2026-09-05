@@ -5,9 +5,10 @@ import type { SqliteEventStore } from "@moe/store";
 
 import type { GitLandingPort } from "../repository/git-landing-port.js";
 import {
-  readLandingReceipt, readLatestLandingBaseline, recordLandingBaseline, recordLandingReceipt,
+  readEarliestLandingBaseline, readLandingReceipt, readLatestLandingBaseline,
+  recordLandingBaseline, recordLandingReceipt,
 } from "../repository/landing-ledger.js";
-import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
+import { DELETED_BLOB, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
@@ -56,6 +57,26 @@ function subjectLine(title: string): string {
   const first = title.split(/\r?\n/u)[0]?.trim() ?? "";
   const text = first === "" ? "Moe: landed a verified node" : first;
   return text.length <= SUBJECT_MAX ? text : `${text.slice(0, SUBJECT_MAX - 1)}…`;
+}
+
+/**
+ * The node's OWN earlier attempts' files: untracked now, unchanged since the latest baseline
+ * (so not "delivered" by this seat), and absent from the node's FIRST baseline. A seat that
+ * dies mid-node leaves its files in the tree; the re-staffed seat finds them, writes nothing,
+ * and the latest baseline calls them operator dirt — kernel-redaction on UnAI (2026-09-05) was
+ * verified ACCEPTED and then refused NOTHING_TO_COMMIT, leaving HEAD without it. Files the
+ * operator had before the node was ever staffed stay the operator's.
+ */
+export function earlierAttemptPaths(
+  first: readonly LandingBaselineEntry[], latest: readonly LandingBaselineEntry[],
+  observed: readonly LandingBaselineEntry[], untracked: ReadonlySet<string>,
+): readonly string[] {
+  const before = new Set(first.map((entry) => entry.path));
+  const staffed = new Map(latest.map((entry) => [entry.path, entry.blobId]));
+  return observed
+    .filter((entry) => entry.blobId !== DELETED_BLOB && untracked.has(entry.path)
+      && !before.has(entry.path) && staffed.get(entry.path) === entry.blobId)
+    .map((entry) => entry.path);
 }
 
 /** The paths whose content the seat changed: present now, and not identical in the baseline. */
@@ -159,7 +180,12 @@ export function createNodeLander(config: NodeLanderConfig) {
       // A git failure that is not structural is reported, not recorded: the next pass retries.
       return { detail: observed.detail, nodeRef, outcome: observed.code };
     }
-    const delivered = deliveredPaths(before.entries, observed.observation.entries);
+    const untracked = new Set(observed.observation.untracked ?? []);
+    const first = readEarliestLandingBaseline(config.store, config.projectId, nodeRef) ?? before;
+    const earlier = earlierAttemptPaths(
+      first.entries, before.entries, observed.observation.entries, untracked,
+    );
+    const delivered = [...deliveredPaths(before.entries, observed.observation.entries), ...earlier];
     if (delivered.length === 0) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
@@ -168,9 +194,7 @@ export function createNodeLander(config: NodeLanderConfig) {
     // Untracked modules the delivered code imports ride the same commit — see landing-imports.ts.
     // The verifier ran with them present, so the state it accepted is the state HEAD gets.
     const { root } = observed.observation;
-    const carried = untrackedImports(
-      delivered, new Set(observed.observation.untracked ?? []), (path) => readText(root, path),
-    );
+    const carried = untrackedImports(delivered, untracked, (path) => readText(root, path));
     const paths = [...delivered, ...carried];
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
     const committed = await config.git.commit(brief.workspace, paths, message);
@@ -193,8 +217,9 @@ export function createNodeLander(config: NodeLanderConfig) {
     });
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     const imports = carried.length === 0 ? "" : `, ${String(carried.length)} imported untracked file(s) carried`;
+    const attempts = earlier.length === 0 ? "" : `, ${String(earlier.length)} from an earlier attempt`;
     return {
-      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)${imports}`,
+      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)${imports}${attempts}`,
       nodeRef,
       outcome: "COMMITTED",
     };
