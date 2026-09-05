@@ -361,7 +361,9 @@ node src/orchestrator/agent-wrapper-main.ts
 ```
 
 Each pass: for every READY, unclaimed non-human step (code nodes first;
-`approval.decide`, `goal.close`, and session plumbing skipped; capped by
+`approval.decide`, `goal.close`, and session plumbing skipped — these are the
+human-only kinds, and `goal.close` in particular is never staffed because
+closing a goal is a person's decision; capped by
 `MOE_WRAPPER_MAX_AGENTS`, default 2)
 it opens a scoped session, claims the item under the AGENT'S credential (the
 claim's expiry is also the reap horizon), and spawns
@@ -482,6 +484,48 @@ file(s))`, or `REFUSED (<code>: <detail>)` recorded durably and never retried �
 it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
+
+### Closing a goal (your decision, the daemon's evidence)
+
+Closing is human-only and operator-only, like approval and publishing: the
+wrapper skips `goal.close`, and it is never reachable over MCP. Needs you shows
+a "Ready to close" card for a goal whose contract is fully verified, and its
+Close control asks twice before it sends.
+
+WHAT THE DAEMON REQUIRES. The browser sends only who declared the decision; the
+daemon derives every witness from its own durable records. It OFFERS
+`goal.close` only when the goal's approved Product Contract has every acceptance
+criterion at VERIFIED on the coverage read (a goal with no contract — the seed
+and Foundation journeys — is offered as it always was, since this gate has
+nothing to say about it). When you spend that offer, the command additionally
+requires, for each node the approval's scope names: a durable review acceptance,
+the verifier receipt that acceptance names and still matching it, the node's
+landing, and no activation still holding authority.
+
+WHEN IT REFUSES, THE CARD SHOWS THE DAEMON'S CODE VERBATIM — search for it here.
+All of these refuse at layer `DAEMON_PREREQUISITE`:
+
+| Code | What it means |
+| --- | --- |
+| `GOAL_CLOSE_CRITERIA_UNVERIFIED` | the approved contract still has a criterion the coverage read does not call VERIFIED (or the coverage read could not be completed) |
+| `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED` | no durable review acceptance names an approved node |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` | no verification receipt names the node |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS` | more than one receipt names it, so which one attests is unknown |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE` | the receipt exists but will not read back |
+| `GOAL_CLOSE_VERIFICATION_NOT_PASSED` | the durable verification or landing evidence does not say the work passed |
+| `GOAL_CLOSE_RESULT_DIGEST_MISMATCH` | the accepted result's digest does not match what was verified |
+| `GOAL_CLOSE_REVIEW_PACKAGE_STALE` | a later review round or a re-plan supersedes the acceptance being relied on |
+| `GOAL_CLOSE_AUTHORITY_REMAINS` | an activation still holds authority over a node of this goal |
+
+ONE EARLIER GATE, WITH A GENERIC CODE. `goal.close` is a bootstrap-family
+command, and the bootstrap sequence requires the project to have committed an
+`approval.decide` before it will run any handler. A project whose goals were
+approved only through the browser's `approval.decide_intent` path has no such
+decision, so the answer is `BOOTSTRAP_PREREQUISITE_MISSING` @
+`DAEMON_PREREQUISITE` — a code that names nothing about goals, because nothing
+goal-specific has been consulted yet. If you see it on a goal whose criteria all
+read VERIFIED, the goal is not the problem: the project has never committed an
+`approval.decide`.
 
 ### Publishing (your decision, your remote)
 

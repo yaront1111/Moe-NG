@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:38:07.858Z",
-  "updatedAt": "2026-09-05T01:28:38.364Z",
+  "updatedAt": "2026-09-05T01:29:41.720Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:41:09.806Z",
     "plannedStepCount": 5,
@@ -255,7 +255,8 @@
     ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json",
     ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json",
     ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
-    ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json"
+    ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json",
+    ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json"
   ],
   "completionSummary": "`repository.publish` is now offered ONLY for a goal with at least one node carrying a landing receipt whose outcome is COMMITTED. The live UnAI defect (a PUBLISH card over \"No node of this goal is landed as a commit yet\") is closed and reproduced in a unit world.\n\nSHIPPED. apps/daemon/src/repository/goal-landing-facts.ts (113 lines) + .js bridge + .test.ts (283, 16 arms). `goalHasLandedCommit(store, projectId, goalId, folded?)` and `createGoalLandingReader(store, projectId, folded?)`. SCOPE RULE: node keys come from THIS goal's activated graph — `activeCompiledGraphs(store, projectId, {EXECUTION_ENABLED,CLOSING,COMPLETED}, ledger)` filtered by `goalRef`, keys read exactly as document-coverage-read.ts:90-96 reads them (snapshot nodes where `executionBearing`, joined with `nodeAuthority.definitions[].nodeKey`; a key in two graphs credits both). True iff some `readReviewLedgers(...).landings` receipt has `outcome === \"COMMITTED\"`. REFUSED is a landing ATTEMPT and does not count. No graph/no nodes -> false. Any throw -> false (fail closed).\nLADDER: `PlanningOfferInput.landedCommit: (goalId) => boolean` beside 8145137c's `closeReadiness` (affordance-planning-offers.ts, 213 lines); publish minted only for the three publishable lifecycles AND a landed commit. affordance-read.ts (462) builds ONE reader per `readSurface()` reusing the ledger already folded there.\n\nPINNED CONSUMERS, all green, each named. affordance-planning-offers.test.ts — 5 publish-listing arms re-aimed (:122/:138/:147/:154/:164) plus 5 new (withhold-until-landed, appears-once-landed, the close/publish 2x2 independence matrix, a spy proving the fact is consulted for EXACTLY the three publishable lifecycles and never on the compiler ladder). affordance-read.test.ts — `BOARD_PLANNING_KINDS` gains `repository.publish`; this CORRECTS a roster already out of sync with production (affordance-read.ts:247-248 withholds a chain offer for four kinds while the roster named three; it passed only because the ladder re-",
   "commits": [
@@ -341,6 +342,22 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "d22e21bb0cb77e746d898822c14f23738bf570b0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T01:19:28Z",
+      "paths": [
+        ".moe/tasks/task-ebbcbdb4967748daa84f314b39bd3960.json",
+        ".moe/tasks/task-f6f33a3925bf4856b42cf84a37bb0f9e.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T01:29:41.720Z",
+      "treeId": "d636a59fda94f15a9416e708fe69685e968736ef",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -356,9 +373,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-12c76c19@2026-09-04T23:45:51Z",
-    "at": "2026-09-05T00:56:10.562Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T01:19:28Z",
+    "at": "2026-09-05T01:29:41.720Z"
   },
   "completedAt": "2026-09-05T01:28:38.364Z",
   "reviewCompletedAt": "2026-09-05T01:28:38.364Z",
