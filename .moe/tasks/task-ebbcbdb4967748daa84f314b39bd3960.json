@@ -1,0 +1,32 @@
+{
+  "id": "task-ebbcbdb4967748daa84f314b39bd3960",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The surface must not offer a goal.close the command path will refuse: gate the offer on the bootstrap prerequisite too",
+  "description": "Spun out of task-8fdd81b81c0f4dc88c16203de139e2ba (SPIDR child 3 of task-d1c815eb) by worker-56ac23da 2026-09-05. That row owns the browser end of goal closure and is FORBIDDEN by its own task rail 1 from making a daemon change, so the defect it measured is filed here.\n\nMEASURED ON THE LIVE UnAI LOOP, not inferred. Full transcript in comment-41108de3b6b44efc844fec78a522bcee on task-8fdd81b8. Shipped daemon on D:/projexts/UnAI/.moe-next/store.sqlite (MOE_PROJECT_ID=unai), real built control-room bundle, real chromium, operator-stdin pairing.\n\nTHE DEFECT. ONE `/affordances/read` frame contains BOTH of these, at the same instant:\n  steps[]  -> { \"kind\": \"goal.close\", \"status\": \"BLOCKED\", ... }\n  nextAllowedCommands[] -> { \"commandKind\": \"goal.close\", \"targetAggregateId\": \"goal-c9d9850b-ccef-4c14-8893-a162e3aaf679\", \"expectedVersion\": 2, ... }\nThe daemon's own step projection says the command is BLOCKED while its offer roster hands the browser a live affordance for it. The control room does exactly what it should with an offer — Needs you rendered \"Ready to close ... Close the goal\" for two goals — and the click then fails.\n\nWHAT THE OPERATOR GETS. Dispatching that exact offer answers, in 212 ms:\n  {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"BOOTSTRAP_PREREQUISITE_MISSING\",\"detail\":\"BOOTSTRAP_PREREQUISITE_MISSING\",\"httpStatus\":422,\"layer\":\"DAEMON_PREREQUISITE\"},\"stage\":\"DISPATCH\"}\nNot one of the nine GOAL_PREREQUISITE_REFUSAL_CODES. A generic bootstrap code that names nothing about goals, criteria or closure, on a goal whose criteria are 10/10 VERIFIED and whose contract is APPROVED. An operator cannot act on it.\n\nROOT CAUSE, symbol by symbol.\n- `apps/daemon/src/bootstrap/bootstrap-sequence.ts:22` — `\"goal.close\": Object.freeze([\"approval.decide\"])`.\n- `apps/daemon/src/bootstrap/bootstrap-services.ts:257-260` — `missingPrerequisites(ledger, request.kind)` refuses BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE BEFORE any goal handler runs.\n- `apps/daemon/src/http/affordance-planning-offers.ts:170-178` — the offer gate consults ONLY `input.closeReadiness(goal.goalId)` (child 2 task-8145137c's criteria gate) and never `missingPrerequisites`. So the two authorities disagree by construction.\n- On the `unai` project `approval.decide` has COMMITTED=0 (status READY): its goals were activated through the browser's `approval.decide_intent` path. The prerequisite is project-wide, so NO goal on such a project can ever close, while every n/n-verified goal on it is still offered a Close.\n\nWHY THIS IS THE HIGH-VALUE FIX. It is the \"dead button\" hazard the parent's plan named as its biggest risk, shipped and reachable. It also makes the live product's headline journey — close a finished goal from the browser — unreachable end to end on any project approved via approval.decide_intent, which is the browser's only approval path.\n\nSCOPE. Daemon only. Do NOT relax the command-path gate: the offer must stop being made, not the refusal stop being raised. Suggested shape (architect to measure and decide): widen `PlanningOfferInput` with the same `missingPrerequisites` read the command path uses and withhold `goal.close` (and, for the same reason, check `repository.publish`, which shares the `approval.decide` prerequisite and shows the identical BLOCKED-step-with-live-offer split in the same frame). If the deeper answer is that `approval.decide_intent` should satisfy the `goal.close` prerequisite, that is a sequence-table change and needs its own measurement — either way one authority must decide, not two.\n\nREPRODUCTION that needs no live store: any project whose approval went through approval.decide_intent. The parent row's recorded frames are committed at apps/control-room/src/v2/goals/live-close-frames.fixture.ts.",
+  "definitionOfDone": [
+    "A daemon test proves the two authorities agree: for a goal whose project has NO committed approval.decide, /affordances/read emits NO goal.close entry in nextAllowedCommands — asserted on the same frame that carries steps[goal.close].status === 'BLOCKED', so the arm fails if the split ever reopens.",
+    "The converse arm: for a goal whose project HAS a committed approval.decide and whose closeReadiness is READY or NO_CONTRACT, the offer is still made — the fix withholds only what the command path would refuse and does not regress child 2 (task-8145137ca3c144f0878deb83d05bab63) or child 1 (task-ae6fd9aca46c42d8af940ff6f336afbb).",
+    "The command-path gate is UNCHANGED: bootstrap-services.ts still answers BOOTSTRAP_PREREQUISITE_MISSING for a direct dispatch that skips the surface, pinned by an arm that dispatches without an offer. Fail-closed is preserved; only the offer is withheld.",
+    "repository.publish is measured the same way and either fixed with goal.close or explicitly recorded as out of scope with the measurement quoted — it shares the approval.decide prerequisite and shows the same BLOCKED-step-with-live-offer split in the recorded frame.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Note `pnpm test` covers no apps/** and is not evidence."
+  ],
+  "taskRails": [
+    "THE OFFER IS WRONG, NOT THE REFUSAL. Never relax bootstrap-services.ts:257-260 or the GOAL_PREREQUISITE codes to make a close succeed. The command path staying fail-closed is the invariant; the surface must stop advertising what it will refuse.",
+    "Re-measure before planning: the parent measured this at 2026-09-05 on branch moe/work-2026-09-04. Re-run `grep -n 'goal.close' apps/daemon/src/bootstrap/bootstrap-sequence.ts` and `sed -n '170,178p' apps/daemon/src/http/affordance-planning-offers.ts` before writing a plan against them."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1005.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T01:23:28.234Z",
+  "updatedAt": "2026-09-05T01:23:28.234Z"
+}
