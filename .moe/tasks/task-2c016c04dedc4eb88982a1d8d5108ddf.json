@@ -95,10 +95,17 @@
   ],
   "priority": "HIGH",
   "order": 1002.22,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-24e4f692d166494fad810727aa5321f3",
+      "author": "worker-8c5af680",
+      "content": "From child 2a (task-138fab30), for child 2b. Landed on `moe/work-2026-09-04`. Use the fixture module rather than rebuilding a reject world by hand.\n\n**`apps/daemon/src/planning/plan-reject-test-fixtures.ts`** (306 lines, fixture module — exempt from the line cap). Exports:\n- `rejectedWorld(reason) -> { store, goalId, originalRunId, successorRunId, ref }` — boundWorld, committedRevision, approveGate1, submit, then REJECT. This is the one-call entry.\n- `rejectPlan(store, runId, reason, commandId?) -> successorRunId` (reads the successor back through `currentPlanningRun`, never `successorRunIdFor`), `approvePlan(store, runId, commandId?)`.\n- `boundWorld()`, `committedRevision(store, thirdCriterion?)`, `approveGate1(store, ref)`, `nodeOf(...)`, `structureOf(nodes[], completionNodeKey)`, `submit(store, ref, structure?)`, plus re-exports `GOAL_ID` / `PROJECT_ID` / `RUN_ID` / `closeStores`.\n- NOTE the shapes differ from the parent's plan text: `structureOf` takes a NODE ARRAY + completion key, not a single nodeKey.\n\n**Observed successor state** (measured, not inferred): after the REJECT the successor sits at aggregate version 1, `runKind: \"REVISION\"`, `sealedProposal: null`, and is NOT `PLAN_REVIEW` until the compiler runs. `planning.submit_decomposition` for the goal compiles it to `PLAN_REVIEW`, `proposalKind: \"REVISION\"`, ids under a stem keyed on the SUCCESSOR run id (`compile-<digest12>-<sha8(successorRunId)>`), so it cannot collide with the rejected run's already-banked INITIAL family.\n\n**Two fences you will hit if you script an operator journey**: a stale `approval.decide_intent`/`approval.decide` aimed at the REJECTED run refuses `APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING`; a compile whose run chain cannot be walked refuses `SUBMIT_DECOMPOSITION_RUN_UNREADABLE @ COMPILE_DISPATCHER` (the WRITE path fails closed; the surface READ deliberately fails open to the immutable ref instead).\n\n**Warning that cost me a session**: `CURRENT_RUN_HOP_LIMIT` in `apps/daemon/src/planning/current-planning-run.ts` must be 16. A crashed drill left it at 1 in the shared worktree, which reds 12 arms across `affordance-read-planning.test.ts` and `compile-dispatcher-revision.test.ts` with confusing `SUBMIT_DECOMPOSITION_RUN_UNREADABLE` failures — at limit 1 even a single-hop chain returns `unreadable: true`. I restored it. If those arms go red for you, `git diff -- apps/daemon/src/planning/current-planning-run.ts` FIRST.",
+      "timestamp": "2026-09-05T16:55:45.680Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:45:43.617Z",
-  "updatedAt": "2026-09-05T00:27:54.977Z",
+  "updatedAt": "2026-09-05T16:55:45.680Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:26:45.539Z",
     "plannedStepCount": 7,

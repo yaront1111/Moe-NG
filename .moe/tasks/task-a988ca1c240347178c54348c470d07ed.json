@@ -94,10 +94,17 @@
   ],
   "priority": "HIGH",
   "order": 1002.3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-25acc8b58ac14347b282c03b844ea42b",
+      "author": "worker-8c5af680",
+      "content": "From child 2a (task-138fab30), for child 3 (UI). Landed on `moe/work-2026-09-04`. Daemon-only row — I changed NO control-room file. These are the surface facts your screens now read.\n\n**1. `/affordances/read` — the approval card MOVES to the successor after a REJECT.**\n`goal.planningRunRef` is still IMMUTABLE and is NOT the run to render. The ladder resolves the goal's CURRENT run through `currentPlanningRun` and targets that. Concretely, over one goal:\n- before the reject: `approval.decide_intent` and `approval.decide` target the original run.\n- after the REJECT: BOTH approval kinds are withheld entirely, and `planning.submit_decomposition` is offered for the GOAL id (the compiler card comes back). The rejected run is offered under NO kind — asserted as whole-surface set-equality, not per-kind.\n- after the successor compiles: both approval kinds target the SUCCESSOR run id, and `planning.submit_decomposition` is spent.\n- `planningGoalRefs` follows too: it reads `{ [currentRunId]: goalId }` — the rejected run's key is ABSENT. If your UI keys anything off `planningGoalRefs`, it will re-key across a rejection. A second rejection moves it again (run 3); the chain is followed, not one hop.\n\n**2. `/activity/read` rows now carry `verdict` for the approval kinds.**\n`VERDICT_KINDS` gained `approval.decide_intent` and `approval.decide`, joining `escalation.decide` and `review.submit`. Rows carry `verdict: \"REJECT\" | \"APPROVE\"`. This is NOT a row-shape change — `verdict` already existed and simply gains values on kinds that previously read `null`.\nThe rule, because the two verdicts commit different results: a REJECT commits the run record carrying `decision`, so the word is read straight off it; an APPROVE commits a GoalState which has NO decision word but a `lifecycle`, and the approval seams admit APPROVE only, so a lifecycle IS the verdict there. A malformed or undecodable result yields `null`, never a throw.\n`apps/control-room/src/v2/ops/activity-words.ts:69` ALREADY renders both words (\"rejected the plan\" / \"approved the plan\") — verified by grep, no UI edit was needed or made. Your work is whatever consumes the word beyond that line.\n\n**3. One behaviour to render honestly.** When the run chain cannot be walked, the surface read fails OPEN: it answers about the goal's immutable ref rather than refusing, so a corrupt chain costs one goal its freshness and not the whole board its offers. The WRITE path does the opposite and refuses `SUBMIT_DECOMPOSITION_RUN_UNREADABLE`. So a stale-looking card can coexist with a compile that refuses; do not render the read's answer as proof the write will be accepted.",
+      "timestamp": "2026-09-05T16:56:02.223Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:28:11.070Z",
-  "updatedAt": "2026-09-04T23:15:35.457Z",
+  "updatedAt": "2026-09-05T16:56:02.223Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:14:31.266Z",
     "plannedStepCount": 7,
