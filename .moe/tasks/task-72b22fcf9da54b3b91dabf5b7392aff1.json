@@ -18,8 +18,30 @@
     "DELIVERY MUST NOT BECOME A DEPENDENCY: a project with no variables set must spawn exactly as it does today.",
     "NO UI: the Environments screen and the goal's unset count are child 3."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE THREE CHILDREN DELIVERED. This row is a SPIDR shell: it was split because its six DoD items spanned four subsystems and one of them assumed structure that does not exist. Every criterion is delegated and named in this row's dependsOn:\n  - grandchild A task-945bb541777a4b789983382f9513f43c — DoD 1, 2, 5 (delivery under the allowlist, the spawn canary, the empty-environment no-op)\n  - grandchild B task-fd2d438f29d64830a2bd6110f2ded78b — the prerequisite this row's DoD 3 silently assumed: a deployment requirement that can NAME variables\n  - grandchild C task-971caed1c5ca46bd871a7ec1c6ca8de1 — DoD 3, 4 (the unset report, `.env.example`)\n\nWrite NO production code here. If a criterion is unmet the fix belongs in the child that owns it, via a comment and an amendment on that row.\n\nRead each child's `verification`, `completionSummary` and `reviewSummary` from get_context.epicSiblings rather than re-deriving their work. Then re-measure the two facts that drove the split, at the DELIVERED tree:\n  (a) `grep -n 'NO PLAINTEXT-RETURNING FUNCTION' apps/daemon/src/environment/environment-store.ts` — that header claim must STILL be true. Grandchild A was told to put the delivery read in its own module precisely so this stays greppable. If the claim is gone or the store now exports a value-returning function, A widened a security property this row cares about: say so and route it back.\n  (b) `grep -rn 'variableName\\|environmentVariable\\|requiredVariables\\|envVar' packages/contracts/src apps/daemon/src/planning` — at plan time this returned ZERO, which is why B exists. It must now return the field B added.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/environment/environment-store.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONFIRM THE TWO PROPERTIES THAT PULL AGAINST EACH OTHER, because no single child can see both and this is the only place they meet.\n\n(a) THE VALUE REACHES THE CHILD AND NOT THE LOG. Confirm grandchild A's canary arm asserts BOTH halves in ONE test and that the \"child saw it\" half reads the CHILD'S OWN OUTPUT rather than the parent's intent. An arm that asserts delivery from the parent's constructed object proves the parent's intention, not the child's environment. Also confirm the canary variable name is not one the `MOE_` scrub at agent-spawn-environment.ts:56 would drop — a scrubbed canary makes the log half pass for the wrong reason.\n\n(b) NAMES REACH THE REPOSITORY AND VALUES DO NOT. Confirm grandchild C's `.env.example` arm asserts required names are present AND that no required name is followed by a value. That file is committed and pushed, so a value in it is a value published.\n\nThen confirm the two NO-OP properties, which together are what stop this feature becoming a dependency:\n  - A: a spawn with an empty environment produces a child env BYTE-IDENTICAL to today.\n  - C: a contract naming no variables generates `.env.example` BYTE-IDENTICAL to today.\nBoth were specified as byte-identity rather than \"still works\" on purpose; a child that softened either to a success check has not discharged it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES AND CLOSE. Run each STANDALONE and FOREGROUND — no pipe, no `;` chain, no `&&` (a piped run reports tail's exit code; a chain reports only the last command's):\n  1. `pnpm --filter @moe/daemon test`\n  2. `pnpm --filter @moe/control-room test`  — grandchild B touches apps/control-room/src/v2/goals/gate1-contract-shape.ts, which the root vitest lane does NOT cover.\n  3. `pnpm typecheck`\n\nREAD THE OUTPUT, NOT THE EXIT CODE: `pnpm --filter <pkg> <script>` exits 0 on a missed filter, and \"No test files found\" / \"0 passed\" are also exit 0. The discriminator is the `Test Files N passed` count line with N nonzero — quote it for each leg. A bare `pnpm test` covers no `apps/**` and is not evidence here.\n\nName `pnpm --filter @moe/daemon test` as this row's complete_task verification command.\n\nThe daemon suite is slow and flaky on this branch (~22 min; two back-to-back baselines gave `17 failed | 416 passed` then `10 failed | 423 passed`, dominated by 30000ms spawn-latency timeouts), so a whole-suite delta is not admissible attribution. This row owns NO production paths, so any red belongs to a child or a peer — attribute by path per global rail 3 and report it verbatim with exact failing lines and file paths. Disclosed, never hidden, never fabricated green.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,13 +50,39 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
   "dependsOn": [
-    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
-    "task-a2409cba9ad841a690961692a2948c41"
+    "task-945bb541777a4b789983382f9513f43c",
+    "task-fd2d438f29d64830a2bd6110f2ded78b",
+    "task-971caed1c5ca46bd871a7ec1c6ca8de1"
   ],
   "priority": "HIGH",
   "order": 102,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-05T08:42:27.436Z"
+  "updatedAt": "2026-09-05T19:12:08.066Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:06:22.019Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:12:05.907Z",
+  "planningNotes": {
+    "approachesConsidered": "PLANNING IT WHOLE — rejected on measurement, not feel: a new delivery module plus its bridge and test, the spawn-env merge and test, the verifier-runner change and test, a 27-file-radius contract field, the unset read and test, and the `.env.example` template plus its golden pin is comfortably past ten distinct files and past twelve steps.\n\nTWO CHILDREN INSTEAD OF THREE (folding the contract field into the row that consumes it) — rejected: the field alone carries a 27-file shape roster, so the combined row would be over the ceiling by construction. The consumer genuinely cannot exist before the field, which makes this a contract boundary (producer first, consumer second), not an arbitrary cut.\n\nC DEPENDING ON A — rejected deliberately, and it buys real parallelism. C needs the NAMES of what is set, which the existing `readEnvironmentVariables` already returns as metadata; it does not need the plaintext values A delivers. So C waits only on B and the store, and A and C can run concurrently.\n\nSPLITTING A's TWO CANARY HALVES — rejected. \"The value reaches the child\" and \"the value never reaches the log\" pull in opposite directions, and a delivery that logs what it delivers passes either half alone. They are one row and, per the parent's own DoD 2, one test.\n\nWHAT THIS ROW BECOMES: a shell that composes and verifies, with a three-step plan that writes no production code and routes any shortfall back to the owning child.",
+    "codebaseInsights": "MEASURED 2026-09-05 by architect-aa54e231 on branch moe/work-2026-09-04. This row was SPLIT rather than planned: six DoD items across four subsystems (spawn env, verifier runner, contract shape, repository generator), projecting well past the 10-file ceiling, and one criterion assumed structure that does not exist.\n\nDoD 3 WAS UNSATISFIABLE AS WRITTEN — the split's real cause. The row says \"the compiler emits the deployment requirements' variable names, read from the contract rather than a hand-kept list\". No such field exists. A deployment requirement is exactly { dependsOnRequirementIds, priority, requirementId, statement, supersedesRequirementId } (apps/control-room/src/v2/goals/gate1-v2-test-fixture.ts:7-15, mirrored at apps/daemon/src/planning/v2-compiler/compiler.test.ts:45-48), and `grep -rn 'variableName|environmentVariable|requiredVariables|envVar' packages/contracts/src apps/daemon/src/planning` returns ZERO. `deploymentRequirements` is not in packages/contracts at all; the shape lives in gate1-contract-shape.ts (:14 roster, :172 validator). Global rail 6 requires a prerequisite row measuring the gap symbol by symbol rather than a narrowed DoD — that is grandchild B.\n\nTHE FIELD'S BLAST RADIUS IS WHY B IS ITS OWN ROW: `grep -rln 'dependsOnRequirementIds' apps packages --include=*.ts --include=*.tsx` returns 27 FILES. A REQUIRED field there is a 27-file change. B is told to measure its chosen shape's forced roster and to split if it still exceeds the ceiling; an OPTIONAL field is the likely tractable answer but the row must not assume it.\n\nTHE PLAINTEXT READ IS DELIBERATELY ABSENT AND THIS ROW ADDS IT. environment-store.ts's header states \"NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE. Delivering values into spawns is a separate concern and a separate row.\" The primitive exists (`openEnvironmentValue`, environment-cipher.ts:132) and the read side already opens every seal to derive a fingerprint then DROPS the plaintext (environment-projection.ts:89-95). Grandchild A adds the returning function in a NEW module so the store's claim stays true and greppable.\n\nTHE ALLOWLIST SEAM, and a trap inside it. agent-spawn-environment.ts builds the child env from a CLOSED roster — RUNTIME_ENVIRONMENT_KEYS (:14), PROVIDER_ENVIRONMENT_PREFIXES (:28) — and SCRUBS EVERY `MOE_*` KEY at :56. verifier-process-runner.ts:67 reads `options.environment ?? process.env` and passes `env: environment` at :154. The parent's own DoD 2 suggests a canary named `MOE_CANARY_<random>`, which that scrub would DROP — the log half of the canary would then pass for the wrong reason. Recorded as a rail on grandchild A.\n\n`.env.example` ALREADY EXISTS, ALREADY CARRIES VALUES, AND IS NOT WRITTEN BY THE LANDER the description names. It comes from the controlled-profile generator: controlled-profile-root-templates.ts:204 maps `.env.example` to ENV_EXAMPLE, whose content includes a real `POSTGRES_PASSWORD=` placeholder and README copy at :113 (`cp .env.example .env   # then replace every CHANGE_ME`). It is pinned by SHA256 in a golden manifest at controlled-profile-generator.test.ts:32, and deployment-infrastructure-generator.test.ts:305-306 READS the placeholder back with `/POSTGRES_PASSWORD=(\\S+)/`. So grandchild C EXTENDS a generated file under a golden pin and a cross-directory reader — it does not create one. That file was also being actively built by another session on 2026-09-05 (the assembly half and the lockfile-asset mint seen in #general), so C is told to re-measure and expect the hash to have moved.\n\nDEPENDENCY STATE AT PLAN TIME: task-d0c63cd8 (the store) is DONE; task-a2409cba (the published commands) is BLOCKED, and per governor-afbde490 it is itself waiting on task-d0d1cb5c and task-b3888068. dependsOn gates WORKING claims only, so planning proceeded correctly.",
+    "risks": "1. THE SCRUBBED CANARY. The parent's DoD 2 names `MOE_CANARY_<random>`, and agent-spawn-environment.ts:56 drops every `MOE_*` key. That canary never reaches the child, so the \"not in the log\" half passes trivially and the \"child saw it\" half fails for a reason that looks like a delivery bug. Recorded as a rail on grandchild A with an instruction to measure the scrub and state the name chosen.\n\n2. DELIVERY AROUND THE ALLOWLIST. The easy implementation is `{ ...process.env, ...values }`, which silently hands the child everything and would be very hard to notice. A's DoD 1 therefore requires the exclusion arm — a host variable OUTSIDE the allowlist must still be absent from the same constructed env — because a contains-the-variable assertion alone is satisfied by handing over the whole environment.\n\n3. A VALUE IN `.env.example`. It is committed and pushed; a value there is published. Compounded by the file already containing a real placeholder, so \"it has values in it already\" is an available and wrong justification. C's rails separate the profile's own placeholder (which must survive, and is read back by another directory's test) from the required names (which must be names only).\n\n4. THE GOLDEN PIN. controlled-profile-generator.test.ts:32 pins `.env.example` by SHA256. The tempting fix when it reds is to soften the manifest assertion; C is told to move the hash and never weaken the pin.\n\n5. B MAKING THE FIELD REQUIRED. Tidier, and a 27-file change that breaks every existing contract fixture. B's DoD 2 pins the property that keeps it optional: a requirement with no names AND one with the field absent both still validate.\n\n6. THE STORE'S NO-PLAINTEXT CLAIM. A adds the first value-returning read in this slice. If it lands in environment-store.ts, that module's header claim becomes false while a canary suite still greps it. Step 1 of this shell re-checks the claim at the delivered tree.\n\n7. CONCURRENCY ON THE PROFILE GENERATOR. Another session was mid-build on controlled-profile-generator.ts and its assets on 2026-09-05. C must re-measure at claim, expect a moved hash, and never revert peer work.",
+    "keyFiles": [
+      "apps/daemon/src/environment/environment-store.ts",
+      "apps/daemon/src/environment/environment-cipher.ts",
+      "apps/daemon/src/environment/environment-projection.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/control-room/src/v2/goals/gate1-contract-shape.ts",
+      "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+      "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+      "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T19:12:08.066Z"
 }

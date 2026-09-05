@@ -13,6 +13,8 @@ import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { NODE_DELIVER_KIND } from "../http/affordance-contract.js";
 import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
+import { refsOfGoal } from "../goals/goal-identity.js";
+import { composeCompilerInstructions, latestRejectionReason } from "../planning/rejection-instructions.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createGitLandingPort } from "../repository/git-landing-port.js";
 import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
@@ -242,8 +244,9 @@ async function main(): Promise<void> {
           : null;
       },
       affordances,
-      // The goal's operator instructions, read from its durable catalog entry: a replan's
-      // successor goal carries the exhausted attempt's findings there.
+      // The goal's operator instructions: its durable catalog brief, plus - for a RE-STAFFED seat
+      // - why the operator rejected the last plan. That composition is pure and lives in
+      // ../planning/rejection-instructions.ts, which is what keeps this file to one call.
       compilerInstructions: (goalId) => {
         const laneStore = verifierStore;
         if (goalId === null || laneStore === undefined) return null;
@@ -252,8 +255,11 @@ async function main(): Promise<void> {
         const decoded = decodeGoalCatalogEntry(
           event as Parameters<typeof decodeGoalCatalogEntry>[0], config.projectId,
         );
-        return decoded.ok && decoded.entry.goalId === goalId
+        const brief = decoded.ok && decoded.entry.goalId === goalId
           ? decoded.entry.brief?.instructions ?? null : null;
+        return composeCompilerInstructions(brief, latestRejectionReason(
+          laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,
+        ));
       },
       // Both horizons come from the knobs, where the bearer TTL is derived from
       // the agent lifetime: a session bound to the claim TTL expired under a

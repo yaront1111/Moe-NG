@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:28:40.806Z",
-  "updatedAt": "2026-09-05T19:10:16.191Z",
+  "updatedAt": "2026-09-05T19:12:16.255Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:32:29.206Z",
     "plannedStepCount": 5,
@@ -186,7 +186,21 @@
     "apps/daemon/src/daemon-store-dependencies.ts",
     "apps/daemon/src/daemon-entry.ts",
     ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
-    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json"
+    ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+    ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+    ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+    ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
+    ".moe/tasks/task-84cd2e55aae942cf8d56657308215fde.json",
+    ".moe/tasks/task-945bb541777a4b789983382f9513f43c.json",
+    ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+    ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+    ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+    ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+    ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json",
+    ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
   ],
   "completionSummary": "The production daemon now supplies the design-read port. A real `daemon-main`-shaped boot answers POST /design/read from the real store: `{code:\"DESIGN_REVISION_ABSENT\", layer:\"LEDGER\", ok:false, sourceCode:null, sourceLayer:null}` at 200, not LISTENER_DESIGN_UNAVAILABLE/503. Add-only, 6 files.\n\nPLAN DEVIATION (load-bearing, please read first). The plan says reuse `createDesignReadPort` from `mcp-design-read-query.ts:37`. THAT MODULE IS NOT ON THE BRANCH — untracked, `git log --all -- <path>` empty, `git cat-file -e HEAD:<path>` -> \"exists on disk, but not in 'HEAD'\". It belongs to task-7f9f20c7cddf4d50b49054951ab177fb, which is BLOCKED. The architect measured it on disk. Importing it from tracked production would break branch HEAD or carry a blocked row's unreviewed WIP. Took the step text's own escape hatch: a 3-line closure over the LANDED `readDesignRevision`, typed with the LANDED `DesignReadPort` from `./http/design-read.js` (which IS the landed `StartListenerOptions.designReads` type). `readDesignRevision` is NOT reimplemented — identical shape to `documentDossiers` at composition:322. FOLLOW-UP: collapse with `createDesignReadPort` when task-7f9f20c7 lands.\n\nDELIVERED: composition factory + return key; forwarder in the shipped `daemon-store-dependencies.ts` object; provider/resolved members + FACTORIES + explicit resolution block + ports spread in port-resolution; listener spread in daemon-entry.\n\nTWO PLAN FACTS MEASURED FALSE. (1) providerKeys sort slot: producer is `Object.keys(provider).sort()` and `toEqual` on an array is order-sensitive, so `designReads` goes after `commandAuthorityPlane`, BEFORE `documentCoverage` — not \"after documentIngest\". (2) FACTORIES DOES NOT GATE RESOLUTION. Drill (b) removed it and the end-to-end arm stayed GREEN (5 passed). `resolveOptionalDaemonPorts` reads `provider.designReads` from its own explicit block; FACTORIES feeds only `optionalPortFactoriesAreValid` -> `isDependencyProvider` -> daemon-main.ts:56. What it decides i",
   "commits": [
@@ -222,17 +236,46 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "df4a56a027ead9320277cf10bd549bb5d3fe61c2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T18:09:56Z",
+      "paths": [
+        ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+        ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+        ".moe/tasks/task-4a0f706437a042059789be2ebdb98bc0.json",
+        ".moe/tasks/task-84cd2e55aae942cf8d56657308215fde.json",
+        ".moe/tasks/task-945bb541777a4b789983382f9513f43c.json",
+        ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+        ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json",
+        ".moe/tasks/task-b3888068c0e2481cb1463524ee7f2895.json",
+        ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+        ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+        ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json",
+        ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json",
+        ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T19:12:16.255Z",
+      "treeId": "9ea6986f493340f2fc0909844ebb43435faa55e0",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
-    "tests/e2e/foundation/j5-compiler-agent.mjs"
+    "apps/daemon/src/product-contract/product-contract-v2-goal-binding-leg.ts",
+    "Moe-NG_Deep_Review_2026-09-05.md"
   ],
   "lastCommitOutcome": {
-    "outcome": "nothing",
-    "kind": "completion",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-8c5af680@2026-09-05T17:26:38Z",
-    "at": "2026-09-05T18:10:33.462Z"
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-05T18:09:56Z",
+    "at": "2026-09-05T19:12:16.255Z"
   },
   "completedAt": "2026-09-05T19:10:16.191Z",
   "reviewCompletedAt": "2026-09-05T19:10:16.191Z",

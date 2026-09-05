@@ -112,15 +112,18 @@
     {
       "stepId": "step-7",
       "description": "RUN THE GATES AND THE DOCKER-ABSENT PROOF. (a) `pnpm --filter @moe/daemon test` — quote the `Test Files N passed` count line, per global rail 8: exit 0 alone is not evidence, and a `--filter` that matches nothing prints `No projects matched the filters` and exits 0. (b) `pnpm typecheck`. (c) THE DOCKER-ABSENT PROOF (DoD 4): run the image-build file ALONE with `MOE_DEPLOY_IMAGE_BUILD=1` and quote the verbatim `DEPLOY_DOCKER_UNAVAILABLE` line it fails with, in the step note. This host has the docker CLI at `/c/Program Files/Docker/Docker/resources/bin/docker` but NO running daemon (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`), so the completion record must say PLAINLY that the build arm DID NOT RUN here — DoD 4 asks for exactly that sentence, and claiming otherwise would be a fabricated green. Per the standing warning: a timeout-shaped red on a shell-out test is re-run alone before it is believed.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-05T18:34:48.129Z"
+      "note": "GATES RUN. My paths are green; BOTH repo-wide gates are red for causes outside this row, one of them environmental and fleet-wide. Nothing here is rounded up.\n\n(a) OWNED PATHS — green, fresh:\n  npx vitest run --root . --config package.json --testTimeout=30000 src/repository/deployment\n  Test Files  2 passed (2)\n  Tests  11 passed | 1 skipped (12)   Duration 542ms   exit 0\n\n(b) `pnpm --filter @moe/daemon test` — EXIT 1, and NOT attributable to this row:\n  Test Files  10 failed | 431 passed (441)\n  Tests  27 failed | 8669 passed | 2 skipped (8698)\n  Duration 1489.45s (tests 4873.73s)\nEvery red I could read in the captured tail was the same shape — `Error: Test timed out in 30000ms.` — in `src/work/foundation-capture-producer.test.ts`, which this row does not own, does not import and is not imported by. Zero occurrences of `repository/deployment` anywhere in the failure output.\n\n(c) THE STANDING WARNING APPLIED, AND IT DID NOT CLEAR THE RED. Re-ran the suspect file ALONE:\n  npx vitest run --root . --config package.json --testTimeout=60000 src/work/foundation-capture-producer.test.ts\n  Test Files  1 failed (1)\n  Tests  4 failed | 22 passed (26)   Duration 600.87s (tests 596.69s)\n26 tests, ~23 s EACH, alone. That is the diagnosis, not the defect.\n\n(d) ROOT CAUSE MEASURED — the documented process-spawn latency cliff, host-wide:\n  mtkbtsvc  pid 24208  HandleCount 1,093,318   (total handles across all processes: 1,357,443)\n  CPU load: 8%\nNot CPU-bound; handle-table bound. Every spawn and file open on this host is paying seconds. Concurrently on the box: TWO other full `@moe/daemon` suites (pids 42928 started 21:44 — 30 minutes and still running — and 51528), plus a Playwright e2e run and a `tests/e2e/foundation` vitest run, all from other seats. My own suite of pure functions runs in 542 ms because it spawns nothing; the suites that red are the ones that spawn processes and touch stores. This is the failure my notes record as making EVERY gate on this host inadmissible while it lasts, and it clears by restarting that service, not by re-running.\n\n(e) `pnpm typecheck` — EXIT 1, three errors, NONE in this row's paths:\n  apps/control-room/src/v2/ops/live-ops.tsx(80,84): error TS1361: 'readRepositoryRemote' cannot be used as a value because it was imported using 'import type'.\n  apps/daemon/src/planning/rejection-instructions.ts(59,38): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'JsonObject | readonly JsonValue[]'.\n  ../../packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\nAttribution measured, not asserted: `rejection-instructions.ts` is UNTRACKED (`??`) — another seat's in-flight file, present in this session's opening git status before I wrote a line. `budget-reservation.ts` and `live-ops.tsx` are tracked and clean at HEAD, so their errors exist without any working-tree change: baseline red. `git diff --name-only HEAD` contains none of the three. The path-attributed delta intersected with this row's owned paths (`apps/daemon/src/repository/deployment/**`) is EMPTY.\n\n(f) POSITIVE CONTROL, because a typecheck that never looked at my files would also report zero errors in them. Planted `const planted: number = \"not a number\";` into deployment-docker-probe.ts and re-ran the daemon project:\n  src/repository/deployment/deployment-docker-probe.ts(95,7): error TS2322: Type 'string' is not assignable to type 'number'.\ntsc does see this row's files; their silence is real.\nRESTORE PROVEN PER THE DRILL RAIL — the file is UNTRACKED, so `git diff` would be empty before, during and after and proves nothing. Backed up to %TEMP% suffixed by worker id, restored in a SEPARATE call, then verified by sha256 equality:\n  e42b2f11eea13775a9504e55435380fef912f1867fb4cdc8e0057bb72eaa3258  (backup)\n  e42b2f11eea13775a9504e55435380fef912f1867fb4cdc8e0057bb72eaa3258  (working tree)\n  grep -c planted -> 0\n\n(g) THE DOCKER-ABSENT PROOF (DoD 4) was run and quoted in full in the step-6 note. Repeating the load-bearing sentence here so the completion record carries it: THE BUILD ARM DID NOT RUN ON THIS MACHINE. Docker's CLI is installed, its daemon is not running, and asking the arm to run produces `DEPLOY_DOCKER_UNAVAILABLE: no docker daemon answered (exit 1): failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine...` as a test FAILURE. No image has been built and no health URL has been answered by anything this row generated.\n\nCONSEQUENCE FOR COMPLETION: DoD 6 names `pnpm --filter @moe/daemon test` as a gate and the daemon requires exit 0 on a fresh run. I cannot produce that honestly while the handle cliff stands, and I will not submit a fabricated green. Step 8 finishes the adversarial pass; the gate is re-run after it, and if the host has not recovered this row goes to the board as blocked on the environment with everything above, not as a completion.",
+      "startedAt": "2026-09-05T18:34:48.129Z",
+      "completedAt": "2026-09-05T19:14:55.160Z"
     },
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL PASS AND THE RECORD. Read the diff as an attacker: mutate the production surface and confirm each failure-path test goes red (global rail 1 — verify every failure-path test by mutation), specifically that deleting the sort makes the shuffled-determinism arm red and that adding a second postgres service to the override makes the one-postgres arm red. Post the DoD 5 ruling as a task comment (the scaffold's compose stays authoritative; the app arrives as an override; one project, one postgres) so the migrations row task-8f86e105 and the sibling children read it from the board rather than from a step note. Then `complete_task` with `pnpm --filter @moe/daemon test` as the named verification, its fresh exit code and its count line.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-05T19:14:57.497Z"
     }
   ],
   "status": "WORKING",
@@ -143,12 +146,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:50:36.331Z",
-  "updatedAt": "2026-09-05T18:34:48.129Z",
+  "updatedAt": "2026-09-05T19:14:57.498Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:16:00.386Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "worker-caece97b"
@@ -162,7 +165,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T18:20:57.665Z",
