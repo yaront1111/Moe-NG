@@ -32,7 +32,14 @@ entry points, environment, and knobs.
   clarifications; the human approves at Gate 1; a second planning run submits
   the decomposition the daemon compiles into a sealed plan; the human approves
   the plan; the PRD coverage read joins every criterion to the node that
-  verified it. Two goals over the same PRD share the approved contract.
+  verified it. Two goals over the same PRD share the approved contract. That
+  one plan approval seals the WHOLE dependency graph, not a single node: an
+  initial run admits N nodes, independent nodes are staffed in parallel up to
+  the configured seat limit, and a node stays BLOCKED — naming each producer as
+  `depends:<nodeKey>` — until every HARD dependency it declares has been
+  accepted. Growth therefore happens inside one goal; replanning into a
+  successor goal remains the path for a review that has exhausted its attempts,
+  not the path for adding work.
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`, the
   event stream, the affordance surface, and the operator's reads (goals, goal
   source, planning run, product-contract gate, document coverage, runs, policy,
@@ -109,8 +116,12 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-03,
 these are still missing or manual: a fresh project cannot be started from the
 browser alone (goal creation waits on the project activation chain, which the
-seed script or the wrapper drives); an initial plan seals one node, so a goal
-is built one node at a time and growth goes through a successor goal; there is
+seed script or the wrapper drives); a multi-node goal is proven end to end only
+OFFLINE — as of 2026-09-05 the sealed 3-node graph, the parallel staffing, the
+`depends:` gate and the coverage close are exercised over real daemon, wrapper
+and agent processes in `tests/e2e/foundation/multi-node-graph.e2e.test.ts`, but
+no multi-node graph has yet been driven on a live project with a browser
+approval, and every graph on the live store is still single-node; there is
 no working preview and no release gate, so the vision's Gates 2 and 3 do not
 exist yet; a Codex seat is wired but was last proven only to reach the API; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0

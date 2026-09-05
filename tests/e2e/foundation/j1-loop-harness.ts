@@ -49,7 +49,17 @@ export const CSRF_TOKEN = "moe-e2e-j1-csrf";
 const PROJECT_ID = SEEDED_LOW_RISK_TASK.projectId;
 export const NODE_REF = SEEDED_LOW_RISK_TASK.nodeRef;
 
-export type AgentArm = "complete" | "fail-verify" | "forge-credential" | "skip-review";
+/**
+ * `multi-node` behaves exactly like `complete` INSIDE the agent — it delivers whichever node
+ * the wrapper staffed it onto, because `fake-agent.mjs` reads its node out of the mission and
+ * writes into the cwd the spawner set to that node's workspace. It differs only in how it
+ * announces its pid: a multi-node pass runs TWO agents at once and a single `--pidfile` would
+ * have them racing one path, so this arm is handed `--pid-dir` and each child writes its own
+ * `agent-<pid>.pid`. Adding a member rather than reusing `complete` keeps the shim's argv, and
+ * therefore every existing arm's behaviour, byte-identical.
+ */
+export type AgentArm =
+  | "complete" | "fail-verify" | "forge-credential" | "multi-node" | "skip-review";
 
 export interface J1Scratch {
   readonly agentPidFile: string;
@@ -309,11 +319,17 @@ export function runRealAgentWrapper(scratch: J1Scratch, run: RealAgentRun): Prom
  */
 export function writeAgentShim(scratch: J1Scratch, arm: AgentArm): string {
   const agent = join(REPOSITORY_ROOT, FAKE_AGENT);
+  // ONE pid flag per arm, chosen here rather than inside the agent: a parallel arm hands a
+  // DIRECTORY so two concurrent children never write one path, every other arm keeps the
+  // single-file flag it has always been given.
+  const pidFlag = arm === "multi-node"
+    ? `--pid-dir "${scratch.root}"`
+    : `--pidfile "${scratch.agentPidFile}"`;
   if (!IS_WINDOWS) {
     const path = join(scratch.root, `agent-${arm}.sh`);
     writeFileSync(path, [
       "#!/bin/sh",
-      `exec node "${agent}" --arm ${arm} --pidfile "${scratch.agentPidFile}" "$@"`,
+      `exec node "${agent}" --arm ${arm} ${pidFlag} "$@"`,
       "",
     ].join("\n"), { encoding: "utf8", mode: 0o755 });
     return path;
@@ -321,27 +337,41 @@ export function writeAgentShim(scratch: J1Scratch, arm: AgentArm): string {
   const path = join(scratch.root, `agent-${arm}.cmd`);
   writeFileSync(path, [
     "@echo off",
-    `node "${agent}" --arm ${arm} --pidfile "${scratch.agentPidFile}" %*`,
+    `node "${agent}" --arm ${arm} ${pidFlag} %*`,
     "",
   ].join("\r\n"), "utf8");
   return path;
 }
 
-function wrapperEnvironment(scratch: J1Scratch, arm: AgentArm): Record<string, string> {
+/**
+ * Extra environment ONE pass wants, applied last so a caller can raise the seat limit for a
+ * parallel-staffing pass. Absent, the wrapper environment is byte-identical to what every
+ * existing arm has always been handed (`MOE_WRAPPER_MAX_AGENTS=1`, `MOE_WRAPPER_ONCE=1`).
+ */
+export interface WrapperPassOptions {
+  readonly environment?: Readonly<Record<string, string>>;
+}
+
+function wrapperEnvironment(
+  scratch: J1Scratch, arm: AgentArm, options: WrapperPassOptions = {},
+): Record<string, string> {
   return {
     ...storeEnvironment(scratch),
     MOE_AGENT_COMMAND: writeAgentShim(scratch, arm),
     MOE_WRAPPER_MAX_AGENTS: "1",
     MOE_WRAPPER_ONCE: "1",
+    ...options.environment,
   };
 }
 
 /** Runs the REAL wrapper for exactly one pass; it exits on its own in ONCE mode. */
-export function runWrapper(scratch: J1Scratch, arm: AgentArm): Promise<ProcessRun> {
+export function runWrapper(
+  scratch: J1Scratch, arm: AgentArm, options: WrapperPassOptions = {},
+): Promise<ProcessRun> {
   return runToExit(
     process.execPath,
     [TRANSFORM_TYPES, join(REPOSITORY_ROOT, WRAPPER_MAIN)],
-    wrapperEnvironment(scratch, arm),
+    wrapperEnvironment(scratch, arm, options),
   );
 }
 

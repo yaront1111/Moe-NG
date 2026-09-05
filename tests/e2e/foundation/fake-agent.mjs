@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { argv, cwd, pid, stdin, stdout } from "node:process";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -201,10 +202,26 @@ function implement(target, arm) {
   return readFileSync(target, "utf8");
 }
 
+/**
+ * Where this agent announces its pid.
+ *
+ * `--pidfile` is ONE path and is what every single-agent arm is handed. A pass that staffs two
+ * nodes at once runs two of these processes concurrently, and two of them writing one path
+ * races (on Windows the loser can take an EPERM and die reporting nothing about the journey),
+ * so a parallel arm is handed `--pid-dir` instead and each child owns `agent-<pid>.pid`. The
+ * choice is the SHIM's, made in `writeAgentShim`; this function only obeys the argv it got.
+ */
+function pidPath() {
+  const directory = flagValue("--pid-dir");
+  return directory === null
+    ? flagValue("--pidfile") ?? "fake-agent.pid"
+    : join(directory, `agent-${pid}.pid`);
+}
+
 async function main() {
   const arm = flagValue("--arm") ?? "complete";
   const configPath = flagValue("--mcp-config");
-  writeFileSync(flagValue("--pidfile") ?? "fake-agent.pid", String(pid), "utf8");
+  writeFileSync(pidPath(), String(pid), "utf8");
   say(`pid=${pid} arm=${arm} cwd=${cwd()}`);
   if (configPath === null) throw new Error("the spawner passed no --mcp-config");
 

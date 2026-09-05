@@ -90,7 +90,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:41:53.294Z",
-  "updatedAt": "2026-09-05T05:03:58.827Z",
+  "updatedAt": "2026-09-05T05:04:52.015Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:33:53.477Z",
     "plannedStepCount": 3,
@@ -164,14 +164,36 @@
       "treeId": "a0a89537194e80132cf4ee0ad545fff623302d48",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "b24e73b2ffe495d8dd0c8e25e787da60be42c830",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-05T04:49:56Z",
+      "paths": [
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-05T05:04:52.015Z",
+      "treeId": "da92dd648e684e94a7d0b8316f6a1cb2db032628",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "tests/e2e/foundation/fake-agent.mjs",
+    "tests/e2e/foundation/multi-node-graph-harness.ts",
+    "tests/e2e/foundation/multi-node-journey.ts",
+    "tests/e2e/foundation/multi-node-reads.ts",
+    "tests/e2e/foundation/multi-node-wire.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-75411639@2026-09-05T03:40:36Z",
-    "at": "2026-09-05T04:18:47.264Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-05T04:49:56Z",
+    "at": "2026-09-05T05:04:52.015Z"
   },
   "completedAt": "2026-09-05T05:03:58.827Z",
   "reviewCompletedAt": "2026-09-05T05:03:58.827Z",
