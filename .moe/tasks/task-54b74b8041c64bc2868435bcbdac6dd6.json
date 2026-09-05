@@ -44,5 +44,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-05T11:37:53.272Z"
+  "updatedAt": "2026-09-05T13:11:16.069Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T13:00:38.306Z"
+  },
+  "contextFetchedBy": [
+    "architect-71b9a4e9"
+  ]
 }

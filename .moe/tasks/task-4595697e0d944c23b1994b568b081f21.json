@@ -175,7 +175,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T02:02:06.261Z",
-  "updatedAt": "2026-09-05T12:51:02.604Z",
+  "updatedAt": "2026-09-05T12:52:55.063Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:23:55.380Z",
     "plannedStepCount": 8,
@@ -232,6 +232,33 @@
       "treeId": "1ece090facf781d5ea95d2a500885e090779083a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "fd1b455d19ea31c80bb0287130be5b2064d7b1f0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-fa42c94f@2026-09-05T11:36:20Z",
+      "paths": [
+        ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+        "apps/daemon/src/planning/compile-dispatcher.ts",
+        "apps/daemon/src/planning/compile-dispatcher-revision.test.ts",
+        "apps/daemon/src/planning/compile-run-resolution.js",
+        "apps/daemon/src/planning/compile-run-resolution.ts",
+        "apps/daemon/src/planning/planning-services.ts"
+      ],
+      "recordedBy": "worker-fa42c94f",
+      "recordedAt": "2026-09-05T12:52:55.063Z",
+      "treeId": "3d480fb6fd8e0bc75fce6d935830127e0f2df6a2",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/planning/compile-dispatcher.ts",
+          "taskId": "task-138fab3075884df98c3c220e74c1a3e9"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -240,29 +267,16 @@
     "apps/daemon/src/planning/planning-services.ts",
     "apps/daemon/src/planning/compile-run-resolution.ts",
     "apps/daemon/src/planning/compile-dispatcher.ts",
-    "apps/daemon/src/planning/compile-run-resolution.js"
+    "apps/daemon/src/planning/compile-run-resolution.js",
+    ".moe/tasks/task-1c9587ed1b2b4e1abd6b51396ee672f8.json",
+    ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/daemon-command-dispatch.ts",
-    "apps/daemon/src/daemon-command-edges.ts",
-    "apps/daemon/src/daemon-foundation-verification-command.ts",
-    "apps/daemon/src/daemon-v2-command-registry.ts",
-    "apps/daemon/src/orchestrator/agent-mission-text.ts",
-    "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
-    "apps/daemon/src/planning/compiled-authority-bodies.ts",
-    "apps/daemon/src/planning/compiled-authority-contracts.ts",
-    "apps/daemon/src/product-contract/product-contract-propose-service.test.ts",
-    "apps/daemon/src/product-contract/product-contract-propose-service.ts",
-    "apps/daemon/src/product-contract/product-contract-provenance.test.ts",
-    "apps/daemon/src/product-contract/product-contract-provenance.ts",
-    "apps/daemon/src/product-contract/product-contract-v2-clarification-service.test.ts",
-    "apps/daemon/src/product-contract/product-contract-v2-propose-service.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-fa42c94f@2026-09-05T11:36:20Z",
-    "at": "2026-09-05T11:36:39.144Z"
+    "at": "2026-09-05T12:52:55.063Z"
   },
   "workStartedAt": "2026-09-05T11:37:07.687Z",
   "reviewStartedAt": "2026-09-05T12:51:02.604Z",
@@ -272,5 +286,13 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  52 passed (52)\n      Tests  1217 passed (1217)\n   Start at  15:48:26\n   Duration  48.07s (transform 17.40s, setup 0ms, import 63.35s, tests 77.36s, environment 4ms)\nOWNED_EXIT=0",
     "reportedAt": "2026-09-05T12:51:02.604Z"
   },
-  "completionSummary": "A REVISION successor run now compiles. Route (a) as the architect chose: the `plan.propose` optimistic fence reads the run's RAW head ONCE at HANDLER ENTRY — `Math.max(versionOf(ledger,runId), store.getAggregateVersion(runId))` at planning-services.ts:139, above classifyPlanningChain/fold/authority-build/gate-persist — because `readDurableLedger` keys aggregates by `decision.targetAggregateId`, so a run minted as somebody else's SECONDARY leg reads 0 forever while the store observes 1. New `compile-run-resolution.ts` answers `{runId, runKind, baseVersion}` from `currentPlanningRun` and FAILS CLOSED on `unreadable`; the dispatcher compiles onto that target with the version gates re-based on `baseVersion` (0 for INITIAL = today's literals).\n\nDoD, item by item. (1) `rejectedWorld` + one `submit` compiles the SUCCESSOR to PLAN_REVIEW / runKind REVISION, id read back through `currentPlanningRun`, never recomputed; the successor's stream is asserted exactly [\"PlanningRunCreated\"] first, pinning the baseVersion=1 coupling to `commitIntentRejection`. (2) The original is untouched — same head, same event array, still REJECTED/INITIAL — and the arm asserts `compiled.runId === successorRunId` FIRST, because without that line the defect satisfies it vacuously (pre-fix the submission wrote nothing anywhere). (3) Two arms: identical resubmission REPLAYS with zero new events; changed-structure resubmission refuses `SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT @ COMPILE_DISPATCHER`, code and layer as separate assertions. (4) A competing writer moves the head between the entry read and the commit through the store's own multi-leg commit; the decision still refuses `EXPECTED_VERSION_CONFLICT @ DAEMON_PLANNING`, with a control proving the identical submission commits unraced. (5) compile-dispatcher.test.ts SHA256 is byte-identical to its pre-task baseline (6f1f98eb…); every changed production file drilled red.\n\nTHREE THINGS THE PLAN DID NOT PREDICT, all measured, all in this row's files. "
+  "completionSummary": "A REVISION successor run now compiles. Route (a) as the architect chose: the `plan.propose` optimistic fence reads the run's RAW head ONCE at HANDLER ENTRY — `Math.max(versionOf(ledger,runId), store.getAggregateVersion(runId))` at planning-services.ts:139, above classifyPlanningChain/fold/authority-build/gate-persist — because `readDurableLedger` keys aggregates by `decision.targetAggregateId`, so a run minted as somebody else's SECONDARY leg reads 0 forever while the store observes 1. New `compile-run-resolution.ts` answers `{runId, runKind, baseVersion}` from `currentPlanningRun` and FAILS CLOSED on `unreadable`; the dispatcher compiles onto that target with the version gates re-based on `baseVersion` (0 for INITIAL = today's literals).\n\nDoD, item by item. (1) `rejectedWorld` + one `submit` compiles the SUCCESSOR to PLAN_REVIEW / runKind REVISION, id read back through `currentPlanningRun`, never recomputed; the successor's stream is asserted exactly [\"PlanningRunCreated\"] first, pinning the baseVersion=1 coupling to `commitIntentRejection`. (2) The original is untouched — same head, same event array, still REJECTED/INITIAL — and the arm asserts `compiled.runId === successorRunId` FIRST, because without that line the defect satisfies it vacuously (pre-fix the submission wrote nothing anywhere). (3) Two arms: identical resubmission REPLAYS with zero new events; changed-structure resubmission refuses `SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT @ COMPILE_DISPATCHER`, code and layer as separate assertions. (4) A competing writer moves the head between the entry read and the commit through the store's own multi-leg commit; the decision still refuses `EXPECTED_VERSION_CONFLICT @ DAEMON_PLANNING`, with a control proving the identical submission commits unraced. (5) compile-dispatcher.test.ts SHA256 is byte-identical to its pre-task baseline (6f1f98eb…); every changed production file drilled red.\n\nTHREE THINGS THE PLAN DID NOT PREDICT, all measured, all in this row's files. ",
+  "touchedFiles": [
+    "apps/daemon/src/planning/compile-dispatcher.ts",
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/planning/compile-run-resolution.ts",
+    "apps/daemon/src/planning/compile-dispatcher-revision.test.ts",
+    "apps/daemon/src/planning/compile-run-resolution.js",
+    "apps/daemon/src/planning/zz-scratch-probe.test.ts"
+  ]
 }
