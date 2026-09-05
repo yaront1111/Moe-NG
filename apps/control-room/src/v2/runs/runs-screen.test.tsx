@@ -69,6 +69,19 @@ describe("the runs screen", () => {
     totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
   };
 
+  it.each(["PUSHED", "PENDING", "REFUSED"] as const)("keeps later node landings separate from a %s goal receipt", (publishOutcome) => {
+    const nodes = ["a", "b"].map((key) => node({ nodeKey: key, status: "ACCEPTED",
+      landing: { branch: "main", code: null, files: [`${key}.ts`], outcome: "COMMITTED", sha: key.repeat(40) },
+    }));
+    const updated: RunsOutcome = { ...outcome, goals: [{ ...outcome.goals[0]!, nodes,
+      publish: { branch: "main", code: null, decisionId: "publish-1", outcome: publishOutcome, remoteUrl: "https://example.com/repo.git", requestedAt: "2026-09-02T19:00:00.000Z", sha: "a".repeat(40), url: null },
+    }] };
+    render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={updated} />);
+    expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe(publishOutcome === "PUSHED" ? "1" : "0");
+    expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe(publishOutcome === "PUSHED" ? "1" : "2");
+    expect(screen.getByTestId("cr.kanban.line.b").textContent).toBe("landed on the workspace branch");
+  });
+
   it("renders the totals, each goal as a board, and lease words on working cards", async () => {
     const onOpenBoard = vi.fn();
     render(<RunsScreen nowMs={NOW} onOpenBoard={onOpenBoard} outcome={outcome} />);

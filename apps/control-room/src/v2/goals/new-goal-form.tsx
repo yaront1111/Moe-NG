@@ -23,21 +23,11 @@ export { PRD_FILE_PREFLIGHT_MAX_BYTES } from "./use-goal-prd.js";
 const TITLE_INPUT_MAX_LENGTH = 2_048;
 
 /**
- * The new-goal form (UI-3), opened in place from "New goal". Its fields are the
- * plain ones the design names - Outcome, Acceptance criteria, Budget envelope,
- * Risk class - plus the PRD DROP affordance the owner asked for.
- *
- * Honesty rules kept:
- *  - The caption states the control room authors no defaults; policy supplies them.
- *  - The PRD drop has ONE path and it is entirely local: the file is read in the
- *    browser and digested there. Selecting a PRD calls no route and writes
- *    nothing, so it can be changed or abandoned without retracting a durable
- *    record. The status region reports only what this page did.
- *  - Nothing seeds the operator's prose. The outcome and title are the words the
- *    human typed; the PRD contributes an advisory line to the composed brief and
- *    is never presented as an ingest receipt or as lifecycle authority.
- *  - Create goal requires both a title and an outcome and hands the draft to the
- *    caller, which owns the dispatch and the refusal report.
+ * The new-goal form owns the human's draft and optional browser-read PRD.
+ * Selecting a file calls no route and writes no durable record. Creation waits
+ * for a successful read or explicit removal, then hands the bytes to the caller,
+ * which owns dispatch and refusal reporting. Local reads confer no authority.
+ * Title and outcome remain the human's words; neither is seeded from the PRD.
  */
 
 export interface NewGoalFormProps {
@@ -65,7 +55,7 @@ export function NewGoalForm({
   const [risk, setRisk] = useState<AdvisoryRiskClass | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { acceptFile, prd, read, submittedPrd } = useGoalPrd();
+  const { acceptFile, clearFile, prd, read, submittedPrd } = useGoalPrd();
 
   // A committed create is the ONLY thing that clears the draft. The token starts at
   // its mount value, so a plain re-render (busy flipping back after a refusal) is
@@ -79,7 +69,9 @@ export function NewGoalForm({
     setCriteria("");
     setBudget("");
     setRisk(undefined);
-  }, [resetToken]);
+    clearFile();
+    if (inputRef.current !== null) inputRef.current.value = "";
+  }, [clearFile, resetToken]);
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     acceptFile(event.target.files?.[0]);
@@ -90,7 +82,10 @@ export function NewGoalForm({
     acceptFile(event.dataTransfer.files?.[0]);
   };
 
+  const unresolvedPrd = read !== null && (read === "READING" || read.status === "ERROR");
+  const createDisabled = busy || unresolvedPrd || outcome.trim() === "" || title.trim() === "";
   const submit = (): void => {
+    if (createDisabled) return;
     onCreate({
       outcome: outcome.trim(),
       title: title.trim(),
@@ -124,6 +119,12 @@ export function NewGoalForm({
           >
             Choose a file
           </button>
+          {read === null ? null : (
+            <button className="cr2-prd-browse" disabled={busy} onClick={() => {
+              clearFile();
+              if (inputRef.current !== null) inputRef.current.value = "";
+            }} type="button">Remove PRD</button>
+          )}
         </div>
         <input
           className="cr2-visually-hidden"
@@ -194,7 +195,7 @@ export function NewGoalForm({
       <div className="cr2-newgoal-col">
         <details className="cr2-newgoal-more" data-testid="cr.goals.newgoal.more">
           <summary>More</summary>
-          <label className="cr2-field-label" htmlFor="cr2-budget">Budget</label>
+          <label className="cr2-field-label" htmlFor="cr2-budget">Requested budget</label>
           <input
             className="cr2-field-input"
             data-testid="cr.goals.newgoal.budget"
@@ -223,12 +224,13 @@ export function NewGoalForm({
             ))}
           </select>
           <p className="cr2-newgoal-caption" data-testid="cr.goals.newgoal.authority-note">
-            Budget and risk are optional. Blank means not supplied.
+            Budget and risk are optional advisory instructions. Blank means not supplied.
+            Requested budget is separate from an admitted spending cap and measured consumption.
           </p>
         </details>
         <div className="cr2-newgoal-actions">
           <ActionButton
-            disabled={busy || read === "READING" || outcome.trim() === "" || title.trim() === ""}
+            disabled={createDisabled}
             onClick={submit}
             testId="cr.goals.newgoal.create"
             variant="primary"

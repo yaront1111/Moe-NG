@@ -33,8 +33,8 @@ describe("columnOf", () => {
       landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "4f2a91cdabcdef" },
     }))).toBe("LANDED");
     expect(columnOf(node("ACCEPTED", {
-      landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "4f2a91cdabcdef" },
-    }), true)).toBe("PUBLISHED");
+      landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "a".repeat(40) },
+    }), "a".repeat(40))).toBe("PUBLISHED");
   });
 
   it("keeps sent-back work in Planned and exhausted reviews in Review, marked stuck", () => {
@@ -132,14 +132,35 @@ describe("foldBoard", () => {
     expect(Object.isFrozen(fold.cards.PLANNED)).toBe(true);
   });
 
-  it("puts landed work in Published once the goal's publish has been pushed", () => {
+  it("publishes only the node whose landing matches the pushed commit", () => {
     const landed = node("ACCEPTED", {
-      landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "abc" },
+      nodeKey: "published-node",
+      landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "a".repeat(40) },
     });
-    const fold = foldBoard([landed], NOW, true);
+    const later = node("ACCEPTED", {
+      nodeKey: "later-node",
+      landing: { branch: "master", code: null, files: ["b.ts"], outcome: "COMMITTED", sha: "b".repeat(40) },
+    });
+    const fold = foldBoard([landed, later], NOW, "a".repeat(40));
     expect(fold.counts.PUBLISHED).toBe(1);
-    expect(fold.counts.LANDED).toBe(0);
+    expect(fold.counts.LANDED).toBe(1);
+    expect(fold.cards.PUBLISHED.map((card) => card.node.nodeKey)).toEqual(["published-node"]);
+    expect(fold.cards.LANDED.map((card) => card.node.nodeKey)).toEqual(["later-node"]);
     expect(fold.cards.PUBLISHED[0]?.line).toBe("published");
+  });
+
+  it.each([null, "", "abc", "g".repeat(40)])("keeps missing or incomplete matching SHA %s in Landed", (sha) => {
+    const landed = node("ACCEPTED", {
+      landing: { branch: "main", code: null, files: ["a.ts"], outcome: "COMMITTED", sha },
+    });
+    expect(columnOf(landed, sha)).toBe("LANDED");
+  });
+
+  it("recognizes a complete matching SHA-256 commit", () => {
+    const landed = node("ACCEPTED", {
+      landing: { branch: "main", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "a".repeat(64) },
+    });
+    expect(columnOf(landed, "a".repeat(64))).toBe("PUBLISHED");
   });
 
   it("speaks a single node without a plural and without empty counts", () => {

@@ -90,6 +90,19 @@ const PAUSE: ProviderPause = {
 const WAITING = `Waiting for the provider limit to reset at ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()}`;
 
 describe("BoardScreen", () => {
+  it.each(["PUSHED", "PENDING", "REFUSED"] as const)("attributes a %s receipt only to its exact landed commit", (outcome) => {
+    const nodes = ["a", "b"].map((key) => node(key, "ACCEPTED", {
+      landing: { branch: "main", code: null, files: [`${key}.ts`], outcome: "COMMITTED", sha: key.repeat(40) },
+    }));
+    const runs: RunsOutcome = { ...RUNS, goals: [{ ...RUNS.goals[0]!, nodes,
+      publish: { branch: "main", code: null, decisionId: "publish-1", outcome, remoteUrl: "https://example.com/repo.git", requestedAt: "2026-09-04T08:00:00.000Z", sha: "a".repeat(40), url: null },
+    }] };
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN} runs={runs} surface={null} title="t" />);
+    expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe(outcome === "PUSHED" ? "1" : "0");
+    expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe(outcome === "PUSHED" ? "1" : "2");
+    expect(screen.getByTestId("cr.kanban.line.b").textContent).toBe("landed on the workspace branch");
+  });
+
   it("folds the goal's nodes into six columns with counts, one line per card, and a finding only where it is the next question", () => {
     render(<BoardScreen activity={ACTIVITY} brief="Make evidence survive." coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="Evidence ledger" />);
     expect(screen.getByTestId("cr.kanban.count.PLANNED").textContent).toBe("2");

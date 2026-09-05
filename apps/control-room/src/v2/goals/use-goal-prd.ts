@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type { GoalDraftPrd } from "./goal-model.js";
 import { PRD_LOCAL_LAYER } from "./new-goal-form-model.js";
@@ -64,6 +64,7 @@ export function prdMediaType(name: string): GoalDraftPrd["mediaType"] {
 
 interface GoalPrdState {
   readonly acceptFile: (file: File | null | undefined) => void;
+  readonly clearFile: () => void;
   readonly prd: PrdFile | null;
   readonly read: PrdReadState;
   /** Present only for a file this browser actually read; otherwise absent. */
@@ -111,6 +112,13 @@ export function useGoalPrd(): GoalPrdState {
   const [submittedPrd, setSubmittedPrd] = useState<GoalDraftPrd | undefined>(undefined);
   const generationRef = useRef(0);
 
+  const clearFile = useCallback((): void => {
+    generationRef.current += 1;
+    setPrd(null);
+    setSubmittedPrd(undefined);
+    setRead(null);
+  }, []);
+
   const acceptFile = (file: File | null | undefined): void => {
     if (file === null || file === undefined) return;
     const generation = (generationRef.current += 1);
@@ -134,5 +142,5 @@ export function useGoalPrd(): GoalPrdState {
     })();
   };
 
-  return { acceptFile, prd, read, submittedPrd };
+  return { acceptFile, clearFile, prd, read, submittedPrd };
 }

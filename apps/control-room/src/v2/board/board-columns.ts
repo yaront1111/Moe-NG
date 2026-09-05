@@ -9,8 +9,9 @@ import { agoWords, seatWords } from "../ops/activity-words.js";
  * lane. Pure: no fetch, no clock beyond the `nowMs` it is handed.
  *
  * READY is both "not yet started" and "sent back after review"; the latter is stuck
- * Planned. Exhausted reviews sit in Review, stuck. Landed vs published is the goal's
- * publish outcome, not a node status the daemon names.
+ * Planned. Exhausted reviews sit in Review, stuck. Publication requires a node's
+ * exact landing SHA to match the goal's pushed receipt. The read has no ancestry
+ * evidence, so other landings remain Landed even if they might be ancestors.
  */
 
 export const BOARD_COLUMNS = [
@@ -53,7 +54,7 @@ export function isStuck(node: RunNodeView): boolean {
     || node.status === "UNATTRIBUTABLE";
 }
 
-export function columnOf(node: RunNodeView, published = false): BoardColumn {
+export function columnOf(node: RunNodeView, publishedSha: string | null = null): BoardColumn {
   switch (node.status) {
     case "IN_PROGRESS": return "WORKING";
     case "DELIVERED": return "REVIEW";
@@ -61,7 +62,10 @@ export function columnOf(node: RunNodeView, published = false): BoardColumn {
     case "ESCALATION_REQUIRED":
       return "REVIEW";
     case "ACCEPTED":
-      if (node.landing?.outcome === "COMMITTED") return published ? "PUBLISHED" : "LANDED";
+      if (node.landing?.outcome === "COMMITTED") {
+        return publishedSha !== null && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(publishedSha)
+          && node.landing.sha === publishedSha ? "PUBLISHED" : "LANDED";
+      }
       return "VERIFIED";
     default:
       return "PLANNED";
@@ -141,12 +145,12 @@ function emptyCards(): Record<BoardColumn, BoardCard[]> {
 }
 
 export function foldBoard(
-  nodes: readonly RunNodeView[], nowMs: number, published = false,
+  nodes: readonly RunNodeView[], nowMs: number, publishedSha: string | null = null,
 ): BoardFold {
   const cards = emptyCards();
   let stuck = 0;
   for (const node of nodes) {
-    const column = columnOf(node, published);
+    const column = columnOf(node, publishedSha);
     const stuckCard = isStuck(node);
     if (stuckCard) stuck += 1;
     cards[column].push(Object.freeze({

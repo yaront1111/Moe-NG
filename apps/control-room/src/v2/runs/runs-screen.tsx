@@ -86,7 +86,7 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
   const title = goal.title ?? goal.goalId;
   const runRef = goal.run?.runId ?? "";
   const fold = goal.nodes.length === 0
-    ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED");
+    ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
   return (
     <section className="cr2-run-goal" data-embedded={embedded ? "true" : undefined} data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
