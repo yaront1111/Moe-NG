@@ -195,6 +195,23 @@ describe("bytes the decoder refuses rather than guesses", () => {
     expect(report.refusals.length).toBe(4);
   });
 
+  it("refuses a non-canonical time at DECODE so one file cannot abort the whole import", () => {
+    // `provenance.sourceTime` is compared lexically and read by the store's clock: a
+    // second-precision or offset time used to decode fine and then fail every sibling at APPLY.
+    const report = decode(tree([
+      ...GOOD,
+      ["tasks/seconds.json", '{"legacyId":"s","time":"2026-01-01T00:00:00Z"}'],
+      ["tasks/offset.json", '{"legacyId":"o","time":"2026-01-01T02:00:00.000+02:00"}'],
+      ["tasks/impossible.json", '{"legacyId":"i","time":"2026-13-45T00:00:00.000Z"}'],
+    ]));
+    for (const path of ["tasks/seconds.json", "tasks/offset.json", "tasks/impossible.json"]) {
+      expect(refusalAt(report, path).refusal.code).toBe("IMPORT_SOURCE_MALFORMED");
+      expect(refusalAt(report, path).refusal.layer).toBe("DECODE");
+    }
+    expect(report.records.length).toBe(3);
+    expect(report.refusals.length).toBe(3);
+  });
+
   it("refuses bytes that admit two readings rather than picking one", () => {
     const report = decode(tree([
       ["tasks/two-ids.json", '{"id":"old","legacyId":"new","owner":"bob"}'],

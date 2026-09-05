@@ -143,12 +143,32 @@ function readIdentity(path: string, document: Record<string, unknown>): DecodeRe
   return declared;
 }
 
-/** The source's own time, or null when it declared none. Never a clock read. */
+/** Canonical UTC, millisecond precision, `Z` suffix: the only spelling the import's clock reads. */
+const CANONICAL_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+
+function isCanonicalUtc(value: string): boolean {
+  if (!CANONICAL_UTC.test(value)) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+/**
+ * The source's own time, or null when it declared none. Never a clock read.
+ *
+ * Canonical UTC only. `provenance.sourceTime` is compared lexically to pick the import's
+ * `committedAt`, and the store's own clock reader refuses anything else: a `time` such as
+ * `2026-01-01T00:00:00Z` used to decode fine and then abort the WHOLE import at APPLY
+ * (IMPORT_COMMIT_FAILED), taking every well-formed sibling record with it. Refusing it here
+ * keeps the refusal typed, per file, at DECODE.
+ */
 function readDeclaredTime(path: string, document: Record<string, unknown>): DecodeRefusal | string | null {
   const declared = document["time"];
   if (declared === undefined || declared === null) return null;
   if (typeof declared !== "string") {
     return decodeRefusal(path, "IMPORT_SOURCE_MALFORMED", "time is neither a string nor null");
+  }
+  if (!isCanonicalUtc(declared)) {
+    return decodeRefusal(path, "IMPORT_SOURCE_MALFORMED", "time is not canonical UTC (YYYY-MM-DDTHH:mm:ss.sssZ)");
   }
   return declared;
 }
