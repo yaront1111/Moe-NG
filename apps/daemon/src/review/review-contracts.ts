@@ -82,9 +82,14 @@ export type ReviewIngressRefusalCode = (typeof REVIEW_INGRESS_REFUSAL_CODES)[num
  * `REVIEW_ROUND_CEILING_REACHED` bounds the round count itself: a durable escalation admits
  * the human-in-loop fix round, and past `REVIEW_ROUND_ABSOLUTE_CEILING` committed rounds no
  * further round is admissible for the subject at all.
+ *
+ * `REVIEW_COMMAND_BYTES_CONFLICT` is the replay fence's second arm: the decision key covers
+ * neither kind nor payload, so a commandId reused under the same kind with different bytes is
+ * refused instead of being handed the earlier decision as an accepted replay.
  */
 export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_ALREADY_ACCEPTED",
+  "REVIEW_COMMAND_BYTES_CONFLICT",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_LINEAGE_UNREADABLE",

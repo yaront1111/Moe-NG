@@ -1,5 +1,6 @@
 import type { JsonObject, JsonValue, RuntimeError } from "@moe/contracts";
 import type { ReviewDecisionLayer } from "@moe/review";
+import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
@@ -155,6 +156,14 @@ function eventDraft(request: ReviewRequest, plan: CommitPlan): EventDraft {
 }
 
 /**
+ * The bytes a review command is decided AND replay-checked against. One definition, so the
+ * replay fence in `replayOf` compares exactly what `commitAccepted` stored.
+ */
+function requestBytesOf(request: ReviewRequest): Uint8Array {
+  return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
+}
+
+/**
  * The single durable seam. Every accepted review command commits exactly one decision here, so
  * "one durable terminal decision" is a property of this function rather than of four call sites.
  */
@@ -171,7 +180,7 @@ export function commitAccepted(
     events: [eventDraft(request, plan)],
     expectedVersion: plan.expectedVersion,
     key: decisionKey(request),
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
     targetAggregateId: plan.aggregateId,
   });
   // The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row and
@@ -204,7 +213,19 @@ export function replayOf(store: SqliteEventStore, request: ReviewRequest): Revie
   if (existing.commandKind !== request.kind) {
     return refuse(request.kind, "REVIEW_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
+  // A refused decision's receipt carries no request digest (it commits the rejection audit
+  // payload), so nothing here could prove the resubmit is the command that was decided: fall
+  // through and decide it again from scratch. This must stay AHEAD of the byte compare below.
   if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // The key does not cover the payload either. A caller reusing a commandId under the SAME kind
+  // with DIFFERENT bytes (another subject, another round, other findings) would otherwise be
+  // handed the earlier decision as an accepted replay: durable authority for a command never
+  // decided with those bytes. Recomputed from the STORED decision's own fence, so the resubmitted
+  // bytes are the only free variable and a match is byte equality; the bootstrap and work-claim
+  // families close the same hole the same way.
+  if (identifyReplayRequest(existing, requestBytesOf(request)) !== existing.replayRequestSha256) {
+    return refuse(request.kind, "REVIEW_COMMAND_BYTES_CONFLICT", "DAEMON_PREREQUISITE");
+  }
   return Object.freeze({
     advisoryOnly: false as const,
     authority: "DURABLE_DECISION" as const,

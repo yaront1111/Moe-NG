@@ -416,4 +416,37 @@ describe("a refusal names the code AND the layer that produced it", () => {
     expect(outcome.authority).toBe("NONE");
     expect(decisionCount(store)).toBe(before);
   });
+
+  it("refuses a commandId reused under the same kind with different bytes, claiming no authority", () => {
+    const store = openStore();
+    const first = submit(store, 1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("expected acceptance");
+    const before = decisionCount(store);
+
+    // Same key (commandId, principalId, projectId) and same kind, but another subject, another
+    // round and other findings. Without the byte fence the round-1 decision came back as an
+    // accepted REPLAYED outcome: durable authority for a command never decided with these bytes.
+    const outcome = send(
+      store,
+      envelope(
+        "review.submit", 0,
+        submitPayload(7, [finding({ ruleId: "rule-other" })], { subjectRef: "node-run-OTHER" }),
+        "cmd-round-1",
+      ),
+    );
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_COMMAND_BYTES_CONFLICT");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(outcome.authority).toBe("NONE");
+    expect(decisionCount(store)).toBe(before);
+    // The honest replay still answers: identical bytes under the same key.
+    const replay = submit(store, 1);
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) throw new Error("expected replay");
+    expect(replay.disposition).toBe("REPLAYED");
+    expect(replay.decision.decisionId).toBe(first.decision.decisionId);
+  });
 });
