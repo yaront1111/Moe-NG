@@ -205,6 +205,14 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // Pushing the operator's repository to a remote is the operator's decision; the wrapper
   // performs it as an effect of that decision, never as staffed work.
   "repository.publish",
+  // Writing an environment variable is not staffable work: the value is a production secret
+  // the deploy later hands to a running process, so a wrapper that staffed this could set
+  // what production reads. Unlike the kinds above, which the offer surface can present to a
+  // human, these two have no agent-facing step at all — the entry here is belt-and-braces
+  // beside the MCP exclusion in `mcp-tool-allowlist.ts`, and both are wanted: that one stops
+  // an agent reaching the kind over a transport, this one stops the wrapper minting a
+  // session to take it.
+  "environment.set_variable", "environment.unset_variable",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
