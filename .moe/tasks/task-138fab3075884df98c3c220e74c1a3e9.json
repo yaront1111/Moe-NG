@@ -136,8 +136,8 @@
       "completedAt": "2026-09-05T17:20:28.608Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -174,16 +174,24 @@
       "author": "worker-8c5af680",
       "content": "STEP 7 EVIDENCE (worker-8c5af680, resumed session — step 7 was left IN_PROGRESS by a session that died mid-drill).\n\n**THE FIRST FINDING WAS A STRANDED DRILL MUTANT IN THIS ROW'S OWN RESIDUE.**\n`apps/daemon/src/planning/current-planning-run.ts` sat in the shared worktree with\n`CURRENT_RUN_HOP_LIMIT = 1` against HEAD's `16` — an uncommitted one-line mutation.\nOwnership settled by evidence before acting, because \"never revert foreign dirt\" turns on whose it is:\n`/tmp/moe-drill-worker-2739fee7/` is MY predecessor's drill directory (its id is named in step 6's restore\nproofs) and holds `current-planning-run.ts` at 5533 B / 18:05, while the worktree held 5532 B / 18:06 —\none byte smaller, one minute later, exactly `16` -> `1`. So it is this row's residue and the drill rail\nREQUIRES the restore. Backup SHA256 `a5e7c29c…` == `git show HEAD:<path>` SHA256 — two independent\nsources agreed on the correct bytes first. Restored with `cp` from the backup (never `git checkout`),\nproof in a SEPARATE call: post-restore SHA256 `a5e7c29c…`, `git diff` empty, `git status --porcelain`\nempty. I then verified all six files in that backup dir against HEAD: **all CLEAN**, so no second mutant.\n\nBlast radius, which is why it was worth the time: at limit 1 the walk exits its `while` after the first\nhop and returns `unreadable: true`, so even a SINGLE-rejection chain reads as corrupt and the fail-closed\nwrite path answers `SUBMIT_DECOMPOSITION_RUN_UNREADABLE`. The identical 5-file command went\n`Tests 12 failed | 74 passed (86)` -> `Tests 86 passed (86)` with that one constant restored. That is the\npositive control for D6 (the hop-limit drill the dead session was running) obtained at zero extra cost.\n\n**ADVERSARIAL ARMS** (all in `affordance-read-planning.test.ts`, landed): :1039 two-hop chain onto run 3,\npinning `hops: 2, unreadable: false` so the arm cannot pass on a fold that gave up early; :1067 the stale\ncached card — BOTH approval kinds refuse `APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING`, code and\nlayer, with the run's version asserted > 0 first so it is the lifecycle fence answering and not optimistic\nconcurrency; :1080 approving the SUCCESSOR, refs follow, original never re-offered; :1098 the corrupt chain\nvia a `blindChainStore` Proxy, plus an unwrapped-store control so the fallback is attributable to the\ninjected failure and not the Proxy.\n\n**CONSIDERED, DELIBERATELY NOT FIXED — read skew.** `ledger` is a snapshot folded at the top of\n`readSurface()` while `currentRun` reads `config.store` LIVE, so a REJECT landing between them yields one\npoll where the ledger lacks the successor's state. Traced end to end: `bound` is `undefined`, the binding\nguard `typeof bound === \"string\" && …` does not skip, `refs[current]` binds the successor (correct, merely\nearly), `planReviewable` is false so both approval offers are WITHHELD and the compiler card is offered for\nthe goal — which is exactly the right post-REJECT surface anyway. The authority map fails closed (arms :866,\n:902). No wrong write is enabled: the dispatcher re-resolves independently and fails closed. Closing the\nwindow means re-folding the ledger after the resolve, doubling a hot path the team just cut from 14 s to\n541 ms. Recording rather than paying that.\n\n**GATES, fresh this session.**\n- OWNED SCOPE, exit 0: `Test Files 7 passed (7)` / `Tests 131 passed (131)` over the five files this row\n  owns plus `affordance-read.test.ts` and `mcp-tool-allowlist.test.ts`.\n- `pnpm --filter @moe/daemon test` -> EXIT 1: `Test Files 9 failed | 424 passed (433)` /\n  `Tests 26 failed | 8594 passed (8620)`. All nine failing files FOREIGN, delta ∩ owned paths EMPTY:\n  `daemon-command-registry.test.ts` + `daemon-v2-command-registry.test.ts` (`AssertionError: expected 46 to\n  be 45`, `expected [ undefined ] to deeply equal [ 'MCP_STDIO' ]`) are peer task-40e52fa8's UNCOMMITTED\n  `daemon-command-families.ts` / `daemon-command-registry.ts` adding `PREVIEW_DECIDE_COMMAND_KIND` — this\n  row adds no kind; `runtime-entrypoint.test.ts` + the five `foundation-*` files are the known\n  process-spawn-latency timeout cliff.\n- `pnpm typecheck` -> EXIT 1, FOREIGN AND COMMITTED:\n  `packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'`\n  from `e53e3e6a` (18:05:34, clean tree). `apps/daemon/src` emits **0** errors — the scheduler line is the\n  only error in the run, and it reds the daemon-scoped `tsc` too because daemon references scheduler by\n  path. Broadcast to #general as `msg-147c348d` since it gates every row's typecheck leg.",
       "timestamp": "2026-09-05T17:20:06.101Z"
+    },
+    {
+      "id": "comment-8fc5f945f5c94f0b9a999308804badef",
+      "author": "qa-d81848bc",
+      "content": "QA REVIEW EVIDENCE (qa-d81848bc, 2026-09-05 ~20:45) — full detail; the reviewSummary is capped at 2000.\n\nDELIVERED BYTES. feat 48eed563 carries ONLY the task JSON (+55/-90, 1 file). Production landed in this row's earlier wip checkpoints f01a4c32 (offers + verdict + fixture), c03353ef and 5a730cfe (arms), all with Moe-Task trailers for this row. Normal wrapper behaviour, not a NO-COMPLETION-COMMIT defect. Seams re-verified at HEAD after three LATER foreign edits (9021391d, c9d2b18d, 18eb7a0b): `currentRun` offers:56/214/222/223, `decisionWord` activity-read:86, both approval kinds VERDICT_KINDS:79.\n\nDoD 1 OFFERS — PASS. `currentRun` resolved ONCE per goal, used for planReviewable, plan.propose, both approval targets, versionOf (via `offer` -> `versionOf(ledger, aggregateId)`) and `refs[current]`; runCounts stays on the immutable ref. Composed affordance-read.ts:280. The SPLIT binding (run side on `current`, goal side on `goal.planningRunRef` for durableGoalMatches) is correct and documented. Arms over a REAL store at affordance-read-planning.test.ts:931-1105, incl. a positive CONTROL before the reject, exact-map planningGoalRefs, and whole-surface set-equality on `commandKind@target` rather than per-kind subset.\n\nDoD 2 COMPILER — PASS with ownership correction confirmed. Looped `git show --stat <sha> -- apps/daemon/src/planning/compile-dispatcher.ts` over all 8 of this row's commits: ZERO touches. The seam is prerequisite task-4595697e (feat fd1b455d), which this worker filed. This row added 101 lines of arms to compile-dispatcher-revision.test.ts: successor PLAN_REVIEW/runKind REVISION, original stream untouched, ids asserted against production `idsOf` (never re-derived), two-rejection chain onto run 3, fail-closed unreadable walk. Refusals assert code AND layer with unwrapped-store positive controls. The DoD premise \"second submission -> SUBMIT_DECOMPOSITION_ALREADY_FINALIZED\" was measured STALE: production replays a byte-identical resubmission and answers SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT @ COMPILE_DISPATCHER on a changed structure. The worker pinned ALREADY_FINALIZED @ COMPILE_DISPATCHER where it actually fires — a TORN MINT (runVersion < base) — with a reachability enumeration in the docblock. Right call: code pinned where production fires it, DoD not narrowed, no arm deleted. MULTI_NODE_INITIAL is gone tree-wide; `git log -S` attributes the removal to foreign row task-f79d38b1 (\"the compiler seals the whole DAG\"), so task rail 2 is intact — this row did not touch the fence.\n\nDoD 3 VERDICT — PASS. VERDICT_KINDS gains both approval kinds. `decisionWord` returns `record.decision` when a non-empty string, else \"APPROVE\" when `record.lifecycle` is a non-empty string, WITHHELD from escalation.decide — so escalation.decide behaviour is byte-identical after the refactor, and review.submit keeps routing.route. 9 malformed shapes per kind (empty object, \"\" / numeric decision, \"\" / numeric lifecycle, scalar, array, non-JSON, empty Uint8Array) -> null, never throws. Real-store rows over rejectedWorld/approvePlan. Exactly TWO lines removed from activity-read.test.ts — the re-aimed :121 arm, as the plan specified (\"RE-AIMED, never deleted\"); every other arm intact.\n\nDoD 4 GATES — PASS on path-attributed baseline (epic rail 3).\n- `pnpm --filter @moe/daemon test` (mine, foreground, 1159s): EXIT 1, `Test Files 11 failed | 424 passed (435)` / `Tests 21 failed | 8622 passed (8643)`. None of the 11 is an owned path; grep for this row's five modules over each failing file = 0 hits each. Families: spawn-latency cliff (foundation-capture-lifecycle 329s, foundation-registry, foundation-capture-producer 674s, foundation-attempt-service 937s); peer task-40e52fa8's uncommitted PREVIEW_DECIDE_COMMAND_KIND (`expected 46 to be 45`, daemon-v2-command-registry + daemon-store-dependencies); a LIVE peer bootstrap refactor (`TypeError: admitBootstrapCommand is not a function` in bootstrap-services, bootstrap-replay-bytes, daemon-entry-ops, runtime-entrypoint); peer task-7ca9dca3's dirty approval-intent.ts (approval-intent.test.ts).\n- `pnpm typecheck`: EXIT 1 on packages/scheduler/src/budget/budget-reservation.ts(132,42) TS18046, committed foreign e53e3e6a. pnpm FAILS FAST, so I ran the daemon package alone: 2 further errors, both in apps/daemon/src/planning/approval-intent.ts:246-247, on lines `git blame` reports as `Not Committed Yet 2026-09-05 20:27:05` and which `git show HEAD:<path>` does not contain. Peer row task-7ca9dca3 (confirmed by its own MOE_ATTRIBUTION_UNRESOLVED chat notice naming approval-intent.ts). Delta n owned paths = EMPTY.\n- One more attribution worth recording: affordance-read.test.ts > \"offers only the chain roots on a fresh ledger\" PASSED inside my full-suite run and FAILED in a focused re-run 60s later against byte-identical committed bytes. Cause: peers saved bootstrap-sequence.ts (20:34) and daemon-store-dependencies.ts (20:42:06); that arm's chain imports bootstrap-sequence.js (missingPrerequisites, aggregateIdFor, affordance-read.ts:11). This row's entire contribution to affordance-read.ts is 6 planning-only lines at :280.\n\nSIZES: affordance-planning-offers.ts 236 (<250), activity-read.ts 218 (<250), affordance-read.ts 468 (pre-existing over cap; this row's growth exactly +6 = the DoD allowance, measured `git diff --numstat f01a4c32^ f01a4c32`), compile-dispatcher.ts 388 (not this row's bytes; under the 400 hard stop), plan-reject-test-fixtures.ts 306 (fixture module, exempt). CURRENT_RUN_HOP_LIMIT verified 16 at HEAD AND on disk; all owned paths `git status --porcelain` clean — no stranded drill mutant this round.\n\nMY OWN DRILL (rail 1, independent of the worker's five). Backed up out of tree, mutated `refs[current]` -> `refs[goal.planningRunRef]`: `Tests 7 failed | 46 passed (53)` — both unit successor arms and four real-store arms incl. the two-hop chain and the fallback. Restored; restore PROVEN in a SEPARATE call by SHA256 equality (07bb3551...6a0d68ba) plus empty `git diff` on the tracked file. Green control after restore: `Test Files 5 passed (5)` / `Tests 87 passed (87)` exit 0. The arms bite.\n\nFIXTURE AUDIT: plan-reject-test-fixtures.ts derives successorRunId from production `currentPlanningRun`, never from a local re-derivation of `successorRunIdFor`, and throws if it equals the original — a broken resolver fails the fixture loudly instead of yielding a vacuous world. The id is independently anchored by compile-dispatcher-revision.test.ts:131 (`eventTypesOf(store, successorRunId) === [\"PlanningRunCreated\"]`) and by `compiled.runId === successorRunId` off a real dispatcher write. No reimplemented authority.",
+      "timestamp": "2026-09-05T17:48:32.955Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T14:44:51.149Z",
-  "updatedAt": "2026-09-05T17:21:11.452Z",
+  "updatedAt": "2026-09-05T17:50:38.917Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:46:50.972Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-05T17:50:38.917Z",
+    "wallClockMs": 97427945
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -444,6 +452,38 @@
       "treeId": "bb7e300cad5015f7837a4a882f8040ac36e03035",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "48eed563fb276534537196d7d2c5123ccda05120",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-05T16:48:31Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-05T17:21:38.446Z",
+      "treeId": "0a12ef74028ce2350564c4f2625b423c63ac7b6f",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "5040cfe43c3ef158faa2789da9fded1bc37d5fed",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T17:21:13Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T17:21:52.578Z",
+      "treeId": "a408b909e1574496fb8635f81f783abf06e3835f",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -457,7 +497,10 @@
     "apps/daemon/src/http/activity-read.ts",
     "apps/daemon/src/http/activity-read.test.ts",
     "apps/daemon/src/planning/compile-dispatcher.ts",
-    "apps/daemon/src/planning/current-planning-run.ts"
+    "apps/daemon/src/planning/current-planning-run.ts",
+    ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+    ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/http/activity-read.test.ts",
@@ -469,16 +512,15 @@
     "apps/daemon/src/http/affordance-planning-offers.test.ts",
     "apps/daemon/src/http/activity-read.ts",
     "apps/daemon/src/planning/zz-probe.test.ts",
-    "apps/daemon/src/planning/compile-dispatcher-revision.test.ts"
+    "apps/daemon/src/planning/compile-dispatcher-revision.test.ts",
+    "apps/daemon/src/planning/current-planning-run.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/http/document-coverage-read.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-2739fee7@2026-09-05T15:09:18Z",
-    "at": "2026-09-05T15:09:27.887Z"
+    "sessionId": "qa-d81848bc@2026-09-05T17:21:13Z",
+    "at": "2026-09-05T17:21:52.578Z"
   },
   "reviewStartedAt": "2026-09-05T17:20:58.339Z",
   "verification": {
@@ -487,5 +529,8 @@
     "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  7 passed (7)\n      Tests  131 passed (131)\n   Start at  20:19:17\n   Duration  10.21s\nOWNED_SCOPE_EXIT=0\n\n--- FULL PACKAGE LEG, same session, disclosed not hidden ---\n$ pnpm --filter @moe/daemon test  -> EXIT 1\n Test Files  9 failed | 424 passed (433)\n      Tests  26 failed | 8594 passed (8620)\nFailing files, ALL FOREIGN, delta n owned paths EMPTY:\n src/daemon-command-registry.test.ts, src/daemon-v2-command-registry.test.ts\n   AssertionError: expected 46 to be 45\n   AssertionError: expected [ undefined ] to deeply equal [ 'MCP_STDIO' ]\n   = peer task-40e52fa8's UNCOMMITTED daemon-command-families.ts / daemon-command-registry.ts\n     adding PREVIEW_DECIDE_COMMAND_KIND. This row adds no kind or payload.\n src/runtime-entrypoint.test.ts, src/http/foundation-registry.test.ts,\n src/http/foundation-registry-hostile.test.ts, src/work/foundation-attempt-service.test.ts,\n src/work/foundation-attempt-windows.test.ts, src/work/foundation-capture-lifecycle.test.ts,\n src/work/foundation-capture-producer.test.ts\n   = the known process-spawn-latency timeout cliff (shell-out arms).\n\n--- pnpm typecheck -> EXIT 1, FOREIGN AND COMMITTED ---\npackages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\nfrom e53e3e6a (18:05:34, clean tree). apps/daemon/src emits 0 errors; it reds the daemon-scoped\ntsc only because daemon references scheduler sources by path. Broadcast as msg-147c348d.",
     "reportedAt": "2026-09-05T17:20:58.339Z"
   },
-  "completionSummary": "Three daemon seams so the surface follows a goal's CURRENT run after a REJECT.\n\n1. OFFERS. `PlanningOfferInput.currentRun: (planningRunRef) => string`; `offersForGoal(input, goal, runId)` takes the RESOLVED run for planReviewable, the plan.propose target and both approval targets. `resolvePlanningOffers` resolves ONCE per goal, sets `refs[current]`, keeps `runCounts` on the IMMUTABLE ref. Composed at affordance-read.ts:280 as `currentPlanningRun(config.store, ref).runId`. SUBTLETY: the binding check is SPLIT — run side uses `stateOf(ledger, current).state.goalRef`, GOAL side keeps `goal.planningRunRef`, because `durableGoalMatches` asserts the goal record's own ref and that never moves; passing `current` there costs every rejected goal ALL its offers.\n\n2. COMPILER: zero production bytes from this row. The prerequisite I filed (task-4595697e, feat fd1b455d) landed the seam — `compile-run-resolution.ts` resolves {runId, runKind, baseVersion} and fails closed on `unreadable`; `compile-dispatcher.ts` re-bases every version gate on baseVersion (0 INITIAL / 1 REVISION) and sets `proposalKind: target.runKind`. compile-dispatcher.ts is SHA256-identical to HEAD. I closed its three untested gaps: DoD 1's post-compile half, \"ids keyed on the successor runId\" (asserted against production `idsOf`, never a re-derivation), and the reachable `runVersion < base` refusal (a TORN MINT), which answers ALREADY_FINALIZED @ COMPILE_DISPATCHER — the DoD's premise of a second-submission ALREADY_FINALIZED was stale (production replays or SUBMISSION_CONFLICT there, both already pinned), so I pinned the code where it actually fires rather than narrowing the DoD.\n\n3. VERDICT. `VERDICT_KINDS` gains both approval kinds; `decisionWord()` returns `record.decision` when non-empty, else \"APPROVE\" when `record.lifecycle` is a non-empty string — a REJECT commits the run record (decision), an APPROVE commits a GoalState (lifecycle, no word) and the seams admit APPROVE only. Withheld from escalation.deci"
+  "completionSummary": "Three daemon seams so the surface follows a goal's CURRENT run after a REJECT.\n\n1. OFFERS. `PlanningOfferInput.currentRun: (planningRunRef) => string`; `offersForGoal(input, goal, runId)` takes the RESOLVED run for planReviewable, the plan.propose target and both approval targets. `resolvePlanningOffers` resolves ONCE per goal, sets `refs[current]`, keeps `runCounts` on the IMMUTABLE ref. Composed at affordance-read.ts:280 as `currentPlanningRun(config.store, ref).runId`. SUBTLETY: the binding check is SPLIT — run side uses `stateOf(ledger, current).state.goalRef`, GOAL side keeps `goal.planningRunRef`, because `durableGoalMatches` asserts the goal record's own ref and that never moves; passing `current` there costs every rejected goal ALL its offers.\n\n2. COMPILER: zero production bytes from this row. The prerequisite I filed (task-4595697e, feat fd1b455d) landed the seam — `compile-run-resolution.ts` resolves {runId, runKind, baseVersion} and fails closed on `unreadable`; `compile-dispatcher.ts` re-bases every version gate on baseVersion (0 INITIAL / 1 REVISION) and sets `proposalKind: target.runKind`. compile-dispatcher.ts is SHA256-identical to HEAD. I closed its three untested gaps: DoD 1's post-compile half, \"ids keyed on the successor runId\" (asserted against production `idsOf`, never a re-derivation), and the reachable `runVersion < base` refusal (a TORN MINT), which answers ALREADY_FINALIZED @ COMPILE_DISPATCHER — the DoD's premise of a second-submission ALREADY_FINALIZED was stale (production replays or SUBMISSION_CONFLICT there, both already pinned), so I pinned the code where it actually fires rather than narrowing the DoD.\n\n3. VERDICT. `VERDICT_KINDS` gains both approval kinds; `decisionWord()` returns `record.decision` when non-empty, else \"APPROVE\" when `record.lifecycle` is a non-empty string — a REJECT commits the run record (decision), an APPROVE commits a GoalState (lifecycle, no word) and the seams admit APPROVE only. Withheld from escalation.deci",
+  "completedAt": "2026-09-05T17:50:38.917Z",
+  "reviewCompletedAt": "2026-09-05T17:50:38.917Z",
+  "reviewSummary": "APPROVED. 4/4 DoD verified at HEAD; every gate re-run by me, arms drilled independently. Full evidence: comment-8fc5f945.\n\nBYTES: feat 48eed563 holds only the task JSON; production is in this row's wip checkpoints f01a4c32/c03353ef/5a730cfe. Seams intact at HEAD after 3 later foreign edits: currentRun offers:214/222/223, decisionWord activity-read:86, both approval kinds in VERDICT_KINDS.\n\nDoD1: currentRun resolved once per goal, used for planReviewable, plan.propose, both approval targets, versionOf, refs[current]; runCounts on the immutable ref. Real-store arms with a control before the reject, exact-map planningGoalRefs, whole-surface set-equality on commandKind@target.\n\nDoD2: ZERO dispatcher bytes from this row (git show --stat, all 8 commits); seam is prerequisite task-4595697e. Row added 101 lines of arms: successor PLAN_REVIEW/REVISION, original untouched, ids vs production idsOf, two-rejection chain, fail-closed unreadable walk, refusals w/ code AND layer + controls. \"2nd submission -> ALREADY_FINALIZED\" measured stale; pinned where it fires (torn mint). MULTI_NODE_INITIAL removal attributed by git log -S to foreign task-f79d38b1; rail 2 intact.\n\nDoD3: both kinds added; escalation.decide byte-identical, review.submit unchanged; 9 malformed shapes/kind -> null, never throws; real-store rows. 2 lines removed - the re-aimed :121 arm.\n\nDoD4: daemon suite exit 1, Files 11 failed|424 passed / Tests 21 failed|8622 passed - none an owned path, each greps 0 hits for this row's modules. typecheck exit 1 on packages/scheduler (foreign e53e3e6a); pnpm fails fast so I ran the daemon alone - its 2 errors sit on approval-intent.ts lines git blame calls \"Not Committed Yet\" (peer task-7ca9dca3), absent at HEAD. Delta n owned = EMPTY. Sizes 236/218/468(+6)/388(not this row's)/306. HOP_LIMIT 16, paths clean.\n\nDRILL: refs[current]->refs[goal.planningRunRef] reds 7 arms; restored, SHA256 proven separately; control 87 tests exit 0."
 }
