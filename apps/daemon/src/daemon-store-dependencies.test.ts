@@ -36,6 +36,10 @@ import {
 import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
 } from "./work/foundation-capture-lifecycle.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import { OPERATOR_PRINCIPAL_KINDS } from "./daemon-command-vocabulary.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
+import { ASYNC_SERVED_BOOTSTRAP_KINDS } from "./bootstrap/bootstrap-contracts.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -1082,5 +1086,66 @@ describe("the composed affordance port carries planning authority (task-ed89967f
     // And the merged-node roster really came from the composed spec directory.
     expect((entry.authority["planRevision"] as Record<string, unknown>)["affectedNodeIds"])
       .toEqual([NODE_REF]);
+  });
+});
+
+/**
+ * THE DEPLOYMENT KINDS' FENCE ROSTERS, BOTH DIRECTIONS (DoD 1 of task-04b3ce7e).
+ *
+ * Deploying a product, and naming the host it deploys to, are operator acts. Three independent
+ * rosters carry that fact — the dispatch fence (`OPERATOR_PRINCIPAL_KINDS`), the transport
+ * exclusion derived from it (`mcp-tool-allowlist.ts`) and the staffing fence the WRAPPER reads
+ * (`HUMAN_ONLY_STEPS`) — and a kind fenced in two of the three is reachable through the third.
+ *
+ * SET EQUALITY, NOT MEMBERSHIP, and computed per roster from the ADVERTISED deployment kinds
+ * rather than from a hand-written pair: a third deployment kind added to `PAYLOAD_KEYS` without
+ * its fences reds here instead of shipping reachable. Deleting an entry from ANY side reds,
+ * which is the property DoD 1 names.
+ *
+ * NO COUNT LITERAL ANYWHERE IN THE ARM. Eight rows are moving these rosters concurrently; every
+ * assertion below relates production surfaces to each other, so a sibling landing a kind cannot
+ * red it spuriously.
+ */
+describe("the deployment kinds are published human-only and MCP-excluded", () => {
+  const advertised = Object.keys(PAYLOAD_KEYS)
+    .filter((kind) => kind.startsWith("deployment.")).sort();
+  const deploymentMembers = (roster: Iterable<string>): readonly string[] =>
+    [...roster].filter((kind) => kind.startsWith("deployment.")).sort();
+
+  it("advertises both kinds, so the equalities below have a non-empty subject", () => {
+    // A roster arm whose subject is empty passes VACUOUSLY. This is the control that keeps the
+    // three equalities meaningful, and it names the kinds once so a rename is caught here.
+    expect(advertised).toEqual(["deployment.deploy", "deployment.set_target"]);
+  });
+
+  it("fences every advertised deployment kind at dispatch, on MCP and in the wrapper", () => {
+    // (1) THE DISPATCH FENCE. Set-equal, so an operator-roster entry deleted for one kind reds.
+    expect(deploymentMembers(OPERATOR_PRINCIPAL_KINDS)).toEqual(advertised);
+    // (2) THE TRANSPORT EXCLUSION, asserted on BOTH sides of the derivation: present in the
+    // excluded roster AND absent from the allowlist the two MCP entries actually pass to
+    // `@moe/mcp`. Asserting only the first would stay green if the allowlist stopped
+    // subtracting the exclusion.
+    expect(deploymentMembers(MCP_EXCLUDED_COMMAND_KINDS)).toEqual(advertised);
+    expect(deploymentMembers(wiredMcpToolKinds())).toEqual([]);
+    // (3) THE STAFFING FENCE. Both kinds carry a non-null agent capability (GOAL, like
+    // `repository.publish`), so absence here is a staffed-deployer leak the capability gate
+    // would not refuse.
+    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
+  });
+
+  it("serves deployment.deploy from the ASYNC half of the surface, never the sync tables", () => {
+    // The served surface has two halves, and the sync tables are no longer the whole seam. A
+    // roster arm that enumerated only the synchronous handlers would report this kind as
+    // advertised-but-unserved; one that trusted the advertised roster alone would stay green
+    // while the async entry vanished.
+    const synchronous = Object.keys({
+      ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
+    });
+    expect(synchronous.filter((kind) => kind.startsWith("deployment."))).toEqual([]);
+    // `deployment.deploy` and ONLY it: `deployment.set_target` is an ordinary synchronous write
+    // whose handler is a sibling row's, so naming it here would claim an async seam it does not
+    // have. The membership is proved rather than declared in
+    // daemon-command-async-entries.test.ts, which dispatches the kind through the entry.
+    expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual(["deployment.deploy"]);
   });
 });

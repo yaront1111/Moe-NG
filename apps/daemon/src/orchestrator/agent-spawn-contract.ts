@@ -234,6 +234,14 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // half of the fence: that one stops an agent REACHING the kind over a transport, this one
   // stops the wrapper minting a session to take it.
   "repository.bootstrap",
+  // DEPLOYING A PRODUCT IS NEVER AN AGENT'S DECISION, and neither is naming the host it deploys
+  // to. Both carry a non-null `agentCapabilitiesFor` (GOAL, like `repository.publish`), so
+  // absence here is exactly a staffed-deployer leak: the capability gate would not refuse, and
+  // the wrapper would mint a session to take the step. `mcp-tool-allowlist.ts` holds the other
+  // half of the fence — that one stops an agent REACHING the kind over a transport, this one
+  // stops the wrapper staffing it — and `deploy-command.ts` fences the dispatch itself, since an
+  // async entry never reaches the registry's synchronous operator check.
+  "deployment.set_target", "deployment.deploy",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
