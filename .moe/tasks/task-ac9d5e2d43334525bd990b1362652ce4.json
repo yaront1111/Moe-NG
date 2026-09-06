@@ -168,7 +168,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-06T01:57:38.856Z",
+  "updatedAt": "2026-09-06T01:57:57.395Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -369,6 +369,39 @@
       "treeId": "b8b5750e7d7399f771eda2f28d0ddb6abe30f532",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "b16bc4558647e8759bf179757a22d811a1ed1a5d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T01:36:30Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+        ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json",
+        "docs/agent-stack-runbook.md",
+        "README.md"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T01:57:57.394Z",
+      "treeId": "e766c4d0c6eddca483e121e278bb29fe48e2bd11",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -380,19 +413,22 @@
     "tests/e2e/control-room/activation-fresh-project.spec.ts",
     "apps/control-room/src/v2/goals/live-goal-create.test.ts",
     ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
-    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json",
+    ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+    ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
+    ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/goals/plan-reject-frames.fixture.ts",
-    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
-    "apps/control-room/src/v2/goals/plan-run-resolution.ts",
-    "apps/daemon/src/goals/j1-command-path.test.ts"
+    "apps/daemon/src/daemon-command-design.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-2739fee7@2026-09-06T00:49:07Z",
-    "at": "2026-09-06T01:36:31.405Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T01:36:30Z",
+    "at": "2026-09-06T01:57:57.394Z"
   },
   "priorHandoffs": [
     {
