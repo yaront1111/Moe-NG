@@ -116,7 +116,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-d6e44333",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -133,7 +133,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-05T23:25:24.230Z",
+  "updatedAt": "2026-09-06T00:35:27.946Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,
@@ -271,6 +271,21 @@
       "treeId": "390703ae36c3845afaf55b33fae974c908a2429a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "eb39fd4b1a67b147163291a8344b8a288263083c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T23:25:58Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T23:26:22.638Z",
+      "treeId": "4c2fefed8fb1c9e80a53ddebed4cc10351965686",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -359,7 +374,17 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T23:24:02Z",
-    "at": "2026-09-05T23:25:24.230Z"
-  }
+    "sessionId": "worker-d6e44333@2026-09-05T23:25:58Z",
+    "at": "2026-09-05T23:26:22.638Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Claimed 23:03Z; steps 1-2 of 9 COMPLETED (prerequisite hard stop verified on disk 23:10Z; daemon vocabulary for repository.bootstrap 23:12Z). Step 3 IN_PROGRESS when the limit killed the CLI. Checkpoints up to eb39fd4b1a67 (7); two landings hit MOE_COMMIT_FAILED_REF_CONTENTION and parked bytes in refs/moe/rescue/task-facff1d1e7ce44a6b1101490524890a9/20260905T232321Z and .../20260905T232440Z — the wrapper replays them at the next session, do not hand-land.",
+      "whatRemains": "Steps 3-9 per plan (registry wiring, engine call, scaffold commit + bind, receipt, tests, gates, complete_task).",
+      "pitfalls": "Shared files with task-04b3ce7e and task-06ac0da1 (bootstrap-sequence.ts, daemon-command-registry.test.ts): narrow hunks, check git status before editing.",
+      "releasedAt": "2026-09-06T00:35:27.945Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: worker-d6e44333's CLI exited 1 five times in a row from 23:19Z (account usage limit, fleet-wide, now reset); wrapper paused auto-resume and asked for release_task. Releasing so the wrapper relaunches and resumes via handoff."
+    }
+  ]
 }

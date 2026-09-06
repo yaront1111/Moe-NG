@@ -114,7 +114,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -166,7 +166,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:06:27.098Z",
-  "updatedAt": "2026-09-05T23:26:02.420Z",
+  "updatedAt": "2026-09-06T00:35:39.364Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:11:06.674Z",
     "plannedStepCount": 6,
@@ -346,6 +346,21 @@
       "treeId": "62d6166a222d29e8ae694abcf63018fa2a44084c",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "3a3bda2d606056f27e8efa1c130f79733ff8d72d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T23:26:36Z",
+      "paths": [
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T23:27:15.865Z",
+      "treeId": "dfd1f516d7573086267fa48106e0fe2b6241c17d",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -415,7 +430,17 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-05T23:25:30Z",
-    "at": "2026-09-05T23:26:02.420Z"
-  }
+    "sessionId": "qa-f2906c26@2026-09-05T23:26:36Z",
+    "at": "2026-09-05T23:27:15.865Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Row delivered 6/6 with completion commit ffc7e7e90ddb (22:07Z); qa-f2906c26 claimed the review 23:08Z and was mid-review when the limit killed the CLI; no verdict recorded.",
+      "whatRemains": "QA verdict. Grade at the completion commit; half of task-20b7d6bb's park clears on approval.",
+      "pitfalls": "Shares mcp-tool-allowlist.ts and agent-spawn-contract.ts literals with 20b7d6bb and 166d375f — grade delivered bytes, not worktree dirt.",
+      "releasedAt": "2026-09-06T00:35:39.363Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: qa-f2906c26's CLI exited 1 five times in a row from 23:20Z (account usage limit, fleet-wide, now reset); wrapper paused auto-resume and asked for release_task. REVIEW row stays REVIEW, unassigned, for the next QA claim."
+    }
+  ]
 }

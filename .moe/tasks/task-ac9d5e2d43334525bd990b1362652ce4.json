@@ -103,8 +103,8 @@
       "completedAt": "2026-09-05T14:29:59.001Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2739fee7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-05T23:25:34.465Z",
+  "updatedAt": "2026-09-06T00:35:09.088Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -312,6 +312,21 @@
       "treeId": "f517c9783c01e3669dd247f735c4b6ffbbbc1dec",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "74ec649f5cb8cfc94d7b8caa2f712466933c6e3a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T23:25:20Z",
+      "paths": [
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T23:26:09.237Z",
+      "treeId": "03c179e5ed5a49d327623ffdcc7cf2f6e0ae4a0d",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -346,12 +361,23 @@
     "packages/runner/src/platform/windows/windows-status.ts",
     "packages/runner/src/verification/criterion-check-executor.test.ts",
     "packages/runner/src/verification/criterion-check-executor.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
     "tests/e2e/control-room/repository-workflows.spec.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-2739fee7@2026-09-05T23:25:20Z",
-    "at": "2026-09-05T23:25:34.465Z"
-  }
+    "at": "2026-09-05T23:26:09.237Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "All 6 steps COMPLETED before the 34-hour park; the park reason (project.activate refusing ACTIVATION_POLICY_UNMEASURED on the seed:NONE lane) is gone since task-d342a2b1 landed at a1e12d2269d3 and this row auto-unblocked 23:11Z. worker-2739fee7 claimed 23:12Z and was reading context when the limit killed the CLI. Checkpoints up to 74ec649f5cb8; rescue ref refs/moe/rescue/task-ac9d5e2d43334525bd990b1362652ce4/20260905T232440Z parks the bytes of one failed landing (ref contention) and self-heals at the next session.",
+      "whatRemains": "Governor resume note comment-364556ac51fc4e77877754b04270f805 on the row: remove the test.fixme naming task-d342a2b1 in the journey spec (step 3), re-run the journey against the real daemon on the seed:NONE lane, quote the count line, re-check DoD 1, 4 and 7, then complete_task. Its approval auto-unblocks task-bb844c28.",
+      "pitfalls": "Do not complete_task cold just because 6/6 steps show COMPLETED. If activate now refuses with a different code, report_blocked with that code, never the old reason.",
+      "releasedAt": "2026-09-06T00:35:09.087Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: worker-2739fee7's CLI exited 1 five times in a row from 23:19Z (account usage limit, fleet-wide, now reset); wrapper paused auto-resume and asked for release_task. Releasing so the wrapper relaunches and resumes via handoff."
+    }
+  ]
 }

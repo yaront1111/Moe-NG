@@ -135,7 +135,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:10:18.244Z",
-  "updatedAt": "2026-09-05T23:28:52.725Z",
+  "updatedAt": "2026-09-06T00:35:43.808Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:12:51.765Z",
     "plannedStepCount": 8,
@@ -184,6 +184,14 @@
     "qa-d81848bc"
   ],
   "priorHandoffs": [
+    {
+      "whatIsDone": "Row delivered 8/8 with completion commit 16360623a322 (23:04Z, 6 paths pushed); qa-d81848bc claimed the review 23:12Z and was mid-review when the limit killed the CLI; no verdict recorded.",
+      "whatRemains": "QA verdict. Gates 971caed1 and 72b22fcf.",
+      "pitfalls": "gate1-contract-shape.ts is also dirty from a non-board session in the shared checkout — grade at the completion commit.",
+      "releasedAt": "2026-09-06T00:35:43.807Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: qa-d81848bc's CLI exited 1 five times in a row from 23:24Z (account usage limit, fleet-wide, now reset); wrapper paused auto-resume and asked for release_task. REVIEW row stays REVIEW, unassigned, for the next QA claim."
+    },
     {
       "whatIsDone": "Claimed and read full approved context only; no implementation, tests, or started steps. All8steps remain PENDING. Serena handoff records plan seam and collision warning.",
       "whatRemains": "Implement approved5-file deployment-only optional names carrier from step1 measured roster; all work remains. Preserve existing requirement shapes and run paired core/browser tests. Read active gate-halt ruling before final suite instructions.",
@@ -310,6 +318,21 @@
       "recordedBy": "qa-d81848bc",
       "recordedAt": "2026-09-05T23:28:52.725Z",
       "treeId": "ea3adbe286e3335780ed9cd3fef483cd5cd068b2",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "b86c727b7a891093ddc57696bb0911fa7201fd9e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T23:29:28Z",
+      "paths": [
+        ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T23:30:02.232Z",
+      "treeId": "c8b12a7287a3c586ec75b8a596d26036e978aa8f",
       "status": "REVIEW",
       "pushed": true
     }
@@ -500,7 +523,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-d81848bc@2026-09-05T23:28:22Z",
-    "at": "2026-09-05T23:28:52.725Z"
+    "sessionId": "qa-d81848bc@2026-09-05T23:29:28Z",
+    "at": "2026-09-05T23:30:02.232Z"
   }
 }
