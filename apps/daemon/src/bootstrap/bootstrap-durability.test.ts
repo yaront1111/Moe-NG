@@ -781,26 +781,46 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
   }
 
   /**
-   * THE HEADLINE: A BROWSER-APPROVED GOAL CLOSES FOR REAL.
+   * THIS WORLD IS LEGACY, AND LEGACY NOW NEEDS FOUNDATION RECEIPTS.
    *
-   * This is the journey the product is named for and it was unreachable end to end until this
-   * row: the operator approved in the browser, was offered a Close, clicked it, and was refused
-   * forever, because the intent seam minted an EMPTY `approvedNodeScope` and an empty scope reads
-   * as "unknown" to `goal-close-prerequisite.ts:87`.
+   * THE ANSWER MOVED WHILE THIS ROW WAS OPEN, AND HERE IS WHY. As shipped by task-8bdd14af this
+   * arm CLOSED the goal: the mint names the sealed revision's execution-bearing node, so the
+   * scope fence clears and the review acceptance seeded on that node carried the live leg. Commit
+   * 4b6d2bc2 then landed `goal-approved-execution-scope.ts`, which routes an approval whose
+   * planning run has NO compiled Product Contract binding — exactly this bootstrap world — down a
+   * `requiresFoundation` branch: a raw local key may no longer qualify through a review
+   * acceptance alone, because one execution's acceptance must not be inheritable by another's
+   * identically-named node. `goal-qualification.ts` therefore refuses any in-scope node holding
+   * no Foundation verification receipt, and this world holds none.
    *
-   * The assertion is on the DURABLE record, not on the absence of a throw and not merely on the
-   * refusal having changed: `goalLifecycle` folds the committed decisions and answers COMPLETED,
-   * the same terminal `j1-command-path.test.ts:206` asserts for the seeded `approval.decide`
-   * journey. A close that answered `ok` while parking the goal would fail here.
+   * THE ARM IS KEPT, NOT DELETED, AND IT STILL GRADES THIS ROW'S FIX: the scope fence is asserted
+   * SATISFIED — a named, non-null scope over the sealed node — so the refusal below is provably
+   * the newer fence and not the empty-scope defect this row removed. The refusal MESSAGE is the
+   * discriminator, because both fences raise the same code at the same layer.
+   *
+   * THE CLOSE ITSELF NOW LIVES WHERE IT IS REACHABLE:
+   * `goals/goal-intent-approved-closure.test.ts` drives a CONTRACT-BOUND world approved only
+   * through `approval.decide_intent` and asserts `qualifyGoalClosure` answers `ok: true` with a
+   * DAEMON_VERIFIED witness. `goalLifecycle` is asserted here too, so an accidental close would
+   * still fail this arm rather than pass it quietly.
    */
-  it("closes a goal approved ONLY through approval.decide_intent", () => {
+  it("refuses the legacy close at the Foundation fence, with the approved scope named", () => {
     const store = intentApprovedAcceptedWorld("cmd-intent-approve-closes");
+    // The fence this row fixed is SATISFIED, so it cannot be what refuses below.
+    expect(readApprovedNodeScope(store, GOAL_ID))
+      .toEqual({ approvalRef: `approval:${RUN_ID}`, scope: [SEALED_EXECUTION_NODE] });
 
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(closed.ok, closed.ok ? "" : `${closed.code}@${closed.refusedBy}`).toBe(true);
-    expect(goalLifecycle(store)).toBe("COMPLETED");
+    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({
+      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+      layer: "DAEMON_PREREQUISITE",
+      message: "no Foundation receipt proves the legacy approved node",
+      ok: false,
+    });
+    expect(goalLifecycle(store)).not.toBe("COMPLETED");
   }, 90_000);
 
   /**
@@ -839,10 +859,17 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
     expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    // ORDERING, PINNED (task-8bdd14af, after 4b6d2bc2). This world holds NO review acceptance at
+    // all, and the arm above holds one naming the approved node exactly; both answer the SAME
+    // message, so the legacy Foundation-receipt fence provably PRECEDES the acceptance fence. The
+    // acceptance fence's own message is graded where it can still answer — on the contract-bound
+    // world of `goals/goal-intent-approved-closure.test.ts`. Reverting `requiresFoundation` would
+    // split these two arms apart, which is what makes this assertion load-bearing rather than a
+    // restatement of its neighbour.
     expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({
       code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
       layer: "DAEMON_PREREQUISITE",
-      message: "no durable review acceptance names this approved node",
+      message: "no Foundation receipt proves the legacy approved node",
       ok: false,
     });
   });

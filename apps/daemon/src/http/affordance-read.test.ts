@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
+import { ASYNC_SERVED_BOOTSTRAP_KINDS, BOOTSTRAP_COMMAND_KINDS }
+  from "../bootstrap/bootstrap-contracts.js";
 import {
   humanReviewWitness, missingPrerequisites, readDurableLedger,
 } from "../bootstrap/bootstrap-ledger.js";
@@ -463,9 +464,21 @@ describe("code node steps", () => {
  */
 /** The served set, enumerated from the PRODUCTION DISPATCH TABLE — the same composition
  *  `commitBootstrap` above sends through — so the roster arm below has an independent witness. */
-const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
-  { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS },
-);
+const SERVED_BOOTSTRAP_KINDS: readonly string[] = [
+  ...Object.keys({ ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }),
+  // The handler table is no longer the whole seam: a bootstrap kind whose effects are
+  // asynchronous admits through this surface and is served by an async registry entry instead.
+  // Read from production, never hand-typed, so a kind that stops being async-served reds here.
+  ...ASYNC_SERVED_BOOTSTRAP_KINDS,
+];
+
+/**
+ * Served, advertised — and NOT CARDED YET. The operator UI for `repository.bootstrap` is child 3
+ * of task-5ef1a0a9; until it lands there is no step to offer, and inventing one here would card
+ * a command with no surface behind it. Excluded BY NAME, so a kind that quietly stops being
+ * carded still reds: the exemption is a list of one, not a predicate.
+ */
+const UNCARDED_SERVED_KINDS: readonly string[] = Object.freeze(["repository.bootstrap"]);
 
 /**
  * These lifecycle kinds are carded only from their durable per-goal offers — the exact four the
@@ -506,7 +519,8 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
     const read = surface();
     const carded = read.steps.map((entry) => entry.kind);
     const nonPlanningServed = SERVED_BOOTSTRAP_KINDS
-      .filter((kind) => !BOARD_PLANNING_KINDS.includes(kind));
+      .filter((kind) => !BOARD_PLANNING_KINDS.includes(kind))
+      .filter((kind) => !UNCARDED_SERVED_KINDS.includes(kind));
     const nonPlanningCarded = [...new Set(carded
       .filter((kind) => nonPlanningServed.includes(kind)))].sort();
 
@@ -515,6 +529,9 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
     // "advertised implies carded": delete a member and the iteration shrinks with it, staying
     // green while a served capability silently vanishes from the surface.
     expect([...SERVED_BOOTSTRAP_KINDS].sort()).toEqual([...BOOTSTRAP_COMMAND_KINDS].sort());
+    // The exemption cannot grow silently: every uncarded kind must still be a SERVED one.
+    expect(UNCARDED_SERVED_KINDS.filter((kind) => !SERVED_BOOTSTRAP_KINDS.includes(kind)))
+      .toEqual([]);
     expect(nonPlanningServed.filter((kind) => !carded.includes(kind))).toEqual([]);
     expect(nonPlanningCarded).toEqual([...nonPlanningServed].sort());
     expect(BOARD_PLANNING_KINDS.length).toBeGreaterThan(0);
@@ -1203,9 +1220,10 @@ describe("the offer roster and the step projection agree on a browser-approved g
    * approval while `goal-close-prerequisite.ts:87` reads an empty scope as "no approval names an
    * approved node scope". It was written that way on purpose, as a tripwire on a defect one fence
    * deeper than the one task-ebbcbdb4 fixed. The mint now names the sealed revision's
-   * execution-bearing nodes, so with that node's review acceptance seeded the offer the frame
-   * makes is an offer the command path HONOURS — which is the headline journey, "close a finished
-   * goal from the browser", reachable end to end for the first time.
+   * execution-bearing nodes, so the scope fence CLEARS — asserted below on the production reader
+   * — and what answers is a later closure fence. The accepted close is graded on the
+   * contract-bound world of `goals/goal-intent-approved-closure.test.ts`; see the note at the
+   * refusal assertion for why this bootstrap world cannot reach it.
    *
    * WHAT THIS ARM IS FOR IS UNCHANGED: the OFFER and the COMMAND PATH must agree on ONE real
    * frame. Every ROUTING parameter below is still taken from the frame's own offer rather than
@@ -1220,7 +1238,7 @@ describe("the offer roster and the step projection agree on a browser-approved g
    * goal's authority at all, and its name was a claim its assertions could not support. The full
    * `acceptancePayload()` is what carries the dispatch past ingress to the fence being graded.
    */
-  it("dispatches the goal.close offer past the sequence gate and the goal closes", () => {
+  it("dispatches the goal.close offer past the sequence gate to the goal's own authority", () => {
     const worldStore = browserApprovedStore();
     // The one execution-bearing node of the sealed revision (bootstrap-test-fixtures.ts:149),
     // which is what the intent approval's `approvedNodeScope` now names.
@@ -1243,8 +1261,14 @@ describe("the offer roster and the step projection agree on a browser-approved g
     })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
     FIXTURE_ACTIVATION_RECEIPTS);
 
-    expect(dispatched.ok, dispatched.ok ? "" : `${dispatched.code}@${dispatched.refusedBy}`)
-      .toBe(true);
+    // THE GOAL'S OWN AUTHORITY ANSWERS — a closure-vocabulary refusal, not the sequence gate's
+    // BOOTSTRAP_PREREQUISITE_MISSING. Which closure fence answers moved under this row: commit
+    // 4b6d2bc2 landed `goal-approved-execution-scope.ts` and this bootstrap world's planning run
+    // carries no compiled Product Contract binding, so its raw-key scope now qualifies only
+    // through a Foundation verification receipt it does not hold. The close is graded where it is
+    // reachable, on `goals/goal-intent-approved-closure.test.ts`'s contract-bound world.
+    expect(dispatched.ok ? "closed" : `${dispatched.code}@${String(dispatched.refusedBy)}`)
+      .toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
     // NOT admitted by the sequence gate alone, and asserted on the production reader rather than
     // on the code — `publishRepository` proves two authorities can share one code and one layer.
     expect(missingPrerequisites(readDurableLedger(worldStore, BOOTSTRAP_PROJECT), "goal.close"))
