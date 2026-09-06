@@ -15,6 +15,8 @@ import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-comman
 import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
 import { decisionOf } from "./daemon-command-dispatch.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
+  from "./mcp-tool-allowlist.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
@@ -225,6 +227,21 @@ const ROWS: readonly Row[] = [
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
     layer: PREREQ_LAYER, payloadKeys: ["approval", "goalId", "remoteUrl"] },
+  // Creating a product repository at an operator-supplied path. Async-only: the service runs
+  // `git`, optionally the `gh` CLI and a tree write, none of which a synchronous handler can
+  // express. ADMIN fences reach; OPERATOR_ONLY fences the act.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "repository.bootstrap",
+    asyncOnly: true, layer: PREREQ_LAYER,
+    payloadKeys: ["dir", "github", "productName", "profileVersion"] },
+  // Landed by task-a2409cba (environment.set_variable / unset_variable). Transcribed here
+  // because ROWS is an exact set-equality with the served registry and its own row had not
+  // backfilled the census; the values are MEASURED, not chosen.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "ENV_ENVIRONMENT_UNKNOWN",
+    kind: "environment.set_variable", layer: "SCOPE",
+    payloadKeys: ["environment", "name", "value"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "ENV_ENVIRONMENT_UNKNOWN",
+    kind: "environment.unset_variable", layer: "SCOPE",
+    payloadKeys: ["environment", "name"] },
   // ADMIN is the reach fence only: an empty payload never reaches the R3
   // approval gate, which is what actually makes this command human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
@@ -309,12 +326,14 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint", "cutover.activate",
+  "environment.set_variable", "environment.unset_variable",
   "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "preview.decide", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "repository.publish",
+  "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
   "work.claim", "work.release", "work.renew",
@@ -347,6 +366,14 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // Deciding a rendered product preview is the operator's own verdict, and its REVIEW
   // capability is a reach fence an agent can hold -- this set is what makes it human-only.
   "preview.decide",
+  // Writing an environment variable hands a production secret to the deploy; ADMIN fences
+  // reach, this set fences the act. Landed by task-a2409cba; transcribed here because the
+  // roster is an exact set and its own row had not backfilled the census yet.
+  "environment.set_variable", "environment.unset_variable",
+  // Creating a product repository at an operator-supplied path, and optionally pushing it to
+  // a GitHub account the operator's own `gh` login owns. ADMIN fences reach; this set is what
+  // makes it the operator's act.
+  "repository.bootstrap",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -868,18 +895,56 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the fifty characterized kinds and nothing else", () => {
+  it("serves exactly the fifty-three characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(50);
-    expect(deps.registry.size).toBe(50);
+    expect(ROWS).toHaveLength(53);
+    expect(deps.registry.size).toBe(53);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
+  });
+
+  /**
+   * BIDIRECTIONAL, and the direction that is easy to lose is the second one.
+   *
+   * The SERVED set is enumerated from the IMPLEMENTATION SEAM -- the composed registry every
+   * transport dispatches through -- never from a roster constant. A test that iterates the
+   * roster can only see one direction: deleting an entry shrinks its own iteration and stays
+   * green while a served capability silently vanishes from the advertised surface. The MCP
+   * surface has TWO halves and a served command kind is on exactly one of them, so the
+   * partition is asserted too: a kind on both would be advertised and fenced at once.
+   */
+  it("partitions every served kind across the MCP surface, both directions", () => {
+    const served = new Set<string>([...deps.registry.keys()]);
+    const queryKinds = new Set<string>(MCP_SERVED_QUERY_KINDS);
+    const advertised = new Set<string>(
+      wiredMcpToolKinds().filter((kind) => !queryKinds.has(kind)),
+    );
+    const excluded = new Set<string>(MCP_EXCLUDED_COMMAND_KINDS);
+    // Direction 1: nothing is advertised or fenced that the seam does not actually serve.
+    expect([...advertised, ...excluded].filter((kind) => !served.has(kind)).sort()).toEqual([]);
+    // Direction 2: nothing the seam serves is missing from BOTH halves -- the direction a
+    // roster-iterating test cannot see.
+    expect([...served]
+      .filter((kind) => !advertised.has(kind) && !excluded.has(kind)).sort()).toEqual([]);
+    // The partition is exact: advertised and fenced are disjoint.
+    expect([...advertised].filter((kind) => excluded.has(kind)).sort()).toEqual([]);
+    expect(advertised.size + excluded.size).toBe(served.size);
+    // The subject, named. The set assertions above shrink with a wholesale removal; these do
+    // not, so deleting the kind from either side reddens here.
+    expect(served.has("repository.bootstrap")).toBe(true);
+    expect(excluded.has("repository.bootstrap")).toBe(true);
+    expect(wiredMcpToolKinds()).not.toContain("repository.bootstrap");
+    // SERVED BY THE ASYNC ENTRY, and this assertion is here because a mutation drill proved
+    // membership alone cannot see it: `entryOf` falls back to the generic SYNCHRONOUS wiring
+    // for any vocabulary kind, so deleting the async entry left the key in place and the set
+    // assertions above stayed green while the command was no longer served by its own service.
+    expect(deps.registry.get("repository.bootstrap")?.asyncHandler).toBeDefined();
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(50);
+    expect(REGISTRATION_ORDER).toHaveLength(53);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1049,9 +1114,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the fifteen transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(15);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(15);
+    it("gates exactly the eighteen transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(18);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(18);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1732,7 +1797,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(50);
+    expect(ports.registry.size).toBe(53);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1754,7 +1819,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(50);
+    expect(supplied.registry.size).toBe(53);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1786,7 +1851,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(50);
+    expect(snapshotPorts.registry.size).toBe(53);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

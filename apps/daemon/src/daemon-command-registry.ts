@@ -49,6 +49,9 @@ import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import type { RepositoryBootstrapSeams } from "./daemon-command-async-entries.js";
+import { runEnvironmentEdge } from "./daemon-command-environment.js";
+import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
+import type { EnvironmentCredentialSource } from "./environment/environment-store.js";
 import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
@@ -111,6 +114,11 @@ export interface DaemonCommandPortOptions {
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
    *  binding leaves events.resume registered but fail-closed. */
   readonly eventSubscriberId?: string;
+  /** The key the environment variable store seals under, as a THUNK so a throw reads as an
+   *  absent key rather than an error naming where the credential lives. ABSENT is a REFUSING
+   *  state, never a skipped one: an unwired daemon answers ENV_STORE_KEY_UNAVAILABLE instead
+   *  of writing a variable it could not decrypt back. */
+  readonly environmentCredential?: EnvironmentCredentialSource;
   /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
    *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
    *  one with no configured catalog, so Foundation preparation refuses and no
@@ -262,7 +270,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       port: options.repositoryRecovery, assertAuthority: commandAuthority.assert }),
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
-      projectId, store,
+      operatorPrincipalId, projectId, store,
       ...(options.repositoryBootstrap === undefined
         ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
       ...(options.foundationCatalogSource === undefined
@@ -285,7 +293,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       return commandAuthority.wrapAsync(asyncEntry);
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
-      confirmReleased, continuation, criterion, cutover, eventResume,
+      confirmReleased, continuation, criterion, cutover, environment, eventResume,
       graph, journal, preview, productContractGate1, reconcile, recovery, requiredCapability,
       review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
@@ -429,6 +437,22 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         }
         const stub = previewRefusal("PREVIEW_GOAL_NOT_LANDED");
         throw new DomainRefusal(stub.code, stub.layer, "preview runner is not landed");
+      }
+      // Answered BEFORE `requestOf`, and that placement is the whole point rather than a
+      // stylistic choice: `requestOf` encodes the WHOLE envelope -- `payload` included -- into
+      // the request bytes persisted beside every decision, and `environment.set_variable`'s
+      // payload holds a production secret. Reaching the assembler even once would write that
+      // plaintext into durable command bytes. The edge owns the translation; the store owns
+      // every check and every refusal code, which travel back unrestamped.
+      if (environment) {
+        return runEnvironmentEdge({
+          credential: options.environmentCredential ?? (() => null),
+          envelope: { commandId: envelope.commandId, payload: envelope.payload },
+          kind: kind as EnvironmentEdgeKind,
+          now: clock,
+          projectId,
+          store,
+        });
       }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));

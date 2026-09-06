@@ -29,8 +29,8 @@ import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-comma
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
 import {
-  CAPABILITIES, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
-  familyCapabilityOf, type WiredCommandKind,
+  CAPABILITIES, ENVIRONMENT_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY,
+  WORK_FAMILY, familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.js";
 import { CRITERION_APPROVE, CRITERION_VERIFY, CRITERION_SCHEMA_VERSION } from "./criterion-evidence/criterion-contracts.js";
@@ -60,6 +60,10 @@ export interface CommandFamilyFacts {
   readonly continuation: boolean;
   /** The one-way GA activation, answered by its own service from a ports-bearing seam. */
   readonly cutover: boolean;
+  /** The two OPERATOR-ONLY environment-variable writes, answered by their own edge from an
+   *  exact request shape. The SET payload carries a production secret, so this seam never
+   *  reaches `requestOf`: a request record would put the value in durable command bytes. */
+  readonly environment: boolean;
   readonly eventResume: boolean;
   /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
   readonly graph: boolean;
@@ -95,6 +99,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     cutover: kind === CUTOVER_ACTIVATE_COMMAND_KIND,
+    environment: kind in ENVIRONMENT_FAMILY,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
@@ -145,6 +150,11 @@ function requiredCapabilityOf(
     || member.reconcile || member.step) {
     return CAPABILITIES.WORK;
   }
+  // Stated AT the site, as `preview` is below: writing an environment variable demands ADMIN.
+  // ADMIN fences REACH only -- `ENVIRONMENT_FAMILY` answers the same capability, and the two
+  // must agree. What makes these two human-only is OPERATOR_PRINCIPAL_KINDS plus the MCP
+  // exclusion derived from it, never this line.
+  if (member.environment) return CAPABILITIES.ADMIN;
   // ADMIN for the same reason as the three above: it fences REACH, keeping scoped agent
   // sessions out. What makes `cutover.activate` human-only is OPERATOR_PRINCIPAL_KINDS, which
   // demands the CONFIGURED operator identity no minted session can hold.

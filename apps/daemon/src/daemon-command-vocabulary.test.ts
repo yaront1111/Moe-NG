@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   APPROVAL_INTENT_FAMILY,
   CRITERION_FAMILY, REPOSITORY_RECOVERY_FAMILY,
-  BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, GRAPH_FAMILY,
+  BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
@@ -23,8 +23,8 @@ import {
  */
 type Family =
   | "CRITERION" | "REPOSITORY_RECOVERY"
-  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "GRAPH" | "PREVIEW" | "REVIEW" | "SESSION"
-  | "STANDALONE" | "STEP" | "WORK";
+  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "ENVIRONMENT" | "GRAPH" | "PREVIEW"
+  | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
   readonly agent: readonly string[] | null;
@@ -147,6 +147,17 @@ const ROWS: readonly VocabularyRow[] = [
   // the human fence. One key: everything except the GO_ACTIVATE binding is a server fact.
   { agent: null, capability: ADMIN, family: "STANDALONE", kind: "cutover.activate",
     payloadKeys: ["record"] },
+  // THE ONLY PAYLOAD ON THIS BOARD CARRYING A SECRET. `value` is admitted because the operator
+  // must present one; the ingress may never echo it back (daemon-command-environment.test.ts
+  // holds that canary). `agent` is NOT null and that is deliberate: these two are fenced by
+  // OPERATOR_ONLY below (dispatch), HUMAN_ONLY_STEPS (the wrapper) and the MCP exclusion the
+  // allowlist DERIVES from OPERATOR_PRINCIPAL_KINDS (transport). `agentCapabilitiesFor` is a
+  // capability fact, not a staffing decision -- the same reading `goal.close`, `approval.decide`
+  // and `repository.publish` already ship, each human-only with a non-null agent list.
+  { agent: [ADMIN, WORK], capability: ADMIN, family: "ENVIRONMENT",
+    kind: "environment.set_variable", payloadKeys: ["environment", "name", "value"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, family: "ENVIRONMENT",
+    kind: "environment.unset_variable", payloadKeys: ["environment", "name"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["decision", "escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -199,6 +210,12 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "repository.publish",
     payloadKeys: ["approval", "goalId", "remoteUrl"] },
+  // Transcribed by task-a2409cba, which does NOT own this kind: it landed in PAYLOAD_KEYS and
+  // BOOTSTRAP_FAMILY without its roster row, leaving this whole file red at HEAD before the
+  // environment rows below existed. Backfilled rather than worked around -- the roster is a
+  // whole-tree census and a missing row here hides a served kind from every sweep in this file.
+  { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "repository.bootstrap",
+    payloadKeys: ["dir", "github", "productName", "profileVersion"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "qualification.replan",
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "review.submit",
@@ -224,6 +241,7 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   COMPILER: new Map(Object.entries(COMPILER_FAMILY)),
+  ENVIRONMENT: new Map(Object.entries(ENVIRONMENT_FAMILY)),
   PREVIEW: new Map(Object.entries(PREVIEW_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
@@ -234,8 +252,8 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 
 const FAMILY_NAMES = [
   "CRITERION", "REPOSITORY_RECOVERY",
-  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "GRAPH", "PREVIEW", "REVIEW", "SESSION", "STEP",
-  "WORK",
+  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "ENVIRONMENT", "GRAPH", "PREVIEW", "REVIEW",
+  "SESSION", "STEP", "WORK",
 ] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
@@ -245,7 +263,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // by a non-operator principal and hand back exactly the authority this seam removes.
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
-  "repository.publish",
+  "repository.publish", "repository.bootstrap",
   // The operator ANSWERS a material product question -- the human act the clarification
   // fence exists to keep off every agent wire.
   "product_contract.answer_clarification",
@@ -253,6 +271,10 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "graph.approve", "graph.supersede",
   "integration.accept_output",
   "resource.confirm_released", "session.open",
+  // An agent that could write an environment variable could write one the deploy then delivers
+  // to a production process. Fenced three ways: here at dispatch, in HUMAN_ONLY_STEPS against
+  // the wrapper, and out of the MCP roster the allowlist DERIVES from this very set.
+  "environment.set_variable", "environment.unset_variable",
   // The one-way GA activation: the act that makes v2 authoritative for good.
   "cutover.activate",
   // Deciding a rendered product preview is the operator's own verdict.
@@ -260,11 +282,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly fifty wired kinds in their registration order", () => {
+  it("carries exactly fifty-three wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(50);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(50);
+    expect(ROWS).toHaveLength(53);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(53);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -308,7 +330,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(39);
+    expect(declared).toHaveLength(42);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -317,8 +339,9 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
     expect(FAMILY_MAPS.CRITERION.size).toBe(2);
     expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(12);
+    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(13);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
+    expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.PREVIEW.size).toBe(1);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
@@ -335,6 +358,7 @@ describe("command vocabulary", () => {
     expect(Object.isFrozen(REPOSITORY_RECOVERY_FAMILY)).toBe(true);
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
     expect(Object.isFrozen(COMPILER_FAMILY)).toBe(true);
+    expect(Object.isFrozen(ENVIRONMENT_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_MUTATION_COMMAND_KINDS)).toBe(true);
     expect(Object.isFrozen(PREVIEW_FAMILY)).toBe(true);
@@ -358,11 +382,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly fifteen kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(15);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(15);
+  it("gates exactly eighteen kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(18);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(18);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // thirty-five that must stay open, one dropped reddens on the fifteen that must not.
+    // thirty-five that must stay open, one dropped reddens on the eighteen that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }
