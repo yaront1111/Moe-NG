@@ -17,6 +17,8 @@ import type {
   AffordancePort, AffordanceRefused, AffordanceSurface, AffordanceSurfaceResult, ChainStep,
 } from "./http/affordance-contract.js";
 import { CAPABILITIES } from "./daemon-command-vocabulary.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import {
   ACTIVATION_AGGREGATE, CREDENTIAL as FOUNDATION_CREDENTIAL, DISPATCH_AGGREGATE,
   cleanupSeamHarnesses, commandRequest, dispatchPayload, seamHarness,
@@ -95,6 +97,14 @@ const LAUNCH_REFUSAL = {
 };
 
 describe("createMcpDispatchPort", () => {
+  it("advertises design seat kinds without either human-only fence", () => {
+    for (const kind of ["design.submit", "design.read"]) {
+      expect(wiredMcpToolKinds()).toContain(kind);
+      expect(MCP_EXCLUDED_COMMAND_KINDS).not.toContain(kind);
+      expect(HUMAN_ONLY_STEPS.has(kind)).toBe(false);
+    }
+  });
+
   it("refuses an unknown credential with the registry code", () => {
     const outcome = port.authenticate("wrong", "goal.create");
     expect(outcome.ok).toBe(false);

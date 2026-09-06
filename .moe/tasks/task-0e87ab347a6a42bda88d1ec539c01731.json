@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T07:33:41.784Z",
-  "updatedAt": "2026-09-06T10:02:27.511Z",
+  "updatedAt": "2026-09-06T10:03:36.985Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T07:39:15.908Z",
     "plannedStepCount": 7,
@@ -289,14 +289,30 @@
       "treeId": "2a951f9084f0826aad8650c0c679b863c0c7fcde",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "28ef6e54445c0bf4261f8d2c51abc81b0ce0014f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T09:56:39Z",
+      "paths": [
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+        ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T10:03:36.985Z",
+      "treeId": "b3855c918b89053dc1dfcbca6efce387897ff709",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-1d53e70c@2026-09-06T08:47:52Z",
-    "at": "2026-09-06T09:57:13.807Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T09:56:39Z",
+    "at": "2026-09-06T10:03:36.985Z"
   },
   "touchedFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
