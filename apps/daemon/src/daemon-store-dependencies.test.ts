@@ -720,6 +720,11 @@ try {
   // the composition factory to the shipped provider.
   const remote = provider.repositoryRemote();
   const remoteView = remote.readRemote();
+  const previewRead = provider.previewReads().read({
+    goalId: "goal-child-preview", projectId: process.env.MOE_PROJECT_ID,
+  });
+  const previewCaptureMatchesWorkspace = provider.previewCaptures().projectDirectory()
+    === process.env.MOE_NODE_WORKSPACE;
   const schedules = provider.schedules();
   let scheduleRegistration;
   try { scheduleRegistration = schedules.register("child-schedule", () => {}, 60000); }
@@ -736,6 +741,8 @@ try {
     depsKeys: Object.keys(deps).sort(),
     first: shapeOf(first),
     providerKeys: Object.keys(provider).sort(),
+    previewRead,
+    previewCaptureMatchesWorkspace,
     registerCapability: entry.requiredCapability,
     registerHandler: typeof entry.handler,
     registerPayloadKeys: entry.payloadKeys,
@@ -770,6 +777,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
           MOE_DAEMON_CREDENTIAL: "child-operator-credential",
           MOE_PROJECT_ID: "proj-child-smoke",
           MOE_STORE_PATH: join(childDirectory, "store.db"),
+          MOE_NODE_WORKSPACE: childDirectory,
         },
         maxBuffer: 1_000_000,
         shell: false,
@@ -802,7 +810,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         // `previews` is the daemon's ONE preview supervisor, forwarded for exactly the reason
         // stated above: absent here, the shipped daemon's shutdown sweeps nothing and every
         // preview server it started keeps its port after the daemon is gone.
-        "planningRuns", "policy", "previews", "productContractGate1", "productContractPending",
+        "planningRuns", "policy", "previewCaptures", "previewReads", "previews",
+        "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
         "provide", "provideV2", "reconciliation", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
         "schedules",
@@ -817,6 +826,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       remoteKeys: ["boundAt", "boundBy", "outcome", "readAt", "remoteUrl"],
       remoteOutcome: "REMOTE",
       remoteUrl: null,
+      // Both forwarded preview ports are invoked in the child. An empty isolated store
+      // reports no preview; capture resolution stays bound to its explicit temp workspace.
+      previewRead: { goalId: "goal-child-preview", kind: "ABSENT" },
+      previewCaptureMatchesWorkspace: true,
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
@@ -1118,6 +1131,8 @@ describe("the composed affordance port carries planning authority (task-ed89967f
  * rather than from a hand-written pair: a third deployment kind added to `PAYLOAD_KEYS` without
  * its fences reds here instead of shipping reachable. Deleting an entry from ANY side reds,
  * which is the property DoD 1 names.
+ * The wrapper also retains one explicitly named, unserved migration kind. Its closed extension
+ * is compared in full, and a real dispatch below proves the reserved kind admits no command.
  *
  * NO COUNT LITERAL ANYWHERE IN THE ARM. Eight rows are moving these rosters concurrently; every
  * assertion below relates production surfaces to each other, so a sibling landing a kind cannot
@@ -1126,6 +1141,8 @@ describe("the composed affordance port carries planning authority (task-ed89967f
 describe("the deployment kinds are published human-only and MCP-excluded", () => {
   const advertised = Object.keys(PAYLOAD_KEYS)
     .filter((kind) => kind.startsWith("deployment.")).sort();
+  // Reserved staffing refusals remain even when no daemon command currently serves the kind.
+  const unservedWrapperKinds = Object.freeze(["deployment.migrate_down"] as const);
   const deploymentMembers = (roster: Iterable<string>): readonly string[] =>
     [...roster].filter((kind) => kind.startsWith("deployment.")).sort();
 
@@ -1148,7 +1165,29 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     // (3) THE STAFFING FENCE. Both kinds carry a non-null agent capability (GOAL, like
     // `repository.publish`), so absence here is a staffed-deployer leak the capability gate
     // would not refuse.
-    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
+    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual([...advertised, ...unservedWrapperKinds].sort());
+  });
+
+  it.each(unservedWrapperKinds)("keeps %s fenced and refuses it as unserved without writing", (kind) => {
+    expect(HUMAN_ONLY_STEPS.has(kind)).toBe(true);
+    expect(Object.hasOwn(PAYLOAD_KEYS, kind)).toBe(false);
+    expect(deps.registry.has(kind)).toBe(false);
+    expect(wiredMcpToolKinds()).not.toContain(kind);
+    const observed = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const before = observed.readCommandDecisionsAfter(0n, 1000);
+      expect(before.hasMore).toBe(false);
+      const eventHorizon = observed.readEventHorizon();
+      const result = dispatch(envelopeObject({
+        commandId: "cmd-unserved-migrate-down", commandKind: kind, payload: {},
+      }));
+      expect(result).toMatchObject({ ok: false, outcome: "REFUSED", stage: "REGISTRY",
+        error: { code: "INPUT_INVALID" } });
+      const after = observed.readCommandDecisionsAfter(0n, 1000);
+      expect(after.hasMore).toBe(false);
+      expect(after.items.length).toBe(before.items.length);
+      expect(observed.readEventHorizon()).toEqual(eventHorizon);
+    } finally { observed.close(); }
   });
 
   it("serves deployment.deploy from the ASYNC half of the surface, never the sync tables", () => {

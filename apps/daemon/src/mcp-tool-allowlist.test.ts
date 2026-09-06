@@ -221,10 +221,23 @@ describe("wiredMcpToolKinds command half", () => {
    * so a silent shrink is visible even when every membership arm above still passes.
    */
   it("pins an EXACT, frozen exclusion denominator and the derived roster size", () => {
+    // Independent transcription of every currently served operator-only command except
+    // session.open. Keeping the names catches swaps that preserve the denominator.
+    const expectedExcluded = Object.freeze([
+      "approval.decide", "approval.decide_intent",
+      "criterion_check.approve", "criterion_check.verify", "cutover.activate",
+      "deployment.deploy", "deployment.rollback", "deployment.set_target",
+      "environment.set_variable", "environment.unset_variable", "goal.close",
+      "graph.approve", "graph.supersede", "integration.accept_output",
+      "preview.decide", "preview.start", "product_contract.answer_clarification",
+      "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
+      "repository.bootstrap", "repository.publish", "repository.recover", "resource.confirm_released",
+    ]);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(expectedExcluded);
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(25);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(24);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -241,39 +254,15 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // The measured values behind that identity at delivery: 45 - 5 + 5 = 45. Pinned as a
-    // second, INDEPENDENT witness: the identity above would still hold if both sides moved
-    // together, and these literals would not. task-b8272ee0 moved vocabulary and excluded
-    // together by one — `cutover.activate` is registered AND withheld from MCP — and the
-    // human-approver fence widening moved excluded alone by one more
-    // (`approval.decide_intent` left the MCP roster the moment paired HUMAN principals
-    // could take the witness); `wired` moves only when the subtraction itself changes.
-    // Deriving the exclusion from OPERATOR_PRINCIPAL_KINDS (less `session.open`) moved
-    // excluded from 6 to 11: the five operator-only kinds that had stayed advertised left.
+    // Independent count witness: the current surface has 61 commands, subtracts the exact
+    // 24-member exclusion above, and adds seven queries. deployment.migrate_down remains a
+    // reserved wrapper refusal, but is neither served nor advertised by this daemon.
     expect({
       excluded: MCP_EXCLUDED_COMMAND_KINDS.length,
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    // task-a2409cba moved BOTH sides by three and `wired` by ZERO, which is the point:
-    // `environment.set_variable`, `environment.unset_variable` and `repository.bootstrap`
-    // entered the vocabulary AND the operator-only class in the same change, so each one was
-    // subtracted the moment it was added and never spent a commit MCP-advertised.
-    // task-06ac0da1 moved `vocabulary` and `queries` by one each and `excluded` by ZERO, and
-    // that zero IS the row: `design.submit` is a SEAT kind, so it entered the vocabulary
-    // WITHOUT entering the operator-only class, and `wired` therefore moved by two -- one
-    // advertised command plus one advertised query (`design.read`). A `design.submit` that had
-    // been copied into OPERATOR_PRINCIPAL_KINDS by habit would show here as excluded: 18,
-    // wired: 43.
-    // task-f1e40296 moved `vocabulary` and `excluded` by one each and `wired` by ZERO, the same
-    // shape as task-a2409cba above: `product_contract.sync_env_example` entered the vocabulary AND
-    // the operator-only class in the SAME change, so it was never advertised for a moment. A copy
-    // of it into the allowlist by habit would show here as wired: 45.
-    // task-537320ee moved `vocabulary` and `excluded` by one each and `wired` by ZERO, the same
-    // shape again: `deployment.migrate_down` entered PAYLOAD_KEYS and OPERATOR_PRINCIPAL_KINDS in
-    // the SAME commit, so no landed HEAD ever advertised it over MCP. That unchanged `wired` is
-    // the fence: a copy of the kind into the allowlist by habit would show here as wired: 45.
-    }).toEqual({ excluded: 25, queries: 7, vocabulary: 62, wired: 44 });
+    }).toEqual({ excluded: 24, queries: 7, vocabulary: 61, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {
