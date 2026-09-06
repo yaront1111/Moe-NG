@@ -121,6 +121,43 @@ function rowOf(
 }
 
 /**
+ * The criterion rows, derived in ONE place. Both the rendered dossier and the gap list
+ * a refusal names come from this function, so the PR body and the detail on
+ * RELEASE_EVIDENCE_INCOMPLETE cannot disagree about what is missing — a second copy of
+ * this pipeline is exactly how they would come to.
+ */
+function criterionRows(
+  input: DossierInput, ancestry: AncestryPredicate,
+): readonly CriterionRow[] {
+  const nodes = new Map(input.nodes.map((node) => [node.nodeKey, node]));
+  const at = memoized(ancestry);
+  return [...input.criteria]
+    .sort((a, b) => byCodeUnit(a.criterionId, b.criterionId))
+    .map((criterion) => rowOf(criterion, nodes, at));
+}
+
+/**
+ * Every unverified-evidence gap for `input`, in the dossier's own row order — the same
+ * gaps the "Unverified evidence" section renders, from the same derivation.
+ *
+ * A caller that needs to NAME what is missing (RELEASE_EVIDENCE_INCOMPLETE) reads this
+ * rather than the stored dossier: `ReleaseDossierV1` keeps only the rendered markdown,
+ * so re-parsing the document back into rows would reimplement this authority against a
+ * prose artefact.
+ *
+ * Pure and SYNC on purpose: `AncestryPredicate` is sync so the core stays
+ * byte-deterministic and fakeable, and making this async would force that decision back
+ * open. `sha` is unused HERE because the derivation depends on the sha only through the
+ * `ancestry` predicate, which the caller has already bound to it; the parameter is kept
+ * so this reads at the call site exactly like `renderReleaseDossier(input, sha, ancestry)`.
+ */
+export function releaseDossierGaps(
+  input: DossierInput, _sha: string, ancestry: AncestryPredicate,
+): readonly DossierGap[] {
+  return criterionRows(input, ancestry).flatMap((row) => row.gaps);
+}
+
+/**
  * Render the dossier for `input` AT `sha`. The sha is load-bearing: it is printed in
  * the header and it is the tree every cited landing commit is re-measured against, so
  * a render at `shaA` and a render at `shaB` differ even when the ledger facts are
@@ -129,11 +166,7 @@ function rowOf(
 export function renderReleaseDossier(
   input: DossierInput, sha: string, ancestry: AncestryPredicate,
 ): string {
-  const nodes = new Map(input.nodes.map((node) => [node.nodeKey, node]));
-  const at = memoized(ancestry);
-  const rows = [...input.criteria]
-    .sort((a, b) => byCodeUnit(a.criterionId, b.criterionId))
-    .map((criterion) => rowOf(criterion, nodes, at));
+  const rows = criterionRows(input, ancestry);
   return [
     // Every interpolated value is collapsed to one line: a goal title carrying a
     // newline could otherwise inject a forged section into a document a human reads
