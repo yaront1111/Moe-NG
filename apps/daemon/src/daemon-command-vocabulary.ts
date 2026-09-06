@@ -168,7 +168,36 @@ export const ENVIRONMENT_FAMILY: Readonly<Record<string, string>> = Object.freez
   [ENVIRONMENT_COMMAND_KIND_UNSET]: CAPABILITIES.ADMIN,
 });
 
+/**
+ * THE DESIGN AUTHORING WIRE -- AND THE ONE KIND IN THIS BATCH THAT A SEAT MAY ACTUALLY TAKE.
+ *
+ * PLANNING, for exactly the reason `COMPILER_FAMILY` gives above: drawing the design a goal is
+ * built from is a planning act on its own wire, authored between the Gate 1 product-contract
+ * approval and the decomposition run, by the same planning seat that proposes the revision and
+ * submits the decomposition.
+ *
+ * IT IS DELIBERATELY NOT IN `OPERATOR_PRINCIPAL_KINDS`, and that absence is the whole point
+ * rather than an omission. Every OTHER kind landing beside it in this epic -- the deployment
+ * pair, the environment pair, `preview.decide`, `release.decide` -- is a HUMAN act, so the
+ * surrounding code is dense with the human-only shape: a null `agentCapabilitiesFor`, an
+ * OPERATOR_PRINCIPAL_KINDS entry, the MCP exclusion derived from it, a HUMAN_ONLY_STEPS entry.
+ * Copying that shape here would leave every roster test green while making the design step
+ * PERMANENTLY UNSTAFFABLE -- no seat could ever submit a design, and the failure would surface
+ * as a chain that silently never advances. `familyCapabilityOf` therefore answers PLANNING and
+ * `agentCapabilitiesFor` hands a seat [PLANNING, WORK]; `daemon-command-design.test.ts` proves
+ * that BEHAVIOURALLY, by dispatching as an agent principal, not by roster membership.
+ *
+ * `design.read` is ABSENT from this table on purpose: it is a QUERY, served by the MCP dispatch
+ * port (`mcp-dispatch-port.js`) and the HTTP read seam (`http/design-read.js`), so it has no
+ * command family, no PAYLOAD_KEYS row and no registry entry -- exactly like `graph.get` and
+ * `product_contract.read`. Adding it here would mint a command the registry cannot serve.
+ */
+export const DESIGN_FAMILY: Readonly<Record<string, string>> = Object.freeze({
+  "design.submit": CAPABILITIES.PLANNING,
+});
+
 export type WiredCommandKind =
+  | "design.submit"
   | "repository.recover"
   | typeof CRITERION_APPROVE | typeof CRITERION_VERIFY
   | BootstrapCommandKind | GraphMutationCommandKind
@@ -195,7 +224,8 @@ export type WiredCommandKind =
  *  that is NOT listed here is dead: `familyCapabilityOf` walks only this array and its kinds
  *  would resolve to a null capability. */
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
-  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY,
+  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
+  GRAPH_FAMILY,
   PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
   REPOSITORY_RECOVERY_FAMILY,
 ]);

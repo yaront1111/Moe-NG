@@ -3,6 +3,9 @@ import type { ControlledProfileRefusalCode } from "./controlled-profile/controll
 import type { GitRunner, GitRunResult } from "./git-landing-port.js";
 
 export { BOOTSTRAP_PROFILE_VERSION_UNKNOWN } from "./controlled-profile/controlled-profile-generator.js";
+/** The wired command kind. Named ONCE here so the vocabulary, the bootstrap sequence and the
+ *  async registry entry cannot drift apart on a hand-typed literal. */
+export const REPOSITORY_BOOTSTRAP_COMMAND_KIND = "repository.bootstrap" as const;
 export const BOOTSTRAP_DIR_NOT_EMPTY = "BOOTSTRAP_DIR_NOT_EMPTY" as const;
 export const BOOTSTRAP_GIT_UNAVAILABLE = "BOOTSTRAP_GIT_UNAVAILABLE" as const;
 export const BOOTSTRAP_GH_UNAVAILABLE = "BOOTSTRAP_GH_UNAVAILABLE" as const;

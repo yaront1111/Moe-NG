@@ -11,6 +11,7 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
+import { ASYNC_SERVED_BOOTSTRAP_KINDS } from "../bootstrap/bootstrap-contracts.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { scanGlobalEvents } from "./goal-closure-test-fixtures.js";
@@ -62,6 +63,10 @@ const OWNED_KINDS = [
   "project.bind_repository",
   "project.register",
   "provider.probe",
+  // Served on the ASYNC registry entry rather than through BOOTSTRAP_HANDLERS: its service runs
+  // `git`, optionally `gh` and a filesystem tree write, which a synchronous CommandHandler
+  // cannot express. Still an OWNED kind of this family -- it admits through the same surface.
+  "repository.bootstrap",
   "repository.publish",
 ] as const;
 
@@ -164,14 +169,20 @@ function isHumanAction(kind: string): boolean {
 afterEach(closeStores);
 
 describe("J1 command vocabulary", () => {
-  it("publishes exactly the twelve owned kinds from the package root", () => {
+  it("publishes exactly the thirteen owned kinds from the package root", () => {
     expect(new Set<string>(daemon.BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(12);
-    expect(OWNED_KINDS).toHaveLength(12);
+    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(13);
+    expect(OWNED_KINDS).toHaveLength(13);
   });
 
   it("routes every owned kind to a handler reachable from the package root", () => {
-    expect(new Set(Object.keys(HANDLERS))).toEqual(new Set<string>(OWNED_KINDS));
+    // The handler table is no longer the whole seam: an owned kind whose effects are
+    // asynchronous admits through this surface and is served by an async registry entry.
+    // Read from production, so a kind that stops being async-served reds here rather than
+    // being quietly excused.
+    expect(new Set([...Object.keys(HANDLERS), ...ASYNC_SERVED_BOOTSTRAP_KINDS]))
+      .toEqual(new Set<string>(OWNED_KINDS));
+    expect(ASYNC_SERVED_BOOTSTRAP_KINDS.filter((kind) => kind in HANDLERS)).toEqual([]);
   });
 });
 
@@ -207,6 +218,19 @@ describe("J1 creation, approval, and evidenced closure", () => {
   });
 });
 
+/**
+ * Owned kinds this LEGACY SYNCHRONOUS journey does not drive, each for a stated reason. Named,
+ * not predicated, so the set assertion below stays exact and a third exclusion cannot slip in.
+ */
+const UNDRIVEN_BY_LEGACY_JOURNEY: readonly string[] = Object.freeze([
+  // The registry suite's source-bound describe owns its replay without shifting this journey.
+  "goal.create_with_source",
+  // Served on the ASYNC entry: `drive` here is a synchronous ledger send and cannot run `git`,
+  // `gh` or a tree write. Replay and idempotence are covered against the REAL dispatch seam in
+  // repository/repository-bootstrap-journey.test.ts (the second run refuses DIR_NOT_EMPTY).
+  "repository.bootstrap",
+]);
+
 describe("each command is idempotent on replay (DoD 5)", () => {
   const sequence = bootstrapSequence();
   const cases = sequence.map((request, index) => [request.kind, index] as const);
@@ -219,7 +243,7 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     expect(cases).toHaveLength(sequence.length);
     expect(cases.length).toBeGreaterThan(0);
     expect(new Set(cases.map(([kind]) => kind))).toEqual(new Set<string>(
-      OWNED_KINDS.filter((kind) => kind !== "goal.create_with_source"),
+      OWNED_KINDS.filter((kind) => !UNDRIVEN_BY_LEGACY_JOURNEY.includes(kind)),
     ));
   });
 

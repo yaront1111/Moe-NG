@@ -119,6 +119,14 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
     kind: "effect.activate", layer: INGRESS,
     payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
+  // THE ONE SEAT KIND IN THIS BATCH. `agent` is NON-NULL and there is no OPERATOR_ONLY entry
+  // below, because a planning seat authors the design -- the opposite of every neighbouring
+  // kind this epic adds. An empty payload carries no `goalRef`, so the design edge's own
+  // REQUEST-layer shape refusal answers, minted through `designRefusal` from the slice's closed
+  // DESIGN_CODE_LAYERS map rather than a literal at the throw site.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "DESIGN_SHAPE_INVALID",
+    kind: "design.submit", layer: "REQUEST",
+    payloadKeys: ["contractRef", "goalRef", "revision"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["decision", "escalationRef", "subjectRef"] },
   { agent: null, capability: WORK, code: "EVENT_STREAM_RESUME_INPUT_INVALID",
@@ -327,6 +335,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint", "cutover.activate",
   "environment.set_variable", "environment.unset_variable",
+  "design.submit",
   "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
@@ -895,11 +904,11 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the fifty-three characterized kinds and nothing else", () => {
+  it("serves exactly the fifty-four characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(53);
-    expect(deps.registry.size).toBe(53);
+    expect(ROWS).toHaveLength(54);
+    expect(deps.registry.size).toBe(54);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -944,7 +953,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(53);
+    expect(REGISTRATION_ORDER).toHaveLength(54);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1797,7 +1806,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(53);
+    expect(ports.registry.size).toBe(54);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1819,7 +1828,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(53);
+    expect(supplied.registry.size).toBe(54);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1851,7 +1860,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(53);
+    expect(snapshotPorts.registry.size).toBe(54);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

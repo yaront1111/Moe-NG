@@ -227,6 +227,13 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // is reported as UNWIRED_KIND, and it is a capability fact rather than a staffing decision,
   // so it would stop applying the moment the kind gained any agent capability at all.
   "preview.decide",
+  // Creating a product repository at an operator-supplied path is the operator's decision; the
+  // wrapper performs it as an effect of that decision, never as staffed work. The path is
+  // operator input and the command writes a whole tree at it, so a self-staffed session would
+  // be choosing where to write on the operator's disk. `mcp-tool-allowlist.ts` holds the other
+  // half of the fence: that one stops an agent REACHING the kind over a transport, this one
+  // stops the wrapper minting a session to take it.
+  "repository.bootstrap",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */

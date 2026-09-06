@@ -62,6 +62,9 @@ const OWNED_KINDS = [
   "project.bind_repository",
   "project.register",
   "provider.probe",
+  // Served on the ASYNC entry, not through BOOTSTRAP_HANDLERS: its service runs `git`,
+  // optionally `gh` and a tree write, none of which a synchronous CommandHandler can express.
+  "repository.bootstrap",
   "repository.publish",
 ] as const;
 
@@ -84,10 +87,10 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the twelve command kinds this surface owns", () => {
+  it("covers exactly the thirteen command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(12);
-    expect(OWNED_KINDS).toHaveLength(12);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(13);
+    expect(OWNED_KINDS).toHaveLength(13);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

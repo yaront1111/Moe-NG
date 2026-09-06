@@ -49,6 +49,7 @@ import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import type { RepositoryBootstrapSeams } from "./daemon-command-async-entries.js";
+import { runDesignSubmitEdge } from "./daemon-command-design.js";
 import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
 import type { EnvironmentCredentialSource } from "./environment/environment-store.js";
@@ -293,7 +294,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       return commandAuthority.wrapAsync(asyncEntry);
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
-      confirmReleased, continuation, criterion, cutover, environment, eventResume,
+      confirmReleased, continuation, criterion, cutover, design, environment, eventResume,
       graph, journal, preview, productContractGate1, reconcile, recovery, requiredCapability,
       review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
@@ -444,6 +445,27 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // payload holds a production secret. Reaching the assembler even once would write that
       // plaintext into durable command bytes. The edge owns the translation; the store owns
       // every check and every refusal code, which travel back unrestamped.
+      // Answered BEFORE `requestOf`, for the reason `daemon-command-design.js` states in full:
+      // the design slice owns a CLOSED code->layer map, and the shared assembler would answer a
+      // malformed submit with its own generic INPUT_INVALID before `decodeDesignRevision` saw
+      // the bytes -- collapsing DESIGN_SHAPE_INVALID @ REQUEST and
+      // DESIGN_CONTRACT_NOT_APPROVED @ CONTRACT_AUTHORITY into one unactionable answer. The
+      // authority fields are assembled HERE from the authenticated principal and the daemon
+      // clock, never from the payload, exactly as the environment edge below does.
+      if (design) {
+        return runDesignSubmitEdge({
+          envelope: {
+            commandId: envelope.commandId,
+            correlationId: envelope.correlationId,
+            expectedVersion: envelope.expectedVersion,
+            payload: envelope.payload,
+          },
+          now: clock,
+          principalId: principal.principalId,
+          projectId,
+          store,
+        });
+      }
       if (environment) {
         return runEnvironmentEdge({
           credential: options.environmentCredential ?? (() => null),

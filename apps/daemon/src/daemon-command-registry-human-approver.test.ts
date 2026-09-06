@@ -322,9 +322,15 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       "approval.decide", "approval.decide_intent", "cutover.activate", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output", "preview.decide",
       "product_contract.answer_clarification", "repository.publish", "resource.confirm_released",
+      // Landed by task-a2409cba: writing a production secret is never reachable over MCP.
+      "environment.set_variable", "environment.unset_variable",
+      // Creating a repository at an operator-supplied path. The MCP port authenticates with the
+      // operator bootstrap credential, so an advertised operator kind would let an agent arrive
+      // AS THE OPERATOR — the exclusion is derived from OPERATOR_PRINCIPAL_KINDS, not typed here.
+      "repository.bootstrap",
     ]);
-    expect(expectedExclusions).toHaveLength(14);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(14);
+    expect(expectedExclusions).toHaveLength(17);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(17);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

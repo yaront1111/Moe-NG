@@ -49,6 +49,18 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];
 
+/**
+ * The bootstrap-family kinds that are NOT rows in `BOOTSTRAP_HANDLERS`.
+ *
+ * They admit through this surface (decode, replay fence, prerequisites) and are then served by
+ * an ASYNC registry entry, because their effects are asynchronous and `CommandHandler` is not.
+ * Named here so a consumer enumerating the served bootstrap family from the handler table alone
+ * does not silently under-count: that table is no longer the whole seam.
+ */
+export const ASYNC_SERVED_BOOTSTRAP_KINDS: readonly BootstrapCommandKind[] = Object.freeze([
+  "repository.bootstrap",
+]);
+
 export const BOOTSTRAP_REQUEST_KEYS = Object.freeze([
   "commandId",
   "correlationId",

@@ -54,6 +54,8 @@ export interface AsyncCommandEntryOptions {
    *  cannot launch a provider with no durably recorded context manifest. */
   readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
+  /** The configured operator principal, forwarded to the kinds that fence themselves on it. */
+  readonly operatorPrincipalId: string;
   readonly projectId: string;
   /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
@@ -97,6 +99,7 @@ export function createAsyncCommandEntries(
   const bootstrapSeams = options.repositoryBootstrap ?? {};
   const bootstrapRepositoryCommand = createRepositoryBootstrapHandler({
     catalog: bootstrapSeams.catalog ?? createNodeProjectCatalogRegistrar(),
+    operatorPrincipalId: options.operatorPrincipalId,
     projectId,
     store,
     // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a

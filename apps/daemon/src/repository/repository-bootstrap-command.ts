@@ -3,14 +3,15 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { sha256Hex } from "../bootstrap/activation-receipts.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "../bootstrap/bootstrap-contracts.js";
-import { commitAccepted, refuse, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import { commitAccepted, readDurableLedger, refuse, versionOf }
+  from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand }
   from "../bootstrap/bootstrap-services.js";
 import { DomainRefusal, decisionOf, encoder } from "../daemon-command-dispatch.js";
-import type { AsyncCommandHandler, CommandHandlerInput, DurableDecision }
-  from "../http/http-contract.js";
+import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
+import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import { bootstrapRefusal } from "./repository-bootstrap-contracts.js";
 import type { BootstrapGhPort, BootstrapPorts, BootstrapReceiptV1, BootstrapRefusal,
   BootstrapRepository, BootstrapRequest } from "./repository-bootstrap-contracts.js";
@@ -55,6 +56,12 @@ export type BootstrapCatalogPort = (request: CatalogRegistrationRequest) => Prom
 export interface RepositoryBootstrapOptions {
   readonly catalog: BootstrapCatalogPort;
   readonly clock?: () => string;
+  /** The configured operator principal. THE ASYNC ENTRY MUST FENCE ITSELF: the registry's
+   *  operator check lives in the SYNCHRONOUS handler path, which an async entry never reaches,
+   *  so membership in `OPERATOR_PRINCIPAL_KINDS` alone would leave this kind dispatchable by
+   *  any ADMIN-capable session. Measured, not assumed — an unfenced entry answered a
+   *  non-operator session with BOOTSTRAP_PREREQUISITE_MISSING instead of 403. */
+  readonly operatorPrincipalId: string;
   /** Test seam for the GitHub half. Production passes nothing and gets the real `gh` CLI. */
   readonly gh?: BootstrapGhPort;
   readonly projectId: string;
@@ -144,9 +151,18 @@ function portsFor(
 ): BootstrapPorts {
   return {
     bindRepository: async (repository) => {
+      // THE BIND CARRIES THE PROJECT AGGREGATE'S OWN VERSION, read at the moment it runs.
+      // `envelope.expectedVersion` belongs to the BOOTSTRAP aggregate; the project stream has
+      // already advanced (a committed `project.register` is this command's prerequisite), so
+      // reusing it made the reducer refuse EVERY successful bootstrap with
+      // BOOTSTRAP_BIND_FAILED — measured, not theorised.
+      const projectVersion = versionOf(
+        readDurableLedger(options.store, options.projectId), options.projectId,
+      );
       drive(requestBytes("project.bind_repository", options.projectId, decidedAt,
         { observation: observationOf(repository) },
-        { ...envelope, commandId: `${envelope.commandId}-bind` }, principalId));
+        { ...envelope, commandId: `${envelope.commandId}-bind`, expectedVersion: projectVersion },
+        principalId));
     },
     gh: options.gh ?? createBootstrapGhPort(),
     git: createBootstrapGitPort(),
@@ -168,6 +184,13 @@ export function createRepositoryBootstrapHandler(
   const { projectId, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
   return async ({ envelope, principal }: CommandHandlerInput): Promise<DurableDecision> => {
+    // FENCED AT ENTRY, before the clock, the decode and any effect: creating a repository at an
+    // operator-supplied path is the operator's own act, and it is never widened to a paired
+    // browser human the way `repository.publish` is.
+    if (principal.principalId !== options.operatorPrincipalId) {
+      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
+        "this command requires the configured operator principal", 403);
+    }
     const decidedAt = clock();
     const bytes = requestBytes("repository.bootstrap", projectId, decidedAt,
       envelope.payload, envelope, principal.principalId);
