@@ -130,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T22:17:46.607Z",
-  "updatedAt": "2026-09-06T01:13:50.992Z",
+  "updatedAt": "2026-09-06T01:15:22.733Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:26:22.735Z",
     "plannedStepCount": 5,
@@ -299,6 +299,22 @@
       "treeId": "25ef04223d9dac8551015b231e0e5f509dd989fa",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "cc3f5e3d7dedcb71ae605c22a3bf622abaf738e2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T00:57:12Z",
+      "paths": [
+        ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T01:15:22.733Z",
+      "treeId": "fb09e13ac3e8e06e48732dfc884553f2288e7871",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -309,7 +325,8 @@
     "apps/control-room/src/data/data-adapter.test.ts",
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
-    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json"
+    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
   ],
   "touchedFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
@@ -319,14 +336,12 @@
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "packages/control-room-client/src/generated/generated-client.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/goals/goal-intent-approved-closure.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-8c5af680@2026-09-06T00:35:10Z",
-    "at": "2026-09-06T00:58:09.818Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-06T00:57:12Z",
+    "at": "2026-09-06T01:15:22.733Z"
   },
   "priorHandoffs": [
     {

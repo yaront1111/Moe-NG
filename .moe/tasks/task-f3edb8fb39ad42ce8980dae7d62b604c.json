@@ -59,10 +59,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 30,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-05e974c034a449428f337841422f3632",
+      "author": "worker-0520a42e",
+      "content": "FROM worker-0520a42e ON SPIDR CHILD 3 (task-33ceae56edc348e9864bc592430fa1d0), 2026-09-06, HEAD eb13d2f6 on moe/work-2026-09-04.\n\nTHIS BAND IS ONE ROW SHORT. Epic rail 1: \"A COMMAND KIND IS A FOUR-ROW JOB. Shared contract + all four digest mirrors; the refusal vocabulary with its closed code->layer map; DAEMON WIRING AND OPERATOR FENCE; then the behaviour.\"\n\nGate 2 shipped:\n  row 1  task-c672815d  shared contract + digest mirrors        DONE\n  row 2  task-40e52fa8  refusal vocabulary + human-only kind     DONE\n  row 3  task-5f883e4e  operator FENCE only (MCP-excluded)       DONE  <- the fence HALF\n  row 4  task-f5a74c23  the runner behaviour (pure package)      DONE\nMISSING: the DAEMON WIRING half of row 3. The release band has its equivalent as an explicit row (task-54b74b80 \"release.decide is wired in the daemon registry\"); Gate 2 never got one, so the runner landed with no consumer edge and the registry still holds the fail-closed stub.\n\nFOUR MEASUREMENTS (each reproducible, all at HEAD eb13d2f6):\n1. daemon-command-registry.ts:433-439 - EVERY well-formed preview.decide throws PREVIEW_GOAL_NOT_LANDED. The comment above it says \"the FAIL-CLOSED stub the runner replaces\"; the runner never replaced it. No decision is ever committed, so nothing can be read back from /activity/read.\n2. `git grep -n \"preview/preview-\" -- '*.ts' '*.tsx' '*.js' ':!*/dist/*' ':!apps/daemon/src/preview/*'` -> 4 hits, ALL importing only preview-contracts.js (the vocabulary). createPreviewRunner / createPreviewSupervisor / previewReceiptId -> ZERO callers. The runner is unreachable from the live daemon.\n3. `git grep -n \"preview\\.start\"` over apps/ and packages/ -> ZERO. preview.decide is the only preview kind on the roster. Nothing can START a preview, so no receipt is ever written to a live store.\n4. `git grep -in \"preview\" -- 'apps/daemon/src/http/affordance-*.ts'` minus tests -> ZERO. preview.decide is never OFFERED, so the browser can never see the decision.\n\nCONSEQUENCE FOR CHILD 3, clause by clause. DoD 1 (card renders for a goal with a STARTED receipt) has no receipt and no offer to render from. DoD 2 (APPROVE read back from /activity/read carrying its verdict) is unreachable - the registry refuses every APPROVE, which is precisely the failure that clause was written to catch. DoD 3 (REJECT moves the node to REWORK) never commits. DoD 5 (Playwright start -> card -> approve over a REAL daemon) has no start and no approve. DoD 6 (live drive on UnAI) the same. Building the card now would ship exactly what this row's own planningNotes rejected: \"a card that offers a decision the daemon will refuse is worse than no card.\"\n\nACTION TAKEN. Task rail 1 on child 3 forbids repairing the subject from inside the proof, and step 1 directs report_blocked instead. So: filed task-dd86f35e117e4de1b5b885332d8af1f8 (PLANNING, CRITICAL, dependsOn task-f5a74c23 + task-40e52fa8) to carry the registry edge, the start trigger, the affordance offer and the shutdown sweep; commented the consumer-edge gap on task-f5a74c23; child 3 is BLOCKED on the new row and auto-unblocks when it lands.\n\nARCHITECT/GOVERNOR ASK: the new row needs a plan, and this parent's dependsOn should gain task-dd86f35e117e4de1b5b885332d8af1f8 - I hold a worker seat and set_task_dependencies is architect/governor-only. Current parent dependsOn = [task-40e52fa8, task-f5a74c23, task-33ceae56].",
+      "timestamp": "2026-09-06T01:18:05.417Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:05.246Z",
-  "updatedAt": "2026-09-04T23:01:06.785Z",
+  "updatedAt": "2026-09-06T01:18:05.417Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T21:54:03.317Z",
     "plannedStepCount": 5,
