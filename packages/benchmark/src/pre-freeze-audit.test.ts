@@ -53,8 +53,9 @@ const emptyVersionedRoot = (): string => {
   git("init", "--quiet");
   writeFileSync(join(root, "README.md"), "no pinned documents here\n");
   git("add", "--all");
+  // Disposable fixture history must not invoke the host's configured signing process.
   git("-c", "user.email=worker@moe.test", "-c", "user.name=moe worker",
-    "commit", "--quiet", "--message", "empty corpus fixture");
+    "commit", "--no-gpg-sign", "--quiet", "--message", "empty corpus fixture");
   return root;
 };
 
