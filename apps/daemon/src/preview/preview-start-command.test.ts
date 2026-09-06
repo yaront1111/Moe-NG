@@ -76,7 +76,7 @@ const SHOT: PreviewScreenshot = {
 const WRAPPER_FENCED_SERVED_KINDS: readonly string[] = Object.freeze([
   "approval.decide", "approval.decide_intent",
   "criterion_check.approve", "criterion_check.verify",
-  "deployment.deploy", "deployment.rollback", "deployment.set_target",
+  "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
   "environment.set_variable", "environment.unset_variable",
   "goal.close", "goal.create", "goal.create_with_source",
   // BOTH halves of the preview act, and the subject of this row.

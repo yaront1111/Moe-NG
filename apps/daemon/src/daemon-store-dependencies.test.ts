@@ -1131,8 +1131,8 @@ describe("the composed affordance port carries planning authority (task-ed89967f
  * rather than from a hand-written pair: a third deployment kind added to `PAYLOAD_KEYS` without
  * its fences reds here instead of shipping reachable. Deleting an entry from ANY side reds,
  * which is the property DoD 1 names.
- * The wrapper also retains one explicitly named, unserved migration kind. Its closed extension
- * is compared in full, and a real dispatch below proves the reserved kind admits no command.
+ * Schema rollback is now served. It must join every human-only fence, and malformed input
+ * must still refuse before a decision or event is written.
  *
  * NO COUNT LITERAL ANYWHERE IN THE ARM. Eight rows are moving these rosters concurrently; every
  * assertion below relates production surfaces to each other, so a sibling landing a kind cannot
@@ -1141,8 +1141,6 @@ describe("the composed affordance port carries planning authority (task-ed89967f
 describe("the deployment kinds are published human-only and MCP-excluded", () => {
   const advertised = Object.keys(PAYLOAD_KEYS)
     .filter((kind) => kind.startsWith("deployment.")).sort();
-  // Reserved staffing refusals remain even when no daemon command currently serves the kind.
-  const unservedWrapperKinds = Object.freeze(["deployment.migrate_down"] as const);
   const deploymentMembers = (roster: Iterable<string>): readonly string[] =>
     [...roster].filter((kind) => kind.startsWith("deployment.")).sort();
 
@@ -1165,13 +1163,14 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     // (3) THE STAFFING FENCE. Both kinds carry a non-null agent capability (GOAL, like
     // `repository.publish`), so absence here is a staffed-deployer leak the capability gate
     // would not refuse.
-    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual([...advertised, ...unservedWrapperKinds].sort());
+    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
   });
 
-  it.each(unservedWrapperKinds)("keeps %s fenced and refuses it as unserved without writing", (kind) => {
+  it("keeps schema rollback fenced and refuses malformed input without writing", () => {
+    const kind = "deployment.migrate_down";
     expect(HUMAN_ONLY_STEPS.has(kind)).toBe(true);
-    expect(Object.hasOwn(PAYLOAD_KEYS, kind)).toBe(false);
-    expect(deps.registry.has(kind)).toBe(false);
+    expect(Object.hasOwn(PAYLOAD_KEYS, kind)).toBe(true);
+    expect(deps.registry.has(kind)).toBe(true);
     expect(wiredMcpToolKinds()).not.toContain(kind);
     const observed = SqliteEventStore.openForProject(storePath, PROJECT);
     try {
@@ -1179,9 +1178,9 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
       expect(before.hasMore).toBe(false);
       const eventHorizon = observed.readEventHorizon();
       const result = dispatch(envelopeObject({
-        commandId: "cmd-unserved-migrate-down", commandKind: kind, payload: {},
+        commandId: "cmd-malformed-migrate-down", commandKind: kind, payload: { unrecognized: true },
       }));
-      expect(result).toMatchObject({ ok: false, outcome: "REFUSED", stage: "REGISTRY",
+      expect(result).toMatchObject({ ok: false, outcome: "REFUSED", stage: "PAYLOAD_SHAPE",
         error: { code: "INPUT_INVALID" } });
       const after = observed.readCommandDecisionsAfter(0n, 1000);
       expect(after.hasMore).toBe(false);

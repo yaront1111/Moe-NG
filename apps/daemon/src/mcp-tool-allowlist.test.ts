@@ -228,7 +228,7 @@ describe("wiredMcpToolKinds command half", () => {
     const expectedExcluded = Object.freeze([
       "approval.decide", "approval.decide_intent",
       "criterion_check.approve", "criterion_check.verify", "cutover.activate",
-      "deployment.deploy", "deployment.rollback", "deployment.set_target",
+      "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
       "environment.set_variable", "environment.unset_variable", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output",
       "preview.decide", "preview.start", "product_contract.answer_clarification",
@@ -239,7 +239,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(24);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(25);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -256,15 +256,15 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // Independent count witness: the current surface has 61 commands, subtracts the exact
-    // 24-member exclusion above, and adds seven queries. deployment.migrate_down remains a
-    // reserved wrapper refusal, but is neither served nor advertised by this daemon.
+    // Independent count witness: the current surface has 62 commands, subtracts the exact
+    // 25-member exclusion above, and adds seven queries. Schema rollback joins both the
+    // vocabulary and the exclusion, so it adds no agent-facing command.
     expect({
       excluded: MCP_EXCLUDED_COMMAND_KINDS.length,
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 24, queries: 7, vocabulary: 61, wired: 44 });
+    }).toEqual({ excluded: 25, queries: 7, vocabulary: 62, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {
