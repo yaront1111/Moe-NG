@@ -8,7 +8,8 @@ import type { DeployReceiptV1 } from "../deployment/deploy-receipt-contracts.js"
 import { readCurrentDeployReceipt, readDeployLedger } from "../deployment/deploy-ledger.js";
 import { DEPLOYMENT_HEALTH_PATH } from "../repository/deployment/deployment-infrastructure-templates.js";
 import { ensureHealthIncidentSchema, readHealthIncidents, updateHealthIncident } from "./health-incident.js";
-import { HEALTH_FAILURE_THRESHOLD, HEALTH_PROBE_RING_LIMIT, HEALTH_PROBE_VERSION } from "./health-probe-contracts.js";
+import { HEALTH_FAILURE_THRESHOLD, HEALTH_PROBE_RING_LIMIT, HEALTH_PROBE_SIDECAR_SUFFIX, HEALTH_PROBE_VERSION }
+  from "./health-probe-contracts.js";
 import type { HealthIncident, HealthProbe, HealthProbeCode, HealthProbeResult, HealthState } from "./health-probe-contracts.js";
 
 const APPLICATION_ID = 0x4d485031;
@@ -219,7 +220,7 @@ export function createHealthProbeJob(
 ): (signal: AbortSignal) => Promise<void> {
   const databasePath = options.store.getHealth().databasePath;
   if (databasePath === null) throw new Error("PROBE_STORE_UNAVAILABLE");
-  const ring = createHealthProbeRing(`${databasePath}.health.sqlite`, options.projectId);
+  const ring = createHealthProbeRing(`${databasePath}${HEALTH_PROBE_SIDECAR_SUFFIX}`, options.projectId);
   return async (signal) => {
     if (signal.aborted) return;
     let failure: HealthProbeCode | null = null;

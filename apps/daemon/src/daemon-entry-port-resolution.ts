@@ -29,6 +29,7 @@ import type {
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
 import type { PreviewReadPort } from "./http/preview-read.js";
@@ -56,6 +57,11 @@ export interface OptionalDaemonPortProvider {
    * config, so the binding is the composition root's fact and never request input.
    */
   environmentReads?(): EnvironmentsReadPort;
+  /**
+   * The deployment-environment health read. Bound to this daemon's own store, project AND probe
+   * ring sidecar: all three are composition-root facts, never request input.
+   */
+  deploymentsHealth?(): DeploymentsHealthReadPort;
   /** Durable preview receipts and captures from the runner's bound product workspace. */
   previewReads?(): PreviewReadPort;
   /** The goal's release evidence and the receipt of a decision taken on it. */
@@ -137,6 +143,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly goalSource?: GoalSourceReadPort;
   readonly designReads?: DesignReadPort;
   readonly environmentReads?: EnvironmentsReadPort;
+  readonly deploymentsHealth?: DeploymentsHealthReadPort;
   readonly previewReads?: PreviewReadPort;
   readonly releaseReads?: ReleaseReadPort;
   readonly previewCaptures?: PreviewCapturePort;
@@ -172,6 +179,7 @@ const FACTORIES = Object.freeze([
   "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "repositoryWorkflows", "goalSource",
   "designReads",
   "environmentReads",
+  "deploymentsHealth",
   "previewReads", "previewCaptures", "releaseReads",
   "sessionHandshake",
 ] as const);
@@ -378,6 +386,14 @@ export function resolveOptionalDaemonPorts(
     if (environmentReads !== undefined && !hasMethods(environmentReads, ["read"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const deploymentsHealthFactory = provider.deploymentsHealth;
+    if (deploymentsHealthFactory !== undefined && typeof deploymentsHealthFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const deploymentsHealth = deploymentsHealthFactory?.call(provider);
+    if (deploymentsHealth !== undefined && !hasMethods(deploymentsHealth, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const previewReadsFactory = provider.previewReads;
     if (previewReadsFactory !== undefined && typeof previewReadsFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -498,6 +514,7 @@ export function resolveOptionalDaemonPorts(
       ...(goalSource === undefined ? {} : { goalSource }),
       ...(designReads === undefined ? {} : { designReads }),
       ...(environmentReads === undefined ? {} : { environmentReads }),
+      ...(deploymentsHealth === undefined ? {} : { deploymentsHealth }),
       ...(previewReads === undefined ? {} : { previewReads }),
       ...(releaseReads === undefined ? {} : { releaseReads }),
       ...(previewCaptures === undefined ? {} : { previewCaptures }),

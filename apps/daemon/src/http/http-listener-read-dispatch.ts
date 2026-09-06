@@ -35,6 +35,9 @@ import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "
 import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP_READ_PATH, DEPLOYMENTS_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
+import {
+  DEPLOYMENTS_HEALTH_READ_PATH, handleDeploymentsHealthReadRequest,
+} from "./deployments-health-read.js";
 import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
 import { RELEASE_READ_PATH, handleReleaseReadRequest } from "./release-read.js";
 import {
@@ -103,6 +106,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   DEPLOYMENTS_READ_PATH,
   GOAL_SOURCE_READ_PATH,
   DESIGN_READ_PATH,
+  DEPLOYMENTS_HEALTH_READ_PATH,
   ENVIRONMENTS_READ_PATH,
   PREVIEW_READ_PATH,
   RELEASE_READ_PATH,
@@ -396,6 +400,21 @@ function serveDesign(
 }
 
 /**
+ * Deployment-environment health. The listener refusal carries the DECODER'S OWN code, not one
+ * flattened here: `/deployments/health/read` tells a missing key apart from an unknown one, and
+ * collapsing them at the dispatch would undo that distinction on the wire.
+ */
+function serveDeploymentsHealth(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleDeploymentsHealthReadRequest({
+    authenticator: options.deps.authenticator, deploymentsHealth: options.deploymentsHealth,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
  * The per-environment variable table. The port answer travels VERBATIM at 200 for the same
  * reason the design read's does: reshaping here is where a field nobody named would come from,
  * and on this route that field could carry a secret.
@@ -614,6 +633,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_ENVIRONMENTS_REQUEST_INVALID");
     return;
   }
+  if (path === DEPLOYMENTS_HEALTH_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID");
+    return;
+  }
   if (path === PREVIEW_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_PREVIEW_REQUEST_INVALID");
     return;
@@ -702,6 +725,8 @@ export async function serveReadDispatch(
     serveSessionChallengeOperands(response, request, options, body);
   } else if (path === DESIGN_READ_PATH) {
     serveDesign(response, request, options, body);
+  } else if (path === DEPLOYMENTS_HEALTH_READ_PATH) {
+    serveDeploymentsHealth(response, request, options, body);
   } else if (path === ENVIRONMENTS_READ_PATH) {
     serveEnvironments(response, request, options, body);
   } else if (path === PREVIEW_READ_PATH) {

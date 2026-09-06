@@ -18,6 +18,7 @@ import type { SessionsReadPort } from "./sessions-read.js";
 import type { RepositoryRemoteReadPort } from "./repository-remote-read.js";
 import type { RepositoryWorkflowReadPort } from "./repository-workflow-read.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
+import type { DeploymentsHealthReadPort } from "./deployments-health-read.js";
 import type { DesignReadPort } from "./design-read.js";
 import type { EnvironmentsReadPort } from "./environments-read.js";
 import type { PreviewCapturePort } from "./preview-capture-route.js";
@@ -164,6 +165,12 @@ export interface StartListenerOptions {
   readonly designReads?: DesignReadPort;
   /** Absent means the per-environment variable-table read refuses as unavailable. */
   readonly environmentReads?: EnvironmentsReadPort;
+  /**
+   * Absent means the deployment-environment health read refuses as UNAVAILABLE. Never a healthy
+   * default: a daemon composed without this port cannot see any environment, and answering UP
+   * for all of them is the most dangerous output a health route has.
+   */
+  readonly deploymentsHealth?: DeploymentsHealthReadPort;
   /**
    * Absent means the preview receipt read refuses as unavailable rather than answering ABSENT:
    * an unwired daemon must not tell a card "this goal has no preview".

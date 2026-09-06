@@ -93,6 +93,18 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The design-revision read: same transport pair.
   "LISTENER_DESIGN_REQUEST_INVALID",
   "LISTENER_DESIGN_UNAVAILABLE",
+  // The deployment-environment health read (`/deployments/health/read`). FOUR codes rather than
+  // the usual pair, because its body contract is exact-key and the two ways to break it are
+  // fixed differently: MISSING_KEY names no environment at all, UNKNOWN_KEY names a key this
+  // route does not serve (including a `projectId` the principal already decides). A single
+  // code for both would leave a client unable to tell which mistake it made. REQUEST_INVALID
+  // keeps its usual meaning — a non-POST, an undecodable body, a non-object, or an environment
+  // that is not a usable string. UNAVAILABLE covers a daemon composed without the health port,
+  // which must refuse rather than answer a healthy default for environments it cannot see.
+  "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY",
+  "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID",
+  "LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE",
+  "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY",
   // The preview surface's transport pair, shared by BOTH its routes: the JSON receipt read
   // (`/preview/read`) and the capture-bytes route (`/preview/capture/...`). REQUEST_INVALID
   // covers a non-POST receipt read and any body that is not exactly `{goalId}`; UNAVAILABLE
@@ -248,6 +260,10 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE") return 503;
   if (code === "LISTENER_PREVIEW_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PREVIEW_UNAVAILABLE") return 503;
   if (code === "LISTENER_RELEASE_REQUEST_INVALID") return 400;

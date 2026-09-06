@@ -4,6 +4,9 @@ export const HEALTH_PROBE_RING_LIMIT = 1440;
 export const HEALTH_FAILURE_THRESHOLD = 3;
 export const PROBE_URL_MISSING = "PROBE_URL_MISSING" as const;
 export const HEALTH_PROBE_JOB_ID = "monitoring/health-probes" as const;
+/** The ring's sidecar file, appended to the event store's own database path. Shared so the job
+ * that WRITES the ring and the read that serves it can never disagree about which file it is. */
+export const HEALTH_PROBE_SIDECAR_SUFFIX = ".health.sqlite" as const;
 
 export interface HealthProbe {
   readonly version: typeof HEALTH_PROBE_VERSION;

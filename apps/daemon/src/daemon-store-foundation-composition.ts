@@ -11,6 +11,7 @@ import {
 } from "@moe/store/subscriptions/subscription-writes.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
+import type { ReleasePrPort } from "./release/release-pr-port.js";
 import { cutoverActivationWiringOf } from "./daemon-store-cutover-wiring.js";
 import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
@@ -106,12 +107,24 @@ import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
 import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wiring.js";
 import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
 import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
-import { createHealthProbeJob } from "./monitoring/health-probe-ring.js";
+import { createHealthProbeJob, createHealthProbeRing } from "./monitoring/health-probe-ring.js";
 import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
-import { HEALTH_PROBE_JOB_ID } from "./monitoring/health-probe-contracts.js";
+import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX } from "./monitoring/health-probe-contracts.js";
+import { readDeployLedger } from "./deployment/deploy-ledger.js";
+import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
 
 export interface StoreDependencyConfig {
   readonly deploymentDeploy?: DeploymentDeploySeams;
+  /**
+   * Replaces ONLY the pull-request spawn of the release edge; every other release collaborator
+   * (the publisher, the dossier facts, the workspace, the clock) stays the production one.
+   * Absent is the real `gh`, which is what any daemon nobody configured keeps getting.
+   *
+   * The same shape and the same reason as `deploymentDeploy` above: a lane that wants to prove
+   * the release chain end to end cannot spawn `gh` against a real repository on every run, and
+   * a lane that faked the whole seam would prove only that its own double answers.
+   */
+  readonly releasePrPort?: ReleasePrPort;
   readonly healthProbeHttp?: HealthHttpPort;
   readonly schedule?: Pick<ScheduleConfig, "timer" | "resolve">;
   readonly repositoryWorkspace?: string | null;
@@ -196,8 +209,13 @@ export function createStoreDependencies(
       return repositoryWorkspace;
     },
   });
-  const releaseDecide = createProductionReleaseSeams({ store, projectId: config.projectId,
-    storePath: config.storePath, workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, clock });
+  const releaseDecide = {
+    ...createProductionReleaseSeams({ store, projectId: config.projectId,
+      storePath: config.storePath, workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, clock }),
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
+    // DIFFERENT thing from an absent key, and only the absent key means "spawn the real gh".
+    ...(config.releasePrPort === undefined ? {} : { prPort: config.releasePrPort }),
+  };
   const workflows = createRepositoryWorkflowWiring({ store, projectId: config.projectId, storePath: config.storePath,
     workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, nodeSpecsDir: config.nodeSpecsDir, clock });
   const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
@@ -613,6 +631,41 @@ export function createStoreDependencies(
 
   const healthProbe = createHealthProbeJob({ store, projectId: config.projectId, clock,
     ...(config.healthProbeHttp === undefined ? {} : { http: config.healthProbeHttp }) });
+  /**
+   * The operator-facing read over what the probe job WRITES. It opens the SAME sidecar the job
+   * does — one shared suffix constant, so the writer and the reader cannot come to disagree about
+   * which file the ring lives in — and it re-derives the state on every call rather than caching
+   * one, because a cached verdict is a stored status field by another name.
+   *
+   * The project is bound HERE, never from a request: the ring rows and the deploy ledger are both
+   * scoped by projectId, and a route-supplied one would let a caller read another project's
+   * outage. A store with no durable path refuses as PROBE_STORE_UNAVAILABLE rather than serving
+   * an empty history that would read as "nothing wrong".
+   */
+  const deploymentsHealth = (): DeploymentsHealthReadPort => {
+    const databasePath = store.getHealth().databasePath;
+    const ring = databasePath === null
+      ? null : createHealthProbeRing(`${databasePath}${HEALTH_PROBE_SIDECAR_SUFFIX}`, config.projectId);
+    return Object.freeze({
+      read: (input: { readonly environment: string }) => {
+        if (ring === null) {
+          return Object.freeze({ code: "PROBE_STORE_UNAVAILABLE" as const, layer: "DAEMON_INGRESS" as const, ok: false as const });
+        }
+        const probes = ring.read(input.environment);
+        if (!probes.ok) return probes;
+        const incidents = ring.incidents(input.environment);
+        if (!incidents.ok) return incidents;
+        return Object.freeze({
+          ok: true as const,
+          value: Object.freeze({
+            deploys: readDeployLedger(store, config.projectId).get(input.environment) ?? null,
+            incidents: incidents.value,
+            probes: probes.value,
+          }),
+        });
+      },
+    });
+  };
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
     resolve: (id) => id === HEALTH_PROBE_JOB_ID ? healthProbe : config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
@@ -625,6 +678,7 @@ export function createStoreDependencies(
     budgetCommitment,
     close,
     commandAuthorityPlane,
+    deploymentsHealth,
     designReads,
     documentCoverage,
     documentDossiers,

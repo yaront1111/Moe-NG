@@ -114,8 +114,17 @@ function proxiedPaths(): ReadonlySet<string> {
  *   task-ba83b202265d40d1885d3091f009b0a2, which declares dependsOn against it. That row
  *   retires this entry in the same edit that adds the pin, exactly as task-e6000b57 and
  *   task-1c9587ed retired the two above.
+ *
+ * - `/deployments/health/read`: recorded by task-509c6c1609174adb9228940bc002f5c3, which owns
+ *   the daemon half ONLY. Its task rail 5 forbids it touching apps/control-room ("NO UI, NO
+ *   PROXY PIN, NO CLIENT DECODER"), because the two consumers -- the Needs-you incident card
+ *   (task-85895a88a2484d8589046b2030efd445) and the Environments surface
+ *   (task-df972c274f2a43eda3a9f57d2780c6f9) -- own the pin and the exact-key decoder. Whichever
+ *   of those lands first retires this entry in the same edit that adds the pin.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/read"]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
+  "/deployments/health/read", "/environments/read",
+]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -156,6 +165,12 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   "/budget/commitment/read",
+  // `/deployments/health/read`: the daemon half landed with task-509c6c1609174adb9228940bc002f5c3,
+  // whose task rail 5 forbids it touching apps/control-room. Its two consumers own the client
+  // decoder and the proxy pin: the Needs-you incident card (task-85895a88a2484d8589046b2030efd445)
+  // and the Environments surface (task-df972c274f2a43eda3a9f57d2780c6f9). Whichever lands first
+  // retires this entry and its twin in the proxy census above, in the same edit.
+  "/deployments/health/read",
   "/documents/ingest",
   // Same pair as the proxy census above and retired by the same row: the daemon half landed
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
@@ -334,7 +349,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(34);
+    expect(roster.size).toBe(35);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
