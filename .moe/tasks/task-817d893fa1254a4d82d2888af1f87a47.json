@@ -19,8 +19,99 @@
     "REAL FRAMES ONLY: control-room fixtures come from a real daemon run; exact-key decoders reject hand-written frames, and the failure looks like a test bug rather than a fixture bug.",
     "Check any new testid namespace is free before using it, keep JSX text ASCII-only and apostrophe-free (the scheduler package-boundary scan reds otherwise), and keep every production file under 250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, AND CONFIRM THE PREREQUISITE ACTUALLY LANDED. NO EDITS. (a) THE GATE ON THIS ROW: task-2120955202764428a53be598d0f149b4 must be DONE — read its completionSummary and reviewSummary via get_context.epicSiblings, and READ THE DELIVERED OFFER KEY from the tree: `git grep -n \"release\\.decide\" -- apps/daemon/src/http` must now be NONZERO. Record the EXACT `targetAggregateId` it mints and the withholding horn it chose; your card matches that key by value and your DoD-3 arm depends on that rule. Do NOT hard-code a guessed literal. If that grep is still zero, STOP and report — the card cannot render and mocking an offer is what task rail 1 forbids. (b) Read the shapes you render: `ReleaseReceiptV1` (release-receipt-contracts.ts:28-39) for `outcome`, `prUrl`, `refusalCode`, `dossierSha256`, `sha`; and the closed map `RELEASE_DECIDE_CODE_LAYER_MAP` (release-decide-contracts.ts:8-16) with its three codes and layers. (c) Read the patterns you copy: goal-publish.tsx:39-41 (offer match), :86 (absent when unoffered), :91 (action gating); publish-port.ts in full (22 lines — the entire port shape); offer-wire.ts:62-82 (`spendOffer` and the refusal codes it already returns). (d) Confirm the dossier's UNKNOWN representation — read task-70a7ccd3's delivered dossier contracts and find how an unmeasurable criterion is carried, because DoD 1 turns on rendering that count SEPARATELY. (e) Confirm `cr.release` is a free testid namespace and note NEEDS_YOU_KINDS has FIVE members (needs-you-model.ts:35-37), not the four the description claims. Record the baseline for all five gates.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-publish.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE RELEASE PORT — NEW `apps/control-room/src/v2/goals/release-port.ts`, modelled on publish-port.ts (22 lines; read it first and keep this one comparably small). It exports a kind constant, a LAYER constant (`CONTROL_ROOM_RELEASE`), and a `createReleasePort(wire)` returning a frozen object whose `submit(affordance, ...)` calls `spendOffer(wire, RELEASE_COMMAND_KIND, affordance, payload, \"ui-release\", RELEASE_LAYER)`. THE PAYLOAD IS EXACTLY `{base, decision, goalId, sha}` — daemon-command-payload-keys.ts:173 declares those four keys and the daemon's decoder is exact-arity, so a fifth key or a missing one refuses. NO SECOND DECISION WIRE (task rail 3): `spendOffer` is the only path, and it already returns refusals carrying a code AND a layer (OFFER_KIND_UNBUILDABLE, plus build- and transport-layer codes) — render those, never invent parallel ones. The `affordance` argument is the daemon's offer row spent VERBATIM; do not reshape it, and do not construct one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/release-port.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/release-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE RELEASE CARD — NEW `apps/control-room/src/v2/goals/goal-release.tsx`, modelled on goal-publish.tsx and kept UNDER 250 LINES. Find the offer exactly as :39-41 does: match BOTH `commandKind === \"release.decide\"` AND `targetAggregateId` equal by value to the key step 1 read from the delivered tree. ABSENT WHEN UNOFFERED (DoD 3): with no offer and no receipt the card returns null and renders NOTHING — goal-publish.tsx:86 states the reason, and a control that dispatches into a refusal is worse than an honest explanation. THE EVIDENCE SUMMARY IS THE PRODUCT (DoD 1): render criteria covered n/m, the verifier receipts and landing shas, and the preview decision or its EXPLICIT ABSENCE. **SHOW THE UNKNOWN COUNT SEPARATELY AND ALWAYS WHEN NON-ZERO** — never folded into covered (task rail 2). This is the defect the row's own description calls the worst it could ship: an operator approving a release believing evidence that was never measured. Arm/confirm follows the PUBLISH card's shape. AFTERWARDS: a RELEASED receipt renders `prUrl` as the PR link; a REFUSED receipt renders `refusalCode` VERBATIM plus the missing criterion ids the refusal carries. Derive any code list from `RELEASE_DECIDE_CODES` rather than restating the three codes — that constant is derived from the closed layer map and a hand-written copy is a second authority. JSX TEXT MUST BE ASCII-ONLY AND APOSTROPHE-FREE (task rail 5), and use the free `cr.release.*` testid namespace.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-release.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/goal-release.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE CARD ARMS — NEW `apps/control-room/src/v2/goals/goal-release.test.tsx` (test files are exempt from the line cap). FIVE ARMS, each against the component with REAL-SHAPED frames: (a) THE UNKNOWN ARM, DoD 1's teeth: a dossier carrying an unmeasurable criterion renders the UNKNOWN count VISIBLY AND SEPARATELY from covered. Assert the rendered text, not an internal value — this is the arm that stops an operator approving unmeasured evidence, and it is the single most important assertion in this row. (b) OFFERED: with the offer present the card renders and the approve control is enabled. (c) UNOFFERED (DoD 3): with no offer and no receipt the card renders NOTHING — assert absence of the root testid, not a disabled button. (d) RELEASED: a RELEASED receipt renders the `prUrl` link. (e) REFUSED: a REFUSED receipt renders `RELEASE_EVIDENCE_INCOMPLETE` VERBATIM as literal text AND the missing criterion ids reach the operator (DoD 2 says assert the literal). Assert the code string itself, since a friendly paraphrase alone would hide which layer refused.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-release.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/goals/goal-release.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "NEEDS-YOU AND THE RUNS FEED (DoD 4). (1) `apps/control-room/src/v2/approvals/needs-you-model.ts` (226 lines): add a release entry to `NEEDS_YOU_KINDS` (:35-37 — note it currently has FIVE members, not the four the description says) with a `*Facts` interface carrying `affordance: Readonly<Record<string, unknown>>`, following `EscalationFacts:40-46` whose comment reads \"The daemon's offer, spent verbatim by the escalation port\". (2) `apps/control-room/src/v2/ops/activity-words.ts` (note: under v2/ops/, NOT v2/activity/): map the release receipt kind to operator words so Runs shows it. ASSERT APPEARANCE **AND DISAPPEARANCE** (DoD 4 says so explicitly): a goal ready for release is listed, and once RELEASED it stops being listed — a queue entry that never clears grows forever. Put both arms in `needs-you-model.test.ts` (259 lines). WATCH THE ROSTER CONSUMERS: any test pinning `NEEDS_YOU_KINDS` by length or exact set reds when a sixth member appears — grep for those before you edit and fix them in the same commit, or name them and stop if they fall outside this plan's files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+        "apps/control-room/src/v2/ops/activity-words.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MOUNT THE CARD, then THE PLAYWRIGHT JOURNEY (DoD 5). (1) `apps/control-room/src/v2/cordum-app.tsx` is 490 lines — add ONE import and ONE element beside the PUBLISH card and nothing else; do not refactor it, several rows mount into it. (2) NEW `tests/e2e/control-room/release-approval.spec.ts` against a REAL daemon, reusing the existing lane harness — do not write a second daemon launcher. The journey is evidence -> card -> approve -> PR link. REAL FRAMES ONLY (task rail 4): capture the control-room fixtures from THIS run's real daemon frames; the exact-key decoders reject hand-written ones and the failure looks like a test bug rather than a fixture bug, which is how an afternoon disappears. CLEAN UP ON EVERY EXIT PATH INCLUDING FAILURES: the daemon child, its port and its store directory die in teardown, not at the end of a happy path. RUN IT AND QUOTE THE SPEC COUNT WITH THE SPEC NAMED — `pnpm test:e2e:browser` is `tsc -p ... && playwright test -c ...`, so a typecheck failure means ZERO specs ran and the exit code alone cannot tell you.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE LIVE DRIVE (DoD 6) — the arm that proves this is a product and not a simulation. Open a REAL pull request from the browser flow, on the UnAI remote or a throwaway GitHub repository supplied by the owner. Record in a ROW COMMENT under ~4500 chars: the PR URL, the release receipt id, and the dossier sha256 (`dossierSha256` is already on the receipt, release-receipt-contracts.ts:28). IF `gh` IS ABSENT OR UNAUTHENTICATED ON THE LANE, that is NOT a failure of this row and NOT something to work around: record the `RELEASE_PR_FAILED` refusal with its stderr line VERBATIM — the row's DoD names that as a legitimate recorded outcome. **NEVER hand-open a pull request and present it as the product's output, and never fabricate a URL.** A fabricated PR is the worst possible outcome of this row: it would certify a capability nobody has. If the owner has not supplied a target repository, ask in the row comment and record the refusal path meanwhile.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "THE DOCS SWEEP (DoD 7), rewriting three located clauses to the MEASURED truth — not to an aspiration. (1) `README.md:142` currently reads \"no working preview and no release gate, so the vision's Gates 2 and 3 do not...\" — Gate 3 now exists, so rewrite that clause and DATE the claim. Check whether the Gate 2 half of the same sentence is also stale before editing around it. (2) `README.md:171` \"to a proof-carrying, verified pull request\" — confirm it now describes something real and adjust if it over-claims. (3) `docs/VISION.md:137` Stage 1 status line \"...isolated verifier; working browser preview; proof-carrying\" — rewrite to the measured status. (4) `docs/agent-stack-runbook.md` (741 lines): document the `gh` PREREQUISITE and its refusal — an operator whose lane has no `gh` gets `RELEASE_PR_FAILED @ RUNNER_WORKSPACE`, and the runbook is where they find that out before it happens rather than after. WRITE ONLY WHAT YOU MEASURED: if the live drive in step 7 recorded a refusal rather than a PR, the docs say the capability exists and names its prerequisite — they do not claim a PR was opened.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md",
+        "docs/VISION.md",
+        "docs/agent-stack-runbook.md"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "DRILLS, GATES, ADVERSARIAL PASS. DRILLS — `git status --porcelain` the mutated paths FIRST; state which are TRACKED (empty `git diff -- <path>`, in a call SEPARATE from the restore) and which are NEW/untracked (`git diff` is BLIND to them — back each up out of tree under %TEMP% suffixed with your worker id and prove restoration by SHA256, global rail 13). THREE DRILLS: (i) THE ROW'S SUBJECT — fold the UNKNOWN count into covered and confirm the DoD-1 arm goes RED naming the missing count. That failing line IS the defect task rail 2 exists to prevent, so quote it. (ii) Make the card render with no offer (remove the null return) and confirm the DoD-3 absence arm reds — a dead button in front of an operator is what that arm prevents. (iii) Replace the verbatim `refusalCode` with a friendly paraphrase and confirm the DoD-2 literal arm reds. GATES — standalone and foreground, one command per call, no pipes and no `;` chains, each quoted with its `Test Files N passed` count line (an exit-0 leg with NO count line RAN NOTHING, global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` (MANDATORY — this row is almost entirely apps/control-room and the daemon leg covers none of it), `pnpm typecheck`, `pnpm test` (root lane; say explicitly that it covers NO apps/** file), and `pnpm test:e2e:browser` with its SPEC COUNT quoted and the spec NAMED. If the exclusive full-suite lease is contended, cite a named recent run with its anchor rather than queueing. Attribute red by HEAD minus step 1's baseline intersected with this row's owned paths. ADVERSARIAL PASS: can the card render an approve control when the offer is absent; can a REFUSED receipt ever read as never-attempted; does the UNKNOWN count survive a dossier with zero criteria; is the payload exactly the four declared keys; did any NEEDS_YOU_KINDS consumer outside this plan red; and does any doc sentence now claim more than step 7 actually measured. COMPLETION RECORD: name the offer key you matched and where you read it, the three drill outcomes with failing lines, the live-drive result (PR URL or the verbatim refusal), and the five gate count lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-release.tsx",
+        "apps/control-room/src/v2/goals/goal-release.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,7 +121,8 @@
   "parentTaskId": "task-2a345b2e97d94599b4688af1923056e5",
   "dependsOn": [
     "task-70a7ccd3293f465fbc9c1888ae540f5d",
-    "task-f961dc899a13488da8f119abdc37631f"
+    "task-f961dc899a13488da8f119abdc37631f",
+    "task-2120955202764428a53be598d0f149b4"
   ],
   "priority": "HIGH",
   "order": 43,
@@ -44,13 +136,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-06T17:45:17.001Z",
+  "updatedAt": "2026-09-06T17:54:32.922Z",
   "metrics": {
-    "firstClaimAt": "2026-09-05T11:25:19.038Z"
+    "firstClaimAt": "2026-09-05T11:25:19.038Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 12
   },
   "contextFetchedBy": [
     "architect-3c27f2ab",
-    "worker-d6e44333"
+    "worker-d6e44333",
+    "architect-aa54e231"
   ],
   "priorHandoffs": [
     {
@@ -67,5 +162,28 @@
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-06T17:54:30.675Z",
+  "planningNotes": {
+    "approachesConsidered": "THE PRIOR HANDOFF IS NOW STALE IN THE GOOD DIRECTION, and re-measuring is what unblocked this row. architect-3c27f2ab released it on 2026-09-05 because `grep release.decide` returned ZERO and planning the journey would have shipped a mock-backed proof. At HEAD today that grep returns SEVENTEEN production hits and all three producer rows are DONE: task-f961dc89 (kind + proof-carrying PR, 11/11), task-70a7ccd3 (dossier, 7/7), task-bda0eeac (shared contract, 9/9), with task-54b74b80 (daemon registry wiring) DONE 8/8 and task-20b7d6bb folded and ARCHIVED. The handoff's own instruction was \"then re-claim this proof row and plan the browser card/journey against measured production\" — that condition is met for the KIND.\n\nBUT ONE CAPABILITY IS STILL MISSING, AND IT IS THE ONE THE CARD SPENDS. `release.decide` is SERVED (async entry, daemon-command-async-entries.ts:332-335) and OFFERED NOWHERE: zero hits in apps/daemon/src/http minus tests, not a bootstrap kind so no generic emission, and the planning ladder's mintable-kind union at affordance-planning-offers.ts:146-147 is a CLOSED TYPE listing six kinds that excludes it. `spendOffer` (offer-wire.ts:62-69) takes the offer ROW as its `affordance` argument, and the PUBLISH card this row is told to model finds its offer in the frame (goal-publish.tsx:39-41) and renders NOTHING when there is none (:86). So DoD 2, 5 and 6 were unsatisfiable and DoD 3 was vacuously true.\n\nI DID NOT NARROW THE DoD OR MOCK THE OFFER. Task rail 1 forbids repairing the subject inside the proof, and global rail 4 clause 2 requires prerequisite production rows with the gap measured symbol by symbol. So I FILED task-2120955202764428a53be598d0f149b4 (the release.decide affordance offer) with the gap measured three ways, and set this row's dependsOn to include it — dependsOnUnmet is now 1, so the runtime gates the WORKING claim and this row becomes claimable automatically when the offer lands. Rail 16 says do not block on ordering you can fix by declaring the dependency, which is exactly what this is.\n\nWHY THIS ROW IS NOT SPLIT despite seven DoD items. Its own description says it owns the journey, the live PR, the docs sweep and the adversarial pass precisely SO THAT neither sibling files its own evidence row (global rail 21). Splitting it would recreate the phase anti-seam that rail exists to prevent. It is 11 files against a cap of 20 and 9 steps against 12.\n\nTHE TARGET KEY IS READ, NOT GUESSED. The producer row decides it (`release:<goalId>` follows `publish:<goalId>`), so this plan tells the worker to read the delivered key from the tree rather than hard-coding a literal — the same discipline that worked on the deployment offer rows.",
+    "codebaseInsights": "MEASURED AT HEAD ON moe/work-2026-09-04, 2026-09-06 (global rail 6 — the handoff is a day old and was stale in both directions).\n\nWHAT LANDED SINCE THE HANDOFF: `git grep -n \"release\\.decide\" -- apps packages adapters` minus tests = 17 production hits, including release-decide-contracts.ts:31 (kind), release-decide-service.ts, daemon-command-payload-keys.ts:173 `[\"base\",\"decision\",\"goalId\",\"sha\"]`, agent-spawn-contract.ts:212 (human-only fence), runtime-vocabulary.ts:113 and generated-client.ts:268/:392 (the browser CAN build the command).\n\nTHE REMAINING GAP, measured three ways and now owned by task-21209552:\n(1) SERVED: daemon-command-async-entries.ts:332-335, async entry, `requiredCapability: CAPABILITIES.GOAL`, operator-fenced at :170.\n(2) NOT OFFERED: `git grep -n \"release\\.decide\\|RELEASE_DECIDE\" -- apps/daemon/src/http` minus tests = ZERO. Not in bootstrap-contracts.ts either, so no generic emission.\n(3) The ladder's union at affordance-planning-offers.ts:146-147 is exactly `\"approval.decide\" | \"approval.decide_intent\" | \"goal.close\" | \"plan.propose\" | \"preview.decide\" | \"repository.publish\"`.\n\nTHE SHAPES THIS ROW RENDERS, read at HEAD:\n- `ReleaseReceiptV1` (release-receipt-contracts.ts:28-39): `{dossierSha256, goalId, outcome: \"RELEASED\"|\"REFUSED\", prUrl: string|null, projectId, receiptId, refusalCode: ReleaseDecideCode|null, sha, version}`. `prUrl` is the PR link DoD 2 wants; `refusalCode` is the code it must render verbatim.\n- THE CLOSED REFUSAL MAP (release-decide-contracts.ts:8-16), three codes each with the layer that mints it: `RELEASE_EVIDENCE_INCOMPLETE: \"DAEMON_PREREQUISITE\"`, `RELEASE_PR_FAILED: \"RUNNER_WORKSPACE\"`, `RELEASE_REMOTE_MISSING: \"PROJECT_REDUCER\"`. `RELEASE_DECIDE_CODES` is DERIVED from that map's key set — do not restate it in the browser; a hand-written roster is a second authority.\n- `dossierSha256(markdown)` (release-receipt-contracts.ts:80) and `releaseReceiptId(...)` (:99) already exist for DoD 6's comment.\n\nTHE PATTERNS TO COMPOSE, all confirmed present:\n- CARD: apps/control-room/src/v2/goals/goal-publish.tsx (187 lines). :39-41 finds the offer by `commandKind` AND exact `targetAggregateId`; :86 \"Nothing landed means no offer and no receipt: the card is not a thing on this screen at all\"; :91 gates the action on `offer !== null && port !== null && !busy`.\n- PORT: apps/control-room/src/v2/goals/publish-port.ts (22 lines) — the whole shape: a kind constant, a LAYER constant, a `create*Port` returning a frozen object whose `submit` calls `spendOffer(wire, KIND, affordance, payload, prefix, LAYER)`.\n- `spendOffer` (offer-wire.ts:62-82) hashes the payload, builds through `wire.client.commands[kind]`, returns `OFFER_KIND_UNBUILDABLE` when the builder is absent, then a build/transport-layer refusal. Refusals already carry code AND layer — render them, do not invent new ones.\n- NEEDS-YOU: needs-you-model.ts:35-37 `NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\",\"PLAN_REJECTED\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]` — a FIVE-member roster (the description says four; it has grown). Its `*Facts` interfaces (e.g. `EscalationFacts:40-46`) carry `affordance: Readonly<Record<string, unknown>>` \"The daemon's offer, spent verbatim\" — copy that.\n- WORDS: apps/control-room/src/v2/ops/activity-words.ts (NOT under v2/activity/).\n- MOUNT: apps/control-room/src/v2/cordum-app.tsx (490 lines — near the 400 target but under the hard 400 split threshold only for PRODUCTION sources; it is already over, so add ONE import and ONE element and nothing else).\n\nDOCS TARGETS FOR DoD 7, located: README.md:142 \"no working preview and no release gate, so the vision's Gates 2 and 3 do not\"; README.md:171 \"to a proof-carrying, verified pull request\"; docs/VISION.md:137 \"...isolated verifier; working browser preview; proof-carrying\"; the runbook is docs/agent-stack-runbook.md (741 lines) for the `gh` prerequisite.\n\nTESTID NAMESPACE IS FREE: `git grep -c \"cr\\.release\" -- apps/control-room/src` returns nothing.",
+    "risks": "1. THE OFFER MUST LAND FIRST. task-21209552 is this row's unmet dependency. If you somehow claim this row before it is DONE, the card cannot render and the journey cannot pass — STOP and report rather than mocking an offer into the frame, which is exactly what task rail 1 and global rail 4 clause 2 forbid.\n2. NEVER FOLD UNKNOWN INTO COVERED (task rail 2, DoD 1). This is named as the worst defect the row could ship: an operator approving a release believing evidence that was never measured. Show the UNKNOWN count SEPARATELY, and assert it is visible when the dossier carries one.\n3. DO NOT RESTATE THE REFUSAL ROSTER. `RELEASE_DECIDE_CODES` is derived from the closed code->layer map (release-decide-contracts.ts:8-25). A hand-written list in the browser is a second authority that will drift.\n4. REAL FRAMES ONLY (task rail 4). The control-room decoders are exact-key; a hand-written fixture fails in a way that looks like a test bug rather than a fixture bug. Capture frames from the real daemon run in step 6 and use those.\n5. THE E2E SCRIPT HIDES A ZERO-SPEC RUN: `test:e2e:browser` is `tsc -p ... && playwright test -c ...`, so a typecheck failure means Playwright never ran. Quote the SPEC COUNT and name the spec.\n6. A FABRICATED PR IS THE WORST POSSIBLE OUTCOME OF DoD 6. If `gh` is absent or unauthenticated, record the RELEASE_PR_FAILED refusal with its stderr verbatim — that IS the legitimate result. Never hand-open a PR and describe it as the product's output.\n7. cordum-app.tsx IS 490 LINES. One import and one element. Do not refactor it; several rows mount into it.\n8. ASCII-ONLY, APOSTROPHE-FREE JSX TEXT (task rail 5) — the scheduler package-boundary scan reds otherwise. Check the new testid namespace is free before using it (`cr.release` is currently unused).\n9. NEEDS_YOU_KINDS HAS FIVE MEMBERS, not the four the description says. Any test pinning that roster's length or set will red when a sixth appears — find it before the gate does.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/goal-publish.tsx",
+      "apps/control-room/src/v2/goals/publish-port.ts",
+      "apps/control-room/src/v2/approvals/offer-wire.ts",
+      "apps/control-room/src/v2/approvals/needs-you-model.ts",
+      "apps/daemon/src/release/release-receipt-contracts.ts",
+      "apps/daemon/src/release/release-decide-contracts.ts",
+      "apps/daemon/src/http/affordance-planning-offers.ts",
+      "apps/control-room/src/v2/ops/activity-words.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-06T17:54:32.922Z"
 }

@@ -17,11 +17,12 @@
  * are what a root-confined server built on the unnarrowed locator WOULD have handed out.
  */
 import {
-  mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -444,5 +445,37 @@ describe("method, authority and composition", () => {
 
   it("derives its root from the ONE statement of the capture layout", () => {
     expect(previewsRootRelativePath()).toBe(".moe-next/previews");
+  });
+
+  /**
+   * A NUL BYTE IN A `.ts` MAKES THE WHOLE MODULE INVISIBLE TO EVERY TEXT CENSUS. `grep`,
+   * `git grep` and `file` all classify a file carrying one as BINARY — `git grep -n <symbol>
+   * -- <file>` prints "Binary file ... matches" and NO LINES — so the module drops silently
+   * out of the full-tree literal census this epic requires of any row publishing a route.
+   * This row shipped exactly that once: two NUL sentinels in `preview-capture-route.ts`,
+   * undisclosed, and undetectable by the tooling that was meant to catch them.
+   *
+   * NOT VACUOUS, two ways: the counter is first run against a buffer that DOES carry a NUL, so
+   * a predicate that had stopped looking fails here rather than passing by finding nothing;
+   * and the roster length is pinned, so a sweep that enumerated zero files cannot pass.
+   */
+  it("ships no NUL byte in any module this row delivers", () => {
+    const delivered = [
+      "preview-capture-route.ts", "preview-capture-route.js", "preview-capture-route.test.ts",
+      "preview-read.ts", "preview-read.js", "preview-read.test.ts",
+    ] as const;
+    const nulsIn = (bytes: Uint8Array): number => bytes.filter((byte) => byte === 0).length;
+
+    expect(nulsIn(Uint8Array.from([0x61, 0x00, 0x62]))).toBe(1);
+    expect(nulsIn(Uint8Array.from([0x61, 0x62]))).toBe(0);
+
+    const offenders = delivered
+      .map((name) => ({
+        name,
+        nuls: nulsIn(readFileSync(fileURLToPath(new URL(name, import.meta.url)))),
+      }))
+      .filter((entry) => entry.nuls > 0);
+    expect(offenders).toEqual([]);
+    expect(delivered.length).toBe(6);
   });
 });
