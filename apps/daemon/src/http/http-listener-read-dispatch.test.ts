@@ -130,6 +130,9 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/
  * /v2/product-contract/pending/read (gate1-approval.ts), not current.
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
+ * /preview/read: task-4a6e7bdbef9a4344829a7ce49c6fb378 lands the daemon receipt read and the
+ * capture-bytes route; task-33ceae56edc348e9864bc592430fa1d0 supplies the preview card that
+ * consumes them and retires this entry.
  *
  * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
  * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
@@ -156,6 +159,15 @@ const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
   "/environments/read",
   "/events/resume",
+  // The preview receipt read. This row (task-4a6e7bdbef9a4344829a7ce49c6fb378) lands the
+  // DAEMON half only — the JSON receipt read and the capture-bytes route beneath it. The
+  // Needs-you preview card that fetches them, renders the loopback url as a link and the
+  // captures inline, is task-33ceae56edc348e9864bc592430fa1d0, which declares dependsOn
+  // against this row and RETIRES THIS ENTRY in the same edit that adds its consumer — exactly
+  // as task-e6000b57, task-1c9587ed and task-80322112 retired the three entries above it.
+  // The capture route is not listed here because it is not a JSON_ROUTES member; it is
+  // proxied-but-not-rostered, and the arm below names it there instead.
+  "/preview/read",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
 ]);
@@ -322,7 +334,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(31);
+    expect(roster.size).toBe(32);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
@@ -384,6 +396,38 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(proxiedPaths().has("/repository/bootstrap/read")).toBe(true);
   });
 
+  it("registers the preview receipt read in all three seams and the dev proxy", () => {
+    const source = dispatchSource();
+    expect(rosterIdentifiers(source).has("PREVIEW_READ_PATH")).toBe(true);
+    expect(branchIdentifiers(source).has("PREVIEW_READ_PATH")).toBe(true);
+    expect(guardIdentifiers(source).has("PREVIEW_READ_PATH")).toBe(true);
+    expect(JSON_ROUTES).toContain("/preview/read");
+    expect(proxiedPaths().has("/preview/read")).toBe(true);
+  });
+
+  it("serves the capture route ahead of the roster and never through it", () => {
+    const source = dispatchSource();
+
+    // The set arms above cannot see this route: it is not a JSON_ROUTES member and it is
+    // matched by prefix, so its registration is asserted here by name. All three clauses
+    // matter and fail differently — no interception sends `/preview/capture/...` to the
+    // ASSET host under the CONTROL-ROOM root (a bundle path, not a capture); an interception
+    // placed after the roster check would be dead for a daemon hosting no bundle; and a
+    // JSON_ROUTES membership would route image bytes through the dossier handler.
+    const intercept = source.indexOf("isPreviewCapturePath(path)");
+    const rosterCheck = source.indexOf("if (!JSON_ROUTES.includes(path))");
+    expect(intercept).toBeGreaterThan(-1);
+    expect(rosterCheck).toBeGreaterThan(-1);
+    expect(intercept).toBeLessThan(rosterCheck);
+    expect(JSON_ROUTES).not.toContain("/preview/capture");
+    expect(proxiedPaths().has("/preview/capture")).toBe(true);
+    // It is fenced by the same Host/Origin/CSRF check as the JSON surface, not by the
+    // asset host's bare Host check.
+    expect(source).toContain("const captureFault = checkHeaders(request, authority, origin,");
+    // And it is served through the NARROWED locator, never the bundle-wide one.
+    expect(source).toContain("locatePreviewCapture,");
+  });
+
   it("proxies every served JSON route in development, bar a named census", () => {
     const proxied = proxiedPaths();
 
@@ -399,11 +443,15 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
 
     // The pairing surface and `/bootstrap` are deliberately OUTSIDE JSON_ROUTES (they are
     // served by http-listener-pairing-routes.ts and the listener itself), so they are the
-    // only permitted proxied-but-not-rostered entries.
+    // only permitted proxied-but-not-rostered entries — joined by `/preview/capture`, which
+    // is outside the roster for a THIRD reason: it answers image bytes, not JSON, is matched
+    // by PREFIX rather than equality, and is intercepted ahead of the roster check in
+    // `serveReadDispatch`. A JSON_ROUTES membership for it would send it to the dossier
+    // handler; the arm below proves the daemon really does serve it.
     const served = new Set<string>(JSON_ROUTES);
     expect(sorted([...proxied].filter((path) => !served.has(path)))).toStrictEqual([
-      "/bootstrap", "/session/pair", "/session/pair/claim", "/session/pair/open",
-      "/session/pair/request",
+      "/bootstrap", "/preview/capture", "/session/pair", "/session/pair/claim",
+      "/session/pair/open", "/session/pair/request",
     ]);
     expect([...proxied].some((path) => path.startsWith("/manager/"))).toBe(false);
   });

@@ -81,12 +81,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "Governor 14:14Z: restored to PLANNING — the deployment.set_target affordance offer is an unowned daemon producer; 4d77ba04 (the browser control) depends on it and its own step 1 says it cannot be built without it. architect-fa3a3e17 wrote the DoD and plans it; dependsOn [358b6ec8, 2cedb26a] keeps the two offer edits to affordance-planning-offers.ts sequential.",
+  "reopenReason": "Governor re-plan handoff 17:23Z (BLOCKED->PLANNING nulls the block fields; premise quoted). worker-f78e0703 16:35Z: \"Live production probe falsifies approved step 3 CAS premise: versionOf(ledger,'deploy:goal-1') stays 0 after real preview binding, while the setter's durable aggregate deploy-target:project-1:preview is 1. Rebinding with the planned offer version 0 refuses EXPECTED_VERSION_CONFLICT@DURABLE_STORE. One goal-scoped scalar cannot fence independent environment versions selected at dispatch.\" Full replay source in the row comment; prerequisite 2cedb26a DONE changed only bootstrapAggregateId for deployment.deploy. RE-PLAN: the offer carries an environment-scoped version authority — the version of deploy-target:<projectId>:<environment>, chosen per environment at dispatch — setter execution and CAS untouched (rail 6), no fabricated current version; steps 3/4/7 rewritten accordingly and task-4d77ba04's consumer step aligned to the same contract (amend that row, do not re-plan it). Original planner architect-fa3a3e17 is offline; any planning seat may take it. Step 1 (measure) was the only completed step; its evidence is in the row comment.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "dependsOn": [
@@ -105,7 +105,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:02:47.010Z",
-  "updatedAt": "2026-09-06T16:35:14.355Z",
+  "updatedAt": "2026-09-06T17:23:02.823Z",
   "failedDodItems": [],
   "contextFetchedBy": [
     "architect-aa54e231",
@@ -133,8 +133,10 @@
   },
   "planApprovedAt": "2026-09-06T14:12:28.072Z",
   "workStartedAt": "2026-09-06T16:31:32.472Z",
-  "blockedReason": "Live production probe falsifies approved step3 CAS premise (no active amendments): versionOf(ledger,'deploy:goal-1') stays0 after real preview binding, while setter durable aggregate deploy-target:project-1:preview is1. Rebind with planned offer version0 refuses EXPECTED_VERSION_CONFLICT@DURABLE_STORE, specifically asserted. One goal-scoped scalar cannot fence independent environment versions selected at dispatch. Need amend steps3/4/7 and consumer4d77 version-authority contract; do not change setter execution/CAS (rail6) or fabricate current version. Full replay source/result in row comment. Prereq2ced DONE changed only bootstrapAggregateId deployment.deploy, not bootstrap-sequence; no missingdependency. Fresh4affordancefiles116tests0 and pnpmtypecheck0; no repo edits, no runningjobs/lease/queue. Blocking solely on non-working approved design, not foreignWIP or verificationlease.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:35:14.354Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Live production probe falsifies approved step3 CAS premise (no active amendments): versionOf(ledger,'deploy:goal-1') stays0 after real preview binding, while setter durable aggregate deploy-target:project-1:preview is1. Rebind with planned offer version0 refuses EXPECTED_VERSION_CONFLICT@DURABLE_STORE, specifically asserted. One goal-scoped scalar cannot fence independent environment versions selected at dispatch. Need amend steps3/4/7 and consumer4d77 version-authority contract; do not change setter execution/CAS (rail6) or fabricate current version. Full replay source/result in row comment. Prereq2ced DONE changed only bootstrapAggregateId deployment.deploy, not bootstrap-sequence; no missingdependency. Fresh4affordancefiles116tests0 and pnpmtypecheck0; no repo edits, no runningjobs/lease/queue. Blocking solely on non-working approved design, not foreignWIP or verificationlease.",
+  "blockedOnTaskIds": null
 }

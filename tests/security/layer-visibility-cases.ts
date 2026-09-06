@@ -384,6 +384,12 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "EXPANSION_REQUEST_SERVICE",
   "FOUNDATION_CONTEXT_SEAL",
   "PRODUCT_CONTRACT_V2_CLARIFICATION_AUTHORITY",
+  // The preview receipt/capture read routes' answer stamp (apps/daemon/src/http/preview-read.ts,
+  // preview-capture-route.ts). Same class as every other `/*/read` route: a module-private
+  // `const LAYER = "..."`, deliberately NOT a `*_LAYER` constant, so it owes the boundary roster
+  // no entry and appears here instead. Registered by
+  // task-4a6e7bdbef9a4344829a7ce49c6fb378 when it landed the routes.
+  "PREVIEW_READ",
   "RELEASE_HANDOFF",
   "RETRY_PREDICATE",
   "REVIEW_KERNEL",

@@ -35,6 +35,11 @@ import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "
 import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
+import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
+import {
+  handlePreviewCaptureRequest, isPreviewCapturePath, locatePreviewCapture,
+  previewCaptureRequestPathOf,
+} from "./preview-capture-route.js";
 import { ENVIRONMENTS_READ_PATH, handleEnvironmentsReadRequest } from "./environments-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
@@ -97,6 +102,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   GOAL_SOURCE_READ_PATH,
   DESIGN_READ_PATH,
   ENVIRONMENTS_READ_PATH,
+  PREVIEW_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -422,6 +428,56 @@ function serveDocumentIngest(
   reply(response, result.httpStatus, result.body);
 }
 
+function servePreviewRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handlePreviewReadRequest({
+    authenticator: options.deps.authenticator,
+    previewReads: options.previewReads,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * The capture-bytes route. It is NOT a JSON route and deliberately not in `JSON_ROUTES`: it
+ * answers image bytes, is matched by PREFIX rather than by equality, and is served by the
+ * static host's own machinery. It is intercepted BEFORE the roster check so an unhosted daemon
+ * (`assets === null`) still serves captures — the two roots are independent.
+ *
+ * `checkHeaders` runs on it exactly as it does on the JSON surface, so the route sits behind
+ * the same Host/Origin/CSRF fence, and `serveAsset` is handed the NARROWED locator so the
+ * bytes it will publish are images under the previews root and nothing else.
+ */
+function servePreviewCapture(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  authority: string,
+  path: string,
+): void {
+  const result = handlePreviewCaptureRequest({
+    authenticator: options.deps.authenticator,
+    previewCaptures: options.previewCaptures,
+  }, {
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  if (result.kind === "REPLY") { reply(response, result.httpStatus, result.body); return; }
+  serveAsset(
+    response, request, result.root, authority,
+    previewCaptureRequestPathOf(path), locatePreviewCapture,
+  );
+}
+
 /**
  * The facade calls this AFTER the handshake surface and the retired-approve tombstone have
  * had their turn, so this module never sees a path either of those owns.
@@ -435,6 +491,14 @@ export async function serveReadDispatch(
   assets: ControlRoomAssetRoot | null,
   path: string,
 ): Promise<void> {
+  // Before the roster check, because the capture route is matched by PREFIX and lives outside
+  // `JSON_ROUTES`; it carries the same Host/Origin/CSRF fence as the JSON surface.
+  if (isPreviewCapturePath(path)) {
+    const captureFault = checkHeaders(request, authority, origin, options.csrfToken);
+    if (captureFault !== null) { refuseRequest(response, captureFault); return; }
+    servePreviewCapture(response, request, options, authority, path);
+    return;
+  }
   if (!JSON_ROUTES.includes(path)) {
     // No hosted bundle means the answer is the one it always was. The static
     // host is reached only when a root was resolved at startup, so a daemon
@@ -525,6 +589,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_ENVIRONMENTS_REQUEST_INVALID");
     return;
   }
+  if (path === PREVIEW_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PREVIEW_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -605,5 +673,7 @@ export async function serveReadDispatch(
     serveDesign(response, request, options, body);
   } else if (path === ENVIRONMENTS_READ_PATH) {
     serveEnvironments(response, request, options, body);
+  } else if (path === PREVIEW_READ_PATH) {
+    servePreviewRead(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }

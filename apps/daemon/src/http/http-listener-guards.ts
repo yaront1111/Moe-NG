@@ -93,6 +93,14 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The design-revision read: same transport pair.
   "LISTENER_DESIGN_REQUEST_INVALID",
   "LISTENER_DESIGN_UNAVAILABLE",
+  // The preview surface's transport pair, shared by BOTH its routes: the JSON receipt read
+  // (`/preview/read`) and the capture-bytes route (`/preview/capture/...`). REQUEST_INVALID
+  // covers a non-POST receipt read and any body that is not exactly `{goalId}`; UNAVAILABLE
+  // covers a daemon composed without the preview ports. A capture request that IS reachable
+  // but not servable answers one of the eleven asset codes above instead — those describe a
+  // PATH, these describe the surface.
+  "LISTENER_PREVIEW_REQUEST_INVALID",
+  "LISTENER_PREVIEW_UNAVAILABLE",
   // The per-environment variable table: same transport pair. REQUEST_INVALID covers a non-POST
   // and any body that is not exactly `{environment}`; an environment NAME this project does not
   // have is NOT here, because that caller is refused by the store's own ENV_ENVIRONMENT_UNKNOWN
@@ -234,6 +242,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PREVIEW_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PREVIEW_UNAVAILABLE") return 503;
   if (code === "LISTENER_ENVIRONMENTS_REQUEST_INVALID") return 400;
   if (code === "LISTENER_ENVIRONMENTS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;

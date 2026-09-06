@@ -137,7 +137,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -188,7 +188,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:43:05.459Z",
-  "updatedAt": "2026-09-06T16:22:42.772Z",
+  "updatedAt": "2026-09-06T17:16:55.123Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:24:22.265Z",
     "plannedStepCount": 8,
@@ -233,20 +233,17 @@
   },
   "planApprovedAt": "2026-09-06T11:35:34.143Z",
   "workStartedAt": "2026-09-06T02:25:16.845Z",
-  "blockedReason": "THE FENCE ROW WORKED; THE JOURNEY FAILS ONE LAYER DEEPER, ON A DEFECT THIS ROW DOES NOT OWN. Do NOT re-block on task-6d5db404 - it landed (2735406c, merged) and the governor's 15:02Z conditional is SPENT: the refusal is no longer OPERATOR_PRINCIPAL_REQUIRED, the paired browser HUMAN is admitted and the run reaches the effects.\n\nBLOCKED ON task-123da653c6fb43acb43e9329ab89bf90, filed by me (PLANNING, CRITICAL, parent task-5ef1a0a9). `repository.bootstrap` CANNOT SUCCEED ON A REAL FILESYSTEM. repository-bootstrap-command.ts:174-179 registers configPath `${dir}/moe.config.json` and storePath `${dir}/.moe-next/store.sqlite`; nothing creates either and the scaffold emits neither. project-catalog.ts:127-140 realpaths both, ENOENT (root resolves), refuses PROJECT_CATALOG_PATH_UNRESOLVED; the registrar throws; the service answers BOOTSTRAP_CATALOG_FAILED - AFTER the repository is created, committed and BOUND. Probe with a discriminating control: comment-710d0b5656154f07abaedd7273aa4508 on child 2 (task-facff1d1e, whose file it is). Full record here: comment-c18311360bb446d794f8f6e6e3e8db6a. Invisible to every arm because repository-bootstrap-journey.test.ts:127 stubs the `catalog` seam. Task rail 3: commented there, did not patch across the seam.\n\nRUN: e2e tsc exit 0, then playwright new-product-from-prd exit 1, `1 failed`, 4.1m; spec:152 Expected SUCCESS Received ERROR.\n\nNOT IDLE: the journey exposed a real defect in MY file, now fixed. `runNewProduct` returned bootstrap:null on ANY refused dispatch, so the card said nothing was created while the receipt said CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED. The refused path now reads the receipt, trusted only on a code match. 3 new arms; products EXIT 0, Tests 28 passed (28); typecheck EXIT 0; drill reds both DISCARD arms.\n\nON UNBLOCK: re-run step 6 unchanged under a browser-e2e-gate lease, then step 8. Gate RELEASED, no leaks. GOVERNOR: declaredFiles carries 4 peer paths this row never wrote.",
-  "blockedOnTaskIds": [
-    "task-123da653c6fb43acb43e9329ab89bf90"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:22:42.772Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-caece97b@2026-09-06T02:24:56Z",
-    "at": "2026-09-06T02:39:21.195Z"
+    "sessionId": "worker-1d53e70c@2026-09-06T16:06:26Z",
+    "at": "2026-09-06T16:23:06.378Z"
   },
   "priorBlockedReason": "STEP 6 RAN UNDER THE LEASE AND FAILED FOR A PRODUCT REASON, NOT A TEST REASON. The DoD (\"in the browser alone\") is not satisfiable at HEAD dd07b69d without a daemon authorization change I do not own.\n\nEVIDENCE. Leased 13:11:22Z, GATE START posted, free RAM 8.89 GiB, zero competing runners. `npx playwright test -c tests/e2e/control-room/playwright.config.ts new-product-from-prd.spec.ts` -> EXIT 1, 1 failed, 4.1m. Failing assertion spec:152: data-state expected \"SUCCESS\", received \"ERROR\". The page names the cause verbatim: \"The daemon answered OPERATOR_PRINCIPAL_REQUIRED at DAEMON_AUTHORIZATION. No repository was reported.\" Lease released at once (granted on to task-95e68a8d) rather than spend the slot behind a red.\n\nROOT CAUSE, read at source. The form dispatches `repository.bootstrap` (live-new-product.tsx:31), a member of OPERATOR_PRINCIPAL_KINDS (daemon-command-vocabulary.ts:377). The fence at daemon-command-registry.ts:336-353 refuses every non-operator EXCEPT a widening arm for a durable HUMAN principal: approvalIntent || criterion || \"repository.publish\" || PRODUCT_CONTRACT_ANSWER_CLARIFICATION. `repository.publish` is widened; `repository.bootstrap` is NOT. A paired browser can PUBLISH a repository but cannot CREATE one. Likely an omission: vocabulary:375-377 puts both on ONE line under ONE comment treating them as one class.\n\nNEEDED, not mine to decide: (a) may a paired browser human create a git repo at a caller-supplied path on the daemon host, or is that operator-only because the path is arbitrary filesystem reach? (b) if operator-only, this DoD needs re-planning. Plausible fix is one term at registry.ts:345 keeping MCP exclusion intact; I will not widen an authorization fence to make my own test pass.\n\nROW STATE at cf1d4538: steps 1-5, 7 COMPLETE, re-verified green (daemon 2 files/48 tests EXIT 0; control-room 3 files/73 tests EXIT 0; e2e tsc EXIT 0; pnpm typecheck EXIT 0/19). Step 6 spec EXECUTED, failing honestly. Step 8 not started.",
   "declaredFiles": [
@@ -260,5 +257,104 @@
     "apps/control-room/src/live/live-bootstrap-receipt.ts",
     "apps/control-room/src/v2/goals/design-version-note.tsx",
     "tests/e2e/control-room/fake-docker-dependencies.ts"
+  ],
+  "commits": [
+    {
+      "sha": "17446e73b0f7bead6a3fa71536d940327d6ef076",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1d53e70c@2026-09-06T16:06:26Z",
+      "paths": [
+        ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
+        ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/control-room/src/live/live-bootstrap-receipt.ts",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/goals/design-version-note.tsx",
+        "apps/control-room/src/v2/products/live-new-product.test.tsx",
+        "apps/control-room/src/v2/products/live-new-product.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/new-product-from-prd.spec.ts",
+        "tests/e2e/control-room/wrapper-lane.ts"
+      ],
+      "recordedBy": "worker-1d53e70c",
+      "recordedAt": "2026-09-06T16:23:06.378Z",
+      "treeId": "28f4bf933b5516299a8a47cc192607efdbb78cad",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/live-bootstrap-receipt.ts",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/cordum-app.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/design-version-note.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/new-product-form.test.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/new-product-form.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read.test.ts",
+          "taskId": "task-9aea412b10d141c084c9bfdb04c33a21"
+        },
+        {
+          "path": "tests/e2e/control-room/daemon-ports.ts",
+          "taskId": "task-cf2d91d923ea4397a1145e0973ed2218"
+        },
+        {
+          "path": "tests/e2e/control-room/fake-docker-dependencies.ts",
+          "taskId": "task-cf2d91d923ea4397a1145e0973ed2218"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
+    ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+    "apps/control-room/src/live/live-bootstrap-receipt.ts",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/goals/design-version-note.tsx",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    "apps/control-room/src/v2/products/live-new-product.tsx",
+    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "apps/control-room/src/v2/products/new-product-form.tsx",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "tests/e2e/control-room/new-product-from-prd.spec.ts",
+    "tests/e2e/control-room/wrapper-lane.ts"
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/products/live-new-product.tsx"
   ]
 }

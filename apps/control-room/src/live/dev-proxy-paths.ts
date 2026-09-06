@@ -25,6 +25,12 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/graph/get",
   "/planning/run/read",
   "/policy/read",
+  // The preview receipt read, and the capture-bytes route beneath it. The second is a PREFIX:
+  // Vite matches proxy keys by prefix, so one entry covers every
+  // `/preview/capture/<goalId>/<sha>/<file>.png`. Without both the dev server answers them
+  // itself and the preview card renders against Vite instead of against a daemon.
+  "/preview/read",
+  "/preview/capture",
   "/product-contract/gate-1/read",
   "/product-contract/pending/read",
   "/repository/remote/read",
