@@ -110,8 +110,12 @@ function commitReport(report: DeployReport): CommandHandler {
   return (context) => {
     const { ledger, request, store } = context;
     const aggregateId = aggregateIdFor(request, null);
+    // THE ENGINE'S OWN DETAIL IS CARRIED, not dropped: it is where a PRODUCTION deploy states
+    // its release standing ("cites release decision <id>" or "no release decision", DoD 7).
+    // A decision that recorded only the outcome would leave that standing unreadable to
+    // everyone downstream of the command, which is exactly who needs it.
     const result = {
-      environment: report.environment, outcome: report.outcome,
+      detail: report.detail, environment: report.environment, outcome: report.outcome,
       receiptId: report.receipt?.receiptId ?? null, sha: report.receipt?.sha ?? null,
     } satisfies JsonObject;
     return commitAccepted(store, request, {
