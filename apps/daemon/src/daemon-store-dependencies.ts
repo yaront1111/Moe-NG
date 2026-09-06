@@ -64,6 +64,7 @@ function fromEnv(): StoreDependencyProvider {
 const provider: DaemonDependencyProvider & Pick<
   StoreDependencyProvider, "restore" | "sourceSnapshotPublisher"
 > = Object.freeze({
+  schedules: () => fromEnv().schedules(),
   activation: () => {
     const port = fromEnv().activation;
     if (port === undefined) throw new Error("unreachable: the activation reader is always wired");

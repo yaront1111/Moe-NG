@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DurableSchedule } from "./orchestrator/durable-schedule.js";
 
 import {
   optionalPortFactoriesAreValid,
@@ -14,6 +15,7 @@ import type {
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
 import type {
+  ControlRoomListener,
   ListenerRefused,
   PairingOperatorApprovalResult,
 } from "./http/http-listener.js";
@@ -73,6 +75,8 @@ export interface DaemonDependencyProvider extends OptionalDaemonPortProvider {
    * the listener serves — nothing resolves it per request; only `shutdown` below touches it.
    */
   previews?(): { close(): Promise<void> };
+  /** Process lifecycle, not a listener read port; the store provider owns the one instance. */
+  schedules?(): DurableSchedule;
   provide(): CommandAdapterDeps;
   /** Separate authority plane for `/v2/command`; absence is surfaced by the listener. */
   provideV2?(): CommandAdapterDeps;
@@ -262,99 +266,119 @@ const ALREADY_STOPPED = Object.freeze({
 export async function startDaemon(options: DaemonStartOptions): Promise<DaemonStartResult> {
   const dependencies = options.dependencies ?? null;
   if (dependencies === null) return refuseEntry("DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER");
+  let schedules: DurableSchedule | undefined;
+  let listener: ControlRoomListener | undefined;
+  let handedOff = false;
+  try {
+    // Capture once: resolving a factory again during cleanup could release a different instance.
+    const schedule = dependencies.schedules?.();
+    if (schedule !== undefined && (schedule === null || typeof schedule.release !== "function")) {
+      return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    }
+    schedules = schedule;
+    const resolved = resolveDependencies(dependencies);
+    if (!resolved.ok) return resolved;
 
-  const resolved = resolveDependencies(dependencies);
-  if (!resolved.ok) return resolved;
+    // BEFORE the listener, never after: a daemon that becomes ready while the last
+    // crash is still unclassified is the exact failure this sweep exists to stop.
+    const swept = runBootReconciliation(resolved.reconciliation);
+    if (swept !== null) return swept;
 
-  // BEFORE the listener, never after: a daemon that becomes ready while the last
-  // crash is still unclassified is the exact failure this sweep exists to stop.
-  const swept = runBootReconciliation(resolved.reconciliation);
-  if (swept !== null) return swept;
-
-  // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps
-  // credentials out of URLs and logs, so this value is never written to the log
-  // sink and never placed on a query string.
-  // Empty is treated as unsupplied: `--csrf-token=` reaches here as "", and an
-  // empty token is a secret no header can safely match, so mint a real one.
-  const suppliedCsrfToken = options.csrfToken ?? "";
-  const csrfToken = suppliedCsrfToken === "" ? randomUUID() : suppliedCsrfToken;
-  const started = await startControlRoomListener({
-    csrfToken,
-    deps: resolved.deps,
-    ...(resolved.v2Deps === undefined ? {} : { v2Deps: resolved.v2Deps }),
-    ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
-    ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
-    ...(options.host === undefined ? {} : { host: options.host }),
-    ...(options.log === undefined ? {} : { log: options.log }),
-    ...(options.pairingOperatorChannelAvailable === undefined
-      ? {} : { pairingOperatorChannelAvailable: options.pairingOperatorChannelAvailable }),
-    ...(options.port === undefined ? {} : { port: options.port }),
-    ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
-    ...(resolved.documentDossiers === undefined
-      ? {} : { documentDossiers: resolved.documentDossiers }),
-    ...(resolved.documentIngest === undefined
-      ? {} : { documentIngest: resolved.documentIngest }),
-    ...(resolved.documentCoverage === undefined
-      ? {} : { documentCoverage: resolved.documentCoverage }),
-    ...(resolved.runs === undefined ? {} : { runs: resolved.runs }),
-    ...(resolved.policy === undefined ? {} : { policy: resolved.policy }),
-    ...(resolved.activation === undefined ? {} : { activation: resolved.activation }),
-    ...(resolved.health === undefined ? {} : { health: resolved.health }),
-    ...(resolved.activity === undefined ? {} : { activity: resolved.activity }),
-    ...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions }),
-    ...(resolved.repositoryRemote === undefined ? {} : { repositoryRemote: resolved.repositoryRemote }),
-    ...(resolved.repositoryWorkflows === undefined ? {} : { repositoryWorkflows: resolved.repositoryWorkflows }),
-    ...(resolved.goalSource === undefined ? {} : { goalSource: resolved.goalSource }),
-    ...(resolved.designReads === undefined ? {} : { designReads: resolved.designReads }),
-    ...(resolved.environmentReads === undefined
-      ? {} : { environmentReads: resolved.environmentReads }),
-    ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
-    ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
-    ...(resolved.planningRuns === undefined
-      ? {} : { planningRuns: resolved.planningRuns }),
-    ...(resolved.budgetCommitment === undefined
-      ? {} : { budgetCommitment: resolved.budgetCommitment }),
-    ...(resolved.productContractGate1 === undefined
-      ? {} : { productContractGate1: resolved.productContractGate1 }),
-    ...(resolved.productContractPending === undefined
-      ? {} : { productContractPending: resolved.productContractPending }),
-    ...(resolved.productContractV2Current === undefined
-      ? {} : { productContractV2Current: resolved.productContractV2Current }),
-    ...(resolved.productContractV2Pending === undefined
-      ? {} : { productContractV2Pending: resolved.productContractV2Pending }),
-    ...(resolved.commandAuthorityPlane === undefined
-      ? {} : { commandAuthorityPlane: resolved.commandAuthorityPlane }),
-    ...(resolved.sessionChallengeOperands === undefined
-      ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
-    ...(resolved.pairingOpenSessions === undefined
-      ? {} : { pairingOpenSessions: resolved.pairingOpenSessions }),
-    ...(resolved.sessionHandshake === undefined
-      ? {} : { pairing: resolved.sessionHandshake }),
-    ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
-  });
-  if (!started.ok) return started;
-
-  options.log?.(`listening on ${started.origin}`);
-
-  let stopped = false;
-  return Object.freeze({
-    approvePairing: (confirmationLabel: unknown): DaemonPairingApprovalResult =>
-      stopped ? ALREADY_STOPPED : started.approvePairing(confirmationLabel),
-    csrfToken,
-    ok: true,
-    origin: started.origin,
-    port: started.port,
-    shutdown: async (): Promise<ShutdownResult> => {
-      // Idempotent BY REFUSAL rather than silently: a second shutdown usually
-      // means two owners believe they hold the lifecycle, which is worth a code.
-      if (stopped) return ALREADY_STOPPED;
-      stopped = true;
-      await started.close();
-      // AFTER the listener, so no decide can arrive while the roster is being swept, and on
-      // THIS path rather than `StoreDependencyProvider.close()` — that one is SYNC with six
-      // call sites, and a fire-and-forget stop would let the process exit before the kills land.
-      await sweepPreviews(dependencies);
-      return Object.freeze({ ok: true } as const);
-    },
-  } as const);
+    // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps
+    // credentials out of URLs and logs, so this value is never written to the log
+    // sink and never placed on a query string.
+    // Empty is treated as unsupplied: `--csrf-token=` reaches here as "", and an
+    // empty token is a secret no header can safely match, so mint a real one.
+    const suppliedCsrfToken = options.csrfToken ?? "";
+    const csrfToken = suppliedCsrfToken === "" ? randomUUID() : suppliedCsrfToken;
+    const started = await startControlRoomListener({
+      csrfToken,
+      deps: resolved.deps,
+      ...(resolved.v2Deps === undefined ? {} : { v2Deps: resolved.v2Deps }),
+      ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
+      ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
+      ...(options.host === undefined ? {} : { host: options.host }),
+      ...(options.log === undefined ? {} : { log: options.log }),
+      ...(options.pairingOperatorChannelAvailable === undefined
+        ? {} : { pairingOperatorChannelAvailable: options.pairingOperatorChannelAvailable }),
+      ...(options.port === undefined ? {} : { port: options.port }),
+      ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
+      ...(resolved.documentDossiers === undefined
+        ? {} : { documentDossiers: resolved.documentDossiers }),
+      ...(resolved.documentIngest === undefined
+        ? {} : { documentIngest: resolved.documentIngest }),
+      ...(resolved.documentCoverage === undefined
+        ? {} : { documentCoverage: resolved.documentCoverage }),
+      ...(resolved.runs === undefined ? {} : { runs: resolved.runs }),
+      ...(resolved.policy === undefined ? {} : { policy: resolved.policy }),
+      ...(resolved.activation === undefined ? {} : { activation: resolved.activation }),
+      ...(resolved.health === undefined ? {} : { health: resolved.health }),
+      ...(resolved.activity === undefined ? {} : { activity: resolved.activity }),
+      ...(resolved.sessions === undefined ? {} : { sessions: resolved.sessions }),
+      ...(resolved.repositoryRemote === undefined ? {} : { repositoryRemote: resolved.repositoryRemote }),
+      ...(resolved.repositoryWorkflows === undefined ? {} : { repositoryWorkflows: resolved.repositoryWorkflows }),
+      ...(resolved.goalSource === undefined ? {} : { goalSource: resolved.goalSource }),
+      ...(resolved.designReads === undefined ? {} : { designReads: resolved.designReads }),
+      ...(resolved.environmentReads === undefined
+        ? {} : { environmentReads: resolved.environmentReads }),
+      ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+      ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
+      ...(resolved.planningRuns === undefined
+        ? {} : { planningRuns: resolved.planningRuns }),
+      ...(resolved.budgetCommitment === undefined
+        ? {} : { budgetCommitment: resolved.budgetCommitment }),
+      ...(resolved.productContractGate1 === undefined
+        ? {} : { productContractGate1: resolved.productContractGate1 }),
+      ...(resolved.productContractPending === undefined
+        ? {} : { productContractPending: resolved.productContractPending }),
+      ...(resolved.productContractV2Current === undefined
+        ? {} : { productContractV2Current: resolved.productContractV2Current }),
+      ...(resolved.productContractV2Pending === undefined
+        ? {} : { productContractV2Pending: resolved.productContractV2Pending }),
+      ...(resolved.commandAuthorityPlane === undefined
+        ? {} : { commandAuthorityPlane: resolved.commandAuthorityPlane }),
+      ...(resolved.sessionChallengeOperands === undefined
+        ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
+      ...(resolved.pairingOpenSessions === undefined
+        ? {} : { pairingOpenSessions: resolved.pairingOpenSessions }),
+      ...(resolved.sessionHandshake === undefined
+        ? {} : { pairing: resolved.sessionHandshake }),
+      ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
+    });
+    if (!started.ok) return started;
+    listener = started;
+    options.log?.(`listening on ${started.origin}`);
+    handedOff = true;
+    let stopped = false;
+    return Object.freeze({
+      approvePairing: (confirmationLabel: unknown): DaemonPairingApprovalResult =>
+        stopped ? ALREADY_STOPPED : started.approvePairing(confirmationLabel),
+      csrfToken,
+      ok: true,
+      origin: started.origin,
+      port: started.port,
+      shutdown: async (): Promise<ShutdownResult> => {
+        // Idempotent BY REFUSAL rather than silently: a second shutdown usually
+        // means two owners believe they hold the lifecycle, which is worth a code.
+        if (stopped) return ALREADY_STOPPED;
+        stopped = true;
+        try { schedules?.release(); }
+        // AFTER the listener, so no decide can arrive while the roster is being swept, and on
+        // THIS path rather than `StoreDependencyProvider.close()` — that one is SYNC with six
+        // call sites, and a fire-and-forget stop would let the process exit before the kills land.
+        finally { try { await started.close(); } finally { await sweepPreviews(dependencies); } }
+        return Object.freeze({ ok: true } as const);
+      },
+    } as const);
+  } catch { return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW"); }
+  finally {
+    if (!handedOff) {
+      try { schedules?.release(); }
+      finally {
+        if (listener !== undefined) {
+          try { await listener.close(); } finally { await sweepPreviews(dependencies); }
+        }
+      }
+    }
+  }
 }
