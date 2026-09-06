@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import type { NextAllowedCommand } from "@moe/contracts";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
@@ -32,6 +33,19 @@ import {
   fixtureBudgetCommitmentFor,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  GOAL_ID as SEED_GOAL,
+  PROJECT_ID as SEED_PROJECT,
+  closeStores as closeSeedStores,
+  driveThrough,
+  openStore as openSeedStore,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { releaseDossierAggregateId } from "../release/release-dossier-contracts.js";
+import { recordReleaseDossier } from "../release/release-dossier-ledger.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
@@ -1321,5 +1335,171 @@ describe("the real design surface journey", () => {
     // resubmit offer over bytes nobody could read; the whole surface refuses instead.
     expect("nextAllowedCommands" in refused).toBe(false);
     expect("steps" in refused).toBe(false);
+  });
+});
+
+/**
+ * THE RELEASE DECISION CARD, THROUGH THE SHIPPED COMPOSITION ROOT (task-21209552, DoD 1-2).
+ *
+ * Every arm here runs `createAffordancePort(...).readSurface()` over a REAL store driven through
+ * the production bootstrap sequence, with the landing receipt written by the lander's own writer
+ * (`recordLandingReceipt`, via `seedLandingReceipt`) — no stubbed fact, no hand-built frame. The
+ * ladder arms in `affordance-planning-offers.test.ts` prove the RULE; these prove the surface
+ * really composes it, which is the half a stubbed `landedCommit` can never reach.
+ *
+ * THE POINT OF THE SUITE IS THE SURVIVAL ARM. `readDurableLedger` keeps the last committed
+ * result per `targetAggregateId`, so a decide committed against the BARE GOAL ID would overwrite
+ * the goal's own durable record, drop it out of `durableGoals`, and silently take every offer
+ * for that goal with it — with nothing thrown and every by-name assertion still passing. That is
+ * a measured defect on this ladder, not a hypothetical (`preview.decide`, 2026-09-06).
+ *
+ * Each arm opens its OWN ephemeral store: the module-level store above is driven sequentially by
+ * the plan.propose suite, and a landed commit in it would move every roster that follows.
+ */
+describe("the release decision card over a real store", () => {
+  const RELEASE_TARGET = releaseDossierAggregateId(SEED_GOAL);
+  const LANDED_SHA = "c".repeat(40);
+
+  /** The graph-scoped ref for a node key, so the landing sits on a node THIS goal's graph names. */
+  function scopedRef(store: ReturnType<typeof openSeedStore>, nodeKey: string): string {
+    const graph = activeCompiledGraphs(store, SEED_PROJECT).find((plan) =>
+      plan.goalRef === SEED_GOAL
+      && plan.content.snapshot.nodes.some((node) => node.nodeKey === nodeKey));
+    return graph === undefined ? nodeKey : compiledExecutionRef(SEED_PROJECT, graph, nodeKey);
+  }
+
+  /** An EXECUTION_ENABLED goal; `landed` writes a real COMMITTED landing receipt for its node. */
+  function releaseWorld(landed: boolean): ReturnType<typeof openSeedStore> {
+    const store = openSeedStore();
+    driveThrough(store, "goal.close");
+    if (landed) {
+      const nodeRef = scopedRef(store, "node-a");
+      seedReviewAcceptance(store, nodeRef);
+      seedLandingReceipt(store, nodeRef, "COMMITTED");
+    }
+    return store;
+  }
+
+  /** The whole offer slice as the surface states it, UNFILTERED by target. */
+  function surface(store: ReturnType<typeof openSeedStore>): {
+    readonly offers: readonly NextAllowedCommand[]; readonly roster: readonly string[];
+  } {
+    let seq = 0;
+    const result = createAffordancePort({
+      mintId: () => `afford-release-${String(seq += 1)}`, projectId: SEED_PROJECT, store,
+    }).readSurface();
+    if (!("nextAllowedCommands" in result)) throw new Error("expected a surface, got a refusal");
+    const offers = result.nextAllowedCommands;
+    return {
+      offers,
+      roster: offers.map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort(),
+    };
+  }
+
+  const releaseCard = (store: ReturnType<typeof openSeedStore>): NextAllowedCommand | undefined =>
+    surface(store).offers.find((entry) => entry.commandKind === "release.decide");
+
+  afterAll(() => { closeSeedStores(); });
+
+  it("offers release.decide at the RELEASE aggregate, spendable against the store's version", () => {
+    const store = releaseWorld(true);
+    const card = releaseCard(store);
+    // BY VALUE, and against the CONTRACT function rather than a literal: `release-decide-command`
+    // :47 refuses RELEASE_TARGET_INVALID unless the target is exactly this.
+    expect(card?.targetAggregateId).toBe(RELEASE_TARGET);
+    expect(card?.targetAggregateId).not.toBe(SEED_GOAL);
+    // SPENDABLE, read from the STORE and never copied out of the response: the offer carries
+    // `versionOf(durableLedger, target)` while `release-decide-command.ts:133` fences on
+    // `store.getAggregateVersion(target)`. A stale 0 would refuse EXPECTED_VERSION_CONFLICT on
+    // every release the surface ever offered, while the card looked perfectly correct.
+    expect(card?.expectedVersion).toBe(store.getAggregateVersion(RELEASE_TARGET));
+  });
+
+  it("keeps expectedVersion tracking the store after a dossier moves the release aggregate", () => {
+    // The release aggregate is NOT the card's alone — `release-dossier-ledger.ts:118` commits
+    // the dossier onto the same target. So the two version sources can only be proved equal on
+    // an aggregate that has actually MOVED; at 0-vs-0 the assertion above is satisfied by a
+    // reader that answers zero to everything.
+    const store = releaseWorld(true);
+    expect(releaseCard(store)?.expectedVersion).toBe(0);
+    const recorded = recordReleaseDossier(store, {
+      decidedAt: "2026-09-06T12:00:00.000Z", goalId: SEED_GOAL,
+      markdown: "# fixture release dossier\n", projectId: SEED_PROJECT, sha: LANDED_SHA,
+    });
+    expect(recorded.ok).toBe(true);
+    const moved = store.getAggregateVersion(RELEASE_TARGET);
+    expect(moved).toBeGreaterThan(0);
+    expect(releaseCard(store)?.expectedVersion).toBe(moved);
+
+    // AND AGAIN after a SECOND dossier at a DIFFERENT sha. One write proves the two sources
+    // agree once; a fence that tracked only the FIRST move would still satisfy the assertion
+    // above and refuse every release after the second, which is the shape a cached or
+    // once-folded reader fails in. A second sha is required — `recordReleaseDossier` REPLAYS
+    // the same (project, goal, sha) triple instead of appending, so re-recording would move
+    // nothing and the arm would pass without testing anything.
+    const again = recordReleaseDossier(store, {
+      decidedAt: "2026-09-06T13:00:00.000Z", goalId: SEED_GOAL,
+      markdown: "# second fixture release dossier\n", projectId: SEED_PROJECT,
+      sha: "d".repeat(40),
+    });
+    expect(again.ok).toBe(true);
+    const movedAgain = store.getAggregateVersion(RELEASE_TARGET);
+    expect(movedAgain).toBeGreaterThan(moved);
+    expect(releaseCard(store)?.expectedVersion).toBe(movedAgain);
+  });
+
+  it("THE GOAL SURVIVES a decision committed against the offered release target", () => {
+    const store = releaseWorld(true);
+    const before = surface(store);
+    const card = before.offers.find((entry) => entry.commandKind === "release.decide");
+    if (card === undefined) throw new Error("no release offer to spend");
+    const goalBefore = stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL);
+    expect(goalBefore).toBeDefined();
+
+    // Committed AT THE TARGET THE OFFER CARRIES, never at a target this test chose: that is what
+    // makes the arm see a retargeted mint. The envelope shape is the dispatcher's own — the
+    // decide commits `envelope.targetAggregateId` at `envelope.expectedVersion`.
+    const response = store.commitExpectedVersionDecision({
+      commandKind: "release.decide",
+      committedResultBytes: encoder.encode(JSON.stringify({ decision: "RELEASED" })),
+      correlationId: "release-decide-survival",
+      decidedAt: "2026-09-06T12:30:00.000Z",
+      events: [{
+        eventId: `${SEED_GOAL}-ReleaseDecided`, eventType: "ReleaseDecided",
+        payload: encoder.encode(JSON.stringify({ goalId: SEED_GOAL, sha: LANDED_SHA })),
+      }],
+      expectedVersion: card.expectedVersion,
+      key: {
+        commandId: "cmd-release-decide-survival", principalId: "operator-local",
+        projectId: SEED_PROJECT,
+      },
+      requestBytes: encoder.encode(JSON.stringify({ goalId: SEED_GOAL, sha: LANDED_SHA })),
+      targetAggregateId: card.targetAggregateId,
+    });
+    // The offer is SPENDABLE: the version it carried is the one the store accepted.
+    expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+
+    // SURVIVAL, asserted three ways — the goal's own durable record is intact, the surface still
+    // answers for it, and the whole roster is unchanged. A key-spelling assertion sees none of
+    // this: it passes just as happily while the goal is being erased.
+    const goalAfter = stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL);
+    expect(goalAfter).toEqual(goalBefore);
+    const after = surface(store);
+    expect(after.roster).toEqual(before.roster);
+    expect(after.roster).toContain(`release.decide@${RELEASE_TARGET}`);
+  });
+
+  it("WITHHOLDS it, with publish, for a goal that has landed nothing", () => {
+    // Set-equality over the release/publish slice, never `not.toContain` alone: an offer that
+    // should have DISAPPEARED still satisfies a per-kind absence check, and a differently-named
+    // release offer would satisfy it too.
+    const roster = surface(releaseWorld(false)).roster;
+    // Non-empty first: a surface that answered nothing at all would satisfy the absence below
+    // for the wrong reason, and `repository.bootstrap` is in this roster throughout — the
+    // filter names the two LANDING-gated kinds exactly, never a `repository.` prefix.
+    expect(roster.length).toBeGreaterThan(0);
+    expect(roster.filter((entry) =>
+      entry.startsWith("release.decide@") || entry.startsWith("repository.publish@")))
+      .toEqual([]);
   });
 });

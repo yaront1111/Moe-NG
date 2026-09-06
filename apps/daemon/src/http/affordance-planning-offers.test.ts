@@ -22,6 +22,7 @@ import type { WiredCommandKind } from "../daemon-command-vocabulary.js";
 import { designAggregateId } from "../design/design-contracts.js";
 import type { PreviewReceiptState } from "../preview/preview-daemon-edge.js";
 import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
+import { releaseDossierAggregateId } from "../release/release-dossier-contracts.js";
 import type { PlanningOfferResolution } from "./affordance-planning-offers.js";
 import type { DurableAggregate, DurableLedger } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
@@ -230,24 +231,28 @@ describe("per-goal planning offers", () => {
   it("offers repository.publish once a commit has landed for the goal", () => {
     for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
       const offers = offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, NO_CONTRACT, LANDED);
-      expect(offers.map((entry) => entry.commandKind)).toEqual(["goal.close", "repository.publish"]);
+      expect(offers.map((entry) => entry.commandKind))
+        .toEqual(["goal.close", "repository.publish", "release.decide"]);
       expect(offers[0]?.targetAggregateId).toBe(GOAL_ID);
       // Publishing targets the goal's own publish aggregate, so its version fence never moves the goal's.
       expect(offers[1]?.targetAggregateId).toBe(`publish:${GOAL_ID}`);
     }
     const completed = offersFor("PLAN_REVIEW", "COMPLETED", LEGACY_LANE, NO_CONTRACT, LANDED);
-    expect(completed.map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+    expect(completed.map((entry) => entry.commandKind))
+      .toEqual(["repository.publish", "release.decide"]);
     expect(completed[0]?.targetAggregateId).toBe(`publish:${GOAL_ID}`);
   });
 
   it("gates the close and the publish INDEPENDENTLY", () => {
     // The two facts answer different questions — is the product finished, and is anything
     // committed — so each ladder entry must turn on its own and neither may mask the other.
+    // `release.decide` rides the LANDING fact with publish, deliberately: both are decisions
+    // about committed bytes, so they turn on together and neither is gated on readiness.
     const combos: readonly [GoalCloseReadiness["kind"], boolean, readonly string[]][] = [
       ["NOT_READY", false, []],
-      ["NOT_READY", true, ["repository.publish"]],
+      ["NOT_READY", true, ["repository.publish", "release.decide"]],
       ["READY", false, ["goal.close"]],
-      ["READY", true, ["goal.close", "repository.publish"]],
+      ["READY", true, ["goal.close", "repository.publish", "release.decide"]],
     ];
     for (const [readiness, landed, expected] of combos) {
       expect(
@@ -302,7 +307,7 @@ describe("per-goal planning offers", () => {
     // which entry survived rather than watching the whole ladder go dark.
     for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
       expect(offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "NOT_READY", LANDED)
-        .map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+        .map((entry) => entry.commandKind)).toEqual(["repository.publish", "release.decide"]);
     }
   });
 
@@ -311,14 +316,15 @@ describe("per-goal planning offers", () => {
     // close the command would refuse is the exact disagreement this gate exists to prevent.
     for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
       expect(offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "UNREADABLE", LANDED)
-        .map((entry) => entry.commandKind)).toEqual(["repository.publish"]);
+        .map((entry) => entry.commandKind)).toEqual(["repository.publish", "release.decide"]);
     }
   });
 
   it("offers goal.close once every approved criterion is verified", () => {
     for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
       const offers = offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, () => "READY", LANDED);
-      expect(offers.map((entry) => entry.commandKind)).toEqual(["goal.close", "repository.publish"]);
+      expect(offers.map((entry) => entry.commandKind))
+        .toEqual(["goal.close", "repository.publish", "release.decide"]);
       expect(offers[0]?.targetAggregateId).toBe(GOAL_ID);
       expect(offers[1]?.targetAggregateId).toBe(`publish:${GOAL_ID}`);
     }
@@ -329,7 +335,8 @@ describe("per-goal planning offers", () => {
     // being something landed to publish, which the second loop pins.
     for (const kind of ["NO_CONTRACT", "NOT_READY", "READY", "UNREADABLE"] as const) {
       expect(offersFor("PLAN_REVIEW", "COMPLETED", LEGACY_LANE, () => kind, LANDED)
-        .map((entry) => entry.commandKind), kind).toEqual(["repository.publish"]);
+        .map((entry) => entry.commandKind), kind)
+        .toEqual(["repository.publish", "release.decide"]);
       expect(offersFor("PLAN_REVIEW", "COMPLETED", LEGACY_LANE, () => kind), kind).toEqual([]);
     }
   });
@@ -459,7 +466,7 @@ describe("the compiler ladder on a source-bound goal", () => {
     expect(new Set(offers.map((entry) => entry.commandKind))).toEqual(new Set([
       "approval.decide", "approval.decide_intent", "design.submit", "goal.close", "plan.propose",
       "planning.submit_decomposition", "product_contract.propose_revision",
-      "preview.decide", "repository.publish",
+      "preview.decide", "release.decide", "repository.publish",
     ]));
     for (const entry of offers) {
       expect(entry.inputSchemaVersion, entry.commandKind)
@@ -681,6 +688,8 @@ describe("the offer ladder resolves the goal's CURRENT run", () => {
  */
 describe("the preview decision card", () => {
   const PREVIEW_TARGET = previewAggregateId(GOAL_ID);
+  /** Every arm here holds LANDED, so the release rung fires alongside publish in each roster. */
+  const RELEASE_TARGET = releaseDossierAggregateId(GOAL_ID);
   const roster = (resolution: PlanningOfferResolution): string[] => resolution.offers
     .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
   const started = (): PreviewReceiptState | null => "STARTED";
@@ -693,6 +702,7 @@ describe("the preview decision card", () => {
     expect(roster(resolution)).toEqual([
       `goal.close@${GOAL_ID}`,
       `preview.decide@${PREVIEW_TARGET}`,
+      `release.decide@${RELEASE_TARGET}`,
       `repository.publish@publish:${GOAL_ID}`,
     ]);
   });
@@ -702,7 +712,8 @@ describe("the preview decision card", () => {
       "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, NO_PREVIEW,
     );
     expect(roster(resolution)).toEqual([
-      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+      `goal.close@${GOAL_ID}`, `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`,
     ]);
   });
 
@@ -711,7 +722,8 @@ describe("the preview decision card", () => {
       "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, refused,
     );
     expect(roster(resolution)).toEqual([
-      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+      `goal.close@${GOAL_ID}`, `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`,
     ]);
   });
 
@@ -760,5 +772,112 @@ describe("the preview decision card", () => {
     expect(card?.expectedVersion).toBe(0);
     expect(resolution.offers.find((entry) => entry.commandKind === "goal.close")?.expectedVersion)
       .toBe(3);
+  });
+});
+
+/**
+ * THE RELEASE DECISION CARD (task-21209552, DoD 1-4).
+ *
+ * `release.decide` is offered off exactly one fact — a landed commit — and off NOTHING ELSE.
+ * The withholding horn is deliberate and written at the offer site: a goal with no landed
+ * commit has no sha, and `release-decide-service.ts:182` keys the release receipt by it, so
+ * there is no release object to decide. PAST that point the surface withholds nothing, because
+ * the service's own refusals NAME what is missing (`unverified evidence for: ${criteria}` at
+ * :160-161, RELEASE_REMOTE_MISSING at :146, the absent dossier at :169) and an absent card
+ * would replace a precise diagnostic with silence. That is the OPPOSITE of `goal.close`, which
+ * withholds because its refusal says nothing the operator could act on.
+ *
+ * EVERY ARM IS SET-EQUALITY on `commandKind@target`. A `not.toContain("release.decide")` would
+ * pass just as happily against a surface that emitted a DIFFERENTLY-NAMED release offer, which
+ * is exactly the regression a subset assertion cannot see.
+ *
+ * THE TARGET IS COMPUTED BY CALLING `releaseDossierAggregateId`, never spelled. The command
+ * fences on that function's output (`release-decide-command.ts:47`, RELEASE_TARGET_INVALID), so
+ * a test that writes `release:goal-offers-1` on both sides agrees with a drifted contract.
+ */
+describe("the release decision card", () => {
+  const RELEASE_TARGET = releaseDossierAggregateId(GOAL_ID);
+  const roster = (resolution: PlanningOfferResolution): string[] => resolution.offers
+    .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
+
+  it("offers release.decide at the goal's RELEASE aggregate once a commit has landed", () => {
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED,
+    );
+    // BY VALUE, and the value is DERIVED: the expected target is the contract function's own
+    // output, so this arm reds if the ladder and the command ever disagree about the key.
+    const card = resolution.offers.find((entry) => entry.commandKind === "release.decide");
+    expect(card?.targetAggregateId).toBe(RELEASE_TARGET);
+    expect(card?.targetAggregateId).not.toBe(GOAL_ID);
+    // Both directions, as a SET: what appeared, and that nothing else moved.
+    expect(roster(resolution)).toEqual([
+      `goal.close@${GOAL_ID}`,
+      `release.decide@${RELEASE_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`,
+    ]);
+    // The release verdict is an OPERATOR affordance. `release.decide` is in neither
+    // COMPILER_OFFER_KINDS nor COMPILER_SCHEMA_KINDS, so it must never become staffable work:
+    // a compilerStep here would have the wrapper spawn an agent to decide the release.
+    expect(resolution.compilerSteps).toEqual([]);
+  });
+
+  it("WITHHOLDS it, with publish, while nothing is landed for the goal", () => {
+    // ONE fact, TWO kinds. Asserting both together is what makes a regression that ungates
+    // only one of them visible — each alone would still satisfy a per-kind absence check.
+    for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING"]) {
+      expect(roster(resolutionFor("PLAN_REVIEW", lifecycle)), lifecycle)
+        .toEqual([`goal.close@${GOAL_ID}`]);
+    }
+    expect(roster(resolutionFor("PLAN_REVIEW", "COMPLETED"))).toEqual([]);
+  });
+
+  it("offers it on CLOSING and COMPLETED goals, and never before anything is built", () => {
+    for (const lifecycle of ["CLOSING", "COMPLETED"]) {
+      expect(roster(resolutionFor(
+        "PLAN_REVIEW", lifecycle, LEGACY_LANE, NO_CONTRACT, LANDED,
+      )), lifecycle).toContain(`release.decide@${RELEASE_TARGET}`);
+    }
+    // A DRAFT goal has nothing built, so the landing fact is never even asked and no release
+    // card can appear however the fact would have answered.
+    expect(roster(resolutionFor("PLAN_REVIEW", "DRAFT", LEGACY_LANE, NO_CONTRACT, LANDED)))
+      .toEqual([`approval.decide@${RUN_ID}`, `approval.decide_intent@${RUN_ID}`]);
+  });
+
+  it("is NOT gated on close readiness: an unfinished product may still be released", () => {
+    // The horn, asserted rather than described. An operator whose evidence is incomplete must
+    // still reach the command, because only its refusal names the unverified criterion ids.
+    for (const kind of ["NOT_READY", "UNREADABLE"] as const) {
+      expect(roster(resolutionFor(
+        "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, () => kind, LANDED,
+      )), kind).toEqual([
+        `release.decide@${RELEASE_TARGET}`, `repository.publish@publish:${GOAL_ID}`,
+      ]);
+    }
+  });
+
+  it("fences the card on the RELEASE aggregate's version, never the goal's", () => {
+    // The goal sits at version 3 in this fixture. A decide committed against the goal would
+    // overwrite the goal's own durable result (`readDurableLedger` keeps the last committed
+    // result per targetAggregateId) and the goal would vanish from this surface entirely, so
+    // the card must carry the release aggregate's version — 0 here, no dossier in the fixture.
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED,
+    );
+    const card = resolution.offers.find((entry) => entry.commandKind === "release.decide");
+    expect(card?.expectedVersion).toBe(0);
+    expect(resolution.offers.find((entry) => entry.commandKind === "goal.close")?.expectedVersion)
+      .toBe(3);
+  });
+
+  it("asks the landing fact ONCE per goal, for publish and release together", () => {
+    // Both rungs read the same fact, and the fact walks the goal's graph AND the review ledger.
+    // A second call would double that walk on every surface poll for every built goal — the
+    // 2026-09-05 affordances hot-path incident, re-entered through a rung that merely looked
+    // like an independent gate.
+    for (const lifecycle of ["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]) {
+      const spy = landingSpy(true);
+      offersFor("PLAN_REVIEW", lifecycle, LEGACY_LANE, NO_CONTRACT, spy.fact);
+      expect(spy.asked, lifecycle).toEqual([GOAL_ID]);
+    }
   });
 });

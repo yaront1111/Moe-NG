@@ -8,6 +8,7 @@ import { PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION }
   from "../product-contract/product-contract-command-contracts.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
+import { releaseDossierAggregateId } from "../release/release-dossier-contracts.js";
 import { designAggregateId } from "../design/design-contracts.js";
 import type { CompilerLanePort } from "./affordance-compiler-lane.js";
 
@@ -144,7 +145,7 @@ function offer(
   input: PlanningOfferInput,
   kind: CompilerOfferKind
     | "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose"
-    | "preview.decide" | "repository.publish",
+    | "preview.decide" | "release.decide" | "repository.publish",
   aggregateId: string,
 ): NextAllowedCommand {
   return Object.freeze({
@@ -247,10 +248,14 @@ function offersForGoal(
   // here rather than above so the landing walk is skipped for a goal that could not publish.
   const built = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING"
     || lifecycle === "COMPLETED";
-  const publish = built
-    ? (input.landedCommit(goal.goalId)
-      ? [offer(input, "repository.publish", `publish:${goal.goalId}`)]
-      : [])
+  // ASKED ONCE PER GOAL PER POLL, and read by BOTH the publish and the release rungs below.
+  // The fact walks the goal's graph AND the review ledger, so a second call would double that
+  // walk on every surface read for every built goal — the 2026-09-05 affordances hot-path
+  // incident, re-entered by a rung that merely looked like an independent gate. The `built &&`
+  // short-circuit keeps the walk skipped entirely for a goal that could offer neither.
+  const landed = built && input.landedCommit(goal.goalId);
+  const publish = landed
+    ? [offer(input, "repository.publish", `publish:${goal.goalId}`)]
     : [];
   // The product-preview verdict, offered only once a preview really STARTED for this goal — a
   // Decide card for a preview that never became answerable would ask the operator to judge a
@@ -264,6 +269,30 @@ function offersForGoal(
   const preview = built && input.previewReceipt(goal.goalId) === "STARTED"
     ? [offer(input, "preview.decide", previewAggregateId(goal.goalId))]
     : [];
+  // THE RELEASE VERDICT, GATED ON THE SAME LANDED COMMIT PUBLISH USES AND ON NOTHING ELSE.
+  // The withholding rule, decided deliberately because the Release card's row depends on it:
+  // WITHHOLD ONLY WHERE THERE IS NO RELEASE OBJECT. `release-decide-service.ts:182` keys the
+  // receipt by the SHA, so a goal with no landed commit has nothing to decide about and the
+  // card would be a control over an absent thing. PAST that point NOTHING is withheld — and
+  // this is the OPPOSITE of `goal.close` below, on purpose. Close withholds because its
+  // refusal tells the operator nothing they could act on. Release's refusals are the answer to
+  // the operator's actual question, "why can't I release?": :160-161 answers
+  // `unverified evidence for: ${criteria}` with the criterion ids themselves, :146 names the
+  // unbound remote, :169 names the missing dossier and its code. Withholding here would
+  // replace a precise diagnostic with an absent card, so the surface offers the decide and
+  // lets the dispatch refuse RELEASE_EVIDENCE_INCOMPLETE where the operator can read it.
+  // Targets the goal's RELEASE aggregate, and here the key is DICTATED rather than chosen:
+  // `release-decide-command.ts:47` refuses RELEASE_TARGET_INVALID unless the target is exactly
+  // `releaseDossierAggregateId(goalId)`, so this CALLS that function instead of spelling
+  // `release:${goalId}` the way `publish:` is spelled above — a hand-spelled key that drifts
+  // from the contract passes every grep and is refused at dispatch. It is also the same
+  // load-bearing hazard preview names: `readDurableLedger` keeps the last committed result per
+  // targetAggregateId, so a decide on the bare goal id would overwrite the goal's own state
+  // and drop it out of `durableGoals` entirely, taking every offer for that goal with it.
+  // Read HERE rather than above so the landing walk is skipped for a goal with nothing built.
+  const release = landed
+    ? [offer(input, "release.decide", releaseDossierAggregateId(goal.goalId))]
+    : [];
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
     // A goal is offered to close only when its product is DONE: every approved criterion of its
     // Product Contract is verified. A goal with no contract — the seed/Foundation journey — is
@@ -273,10 +302,10 @@ function offersForGoal(
     // above so the coverage walk is skipped for every goal that could not be offered one.
     const readiness = input.closeReadiness(goal.goalId);
     return staffAll(readiness === "NO_CONTRACT" || readiness === "READY"
-      ? [offer(input, "goal.close", goal.goalId), ...publish, ...preview]
-      : [...publish, ...preview]);
+      ? [offer(input, "goal.close", goal.goalId), ...publish, ...preview, ...release]
+      : [...publish, ...preview, ...release]);
   }
-  if (lifecycle === "COMPLETED") return staffAll([...publish, ...preview]);
+  if (lifecycle === "COMPLETED") return staffAll([...publish, ...preview, ...release]);
   return staffAll([]);
 }
 
