@@ -6,8 +6,8 @@
  * `approval.decide_intent` offer, so the DRAFT arm must mint one.
  *
  * COMPILER LADDER (source-bound goals): pre-Gate-1 the goal offers the Product
- * Contract writer and WITHHOLDS `plan.propose`; post-Gate-1 it offers the
- * decomposition dispatcher; an unreadable binding offers NOTHING. The lane port
+ * Contract writer and WITHHOLDS `plan.propose`; post-Gate-1 it offers design until
+ * present/skipped, then decomposition; an unreadable binding offers NOTHING. The lane port
  * is stubbed per arm — `affordance-compiler-lane.test.ts` proves the production
  * detection over a real store.
  */
@@ -17,6 +17,9 @@ import type { JsonObject, NextAllowedCommand } from "@moe/contracts";
 
 import type { CompilerLaneFacts, CompilerLanePort } from "./affordance-compiler-lane.js";
 import { resolvePlanningOffers } from "./affordance-planning-offers.js";
+import { commandFamilyFacts } from "../daemon-command-families.js";
+import type { WiredCommandKind } from "../daemon-command-vocabulary.js";
+import { designAggregateId } from "../design/design-contracts.js";
 import type { PreviewReceiptState } from "../preview/preview-daemon-edge.js";
 import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
 import type { PlanningOfferResolution } from "./affordance-planning-offers.js";
@@ -120,6 +123,7 @@ function resolutionOver(
     closeReadiness: NO_CONTRACT,
     compilerLane: lane,
     currentRun,
+    designState: () => "PRESENT",
     landedCommit: NOTHING_LANDED,
     ledger,
     previewReceipt: NO_PREVIEW,
@@ -133,6 +137,7 @@ function resolutionFor(
   closeReadiness: (goalId: string) => GoalCloseReadiness["kind"] = NO_CONTRACT,
   landedCommit: (goalId: string) => boolean = NOTHING_LANDED,
   previewReceipt?: (goalId: string) => PreviewReceiptState | null,
+  designState: (goalId: string) => "ABSENT" | "PRESENT" | "SKIPPED" = () => "PRESENT",
 ): PlanningOfferResolution {
   let minted = 0;
   return resolvePlanningOffers({
@@ -141,6 +146,7 @@ function resolutionFor(
     // A goal whose run was never rejected IS its own current run: the identity fact keeps every
     // arm written before the resolver existed asserting exactly today's ladder.
     currentRun: (planningRunRef) => planningRunRef,
+    designState,
     landedCommit,
     ledger: ledgerWith(runLifecycle, goalLifecycle),
     previewReceipt: previewReceipt ?? NO_PREVIEW,
@@ -378,6 +384,70 @@ describe("the compiler ladder on a source-bound goal", () => {
   const laneOf = (facts: CompilerLaneFacts): CompilerLanePort =>
     Object.freeze({ factsFor: () => facts });
 
+  function designResolution(approved: boolean, state: "ABSENT" | "PRESENT" | "SKIPPED") {
+    return resolutionFor("DRAFTING", "DRAFT", laneOf({
+      approvedGateRef: approved ? GATE_REF : null, lane: "COMPILER",
+    }), NO_CONTRACT, NOTHING_LANDED, NO_PREVIEW, () => state);
+  }
+
+  it.each([
+    [false, "ABSENT", "product_contract.propose_revision"],
+    [true, "ABSENT", "design.submit"],
+    [true, "PRESENT", "planning.submit_decomposition"],
+    [true, "SKIPPED", "planning.submit_decomposition"],
+  ] as const)("design rung: approved=%s, state=%s offers only %s", (approved, state, kind) => {
+    expect(new Set(designResolution(approved, state).offers.map((entry) => entry.commandKind)))
+      .toEqual(new Set([kind]));
+  });
+
+  it("fences the design offer on the design aggregate, not the advanced goal", () => {
+    const resolution = designResolution(true, "ABSENT");
+    expect(resolution.offers).toHaveLength(1);
+    expect(resolution.offers[0]).toMatchObject({
+      commandKind: "design.submit", expectedVersion: 0,
+      targetAggregateId: designAggregateId(GOAL_ID),
+    });
+    expect(resolution.compilerSteps).toEqual([
+      { aggregateId: designAggregateId(GOAL_ID), kind: "design.submit" },
+    ]);
+  });
+
+  it("uses each offered kind's production family schema, not its staffing lane", () => {
+    const resolutions = [
+      designResolution(false, "ABSENT"), designResolution(true, "ABSENT"),
+      designResolution(true, "PRESENT"), resolutionFor("DRAFTING", "DRAFT"),
+      resolutionFor("PLAN_REVIEW", "DRAFT"),
+      resolutionFor("PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT,
+        () => true, () => "STARTED"),
+    ];
+    const offers = resolutions.flatMap((resolution) => resolution.offers);
+    expect(offers.length).toBeGreaterThan(0);
+    expect(new Set(offers.map((entry) => entry.commandKind))).toEqual(new Set([
+      "approval.decide", "approval.decide_intent", "design.submit", "goal.close", "plan.propose",
+      "planning.submit_decomposition", "product_contract.propose_revision",
+      "preview.decide", "repository.publish",
+    ]));
+    for (const entry of offers) {
+      expect(entry.inputSchemaVersion, entry.commandKind)
+        .toBe(commandFamilyFacts(entry.commandKind as WiredCommandKind).schemaVersion);
+    }
+  });
+
+  it("reads the design fact once only for an approved, not yet reviewable compiler goal", () => {
+    for (const [run, facts, expected] of [
+      ["DRAFTING", { lane: "LEGACY" }, []],
+      ["DRAFTING", { lane: "WITHHELD" }, []],
+      ["DRAFTING", { lane: "COMPILER", approvedGateRef: null }, []],
+      ["PLAN_REVIEW", { lane: "COMPILER", approvedGateRef: GATE_REF }, []],
+      ["DRAFTING", { lane: "COMPILER", approvedGateRef: GATE_REF }, [GOAL_ID]],
+    ] as const) {
+      const asked: string[] = [];
+      resolutionFor(run, "DRAFT", laneOf(facts), NO_CONTRACT, NOTHING_LANDED, NO_PREVIEW,
+        (goalId) => { asked.push(goalId); return "ABSENT"; });
+      expect(asked, run).toEqual(expected);
+    }
+  });
+
   it("offers the writer and WITHHOLDS plan.propose before Gate 1", () => {
     const resolution = resolutionFor("DRAFTING", "DRAFT",
       laneOf({ approvedGateRef: null, lane: "COMPILER" }));
@@ -407,7 +477,7 @@ describe("the compiler ladder on a source-bound goal", () => {
       .map((entry) => entry.commandKind)).toEqual(["product_contract.propose_revision"]);
   });
 
-  it("offers the dispatcher instead once Gate 1 approved a citing revision", () => {
+  it("offers the dispatcher once Gate 1 is approved and a design exists", () => {
     const resolution = resolutionFor("DRAFTING", "DRAFT",
       laneOf({ approvedGateRef: GATE_REF, lane: "COMPILER" }));
     expect(resolution.offers.map((entry) => entry.commandKind))
@@ -465,7 +535,14 @@ describe("the compiler ladder on a source-bound goal", () => {
     for (const kind of [
       "environment.set_variable", "environment.unset_variable",
       "goal.close", "goal.create", "goal.create_with_source",
-      "preview.decide",
+      // BOTH halves of the preview act. ASKING for one spawns a dev server on the daemon's host
+      // and drives a browser at it, so a seat able to staff it would be running the product on
+      // the operator's machine on its own say-so. The BIDIRECTIONAL half of this fence -- that
+      // every SERVED operator kind is also fenced, enumerated from the dispatch seam's handled
+      // kinds rather than from a roster constant -- lives in
+      // `preview/preview-start-command.test.ts`, which composes a real registry; this file is
+      // store-free and can only state the explicit roster.
+      "preview.decide", "preview.start",
       "repository.publish",
     ]) {
       expect(HUMAN_ONLY_STEPS.has(kind), `${kind} missing from HUMAN_ONLY_STEPS`).toBe(true);

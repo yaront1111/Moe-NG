@@ -18,7 +18,9 @@ import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
 } from "./product-contract/product-contract-gate-1-contract.js";
-import { PREVIEW_DECIDE_COMMAND_KIND } from "./preview/preview-contracts.js";
+import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
+  from "./preview/preview-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { CONTINUATION_COMMAND_KIND } from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
   from "./recovery/recovery-completion-digest.js";
@@ -80,6 +82,8 @@ export interface CommandFamilyFacts {
   readonly productContractGate1: boolean;
   readonly reconcile: boolean;
   readonly recovery: boolean;
+  /** The operator's release decision, served by its own async entry. */
+  readonly release: boolean;
   /** The capability the seam checks BEFORE the handler runs. */
   readonly requiredCapability: string;
   readonly review: boolean;
@@ -110,10 +114,13 @@ function membershipOf(kind: WiredCommandKind): Omit<
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
-    preview: kind === PREVIEW_DECIDE_COMMAND_KIND,
+    // AN EQUALITY WIDENED TO A PAIR, not a set membership: both preview kinds are in this
+    // family. Narrowing it back to one kind still COMPILES and reds only in the family arm.
+    preview: kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND,
     productContractGate1: kind === PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
     reconcile: kind === RESOURCE_RECONCILE_COMMAND_KIND,
     recovery: kind === RECOVERY_COMPLETION_COMMAND_KIND,
+    release: kind === RELEASE_DECIDE_COMMAND_KIND,
     review: kind in REVIEW_FAMILY,
     session: kind in SESSION_FAMILY,
     step: kind in STEP_FAMILY,

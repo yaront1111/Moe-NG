@@ -31,6 +31,7 @@ import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
 import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
 import {
   PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_DECIDE_PAYLOAD_KEYS,
+  PREVIEW_START_COMMAND_KIND, PREVIEW_START_PAYLOAD_KEYS,
 } from "./preview/preview-contracts.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
@@ -149,6 +150,11 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],
     [PREVIEW_DECIDE_COMMAND_KIND]: PREVIEW_DECIDE_PAYLOAD_KEYS,
+    // EXACTLY TWO KEYS. `workspace` is absent DELIBERATELY -- this roster is the HTTP ingress
+    // ALLOW-LIST, so leaving it off is what stops a caller naming the directory the daemon
+    // spawns a dev-server script out of. The reason is stated in full on
+    // `PREVIEW_START_PAYLOAD_KEYS` (preview/preview-contracts.ts).
+    [PREVIEW_START_COMMAND_KIND]: PREVIEW_START_PAYLOAD_KEYS,
     // RECOGNISED IN ORDER TO BE REFUSED, not accepted (task-4b9c394d). The daemon MINTS the
     // activation witness, so a well-behaved caller sends `{}`. `"witness"` stays listed because
     // this roster is the HTTP ingress ALLOW-LIST (http-command-ingress.ts:118-126): an UNLISTED
@@ -159,6 +165,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
     "project.register": ["owner"], "provider.probe": ["observation"],
     "repository.publish": ["approval", "goalId", "remoteUrl"],
+    "release.decide": ["base", "decision", "goalId", "sha"],
     // The docker build CONTEXT is deliberately absent from the deploy: it is host-scoped daemon
     // configuration, and a caller-supplied path would let any operator-authenticated request
     // build an arbitrary directory on the daemon's host. Both lists are the slice's own.

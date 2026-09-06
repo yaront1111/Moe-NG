@@ -31,6 +31,8 @@ import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowl
 import { createOperatorSessionHandshakePort } from "./identity/session-handshake.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+import { createAgentWrapper } from "./orchestrator/agent-wrapper.js";
+import type { ChainStep } from "./http/affordance-contract.js";
 
 const CREDENTIAL = "human-approver-operator-credential";
 const PROJECT = "proj-human-approver";
@@ -82,6 +84,27 @@ const provider = createStoreDependencies({
   storePath,
 });
 const deps = provider.provide();
+
+it("release.decide never staffs the READY unclaimed human work item", async () => {
+  const steps: readonly ChainStep[] = [{ aggregateId: "release-human-1", claim: null,
+    claimAggregateVersion: 0, kind: "release.decide", missing: [], status: "READY", version: 1 }];
+  const wrapper = createAgentWrapper({
+    affordances: { boundProjectId: PROJECT, readSurface: () => ({
+      nextAllowedCommands: [], outcome: "SURFACE", planningAuthorityByRun: {},
+      planningGoalRefs: {}, planningGoalRef: null, steps,
+    }) },
+    claimTtlMs: 60_000, clock: () => Date.parse(DECIDED_AT), deps, maxAgents: 1,
+    mintSecret: () => { throw new Error("release human gate must not mint a session"); },
+    operatorCredential: CREDENTIAL,
+    spawnAgent: () => { throw new Error("release human gate must not spawn"); },
+  });
+  expect(steps.filter((step) => step.kind === "release.decide"
+    && step.status === "READY" && step.claim === null)).toHaveLength(1);
+  const report = await wrapper.runOnce();
+  expect(report.spawned.map((entry) => entry.workItemId))
+    .not.toContain("release.decide@release-human-1");
+  expect(report).toEqual({ active: 0, spawned: [], surfaceOutcome: "SURFACE" });
+});
 
 afterAll(() => {
   provider.close();
@@ -328,9 +351,13 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // operator bootstrap credential, so an advertised operator kind would let an agent arrive
       // AS THE OPERATOR — the exclusion is derived from OPERATOR_PRINCIPAL_KINDS, not typed here.
       "repository.bootstrap",
+      "release.decide", "deployment.deploy", "deployment.set_target",
+      // Asking for a product preview runs the product on the daemon's host, so it is the
+      // operator's act and never an agent's. Derived from OPERATOR_PRINCIPAL_KINDS like the rest.
+      "preview.start",
     ]);
-    expect(expectedExclusions).toHaveLength(17);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(17);
+    expect(expectedExclusions).toHaveLength(21);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(21);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

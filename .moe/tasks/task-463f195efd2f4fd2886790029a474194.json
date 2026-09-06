@@ -247,7 +247,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:47:55.345Z",
-  "updatedAt": "2026-09-06T11:31:49.488Z",
+  "updatedAt": "2026-09-06T11:33:14.989Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:05.225Z",
     "plannedStepCount": 8,
@@ -330,7 +330,13 @@
     "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
     ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
     ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
-    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json",
+    ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+    ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+    ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json"
   ],
   "completionSummary": "controlled-2 ships exact node-pg-migrate9.0.0 + pg8.23.0, migration scripts, deterministic initial app_metadata migration and v2 frozen lock; v1 asset preserved. Down uses down 1: exactly ONE most-recent migration, not all/last batch. MIGRATION_TOOL_MISSING defined/type-pinned at existing DAEMON_INGRESS here; verifier/deployment children2/3 own missing-script detection/refusal, no invented call site. Fixed1700000000000-initial.js/LF bytes; later CLI create timestamps coding-seat migrations. Golden identity/name-only difference preserved. Four drills RED at intended seams, SHA256 restores proved, no leaked containers. Fresh opt-in owned6files102tests EXIT0 (51.70s): GENERATED PRODUCT install/up/down/build0, table PRESENT then ABSENT, pgmigrations1 then0. Scoped strict tsc0. Latest full typecheck1 ONLY foreign mcp-tool-allowlist.test.ts89/90 TS2554; earlier typecheck0, foundation35files756tests0/store52files675tests0 recorded with original anchors. Full daemon1:38failed/476passed files,180failed/9284passed/50skipped tests; all failing paths foreign, exact lines and contention caveat in comments. Root NOT RUN per governor msg-e35611 (no approved step names it); no repo-wide green claim. Latest evidence comment23fa1ce0. Nine owned paths declared; no moe-next manifest changes/root install.",
   "commits": [
@@ -365,6 +371,27 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "d60522a32cb6ee6245d1e96fe0938a0728680d31",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T11:03:16Z",
+      "paths": [
+        ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T11:33:14.989Z",
+      "treeId": "92990b30231f1b3ad7bd62fc64fabd06f003ea62",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
@@ -372,7 +399,7 @@
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-4f771bb8@2026-09-06T11:03:16Z",
-    "at": "2026-09-06T11:03:31.393Z"
+    "at": "2026-09-06T11:33:14.989Z"
   },
   "completedAt": "2026-09-06T11:31:49.488Z",
   "reviewCompletedAt": "2026-09-06T11:31:49.488Z",

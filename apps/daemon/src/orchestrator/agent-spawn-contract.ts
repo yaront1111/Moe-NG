@@ -209,6 +209,7 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // Pushing the operator's repository to a remote is the operator's decision; the wrapper
   // performs it as an effect of that decision, never as staffed work.
   "repository.publish",
+  "release.decide",
   // Writing an environment variable is not staffable work: the value is a production secret
   // the deploy later hands to a running process, so a wrapper that staffed this could set
   // what production reads. Unlike the kinds above, which the offer surface can present to a
@@ -227,6 +228,15 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // is reported as UNWIRED_KIND, and it is a capability fact rather than a staffing decision,
   // so it would stop applying the moment the kind gained any agent capability at all.
   "preview.decide",
+  // ASKING for one is the same human act. `preview.start` spawns a dev server on the daemon
+  // host and drives a browser against it, off the daemon's OWN bound workspace -- a seat that
+  // could staff it would be running the product on the operator's machine on its own say-so.
+  // `mcp-tool-allowlist.ts` holds the other half of the fence (that one stops an agent REACHING
+  // the kind over a transport, this one stops the wrapper minting a session to take it), and
+  // `agentCapabilitiesFor` already returns null for the kind -- which refuses one step later,
+  // as a capability fact rather than a staffing decision, and would stop applying the moment
+  // the kind gained any agent capability at all.
+  "preview.start",
   // Creating a product repository at an operator-supplied path is the operator's decision; the
   // wrapper performs it as an effect of that decision, never as staffed work. The path is
   // operator input and the command writes a whole tree at it, so a self-staffed session would

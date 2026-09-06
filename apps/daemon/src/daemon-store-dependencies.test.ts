@@ -717,6 +717,10 @@ try {
   // the composition factory to the shipped provider.
   const remote = provider.repositoryRemote();
   const remoteView = remote.readRemote();
+  const schedules = provider.schedules();
+  let scheduleRegistration;
+  try { scheduleRegistration = schedules.register("child-schedule", () => {}, 60000); }
+  finally { schedules.release(); }
   const shapeOf = (result) => ({
     commandId: result.decision?.commandId ?? null,
     disposition: result.decision?.disposition ?? null,
@@ -738,6 +742,9 @@ try {
     remoteOutcome: remoteView.outcome,
     remoteUrl: remoteView.remoteUrl,
     sameEffect: first.decision?.effectId === second.decision?.effectId,
+    sameSchedules: schedules === provider.schedules(),
+    scheduleRegistration,
+    scheduleAfterRelease: schedules.register("child-schedule", () => {}, 60000),
     sameSourceSnapshotPublisher:
       sourceSnapshotPublisher === provider.sourceSnapshotPublisher(),
     second: shapeOf(second),
@@ -795,6 +802,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "planningRuns", "policy", "previews", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
         "provide", "provideV2", "reconciliation", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
+        "schedules",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",
         "subscriptions",
       ],
@@ -815,6 +823,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "approval.decide", "approval.decide_intent",
         "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
+        "deployment.deploy", "deployment.set_target",
         // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
         "design.submit",
         "effect.activate",
@@ -829,12 +838,12 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph.request_expansion", "graph.supersede",
         "integration.accept_output", "journal.append",
         "plan.propose", "planning.submit_decomposition", "policy.install",
-        "policy.validate", "preview.decide",
+        "policy.validate", "preview.decide", "preview.start",
         "product_contract.answer_clarification", "product_contract.approve_gate_1",
         "product_contract.ask_clarification", "product_contract.propose_revision",
         "project.activate", "project.bind_repository", "project.register",
         "provider.probe", "qualification.replan", "recovery.complete",
-        "repository.bootstrap", "repository.publish", "repository.recover",
+        "release.decide", "repository.bootstrap", "repository.publish", "repository.recover",
         "resource.confirm_released", "resource.reconcile",
         "review.submit",
         "session.close", "session.open", "session.renew",
@@ -843,6 +852,9 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "work.renew", "work.resume",
       ],
       sameEffect: true,
+      sameSchedules: true,
+      scheduleRegistration: { ok: true },
+      scheduleAfterRelease: { ok: false, id: "child-schedule", code: "SCHEDULE_RELEASED", layer: "DAEMON_INGRESS" },
       sameSourceSnapshotPublisher: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",

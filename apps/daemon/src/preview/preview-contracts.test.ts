@@ -30,8 +30,12 @@ import {
   PREVIEW_FINDING_KEYS,
   PREVIEW_LAYERS,
   PREVIEW_REJECT_PAYLOAD_KEYS,
+  PREVIEW_START_COMMAND_KIND,
+  PREVIEW_START_PAYLOAD_KEYS,
   boundedPreviewText,
+  containedPreviewSegment,
   decodePreviewDecidePayload,
+  decodePreviewStartPayload,
   isPreviewRefusal,
   previewRefusal,
 } from "./preview-contracts.js";
@@ -76,14 +80,15 @@ describe("preview.decide rosters (task-40e52fa8a85a4921b97bee933b00403f)", () =>
     const mapped = new Set(Object.keys(PREVIEW_CODE_LAYERS));
     const roster = new Set<string>(PREVIEW_CODES);
     expect(roster).toStrictEqual(mapped);
-    expect(roster.size).toBe(4);
+    expect(roster.size).toBe(5);
   });
 
-  it("carries the four named codes and no fifth spelling", () => {
+  it("carries the named codes and no unlisted spelling", () => {
     expect(PREVIEW_CODES).toStrictEqual([
       "PREVIEW_COMMAND_MISSING",
       "PREVIEW_DECISION_INVALID",
       "PREVIEW_GOAL_NOT_LANDED",
+      "PREVIEW_START_PAYLOAD_INVALID",
       "PREVIEW_START_TIMEOUT",
     ]);
   });
@@ -92,6 +97,7 @@ describe("preview.decide rosters (task-40e52fa8a85a4921b97bee933b00403f)", () =>
     expect(PREVIEW_CODE_LAYERS.PREVIEW_COMMAND_MISSING).toBe("RUNNER");
     expect(PREVIEW_CODE_LAYERS.PREVIEW_DECISION_INVALID).toBe("REQUEST");
     expect(PREVIEW_CODE_LAYERS.PREVIEW_GOAL_NOT_LANDED).toBe("GOAL_AUTHORITY");
+    expect(PREVIEW_CODE_LAYERS.PREVIEW_START_PAYLOAD_INVALID).toBe("REQUEST");
     expect(PREVIEW_CODE_LAYERS.PREVIEW_START_TIMEOUT).toBe("RUNNER");
   });
 
@@ -103,7 +109,7 @@ describe("preview.decide rosters (task-40e52fa8a85a4921b97bee933b00403f)", () =>
       checked += 1;
     }
     expect(checked).toBe(PREVIEW_CODES.length);
-    expect(checked).toBe(4);
+    expect(checked).toBe(5);
   });
 
   it("uses every declared layer at least once, so the roster carries no dead member", () => {
@@ -122,7 +128,7 @@ describe("preview.decide rosters (task-40e52fa8a85a4921b97bee933b00403f)", () =>
       expect(Object.isFrozen(refusal)).toBe(true);
       checked += 1;
     }
-    expect(checked).toBe(4);
+    expect(checked).toBe(5);
   });
 
   it("carries a delegated surface's own code and layer verbatim", () => {
@@ -359,5 +365,136 @@ describe("preview bounded text", () => {
     expect(boundedPreviewText(`node${String.fromCharCode(0)}a`)).toBe(false);
     expect(boundedPreviewText(7)).toBe(false);
     expect(boundedPreviewText(null)).toBe(false);
+  });
+});
+
+/**
+ * `decodePreviewStartPayload` - the OTHER decoder in this module, and the only gate between
+ * operator bytes and a receipt id. Every arm names the CODE and the LAYER: a bare `ok === false`
+ * would stay green if a second refusal layer landed above this one (global rail 1).
+ *
+ * WHY THE TRAVERSAL ARMS MATTER HERE and not only in the runner. `previewReceiptId` HASHES both
+ * values and `previewCaptureDirectory` JOINS them, so a separator or a `..` reaching either
+ * would put one goal's captures inside another's directory. `preview-runner.ts` has its own
+ * containment check one layer down; that is a second gate, and these arms prove THIS one refuses
+ * on its own rather than leaning on it.
+ */
+function expectStartInvalid(result: unknown): void {
+  expect(result).toMatchObject({
+    code: "PREVIEW_START_PAYLOAD_INVALID",
+    layer: PREVIEW_CODE_LAYERS.PREVIEW_START_PAYLOAD_INVALID,
+    ok: false,
+  });
+  expect(result).toMatchObject({ layer: "REQUEST" });
+}
+
+const GOOD_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+function startPayload(): Record<string, unknown> {
+  return { goalId: "goal-1", sha: GOOD_SHA };
+}
+
+describe("preview.start payload contract", () => {
+  it("names the kind and EXACTLY the two keys, with `workspace` deliberately absent", () => {
+    expect(PREVIEW_START_COMMAND_KIND).toBe("preview.start");
+    expect(PREVIEW_START_PAYLOAD_KEYS).toStrictEqual(["goalId", "sha"]);
+    expect(Object.isFrozen(PREVIEW_START_PAYLOAD_KEYS)).toBe(true);
+    // THE SECURITY DECISION OF THE COMMAND, asserted rather than only commented: the runner
+    // reads `<workspace>/package.json` and spawns a script out of it, so a caller-named
+    // workspace would be arbitrary command execution on the daemon host.
+    expect(PREVIEW_START_PAYLOAD_KEYS).not.toContain("workspace");
+  });
+
+  it("accepts the exact two-key shape and copies it into a frozen record", () => {
+    // THE POSITIVE CONTROL for every refusal arm below: without it they would all pass against
+    // a decoder that refused everything.
+    const decoded = decodePreviewStartPayload(startPayload());
+    expect(decoded).toStrictEqual({
+      ok: true, payload: { goalId: "goal-1", sha: GOOD_SHA },
+    });
+    if (!decoded.ok) throw new Error("expected an accepted payload");
+    expect(Object.isFrozen(decoded.payload)).toBe(true);
+  });
+
+  it("refuses a MISSING key and an UNKNOWN key identically, both at REQUEST", () => {
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1" }));
+    expectStartInvalid(decodePreviewStartPayload({ sha: GOOD_SHA }));
+    expectStartInvalid(decodePreviewStartPayload({}));
+    expectStartInvalid(decodePreviewStartPayload({ ...startPayload(), workspace: "C:/tree" }));
+    expectStartInvalid(decodePreviewStartPayload({ ...startPayload(), previewRef: "p-1" }));
+  });
+
+  it("refuses a non-record, an array and a prototype-bearing object", () => {
+    for (const value of [null, undefined, 7, "goal-1", true, [], [startPayload()]]) {
+      expectStartInvalid(decodePreviewStartPayload(value));
+    }
+    class Payload { public goalId = "goal-1"; public sha = GOOD_SHA; }
+    expectStartInvalid(decodePreviewStartPayload(new Payload()));
+  });
+
+  it("refuses an empty, over-long or non-string member on EITHER key", () => {
+    const long = "a".repeat(MAX_PREVIEW_TEXT + 1);
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "", sha: GOOD_SHA }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1", sha: "" }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: long, sha: GOOD_SHA }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1", sha: long }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: 7, sha: GOOD_SHA }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1", sha: null }));
+    // The bound is INCLUSIVE, so the longest admissible value still decodes - which is what
+    // stops the arm above passing against an off-by-one that refused everything long.
+    expect(decodePreviewStartPayload({
+      goalId: "a".repeat(MAX_PREVIEW_TEXT), sha: GOOD_SHA,
+    })).toMatchObject({ ok: true });
+  });
+
+  it("refuses every traversal shape on EITHER key, at REQUEST", () => {
+    const hostile = [
+      "../escape", "..", ".", "a/b", "a\b", "/abs", "C:/tree",
+      `goal${String.fromCharCode(0)}a`, "goal 1", "goal	b", "<goal>", "goal:1", "goal|1",
+      "goal?1", "goal*1", '"goal"',
+    ];
+    let checked = 0;
+    for (const value of hostile) {
+      expectStartInvalid(decodePreviewStartPayload({ goalId: value, sha: GOOD_SHA }));
+      expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1", sha: value }));
+      checked += 1;
+    }
+    // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
+    expect(checked).toBe(hostile.length);
+    expect(checked).toBe(16);
+  });
+
+  it("refuses a non-NFC spelling, because two spellings hash to two receipt ids", () => {
+    // Composed vs decomposed e-acute: visually one id, two different `previewReceiptId` hashes,
+    // which would defeat the supervisor's in-flight de-duplication and let a second dev server
+    // try to bind the port the first already took.
+    const decomposed = `goal-e${String.fromCharCode(0x65, 0x301)}`;
+    expect(decomposed.normalize("NFC")).not.toBe(decomposed);
+    expectStartInvalid(decodePreviewStartPayload({ goalId: decomposed, sha: GOOD_SHA }));
+    expectStartInvalid(decodePreviewStartPayload({ goalId: "goal-1", sha: decomposed }));
+    // The NFC form of the SAME text is admitted, so the arm above is about normalisation and
+    // not about non-ASCII text.
+    expect(decodePreviewStartPayload({
+      goalId: decomposed.normalize("NFC"), sha: GOOD_SHA,
+    })).toMatchObject({ ok: true });
+  });
+
+  it("refuses a getter-backed member and a symbol-keyed one", () => {
+    const getterBacked: Record<string, unknown> = { goalId: "goal-1" };
+    Object.defineProperty(getterBacked, "sha", { enumerable: true, get: () => GOOD_SHA });
+    expectStartInvalid(decodePreviewStartPayload(getterBacked));
+
+    const symbolKeyed: Record<string | symbol, unknown> = startPayload();
+    symbolKeyed[Symbol("smuggled")] = "value";
+    expectStartInvalid(decodePreviewStartPayload(symbolKeyed));
+  });
+
+  it("exposes the segment guard the decoder uses, so the runner cannot drift from it", () => {
+    expect(containedPreviewSegment("goal-1")).toBe(true);
+    expect(containedPreviewSegment(GOOD_SHA)).toBe(true);
+    expect(containedPreviewSegment("../escape")).toBe(false);
+    expect(containedPreviewSegment("a/b")).toBe(false);
+    expect(containedPreviewSegment("")).toBe(false);
+    expect(containedPreviewSegment(7)).toBe(false);
   });
 });

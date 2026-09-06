@@ -7,7 +7,7 @@ import {
   GRAPH_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
-  PAYLOAD_KEYS, PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
+  PAYLOAD_KEYS, PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
   agentCapabilitiesFor, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 
@@ -25,7 +25,7 @@ import {
 type Family =
   | "CRITERION" | "REPOSITORY_RECOVERY"
   | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "DESIGN" | "ENVIRONMENT" | "GRAPH"
-  | "PREVIEW"
+  | "PREVIEW" | "RELEASE"
   | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
@@ -211,6 +211,13 @@ const ROWS: readonly VocabularyRow[] = [
   // it, and calling it standalone would assert the opposite of what ships.
   { agent: null, capability: REVIEW, family: "PREVIEW", kind: "preview.decide",
     payloadKeys: ["decision", "findings", "previewRef"] },
+  // HUMAN wire, same terms as its twin above: `agent` is null and OPERATOR_ONLY below is the
+  // fence. ASKING for a preview runs the product on the daemon's host, so it is the operator's
+  // act as much as judging one is. Family PREVIEW at REVIEW -- `PREVIEW_FAMILY` claims BOTH
+  // kinds now, so calling this one standalone would assert the opposite of what ships.
+  // EXACTLY TWO payload keys: `workspace` is deliberately off the wire.
+  { agent: null, capability: REVIEW, family: "PREVIEW", kind: "preview.start",
+    payloadKeys: ["goalId", "sha"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "project.activate",
     payloadKeys: ["witness"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP",
@@ -221,6 +228,8 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "repository.publish",
     payloadKeys: ["approval", "goalId", "remoteUrl"] },
+  { agent: [GOAL, WORK], capability: GOAL, family: "RELEASE", kind: "release.decide",
+    payloadKeys: ["base", "decision", "goalId", "sha"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "deployment.set_target",
     payloadKeys: ["environment", "network", "sshTarget", "url"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "deployment.deploy",
@@ -259,6 +268,7 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   DESIGN: new Map(Object.entries(DESIGN_FAMILY)),
   ENVIRONMENT: new Map(Object.entries(ENVIRONMENT_FAMILY)),
   PREVIEW: new Map(Object.entries(PREVIEW_FAMILY)),
+  RELEASE: new Map(Object.entries(RELEASE_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
   GRAPH: new Map(Object.entries(GRAPH_FAMILY)),
@@ -269,7 +279,7 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 const FAMILY_NAMES = [
   "CRITERION", "REPOSITORY_RECOVERY",
   "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "DESIGN", "ENVIRONMENT", "GRAPH", "PREVIEW",
-  "REVIEW",
+  "RELEASE", "REVIEW",
   "SESSION", "STEP", "WORK",
 ] as const;
 
@@ -281,6 +291,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish", "repository.bootstrap",
+  "release.decide",
   "deployment.set_target", "deployment.deploy",
   // The operator ANSWERS a material product question -- the human act the clarification
   // fence exists to keep off every agent wire.
@@ -295,16 +306,17 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "environment.set_variable", "environment.unset_variable",
   // The one-way GA activation: the act that makes v2 authoritative for good.
   "cutover.activate",
-  // Deciding a rendered product preview is the operator's own verdict.
-  "preview.decide",
+  // Deciding a rendered product preview is the operator's own verdict, and asking for one is
+  // the same act: it spawns a dev server on the daemon's host and drives a browser at it.
+  "preview.decide", "preview.start",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly fifty-six wired kinds in their registration order", () => {
+  it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(56);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(56);
+    expect(ROWS).toHaveLength(58);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(58);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -348,7 +360,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(45);
+    expect(declared).toHaveLength(47);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -362,7 +374,8 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.DESIGN.size).toBe(1);
     expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
-    expect(FAMILY_MAPS.PREVIEW.size).toBe(1);
+    expect(FAMILY_MAPS.PREVIEW.size).toBe(2);
+    expect(FAMILY_MAPS.RELEASE.size).toBe(1);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);
     expect(FAMILY_MAPS.STEP.size).toBe(3);
@@ -381,6 +394,7 @@ describe("command vocabulary", () => {
     expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_MUTATION_COMMAND_KINDS)).toBe(true);
     expect(Object.isFrozen(PREVIEW_FAMILY)).toBe(true);
+    expect(Object.isFrozen(RELEASE_FAMILY)).toBe(true);
     expect(Object.isFrozen(REVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(SESSION_FAMILY)).toBe(true);
     expect(Object.isFrozen(STEP_FAMILY)).toBe(true);
@@ -401,9 +415,9 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly twenty kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(20);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(20);
+  it("gates exactly the transcribed kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(22);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(22);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

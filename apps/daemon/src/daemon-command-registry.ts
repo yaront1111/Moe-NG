@@ -26,6 +26,7 @@ import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
 import { runPreviewDecideEdge } from "./preview/preview-daemon-edge.js";
 import type { PreviewDaemonPort } from "./preview/preview-daemon-edge.js";
+import type { PreviewSupervisor } from "./preview/preview-supervisor.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
@@ -137,6 +138,16 @@ export interface DaemonCommandPortOptions {
    *  `preview.decide` and refuses every dispatch of it PREVIEW_COMMAND_MISSING @ RUNNER, so
    *  the served roster never depends on host configuration. */
   readonly preview?: PreviewDaemonPort;
+  /** The SAME daemon supervisor, in the half `preview.start` needs. Separate from `preview`
+   *  above rather than a widening of it: that option is the NARROW port (close + release) the
+   *  decide edge and the shutdown sweep hold, and widening it to `PreviewDaemonRuntime` would
+   *  make every existing test double grow a `supervisor` member it has no use for. ABSENT is a
+   *  REFUSING state -- the kind is still SERVED and refuses PREVIEW_COMMAND_MISSING @ RUNNER,
+   *  so the roster never depends on host configuration. */
+  readonly previewSupervisor?: PreviewSupervisor;
+  /** The daemon's own bound product workspace, forwarded RAW to the start edge. NEVER a payload
+   *  value: the runner reads `<workspace>/package.json` and spawns a script out of it. */
+  readonly previewWorkspace?: string | null;
   readonly projectId: string;
   /** `repository.bootstrap`'s two injectable halves. ABSENT means the real `gh` CLI and the
    *  real manager catalog — production passes nothing. */
@@ -278,6 +289,10 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
       operatorPrincipalId, projectId, store,
+      ...(options.previewSupervisor === undefined
+        ? {} : { previewSupervisor: options.previewSupervisor }),
+      ...(options.previewWorkspace === undefined
+        ? {} : { previewWorkspace: options.previewWorkspace }),
       ...(options.repositoryBootstrap === undefined
         ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
       ...(options.foundationCatalogSource === undefined

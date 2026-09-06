@@ -21,6 +21,9 @@ import { createDeployCommandHandler, DEPLOY_BUILD_CONTEXT_ENV_KEY }
   from "./deployment/deploy-command.js";
 import type { DeployPorts } from "./deployment/deploy-ports.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
+import { PREVIEW_START_COMMAND_KIND } from "./preview/preview-contracts.js";
+import { createPreviewStartHandler } from "./preview/preview-start-command.js";
+import type { PreviewSupervisor } from "./preview/preview-supervisor.js";
 import { createNodeProjectCatalogRegistrar } from "./projects/project-catalog-registrar.js";
 import { createRepositoryBootstrapHandler } from "./repository/repository-bootstrap-command.js";
 import type { BootstrapCatalogPort } from "./repository/repository-bootstrap-command.js";
@@ -50,7 +53,12 @@ export type AsyncCommandKind =
   // would describe an intention rather than a deployed product. Registered HERE for the same
   // reason as the kind above: the registry is past its size cap and this module is the seam it
   // spreads for async kinds.
-  | typeof DEPLOYMENT_DEPLOY_COMMAND_KIND;
+  | typeof DEPLOYMENT_DEPLOY_COMMAND_KIND
+  // `preview.start` spawns a dev server, waits for it to become answerable and drives a browser
+  // through Playwright, so a synchronous `CommandHandler` could only answer BEFORE the preview
+  // existed. Registered HERE for the same reason as the two kinds above: the registry is past
+  // its size cap and this module is the seam it spreads for async kinds.
+  | typeof PREVIEW_START_COMMAND_KIND;
 
 /** The injectable half of the deploy. Production passes NOTHING and gets the real docker and ssh
  *  runners on this host; a test passes `ports` and touches no docker daemon and no network.
@@ -91,6 +99,15 @@ export interface AsyncCommandEntryOptions {
   /** The configured operator principal, forwarded to the kinds that fence themselves on it. */
   readonly operatorPrincipalId: string;
   readonly projectId: string;
+  /** The daemon's ONE preview supervisor, taken off `PreviewDaemonRuntime.supervisor` rather
+   *  than constructed here: a second instance would hold half the live roster, so
+   *  `preview.decide` would find nothing to stop for one half and shutdown would sweep only the
+   *  other. ABSENT is a REFUSING state (PREVIEW_COMMAND_MISSING @ RUNNER), never a skipped one. */
+  readonly previewSupervisor?: PreviewSupervisor;
+  /** The daemon's own bound product workspace, forwarded RAW. Deliberately NOT a payload key:
+   *  the runner reads `<workspace>/package.json` and spawns a script out of it, so a
+   *  caller-supplied path would be arbitrary command execution on this host. ABSENT refuses. */
+  readonly previewWorkspace?: string | null;
   /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   readonly store: SqliteEventStore;
@@ -175,7 +192,24 @@ export function createAsyncCommandEntries(
     ...(deploySeams.ports === undefined ? {} : { ports: deploySeams.ports }),
     ...(deploySeams.sleep === undefined ? {} : { sleep: deploySeams.sleep }),
   });
+  const startPreviewCommand = createPreviewStartHandler({
+    operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
+    // DIFFERENT thing from an absent key, and only the absent key means "unwired".
+    ...(options.previewSupervisor === undefined
+      ? {} : { supervisor: options.previewSupervisor }),
+    ...(options.previewWorkspace === undefined
+      ? {} : { workspace: options.previewWorkspace }),
+  });
   return Object.freeze({
+    [PREVIEW_START_COMMAND_KIND]: Object.freeze({
+      asyncHandler: startPreviewCommand, handler: foundationSyncHandler,
+      kind: PREVIEW_START_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[PREVIEW_START_COMMAND_KIND],
+      // REVIEW, matching `preview.decide`: the capability fences REACH only, and the operator
+      // fence at the handler's own entry is what makes asking for a preview a human act.
+      requiredCapability: CAPABILITIES.REVIEW,
+    }),
     [DEPLOYMENT_DEPLOY_COMMAND_KIND]: Object.freeze({
       asyncHandler: deployEnvironment, handler: foundationSyncHandler,
       kind: DEPLOYMENT_DEPLOY_COMMAND_KIND,

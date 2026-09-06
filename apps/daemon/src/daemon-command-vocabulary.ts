@@ -23,7 +23,9 @@ import type { SessionCommandKind } from "./identity/session-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
 import { JOURNAL_APPEND_COMMAND_KIND } from "./journal/journal-contracts.js";
 
-import { PREVIEW_DECIDE_COMMAND_KIND } from "./preview/preview-contracts.js";
+import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
+  from "./preview/preview-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
 } from "./product-contract/product-contract-gate-1-contract.js";
@@ -157,8 +159,18 @@ export const COMPILER_FAMILY: Readonly<Record<string, string>> = Object.freeze({
 
 /** REVIEW capability, on its own table: REVIEW_FAMILY membership would set review:true
  *  and dispatch this kind to runReviewCommand. Family membership is not the human gate. */
-export const PREVIEW_FAMILY: Readonly<Record<typeof PREVIEW_DECIDE_COMMAND_KIND, string>> =
-  Object.freeze({ [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW });
+export const PREVIEW_FAMILY: Readonly<Record<
+  typeof PREVIEW_DECIDE_COMMAND_KIND | typeof PREVIEW_START_COMMAND_KIND, string
+>> = Object.freeze({
+  [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW,
+  // START AND DECIDE ARE TWO HALVES OF ONE OPERATOR ACT, so they share a capability: whoever
+  // may pass verdict on a rendered preview is whoever may ask for one to be rendered. REVIEW
+  // fences REACH only; OPERATOR_PRINCIPAL_KINDS below is what makes both human-only.
+  [PREVIEW_START_COMMAND_KIND]: CAPABILITIES.REVIEW,
+});
+/** GOAL like repository.publish, but not a bootstrap-sequence or review reducer command. */
+export const RELEASE_FAMILY: Readonly<Record<typeof RELEASE_DECIDE_COMMAND_KIND, string>> =
+  Object.freeze({ [RELEASE_DECIDE_COMMAND_KIND]: CAPABILITIES.GOAL });
 export const CRITERION_FAMILY = Object.freeze({ [CRITERION_APPROVE]: CAPABILITIES.ADMIN, [CRITERION_VERIFY]: CAPABILITIES.ADMIN });
 export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN });
 
@@ -201,6 +213,7 @@ export const DESIGN_FAMILY: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export type WiredCommandKind =
+  | typeof RELEASE_DECIDE_COMMAND_KIND
   | "design.submit"
   | "repository.recover"
   | typeof CRITERION_APPROVE | typeof CRITERION_VERIFY
@@ -211,6 +224,7 @@ export type WiredCommandKind =
   | typeof PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND
   | typeof PREVIEW_DECIDE_COMMAND_KIND
+  | typeof PREVIEW_START_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
@@ -230,7 +244,7 @@ export type WiredCommandKind =
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
   APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
   GRAPH_FAMILY,
-  PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
+  PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
   REPOSITORY_RECOVERY_FAMILY,
 ]);
 
@@ -247,7 +261,7 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
-  if (kind === PREVIEW_DECIDE_COMMAND_KIND) return null;
+  if (kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -341,6 +355,13 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // Deciding a product preview is the operator's own act; an agent presenting
   // APPROVE/REJECT would staff the human gate. MCP-excluded on the same standing.
   PREVIEW_DECIDE_COMMAND_KIND,
+  // ASKING for a preview is the same human act as judging one: it spawns a dev server and drives
+  // a browser on the daemon host. Membership HERE is what removes the kind from the advertised
+  // MCP surface (`mcp-tool-allowlist.js` DERIVES its exclusion from this set), but NOT what
+  // fences its dispatch: like `deployment.deploy`, it is served from an ASYNC entry that never
+  // reaches the synchronous operator check, so its handler fences itself at entry.
+  PREVIEW_START_COMMAND_KIND,
+  RELEASE_DECIDE_COMMAND_KIND,
   "goal.close",
   // AN AGENT MUST NEVER SET AN ENVIRONMENT VARIABLE: one it could write is one the deploy then
   // delivers to a production process. The MCP roster EXCLUDES both kinds by deriving itself from

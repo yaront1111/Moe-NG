@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
-import { STDIO_TOOL_INDEX, allowlistedToolEntries, toolLabelForKind } from "@moe/mcp";
+import { STDIO_TOOL_INDEX, allowlistedToolEntries, createHttpMcpAdapter, toolLabelForKind } from "@moe/mcp";
+import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -12,6 +13,7 @@ import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
 import { createProductContractReadPort } from "./product-contract/product-contract-read-port.js";
+import { createMcpHttpSessionPort } from "./mcp-http/mcp-http-session-port.js";
 import {
   MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds,
 } from "./mcp-tool-allowlist.js";
@@ -71,6 +73,52 @@ afterAll(() => {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+function releaseMcpRequest(body: unknown, sessionId?: string): Request {
+  return new Request("http://127.0.0.1/mcp", {
+    method: "POST", body: JSON.stringify(body),
+    headers: { accept: "application/json, text/event-stream", authorization: `Bearer ${CREDENTIAL}`,
+      "content-type": "application/json", host: "127.0.0.1",
+      ...(sessionId === undefined ? {} : { "mcp-session-id": sessionId }) },
+  });
+}
+
+it("release.decide is refused by the MCP allowlist before authentication or dispatch", async () => {
+  const calls: string[] = [];
+  const observedPort: HttpDispatchPort = {
+    authenticate: (credential, kind) => { calls.push("authenticate"); return port.authenticate(credential, kind); },
+    dispatchCommandBytes: (bytes) => { calls.push("command"); return port.dispatchCommandBytes(bytes); },
+    dispatchQueryBytes: (bytes) => { calls.push("query"); return port.dispatchQueryBytes(bytes); },
+  };
+  const adapter = createHttpMcpAdapter({ dispatchPort: observedPort, enableJsonResponse: true,
+    sessionPort: createMcpHttpSessionPort(provider.provide().authenticator),
+    toolAllowlist: wiredMcpToolKinds() });
+  try {
+    const initialized = await adapter.handleRequest(releaseMcpRequest({ id: 1, jsonrpc: "2.0",
+      method: "initialize", params: { capabilities: {}, protocolVersion: "2025-06-18",
+        clientInfo: { name: "release-fence-test", version: "1" } } }));
+    await initialized.text();
+    expect(initialized.status).toBe(200);
+    const sessionId = initialized.headers.get("mcp-session-id");
+    if (sessionId === null) throw new Error("release fixture opened no MCP session");
+    const label = toolLabelForKind("release.decide");
+    expect(STDIO_TOOL_INDEX.get(label)?.kind).toBe("release.decide");
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+    const before = decisionsIn();
+    const response = await adapter.handleRequest(releaseMcpRequest({ id: 2, jsonrpc: "2.0",
+      method: "tools/call", params: { name: label, arguments: {} } }, sessionId));
+    expect(await response.json()).toMatchObject({ id: 2, error: { code: -32002,
+      data: { code: "CAPABILITY_DENIED", truthClass: "DAEMON_VERIFIED",
+        transport: { category: "FORBIDDEN", httpStatus: 403 } } } });
+    // RuntimeError has no layer member: zero tool-port calls pins WHICH layer refused.
+    expect(calls).toEqual([]);
+    expect(decisionsIn()).toEqual(before);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("release.decide");
+    expect(wiredMcpToolKinds()).not.toContain("release.decide");
+  } finally {
+    await adapter.close();
+  }
+});
+
 const PAYLOAD_FOR: Readonly<Record<string, Record<string, unknown>>> = Object.freeze({
   "design.read": { goalRef: "goal-allowlist-probe" },
   "documents.source_read": { goalRef: "goal-allowlist-probe" },
@@ -91,6 +139,16 @@ function refusalCodeOf(queryKind: string): string | null {
 }
 
 describe("wiredMcpToolKinds command half", () => {
+  it("release.decide belongs to the exact served operator exclusion partition", () => {
+    const operatorKinds: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    const served = [...provider.provide().registry.keys()]
+      .filter((kind) => operatorKinds.has(kind) && kind !== "session.open").sort();
+    const excluded = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
+    expect(excluded).toEqual(served);
+    expect(served).toEqual(excluded);
+    expect(served).toContain("release.decide");
+  });
+
   it("equals the daemon's wired command vocabulary MINUS the excluded kinds", () => {
     const commands = wiredMcpToolKinds().filter((kind) => !MCP_SERVED_QUERY_KINDS.includes(kind));
     const expected = [...Object.keys(PAYLOAD_KEYS)]
@@ -144,7 +202,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(17);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(21);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -185,7 +243,7 @@ describe("wiredMcpToolKinds command half", () => {
     // advertised command plus one advertised query (`design.read`). A `design.submit` that had
     // been copied into OPERATOR_PRINCIPAL_KINDS by habit would show here as excluded: 18,
     // wired: 43.
-    }).toEqual({ excluded: 17, queries: 7, vocabulary: 54, wired: 44 });
+    }).toEqual({ excluded: 21, queries: 7, vocabulary: 58, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {

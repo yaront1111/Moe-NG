@@ -41,6 +41,23 @@
  */
 
 export const PREVIEW_DECIDE_COMMAND_KIND = "preview.decide" as const;
+export const PREVIEW_START_COMMAND_KIND = "preview.start" as const;
+
+/**
+ * START'S EXACT ARITY - AND `workspace` IS DELIBERATELY NOT ON IT.
+ *
+ * `PreviewRunRequest` (preview-runner.ts) carries `{goalId, sha, workspace}`, but
+ * `workspaceScripts` (preview-runner.ts) READS `<workspace>/package.json` and the runner then
+ * SPAWNS a script out of it. A caller-supplied workspace is therefore arbitrary command
+ * execution on the daemon host for anyone who can reach the command plane. The handler resolves
+ * the workspace from the daemon's OWN bound configuration instead (`preview-start-command.ts`),
+ * and an unconfigured daemon refuses rather than guessing.
+ *
+ * DO NOT "helpfully" ADD THE THIRD KEY. The decoder below enforces exact arity, so a payload
+ * carrying `workspace` is REFUSED, and `preview-start-command.test.ts` asserts that refusal by
+ * code and layer precisely so this decision cannot be undone quietly.
+ */
+export const PREVIEW_START_PAYLOAD_KEYS = Object.freeze(["goalId", "sha"] as const);
 
 /** The two decisions, and nothing else. Sorted; compared by identity, never by truthiness. */
 export const PREVIEW_DECISIONS = Object.freeze(["APPROVE", "REJECT"] as const);
@@ -86,6 +103,12 @@ export const PREVIEW_CODE_LAYERS = Object.freeze({
   PREVIEW_DECISION_INVALID: "REQUEST",
   /** GOAL_AUTHORITY: the goal behind the preview never reached a landed revision. */
   PREVIEW_GOAL_NOT_LANDED: "GOAL_AUTHORITY",
+  /** REQUEST: `decodePreviewStartPayload` below. Its own code rather than the decide decoder's,
+   *  so an operator screen can tell WHICH wire was malformed; both answer at REQUEST because
+   *  both are the same layer. Added to THIS MAP rather than spelled at a call site, so
+   *  `PREVIEW_CODES` picks it up with no second edit and no call site can pair it with a
+   *  layer the vocabulary disagrees with. */
+  PREVIEW_START_PAYLOAD_INVALID: "REQUEST",
   /** RUNNER: the preview process never became answerable inside its budget. */
   PREVIEW_START_TIMEOUT: "RUNNER",
 } as const satisfies Readonly<Record<string, PreviewLayer>>);
@@ -121,6 +144,12 @@ export interface PreviewRejectDecision {
 
 export type PreviewDecidePayload = PreviewApproveDecision | PreviewRejectDecision;
 
+/** What `preview.start` names: WHICH goal and WHICH landed revision. Never where to run it. */
+export interface PreviewStartPayload {
+  readonly goalId: string;
+  readonly sha: string;
+}
+
 export interface PreviewRefusal {
   readonly code: PreviewCode;
   readonly layer: PreviewLayer;
@@ -133,6 +162,10 @@ export interface PreviewRefusal {
 
 export type PreviewDecidePayloadResult =
   | { readonly ok: true; readonly payload: PreviewDecidePayload }
+  | PreviewRefusal;
+
+export type PreviewStartPayloadResult =
+  | { readonly ok: true; readonly payload: PreviewStartPayload }
   | PreviewRefusal;
 
 /**
@@ -245,5 +278,51 @@ export function decodePreviewDecidePayload(value: unknown): PreviewDecidePayload
   return Object.freeze({
     ok: true as const,
     payload: Object.freeze({ decision, findings, previewRef }),
+  });
+}
+
+/**
+ * A `goalId` or `sha` that would escape `.moe-next/previews/<goalId>/<sha>/` if it were joined.
+ *
+ * BOTH VALUES ARE PATH SEGMENTS AND AN AGGREGATE KEY. `previewReceiptId` hashes them
+ * (preview-receipt-contracts.ts) and `previewCaptureDirectory` JOINS them, so a separator or a
+ * `..` here would put one goal's captures inside another's directory - or outside the project
+ * entirely - while the receipt advertised them as this run's.
+ *
+ * NFC IS PART OF THE RULE, not decoration. Two spellings of the same visible id hash to two
+ * DIFFERENT receipt ids, so a non-NFC form would defeat the deduplication `preview-supervisor`
+ * relies on to stop a second server binding a port the first already took.
+ *
+ * `preview-runner.ts containedSegment` applies the same rule one layer down. That is a SECOND
+ * gate, deliberately, and not a reason to skip this one: this decoder is the only thing standing
+ * between operator bytes and the receipt id, and a payload refused here never reaches a spawn.
+ */
+const UNSAFE_PREVIEW_SEGMENT = /[\u0000-\u001f\s/\\<>:"|?*]/u;
+
+export function containedPreviewSegment(value: unknown): value is string {
+  return boundedPreviewText(value) && !value.includes("..")
+    && !UNSAFE_PREVIEW_SEGMENT.test(value)
+    && value !== "." && value.normalize("NFC") === value;
+}
+
+/**
+ * The ONE decode of `preview.start`'s operator bytes. EXACT ARITY over own enumerable keys:
+ * a missing key and an unknown key refuse identically, which is what keeps `workspace` off the
+ * wire (see `PREVIEW_START_PAYLOAD_KEYS` above - that is the security decision of this command,
+ * not a shape preference). Every refusal is `PREVIEW_START_PAYLOAD_INVALID` at REQUEST, minted
+ * through `previewRefusal`, which takes no layer: `PREVIEW_CODE_LAYERS` decides.
+ *
+ * Accepted members are copied into a fresh frozen record, so a caller retaining a reference to
+ * the input cannot mutate what the daemon then hashes into a receipt id.
+ */
+export function decodePreviewStartPayload(value: unknown): PreviewStartPayloadResult {
+  const item = exactPreviewRecord(value, PREVIEW_START_PAYLOAD_KEYS);
+  if (item === null) return previewRefusal("PREVIEW_START_PAYLOAD_INVALID");
+  if (!PREVIEW_START_PAYLOAD_KEYS.every((key) => containedPreviewSegment(item[key]))) {
+    return previewRefusal("PREVIEW_START_PAYLOAD_INVALID");
+  }
+  return Object.freeze({
+    ok: true as const,
+    payload: Object.freeze({ goalId: item["goalId"] as string, sha: item["sha"] as string }),
   });
 }

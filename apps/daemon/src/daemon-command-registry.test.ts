@@ -18,6 +18,7 @@ import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
   from "./mcp-tool-allowlist.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
@@ -114,6 +115,12 @@ const ROWS: readonly Row[] = [
   // because this row alone cannot tell "served" from "advertised".
   { agent: null, capability: ADMIN, code: "CUTOVER_ACTIVATE_UNCONFIGURED",
     kind: "cutover.activate", layer: "DAEMON_COMPOSITION", payloadKeys: ["record"] },
+  // Existing deployment vocabulary backfilled into the independent served-kind census.
+  { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "DEPLOY_BUILD_CONTEXT_UNCONFIGURED",
+    kind: "deployment.deploy", layer: "DAEMON_COMMAND_SEAM", payloadKeys: ["environment", "sha"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: "BOOTSTRAP_COMMAND_UNKNOWN",
+    kind: "deployment.set_target", layer: INGRESS,
+    payloadKeys: ["environment", "network", "sshTarget", "url"] },
   // An empty payload carries none of the six sections, so the envelope decode —
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
@@ -219,6 +226,15 @@ const ROWS: readonly Row[] = [
   // would let the map and the wire drift together silently.
   { agent: null, capability: REVIEW, code: "PREVIEW_DECISION_INVALID", kind: "preview.decide",
     layer: "REQUEST", payloadKeys: ["decision", "findings", "previewRef"] },
+  // ASKING for the preview, the other half of the same operator act. ASYNC-ONLY: the service
+  // spawns a dev server, waits for it to answer and drives a browser, none of which a
+  // synchronous handler can express. The empty payload this sweep sends is dispatched as the
+  // CONFIGURED OPERATOR, so the entry's own operator fence passes and the DECODER answers --
+  // which is why the code transcribed here is the start decoder's REQUEST-layer one, not the
+  // RUNNER codes an unwired supervisor would raise below it. `payloadKeys` is exactly two:
+  // `workspace` is deliberately absent, because the runner spawns a script out of it.
+  { agent: null, asyncOnly: true, capability: REVIEW, code: "PREVIEW_START_PAYLOAD_INVALID",
+    kind: "preview.start", layer: "REQUEST", payloadKeys: ["goalId", "sha"] },
   // ASYNC-ONLY since task-4b9c394d: the daemon MEASURES its own activation receipts (a git HEAD
   // read and a store backup) before it may mint the witness, and a synchronous handler cannot
   // await that. `payloadKeys` still lists "witness" DELIBERATELY -- the roster is the ingress
@@ -233,6 +249,8 @@ const ROWS: readonly Row[] = [
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "RELEASE_PR_FAILED",
+    kind: "release.decide", layer: "RUNNER_WORKSPACE", payloadKeys: ["base", "decision", "goalId", "sha"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
     layer: PREREQ_LAYER, payloadKeys: ["approval", "goalId", "remoteUrl"] },
   // Creating a product repository at an operator-supplied path. Async-only: the service runs
@@ -340,8 +358,10 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
-  "plan.propose", "policy.install", "policy.validate", "preview.decide", "project.activate",
+  "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
+  "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "repository.publish",
+  "release.decide", "deployment.set_target", "deployment.deploy",
   "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -362,6 +382,7 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
+  "release.decide", "deployment.set_target", "deployment.deploy",
   // The operator ANSWERS a material product question; an agent transport presenting
   // that answer would be quiet invention with a human label (see the vocabulary set).
   "product_contract.answer_clarification",
@@ -374,7 +395,10 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   "cutover.activate",
   // Deciding a rendered product preview is the operator's own verdict, and its REVIEW
   // capability is a reach fence an agent can hold -- this set is what makes it human-only.
-  "preview.decide",
+  // ASKING for one is the same act on the same terms: it runs the product on the daemon's
+  // host. `preview.start` is served from an ASYNC entry, so this membership keeps it off the
+  // MCP roster while the handler's own entry check is what refuses the dispatch.
+  "preview.decide", "preview.start",
   // Writing an environment variable hands a production secret to the deploy; ADMIN fences
   // reach, this set fences the act. Landed by task-a2409cba; transcribed here because the
   // roster is an exact set and its own row had not backfilled the census yet.
@@ -473,6 +497,59 @@ function openSession(
   expect(opened).toMatchObject({ decision: { disposition: "DECIDED" }, outcome: "ACCEPTED" });
   return secret;
 }
+
+describe("release.decide operator-only async wiring", () => {
+  const payload = { base: "main", decision: "APPROVE", goalId: "release-goal", sha: "b".repeat(40) };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally {
+      reader.close();
+    }
+  };
+
+  it("serves an asynchronous GOAL entry with only caller-intent keys", () => {
+    const entry = deps.registry.get(RELEASE_DECIDE_COMMAND_KIND);
+    expect(entry).toMatchObject({ kind: "release.decide", requiredCapability: GOAL,
+      payloadKeys: ["base", "decision", "goalId", "sha"] });
+    expect(entry?.asyncHandler).toBeTypeOf("function");
+    expect(commandFamilyFacts(RELEASE_DECIDE_COMMAND_KIND))
+      .toMatchObject({ release: true, requiredCapability: GOAL });
+  });
+
+  it("refuses an authenticated capable non-operator at the async operator fence", async () => {
+    const credential = openSession("cmd-release-open-agent", "sess-release-agent",
+      "release-agent-secret", [GOAL, WORK]);
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-agent", RELEASE_DECIDE_COMMAND_KIND, payload,
+      credential, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses the operator with the unconfigured release port code and no durable writes", async () => {
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-unconfigured", RELEASE_DECIDE_COMMAND_KIND, payload,
+      CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+      refusal: { code: "RELEASE_PR_FAILED", layer: "RUNNER_WORKSPACE",
+        detail: "no release port is composed for this daemon" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses caller-supplied project authority at PAYLOAD_SHAPE without writes", async () => {
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-smuggled", RELEASE_DECIDE_COMMAND_KIND,
+      { ...payload, projectId: PROJECT }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, stage: "PAYLOAD_SHAPE",
+    });
+    expect(snapshot()).toEqual(before);
+  });
+});
 
 function transportRequest(
   commandId: string,
@@ -904,11 +981,11 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the fifty-four characterized kinds and nothing else", () => {
+  it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(54);
-    expect(deps.registry.size).toBe(54);
+    expect(ROWS).toHaveLength(58);
+    expect(deps.registry.size).toBe(58);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -943,6 +1020,9 @@ describe("registered command table", () => {
     expect(served.has("repository.bootstrap")).toBe(true);
     expect(excluded.has("repository.bootstrap")).toBe(true);
     expect(wiredMcpToolKinds()).not.toContain("repository.bootstrap");
+    expect(served.has("release.decide")).toBe(true);
+    expect(excluded.has("release.decide")).toBe(true);
+    expect(wiredMcpToolKinds()).not.toContain("release.decide");
     // SERVED BY THE ASYNC ENTRY, and this assertion is here because a mutation drill proved
     // membership alone cannot see it: `entryOf` falls back to the generic SYNCHRONOUS wiring
     // for any vocabulary kind, so deleting the async entry left the key in place and the set
@@ -953,7 +1033,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(54);
+    expect(REGISTRATION_ORDER).toHaveLength(58);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1123,9 +1203,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the eighteen transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(18);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(18);
+    it("gates exactly the transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(22);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(22);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1806,7 +1886,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(54);
+    expect(ports.registry.size).toBe(58);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1828,7 +1908,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(54);
+    expect(supplied.registry.size).toBe(58);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1860,7 +1940,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(54);
+    expect(snapshotPorts.registry.size).toBe(58);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

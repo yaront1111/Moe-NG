@@ -97,8 +97,11 @@ import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
 import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
 import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wiring.js";
+import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
+import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
 
 export interface StoreDependencyConfig {
+  readonly schedule?: Pick<ScheduleConfig, "timer" | "resolve">;
   readonly repositoryWorkspace?: string | null;
   /** Optional deterministic command identity source for bounded harness composition. */
   readonly affordanceMintId?: ((kind: string) => string) | undefined;
@@ -151,6 +154,7 @@ function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
 
 export type StoreDependencyProvider = DaemonDependencyProvider & {
   close(): void;
+  schedules(): DurableSchedule;
   restore(): RestorePort;
   sourceSnapshotPublisher(): DeliveryV2SourceSnapshotPublisher;
 };
@@ -211,7 +215,14 @@ export function createStoreDependencies(
     ...(foundation.foundationContextSeal === undefined
       ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
     foundationLifecycle: foundation.foundationLifecycle,
-    operatorPrincipalId: config.principalId, preview: previewPort, projectId: config.projectId,
+    operatorPrincipalId: config.principalId, preview: previewPort,
+    // THE SAME supervisor object, in the half the async `preview.start` entry needs. Taken off
+    // the runtime rather than constructed a second time: two supervisors would each hold half
+    // the live roster, so the decide edge would find nothing to stop for one half and shutdown
+    // would sweep only the other. The workspace is the daemon's OWN bound one -- never a
+    // payload value, because the runner spawns a script out of it.
+    previewSupervisor: previewPort.supervisor, previewWorkspace: repositoryWorkspace,
+    projectId: config.projectId,
     store,
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
@@ -552,12 +563,13 @@ export function createStoreDependencies(
     store,
   });
 
+  const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock });
   return Object.freeze({
     activation,
     activity,
     affordances,
     budgetCommitment,
-    close: (): void => { subscriptionDatabase?.close(); store.close(); },
+    close: (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); },
     commandAuthorityPlane,
     designReads,
     documentCoverage,
@@ -581,6 +593,7 @@ export function createStoreDependencies(
     provide,
     provideV2,
     reconciliation,
+    schedules: (): DurableSchedule => schedules,
     repositoryRemote,
     repositoryWorkflows: workflows.repositoryWorkflows,
     runs,
