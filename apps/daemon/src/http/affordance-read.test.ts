@@ -52,6 +52,8 @@ import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import type { NodeSpec } from "./affordance-contract.js";
+import type { DeployTarget } from "../deployment/deploy-ports.js";
+import { ENVIRONMENT_NAMES } from "../environment/environment-contracts.js";
 import {
   DEFAULT_SESSION_SUBJECT, DEFAULT_SUBJECTS, createAffordancePort,
 } from "./affordance-read.js";
@@ -1277,5 +1279,116 @@ describe("the offer roster and the step projection agree on a browser-approved g
     // a scope that named some other node would have walked receipts belonging to nobody.
     expect(readApprovedNodeScope(worldStore, BOOTSTRAP_GOAL))
       .toEqual({ approvalRef: `approval:${BOOTSTRAP_RUN_ID}`, scope: ["node-a"] });
+  });
+});
+
+/**
+ * THE OFFER THE DEPLOYMENTS CARD MATCHES (task-2cedb26a). The defect this pins was an IDENTITY
+ * MISMATCH, not an absence: the generic loop already offered `deployment.deploy`, but
+ * `aggregateIdFor` had no deployment case, so the fallthrough targeted the PROJECT and the
+ * card -- which matches `deploy:${goalId}` exactly -- rendered nothing while the surface
+ * believed it had offered something. Every arm below reads the PRODUCTION surface; a
+ * hand-built frame would only prove the matcher string.
+ */
+describe("deployment.deploy is offered per goal at deploy:<goalId> (task-2cedb26a)", () => {
+  let deployMints = 0;
+
+  afterAll(closeBootstrapStores);
+
+  const TARGET: DeployTarget = Object.freeze({ network: "moe-verify", sshTarget: null, url: null });
+
+  /**
+   * The shipped journey up to (not including) `goal.close`, read through a port whose
+   * bindings are stated. It must run PAST `repository.publish`: that is
+   * `deployment.deploy`'s only entry in `COMMAND_PREREQUISITES` -- a deploy builds THE
+   * LANDED SHA -- so a world stopping at `approval.decide` leaves the step BLOCKED on the
+   * publish and no target binding could make it offer.
+   */
+  function surfaceWithTargets(bound: readonly string[]) {
+    const worldStore = openBootstrapStore();
+    driveThrough(worldStore, "goal.close");
+    const worldPort = createAffordancePort({
+      deployTarget: (environment: string) => bound.includes(environment) ? TARGET : null,
+      mintId: (kind: string) => `afford-deploy-${kind}-${String(deployMints += 1)}`,
+      projectId: BOOTSTRAP_PROJECT,
+      store: worldStore,
+    });
+    const result = worldPort.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`surface refused: ${result.code}`);
+    return result;
+  }
+
+  /** The card's matcher, reproduced LITERALLY from goal-deployments.tsx `deployOffer`. */
+  function cardMatches(
+    offers: readonly { readonly commandKind: string; readonly targetAggregateId: string }[],
+    goalId: string,
+  ) {
+    return offers.filter((row) =>
+      row.commandKind === "deployment.deploy"
+      && row.targetAggregateId === `deploy:${goalId}`);
+  }
+
+  /**
+   * Read the goal off the surface's OWN `planningGoalRefs` -- the same resolution
+   * `soleLegacyPlanningSubject` reads to derive the subject -- rather than restating it, then
+   * pin it by value against the fixture's goal. Deriving it from a deployment step instead
+   * would make the DoD-1 arm circular.
+   */
+  function goalOf(read: ReturnType<typeof surfaceWithTargets>): string {
+    const refs = Object.values(read.planningGoalRefs);
+    expect(refs).toEqual([BOOTSTRAP_GOAL]);
+    return String(refs[0]);
+  }
+
+  it("targets the goal by value, so the card's exact matcher finds it", () => {
+    const read = surfaceWithTargets(["production"]);
+    const goalId = goalOf(read);
+    const offer = read.nextAllowedCommands
+      .find((entry) => entry.commandKind === "deployment.deploy");
+    // BY VALUE, not by shape: an id that merely looks right renders nothing.
+    expect(offer?.targetAggregateId).toBe(`deploy:${goalId}`);
+    expect(offer?.targetAggregateId).not.toBe(BOOTSTRAP_PROJECT);
+    expect(cardMatches(read.nextAllowedCommands, goalId)).toHaveLength(1);
+    // DoD 4: no stale PROJECT-targeted deployment.deploy offer survives beside it, so the
+    // card cannot match two rows or match the wrong one.
+    expect(read.nextAllowedCommands.filter((entry) =>
+      entry.commandKind === "deployment.deploy"
+      && entry.targetAggregateId === BOOTSTRAP_PROJECT)).toEqual([]);
+  });
+
+  it("withholds the offer entirely when no environment has a bound target", () => {
+    const read = surfaceWithTargets([]);
+    const goalId = goalOf(read);
+    // THE SET, not a `not.toContain`: "offers nothing for deploy" and "offers something else
+    // named differently" are one assertion. `deployment.set_target` is the sibling that must
+    // still be offered -- withholding the deploy must not withhold the way to fix it.
+    expect(read.nextAllowedCommands
+      .map((entry) => entry.commandKind)
+      .filter((kind) => kind.startsWith("deployment."))
+      .sort()).toEqual(["deployment.set_target"]);
+    // ABSENT, not disabled: the consumer's card renders nothing rather than a dead button.
+    expect(cardMatches(read.nextAllowedCommands, goalId)).toEqual([]);
+    // And the absence is NAMED, so the surface says which command would restore the offer.
+    expect(read.steps.find((entry) => entry.kind === "deployment.deploy"))
+      .toMatchObject({ missing: ["deployment.set_target"], status: "BLOCKED" });
+  });
+
+  it("emits ONE offer per goal with two environments bound, not one per environment", () => {
+    const read = surfaceWithTargets(["preview", "production"]);
+    const goalId = goalOf(read);
+    // The granularity decision, pinned: the environment is chosen at DISPATCH and travels in
+    // the payload, so a second offer here would mean the axes had quietly switched.
+    expect(read.nextAllowedCommands
+      .filter((entry) => entry.commandKind === "deployment.deploy")).toHaveLength(1);
+    expect(cardMatches(read.nextAllowedCommands, goalId)).toHaveLength(1);
+  });
+
+  it("offers the goal when only ONE of the environments is bound", () => {
+    // Deliberate and stated: the offer means "deploying this goal is possible", and the
+    // per-environment refusal stays with the engine (DEPLOY_TARGET_MISSING) while the card
+    // renders "No target is bound for this environment yet." per row.
+    const read = surfaceWithTargets(["preview"]);
+    expect(cardMatches(read.nextAllowedCommands, goalOf(read))).toHaveLength(1);
+    expect(ENVIRONMENT_NAMES.includes("production")).toBe(true);
   });
 });

@@ -9,6 +9,9 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
+import { productionDeployPorts } from "../deployment/deploy-command.js";
+import type { DeployTargetPort } from "../deployment/deploy-ports.js";
+import { ENVIRONMENT_NAMES } from "../environment/environment-contracts.js";
 import { goalCloseReadinessFor } from "../goals/goal-close-readiness.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
@@ -118,6 +121,12 @@ export interface AffordancePortConfig {
   readonly principalId?: string | undefined;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+  /**
+   * Reads the durable per-environment deploy target. OPTIONAL only so a bounded test can
+   * drive the binding without writing events; production composes the landed reader from
+   * `store` and `projectId` rather than re-deriving the aggregate key or the decoder.
+   */
+  readonly deployTarget?: DeployTargetPort;
 }
 
 /** The shared work-item key: the same one the live board renders per card. */
@@ -147,6 +156,17 @@ function bootstrapAggregateId(
     if (kind === "plan.propose" || kind === "approval.decide") return planningSubject.runId;
     if (kind === "goal.close") return planningSubject.goalId;
     if (kind === "repository.publish") return `publish:${planningSubject.goalId}`;
+    // ONE OFFER PER GOAL, at the exact key the Deployments card matches
+    // (goal-deployments.tsx `deployOffer`). The environment is chosen at DISPATCH and
+    // travels in the payload -- `daemon-command-payload-keys.ts` declares
+    // `deployment.deploy` as ["environment", "sha"] -- so a per-environment offer would
+    // put the environment in two places that can disagree. The durable target is keyed
+    // per (project, environment) (`deployTargetAggregateId`), a DIFFERENT axis that
+    // deliberately does not appear in the offer identity: the card reads the target per
+    // environment and renders its own rows. `aggregateIdFor` cannot answer this -- its
+    // `repository.publish` case reads goalId from the request PAYLOAD, and an affordance
+    // read has none -- so the goal-scoped key is derived here, where the subject lives.
+    if (kind === "deployment.deploy") return `deploy:${planningSubject.goalId}`;
   }
   return aggregateIdFor(
     { kind, projectId } as Parameters<typeof aggregateIdFor>[0],
@@ -206,13 +226,30 @@ function soleLegacyPlanningSubject(
  * COMPOSED, never substituted: an operator on a fresh store is told the table's primaries AND
  * the policy in one roster instead of being walked through one refusal at a time.
  */
-function surfaceMissing(ledger: DurableLedger, kind: BootstrapCommandKind): readonly string[] {
+function surfaceMissing(
+  ledger: DurableLedger, kind: BootstrapCommandKind, deployTargetBound: boolean,
+): readonly string[] {
   const missing = missingPrerequisites(ledger, kind);
+  // WITHHELD MEANS ABSENT, AND THE ABSENCE IS NAMED. `COMMAND_PREREQUISITES` deliberately
+  // does NOT list `deployment.set_target` under `deployment.deploy`: that table reads
+  // COMMITTED KINDS, so naming it there would admit a `production` deploy on the strength
+  // of a `preview` binding (bootstrap-sequence.ts:47-55 states this). The durable target is
+  // per (project, environment), so the check belongs where a per-environment READ is
+  // possible -- here. Missing rather than a silent offer skip because every READY step
+  // carries an offer and no offer exists for a kind no step called READY; withholding by
+  // skipping the push alone would break that invariant instead of expressing the fact.
+  if (kind === "deployment.deploy" && !deployTargetBound) {
+    return Object.freeze([...missing, "deployment.set_target"]);
+  }
   if (kind !== "project.activate" || ledger.kinds.has("policy.install")) return missing;
   return Object.freeze([...missing, "policy.install"]);
 }
 
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
+  // ONE composition, not one per read: the landed reader from task-79f8c7c0, whose decoder
+  // fails closed to null on an unreadable or invalid binding.
+  const deployTarget: DeployTargetPort = config.deployTarget
+    ?? productionDeployPorts(config.store, config.projectId).target;
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
     commandId: string = config.mintId(kind),
@@ -231,6 +268,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
   ): ChainStep[] => {
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId, planningSubject));
+    // BOUND means at least one environment has a target, because the offer is one per GOAL
+    // and the environment is chosen at dispatch. A goal with `preview` bound and
+    // `production` unbound is therefore OFFERED: the per-environment refusal is the
+    // engine's (`DEPLOY_TARGET_MISSING`, before any docker spawn), and the card renders a
+    // row per environment with its own bound/unbound wording.
+    const deployTargetBound = ENVIRONMENT_NAMES
+      .some((environment) => deployTarget(environment) !== null);
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
       // Both creation handlers derive the durable goal from request.commandId. The daemon
       // therefore mints and offers a fresh aggregate for each read; a prior GoalCreated row
@@ -269,7 +313,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           version: versionOf(ledger, aggregateId),
         });
       }
-      const missing = surfaceMissing(ledger, kind);
+      const missing = surfaceMissing(ledger, kind, deployTargetBound);
       if (missing.length > 0) {
         return Object.freeze({
           aggregateId: null, ...claimFields(claims, kind, null, now), kind,
