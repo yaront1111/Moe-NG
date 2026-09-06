@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T21:24:27.969Z",
+  "updatedAt": "2026-09-06T21:25:11.597Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -286,6 +286,21 @@
       "treeId": "4ce6d9b6ca1b712cde4ed7586b5c1056ad744076",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "bba75cbf0c9b8da937eac8e4fa1bf05d98acb273",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:25:02Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:25:11.597Z",
+      "treeId": "1b1b45b0f8e0c29ffb0e4d7f27a0af5d36c2f687",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -298,14 +313,12 @@
     ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
     ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json"
   ],
-  "unattributedPaths": [
-    "tests/e2e/control-room/lane-landing.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d107a8ef@2026-09-06T21:17:34Z",
-    "at": "2026-09-06T21:24:27.969Z"
+    "sessionId": "worker-d107a8ef@2026-09-06T21:25:02Z",
+    "at": "2026-09-06T21:25:11.597Z"
   },
   "priorHandoffs": [
     {
