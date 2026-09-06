@@ -23,21 +23,25 @@
     {
       "stepId": "step-1",
       "description": "MEASURE, AND CONFIRM THE PREREQUISITE ACTUALLY LANDED. NO EDITS. (a) THE GATE ON THIS ROW: task-2120955202764428a53be598d0f149b4 must be DONE — read its completionSummary and reviewSummary via get_context.epicSiblings, and READ THE DELIVERED OFFER KEY from the tree: `git grep -n \"release\\.decide\" -- apps/daemon/src/http` must now be NONZERO. Record the EXACT `targetAggregateId` it mints and the withholding horn it chose; your card matches that key by value and your DoD-3 arm depends on that rule. Do NOT hard-code a guessed literal. If that grep is still zero, STOP and report — the card cannot render and mocking an offer is what task rail 1 forbids. (b) Read the shapes you render: `ReleaseReceiptV1` (release-receipt-contracts.ts:28-39) for `outcome`, `prUrl`, `refusalCode`, `dossierSha256`, `sha`; and the closed map `RELEASE_DECIDE_CODE_LAYER_MAP` (release-decide-contracts.ts:8-16) with its three codes and layers. (c) Read the patterns you copy: goal-publish.tsx:39-41 (offer match), :86 (absent when unoffered), :91 (action gating); publish-port.ts in full (22 lines — the entire port shape); offer-wire.ts:62-82 (`spendOffer` and the refusal codes it already returns). (d) Confirm the dossier's UNKNOWN representation — read task-70a7ccd3's delivered dossier contracts and find how an unmeasurable criterion is carried, because DoD 1 turns on rendering that count SEPARATELY. (e) Confirm `cr.release` is a free testid namespace and note NEEDS_YOU_KINDS has FIVE members (needs-you-model.ts:35-37), not the four the description claims. Record the baseline for all five gates.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/goal-publish.tsx"
-      ]
+      ],
+      "note": "MEASURED, NO EDITS. Every fact this step demands is now satisfiable — the two producer gaps that blocked this row at 20:34Z are both closed — and the measurement turns up ONE THING THE PLAN CANNOT HAVE ANTICIPATED, which needs a scoped amendment before step 3.\n\n**(a) THE OFFER KEY AND THE HORN — the STOP condition did NOT fire.**\n```\ngit grep -n \"release\\.decide\" HEAD -- apps/daemon/src/http     (non-test)\n  affordance-planning-offers.ts:148   the closed kind union\n  affordance-planning-offers.ts:294   ? [offer(input, \"release.decide\", releaseDossierAggregateId(goal.goalId))]\n```\n**THE KEY THE CARD MUST MATCH BY VALUE IS `releaseDossierAggregateId(goalId)` = `release:<goalId>`**, and the card must CALL that function rather than spell it: `release-decide-command.ts:47` refuses `RELEASE_TARGET_INVALID` against exactly that function's output. **THE HORN TAKEN: offered whenever a commit has LANDED, withheld on nothing else** — the same `landedCommit` fact `repository.publish` uses. That is the clause **DoD 2 of this row depends on**: the operator reaches the command precisely so the dispatch can answer `RELEASE_EVIDENCE_INCOMPLETE` with its criterion ids, instead of the surface silently withholding the card. Landed 57446237 (task-21209552).\n\n**(b) THE SHAPES.** `ReleaseReceiptV1` (release-receipt-contracts.ts:28-39) = `{dossierSha256, goalId, outcome: \"RELEASED\"|\"REFUSED\", prUrl, projectId, receiptId, refusalCode, sha}`, with the decoder enforcing the RELEASED/REFUSED split rather than trusting callers. `RELEASE_DECIDE_CODE_LAYER_MAP` (release-decide-contracts.ts:38-45) is closed with exactly three pairs: `RELEASE_EVIDENCE_INCOMPLETE -> DAEMON_PREREQUISITE`, `RELEASE_PR_FAILED -> RUNNER_WORKSPACE`, `RELEASE_REMOTE_MISSING -> PROJECT_REDUCER`. `RELEASE_DECIDE_CODES` is DERIVED from the map's keys — the card must read that constant, never restate the three.\n\n**(c) THE PATTERNS TO COPY.** `goal-publish.tsx:37-42` matches BOTH `commandKind` and `targetAggregateId` by value; `:86` returns null with the reason (\"Nothing landed means no offer and no receipt: the card is not a thing on this screen at all\"); `:91` gates the control on `offer !== null && port !== null && !busy`. `publish-port.ts` is 22 lines: a kind constant, a LAYER constant, and `createPublishPort(wire)` returning a frozen object whose `submit` calls `spendOffer(...)`. `offer-wire.ts spendOffer` returns `{commandId, ok:true}` or `{code, layer, ok:false}` — **plus, since 21:18Z, an optional `detail`.**\n\n**(d) THE DOSSIER'S UNKNOWN IS NOW READABLE, AND THAT IS THE CHANGE THAT UNBLOCKED THIS ROW.** When this row was blocked, the answer to \"how does the card get criteria covered n/m with the UNKNOWN count separate\" was \"it cannot, without parsing markdown\". `POST /release/read` now answers, for one goal, `{ancestryMeasured, criteria[], goalId, goalTitle, preview, receipt, reviewRounds, sha}` where each `criteria[]` entry is a `CriterionRow` carrying **its own `gaps: DossierGap[]`** (`{code, criterionId, detail}` over a closed 7-member code set). So **covered = `gaps.length === 0`, UNKNOWN = `gaps.length > 0`, computed by the CARD from per-row data** — no markdown, no server-side summing, and the gap says WHICH criterion and WHY. `evidence.receipt` carries `prUrl`, `refusalCode`, `dossierSha256` for BOTH outcomes. Landed a5ca738e (task-2b843170, DONE and QA-approved).\n\n**(e) `cr.release` IS FREE** — `git grep -rn \"cr\\.release\" -- apps tests` returns nothing. **`NEEDS_YOU_KINDS` HAS SIX MEMBERS**, not the four the row description claims and not the five the plan's step 5 claims: `[\"PLAN_APPROVAL\", \"PLAN_REJECTED\", \"PREVIEW\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"]` (needs-you-model.ts:42-44). A release entry makes SEVEN. Both the description and the plan are stale here; the file is the authority.\n\n**THE ONE THING THE PLAN CANNOT HAVE ANTICIPATED, and the reason I am flagging rather than silently taking it.** The plan was written when NO release read existed, so step 3 says \"render the evidence summary\" without naming where the data comes from, and its `affectedFiles` list only `goal-release.tsx`. **The card cannot fetch `/release/read` without a live read client** — the control-room's convention is one decoder module per route (`live-deployments.ts`, 40 lines: an exact-key decoder, a `*_RESPONSE_INVALID` refusal at its own LAYER, and a `map<X>Answer(status, body)`), and the exact-key decoders reject anything hand-shaped. So step 3 needs **one new file, `apps/control-room/src/live/live-release.ts`** (plus its test), which no step names.\n\nThat is not a gap in the row's intent — it is the plumbing the row's own DoD 1 requires — but it is a path outside the declared roster, and global rail 19 says a worker who finds one stops and reports rather than taking it. **Requesting a scoped amendment adding `live-release.ts` + `live-release.test.ts` to step 3.** Everything else in the plan survives the re-measurement unchanged.\n\nNOTHING TOUCHED. Also worth recording fo",
+      "startedAt": "2026-09-06T20:29:10.550Z",
+      "completedAt": "2026-09-06T21:23:46.978Z"
     },
     {
       "stepId": "step-2",
       "description": "THE RELEASE PORT — NEW `apps/control-room/src/v2/goals/release-port.ts`, modelled on publish-port.ts (22 lines; read it first and keep this one comparably small). It exports a kind constant, a LAYER constant (`CONTROL_ROOM_RELEASE`), and a `createReleasePort(wire)` returning a frozen object whose `submit(affordance, ...)` calls `spendOffer(wire, RELEASE_COMMAND_KIND, affordance, payload, \"ui-release\", RELEASE_LAYER)`. THE PAYLOAD IS EXACTLY `{base, decision, goalId, sha}` — daemon-command-payload-keys.ts:173 declares those four keys and the daemon's decoder is exact-arity, so a fifth key or a missing one refuses. NO SECOND DECISION WIRE (task rail 3): `spendOffer` is the only path, and it already returns refusals carrying a code AND a layer (OFFER_KIND_UNBUILDABLE, plus build- and transport-layer codes) — render those, never invent parallel ones. The `affordance` argument is the daemon's offer row spent VERBATIM; do not reshape it, and do not construct one.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/release-port.ts"
       ],
       "newFiles": [
         "apps/control-room/src/v2/goals/release-port.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T21:23:51.098Z"
     },
     {
       "stepId": "step-3",
@@ -112,7 +116,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-deb4c7d8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,20 +136,28 @@
       "author": "worker-d6e44333",
       "content": "RE-MEASURED AT HEAD (worker-d6e44333, 2026-09-05T13:28Z, branch moe/work-2026-09-04, working tree). Global rail 6 requires the description's disk claims be re-measured; global rail 4 clause 2 requires this proof row's certified capability be verified by grep/probe, not read off the design. Result: the producer surface is STILL ABSENT, exactly as architect-3c27f2ab measured at 11:26Z. Confirming rather than re-litigating, because 3 producer rows have moved since and the gap could plausibly have closed.\n\nGAP, SYMBOL BY SYMBOL — commands and verbatim results:\n\n1. `grep -rn \"release\\.decide\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => `0`\n2. `grep -rn \"RELEASE_EVIDENCE_INCOMPLETE\\|RELEASE_PR_FAILED\" apps/ packages/ adapters/ --include=*.ts --include=*.tsx | wc -l` => `0`\n3. `find apps packages adapters -iname \"*release*decide*\"` => no output (no module owns the kind)\n\nDoD clauses 2, 3 and 6 name those three symbols directly: clause 2 demands the literal `RELEASE_EVIDENCE_INCOMPLETE` text be asserted and the missing criterion ids reach the operator; clause 3 demands the card be ABSENT when the daemon offers no `release.decide`, asserted in BOTH the offered and un-offered states; clause 6 demands `RELEASE_PR_FAILED` with its stderr line verbatim when `gh` is missing. None of those three literals exists on disk. A plan written now would have to invent the refusal codes, the offer shape and the receipt shape in the control-room, i.e. a mock-backed journey — forbidden by task rail 1 (\"THIS ROW PROVES, IT DOES NOT REBUILD\"), task rail 4 (REAL FRAMES ONLY: the exact-key decoders reject hand-written frames), and global rail 4 clause 2 (\"a proof that only proves shapes retires the question unanswered; a falsely retired gate cannot be repaired\").\n\nWHAT IS ACTUALLY READY — this row is NOT blocked on its own composition surface, only on the kind:\n- Child 1 IS landed: `apps/daemon/src/release/` holds release-dossier{,-contracts,-ledger,-sections}.ts each with its .js bridge, plus 2 test files. task-70a7ccd3 DONE at 1c464208, reviewSummary confirms 30/30.\n- Every control-room pattern the description names exists: `apps/control-room/src/v2/goals/goal-publish.tsx`, `goals/publish-port.ts`, `approvals/offer-wire.ts` (`spendOffer`, 11 call sites under apps/control-room/src).\n- `NEEDS_YOU_KINDS` is at `apps/control-room/src/v2/approvals/needs-you-model.ts:28` — a FOUR-member roster `[\"PLAN_APPROVAL\", \"ESCALATION\", \"GATE_1\", \"READY_TO_CLOSE\"]`. Note the path: the description says needs-you-model.ts:28 without the `approvals/` segment; it lives under v2/approvals/, not v2/needs-you/. Adding a member here is a roster change, so global rail 19 applies — needs-you-model.test.ts and needs-you.test.tsx must be in affectedFiles, and any hard-coded length assertion re-counted.\n- Testid namespace `cr.release.*` is FREE: `grep -rn \"cr\\.release\" apps/control-room/src tests | wc -l` => `0`. Safe to claim (task rail 5).\n\nSo the leaf-first order holds and only the kind is missing. Blocking on the 3 rows that own it rather than filing anything new (global rail 20: a row already owns the capability).",
       "timestamp": "2026-09-05T13:28:36.112Z"
+    },
+    {
+      "id": "comment-3a349e61172f40bd9ae840415c639fc2",
+      "author": "worker-deb4c7d8",
+      "content": "STEP 1 MEASUREMENT (worker-deb4c7d8, 2026-09-06T20:3xZ, HEAD 57446237). The prerequisite this row waited for HAS landed — and measuring the rest of step 1 found a SECOND producer gap the plan did not anticipate. Symbol by symbol, commands and verbatim results.\n\n**(a) THE OFFER IS THERE. This half is closed.**\n```\ngit grep -n \"release\\.decide\" HEAD -- apps/daemon/src/http   (non-test)\n  affordance-planning-offers.ts:148   | \"preview.decide\" | \"release.decide\" | \"repository.publish\",\n  affordance-planning-offers.ts:294   ? [offer(input, \"release.decide\", releaseDossierAggregateId(goal.goalId))]\n```\nTHE OFFER KEY MY CARD MUST MATCH BY VALUE: `releaseDossierAggregateId(goalId)` = `release:<goalId>` (release-dossier-contracts.ts:145-146), NOT the bare goal id. WITHHOLDING HORN: offered whenever a commit has landed and withheld on nothing else — the same `landedCommit` fact `repository.publish` uses — so the operator reaches the command and the dispatch names what is missing. Landed as 57446237 (task-2120955202764428a53be598d0f149b4).\n\n**(b) THE GAP: NOTHING RELEASE-SHAPED IS READABLE OVER HTTP.**\n```\nJSON_ROUTES (http-listener-read-dispatch.ts:73-107) = 31 members, NONE release-shaped.\ngit grep -n \"release\" -- apps/daemon/src/http/*.ts | grep -v test\n  -> ONLY my two offer lines above, plus goal-deployment-read.ts\ngit grep -ln \"releaseDossier\\|ReleaseReceipt\\|release-receipt\\|release-dossier\" -- apps/control-room/src\n  -> ZERO files\n```\nThe browser's ONLY release datum at HEAD is `releaseDecision: string | null` on the DEPLOYMENTS read (goal-deployment-read.ts:41, live-deployments.ts:7) — a receipt **id**, and only for a RELEASED receipt (`releaseReceiptId(..., \"RELEASED\", null)`, :35-36). Not `prUrl`, not `refusalCode`, not `dossierSha256`, and no criteria coverage.\n\n**(c) THE DOSSIER IS STORED AS MARKDOWN ONLY.** `ReleaseDossierV1` (release-dossier-contracts.ts:98-105) = `{dossierId, goalId, markdown, projectId, sha, version}`. The structured evidence — `CriterionRow`, `DossierGap`, `DossierGapCode` and the `UNKNOWN` sentinel (release-dossier.ts:6, :28, :56-119) — exists INSIDE the daemon, is rendered into markdown, and is never persisted or served in structured form. **So DoD 1's \"criteria covered n/m WITH the UNKNOWN count shown separately\" has no read to compute it from, and computing it by PARSING the markdown in the browser would make the card a second authority for the exact number task rail 2 says must never be wrong.**\n\n**WHAT IS REACHABLE TODAY, so the block is not read as wider than it is:**\n- DoD 3 (card absent when unoffered) — fully reachable; the offer is the only input.\n- DoD 2's dispatch half — reachable. `releaseRefusal` carries `detail` (release-decide-contracts.ts:83-93) and `domainRefusalOf` (daemon-command-dispatch.ts:54-61) puts the authority's OWN words on the wire, so `unverified evidence for: <criterionIds>` (release-decide-service.ts:160-161) does reach the browser. **One catch, and it is in a file this plan does not name:** `offer-wire.ts:41-47 refusalOf` reads only `code` and `layer` and DROPS `detail`, so today the ids arrive at the browser and are discarded before the card sees them.\n- DoD 4's first half (Needs-you lists a goal ready for release) — reachable from the offer.\n\n**WHAT IS BLOCKED, and it is the row's core:**\n- DoD 1 — the evidence summary and the UNKNOWN count. No read.\n- DoD 2's second half — `prUrl` rendered after a RELEASED receipt. No read exposes it.\n- DoD 4's second half — \"Runs shows the release receipt\": `runs-read.ts` has no release member at all.\n- DoD 5/6 follow, since the journey is evidence -> card -> approve -> PR link.\n\nTASK RAIL 1 IS EXPLICIT that this row proves and does not rebuild: \"if the card cannot render because the dossier or receipt is missing a member, comment on THAT child and report_blocked — do not add a daemon field here.\" The two children are DONE (task-70a7ccd3 dossier, task-f961dc89 kind+receipt) and neither owns an HTTP read, so there is no existing row to comment on. Filing the prerequisite production row and blocking on it, per global rail 4 clause 2 and rail 20.\n\nNO EDITS MADE. Nothing in this row's owned paths is touched.",
+      "timestamp": "2026-09-06T20:32:05.785Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-06T17:54:32.922Z",
+  "updatedAt": "2026-09-06T21:23:51.098Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z",
     "plannedStepCount": 9,
-    "plannedDistinctFileCount": 12
+    "plannedDistinctFileCount": 12,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-3c27f2ab",
     "worker-d6e44333",
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-deb4c7d8"
   ],
   "priorHandoffs": [
     {
@@ -167,7 +179,9 @@
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T17:54:30.675Z",
   "planningNotes": {
@@ -185,5 +199,6 @@
       "apps/control-room/src/v2/ops/activity-words.ts"
     ]
   },
-  "planApprovedAt": "2026-09-06T17:54:32.922Z"
+  "planApprovedAt": "2026-09-06T17:54:32.922Z",
+  "workStartedAt": "2026-09-06T20:29:10.550Z"
 }
