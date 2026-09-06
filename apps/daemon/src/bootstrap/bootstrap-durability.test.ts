@@ -192,6 +192,22 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
   });
 });
 
+/**
+ * Bootstrap-family kinds this SYNCHRONOUS journey does not drive, each for a stated reason.
+ * Naming them here rather than filtering by predicate keeps the set assertion below exact.
+ */
+const UNDRIVEN_KINDS: readonly string[] = Object.freeze([
+  // Exercised through the real registry describe instead of this legacy goal.create journey.
+  "goal.create_with_source",
+  // Served on the ASYNC entry: its service runs `git`, optionally `gh` and a filesystem tree
+  // write, none of which `send` -- a synchronous ledger drive -- can express. Driven end to end
+  // in repository/repository-bootstrap-journey.test.ts instead.
+  "repository.bootstrap",
+]);
+
+/** `plan.propose` and `policy.install` each appear twice; both repeats are asserted below. */
+const REPEATED_REQUESTS = 2;
+
 describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
@@ -203,10 +219,13 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
     // finalize terminal now requires (task-a888038d) — without it every sealed run refuses
     // RUN_POLICY_UNCLASSIFIABLE, so the world could not reach approval at all.
     expect(sequence).toHaveLength(13);
-    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length + 1);
+    // Derived from the roster and the two stated exclusions, so a kind added to the bootstrap
+    // family without a decision here still reds -- the arithmetic cannot absorb it silently.
+    expect(sequence.length)
+      .toBe(BOOTSTRAP_COMMAND_KINDS.length - UNDRIVEN_KINDS.length + REPEATED_REQUESTS);
     expect(new Set(sequence.map((entry) => entry.kind)))
       .toEqual(new Set<string>(
-        BOOTSTRAP_COMMAND_KINDS.filter((kind) => kind !== "goal.create_with_source"),
+        BOOTSTRAP_COMMAND_KINDS.filter((kind) => !UNDRIVEN_KINDS.includes(kind)),
       ));
     expect(sequence.filter((entry) => entry.kind === "plan.propose")).toHaveLength(2);
     expect(sequence.filter((entry) => entry.kind === "policy.install")).toHaveLength(2);
