@@ -78,7 +78,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-1d53e70c",
+  "assignedWorkerId": "worker-ade1efb1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T21:33:11.165Z",
+  "updatedAt": "2026-09-06T22:05:41.455Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
@@ -165,7 +165,8 @@
     "architect-aa54e231",
     "worker-96c6d708",
     "worker-f78e0703",
-    "worker-1d53e70c"
+    "worker-1d53e70c",
+    "worker-ade1efb1"
   ],
   "stepsCompleted": [
     "step-1",
@@ -313,8 +314,8 @@
     "outcome": "nothing",
     "kind": "checkpoint",
     "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-1d53e70c@2026-09-06T21:33:05Z",
-    "at": "2026-09-06T21:33:11.165Z"
+    "sessionId": "worker-1d53e70c@2026-09-06T21:41:12Z",
+    "at": "2026-09-06T21:41:18.217Z"
   },
   "touchedFiles": [
     "tests/e2e/control-room/wrapper-lane.ts",
