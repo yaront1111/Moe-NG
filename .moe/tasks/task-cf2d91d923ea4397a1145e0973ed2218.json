@@ -137,7 +137,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -174,11 +174,23 @@
       "author": "worker-96c6d708",
       "content": "WIP validation15:05–15:06Z: step7 drills(i)/(ii) performed early while waiting real-publish clarification. NO shared source mutation during peer full gate. External Vite pre-transform plugin changes exact production strings and prints MUTANT_GENERATED (zero-match throws). (i) Remove V2 `...(deploymentDeploy === undefined ? {} : { deploymentDeploy }),` ->1failed9passed; async-entry.test105 V2 injected arm expected DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE, got DEPLOY_BUILD_CONTEXT_UNCONFIGURED@DAEMON_COMMAND_SEAM. V1 green. (ii) Replace deploy-command `docker: nodeDockerRunner,` with inline zero-effect fake ->2failed8passed; both default identity arms94 fail nodeDockerRunner vs docker.\n\nGitstatus before: V2 tracked M, deploy-command tracked clean. Separate post-run SHA256 against external backups proves unchanged source: V2 D9341AE6B57660B25141FA5DB803EF1CE895194ADBA338627C0D6CB452198B05; command71FC50CCADE453CDF2052926ECD3ABB2065B72F970058171C757DBC83891043F. No untracked source mutated. No restoration copy necessary. TEMP backup/config dir C:/Users/Yaron/AppData/Local/Temp/moe-deploy-drill-worker-96c6d708 remains (command.ts,default.mjs,v2.mjs,v2.ts): deletion tool policy rejected both native cleanup attempts despite absolute path check; no claim it was removed. No process remains running there. Leak drill pending.\n\nBroader composition4files443tests15:02Z exit1:3failed1passed /7failed436passed. All7 newkind roster pins product_contract.sync_env_example: registry.test1035/1085/1937/1959/1991(61vs60), store-dependencies.test783(newkind), v2-registry.test271(60vs59). Own async-entry10/10green. No counts changed; worker channeld22ca608 notified. Fresh pnpm typecheck19projects0 before this run; not HEADproperty. No completion claimed.",
       "timestamp": "2026-09-06T15:08:56.441Z"
+    },
+    {
+      "id": "comment-53aa340a11ef426eabba4377ed761b65",
+      "author": "worker-f78e0703",
+      "content": "AMENDED STEP6 FEASIBILITY (production-at-claim HEAD17446e73,16:40Z). Exact stdout: {mintedHuman:true,activeGraphs:1}; {httpStatus:422,outcome:'PORT_REFUSED',stage:'DISPATCH',refusal:{code:'PUBLISH_WORKSPACE_UNCONFIGURED',detail:'PUBLISH_WORKSPACE_UNCONFIGURED',httpStatus:422,layer:'DAEMON_PREREQUISITE'}}; {survivors:0,scratchRemoved:true}. Node exit0 is probe completion, NOT deploy/spec success. No repository files edited, no credential material logged. Full source below piped to node --experimental-transform-types --input-type=module; .js fallback resolves lane TS helpers only in the probe process.\n\nimport { registerHooks } from \"node:module\";\nimport { existsSync } from \"node:fs\";\nregisterHooks({ resolve(specifier, context, next) {\n  try { return next(specifier, context); } catch (error) {\n    if (specifier.endsWith(\".js\") && context.parentURL) {\n      const ts = new URL(specifier.slice(0, -3) + \".ts\", context.parentURL);\n      if (ts.protocol === \"file:\" && existsSync(ts)) return next(ts.href, context);\n    }\n    throw error;\n  }\n} });\nconst { default: assert } = await import(\"node:assert/strict\");\nconst { dirname, join } = await import(\"node:path\");\nconst { SqliteEventStore } = await import(\"@moe/store\");\nconst { withDaemonBackedControlRoom, lanePids, survivingPids, readWireProtocolVersion } =\n  await import(\"./tests/e2e/control-room/daemon-ports.ts\");\nconst { createOperatorSessionHandshakePort } = await import(\"./apps/daemon/src/identity/session-handshake.js\");\nconst { isDurableHumanPrincipal } = await import(\"./apps/daemon/src/identity/human-approver.js\");\nconst { OPERATOR_CAPABILITIES } = await import(\"./apps/daemon/src/daemon-command-vocabulary.js\");\nconst { DEFAULT_OPERATOR_PRINCIPAL_ID } = await import(\"./apps/daemon/src/operator-identity.js\");\nconst { activeCompiledGraphs } = await import(\"./apps/daemon/src/orchestrator/compiled-node-source.js\");\nlet started;\ntry {\n  const result = await withDaemonBackedControlRoom({liveCredentials:\"ATTACHED\", fakeDocker:\"SUCCESS\"}, async lane => {\n    started = lane;\n    const store = SqliteEventStore.openForProject(join(dirname(lane.catalogPath),\"store.sqlite\"),lane.projectId);\n    let minted, goalId;\n    try {\n      minted = createOperatorSessionHandshakePort({capabilities:OPERATOR_CAPABILITIES,\n        clock:Date.now, operatorPrincipalId:DEFAULT_OPERATOR_PRINCIPAL_ID,\n        projectId:lane.projectId, sessionTtlMs:60000, store}).mint();\n      assert.equal(minted.ok,true);\n      assert.equal(isDurableHumanPrincipal(store,minted.principalId),true);\n      const graphs=activeCompiledGraphs(store,lane.projectId);\n      assert.equal(graphs.length,1);\n      goalId=graphs[0].goalRef;\n      console.log(JSON.stringify({mintedHuman:true,activeGraphs:graphs.length}));\n    } finally { store.close(); }\n    const remoteUrl=\"https://github.com/example/lane.git\";\n    const payload={goalId,remoteUrl,approval:{branch:\"main\",remoteUrl,\n      repositoryId:\"a\".repeat(64),sha:\"b\".repeat(40)}};\n    const response=await fetch(lane.daemonOrigin+\"/command\",{method:\"POST\",headers:{\n      \"content-type\":\"application/json\",origin:lane.daemonOrigin,\"x-moe-csrf\":lane.csrfToken,\n      \"x-moe-session-credential\":minted.credential,\n      \"x-moe-protocol-version\":await readWireProtocolVersion(lane.repoRoot)},\n      body:JSON.stringify({commandId:\"paired-human-publication-probe\",commandKind:\"repository.publish\",\n        correlationId:\"publish-probe\",expectedVersion:0,payload,requestDigest:\"d\".repeat(64),\n        schemaVersion:\"moe-runtime-command/1\",sessionCredential:minted.credential,targetAggregateId:\"publish:\"+goalId})});\n    const answer=await response.json();\n    console.log(JSON.stringify({httpStatus:response.status,outcome:answer.outcome,stage:answer.stage,refusal:answer.refusal}));\n  });\n  assert.equal(result.ok,true);\n} finally {\n  if(started) {\n    const survivors=await survivingPids(lanePids(started));\n    assert.deepEqual(survivors,[]);\n    assert.equal(existsSync(dirname(started.catalogPath)),false);\n    console.log(JSON.stringify({survivors:0,scratchRemoved:true}));\n  }\n}",
+      "timestamp": "2026-09-06T16:41:01.191Z"
+    },
+    {
+      "id": "comment-6da9441c218c483e9b44310403e7d948",
+      "author": "worker-f78e0703",
+      "content": "RESUME16:41–16:42Z, HEAD17446e73, no new repo edits. `pnpm test:e2e:browser deploy-fake-docker.spec.ts` EXIT1 before Playwright, ZERO specs: apps/daemon/src/http/runs-read.ts(161,5) TS2741 Property 'deployments' is missing... required in type 'RunGoalView'. Foreign c329 WIP disclosed, not block premise. Standalone `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker.spec.ts` executes3 specs: 2 failed /1 passed (32.5s). BOTH receipt arms fail spec65: actual PORT_REFUSED stageDISPATCH BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE, rather than ACCEPTED or DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE. Throwing-body cleanup passes, both failure finally checks pass. No fake spawn or deploy receipt reached. Fresh `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-async-entries.test.ts` EXIT0 Test Files1passed(1),Tests10passed(10),12.07s. Browser lease released; every own process polled to final. Full daemon lease remains f1e/adefb; no full run started or queued.\n\nActive amend-1 fallback 'seed the landed-goal fixture the lane composes' is absent: `rg -n 'landed|landing|createNodeLander|seedLandingReceipt' tests/e2e/control-room -g '*.ts'` finds wrapper-lane.ts127 explicitly disables landing and publish-remote.spec.ts24–29 documents no landing ingress or seed. The apparent helper apps/daemon/src/goals/goal-closure-test-fixtures.ts802 seedLandingReceipt calls recordLandingReceipt with literal LANDING_SHA0123456789abcdef0123456789abcdef01234567 at791, src/landed.ts, D:/fixture-workspace; no actual git/lander and not this lane's project. Copying it would fake the missing authority. Actual composition at daemon-store-foundation-composition.ts184 takes repositoryWorkspace/MOE_NODE_WORKSPACE; daemon-repository-workflow-wiring.ts26 passes it into createPublicationCandidateReader. Lane config has neither a bound repository nor real landed node. Need an approved reachable setup/owner, not weakening admission/receipt assertions.",
+      "timestamp": "2026-09-06T16:43:07.078Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T15:12:47.255Z",
+  "updatedAt": "2026-09-06T16:44:00.175Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 8,
@@ -187,7 +199,8 @@
   },
   "contextFetchedBy": [
     "architect-aa54e231",
-    "worker-96c6d708"
+    "worker-96c6d708",
+    "worker-f78e0703"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -227,10 +240,45 @@
     "tests/e2e/control-room/daemon-ports.ts",
     "tests/e2e/control-room/deploy-fake-docker.spec.ts"
   ],
-  "blockedReason": null,
+  "blockedReason": "Active step6 amend-1 (15:12Z) has been executed as a REAL lane feasibility probe at17446e73: createOperatorSessionHandshakePort mint succeeds; isDurableHumanPrincipal true and activeGraphs=1. Actual HTTP repository.publish now refuses PUBLISH_WORKSPACE_UNCONFIGURED@DAEMON_PREREQUISITE,422 PORT_REFUSED stageDISPATCH (full source comment53aa340a11ef426eabba4377ed761b65). The amendment fallback says 'seed the landed-goal fixture the lane composes rather than faking a landing'; no such lane fixture exists: wrapper-lane.ts127 disables landing; publish-remote.spec.ts24–29 documents no landing ingress or seed. seedLandingReceipt in goals/goal-closure-test-fixtures.ts802 only writes literal SHA012345.../D:/fixture-workspace, not a real git landing. A success/engine-refusal receipt test therefore still stops at BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE (fresh actual3specs2failed1passed, comment6da9441c218c483e9b44310403e7d948). Completing would fabricate authority or weaken explicit amended DoD2/3. Need a measured real repository/landed-goal setup amendment or producer owner, not the old human-fence recipe. Foreign TS2741 runs-read.ts161 disclosed but NOT block premise. All processes ended; browser lease released; no new repo edits; production seam/unit10tests remain green but e2e DoD unmet.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T16:44:00.175Z",
   "priorBlockedReason": "Approved step6 real-admission receipt proof lacks a real repository.publish setup. Fresh context15:09Z: step6 has NO activeAmendmentId/amendments; effective text requires real command/admission/ledger with ONLY spawns fake. Actual owned replay command `pnpm test:e2e:browser deploy-fake-docker.spec.ts` executes3specs:2failed1passed, exit1; both receipt arms at spec65 receive BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE stageDISPATCH after real deployment.set_target ACCEPTED. Seed SHIPPED stops approval, not publication; bootstrap-sequence55 requires repository.publish. Existing publish-remote.spec asserts no publication with nothing landed. Architect suggested bootstrap-test-fixtures, but measured ALL_HANDLERS213-215 overrides publish isHuman/validateGoal/readCandidate; substituting default createPublishRepository after seeded approval yields PUBLISH_HUMAN_REQUIRED@DAEMON_AUTHORIZATION (full probe source comment60b544e2). Seeding with that override would fabricate authority, explicitly forbidden. Need an approved real-publication setup/prerequisite (durable human + real workspace candidate + scoped COMMITTED landing/ancestry), not a narrowed/mocked proof. Relevant capability owner not identified, so no invented dependency id. Commentsd6fcd41/60b544e2/c12861a8 hold measurements. Steps1-5 implemented,7actualpaths declared, atomic3-production-file seam green10tests fresh15:09Z/defaultidentity bothplanes; two mutation drills red sourcehashunchanged. Real lane children/ports/store-root cleanup assertions pass including thrown-body arm. No live jobs or lease held. Leak drill/final gates pending. No complete_task claim; WIP for replan, preserve foreign registry/provider and lane catalog hunks.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "17446e73b0f7bead6a3fa71536d940327d6ef076",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "governor-afbde490@2026-09-06T16:40:00Z",
+      "paths": [
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/daemon-ports.ts"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T16:39:09.998Z",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "tests/e2e/control-room/daemon-ports.ts",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        }
+      ],
+      "pushed": true,
+      "recoveredBy": "worker-1d53e70c",
+      "message": "Governor attribution: task-80322112's wrapper exit (17446e73) swept this row's in-flight e2e-lane bytes — fake-docker-dependencies.ts (67 lines, the MOE_E2E_DEPLOY_MODE docker double) whole, and the fakeDocker hunks of daemon-ports.ts (FakeDockerMode import, LaneOptions.fakeDocker, the dependencies switch and MOE_E2E_DEPLOY_MODE env). daemon-ports.ts is MIXED in that commit: the catalogPath / MOE_PROJECT_CATALOG hunks are 80322112's own. Commit trailers name both paths Moe-Contested for cf2d91d9. Next cf2d91d9 claimer: these steps are already in HEAD; verify against HEAD, do not re-create."
+    }
+  ],
+  "filesModified": [
+    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "tests/e2e/control-room/daemon-ports.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "governor-afbde490@2026-09-06T16:40:00Z",
+    "at": "2026-09-06T16:39:09.998Z"
+  }
 }

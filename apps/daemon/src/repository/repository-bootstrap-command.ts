@@ -16,6 +16,7 @@ import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import { bootstrapRefusal } from "./repository-bootstrap-contracts.js";
 import type { BootstrapGhPort, BootstrapPorts, BootstrapReceiptV1, BootstrapRefusal,
   BootstrapRepository, BootstrapRequest } from "./repository-bootstrap-contracts.js";
+import { writeMoeProjectFiles } from "./repository-bootstrap-moe-files.js";
 import { createBootstrapGhPort, createBootstrapGitPort, nodeTreeWriter }
   from "./repository-bootstrap-ports.js";
 import { bootstrapRepository } from "./repository-bootstrap-service.js";
@@ -172,9 +173,16 @@ function portsFor(
     git: createBootstrapGitPort(),
     now: options.clock ?? ((): string => new Date().toISOString()),
     registerCatalog: async (repository) => {
+      // THE PATHS ARE CREATED BEFORE THEY ARE REGISTERED, and this line is the whole fix.
+      // `canonicalEntry` realpaths `configPath` and `dirname(storePath)`; naming two paths
+      // nothing produced made every local-only bootstrap answer BOOTSTRAP_CATALOG_FAILED after
+      // the repository was already committed and bound. `writeMoeProjectFiles` owns WHY this
+      // runs here — after the `add -A` commit, before the registration — and returns the exact
+      // paths it wrote, so the entry cannot name a different file from the one on disk.
+      const paths = await writeMoeProjectFiles(repository.dir, repository.projectId);
       await options.catalog({
-        configPath: `${repository.dir}/moe.config.json`, projectId: repository.projectId,
-        root: repository.dir, storePath: `${repository.dir}/.moe-next/store.sqlite`,
+        configPath: paths.configPath, projectId: repository.projectId,
+        root: repository.dir, storePath: paths.storePath,
         title: repository.productName,
       });
     },

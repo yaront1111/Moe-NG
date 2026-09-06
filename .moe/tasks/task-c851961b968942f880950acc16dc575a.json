@@ -20,13 +20,16 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AT CLAIM, BEFORE ANY EDIT. Grandchild B (task-c422b106af2945b1a1ad4ed49556bf66) was WORKING and UNLANDED when this plan was written (2026-09-05): `git grep -n \"set_agent_provider\\|AGENT_PROVIDER\" -- apps adapters packages` returned ZERO hits, and a plain grep over apps/daemon/src returned zero. B's files are therefore listed as newFiles throughout this plan because they do not exist YET — B creates them, not you. Your row's dependsOn gates it, so B should be DONE by the time you claim — but re-measure, do not assume.\n\nRun and read the OUTPUT of each:\n  (a) `grep -n \"AGENT_PROVIDER_COMMAND_KIND\\|AGENT_PROVIDER_PAYLOAD_KEYS\\|runAgentProviderCommand\\|AGENT_PROVIDER_UNCONFIGURED\" apps/daemon/src/orchestrator/agent-provider-command.ts`\n  (b) `grep -rn \"runAgentProviderCommand\" apps/daemon/src/daemon-command-registry.ts`\n  (c) `ls apps/daemon/src/orchestrator/agent-provider-command.*`\n  (d) `grep -rln \"AGENT_PROVIDER\" apps/daemon/src --include=*.test.ts`\n\nIf (a) or (b) is empty, B has not landed: call moe.report_blocked with blockedOnTaskIds [\"task-c422b106af2945b1a1ad4ed49556bf66\"] and stop. Do NOT write B's registry entry, family table, PAYLOAD_KEYS or count-pin edits yourself — that is B's owned surface and re-implementing it collides with its owner in the shared checkout.\n\nIf B HAS landed, print for your own use: B's exact exported symbol names and their argument object shape, and the full text of every test arm found by (d) — specifically the arm asserting AGENT_PROVIDER_UNCONFIGURED. Step 5 needs to know whether that arm calls the function directly (a unit arm, which survives your swap untouched) or dispatches through a fully-composed registry (which will change answer once the real store is reachable). Record the answer in your step note; it decides whether B's test file is touched at all.\n\nAlso note the shared checkout was dirty with 13 foreign paths at plan time. Peer dirt is never a stop condition: note it and continue. Never revert, stash, or `git add -A`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts"
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-provider-command.ts"
-      ]
+      ],
+      "note": "Claim-time measurement complete; NO SOURCE EDITS. HEAD17446e73; DONE/merged prerequisite B=2d94a928 confirmed via epicSiblings. command.ts exports kind+keys+stub, registry.ts363 calls stub; command.ts/.js/.test.ts exist; durable setAgentProvider/readAgentProvider absent. Full unconfigured test arm source and grep results preserved in row comment. Omitted asserting consumer registry.test.ts255–257/530–536 requires amendment. Additional planned AGENT_PROVIDER_LAYERS and *_CODE_LAYERS match security boundary scanner at tests/security/boundary-roster.security.ts603; omitted roster/completeness coverage consumers require scope remeasurement. No active step amendments present at fresh get_context. Foreign dirty paths including registry deploymentDeploy hunks preserved; no tests run because no implementation change.",
+      "startedAt": "2026-09-06T16:33:01.400Z",
+      "completedAt": "2026-09-06T16:35:53.490Z"
     },
     {
       "stepId": "step-2",
@@ -87,7 +90,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -97,25 +100,36 @@
   "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
   "priority": "HIGH",
   "order": 71.3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8aae01352090424db1c4ab726a65b292",
+      "author": "worker-7bdbffac",
+      "content": "CLAIM-TIME MEASUREMENT, delivered/working tree HEAD 17446e73b0f7bead6a3fa71536d940327d6ef076, 2026-09-06 16:32–16:35Z; NO SOURCE EDITS. Prerequisite B is DONE, landing.merged:true, completion 2d94a928ae6993e8d54936b45af8ccd367c33d86 per epicSiblings. git grep -n -E 'AGENT_PROVIDER_COMMAND_KIND|AGENT_PROVIDER_PAYLOAD_KEYS|runAgentProviderCommand|AGENT_PROVIDER_UNCONFIGURED' -- apps/daemon/src/orchestrator/agent-provider-command.ts apps/daemon/src/daemon-command-registry.ts => command.ts3 kind,4 frozen keys,9 function,11 refusal; registry.ts1 import,363 decisionOf(runAgentProviderCommand()). Get-ChildItem command.* => .ts/.js/.test.ts. git grep -n -E 'setAgentProvider|readAgentProvider' -- apps/daemon/src => zero: durable service absent.\n\nFULL existing unconfigured arms (git grep -n 'AGENT_PROVIDER' -- '*test*' '*spec*'):\nUNIT agent-provider-command.test.ts12–16:\nit(\"refuses an unconfigured provider command at composition, not bootstrap\", () => {\n  expect(runAgentProviderCommand).toThrowError(expect.objectContaining({\n    code: \"AGENT_PROVIDER_UNCONFIGURED\", layer: \"DAEMON_COMPOSITION\", httpStatus: 422,\n  }));\n});\nCOMPOSED daemon-command-registry.test.ts530–537:\nit(\"refuses a well-formed operator dispatch without any durable write\", () => {\n  const before = snapshot();\n  expect(send(\"cmd-provider-unconfigured\", \"project.set_agent_provider\", payload)).toMatchObject({\n    outcome: \"PORT_REFUSED\", stage: \"DISPATCH\", httpStatus: 422,\n    refusal: { code: \"AGENT_PROVIDER_UNCONFIGURED\", layer: \"DAEMON_COMPOSITION\" },\n  });\n  expect(snapshot()).toEqual(before);\n});\nIts payload :522 is {base:\"main\",goalId:\"\",provider:\"codex\"}; snapshot :523–528 opens same file SqliteEventStore, reads decisions and eventHorizon, closes in finally. Also literal ROWS :255–257 pins code AGENT_PROVIDER_UNCONFIGURED, kind project.set_agent_provider, layer DAEMON_COMPOSITION, payloadKeys [base,goalId,provider]. Consumer :1119–1129 sends {} and asserts row code/layer at DISPATCH. Therefore both composed arm and empty-payload row must change when real handler is wired. Unit absent-config arm stays untouched; nonoperator :539–546 and synchronous ADMIN entry :549–554 stay valid. registry.test.ts omitted from approved affectedFiles/newFiles. Independent read-only agent confirms no other source unconfigured consumers.\n\nForeign shared-tree dirty paths preserved; registry.ts has existing deploymentDeploy import/option/composition hunks, not mine. No paths created/modified and no gates launched.",
+      "timestamp": "2026-09-06T16:35:53.029Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.227Z",
-  "updatedAt": "2026-09-05T23:16:20.696Z",
+  "updatedAt": "2026-09-06T16:35:54.525Z",
   "dependsOn": [
     "task-c422b106af2945b1a1ad4ed49556bf66"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-05T16:49:23.744Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-7bdbffac"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T16:59:24.237Z",
   "planningNotes": {
@@ -357,5 +371,10 @@
     "kind": "checkpoint",
     "sessionId": "architect-aa54e231@2026-09-05T16:49:27Z",
     "at": "2026-09-05T23:16:20.696Z"
-  }
+  },
+  "workStartedAt": "2026-09-06T16:33:01.400Z",
+  "blockedReason": "Claim-time scope remeasurement found mandatory asserting consumers omitted from the effective approved plan (fresh get_context: no active amendments). NO SOURCE EDITS. Step5 wires real provider store, but apps/daemon/src/daemon-command-registry.test.ts255–257/1119–1129 pins empty-payload AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and530–536 valid operator refusal plus NO writes; only command.test.ts was listed. The valid composed arm must transition to durability, not unconditional refusal; preserve unit absent-config and nonoperator authorization. Step3 also requires AGENT_PROVIDER_LAYERS + AGENT_PROVIDER_CODE_LAYERS; BOTH match tests/security/boundary-roster.security.ts603, failing unrostered scan736–738/cardinality746–747, with added boundary coverage enforced by completeness.security.ts300–307. Plan codebaseInsights4 asserts no global roster obligation incorrectly. Planned9 paths +omitted registrytest=10 already, before security consumers. Cannot implement honestly green within approved scope or rename/reformat declarations to evade scanner. Full command/arm source in row comment. Prerequisite B is DONE/merged2d94a928, NOT a dependency block. Foreign WIP preserved, not block premise.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T16:35:54.525Z"
 }

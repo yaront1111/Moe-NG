@@ -123,8 +123,8 @@
       "completedAt": "2026-09-06T17:05:49.340Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -209,16 +209,24 @@
       "author": "worker-adefb11e",
       "content": "STEP 7 — DRILLS, RESTORE PROOF, RAIL CHECKS (worker-adefb11e, 17:05Z, HEAD 17446e73).\n\nDRILLS. Eight mutations, every one EXIT 1 (non-vacuous), run process-local through a Vitest transform so NO shared on-disk file was ever mutated — full reproducible temp config in comment-e9ed2453eefc41e08121aab909626c26, outcomes/frames/SHAs in comment-45f0f01c96394338894c6b58f9ad04df. The three the plan names, re-run 15:09 against the FINAL bytes, each `1 failed | 8 skipped (9)`:\n  DRILL 1 ORDERING (DoD 1) — service mutated to migrate-then-backup. RED at migration-service.test.ts:93:23 on the recorded call trace, i.e. on the ORDER, not on \"both happened\".\n  DRILL 2 SAFETY (DoD 2) — backup-failure path made to apply migrations anyway. RED at migration-service.test.ts:112:26 and — this is the part that matters — the SCHEMA ASSERTION is the one that reds: it sees the `after_migration` table appear. The assertion reads the schema first, before any code check, so it catches the data-losing case a return-value assertion cannot.\n  DRILL 3 PAIRING (DoD 3) — receipt populated with BOTH `outcome: APPLIED` and a non-null `refusal`. RED at migration-service.test.ts:39:8; the codec answers INVALID rather than accepting it, so a REFUSED record can never later read as a success.\nOther five (filename, code, layer, busy, corrupt-dump/restore) likewise EXIT 1.\n\nRESTORE PROOF, global rail 13, done the way an UNTRACKED path requires. All 8 owned modules are `??`, so `git diff` is blind to them and proves nothing. Each was backed up out of tree (%TEMP%, worker-suffixed) before drilling and the restore was proven by SHA256 EQUALITY against that backup, in a call separate from the restore — all MATCH. Confirmed again this session: the 8 live SHA256s equal the frozen 15:08 set byte for byte (listed in the preceding comment). `activation-receipts-measure.ts` is TRACKED and was never mutated by us — `git status --porcelain` on it returns NOTHING (clean), the valid tracked-path proof.\n\nDoD 4 — BACKUP PATH REUSES THE CONVENTION, grep as required:\n  apps/daemon/src/repository/migrations/migration-service.ts:4: import { BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF } from \"../../bootstrap/activation-receipts-measure.js\";\n  apps/daemon/src/repository/migrations/migration-service.ts:22:   for (const part of [BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF, input.environment]) {\n  apps/daemon/src/bootstrap/activation-receipts-measure.ts:35: export const BACKUP_DIRECTORY = \".moe-next\";\n  apps/daemon/src/bootstrap/activation-receipts-measure.ts:36: export const BACKUP_LEAF = \"backups\";\n  apps/daemon/src/bootstrap/activation-receipts-measure.ts:38: export const PRE_MIGRATION_BACKUP_LEAF = \"pre-migration\";\nThe constants were EXPORTED by the peer 95e row (landed 2b10ebd5 at 14:45:58Z) — we IMPORT them, we did not export them and we added NO third transcription. Resulting path `<project>/.moe-next/backups/pre-migration/<env>/<stamp>.sql`, per binding architect ruling comment-6513c210 (the DoD text predates the `pre-migration` subtree, which exists so scheduled retention does not sweep pre-migration dumps). One backup location, not two. `daemon-main-activation-boot.test.ts` still re-declares both literals locally at :35-36 — deliberately NOT touched, out of this row's scope; follow-up observation only.\n\nRAIL 4 — NO COMMAND KIND, verified at this HEAD: `grep -c \"migration|migrate\"` returns 0 in BOTH `daemon-command-registry.ts` AND `mcp-tool-allowlist.ts`. Those two files ARE dirty in the shared checkout — that is peer c422's wiring, disclosed and untouched by us. `daemon-command-vocabulary.ts`, `agent-spawn-contract.ts` and `packages/contracts` are CLEAN. `moe-migration-receipt/1` is a private `internal.repository.migration_receipt` kind, outside PAYLOAD_KEYS/registry/MCP roster, so it cost zero roster backfill — exactly as `internal.repository.publish_receipt` does.\n\nRAIL 6 / DEPLOY COMPOSITION — task-5d309484 (deploy path) had NOT landed at claim and has not landed now. Per task rail 6 this ships behind THIS row's own callable entry point; no deploy path was wired, none was duplicated, and no deployment-composition claim is made. The parent integration row task-78eedd8e owns the consumer composition.\n\nPER-FILE CAP: ports.ts 75, receipt.ts 106, service.ts 90, service.test.ts 176, real.test.ts 110, three .js bridges 1 each. All well under 250.",
       "timestamp": "2026-09-06T17:05:41.459Z"
+    },
+    {
+      "id": "comment-cb06b26b103040619dccf3c1bfee765f",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE (qa-4f771bb8).\n\nGATE RE-RUN, recorded command verbatim including the PowerShell env prefix:\n`$env:MOE_MIGRATION_RESTORE='1'; pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/repository/migrations/migration-real.test.ts src/repository/migrations/migration-service.test.ts`\n-> **Test Files 2 passed (2), Tests 11 passed (11), EXIT 0**, 21.71s, and the banner `REAL MIGRATION: schema changed, restored exactly, backup-failure unchanged, failing-file named` printed. Exact reproduction. **11 executed with 0 skipped is the discriminator that the gated arm actually RAN** — unflagged it would skip and the count would drop.\n\nDoD 1 ORDERING BY RECORDED CALL ORDER — service.test.ts:75-85 records `dump-start` / `dump-completed` / `migrate` into a `calls` array from inside the injected ports, and :93 asserts `toEqual([\"dump-start\",\"dump-completed\",\"migrate\"])`. That pins COMPLETION before apply, not merely invocation, which is the property the DoD names. Drill 1 red is recorded.\n\nDoD 2 THE CENTRAL SAFETY PROPERTY — service.test.ts:105-118. `expect(w.schema()).toEqual(before)` reads the SCHEMA, exactly as the DoD demands rather than trusting the return value; `expect(w.calls).toEqual([])` proves zero migrations were attempted; the refusal pins `MIGRATION_BACKUP_FAILED` @ `DAEMON_INGRESS` (code AND layer); and the persisted receipt is read back and compared to the result. Drill 2 was run against the schema assertion specifically.\n\nDoD 3 RECEIPT — `MIGRATION_RECEIPT_VERSION = \"moe-migration-receipt/1\"`. Arm :28 pins both outcome directions and every refused schema (the null-pairing mirror of publish-receipt-contracts.ts); arm :50 round-trips every member from a REAL store and refuses a mismatched replay. `backupRef` carries `<path>@sha256:<hash>` and arm :120 asserts the file at that path still exists.\n\nDoD 4 NO SECOND BACKUP LOCATION — `migration-service.ts:4` IMPORTS `BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF` from `bootstrap/activation-receipts-measure.js`, where they are now exported (:32-36). Derived, not restated, so the two cannot drift.\n\nDoD 5 THE RESTORE IS REAL — migration-real.test.ts drives a live PostgreSQL container: schema read out of `information_schema.columns` via `docker exec psql`, captured as `before`, a migration applied and asserted visible (`toContain(\"added_by_migration\")`), then restored from the dump and `expect(schema()).toBe(before)`. String equality against the pre-change schema, not a shape check.\n\nDoD 6 — :120-131 pins `MIGRATION_FAILED` @ `DAEMON_INGRESS` with `detail: \"1700000000001-broken.js\"`, the failing migration NAMED, and the backup retained.\n\nDoD 7 TEARDOWN — nested `finally` at :100-105 (operation, then `runner.close()`, then `rmSync`), so a throw in any of the three still reaches the next. **Measured after my run: `docker ps --all` is EMPTY.** All spawns are `shell: false` with argv arrays; no `.cmd`, no shell string, no chain.\n\nDoD 8 — the full daemon leg is CITED per the governor's 16:35Z restore, and it is the first citation today that is actually complete: the four failing files are named WITH line numbers, shown to be a strict subset of this row's own 13:30Z 8-file BEFORE, and the `(AFTER − BEFORE) ∩ owned` computation is stated and empty, none under `repository/migrations/`. `pnpm typecheck` EXIT 0 19/19.\n\nONE HAZARD I CHASED AND CLEARED, recorded because the next reviewer will see it too. `migration-real.test.ts:32` runs `spawnSync(\"pnpm\", [\"install\", \"--frozen-lockfile\"])` after deleting every `npm_*` var from the env, and this host has had a fleet-wide outage from a `pnpm install` that reached the shared store. I measured rather than rejecting on the memory: with `npm_*` stripped and the cwd outside the repo, `pnpm store path` resolves to `C:\\Users\\Yaron\\AppData\\Local\\pnpm\\store\\v11`, NOT the repo's `D:\\.pnpm-store\\v11`. The fleet store is unreachable from this test, so there is no purge risk. Residual, a note and not a defect: each flagged run populates that second store on the system drive and nothing prunes it.\n\nLANDING — `task.commits` was null when I claimed. I staged the eight files intending to hand-land; the row's own wrapper committed them first, at `3c2da53a` (17:07:19Z, `Moe-Kind: completion`, 10 paths = the 8 modules plus two task JSONs), so my `git commit` found nothing to commit and NOTHING OF MINE LANDED. Disclosing the staging so an attribution audit is not surprised by it. Verified after: all 8 files IN HEAD, `git status --porcelain` on the directory EMPTY, and every relative import the directory makes resolves at HEAD (backup-ports, verifier-process-runner, verifier-database, session-test-fixtures, activation-receipts-measure, controlled-profile-generator) — the landing creates no dangling edge.\n\nPER-FILE CAP: ports 75, service 90, receipt 106, service.test 176, real.test 110. All well inside.",
+      "timestamp": "2026-09-06T17:09:59.109Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:34:29.013Z",
-  "updatedAt": "2026-09-06T17:06:11.111Z",
+  "updatedAt": "2026-09-06T17:11:02.790Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:41:11.264Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-06T17:11:02.789Z",
+    "wallClockMs": 77391525
   },
   "stepsCompleted": [
     "step-1",
@@ -250,7 +258,8 @@
     "worker-e15d25c8",
     "worker-7bdbffac",
     "worker-f78e0703",
-    "worker-adefb11e"
+    "worker-adefb11e",
+    "qa-4f771bb8"
   ],
   "workStartedAt": "2026-09-06T14:43:10.021Z",
   "declaredFiles": [
@@ -311,7 +320,55 @@
     "apps/daemon/src/repository/migrations/migration-ports.js",
     "apps/daemon/src/repository/migrations/migration-service.ts",
     "apps/daemon/src/repository/migrations/migration-service.js",
-    "apps/daemon/src/repository/migrations/migration-real.test.ts"
+    "apps/daemon/src/repository/migrations/migration-real.test.ts",
+    ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
   ],
-  "completionSummary": "Backup-before-migrate engine + safety property. 8 NEW paths under apps/daemon/src/repository/migrations/ (receipt/ports/service .ts + .js bridges, service.test.ts, real.test.ts); ports 75, receipt 106, service 90 lines.\n\nORDER: backup await -> non-empty dump file + sha256 -> apply -> persist receipt, under one project-wide exclusive lock spanning backup+apply+receipt write.\n\nVERIFICATION COMMAND CHOICE, stated plainly: the plan named `pnpm --filter @moe/daemon test`, which is EXIT 1 on this branch for FOREIGN reasons, so it cannot be passed as exitCode 0. Per the 16:35Z governor restore instruction, the full suite is CITED not re-run: c422's terminal run at HEAD ecc99b99, 15:13:49-15:26:42Z, exact `pnpm --filter @moe/daemon test`, EXIT 1, Test Files 4 failed | 530 passed (534), Tests 6 failed | 9918 passed | 5 skipped (9929). The 4 failing files (criterion-evidence/criterion-integrated.test.ts:66:19; goals/goal-live-evidence.test.ts:380:19; goals/goal-services.test.ts:309:19; goals/j1-command-path.test.ts:203:19,265:43,314:19) are a strict SUBSET of our own 13:30Z BEFORE (8 failed files), so AFTER-minus-BEFORE is EMPTY and its intersection with our 8 owned paths is EMPTY. None is under repository/migrations/. Red disclosed, no green claimed. The recorded verification is our fresh scoped run, EXIT 0, 11 executed tests.\n\nAlso fresh: `pnpm typecheck` EXIT 0, all 19 packages Done incl apps/daemon. Root `pnpm test` covers NO apps/** file, so no root count is quoted.\n\nDoD 5 arm ACTUALLY RAN against real PostgreSQL (flag MOE_MIGRATION_RESTORE=1; unflagged it skips and a control runs). Schema created, backed up, changed, restored, asserted via information_schema.\n\nDrills 1/2/3 all RED, drill 2 on the SCHEMA assertion; 8 mutations total, all EXIT 1, process-local. Restore proven by SHA256 equality vs out-of-tree backups (untracked paths — git diff is blind).\n\nNo command kind, roster, allowlist or contracts edit (grep 0). Backup path IMPORTS the 95e-exported BACKUP_DIRECTORY/"
+  "completionSummary": "Backup-before-migrate engine + safety property. 8 NEW paths under apps/daemon/src/repository/migrations/ (receipt/ports/service .ts + .js bridges, service.test.ts, real.test.ts); ports 75, receipt 106, service 90 lines.\n\nORDER: backup await -> non-empty dump file + sha256 -> apply -> persist receipt, under one project-wide exclusive lock spanning backup+apply+receipt write.\n\nVERIFICATION COMMAND CHOICE, stated plainly: the plan named `pnpm --filter @moe/daemon test`, which is EXIT 1 on this branch for FOREIGN reasons, so it cannot be passed as exitCode 0. Per the 16:35Z governor restore instruction, the full suite is CITED not re-run: c422's terminal run at HEAD ecc99b99, 15:13:49-15:26:42Z, exact `pnpm --filter @moe/daemon test`, EXIT 1, Test Files 4 failed | 530 passed (534), Tests 6 failed | 9918 passed | 5 skipped (9929). The 4 failing files (criterion-evidence/criterion-integrated.test.ts:66:19; goals/goal-live-evidence.test.ts:380:19; goals/goal-services.test.ts:309:19; goals/j1-command-path.test.ts:203:19,265:43,314:19) are a strict SUBSET of our own 13:30Z BEFORE (8 failed files), so AFTER-minus-BEFORE is EMPTY and its intersection with our 8 owned paths is EMPTY. None is under repository/migrations/. Red disclosed, no green claimed. The recorded verification is our fresh scoped run, EXIT 0, 11 executed tests.\n\nAlso fresh: `pnpm typecheck` EXIT 0, all 19 packages Done incl apps/daemon. Root `pnpm test` covers NO apps/** file, so no root count is quoted.\n\nDoD 5 arm ACTUALLY RAN against real PostgreSQL (flag MOE_MIGRATION_RESTORE=1; unflagged it skips and a control runs). Schema created, backed up, changed, restored, asserted via information_schema.\n\nDrills 1/2/3 all RED, drill 2 on the SCHEMA assertion; 8 mutations total, all EXIT 1, process-local. Restore proven by SHA256 equality vs out-of-tree backups (untracked paths — git diff is blind).\n\nNo command kind, roster, allowlist or contracts edit (grep 0). Backup path IMPORTS the 95e-exported BACKUP_DIRECTORY/",
+  "commits": [
+    {
+      "sha": "3c2da53a4591042e55a9a47349037e7f1216265b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-adefb11e@2026-09-06T17:02:16Z",
+      "paths": [
+        ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+        ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json",
+        "apps/daemon/src/repository/migrations/migration-ports.js",
+        "apps/daemon/src/repository/migrations/migration-ports.ts",
+        "apps/daemon/src/repository/migrations/migration-real.test.ts",
+        "apps/daemon/src/repository/migrations/migration-receipt.js",
+        "apps/daemon/src/repository/migrations/migration-receipt.ts",
+        "apps/daemon/src/repository/migrations/migration-service.js",
+        "apps/daemon/src/repository/migrations/migration-service.test.ts",
+        "apps/daemon/src/repository/migrations/migration-service.ts"
+      ],
+      "recordedBy": "worker-adefb11e",
+      "recordedAt": "2026-09-06T17:07:23.865Z",
+      "treeId": "efaccdb2592deb1a67c64cfa054d38a11eb847e6",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/migrations/migration-service.ts",
+    "apps/daemon/src/repository/migrations/migration-service.test.ts",
+    "apps/daemon/src/repository/migrations/migration-real.test.ts",
+    "apps/daemon/src/repository/migrations/migration-receipt.ts",
+    "apps/daemon/src/repository/migrations/migration-ports.js",
+    "apps/daemon/src/repository/migrations/migration-ports.ts",
+    "apps/daemon/src/repository/migrations/migration-receipt.js",
+    "apps/daemon/src/repository/migrations/migration-service.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-adefb11e@2026-09-06T17:02:16Z",
+    "at": "2026-09-06T17:07:23.865Z"
+  },
+  "completedAt": "2026-09-06T17:11:02.789Z",
+  "reviewCompletedAt": "2026-09-06T17:11:02.789Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-cb06b26b.\n\nRE-RAN the recorded command verbatim (PowerShell env prefix included): 2 files, 11 passed (11), EXIT 0, REAL MIGRATION banner printed. 11 executed with 0 skipped proves the flagged live-PostgreSQL arm actually RAN.\n\nDoD1 (:75-93) records dump-start/dump-completed/migrate inside the injected ports and asserts the exact array - COMPLETION before apply, not invocation.\nDoD2 (:105-118) asserts schema() toEqual(before), the SCHEMA as demanded rather than the return value, plus calls toEqual([]), MIGRATION_BACKUP_FAILED @ DAEMON_INGRESS, receipt read back.\nDoD3 moe-migration-receipt/1: :28 pins both directions and the null-pairing; :50 round-trips every member from a REAL store and refuses mismatched replay; backupRef carries @sha256 and :120 asserts the file exists.\nDoD4 service.ts:4 IMPORTS the backup-path constants - derived, not restated.\nDoD5 real PostgreSQL: schema from information_schema via docker exec psql, captured, migrated, restored, schema() toBe(before).\nDoD6 MIGRATION_FAILED @ DAEMON_INGRESS with detail naming 1700000000001-broken.js, backup retained.\nDoD7 nested finally; after my run docker ps --all is EMPTY. Spawns shell:false, argv arrays.\nDoD8 first COMPLETE citation today: failing files named with line numbers, a strict subset of this row's own 8-file BEFORE, intersection with owned paths empty. typecheck EXIT 0 19/19.\n\nHAZARD CLEARED BY MEASUREMENT: real.test.ts:32 runs pnpm install with npm_* stripped, and this host has had a fleet outage from an install reaching the shared store. That env resolves to the user store, not the repo's D:\\.pnpm-store. No purge risk.\n\nLANDING: commits was null; I staged the files to hand-land, the wrapper committed them first at 3c2da53a, nothing of mine landed. All 8 IN HEAD, directory clean, imports resolve at HEAD."
 }

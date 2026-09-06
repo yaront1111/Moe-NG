@@ -20,17 +20,26 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AT CLAIM, then RED tests. Confirm `project.set_agent_provider` is a RuntimeCommandKind (A0 DONE); if not, report_blocked blockedOnTaskIds [task-bb0a71316bd343d18453224973563ed0]. Print the current count literals (do not trust 46/35/11): vocabulary.test.ts ROWS.toHaveLength, declared.toHaveLength, OPERATOR_ONLY.toHaveLength, OPERATOR_PRINCIPAL_KINDS.size; registry.test.ts every registry.size toBe(N) (grep toBe, currently six at :819/:826/:1678/:1700/:1732 plus ROWS/REGISTRATION_ORDER lengths); store-deps registryKinds membership. Then add the kind to the hand-transcribed tables in the SAME insertion slot as PAYLOAD_KEYS will use (after project.register): vocabulary.test.ts ROWS + Family \"SETTINGS\" + FAMILY_MAPS/FAMILY_NAMES + OPERATOR_ONLY; registry.test.ts REGISTRATION_ORDER + its OPERATOR_ONLY + ROWS payload table; store-deps registryKinds SET. Bump every count from the PRINTED value. Add fail-closed + operator-fence tests in daemon-command-registry.test.ts: well-formed operator dispatch (payload keys base, goalId:\"\", provider:\"codex\") asserts code AGENT_PROVIDER_UNCONFIGURED AND layer DAEMON_COMPOSITION and that no event/decision was written; non-operator principal asserts OPERATOR_PRINCIPAL_REQUIRED AND DAEMON_AUTHORIZATION. These tests are RED until step 2. Do not edit mcp-tool-allowlist.ts or agent-spawn-contract.ts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.test.ts",
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.test.ts"
+      ],
+      "note": "Preedit HEAD6eb68c3e, all target paths clean; own baseline3files601tests EXIT0; QA4f typecheck19projects0 sameanchor cited. Runtime kind confirmed contracts109/generated client256/380, daemon absent. Plan moved-home correction + sibling test granted governor092ba660; extra v2/MCP asserting4paths atomic grantc56dcf4, total13declared/planned. Current pins measured59ROWS/registry(all4livecounts),48declaredfamilies,23operator, v2=58, excluded22. Red-first integration+roster+module test run EXIT1:3failedfiles,11failed414passed; unit missingmodule explicit not executed, not counted as pass. Both named operator/nonoperator tests got400@REGISTRY instead of expected422AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION /403OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION. Printed ROWS/order59->60 and operator23->24; native child expected new kind absent. Added SETTINGS testfamily+frozen/exactmaps and direct2testmodule; remaining count pins will move from actual output as production comes green. Snapshot reads real decisionCount+eventHorizon before/after, no mocks mint authority. No MCPproduction/HUMAN_ONLY_STEPS edits. Shared provider test changed ONLY new kind line; f72 livegate owner notified exact timing14:46, healtharms untouched.",
+      "startedAt": "2026-09-06T14:43:04.199Z",
+      "completedAt": "2026-09-06T14:48:15.265Z"
     },
     {
       "stepId": "step-2",
       "description": "MINIMUM WIRING + FAIL-CLOSED. New apps/daemon/src/orchestrator/agent-provider-command.ts (plus one-line .js bridge, copy environment-store.js) exports: AGENT_PROVIDER_COMMAND_KIND = \"project.set_agent_provider\", AGENT_PROVIDER_PAYLOAD_KEYS = [\"base\",\"goalId\",\"provider\"] frozen, and runAgentProviderCommand() that refuses AGENT_PROVIDER_UNCONFIGURED at DAEMON_COMPOSITION (copy cutover's DomainRefusal unconfigured shape) and writes nothing. Keep it under 250 lines. vocabulary.ts: SETTINGS_FAMILY Record with this kind → CAPABILITIES.ADMIN, add it to FAMILY_TABLES, add the kind to the WiredCommandKind union, PAYLOAD_KEYS row (spread AGENT_PROVIDER_PAYLOAD_KEYS, inserted after project.register), OPERATOR_PRINCIPAL_KINDS, and agentCapabilitiesFor early-return null (copy answer_clarification at :196). Freeze SETTINGS_FAMILY; add Object.isFrozen(SETTINGS_FAMILY) next to the other family freeze asserts. registry.ts: import the kind; in entryOf, AFTER the operator fence and BEFORE the bootstrap fallback, `if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(runAgentProviderCommand());`. Do not add a settings boolean to CommandFamilyFacts. Do not put the kind in BOOTSTRAP_FAMILY or asyncEntries. File cap: vocabulary.ts is 372 — stay under 400; registry.ts is 436 — the intercept is one if+return, no new family-facts flag.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-provider-command.ts",
         "apps/daemon/src/orchestrator/agent-provider-command.js",
@@ -40,16 +49,54 @@
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-provider-command.ts",
         "apps/daemon/src/orchestrator/agent-provider-command.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.js",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+      ],
+      "note": "Implemented own refusing synchronous seam, frozen SETTINGS family ADMIN, exact frozen intent keys, union/operator/null-agent-capabilities and sync intercept after operator fence; no bootstrap family/facts widening. All14 paths granted092ba660/c56dcf4/d69dc5 and ownershipconfirm83a72f, explicitlydeclared. Newmodule14lines; own-only vocabulary399 at14:56, peerenv addition now404 (unresolved caprepair beforecompletion, notclaimed compliant). Current actual scoped9files690tests EXIT0 at15:13:12, after bothprovider+peer env pins reconciled. Provider own delta59->60wired/23->24operator/22->23excluded; env peer adds61/25/24, transport48 vsprovider46, v2peer60 vsprovider59. Governor189f21 ruled carry envdeltas notrollback; cap and clean-checkoutimportclosure constraints raised inreplyed68384, not silentlywaived. NoMCPproduction/HUMAN_ONLY orKNOWN_PROVIDERS copy. Registry preexisting oversized562claim, own3lines, pluspeercf2deployseam preserved. Ready boundedfullAFTER; allfiveisolateddrills andno-write productionproof recordedcomment779c873. Actual received9-filegreen not extrapolated fromnamedsubject.",
+      "startedAt": "2026-09-06T14:48:15.660Z",
+      "completedAt": "2026-09-06T15:13:47.178Z"
     },
     {
       "stepId": "step-3",
       "description": "VERIFY AND ADVERSARIAL. `pnpm --filter @moe/daemon test` and `pnpm typecheck`, each standalone foreground, quote `Test Files N passed`. Named complete_task command: `pnpm --filter @moe/daemon test`. Mutation: remove the kind from OPERATOR_PRINCIPAL_KINDS → the non-operator arm goes RED; restore per rail 13 (`git status --porcelain` first; untracked new module SHA256 vs %TEMP% in a call separate from the restore). Confirm the intercept sits before runBootstrapCommand (a missing intercept would accept as bootstrap). Confirm no MCP allowlist / HUMAN_ONLY_STEPS edit. Confirm KNOWN_PROVIDERS was not copied. Then complete_task. Grandchild C replaces runAgentProviderCommand with the store; unconfigured tests stay in this row.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.js",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+      ],
+      "note": "FINAL freshpostEND gate15:31:14: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/orchestrator/agent-provider-command.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/mcp-main.test.ts src/daemon-command-registry-human-approver.test.ts src/mcp-http/mcp-http-host.test.ts -> EXIT0 Test Files9passed(9),Tests691passed(691),19.82s. Freshpnpmtypecheck15:29 EXIT0 all19projectsDone. Fullleased15:13:49.004->15:26:42.790Z EXIT1 4failed530passed/6failed9918passed5skipped; same6frames/4pathsasBEFORE, (AFTERminusBEFORE)intersect14owned=EMPTY. Exactframes,hashunion3803/fivechangedpaths, intervalenvlivedrills andnewpeerMCParm disclosedcomment1d97f6f/0ae0b70; newarmcoveredfresh9. LeaseRELEASED,noownjobs.\nAdversarial reread32:45: handleracceptsnostore/request,noeffects,alwaysrefusesnoIO/TOCTOU/retryrace. Actualauthgatepriorstub; realreadbacksclosefinally; no plaintextcredentialintroduced(randomUUID). Exactshapeprotectedexistingproductionseam; noMCPproduction/HUMAN_ONLY/providerlistcopy. Fiveactualproductiondrills fence/code/layer/intercept/write allRED andseparatehashproofcomment779c873. Missingintercept refusesBOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS, notplan'sstaleacceptanceguess. Bothrosterdirections andnonzerocensus retained.\nPhysicalcapdisclosure: ownprovider-only399(395claim+4); actual404includesfiveenvlines alreadyLANDED f5991444 bypeerexit; NOTclaimed404compliant. Governorba24a352/88f1f867 +QA f23d786b routeactualcaprepairtof1andgradeown399. Noextrafiles/squeeze; all14actualtouchedreported. f599 checkpointcarried10sharedpaths withoutnewprovider3modulefiles+registry; governor2f5edced orderedQA4-filecheckpoint NOW tohealmissingimport andtaskcompletionimmediate. NotcallingHEADgreenbeforeheal; final691greenisexplicitworkingtreeanchor. Registrycf2deploymenthunksremainforeign; preserve/separatebyQAindex-only. Fullfailure/rawEXIT1disclosed; recordedscopedEXIT0 authorizedstanding715802a/704387 +current88f1completionruling. Rootlaneonlyfoundation35files756/store52files675green doesnotclaimappscoverage.",
+      "startedAt": "2026-09-06T15:13:47.643Z",
+      "completedAt": "2026-09-06T15:33:59.153Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -64,19 +111,75 @@
   ],
   "priority": "HIGH",
   "order": 71.2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1c1c3f8bed304852ba2cd81678ceddaf",
+      "author": "worker-b3d8772c",
+      "content": "Step2 implemented14:48, then roster deltas from actual red runs. Approved scope13 via governor092ba660 +c56dcf4, all13 declared. Actual current8file run Test Files1failed|7passed(8),Tests1failed|666passed(667),EXIT1. Provider native-child and new operator/no-write/fence arms GREEN; sole remaining own red mcp-tool-allowlist.test.ts247 exact summary expected {excluded:22,queries:7,vocabulary:59,wired:44}, received {excluded:23,queries:7,vocabulary:60,wired:44}. Fix is two numeric literals, but NOT editing now: governor873ef4 forbids any shared daemon-read-file mutation during 1d53's live full suite. No source writes after that ruling reached my tool boundary14:51:46. mtime145015 for registry/vocabulary/count files disclosed; provider-test lastwrite144646 one new kind literal only. No revert to hide drift.\n\nProduction registry/type/keys/handler now exists, exact frozen keys [base,goalId,provider], new frozen SETTINGS family ADMIN (inferred readonly literal), operator set + agentCapabilities null; SYNC intercept after operator fence beforebootstrap. Stub throws AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and has no store parameter. Vocabulary399lines (395claim; folded only own tiny family declaration plus one whitespace line), existing registry565 (562claim, existing oversized source,3line import/intercept only), newmodule14lines. No KNOWN_PROVIDERS clone, no MCPproduction/HUMAN_ONLY edit; fixture credential newtest generatedrandomUUID not committedsecretvalue.\n\nRED evidence: firsttests missingentry400@REGISTRY vs correctexpected422/403; native child missingnewkind. Printed count deltas59->60wired,48->49familydeclared,23->24operator,58->59v2,22->23MCPexcluded and44->46transportcases. Current sole-summary delta above not hidden. Isolated production mutation drills now running ONLY via out-of-tree Vite pre-transform, no shared byte changes; backups/status first and separate SHA proof to follow. Working on direct evidence while freeze holds, not blocked on peer dirt or tests.",
+      "timestamp": "2026-09-06T14:53:48.958Z"
+    },
+    {
+      "id": "comment-779c8737cec3458b9def73da5960cb2e",
+      "author": "worker-b3d8772c",
+      "content": "FIVE production drills complete, NO shared disk mutation: isolated Vite pre-transform with exactneedle assertion/MUTATION_APPLIED, config %TEMP%/provider-drills-worker-b3d8772c/vitest.config.mjs. Before status vocabulary/registry M; module??. Backed up all3 before drilling. Modes: fence removes only providerkind from OPERATOR_PRINCIPAL_KINDS -> named nonoperator arm532 RED expected403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION, received422 AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION (1failed392skipped). code changes only stub code -> unit13 and actualdispatch522 both RED on MUTATED_PROVIDER_CODE (2failed391skipped). layer changes only stub layer -> same2RED on MUTATED_PROVIDER_LAYER (2failed391skipped). intercept deletes actual registry branch -> operator dispatch522 RED on BOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS (1failed392skipped). write injects real store.commit before same refusing branch, preserving correct refusal -> actual durable snapshot526 RED eventHorizon3n vs2n, decisions0 unchanged (1failed392skipped). Every mode EXIT1 and actual mutation marker observed, not a fixture-helper reimplementation.\n\nSeparate postdrill SHA256 proof call after all5: vocabulary5FD96563E200E2B70FB32C55505F455483318943748FE6D6A43215D94566B601, registryA422B52A446F1FF7428C86D8789C919F83FF35AF035B9A10884D9A25F6D96470, module3FF1C028340CFD53B2557E027994FC677CCD078F1642ECE1BAB5793D48620135, each LIVE==OUT_OF_TREE_BACKUP. No restore needed because bytes never mutated; no git-diff-as-proof claim. Later peer deploymentDeploy seam hunks appeared in sharedregistry (import/options/forwarding), preserved, not authored here; this does not retroactively label their newbytes as my oldhash. Control via sameconfig exactprovider filters ran after drills; final result recorded separately. Fresh pnpm typecheck14:56 EXIT0 all19projectsDone; own shared MCPsummary2-number fix still held under governorfreeze. Queue #1 for full-suite-gate; no resourcelease owned yet. No current running mutation process.",
+      "timestamp": "2026-09-06T14:57:47.882Z"
+    },
+    {
+      "id": "comment-8dc097fccfba4485b55cec13b4a3d7bd",
+      "author": "worker-b3d8772c",
+      "content": "Final-roster preflight15:03 after governor d69dc5 scopegrant: applied exact remaining5 provider literals (HTTP2counts22->23 and transport44->46; MCPsummary excluded22->23/vocabulary59->60); explicitpath14declared. Later conflicting assignment resolved governor83a72f: bytes already written remain this row, no artificial revert or secondwriter. Owned9file run15:03 EXIT1 Test Files8failed1passed(9),Tests14failed668passed(682), ALL14red from concurrent env-sync kind: registryactual61vs60; extra product_contract.sync_env_example in equality/nativechild; excluded24vs23/operator25vs24/v2actual60vs59. This is NOT evidence of owned-green and not a final pass. Newpeerhunks explicitly measured in live diff; myprovider subjectarms stillpass. 15:05 standalone pnpmtypecheck EXIT1 ONLY vocabulary.test.ts237 TS2322 ENV_EXAMPLE_SYNC notassignabletoFamily duringpeerpartialedit. Previous ownfresh14:56 typecheck0 all19; laterfoundation35files756tests0 andstore52files675tests0, bothrepeattsc0. Isolatedcontrol10provider-tests/2files0 afterfiveREDdrills confirmed. Governor04ebaf ordered envowner adefb11e withdraw onlyhis sharedhunks then reapply afterc422lands; no full AFTERSTART yet, lease held and awaiting explicitrestore. These intermediate foreignchanges are disclosed, not silently counted as mydiff or usedtoevade an owned-red gate.",
+      "timestamp": "2026-09-06T15:08:26.050Z"
+    },
+    {
+      "id": "comment-e5aae0e6dd1a46cc9022acd4ef826023",
+      "author": "worker-b3d8772c",
+      "content": "GATE START authority/evidence: exactactual15:13:49.004Z HEAD ecc99b99f995c7fd91ae3eb7ce1d3a163afbf3fd,3802tracked+untracked paths hashed (apps/daemon,packages,adapters,manifestlock). Governor189f21 reversedrollback order: carryenvrosterhunks, nofurtherrollback. CurrentpreSTART9filegate15:12:52 EXIT0 Test Files9passed(9),Tests690passed(690). Fullcommand pnpm --filter @moe/daemon test, envVITEST_MAX_WORKERS=2; executablepnpm argv/shellfalse NodeforegroundloggerinTEMP capturesstatusstdoutstderr, no pipe or chainedstatus. RAM15:13:13/18Z9.36/9.34GiB,node158stable; actual15:16:59 twoforkchildren35184/70536 parent57328 despiteCLIprintedmaxWorkers4, proving envboundeffective. Expensiveoptinsunset; e15migration8finalfreeze15:08:39.932Z includedbutlive11flaggedtests citedseparately.\n\nCAP DISCLOSURE, NOT A FALSE COMPLIANCE CLAIM: actualvocabulary404physical lines atSTART; ownprovider-only399 (395claim+4net), SHA5FD96563E200E2B70FB32C55505F455483318943748FE6D6A43215D94566B601. Peerf1envadds5. Governorba24a352 andQA f23d786b gradeauthoreddelta399androutephysicalcaprepairtoenvowneraftermyEND. I do notcall404compliant; preferactualunder400andfresh9filegateafterrepair. Productionnewmodule14lines, registryalready562atclaim/oversizedapprovedbeforeown3lineedit; peercf2addsdeploymentseams. No sourceeditduringfull.\n\nDEPENDENCY DELIVERY MEASURED: git cat-file -e HEAD:apps/daemon/src/repository/env-example-sync-contracts.js EXIT0 (b09contractlanded437df68f); env-example-sync-command.js EXIT128 absentHEAD butuntrackedlive. Actualenvhandlerimport is inFOREIGNdaemon-command-async-entries.ts NOTourdeclaredpaths (alongsidepeerreleasehandlerhunks). Governoracceptsshortserved-roster-mismatchwindowuntilf1immediatelylands; notclaimingdirty9filegreen meansdeliveredHEADgreen. These are explicitlyforeignhunkscarriedundergovernor189f21, notinvisibleauthorityorown-authorshipclaims. Ownprovider3newfileswilllandwithimportersthrough14declaredpaths.",
+      "timestamp": "2026-09-06T15:20:36.391Z"
+    },
+    {
+      "id": "comment-0ae0b70cb21c468d8edf96fd0a7783ec",
+      "author": "worker-b3d8772c",
+      "content": "IMPORTANT FULL-RUN CONTAMINATION DISCLOSURE beforeEND: envownerworker-adefb11e msg250dbafc15:22:39 now reports SEVEN LIVE shared-filesystem mutation drills on untracked env-example-sync-command.ts during ~15:0x–15:2x, overlapping mySTART15:13:49.004Z. Source directly loadedbyforeignasync-entries.ts. Owner restoredSHA1042b35c59ff5b15… saysfresh19projecttypecheck0. Therefore even if mySTART/ENDhashesmatch, this does NOTprove thatenvclosure stayedstable DURINGrun; recordelapseddrillsnotvisibletoendpoint-onlyhashes. Myown14pathsnotmutatedbyme since15:03, own5drills wereprocess-localnotdisk, and scoped9files690greenpreSTART survivedoutsidehisreportedlatermutation. RequestedNOmoreeditsuntilEND andprocess-localdrills; will attributeactualfullframesbykind/code/path, notbrandwholegate clean. F1 ownsenvcommand, B09 ownscontracts only. Thiscommentpreventsqa/citingrowsmistakinghashidentityforcontinuousstability.",
+      "timestamp": "2026-09-06T15:24:08.811Z"
+    },
+    {
+      "id": "comment-1d97f6f966fe4d96beb3247d7efbe0ac",
+      "author": "worker-b3d8772c",
+      "content": "FINAL LEASED DAEMON AFTER, full actualoutput. START15:13:49.004Z -> END15:26:42.790Z, HEADsame ecc99b99f995c7fd91ae3eb7ce1d3a163afbf3fd bothends. `pnpm --filter @moe/daemon test` withVITEST_MAX_WORKERS=2, EXIT1/SIGNALnull. Test Files4failed|530passed(534); Tests6failed|9918passed|5skipped(9929); Duration771.97s. LeaseRELEASED15:27:08,granted0a56. RootpnpmtestNOTused: coversnoapps; thisisexplicitdaemonleg.\n\nEXACT FOREIGN FAIL FRAMES (allpaths apps/daemon/): src/criterion-evidence/criterion-integrated.test.ts:66:19, `AssertionError: expected { outcome: 'CRITERION_EVIDENCE', …(8) } to match object { …(2) }`; receivedevidence.byteCount0/statusUNKNOWN thenevidence:null/run.statusBLOCKED vsexpected16/PASSED/COMPLETED. src/goals/goal-live-evidence.test.ts:380:19; src/goals/goal-services.test.ts:309:19; src/goals/j1-command-path.test.ts:203:19,265:43,314:19: each `Error: scoped criterion execution did not prove all checks:` with firstevidence `status:\"UNKNOWN\",exitCode:null,byteCount:0`,secondevidence:null,runBLOCKED. Sharedthrow frame `src/goals/goal-scoped-close-test-fixtures.ts:90:13`. Theseexacttestarms/commandSURVIVE inrepo; no deletedhelperprooftodischargeforeignbehavior.\n\nBASELINE/ATTRIBUTION: cc05comment2050b3e full14:38:32.141Z HEAD43a84045 ->14:47:37.923Z HEAD2b10ebd5 had4failed522passed/6failed9838passed4skipped, sameexact4pathsand6frames. Mypre-editowned3files601tests0 atHEAD6eb68c3e additionallyanchorsownscope. (AFTER4paths minusBEFORE4paths)=EMPTY; intersectionwith14ownedpaths=EMPTY. No daemonfull-green claim; owned9files690greenbeforefullandfreshpostENDfollowstoaddressdrift.\n\nHASH/CONTAMINATION: START3802, END3803, union3803; exactly5endpointchanges: apps/daemon/src/repository/env-example-sync-command.test.ts; apps/daemon/src/mcp-tool-allowlist.test.ts; apps/daemon/src/repository/repository-bootstrap-command.ts; apps/daemon/src/repository/repository-bootstrap-journey.test.ts; newapps/daemon/src/repository/repository-bootstrap-authorization.test.ts. Own13/14endpointshashesmatch; mcpallowlisttestchangedbypeerHUMANbootstraparm, inspect/rerunratherthanrestore. ADDITIONAL intervalenvlivedrillsdisclosedcomment0ae0b70: endpointsdonotprovethatclosurewascontinuouslystable. Ownproducerhashesunchanged. Full589? NO: actual534filesquotedabove; no inventeddenominator. No browseroverlapobservedbefore15:26:42END; browserseparatelaneruling15:26:12aloneisnotrunstart.",
+      "timestamp": "2026-09-06T15:28:30.090Z"
+    },
+    {
+      "id": "comment-9870da07b02844a98c944121125044dd",
+      "author": "worker-b3d8772c",
+      "content": "CITABLE 0a56 MIGRATION HASH LEDGER from actual fullSTART15:13:49.004Z/END15:26:42.790Z atHEAD ecc99b99, independentlycomputed3802/3803pathsnapshots. ALL8 START==END; basepath apps/daemon/src/repository/migrations/:\nmigration-ports.js 1aeb80e904888ec2edb23a2aa87ae81787af6e3653260db1e91d98d1f8158e88\nmigration-ports.ts 12a0130fc998c095e88095a00c5f67a7bce3f3e7c30e03986977e54052ff83fc\nmigration-real.test.ts 01e3a3aa1ea60aa6a36b03c4b2cce05c2d7b1cee5df66d573e666b51e3478c78\nmigration-receipt.js 087f416334b9b2b88f95828f68efece05757a517d8670bb4452f8c79188ad502\nmigration-receipt.ts bf542387dd610f13299006356ce6752410f94d063a54256df24011cb5ad79efc\nmigration-service.js 4e41011deaba742127898a09931395047ce5b3a57691a5beca15f6aa0e1484df\nmigration-service.test.ts be8c389876f8513fd2836bd6efad13fc489882a6749bbd69cee7e962e742beeb\nmigration-service.ts 576914962d751834c0c3299c0a3099436cf109fd8b5eb72ccf1ab7aa77c41a87\nFullcountlines/failureframes/foreignintervalmutations are in comment1d97f6f966fe4d96beb3247d7efbe0ac, not omittedfromcitation. Full ordinary MOE_MIGRATION_RESTORE unset: expensivearmisgated, live11flaggedtests belongto0a56ownrun, notthisfullcount. No migrationframefails. Broaderbefore/after4pathsame ->deltaEMPTY, intersectmigration8EMPTY. EnvuntrackedhandlerdrillsduringintervaldoNOTretroactivelyclaimmigration8changed; allactual5changedpathslistedseparately.",
+      "timestamp": "2026-09-06T15:28:59.393Z"
+    },
+    {
+      "id": "comment-8de1c23353e64fa4861cddc1ae07e5bc",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE SHEET (qa-f2906c26). Verified, hand-landed as `2d94a928`, pushed. This landing also HEALED A BROKEN HEAD.\n\nTHE STATE AT CLAIM. Ten of the fourteen declared paths were already on the branch — swept into checkpoint `f5991444` under task-f1e40296's trailer, per the governor's 15:31Z census. The four that were not: `orchestrator/agent-provider-command.{ts,js,test.ts}` (untracked) and `daemon-command-registry.ts` (dirty). That split was a LIVE BREAK, not just an inconvenience: `f5991444` landed `daemon-command-vocabulary.ts:2` and `daemon-command-payload-keys.ts:55`, both of which import `./orchestrator/agent-provider-command.js`, while the module and its bridge stayed `??`. `git cat-file -e HEAD:<module>` was fatal, so a clean checkout could not typecheck `@moe/daemon` at all — `daemon-command-vocabulary.ts` is imported by most of the package. Landed on the governor's instruction, after verification.\n\nINDEX-ONLY SURGERY ON `daemon-command-registry.ts`, the second time today. At -U3 it carries five hunks from two authors:\n```\nhunk 0  import { AGENT_PROVIDER_COMMAND_KIND, runAgentProviderCommand }   THIS row\nhunk 1  widen the async-entries type import to add DeploymentDeploySeams  PEER\nhunk 2  readonly deploymentDeploy?: DeploymentDeploySeams                 PEER\nhunk 3  the deploymentDeploy spread into createAsyncCommandEntries        PEER\nhunk 4  if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(...)  THIS row\n```\nStaged 0 and 4 only via `git apply --cached --recount`, committed BARE. Checked before committing that the staged file contains ZERO occurrences of `deploymentDeploy`, and — the part that matters for compilability — that excluding hunk 1 leaves NO dangling symbol, because hunk 1 is the very line that would have introduced `DeploymentDeploySeams`. The committed file imports only `RepositoryBootstrapSeams`, exactly as HEAD did. After: the worktree differs from HEAD by precisely the peer's three hunks, so their work is intact and still theirs.\n\nHEAL CONFIRMED at the new HEAD: all three of `agent-provider-command.{ts,js,test.ts}` return exit 0 from `git cat-file -e`, and my untracked-imported-by-tracked scan no longer reports this module. I ran that scan WITH A POSITIVE CONTROL this time — see the note at the end, because the first version of it lied to me.\n\nDoD 1 ✓ The roster is on its own family table with `CAPABILITIES.ADMIN`, on `WiredCommandKind`, on `PAYLOAD_KEYS` as `[\"base\",\"goalId\",\"provider\"]`, on `OPERATOR_PRINCIPAL_KINDS`, and served by a SYNCHRONOUS registry entry — asserted directly rather than inferred: `daemon-command-registry.test.ts:549` reads the composed entry and pins `requiredCapability: ADMIN`, `payloadKeys: [\"base\",\"goalId\",\"provider\"]`, `entry?.asyncHandler` UNDEFINED (that is what makes \"synchronous\" a measured fact rather than a description), and `agentCapabilitiesFor(kind)` NULL. All four hand-written pins were reconciled in the same sweep that landed them and are green.\n\nDoD 2 ✓ AND THE \"NO DURABLE WRITE\" HALF IS PROVEN, NOT ASSERTED. `refuses a well-formed operator dispatch without any durable write`: `AGENT_PROVIDER_UNCONFIGURED @ DAEMON_COMPOSITION`, httpStatus 422, `outcome: PORT_REFUSED`, `stage: DISPATCH` — and the arm snapshots `{decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon()}` from a REAL store before and after, then `expect(snapshot()).toEqual(before)`. A decision count alone would miss an event; the horizon alone would miss a decision. Both together is the right pair. The production module earns that easily by construction: `runAgentProviderCommand()` takes NO store and NO request and returns `never`, so there is nothing it could write.\n\nDoD 3 ✓ `refuses the non-operator at authorization before composition`: `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`, httpStatus 403, same no-write snapshot. The ORDERING claim in the test's own name is what makes it non-vacuous — the two arms return DIFFERENT codes and different statuses, so an operator fence that ran after composition would surface `AGENT_PROVIDER_UNCONFIGURED` here and the arm would fail. That is the layer discipline global rail 1 asks for, done properly rather than by asserting \"it refused\".\n\nDoD 4 — recorded verification re-run BY ME, reproducing it exactly: `Test Files 9 passed (9)` / `Tests 691 passed (691)`, EXIT 0, over vocabulary, registry, store-dependencies, the new module's own test, v2-registry, mcp-tool-allowlist, mcp-main, human-approver and mcp-http-host — i.e. every roster consumer this kind touches. The full `pnpm --filter @moe/daemon test` is not obtainable to me (gate leased with a queue; I will not produce an unleased result the governor has ruled inadmissible), and `pnpm typecheck` I ran twice earlier this hour at EXIT 0 on trees containing these exact bytes, since all four landed paths were byte-identical on disk throughout.\n\nSCANNER NOTE, because it nearly cost this row its finding. My untracked-imported-by-tracked scan first reported ZERO breaks while six files were dangling. Cause: in Git Bash, MSYS PATH CONVERSION silently rewrites a `git grep` pattern beginning with `/`, so `-F \"/agent-provider-command.js\"` matched nothing while `MSYS_NO_PATHCONV=1` with the same pattern returned both importers. I only caught it because I had already found this module by hand and the scan disagreed with a fact I held. Every negative from that detector now needs a positive control first — I ran one here, confirming the scan reports the known-present stem before trusting its silence about the others.\n\nSTILL LIVE, NOT THIS ROW'S: `release/release-decide-service.{ts,js}` and `release/release-pr-port.{ts,js}` remain untracked while `daemon-command-async-entries.ts` at HEAD imports both. That is task-f961dc89's to land.",
+      "timestamp": "2026-09-06T15:37:35.828Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:40.825Z",
-  "updatedAt": "2026-09-05T14:58:41.455Z",
+  "updatedAt": "2026-09-06T16:30:00.466Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:56:36.551Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 3,
+    "doneAt": "2026-09-06T15:38:26.014Z",
+    "wallClockMs": 88909463
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:58:39.271Z",
   "planningNotes": {
@@ -92,5 +195,114 @@
       "apps/daemon/src/orchestrator/agent-provider-command.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:58:41.455Z"
+  "planApprovedAt": "2026-09-05T14:58:41.455Z",
+  "contextFetchedBy": [
+    "worker-b3d8772c",
+    "worker-7bdbffac",
+    "worker-96c6d708",
+    "qa-f2906c26",
+    "worker-e15d25c8"
+  ],
+  "workStartedAt": "2026-09-06T14:43:04.199Z",
+  "declaredFiles": [
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.js",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+  ],
+  "commits": [
+    {
+      "sha": "f59914445aad",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "governor",
+      "sessionId": "governor-afbde490@2026-09-06T15:31:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T15:31:06.717Z",
+      "status": "WORKING",
+      "pushed": true,
+      "message": "Governor attribution: f5991444 is worker-adefb11e's exit checkpoint under task-f1e40296, but these ten shared roster/pin files carry task-c422b106's project.set_agent_provider delta alongside the env-sync delta (ruled landing order c422 first at 15:12Z; the wrapper does not know rulings). Recorded here so c422's ledger carries its shared-file delivery; c422's completion lands its remaining module (agent-provider-command.{ts,js,test.ts}) and daemon-command-registry.ts."
+    },
+    {
+      "sha": "2d94a928ae6993e8d54936b45af8ccd367c33d86",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T10:31:00Z",
+      "paths": [
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.js",
+        "apps/daemon/src/orchestrator/agent-provider-command.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T15:37:01.987Z",
+      "treeId": "a5fbc8bd8629a0b80418e890e0dd42cc8db22b5f",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-cf2d91d923ea4397a1145e0973ed2218"
+        }
+      ],
+      "pushed": true,
+      "recoveredBy": "qa-f2906c26",
+      "message": "feat(task-c422b106): project.set_agent_provider wired, operator-fenced, fail-closed — hand-landed by QA on governor instruction. The remaining 4 of 14 paths (10 were already swept into f5991444). HEALS THE BROKEN HEAD: vocabulary.ts and payload-keys.ts imported ./orchestrator/agent-provider-command.js while the module was untracked. Index-only surgery on registry.ts; a peer's deploymentDeploy hunks left uncommitted."
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.js",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-f2906c26@2026-09-06T10:31:00Z",
+    "at": "2026-09-06T15:37:01.987Z"
+  },
+  "reviewStartedAt": "2026-09-06T15:34:53.007Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/orchestrator/agent-provider-command.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/mcp-main.test.ts src/daemon-command-registry-human-approver.test.ts src/mcp-http/mcp-http-host.test.ts",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  9 passed (9)\n      Tests  691 passed (691)\n   Start at  18:31:14\n   Duration  19.82s (transform 6.22s, setup 0ms, import 15.36s, tests 3.42s, environment 0ms)\n\nEXIT 0",
+    "reportedAt": "2026-09-06T15:34:53.007Z"
+  },
+  "completionSummary": "project.set_agent_provider is wired synchronously in frozen SETTINGS@ADMIN with exact [base,goalId,provider], operator-only and no staffing capability. Operator refuses AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION422; nonoperator refuses OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION403. Real store readback proves no event/decision writes. Five production mutation drills red fence/code/layer/intercept/write, with separate SHA proof; no shared disk mutations by this row.\nFresh recorded WORKTREE gate15:31:14:9files691tests EXIT0; pnpm typecheck15:29 all19projects EXIT0. Own leased full daemon15:13:49.004–15:26:42.790Z ecc99b99: EXIT1,4failed530passed files/6failed9918passed5skipped tests. Same4failurepaths as BEFORE; delta intersect14owned EMPTY. Frames,3803-path union/five changes, env live-drill interval contamination and post-END rerun disclosed comments1d97f6f/0ae0b70. No full-green claim.\n14paths reported. Governor authorized carrying peer env roster deltas: provider59->60wired/23->24operator/22->23excluded, env then61/25/24. Actual vocabulary404 versus own-only399 (395+4); five env lines/cap repair belong f1 per governorba24a352/QA f23d786b, NOT a claim404compliant. f5991444 peer checkpoint already landed10sharedpaths without provider module: governor ordered immediate QA4-path repair (newmodule ts/js/test + registry own2hunks); cf2 deployment registry hunks stay foreign. Workingtree green is not HEAD-green until missing-import repair, including separately owned release holes. No MCP production/HUMAN_ONLY/KNOWN_PROVIDERS edit. Handoff saved; lease released; no own process remains.",
+  "completedAt": "2026-09-06T15:38:26.014Z",
+  "reviewCompletedAt": "2026-09-06T15:38:26.014Z",
+  "reviewSummary": "APPROVED. Evidence: comment-8de1c23353e64fa4861cddc1ae07e5bc.\n\nHAND-LANDED `2d94a928`, pushed — it HEALED A BROKEN HEAD. Ten of fourteen paths were already swept into checkpoint `f5991444`; the four left behind included the module, so HEAD's `daemon-command-vocabulary.ts:2` and `daemon-command-payload-keys.ts:55` imported `./orchestrator/agent-provider-command.js` while it was untracked — `cat-file` fatal, clean checkout could not typecheck the package.\n\nINDEX-ONLY SURGERY on `daemon-command-registry.ts` (five hunks, two authors): staged only the import and the one `if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(...)`, committed BARE, leaving a peer's three `deploymentDeploy` hunks uncommitted. Verified zero `deploymentDeploy` in the staged file AND no dangling symbol — the excluded hunk is the line that would have introduced `DeploymentDeploySeams`.\n\nDoD 1 ✓ own family table, ADMIN, WiredCommandKind, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS; SYNC proven not described — the arm pins `asyncHandler` UNDEFINED and `agentCapabilitiesFor` null.\nDoD 2 ✓ AGENT_PROVIDER_UNCONFIGURED @ DAEMON_COMPOSITION, 422, no-durable-write proven by a real-store snapshot of BOTH decision count and event horizon. The module takes no store, no request, returns `never`.\nDoD 3 ✓ OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, 403, same snapshot. The arms return DIFFERENT codes, so a fence running after composition would fail — non-vacuous ordering.\nDoD 4 recorded verification re-run by me, exact reproduction: 9 files/691 tests EXIT 0 across every roster consumer. Full daemon leg not obtainable (gate leased).\n\nSCANNER NOTE: my detector first reported ZERO while six files dangled — MSYS rewrites a `git grep` pattern starting with `/`. Use `MSYS_NO_PATHCONV=1` plus a positive control.\n\nSTILL LIVE, not this row's: `release-decide-service` and `release-pr-port` untracked while HEAD imports both — task-f961dc89's."
 }

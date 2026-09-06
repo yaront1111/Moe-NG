@@ -22,16 +22,20 @@
     {
       "stepId": "step-1",
       "description": "CONFIRM THE TWO CHILDREN DELIVERED. This row is a SPIDR shell: it was split because it needed the daemon's FIRST recurring loop plus a probe, a bounded ring, a derived state and an incident — five pieces over twelve-plus files. Both children are named in this row's dependsOn:\n  - grandchild A task-e651725c92434127a7b8d72f0ac5246b — the durable recurring schedule (DoD 3, and the interval half of DoD 5)\n  - grandchild B task-cc05c47362dc41b0b2b416a70ad45b42 — the probe, the bounded ring, the derived state, the durable incident (DoD 1, 2, 4, and the PROBE_URL_MISSING half of DoD 5)\n\nWrite NO production code here. A shortfall routes back to the child that owns it via a comment and an amendment.\n\nRe-measure the two facts that drove the split, at the DELIVERED tree:\n  (a) `grep -rn 'setInterval' apps/daemon/src --include=*.ts | grep -v '\\.test\\.'` — at plan time this returned ZERO, which is why grandchild A exists at all. It should now show A's scheduler and NOTHING ELSE: a second, independently-armed timer somewhere in the probe code would mean B armed its own rather than consuming A's registration seam, and that is the double-schedule hazard wearing a different coat.\n  (b) `grep -rn 'NEEDS_YOU_KINDS' apps/control-room/src --include=*.ts` — the roster must STILL be the closed four (PLAN_APPROVAL, ESCALATION, GATE_1, READY_TO_CLOSE). If a fifth kind appeared, a child made the UI change this row's rail 5 forbids; say so and route it back rather than accepting it.\n\nRead each child's verification, completionSummary and reviewSummary from get_context.epicSiblings rather than re-deriving their work.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you-model.ts"
-      ]
+      ],
+      "note": "READONLY SPIDR shell, no files edited/created. Dependencies verified from task.epicSiblings: A e651 DONE landeddd07b69d, recorded2files62tests0 +QA daemon-entry13files70tests0; B cc05 DONE landedff5c51ac, recorded/QA4files100tests0; reviewed completionSummary/reviewSummary, not assumed from memory. Correct scoped delivered-tree commands: git grep -n setInterval HEAD -- 'apps/daemon/src/**/*.ts' ':(exclude)*.test.ts' returns durable-schedule.ts28 plus preview-test-fixtures.ts85 (child-process fixture string, not independent monitoring timer). No timer in monitoring. First broad pathspec mistakenlyORed *.ts acrossrepo; corrected command above. git grep -n NEEDS_YOU_KINDS HEAD -- 'apps/control-room/src/**/*.ts' returns model35/38. Actualclosed roster FIVE (PLAN_REJECTED added by unrelated plan-rejection UI), not stalefour: PLAN_APPROVAL,PLAN_REJECTED,ESCALATION,GATE_1,READY_TO_CLOSE. Neither scheduler nor health child edited UI; no outagecard exists. Preserve legitimatepeerfifthkind, no rail5childviolation. Productionprobe wiring uses ONE HEALTH_PROBE_JOB_ID at composition579; B explicitly discloses default60s only, no per-envinterval API. Will measure DoD5 composition shortfall in step2, not silently assert generic scheduler interval proves environment setting.",
+      "startedAt": "2026-09-06T16:47:08.087Z",
+      "completedAt": "2026-09-06T16:48:06.492Z"
     },
     {
       "stepId": "step-2",
       "description": "CONFIRM THE THREE PROPERTIES THE PARENT NAMED AS EASY TO GET WRONG AND HARD TO NOTICE. Each has a specific way of passing while being broken, so check the ASSERTION SHAPE, not just that an arm exists.\n\n(a) EXACTLY ONE INCIDENT (DoD 1). Confirm B's arm counts incidents across MANY failing probes and a recovery — three failures open one, a further run of failures opens NO second, recovery closes it. An arm that checks only \"an incident exists after three failures\" passes for a loop that opens one per probe, which floods the operator's queue at one item a minute exactly when it must stay usable.\n\n(b) THE RING IS BOUNDED (DoD 2). Confirm the arm asserts by COUNT AND BY CONTENT after more than 1440 probes. A count-only assertion passes for a ring that evicts the NEWEST instead of the oldest — same size, wrong contents, and the probe history is silently useless.\n\n(c) NO DOUBLE SCHEDULE (DoD 3). Confirm A's arm compares the post-restart execution RATE to the pre-restart rate over the same window. \"Probing resumed\" is the assertion that lets a doubled schedule ship, and its only symptom is a durable store filling twice as fast — never an error.\n\nThen confirm DoD 4's derivation: the UP/DEGRADED/DOWN state follows a MUTATED ring with no write. If the state is stored anywhere, the ring and the flag are two sources of truth that can disagree about the same history.\n\nAnd DoD 5's refusal: an environment with a deploy receipt but no health URL is NOT reported UP — assert the state, not merely that a refusal was returned. An unprobeable environment reporting green is the worst output this feature can produce.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T16:48:06.982Z"
     },
     {
       "stepId": "step-3",
@@ -40,7 +44,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -50,20 +54,36 @@
   "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
   "priority": "HIGH",
   "order": 121,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-af76eb60fcb9495a8a55ed97e9f1c064",
+      "author": "worker-f78e0703",
+      "content": "PRODUCTION COMPOSITION SHORTFALL at delivered HEAD17446e73,16:49Z; no source edits. Fresh existing5files131tests0 do NOT certify custom-interval restart. Exact live probe below: real createStoreDependencies, real durable schedule/store, real two deploy receipts, actual createHealthProbeJob, fake timer/HTTP only. Legitimate schedules().register HEALTH_PROBE_JOB_ID at10000 is accepted/durable; equal60000ms windows yield beforeCalls12,afterCalls2; restartIntervals[60000],durableIntervals[60000,10000,60000]. The default registration at composition579 overwrites persisted interval at boot. Two environments always share one job; no per-environment setting source exists. Thus DoD3 RATE equality beyonddefault and DoD5 per-environment interval unproven/notworking; scheduler generic arm alone misses consumer reset. Probe exit0 means diagnostic executed, NOT acceptance. Cleanup handles0/rootremoved. FULL SOURCE piped to node --experimental-transform-types --input-type=module:\n\nimport assert from \"node:assert/strict\";\nimport { mkdtempSync, rmSync } from \"node:fs\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\nimport { SqliteEventStore } from \"@moe/store\";\nimport { createStoreDependencies } from \"./apps/daemon/src/daemon-store-dependencies.js\";\nimport { createHealthProbeJob } from \"./apps/daemon/src/monitoring/health-probe-ring.js\";\nimport { HEALTH_PROBE_JOB_ID } from \"./apps/daemon/src/monitoring/health-probe-contracts.js\";\nimport { recordDeployReceipt } from \"./apps/daemon/src/deployment/deploy-ledger.js\";\nconst root=mkdtempSync(join(tmpdir(),\"moe-health-interval-probe-\"));\nconst path=join(root,\"store.sqlite\"), projectId=\"health-interval-probe\";\nlet now=0, ordinal=0, calls=0, provider, store;\nconst handles=new Map();\nconst timer={set(tick,interval){const id=++ordinal; handles.set(id,{tick,interval,next:now+interval});return id;},\n clear(id){handles.delete(id);}};\nasync function advance(ms){\n const end=now+ms;\n while(handles.size){\n  const due=Math.min(...[...handles.values()].map(x=>x.next)); if(due>end)break;\n  now=due;\n  for(const arm of [...handles.values()])if(arm.next===due){arm.next+=arm.interval;arm.tick();}\n  await new Promise(resolve=>setTimeout(resolve,0));\n }\n now=end;\n}\nconst http=async()=>{calls++;return 200;};\nconst config={storePath:path,projectId,credential:\"local-probe-only\",principalId:\"operator-local\",\n schedule:{timer},healthProbeHttp:http};\ntry{\n provider=createStoreDependencies(config);\n store=SqliteEventStore.openForProject(path,projectId);\n for(const environment of [\"preview\",\"staging\"]){\n  const receipt=recordDeployReceipt(store,{projectId,environment,sha:\"a\".repeat(40),\n   imageDigest:\"sha256:\"+\"b\".repeat(64),refusal:null,releaseDecision:null,\n   url:\"http://127.0.0.1:1\",decidedAt:\"2026-09-06T00:00:00.000Z\",decisionId:environment});\n  assert.equal(receipt.ok,true);\n }\n assert.deepEqual([...handles.values()].map(x=>x.interval),[60000]);\n const custom=provider.schedules().register(HEALTH_PROBE_JOB_ID,\n  createHealthProbeJob({store,projectId,http}),10000);\n assert.equal(custom.ok,true);\n await advance(60000);const before=calls;assert.equal(before,12);\n provider.close(); provider=undefined;assert.equal(handles.size,0);\n provider=createStoreDependencies(config);\n const restartIntervals=[...handles.values()].map(x=>x.interval);\n await advance(60000);\n console.log(JSON.stringify({environments:2,windowMs:60000,beforeCalls:before,\n  afterCalls:calls-before,restartIntervals,durableIntervals:store.readEvents(\"durable-schedule/\"+projectId)\n   .map(e=>JSON.parse(new TextDecoder().decode(e.payload)).intervalMs)}));\n}finally{\n provider?.close();store?.close();assert.equal(handles.size,0);\n rmSync(root,{recursive:true,force:true});\n console.log(\"HEALTH_INTERVAL_PROBE_CLEANUP_OK\");\n}",
+      "timestamp": "2026-09-06T16:50:48.882Z"
+    },
+    {
+      "id": "comment-1e87bb2058f7452b869482f50d34e52d",
+      "author": "worker-f78e0703",
+      "content": "Step2 evidence16:49Z: fresh `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/monitoring src/orchestrator/durable-schedule.test.ts src/daemon-store-dependencies.test.ts` EXIT0 Test Files5passed(5),Tests131passed(131),31.80s. This certifies existing arms, NOT absent per-env setting/customrestart. Exactassertions: health-incident.test81–120 after3 opensone,10furtherfailures listtoEqual(opened),recoveryclosed/noopen, lateroutagenewid; ring.test37–69 after1441 count1440/firstobs2/lastobs1441 andmain domain_events unchanged; ring72–85 reopensrealSQLite andtoEqual allmembers; ring87–101 mutatesarray throughDEGRADED/UP/DOWN/UNPROBEABLE thenUP with purederive; ring129–149 missingURL exactPROBE_URL_MISSING@DAEMON_INGRESS,HTTPcalls0,lastUNPROBEABLE,stateDEGRADED. scheduler.test91–111 restart5callsbefore/5after andsame-idreregistration5more, but both explicitlypass10ms; composedroot instead overwrites withdefault60000, liveprobeaf76eb60.\nAnchor clarification: probe executes current workingtree at HEAD17446e73, NOT a cleancheckout. `git diff -- apps/daemon/src/orchestrator/durable-schedule.ts apps/daemon/src/monitoring apps/daemon/src/daemon-store-dependencies.test.ts apps/daemon/src/daemon-store-foundation-composition.ts` shows ONLY4foreigndeploymentDeploy insertions inroot (import/type/V1spread/V2spread), no changes to healthregisterblock or scheduler/monitoring. Thus implicatedhealthbytes matchdeliveredHEAD; no whole-treeimmutabilityclaim. No fileseditedorcreated; temporaryprobe ranstdin andremovedownfixture. No fullgatelease/request and no jobsrunning. Step1 empty modifiedFiles causedruntimeplannedUI fallback; needs-you-model.ts READONLY andcleanhere, do notattributepeerUI to thisshell.",
+      "timestamp": "2026-09-06T16:52:16.145Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:52:58.391Z",
-  "updatedAt": "2026-09-06T13:31:14.262Z",
+  "updatedAt": "2026-09-06T16:52:17.359Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:22.452Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 1
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 1
   },
   "dependsOn": [
     "task-e651725c92434127a7b8d72f0ac5246b",
     "task-cc05c47362dc41b0b2b416a70ad45b42"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T19:52:28.011Z",
   "planningNotes": {
@@ -79,6 +99,12 @@
   },
   "planApprovedAt": "2026-09-05T19:52:30.250Z",
   "contextFetchedBy": [
-    "worker-96c6d708"
-  ]
+    "worker-96c6d708",
+    "worker-f78e0703"
+  ],
+  "workStartedAt": "2026-09-06T16:47:08.087Z",
+  "blockedReason": "Real production health composition violates required custom-interval restart RATE and lacks per-environment interval setting. Full source parent comment-af76eb60fcb9495a8a55ed97e9f1c064 at workingtree HEAD17446e73: realstore,2realdeployreceipts,actualcreateStoreDependencies/createHealthProbeJob, fakeclock/HTTPonly. Accepted durable HEALTH_PROBE_JOB_ID10000ms yields12probes per60000ms before restart vs2after; persisted intervals[60000,10000,60000]. composition579's interval-lessregister overwrites rebuiltcustomvalue. Singlejob in health-probe-ring.ts sweepsallenvs and has no per-envintervalreader/config. Existing5files131tests0 checks onlydefaultcomposedrate/genericexplicitinterval; cannot certify DoD3/5. Approvedplan1 explicitly says NO productioncode here and routes shortfall to owningchild via comment/amendment; bothchildowners notified comments08b5c88f/67d1800a and governorsbc02133d. Need approvedexistingchildfix/scopeamendment, not fabricated per-envauthority or narrowedDoD. Healthincident/ring/missingURL armsstrong+green. No sourceedits, jobs, resourcelease, or foreignredblockpremise.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T16:52:17.359Z"
 }

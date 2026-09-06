@@ -32,7 +32,7 @@ const GOLDEN_FILE_COUNT = 23;
 const GOLDEN_MANIFEST: readonly string[] = [
   ".env.example  79bcb754cd763c0996100e4be74218a0b32b5be9f6b0c5908b33ee6db266f280",
   ".github/workflows/ci.yml  5ec9a41f863ff4a9083f17f2702202f1fc3bba15c872d7f326a4e82cff06a602",
-  ".gitignore  f826c49d92c5b7d00b3552c66fa3ae22fe971202d8979aa86ee569df1f2d475b",
+  ".gitignore  f9dc6d94a2d0deef95cde70cd545145f8d5e2f3d3251dc2d4581e596bfccb2ee",
   "README.md  a3dcfc8a3e2983866c7837be7939f6b604f06d4804a30261c4a3437512f82844",
   "docker-compose.yml  288945fa1cb9987f9bd53988e947bbdb4b46007a59a86237f6efdb229f718a1b",
   "e2e/smoke.spec.ts  a95824a6d628fd30f3f36ce95c23cbd7a33001632871c437f71908a955fde76b",

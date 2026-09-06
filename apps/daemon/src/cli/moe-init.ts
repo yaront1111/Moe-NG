@@ -36,7 +36,9 @@ export const MOE_CONFIG_SCHEMA_VERSION = "moe-cli-config/1" as const;
 
 const STORE_FILENAME = "store.sqlite";
 const FALLBACK_PROJECT_ID = "moe-local";
-const CREDENTIAL_BYTES = 32;
+/** EXPORTED so the one other minting site (`repository.bootstrap`'s `moe.config.json`) uses
+ *  this width rather than a second copy of the number. */
+export const CREDENTIAL_BYTES = 32;
 const PROJECT_ID_HASH_CHARACTERS = 12;
 const PROJECT_ID_SLUG_CHARACTERS = 110;
 /** The documented prerequisite: `>=24.16.0 <25`, the root manifest's own range. */

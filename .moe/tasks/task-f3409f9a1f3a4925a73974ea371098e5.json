@@ -23,32 +23,44 @@
     {
       "stepId": "step-1",
       "description": "ORIENT AND RE-MEASURE PRODUCERS, no production edits. For each dependsOn id, read get_context.epicSiblings landing.merged (or git log --grep Moe-Task). Then grep on disk: DESIGN_READ_PATH /design/read handler; designReads in daemon-entry; cr.design.card and live-design.ts extra-key refusal; DEV_PROXY_PATHS has /design/read. If any producer surface is missing, STOP and report_blocked with blockedOnTaskIds naming that row — do not rebuild it. Measure approve-plan.tsx line count (must stay untouched). Read ApprovePlan/ApproveGate and the gate1-v1-approval e2e harness. Record producer SHAs and greps in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
         "apps/control-room/src/v2/cordum-app.tsx"
-      ]
+      ],
+      "note": "ORIENTED, NO PRODUCTION EDITS. EVERY PRODUCER SURFACE IS PRESENT AND LANDED — not blocking, and the two pitfalls the prior handoff left have both resolved themselves.\n\nPRODUCER LANDINGS, by SHA rather than by status field.\n- `e2aa3fb1 feat(task-7ca9dca3…): HTTP /design/read serves the versioned aggregate to the operator` — `apps/daemon/src/http/design-read.ts`, TRACKED and AT HEAD. `DESIGN_READ_PATH = \"/design/read\"` at :13, `handleDesignReadRequest` at :70, dispatched from `http-listener-read-dispatch.ts` (import :37, roster :98, method fence :520, route :604).\n- `9a25ff54 feat(control-room): read /design/read through an exact-key decoder [task-e9cb2442…]` — `live/live-design.ts` AND `v2/goals/design-card.tsx`, both TRACKED and AT HEAD, with their tests.\n- `designReads` port wired in `daemon-entry-port-resolution.ts` (:49 provider hook, :130 field, :162 roster, :353 factory).\n- `DEV_PROXY_PATHS` PIN PRESENT: `\"/design/read\"` at `live/dev-proxy-paths.ts:23`. DoD 1's pin requirement is already satisfied by the producer; I add nothing there.\n- CARD PRESENT with the testids step 3 will drive: `cr.design.card` (design-card.tsx:71), `cr.design.version` (:62), `cr.design.none` (:56 no-design and :64 skipped-with-reason), `cr.design.loading` (:53), `cr.design.body` (:16). MOUNTED at `cordum-app.tsx:318` as `<LiveDesign goalRef={open.goalId} headers={attached.headers} />`.\n\nA GREP THAT LIED, recorded so the next seat does not repeat it: my first pass for `cr.design.card` used `git grep` and returned NOTHING, which under this row's own step-1 instruction would have meant \"producer gap, report_blocked\". It was a false negative — `git grep` searches TRACKED content and I had also filtered out test files. A plain `grep -rn` over the working tree found it immediately. On a shared checkout, use `grep -rn` (or `git grep --untracked`) before concluding a surface is absent.\n\nTHE EXACT-KEY DECODER IS GENUINELY EXACT, checked at source rather than taken from the commit subject. `live-design.ts` snapshots with `Reflect.ownKeys`, refuses when `keys.length !== expected.length` or any key is outside the expected set, and refuses any property whose descriptor is missing, non-enumerable, or accessor-backed (`!(\"value\" in descriptor)`) — so a getter cannot smuggle a value past it, and arrays are length-checked as `ownKeys.length !== value.length + 1`. Extra key REFUSED and missing key REFUSED both hold by construction.\n\nA DoD WORDING DISCREPANCY I AM FLAGGING RATHER THAN SILENTLY RESOLVING. DoD 1 and the description say \"the five sections\". The decoder's roster at `live-design.ts:30` names SIX: `apiSurface, componentList, dataModel, nonFunctional, openDecisions, screens`. I will assert against the shipped six and say so, rather than pick five and have the arm mean something other than the surface. If the intended reading is that one of the six is not a \"section\", that is an architect call and nothing turns on it for the arms.\n\nBOTH PRIOR-HANDOFF PITFALLS ARE GONE.\n- `approve-plan.tsx` is now **128 lines**, not the 263 the handoff and the row description measured. `task-a988ca1c` (Reject on the plan gate) is DONE and split it, moving the gate to `approve-plan-gate.tsx` (now 157 lines, was 78). So this row does NOT have to split anything before adding, and the \"ships a violation\" hazard is retired. I still will not edit `approve-plan.tsx` — step 2 puts the provenance in a NEW file.\n- `dev-proxy-paths.ts` already carries the pin, so the `live-document-proxy.test.ts` DEV_PROXY_PATHS hard-coding pitfall does not bite this row either.\n\nMOUNT POINT FOR STEP 2, measured: `cordum-app.tsx` is **482 lines** (the plan says 454 — it has grown), and `<ApprovePlan … />` renders at :333-340 inside the plan fold `<details>` that opens at :327. The version note goes immediately after :340.\n\nPEER DIRT ON MY MOUNT FILE, disclosed and stepped around. `cordum-app.tsx` is ` M` with task-80322112's uncommitted work: +10 lines adding `import { LiveNewProduct }` and rendering `{live.setup.ok && <LiveNewProduct setup={live.setup} />}` in the ops/setup area with its comment block. That is nowhere near the plan fold, so my addition cannot collide. I will not revert, stash or restage it.\n\nE2E HARNESSES available for step 3's copy: `gate1-v1-approval.spec.ts` (13309 bytes, the agent-as-seat pattern) and `resources-and-contract.spec.ts` (6665 bytes, the smaller real-daemon harness). Both read.\n\nHEAD at measurement: `ff5c51ac`. No production file was edited in this step.",
+      "startedAt": "2026-09-06T15:11:44.916Z",
+      "completedAt": "2026-09-06T15:13:15.519Z"
     },
     {
       "stepId": "step-2",
       "description": "VERSION NOTE ON THE PLAN FOLD (DoD 2, 3). Do not edit approve-plan.tsx.\n\nNew apps/control-room/src/v2/goals/design-version-note.tsx: reads via the sibling live-design reader (injectable). Renders data-testid cr.approve.design-version. When a design exists, words include the version number (e.g. Design version 2). When DESIGN_REVISION_ABSENT (or sibling skip status), words say this plan was compiled with no design — never a blank, never a zero. Other refusals OutcomeNote with code AND layer. Apostrophe-free. Under 250 lines.\n\nTests in design-version-note.test.tsx for those three states.\n\ncordum-app.tsx (454 lines — add only): import LiveDesignVersionNote, render it immediately after <ApprovePlan ... /> inside the plan fold, passing open.goalId and attached.headers.\n\nDoD 3 older-version readability: e2e in step 3 POSTs /design/read {goalRef, version:1} after v2 exists; no version picker UI.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/cordum-app.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/v2/goals/design-version-note.tsx",
         "apps/control-room/src/v2/goals/design-version-note.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/design-version-note.tsx",
+        "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ],
+      "note": "THE PLAN FOLD NOW NAMES THE DESIGN VERSION IT WAS COMPILED AGAINST (DoD 2). `approve-plan.tsx` untouched, as instructed.\n\nNEW `apps/control-room/src/v2/goals/design-version-note.tsx`, 107 lines (cap 250). Reads through the SIBLING `readDesign` from `live/live-design.js` — the same `/design/read` and the same exact-key decoder the Design tab uses — with an injectable `read` for tests, mirroring `LiveDesign`'s read-on-mount and stale-subject guard so an old goal cannot publish a late answer. Renders `data-testid=\"cr.approve.design-version\"` in every state. Apostrophe-free throughout.\n\nFOUR STATES, and the two that matter are the ones a blank would collapse.\n- DESIGN present: `Design version 2. Approving this plan accepts that design.` The number is the operator's anchor, so it is in the words, not a title attribute.\n- `DESIGN_REVISION_ABSENT @ LEDGER`: `This plan was compiled with no design. Approving it accepts the plan alone.` NEVER a blank, never a zero — the DoD's point is that a human approving a plan built with no design must be TOLD, because approval is the implicit acceptance.\n- Sibling SKIP status (child 2's path): `The design step was skipped, so this plan was compiled with no design.` plus the recorded reason.\n- ANY OTHER refusal: `OutcomeNote` carrying CODE and LAYER. This is the distinction I was most careful about — a read failure is not a fact about the plan, so it must not read as \"no design\". The test asserts that negatively.\n\nWHY IT READS TWICE RATHER THAN SHARING THE TAB'S FETCH, written at the site: sharing one read would couple the approval surface to whether the operator had opened the Design tab. Same endpoint and same decoder means the version named here and the version on the tab cannot drift.\n\nDoD 3, NO VERSION PICKER — stated in the file so nobody adds one later. An older revision stays readable by asking the daemon for it (`/design/read` accepts a version), which step 3's journey exercises; a picker here would be a second way to name a revision and a second thing to keep in step with the tab.\n\nMOUNT, ADD-ONLY. `cordum-app.tsx` 482 -> 490 lines: one import plus the element rendered immediately after `<ApprovePlan … />`, INSIDE the plan fold `<details>`, with a comment saying why position is the argument — a version note outside the fold would not be part of the approval the human is giving. A test asserts the ORDER (`indexOf(ApprovePlan) < indexOf(LiveDesignVersionNote) < indexOf(</details>)`), not mere presence, so a later move out of the fold reds.\n\nTESTS: 10 arms in `design-version-note.test.tsx`, `Test Files 1 passed (1)` / `Tests 10 passed (10)`, EXIT 0 — five rendering states, two live-reader arms (injected reader; a THROWN read becomes `DESIGN_READ_FAILED @ CONTROL_ROOM_GOALS` rather than an empty slot), and three mount arms including one asserting `approve-plan.tsx` does NOT mention the component.\n\nFULL CONTROL-ROOM SUITE GREEN, not just my file: `Test Files 173 passed (173)` / `Tests 2149 passed (2149)`, EXIT 0. `pnpm --filter @moe/control-room typecheck` EXIT 0, non-vacuous via the `$ tsc --project tsconfig.json` echo.\n\nNO `.js` BRIDGE, deliberately: control-room ships none — `apps/control-room/src/v2/goals` contains zero `.js` files and the sibling `design-card.tsx` has no bridge either. Creating one here would be the mirror of the daemon-side mistake.\n\n`pnpm typecheck` (whole repo) FAILS, and it is FOREIGN — disclosed rather than hidden: `apps/daemon/src/repository/env-example-sync-command.ts(181,11): error TS6133: 'current' is declared but its value is never read.` That file is UNTRACKED (`??`), a peer's in-flight module from task-b09a9aab, and this row's diff is control-room only. The control-room package typechecks clean on its own, which is the leg my change can affect. I will re-run the repo-wide gate at step 4 and report whatever it says then.\n\nDoD WORDING RECONCILED, correcting my own step-1 flag: the \"five sections\" the DoD names are the five STORED sections, and `openDecisions` is the sixth key — `design-card.tsx`'s own comment says exactly that (\"Five stored sections, plus the decisions still open\"). No discrepancy; I withdraw the question I raised in step 1.\n\nPEER DIRT UNTOUCHED: `cordum-app.tsx` carries task-80322112's +10 lines (the LiveNewProduct card in the ops/setup area) — nowhere near the plan fold, preserved intact. `cordum-app.test.tsx` is also ` M` from that row and I have not opened it.",
+      "startedAt": "2026-09-06T15:13:19.999Z",
+      "completedAt": "2026-09-06T15:15:56.337Z"
     },
     {
       "stepId": "step-3",
       "description": "PLAYWRIGHT JOURNEY (DoD 1, 3, 4, 5). New tests/e2e/control-room/design-operator.spec.ts copying the real-daemon harness from resources-and-contract.spec.ts / gate1-v1-approval.spec.ts (vite build, daemon-main with store-deps, demo-seed, pairing).\n\nDrive: (1) operator pairs; (2) scripted seat = POST design.submit on /command with PLANNING+WORK (same pattern gate1 uses to propose a revision as an agent) with a revision whose dataModel names a distinct entity; (3) browser opens the goal; (4) assert cr.design.card shows the version and that entity (DoD 1) — if the card is missing, that is a producer gap, report_blocked, do not rebuild the card; (5) submit a second revision; card shows version 2; POST /design/read {goalRef, version:1} still returns version 1 (DoD 3); (6) a goal with no design shows cr.design.none or cr.approve.design-version skip words, not a blank (DoD 4).\n\nCapture the success JSON frame from the live POST as a committed fixture next to the spec if DoD 5 requires fixtures; otherwise the spec itself is the surviving command. Quote `pnpm test:e2e:browser` Test Files / passed count. Do not edit journey-coverage.ts unless that matrix gains a new COVERED row you can honestly flip — default is leave it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [],
       "newFiles": [
         "tests/e2e/control-room/design-operator.spec.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T15:16:00.662Z"
     },
     {
       "stepId": "step-4",
@@ -65,7 +77,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor 16:38Z: producer gap is now parked by the dependency gate instead of BLOCKED. task-4dbef636 (the design.submit-not-offered fix row, back in PLANNING for a re-plan around the real symptom) was added to dependsOn; WORKING claims are withheld until it is DONE, then the row resumes at step 3 (steps 1-2 complete; design-version-note.tsx already landed in HEAD at 17446e73 through task-80322112's carried-importee closure). Block premise, kept verbatim from the 15:51Z report_blocked: \"design.submit IS NEVER OFFERED for a goal with an approved Gate 1 and no design, so a scripted seat cannot submit one and DoD 1/3/4/5 cannot be driven. MEASURED ON A REAL DAEMON, twice, in tests/e2e/control-room/design-operator.spec.ts ... the surface then offers planning.submit_decomposition@goal-721ab4f3... and no design.submit.\" Next claimer: re-run that spec first; if design.submit is offered after 4dbef636 lands, continue at step 3.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
   "dependsOn": [
@@ -75,7 +87,8 @@
     "task-7f9f20c7cddf4d50b49054951ab177fb",
     "task-7ca9dca37fb44b40ac35abfc3c36cb9a",
     "task-e9cb2442a9a44408bea35cfce6a1897b",
-    "task-eb2bb09d4efa4691803a519901eb2f97"
+    "task-eb2bb09d4efa4691803a519901eb2f97",
+    "task-4dbef6369a424ec9b8ee1734e6a3c867"
   ],
   "priority": "HIGH",
   "order": 63,
@@ -89,14 +102,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:37:41.269Z",
-  "updatedAt": "2026-09-05T14:43:48.766Z",
+  "updatedAt": "2026-09-06T16:38:05.500Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:19:17.986Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
-    "architect-2e480458"
+    "architect-2e480458",
+    "worker-1d53e70c"
   ],
   "priorHandoffs": [
     {
@@ -112,7 +127,10 @@
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:43:46.634Z",
   "planningNotes": {
@@ -129,5 +147,50 @@
       "README.md"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:43:48.766Z"
+  "planApprovedAt": "2026-09-05T14:43:48.766Z",
+  "workStartedAt": "2026-09-06T15:11:44.916Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/control-room/src/v2/products/live-new-product.tsx",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    "apps/control-room/src/v2/products/new-product-form.tsx",
+    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "apps/control-room/src/live/live-bootstrap-receipt.ts",
+    "apps/control-room/src/v2/goals/design-version-note.tsx",
+    "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "tests/e2e/control-room/design-operator.spec.ts"
+  ],
+  "priorBlockedReason": "PRODUCER GAP, per step 3's own rule (\"a producer gap, report_blocked, do not rebuild it\"). Same rule for a missing OFFER; I am not hand-crafting the aggregate id to route around it.\n\n`design.submit` IS NEVER OFFERED for a goal with an approved Gate 1 and no design, so a scripted seat cannot submit one and DoD 1/3/4/5 cannot be driven.\n\nMEASURED ON A REAL DAEMON, twice, in `tests/e2e/control-room/design-operator.spec.ts`. Both acceptance checks pass: `product_contract.propose_revision` answers `ok !== false`, and after the browser approves Gate 1 the daemon's own `/product-contract/pending/read` answers `outcome: \"NONE\"` — the approval IS durable. The surface then offers `planning.submit_decomposition@goal-721ab4f3...` and no `design.submit` in the roster.\n\nPer `affordance-planning-offers.ts:176-182` that branch needs `approvedGateRef !== null` AND `designState(goalId) !== \"ABSENT\"`. The gate ref is confirmed, so the real `designState` answers PRESENT or SKIPPED for a goal that never had a design.\n\nWHY NO TEST CATCHES IT: `affordance-planning-offers.test.ts` INJECTS designState as a stub (default `() => \"PRESENT\"` at :126 and :140), so the ladder is proven against a fake. The production implementation at `affordance-read.ts:356-365` is exercised against a real store NOWHERE. It returns \"PRESENT\" for any refusal that is not `DESIGN_REVISION_ABSENT` (\"unreadable is NOT absence\"), so a read refusing for any other reason silently makes the design step unstaffable.\n\nNOT MINE: `designState` and the design read belong to child 1 (task-5e90317e); the command kinds to task-06ac0da1.\n\nGREEN MEANWHILE: steps 1-2 done. `design-version-note.tsx` (107 lines) + 10 arms EXIT 0; control-room 173 files / 2149 tests EXIT 0; typecheck EXIT 0. Two spec defects of my own found and fixed: `page.reload()` drops the paired session; HTTP 200 is not acceptance.\n\n`browser-e2e-gate` RELEASED; nothing of mine running.",
+  "commits": [
+    {
+      "sha": "17446e73b0f7bead6a3fa71536d940327d6ef076",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "governor-afbde490@2026-09-06T16:38:00Z",
+      "paths": [
+        "apps/control-room/src/v2/goals/design-version-note.tsx"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T16:38:05.500Z",
+      "status": "BLOCKED",
+      "pushed": true,
+      "recoveredBy": "worker-1d53e70c",
+      "message": "Governor attribution: task-80322112's wrapper exit (17446e73, worker-1d53e70c) carried this row's design-version-note.tsx (107 lines, step 2 deliverable) under the carried-importee closure declared 15:5xZ so cordum-app.tsx never landed without its importee. Bytes are f3409f9a's; the commit is 80322112's checkpoint."
+    }
+  ],
+  "filesModified": [
+    "apps/control-room/src/v2/goals/design-version-note.tsx"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "governor-afbde490@2026-09-06T16:38:00Z",
+    "at": "2026-09-06T16:38:05.500Z"
+  }
 }

@@ -23,10 +23,11 @@
     {
       "stepId": "step-1",
       "description": "MEASURE, AND CORRECT THE ROW'S PREMISE. NO EDITS. (a) `sed -n '30,55p' apps/daemon/src/bootstrap/bootstrap-contracts.ts` — confirm `deployment.set_target` is ALREADY on BOOTSTRAP_COMMAND_KINDS (:51). (b) `sed -n '278,290p' apps/daemon/src/http/affordance-read.ts` — confirm the exclusion list is only `plan.propose`, `approval.decide`, `goal.close`, `repository.publish`, so an offer for set_target IS already pushed today. Together these mean THIS ROW RE-TARGETS AN EXISTING OFFER, it does not add one; say so in the step note, because the title and description both read as though none exists. (c) `sed -n '143,156p' apps/daemon/src/http/affordance-read.ts` — confirm `bootstrapAggregateId` special-cases only those four planning kinds and otherwise falls through to `aggregateIdFor`, i.e. the offer is currently PROJECT-targeted. (d) THE DEFECT THIS ROW REALLY FIXES: `sed -n '260,272p' apps/daemon/src/http/affordance-read.ts` — confirm that when `ledger.kinds.has(kind)` the loop returns COMMITTED and pushes NO offer, with a single hand-written exception for `policy.install` because it is repeatable. Confirm there is no such exception for `deployment.set_target`, which means the offer VANISHES after the first successful bind — directly contradicting task rail 4. (e) READ THE SIBLING'S DELIVERED DIFF: task-2cedb26a is landing the `aggregateIdFor` deployment case in bootstrap-sequence.ts. If its case already covers `deployment.set_target`, this row needs NO bootstrap-sequence.ts edit — record which it is, because that decides your file roster. (f) `grep -n \"deployment\" apps/daemon/src/daemon-command-payload-keys.ts` — confirm set_target's keys are `[\"environment\",\"network\",\"sshTarget\",\"url\"]`, which settles DoD 2. Record the global-rail-3 baseline for `pnpm --filter @moe/daemon test` and `pnpm typecheck`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-read.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T16:31:32.472Z"
     },
     {
       "stepId": "step-2",
@@ -80,7 +81,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -94,13 +95,21 @@
   ],
   "priority": "HIGH",
   "order": 91.88,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-96a950d1eea442348e0ea023be321b3e",
+      "author": "worker-f78e0703",
+      "content": "STEP1 MEASURED FEASIBILITY BLOCK, no source edits, HEAD17446e73b0f7bead6a3fa71536d940327d6ef076. ReopenReason is governor planning restoration, NOT QA rejection (rejectionDetails null). All3 planned paths clean. Prerequisite2ced DONE/ecc99b99 actual completion/review read via search_tasks because this runtime get_context exposes no epicSiblings. It changed bootstrapAggregateId in affordance-read.ts, NOT aggregateIdFor/bootstrap-sequence: only deployment.deploy => deploy:<goalId>; set_target still PROJECT-targeted. Its four-file gate116tests0 and QA21files460tests0 read. Do not duplicate a bootstrap-sequence case.\nCRITICAL: step3(2) says versionOf(ledger,aggregateId) on goal-scoped deploy:<goalId> makes the setter CAS work. This is FALSE. Real production setDeployTarget writes deploy-target:<projectId>:<environment> and passes request.expectedVersion; readDurableLedger records THAT aggregate. Its version and the proposed goal key's version are unrelated. Before any edit, real fixture+production probe below shows initial offer project-1 expectedVersion3; first valid preview binding at expectedVersion0 succeeds; current offer disappears; proposed lookup deploy:goal-1 returns0 while actual deploy-target:project-1:preview is1. Rebinding at planned lookup gets EXACT EXPECTED_VERSION_CONFLICT@DURABLE_STORE. No handler replaced, no authority helper, no fake frame. Single goal-scoped scalar cannot represent differently-versioned environments selected later.\nNeed amend plan3/4/7 to specify environment-specific version authority (e.g. chosen-environment read carried to consumer, or per-environment offers which DoD2 permits) and align consumer4d77. Task rail6 forbids changing setter execution; do NOT weaken CAS or call goalVersion0 a valid rebind. Plan steps have NO activeAmendmentId as claimed. Also generic prerequisite project.activate still withholds set_target before activation; 'nothing withholds' needs prerequisite-qualified wording, not a bypass.\nFresh baseline: pnpm typecheck EXIT0 all19 tsclegsDone. Own fouraffordance files via pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-planning-offers.test.ts src/http/affordance-compiler-lane.test.ts EXIT0 Test Files4passed(4),Tests116passed(116),14.80s. Full daemon NOT run: full-suite-gate held byadefb/taskf1e,16:32grant; noqueue/duplicate. Existing named95e full baseline8failed/514passed remains older reference, not new taskAFTER. No tests/builds/probes remain running.\nFULL REPLAY SOURCE; stdin node --input-type=module, EXIT0 (asserts refusal specifically), no script file:\nimport assert from \"node:assert/strict\";\nimport { openStore, closeStores, driveThrough, envelope, send, PROJECT_ID, GOAL_ID } from \"./apps/daemon/src/bootstrap/bootstrap-test-fixtures.js\";\nimport { createAffordancePort } from \"./apps/daemon/src/http/affordance-read.js\";\nimport { readDurableLedger, versionOf } from \"./apps/daemon/src/bootstrap/bootstrap-ledger.js\";\nimport { deployTargetAggregateId } from \"./apps/daemon/src/deployment/deploy-target-contracts.js\";\nprocess.env.MOE_APPROVAL_MODE = \"SPEED\";\nprocess.env.MOE_SPEED_MODE_DELAY_MS = \"0\";\nconst store = openStore();\ntry {\n  driveThrough(store, \"repository.publish\");\n  let mint = 0;\n  const port = createAffordancePort({store, projectId: PROJECT_ID, mintId: () => \"probe-\"+(++mint)});\n  const before = port.readSurface();\n  assert.equal(before.outcome, \"SURFACE\");\n  const initial = before.nextAllowedCommands.filter(x => x.commandKind === \"deployment.set_target\");\n  const payload = {environment:\"preview\",network:\"probe-net\",sshTarget:null,url:null};\n  const bind = send(store, envelope(\"deployment.set_target\",0,payload,\"probe-first\"));\n  assert.equal(bind.ok,true);\n  const after = port.readSurface();\n  assert.equal(after.outcome,\"SURFACE\");\n  const ledger = readDurableLedger(store,PROJECT_ID);\n  const proposedKey = \"deploy:\"+GOAL_ID;\n  const proposedVersion = versionOf(ledger,proposedKey);\n  const writeKey = deployTargetAggregateId(PROJECT_ID,\"preview\");\n  const rebound = send(store,envelope(\"deployment.set_target\",proposedVersion,{...payload,network:\"probe-next\"},\"probe-next\"));\n  assert.equal(rebound.ok,false);\n  assert.equal(rebound.code,\"EXPECTED_VERSION_CONFLICT\");\n  assert.equal(rebound.refusedBy,\"DURABLE_STORE\");\n  console.log(JSON.stringify({initial,afterOffers:after.nextAllowedCommands.filter(x=>x.commandKind===\"deployment.set_target\"),proposedKey,proposedVersion,writeKey,writeVersion:store.getAggregateVersion(writeKey),rebind:{code:rebound.code,layer:rebound.refusedBy}},null,2));\n} finally { closeStores(); }",
+      "timestamp": "2026-09-06T16:35:13.343Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:02:47.010Z",
-  "updatedAt": "2026-09-06T14:12:28.072Z",
+  "updatedAt": "2026-09-06T16:35:14.355Z",
   "failedDodItems": [],
   "contextFetchedBy": [
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-f78e0703"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-06T14:08:56.103Z",
@@ -122,5 +131,10 @@
       "apps/control-room/src/v2/goals/goal-deployments.tsx"
     ]
   },
-  "planApprovedAt": "2026-09-06T14:12:28.072Z"
+  "planApprovedAt": "2026-09-06T14:12:28.072Z",
+  "workStartedAt": "2026-09-06T16:31:32.472Z",
+  "blockedReason": "Live production probe falsifies approved step3 CAS premise (no active amendments): versionOf(ledger,'deploy:goal-1') stays0 after real preview binding, while setter durable aggregate deploy-target:project-1:preview is1. Rebind with planned offer version0 refuses EXPECTED_VERSION_CONFLICT@DURABLE_STORE, specifically asserted. One goal-scoped scalar cannot fence independent environment versions selected at dispatch. Need amend steps3/4/7 and consumer4d77 version-authority contract; do not change setter execution/CAS (rail6) or fabricate current version. Full replay source/result in row comment. Prereq2ced DONE changed only bootstrapAggregateId deployment.deploy, not bootstrap-sequence; no missingdependency. Fresh4affordancefiles116tests0 and pnpmtypecheck0; no repo edits, no runningjobs/lease/queue. Blocking solely on non-working approved design, not foreignWIP or verificationlease.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T16:35:14.354Z"
 }

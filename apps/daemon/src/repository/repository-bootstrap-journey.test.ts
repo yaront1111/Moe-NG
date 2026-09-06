@@ -12,6 +12,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { MOE_CONFIG_FILENAME, parseMoeConfig } from "../cli/moe-init.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import type { RepositoryBootstrapSeams } from "../daemon-command-async-entries.js";
 import {
@@ -21,8 +22,11 @@ import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import type {
   AuthenticationResult, Authenticator, CommandAdapterDeps,
 } from "../http/http-contract.js";
+import { ProjectCatalogRefusalError, createNodeProjectCatalogRegistrar }
+  from "../projects/project-catalog-registrar.js";
 import { CONTROLLED_PROFILE_VERSION }
   from "./controlled-profile/controlled-profile-generator.js";
+import type { BootstrapCatalogPort } from "./repository-bootstrap-command.js";
 import { BOOTSTRAP_RECEIPT_VERSION, bootstrapRefusal }
   from "./repository-bootstrap-contracts.js";
 import type {
@@ -110,8 +114,18 @@ function recordingGh(argv: string[][], answer: "ABSENT" | "CREATED"): BootstrapG
   };
 }
 
+/**
+ * THE `catalog` SEAM IS NO LONGER FENCED OFF, and that is the point of this row.
+ *
+ * This parameter used to be `Omit<RepositoryBootstrapSeams, "catalog">`, which made it
+ * IMPOSSIBLE for any arm to reach the production registrar: every arm got the in-memory recorder
+ * below, the recorder has no filesystem and therefore no `realpath`, and the one requirement that
+ * mattered was the one requirement no arm could see. `repository.bootstrap` shipped green having
+ * never once succeeded. Arms that do not care about the catalog still get the recorder by
+ * default; an arm that passes `catalog` REPLACES it (the spread below is ordered for that).
+ */
 function harness(
-  label: string, seams: Omit<RepositoryBootstrapSeams, "catalog"> = {},
+  label: string, seams: RepositoryBootstrapSeams = {},
   principalId: string = OPERATOR,
 ): Harness {
   const directory = scratch(`store-${label}`);
@@ -189,10 +203,61 @@ function gitLines(dir: string, args: readonly string[]): string[] {
     .split("\n").map((line) => line.trim()).filter((line) => line !== "");
 }
 
+/** What the REAL registrar refused with, captured on the way past. Named separately from the
+ *  bootstrap refusal because two layers can answer here and DoD 2 asks which one did. */
+interface RealCatalog {
+  readonly path: string;
+  readonly port: BootstrapCatalogPort;
+  readonly refusals: { code: string; layer: string }[];
+}
+
+/**
+ * THE PRODUCTION REGISTRAR, pointed at a temp catalog instead of `~/.moe-next/projects.json`.
+ * `createNodeProjectCatalogRegistrar` takes its path as a parameter precisely so a test never has
+ * to touch the operator's home directory (epic rail 4: this arm leaks nothing).
+ *
+ * The wrapper only OBSERVES. It records the catalog's own code and layer and rethrows the original
+ * error untouched, so the command edge sees exactly what production sees.
+ */
+function realCatalog(catalogPath: string): RealCatalog {
+  const refusals: { code: string; layer: string }[] = [];
+  const register = createNodeProjectCatalogRegistrar(catalogPath);
+  return {
+    path: catalogPath,
+    port: async (request): Promise<void> => {
+      try {
+        await register(request);
+      } catch (error) {
+        if (error instanceof ProjectCatalogRefusalError) {
+          refusals.push({ code: error.code, layer: error.layer });
+        }
+        throw error;
+      }
+    },
+    refusals,
+  };
+}
+
+/** The catalog as it sits ON DISK. Reading the registrar's return value would prove only that a
+ *  function resolved; DoD 1 asks for the product to be IN THE CATALOG FILE. */
+function catalogEntries(path: string): { projectId: string; root: string; title: string }[] {
+  return (JSON.parse(readFileSync(path, "utf8")) as {
+    entries: { projectId: string; root: string; title: string }[];
+  }).entries;
+}
+
 const PRODUCT = { productName: "journey-product", profileVersion: CONTROLLED_PROFILE_VERSION };
 const GITHUB = { name: "journey-product", owner: "journey-owner", visibility: "private" };
 
-describe("repository.bootstrap through the registered command", () => {
+/**
+ * A TIMEOUT THAT MATCHES WHAT THESE ARMS ACTUALLY DO. Every arm here spawns REAL `git` several
+ * times (`init`, `add -A`, `commit`, `rev-parse`, plus `log`/`ls-files`/`status` in the
+ * assertions), and `CreateProcess` on this host costs on the order of a second EACH under any
+ * concurrent load. Vitest's 5000 ms default is a budget these arms can exhaust on process
+ * creation alone: measured, with pre-existing arms timing out while a peer's suite ran. That is a
+ * flake, not a finding, and a flaky gate makes every later result inadmissible.
+ */
+describe("repository.bootstrap through the registered command", { timeout: 60_000 }, () => {
   it("refuses a NON-EMPTY directory with its code and layer, writing nothing", async () => {
     const { deps, store } = harness("dir-guard", { gh: recordingGh([], "ABSENT") });
     registerProject(deps);
@@ -238,7 +303,14 @@ describe("repository.bootstrap through the registered command", () => {
     }
   });
 
-  it("SUCCEEDS local-only with gh absent: committed, bound, catalogued, remoteUrl null",
+  /**
+   * SCOPE IS IN THE NAME ON PURPOSE. This arm proves the command CALLS the catalog port with the
+   * right subject; it CANNOT prove the call would succeed, because its catalog seam is the
+   * in-memory recorder. It once read as "catalogued" and was cited as proof of exactly the thing
+   * it does not test. The arm below it, "against the REAL manager catalog", is that proof.
+   */
+  it("SUCCEEDS local-only with gh absent, RECORDING CATALOG SEAM: committed, bound, "
+    + "catalog port called, remoteUrl null",
     async () => {
       const ghArgv: string[][] = [];
       const { deps, registered, store } = harness("local-only", {
@@ -280,6 +352,147 @@ describe("repository.bootstrap through the registered command", () => {
         productName: "journey-product", projectId: PROJECT,
       });
     });
+
+  /**
+   * DoD 1 - THE ARM THIS ROW EXISTS FOR: a local-only bootstrap that SUCCEEDS end to end against a
+   * real filesystem AND the real `createNodeProjectCatalogRegistrar`, with the `catalog` seam NOT
+   * stubbed.
+   *
+   * Before this row, this exact composition answered BOOTSTRAP_CATALOG_FAILED /
+   * CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED on EVERY run - the command named
+   * `<dir>/moe.config.json` and `<dir>/.moe-next/store.sqlite` and nothing on the path created
+   * either, so `canonicalEntry`'s realpath refused PROJECT_CATALOG_PATH_UNRESOLVED after the
+   * repository had already been created, committed and bound.
+   */
+  it("SUCCEEDS local-only against the REAL manager catalog: registered against paths that exist",
+    async () => {
+      const catalog = realCatalog(join(scratch("real-catalog"), "nested", "projects.json"));
+      const { deps, store } = harness("real-catalog", {
+        catalog: catalog.port, gh: recordingGh([], "ABSENT"),
+      });
+      registerProject(deps);
+      // A directory CREATED BY THIS ARM, so a pass cannot come from reusing one that happened to
+      // exist already with the right shape.
+      const dir = join(scratch("real-catalog-dir"), "product");
+      expect(existsSync(dir)).toBe(false);
+
+      const answered = await bootstrap(deps, "cmd-journey-real-catalog", { dir, ...PRODUCT });
+
+      expect(answered).toMatchObject({ outcome: "ACCEPTED" });
+      expect(catalog.refusals).toEqual([]);
+      expect(committedReceipt(store)).toMatchObject({
+        githubRefusal: null, outcome: "BOOTSTRAPPED", refusal: null,
+        version: BOOTSTRAP_RECEIPT_VERSION,
+      });
+
+      // IN THE CATALOG FILE ON DISK, not merely "the port resolved".
+      const entries = catalogEntries(catalog.path);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ projectId: PROJECT, title: "journey-product" });
+      // And the two paths the entry names REALLY EXIST - the whole defect, stated positively.
+      expect(existsSync(join(dir, MOE_CONFIG_FILENAME))).toBe(true);
+      expect(existsSync(join(dir, ".moe-next"))).toBe(true);
+
+      // (D) THE CONFIG PARSES BACK. A file that satisfies the catalog's realpath but is not a
+      // valid Moe config would pass every assertion above and still be useless to `moe start`.
+      const parsed = parseMoeConfig(readFileSync(join(dir, MOE_CONFIG_FILENAME), "utf8"));
+      expect(parsed.ok ? "PARSED" : parsed.code).toBe("PARSED");
+      if (parsed.ok) {
+        expect(parsed.config.projectId).toBe(PROJECT);
+        expect(parsed.config.storePath).toBe(join(dir, ".moe-next", "store.sqlite"));
+        // The credential's PRESENCE and WIDTH only. Its value is a secret: never asserted, never
+        // logged, never written into a committed fixture (epic rail 3).
+        expect(parsed.config.credential).toMatch(/^[a-f0-9]{64}$/u);
+      }
+      expect(JSON.stringify(answered)).not.toContain("credential");
+    });
+
+  /**
+   * (B) DoD 4 and (C) - MOE'S OWN FILES STAY OUT OF THE OPERATOR'S REPOSITORY.
+   *
+   * This is the arm that catches the timing mistake. `createBootstrapGitPort` commits with
+   * `add -A`; create these paths one step earlier and a SQLite store directory AND A MINTED
+   * CREDENTIAL ride into the product's very first commit - and with the GitHub half requested,
+   * `gh repo create --source . --push` pushes them to a remote.
+   */
+  it("leaves EXACTLY ONE commit and keeps moe.config.json and .moe-next OUT of it", async () => {
+    const catalog = realCatalog(join(scratch("untracked-catalog"), "projects.json"));
+    const { deps } = harness("untracked", {
+      catalog: catalog.port, gh: recordingGh([], "ABSENT"),
+    });
+    registerProject(deps);
+    const dir = join(scratch("untracked-dir"), "product");
+
+    const answered = await bootstrap(deps, "cmd-journey-untracked", { dir, ...PRODUCT });
+    expect(answered).toMatchObject({ outcome: "ACCEPTED" });
+
+    // (B) The LINE COUNT, not merely "a commit exists": task-80322112's browser journey pins it.
+    expect(gitLines(dir, ["log", "--oneline"])).toHaveLength(1);
+    // (C) Nothing of Moe's is TRACKED.
+    const tracked = gitLines(dir, ["ls-files"]);
+    expect(tracked.filter((path) => path.includes(".moe-next")
+      || path.includes(MOE_CONFIG_FILENAME))).toEqual([]);
+    expect(tracked).toContain(".gitignore");
+    // ...and the tree is CLEAN, so the operator's brand-new repository is not dirty from birth.
+    expect(gitLines(dir, ["status", "--porcelain"])).toEqual([]);
+
+    // THE STORE ITSELF, once it exists. An EMPTY `.moe-next/` is invisible to git, so the
+    // cleanliness assertion above proves only that `moe.config.json` is ignored. The daemon opens
+    // `.moe-next/store.sqlite` on its next run; this is that state, and it is what makes the
+    // `.moe-next/` line in the generated `.gitignore` load-bearing rather than decorative.
+    writeFileSync(join(dir, ".moe-next", "store.sqlite"), "SQLite format 3", "utf8");
+    expect(gitLines(dir, ["status", "--porcelain"])).toEqual([]);
+    expect(gitLines(dir, ["log", "--oneline"])).toHaveLength(1);
+  });
+
+  /**
+   * (E) DoD 2 - THE FAILING PATH KEEPS ITS CODE, AND THE OPERATOR KEEPS THEIR REPOSITORY.
+   *
+   * The catalog path's PARENT is a FILE, so the registrar's `mkdir(dirname(path))` genuinely
+   * cannot succeed. Measured rather than assumed: that shape yields PROJECT_CATALOG_WRITE_FAILED.
+   * TWO LAYERS answer here and the arm names BOTH - PROJECT_CATALOG refuses first, DAEMON_INGRESS
+   * reports it - so a change that swapped one for the other could not stay green, and so this arm
+   * cannot pass merely because something, somewhere, refused.
+   */
+  it("keeps BOOTSTRAP_CATALOG_FAILED and RETAINS the repository when the catalog cannot be "
+    + "written", async () => {
+    const blocker = join(scratch("blocked-catalog"), "not-a-directory");
+    writeFileSync(blocker, "i am a file", "utf8");
+    const catalog = realCatalog(join(blocker, "projects.json"));
+    const { deps, store } = harness("blocked", {
+      catalog: catalog.port, gh: recordingGh([], "ABSENT"),
+    });
+    registerProject(deps);
+    const dir = join(scratch("blocked-dir"), "product");
+
+    const answered = await bootstrap(deps, "cmd-journey-blocked", { dir, ...PRODUCT });
+
+    // THE LAYER THAT REFUSED FIRST, with its own code.
+    expect(catalog.refusals).toEqual([
+      { code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG" },
+    ]);
+    // THE LAYER THAT REPORTED IT, with the exact code and detail the operator receives.
+    expect(answered).toMatchObject({
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "BOOTSTRAP_CATALOG_FAILED", detail: "CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED",
+        layer: "DAEMON_INGRESS",
+      },
+      stage: "DISPATCH",
+    });
+    expect(committedReceipt(store)).toMatchObject({
+      outcome: "REFUSED",
+      refusal: {
+        code: "BOOTSTRAP_CATALOG_FAILED", detail: "CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED",
+      },
+    });
+
+    // RETAINED, which is what the detail's own name promises (task rail 1). The operator holds a
+    // real, committed repository; nothing on this path rolls it back to tidy the failure up.
+    expect(existsSync(join(dir, ".git"))).toBe(true);
+    expect(gitLines(dir, ["log", "--oneline"])).toHaveLength(1);
+    expect(existsSync(join(dir, "package.json"))).toBe(true);
+  });
 
   it("passes the gh CLI its exact argv, offline, when the GitHub half is requested",
     async () => {

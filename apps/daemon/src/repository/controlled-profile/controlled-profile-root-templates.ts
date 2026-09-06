@@ -87,6 +87,11 @@ const TSCONFIG_BASE = file([
   "}",
 ]);
 
+/** The generated product's ignore list. The last two lines are MOE'S OWN per-checkout files —
+ *  written by `repository.bootstrap` AFTER the scaffold commit, never part of the product. They
+ *  are ignored rather than committed because `moe.config.json` carries a minted credential, and
+ *  because a committed config makes `moe init` refuse MOE_INIT_CONFIG_PRESENT on a fresh clone
+ *  (moe-init.ts:143-146). See `repository-bootstrap-moe-files.ts`. */
 const GITIGNORE = file([
   "node_modules/",
   "dist/",
@@ -94,6 +99,11 @@ const GITIGNORE = file([
   "*.log",
   "playwright-report/",
   "test-results/",
+  "",
+  "# Moe's own per-checkout files. Never commit these: moe.config.json holds this checkout's",
+  "# daemon credential, and committing it makes `moe init` refuse on a fresh clone.",
+  ".moe-next/",
+  "moe.config.json",
 ]);
 
 /**
