@@ -349,20 +349,22 @@ describe("repository.bootstrap through the registered command", () => {
     });
   });
 
-  it("refuses a NON-OPERATOR principal at the authorization layer, before any effect",
+  it("refuses a non-durable non-human principal WITH ADMIN at the entry fence before effects",
     async () => {
       const dir = join(scratch("non-operator-dir"), "product");
       const { deps } = harness("non-operator", { gh: recordingGh([], "ABSENT") }, "agent-1");
+      registerProject(deps); // ADMIN and the durable prerequisite pass; identity must refuse.
 
       const answered = await bootstrap(deps, "cmd-journey-non-operator", { dir, ...PRODUCT });
 
       expect(answered).toMatchObject({
         httpStatus: 403,
         outcome: "PORT_REFUSED",
+        stage: "DISPATCH",
         refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
       });
       // Fenced BEFORE the first byte: the directory was never created.
-      expect(() => readdirSync(dir)).toThrow();
+      expect(existsSync(dir)).toBe(false);
     });
 
   it("refuses a SECOND run against the same directory rather than appending a commit",

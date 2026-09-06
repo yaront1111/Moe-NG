@@ -12,6 +12,7 @@ import { BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand }
 import { DomainRefusal, decisionOf, encoder } from "../daemon-command-dispatch.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
+import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import { bootstrapRefusal } from "./repository-bootstrap-contracts.js";
 import type { BootstrapGhPort, BootstrapPorts, BootstrapReceiptV1, BootstrapRefusal,
   BootstrapRepository, BootstrapRequest } from "./repository-bootstrap-contracts.js";
@@ -58,9 +59,8 @@ export interface RepositoryBootstrapOptions {
   readonly clock?: () => string;
   /** The configured operator principal. THE ASYNC ENTRY MUST FENCE ITSELF: the registry's
    *  operator check lives in the SYNCHRONOUS handler path, which an async entry never reaches,
-   *  so membership in `OPERATOR_PRINCIPAL_KINDS` alone would leave this kind dispatchable by
-   *  any ADMIN-capable session. Measured, not assumed — an unfenced entry answered a
-   *  non-operator session with BOOTSTRAP_PREREQUISITE_MISSING instead of 403. */
+   *  so membership in `OPERATOR_PRINCIPAL_KINDS` alone cannot reject non-human sessions.
+   *  HTTP ingress requires ADMIN; this entry admits only the operator or a durable HUMAN. */
   readonly operatorPrincipalId: string;
   /** Test seam for the GitHub half. Production passes nothing and gets the real `gh` CLI. */
   readonly gh?: BootstrapGhPort;
@@ -188,12 +188,14 @@ export function createRepositoryBootstrapHandler(
   const { projectId, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
   return async ({ envelope, principal }: CommandHandlerInput): Promise<DurableDecision> => {
-    // FENCED AT ENTRY, before the clock, the decode and any effect: creating a repository at an
-    // operator-supplied path is the operator's own act, and it is never widened to a paired
-    // browser human the way `repository.publish` is.
-    if (principal.principalId !== options.operatorPrincipalId) {
+    // Unlike scoped-work judgments, creating a repository at a supplied path requires ADMIN:
+    // HTTP ingress enforces this kind's CAPABILITIES.ADMIN before dispatch. Identity is fenced
+    // HERE, before the clock, decode and effects; the synchronous registry carve-out is not on
+    // this route. Keep the operator roster intact: it also keeps this command MCP-excluded.
+    if (principal.principalId !== options.operatorPrincipalId
+      && !isDurableHumanPrincipal(store, principal.principalId)) {
       throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
-        "this command requires the configured operator principal", 403);
+        "this command requires the configured operator or a durable human principal", 403);
     }
     const decidedAt = clock();
     const bytes = bootstrapRequestBytes("repository.bootstrap", projectId, decidedAt,
