@@ -4,7 +4,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  closeStores, driveThrough, openStore, PROJECT_ID,
+  closeStores, driveThrough, envelope, openStore, PROJECT_ID, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createAsyncCommandEntries } from "../daemon-command-async-entries.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
@@ -18,6 +18,7 @@ import { CONTROLLED_PROFILE_VERSION }
 import { deploymentInfrastructureFiles }
   from "../repository/deployment/deployment-infrastructure-templates.js";
 import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
+import { productionDeployPorts } from "./deploy-command.js";
 import { createDockerDouble } from "./deploy-ports.js";
 import type { DockerDouble, DockerDoubleOptions, DeployTarget } from "./deploy-ports.js";
 import {
@@ -25,7 +26,7 @@ import {
   DEPLOY_RECEIPT_VERSION, DEPLOY_TARGET_MISSING, deployImageTag, deployReceiptId,
 } from "./deploy-receipt-contracts.js";
 import { NO_RELEASE_DECISION_NOTE, candidateContainerName } from "./deploy-service.js";
-import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deploy-target-contracts.js";
+import { DEPLOYMENT_DEPLOY_COMMAND_KIND, deployTargetAggregateId } from "./deploy-target-contracts.js";
 
 /**
  * `deployment.deploy` END TO END THROUGH THE REGISTERED COMMAND, not through the engine.
@@ -40,10 +41,8 @@ import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deploy-target-contracts.js";
  * wall clock. Store handles come from the shared bootstrap fixture and are released by
  * `afterEach(closeStores)`, which vitest also runs when an arm throws.
  *
- * THE TARGET IS AN INJECTED PORT, never a hand-written durable row: `deployment.set_target`'s
- * durable shape belongs to a sibling row that has not landed, and asserting against a shape its
- * owner has not shipped would pin something nothing serves. `DeployTargetPort` is production's
- * own seam (deploy-ports.ts), so injecting it tests the wiring that exists today.
+ * Engine journeys inject their target; durable-target journeys compose the production reader
+ * and write bindings through the real setter command. No happy-path event is planted by a test.
  */
 
 afterEach(closeStores);
@@ -83,10 +82,12 @@ function principal(principalId: string): AuthenticatedPrincipal {
 function journey(options: {
   readonly commandId?: string;
   readonly double?: DockerDoubleOptions;
+  readonly durableTarget?: boolean;
   readonly environment?: string;
   readonly release?: string | null;
   readonly sha?: string;
   readonly target?: DeployTarget | null;
+  readonly targetRead?: (store: SqliteEventStore) => Pick<SqliteEventStore, "readEvents">;
 } = {}): Journey {
   const environment = options.environment ?? STAGING;
   const sha = options.sha ?? SHA;
@@ -107,7 +108,9 @@ function journey(options: {
       buildContext: CONTEXT, clock: (): string => DECIDED_AT,
       // Zero-cost time: the budget is exercised in poll COUNTS, never in wall clock.
       healthBudgetMs: 10, pollMs: 1, sleep: (): Promise<void> => Promise.resolve(),
-      ports: {
+      ports: options.durableTarget === true ? {
+        ...productionDeployPorts(options.targetRead?.(store) ?? store, PROJECT_ID), docker: docker.docker,
+      } : {
         docker: docker.docker, releaseDecision: (): string | null => options.release ?? null,
         ssh: docker.ssh, transfer: docker.transfer,
         target: (): DeployTarget | null => (options.target === undefined ? LOCAL : options.target),
@@ -158,6 +161,65 @@ async function refusalOf(promise: Promise<unknown>): Promise<DomainRefusal> {
     throw error;
   }
 }
+
+function bindTarget(context: Journey, environment: string, network = LOCAL.network): void {
+  const version = context.store.getAggregateVersion(deployTargetAggregateId(PROJECT_ID, environment));
+  expect(send(context.store, envelope("deployment.set_target", version,
+    { environment, network, sshTarget: null, url: LOCAL.url }, `bind-${environment}-${version}`)))
+    .toMatchObject({ ok: true, disposition: "DECIDED" });
+}
+
+describe("the durable target reaches the registered deploy", () => {
+  it("uses the production reader to reach docker after the real setter binds production", async () => {
+    const context = journey({ durableTarget: true, environment: PRODUCTION });
+    bindTarget(context, PRODUCTION);
+    const answered = await context.deploy().catch((error: unknown) => error);
+    expect(context.docker.calls[0]).toEqual(["version", "--format", "{{.Server.Version}}"]);
+    expect(answered).toMatchObject({ disposition: "DECIDED" });
+    const target = productionDeployPorts(context.store, PROJECT_ID).target(PRODUCTION);
+    expect(target).toStrictEqual(LOCAL);
+    expect(Object.isFrozen(target)).toBe(true);
+    expect(committedDetail(context.store, "cmd-deploy-journey")).toContain(NO_RELEASE_DECISION_NOTE);
+  });
+
+  it.each([false, true])("refuses an unbound production target with staging bound=%s", async (bindStaging) => {
+    const context = journey({ durableTarget: true, environment: PRODUCTION });
+    if (bindStaging) bindTarget(context, STAGING);
+    const refusal = await refusalOf(context.deploy());
+    expect([refusal.code, refusal.layer]).toEqual([DEPLOY_TARGET_MISSING, DEPLOY_ENGINE_STAMP]);
+    expect(context.docker.calls).toEqual([]);
+  });
+
+  it("reads the latest binding after the same environment is retargeted", async () => {
+    const context = journey({ durableTarget: true, environment: PRODUCTION });
+    bindTarget(context, PRODUCTION, "original-net");
+    bindTarget(context, PRODUCTION, "replacement-net");
+    const answered = await context.deploy().catch((error: unknown) => error);
+    expect(context.docker.calls.some((args) => args.includes("replacement-net"))).toBe(true);
+    expect(context.docker.calls.some((args) => args.includes("original-net"))).toBe(false);
+    expect(answered).toMatchObject({ disposition: "DECIDED" });
+  });
+
+  it.each(["read throws", "malformed bytes", "invalid latest target"])("fails closed when %s", async (fault) => {
+    const context = journey({ durableTarget: true, environment: PRODUCTION,
+      // The frozen store cannot be spied on. Inject only a failing read at the reader's seam;
+      // command admission, real setter writes and deploy receipts still use the real store.
+      targetRead: (store) => ({ readEvents: (id) => {
+        if (fault === "read throws") throw new Error("store unavailable");
+        const events = store.readEvents(id);
+        return events.map((event, index) => index !== events.length - 1 ? event : {
+          ...event, payload: new TextEncoder().encode(fault === "malformed bytes" ? "{" :
+            JSON.stringify({ network: "invalid network", sshTarget: null, url: null })),
+        });
+      } }),
+    });
+    bindTarget(context, PRODUCTION);
+    bindTarget(context, PRODUCTION, "replacement-net");
+    const refusal = await refusalOf(context.deploy());
+    expect([refusal.code, refusal.layer]).toEqual([DEPLOY_TARGET_MISSING, DEPLOY_ENGINE_STAMP]);
+    expect(context.docker.calls).toEqual([]);
+  });
+});
 
 describe("the registered deploy builds the landed sha (DoD 3)", () => {
   it("tags the image with the sha VALUE through the wiring, and answers a durable decision",

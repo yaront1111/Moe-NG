@@ -1,3 +1,4 @@
+import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -15,7 +16,10 @@ import { nodeDockerRunner, nodeImageTransfer, nodeSshRunner } from "./deploy-por
 import type { DeployPorts } from "./deploy-ports.js";
 import { createDeployService } from "./deploy-service.js";
 import type { DeployReport, DeployRequest } from "./deploy-service.js";
-import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deploy-target-contracts.js";
+import {
+  DEPLOYMENT_DEPLOY_COMMAND_KIND, DEPLOY_TARGET_BOUND_EVENT, decodeDeployTarget,
+  deployTargetAggregateId,
+} from "./deploy-target-contracts.js";
 
 /**
  * The command edge for `deployment.deploy`: the one place the landed engine
@@ -78,22 +82,29 @@ export interface DeployCommandOptions {
 }
 
 /**
- * The real halves on this host, with the two READS that have no durable source yet FAILING
- * CLOSED.
- *
- * `target` answers null until the durable target ledger lands (`deployment.set_target`, its own
- * row), so a production deploy today REFUSES `DEPLOY_TARGET_MISSING` before any spawn rather
- * than deploying to an invented default. `releaseDecision` answers null the same way, which the
- * engine renders as the "no release decision" wording DoD 7 names — a stated absence, never a
- * fabricated approval. Both are single-expression ports precisely so the row that lands the
- * target ledger replaces them without touching this composition.
+ * The host effects and the latest durable, per-project/environment target. The target decoder
+ * remains the setter's authority; unreadable or invalid bindings fail closed as a missing target.
+ * `releaseDecision` deliberately remains unconfigured: Gate 3's release authority is separate.
  */
-export function productionDeployPorts(): DeployPorts {
+export function productionDeployPorts(
+  store: Pick<SqliteEventStore, "readEvents">, projectId: string,
+): DeployPorts {
   return Object.freeze({
     docker: nodeDockerRunner,
     releaseDecision: () => null,
     ssh: nodeSshRunner,
-    target: () => null,
+    target: (environment: string) => {
+      try {
+        const latest = store.readEvents(deployTargetAggregateId(projectId, environment))
+          .filter((event) => event.eventType === DEPLOY_TARGET_BOUND_EVENT).at(-1);
+        if (latest === undefined) return null;
+        const decoded = decodeBoundedJsonBytes(latest.payload);
+        return decoded.ok ? decodeDeployTarget(decoded.value) : null;
+      } catch {
+        // Store failure means UNKNOWN, never permission to reuse a stale/default target.
+        return null;
+      }
+    },
     transfer: nodeImageTransfer,
   });
 }
@@ -187,7 +198,7 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
     if ("outcome" in admitted) return decisionOf(admitted.outcome);
 
     const report = await createDeployService({
-      ports: options.ports ?? productionDeployPorts(), projectId, store,
+      ports: options.ports ?? productionDeployPorts(store, projectId), projectId, store,
       // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
       // is a DIFFERENT thing from an absent key, and only the absent key means "the engine's
       // own default".
