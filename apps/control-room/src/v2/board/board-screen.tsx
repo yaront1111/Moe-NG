@@ -14,6 +14,8 @@ import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.
 import { readRuns } from "../../live/live-runs.js";
 import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
+import { GoalDeployments } from "../goals/goal-deployments.js";
+import type { BoardDeploying } from "../goals/goal-deployments.js";
 import { GoalPublish, publishOffer } from "../goals/goal-publish.js";
 import type { PublishPort } from "../goals/publish-port.js";
 import { deriveGoalStatus } from "../goals/goal-status.js";
@@ -44,6 +46,8 @@ export interface BoardScreenProps {
   readonly activity: ActivityOutcome | null;
   readonly brief: string | null;
   readonly coverage: DocumentCoverageOutcome | null;
+  /** The deploy decision's inputs; absent (tests, fixtures) means no Deployments card. */
+  readonly deploying?: BoardDeploying | undefined;
   readonly goalId: string;
   readonly nowMs: number;
   readonly onNeedsYou?: (() => void) | undefined;
@@ -74,7 +78,7 @@ function criterionStatements(coverage: DocumentCoverageOutcome | null): Readonly
 }
 
 export function BoardScreen(props: BoardScreenProps): JSX.Element {
-  const { activity, brief, coverage, goalId, nowMs, onNeedsYou, paused, publishing, runId, runs, surface, title } = props;
+  const { activity, brief, coverage, deploying, goalId, nowMs, onNeedsYou, paused, publishing, runId, runs, surface, title } = props;
   const status = deriveGoalStatus({ coverage, goalId, paused, runId, surface });
   const goal = goalOf(runs, goalId);
   const fold = goal === null || goal.nodes.length === 0
@@ -100,6 +104,13 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
           <GoalPublish frame={publishing.frame} goal={goal} goalId={goalId} port={publishing.port} remote={publishing.remote} />
         </div>
       ) : null}
+      {deploying === undefined ? null : (
+        <GoalDeployments
+          environments={deploying.environments} frame={surface} goalId={goalId}
+          port={deploying.port} releaseDecision={deploying.releaseDecision ?? null}
+          sha={goal?.publish?.outcome === "PUSHED" ? goal.publish.sha : null}
+        />
+      )}
       {fold !== null ? (
         <BoardLanes criterionStatement={(id): string | null => statements.get(id) ?? null} fold={fold} nowMs={nowMs} />
       ) : (

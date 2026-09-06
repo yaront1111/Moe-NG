@@ -301,3 +301,86 @@ describe("the card keeps nothing in this browser", () => {
     expect(source).not.toContain(["session", "Storage"].join(""));
   });
 });
+
+describe("the adversarial pass, on this diff only", () => {
+  it("NAMES THE ENVIRONMENT in the refusal note, since one note serves both rows", async () => {
+    const calls: { readonly environment: string; readonly sha: string }[] = [];
+    const port: DeployPort = {
+      setTarget: async () => ({ code: "X", layer: "Y", ok: false }),
+      submit: async (_affordance, environmentName, sha) => {
+        calls.push({ environment: environmentName, sha });
+        return { code: "DEPLOY_TARGET_MISSING", layer: "DAEMON_DEPLOY_ENGINE", ok: false };
+      },
+    };
+    render(
+      <GoalDeployments
+        environments={[PREVIEW, PRODUCTION]} frame={FRAME} goalId={GOAL} port={port}
+        releaseDecision={null} sha={SHA}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("cr.deploy.production.button"));
+    await user.click(screen.getByTestId("cr.deploy.production.button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.deploy.answer").textContent ?? "").toContain("production");
+    });
+    // The code and layer stay the daemon's own, in the details line.
+    expect(screen.getByTestId("cr.deploy.answer").textContent ?? "")
+      .toContain("DEPLOY_TARGET_MISSING");
+    expect(calls).toEqual([{ environment: "production", sha: SHA }]);
+  });
+
+  it("cannot be double-clicked into a second dispatch of the same environment", async () => {
+    const calls: { readonly environment: string; readonly sha: string }[] = [];
+    const inFlight: (() => void)[] = [];
+    const port: DeployPort = {
+      setTarget: async () => ({ commandId: "c", ok: true }),
+      submit: async (_affordance, environmentName, sha) => {
+        calls.push({ environment: environmentName, sha });
+        await new Promise<void>((resolve) => { inFlight.push(resolve); });
+        return { commandId: "cmd-deploy", ok: true };
+      },
+    };
+    render(
+      <GoalDeployments
+        environments={[PREVIEW]} frame={FRAME} goalId={GOAL} port={port}
+        releaseDecision={null} sha={SHA}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+    // IN FLIGHT: the button must be inert, or a second click re-arms the row under the operator
+    // and the click after it dispatches the same environment twice.
+    expect(screen.getByTestId("cr.deploy.preview.button").hasAttribute("disabled")).toBe(true);
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+
+    expect(calls).toEqual([{ environment: "preview", sha: SHA }]);
+    inFlight.forEach((resolve) => { resolve(); });
+  });
+
+  it("renders an environment the daemon names that is neither preview nor production", () => {
+    renderCard({ environments: [environment({ environment: "canary", outcome: null })] });
+
+    expect(screen.getByTestId("cr.deploy.canary.button").textContent ?? "")
+      .toContain("Deploy to canary");
+    // No release line for a non-production environment, armed or not.
+    expect(screen.queryByTestId("cr.deploy.canary.release")).toBeNull();
+  });
+
+  it("arming production, then preview, then clicking production dispatches NOTHING", async () => {
+    const { calls } = renderCard();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("cr.deploy.production.button"));
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+    await user.click(screen.getByTestId("cr.deploy.production.button"));
+
+    // The third click RE-ARMS production, because preview held the arm. The dangerous ordering
+    // is the one where an operator believes production is still armed from two clicks ago.
+    expect(calls).toEqual([]);
+  });
+});

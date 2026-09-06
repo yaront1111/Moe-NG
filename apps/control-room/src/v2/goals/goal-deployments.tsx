@@ -66,6 +66,14 @@ export interface GoalDeploymentsProps {
 
 export const PRODUCTION = "production" as const;
 
+/** What a host screen hands the card. Declared here rather than in the host so mounting it
+ *  costs the host the composition and nothing else. */
+export interface BoardDeploying {
+  readonly environments: readonly DeploymentEnvironmentView[];
+  readonly port: DeployPort | null;
+  readonly releaseDecision?: string | null | undefined;
+}
+
 /** The daemon's deployment.deploy offer for this goal, from the surface it stated. */
 export function deployOffer(
   frame: SurfaceFrame | null, goalId: string,
@@ -126,7 +134,7 @@ export function GoalDeployments({
 }: GoalDeploymentsProps): JSX.Element | null {
   const [armed, setArmed] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<OfferOutcome | null>(null);
+  const [answer, setAnswer] = useState<{ readonly environment: string; readonly outcome: OfferOutcome } | null>(null);
   const offer = deployOffer(frame, goalId);
   // No offer means the daemon is not offering this decision at all: the card is not a thing on
   // this screen, rather than a control that cannot be used.
@@ -138,10 +146,13 @@ export function GoalDeployments({
     setBusy(environment);
     setAnswer(null);
     void port.submit(offer, environment, sha ?? "").then((outcome) => {
-      setAnswer(outcome);
+      setAnswer({ environment, outcome });
       setBusy(null);
     }, () => {
-      setAnswer({ code: "DEPLOY_DISPATCH_FAILED", layer: "CONTROL_ROOM_DEPLOY", ok: false });
+      setAnswer({
+        environment,
+        outcome: { code: "DEPLOY_DISPATCH_FAILED", layer: "CONTROL_ROOM_DEPLOY", ok: false },
+      });
       setBusy(null);
     });
   };
@@ -185,7 +196,10 @@ export function GoalDeployments({
               )}
               <ActionButton
                 ariaLabel={`Deploy this goal to ${view.environment}`}
-                disabled={!deployable && !isBusy}
+                // Disabled WHILE THIS ROW IS IN FLIGHT too. Left enabled, a second click would
+                // re-arm the row under the operator and the click after that would dispatch a
+                // SECOND deploy of the same environment.
+                disabled={!deployable}
                 onClick={(): void => {
                   // KEYED BY ENVIRONMENT, never a boolean: a click on a row that is not the
                   // armed one RE-ARMS that row. Only a click on the armed row dispatches, so
@@ -212,15 +226,18 @@ export function GoalDeployments({
           );
         })}
       </ul>
-      {answer === null ? null : answer.ok ? (
+      {answer === null ? null : answer.outcome.ok ? (
         <p aria-live="polite" className="cr2-needs-note" data-testid="cr.deploy.answer" role="status">
-          Recorded. The daemon builds and replaces the container; the receipt says what it did.
+          {`Recorded for ${answer.environment}. The daemon builds and replaces the container;`
+            + " the receipt says what it did."}
         </p>
       ) : (
         <OutcomeNote
-          code={answer.code}
-          layer={answer.layer}
-          said={writeFailedSaid()}
+          code={answer.outcome.code}
+          layer={answer.outcome.layer}
+          // NAMES THE ENVIRONMENT: one note serves both rows, and an operator reading "that did
+          // not go through" beside two environments cannot tell which one refused.
+          said={`${writeFailedSaid()} (${answer.environment})`}
           testId="cr.deploy.answer"
         />
       )}
