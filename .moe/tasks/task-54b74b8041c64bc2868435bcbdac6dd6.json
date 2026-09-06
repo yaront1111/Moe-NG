@@ -113,7 +113,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T00:47:24.575Z",
+  "updatedAt": "2026-09-06T00:48:33.889Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 5,
@@ -170,6 +170,35 @@
       "treeId": "4a01df1bd7a5af67267c5262665e366bb9808385",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "7fd23222ae3bd9541348af857a48cf9d20c88991",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-06T00:35:44Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-06T00:48:33.889Z",
+      "treeId": "e93aab78899dafe767644be20f445494262bec9b",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-f961dc899a13488da8f119abdc37631f"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -177,18 +206,28 @@
     ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
     ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
     ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
-    ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+    ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.ts"
   ],
   "unattributedPaths": [
     "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/probe2.json",
+    "apps/daemon/src/__probe/probe2.test.ts",
+    "apps/daemon/src/goals/zz-probe-0520a42e.test.ts",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
-    "Moe-NG_Deep_Review_2026-09-05.md"
+    "apps/daemon/src/projects/project-catalog-registrar.js",
+    "apps/daemon/src/projects/project-catalog-registrar.ts",
+    "apps/daemon/src/repository/repository-bootstrap-command.js",
+    "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+    "Moe-NG_Deep_Review_2026-09-05.md",
+    "probe-0520a42e.txt"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-2739fee7@2026-09-06T00:35:44Z",
-    "at": "2026-09-06T00:35:52.833Z"
+    "at": "2026-09-06T00:48:33.889Z"
   },
   "workStartedAt": "2026-09-06T00:36:19.092Z",
   "blockedReason": "A CONCURRENT KIND-PUBLISHING ROW HOLDS 5 OF THIS ROW'S 9 OWNED PATHS, UNCOMMITTED, RIGHT NOW. Epic rail 3 prescribes the dependency. Blocked on task-a2409cba9ad841a690961692a2948c41 (WORKING, worker-caece97b, step 4/9).\n\nLIVENESS MEASURED: `date` 03:43:36 JST 2026-09-06; that row's task json mtime 03:41:24; daemon-command-vocabulary.test.ts mtime 03:39:28. Mid-measurement that file went red (03:38) -> green (03:39) with no edit of mine.\n\nOVERLAP: its affectedFiles are vocabulary.ts/.test.ts, registry.ts/.test.ts, payload-keys.ts, families.ts. Five are this row's owned paths and both rows must bump the SAME count literals. vocabulary.test.ts and families.ts are UNCOMMITTED foreign WIP: editing them means committing another session's bytes under this task id, or not reporting a path I modified -- global rail 5 forbids both. That is the delivery-bias rail's \"overwrite foreign WIP\" condition, and not re-orderable: DoD 1 requires all four pins reconciled IN THE SAME COMMIT as the wiring.\n\nNO SAFE PARTIAL SLICE: all four pin files are ALREADY RED AT HEAD, foreign, one cause (production carries environment.set_variable, environment.unset_variable, repository.bootstrap; the pins do not). registry.test.ts :875/:1735/:1757/:1789 `expected 53 to be 50`; store-dependencies.test.ts:769 same three kinds; v2-command-registry.test.ts:267 `expected 52 to be 49`; mcp-tool-allowlist.test.ts:143 `expected 17 to be 14`. Greening them means transcribing that row's three kinds while it is mid-flight there.\n\nARCHITECT DECISION WANTED, 1 point: MCP_EXCLUDED_COMMAND_KINDS is now DERIVED from OPERATOR_PRINCIPAL_KINDS (mcp-tool-allowlist.ts:68, less session.open), so this row's own OPERATOR_PRINCIPAL_KINDS edit MCP-excludes release.decide with no allowlist edit and moves the `excluded` denominator plus the 3 pins comment-eb460c84 gave sibling task-20b7d6bb. Step 2(d) cannot hold as written.\n\nSTATE CLEAN: no production edits, probes deleted in-command, foreign dirt untouched.",

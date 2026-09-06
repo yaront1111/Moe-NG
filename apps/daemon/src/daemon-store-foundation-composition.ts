@@ -192,6 +192,11 @@ export function createStoreDependencies(
     clock,
     ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,
+    // The SAME key the environments READ port seals under below, handed in as a thunk for the
+    // same reason: `resolveCredential` treats a throw as an absent key rather than letting an
+    // error naming a credential path escape. Without this the two environment WRITE kinds would
+    // register and then refuse every dispatch ENV_STORE_KEY_UNAVAILABLE -- served but unusable.
+    environmentCredential: () => config.credential,
     foundationCatalogSource: foundation.foundationCatalogSource,
     ...(foundation.foundationContextSeal === undefined
       ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
