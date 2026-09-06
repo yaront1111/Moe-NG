@@ -230,7 +230,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:30:16.693Z",
-  "updatedAt": "2026-09-06T10:42:27.951Z",
+  "updatedAt": "2026-09-06T10:43:22.742Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:41:35.541Z",
     "plannedStepCount": 9,
@@ -297,7 +297,12 @@
     "apps/daemon/src/mcp-dispatch-port.test.ts",
     ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
     ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
-    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json"
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+    ".moe/tasks/task-166d375f8ce9492aaf50587233545992.json",
+    ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+    ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
   ],
   "completionSummary": "DoD1-4 met. Dependency06ac0da1 already landed production roster/handler; this row finishes tests rather than duplicates wiring. Independent roster/handler deletion drills both red; real durable agent sessions submit and read via stdio AND HTTP MCP, exact revision/history and DESIGN_REVISION_ABSENT@LEDGER asserted. Unknown HTTP bearer cannot use valid fallback: AUTHENTICATION_FAILED@AUTHENTICATE. Both kinds stay advertised, MCP-unexcluded and not HUMAN_ONLY. Existing handler tests now call production reader factory and pin authentication code. Only two test paths changed; new test300lines, production dispatch396/handler126 unchanged.\nFresh scoped gate EXIT0: Test Files2passed, Tests15passed|20skipped; dispatch supplement EXIT0:1file,3passed|23skipped. Refusal drills:4/2/5 intended failures; separate production source hash checks unchanged. Plain Node bridge smoke green. Adversarial review complete.\nGovernor msg6265526a accepted scoped/path-attributed completion. Full3file final EXIT1:1failed|2passed files,2failed|59passed tests, vs pre-edit4failed|53passed; new failing paths EMPTY. Remaining exact reds: allowlist.test.ts147 expected19 to be17; bootstrap-sequence.ts109 undefined.filter, both deployment task04b3ce7e. Typecheck/verify:foundation/store EXIT1 on same bootstrap45/109 errors; no own TypeScript errors. Full-daemon/root before/after remains UNMEASURED/deferred under host gate order, explicitly disclosed to governor; NOT repo-wide green. Evidence comments74402123,bb6e6843,ec4dff9c. All subprocesses finished.",
   "commits": [
@@ -319,16 +324,34 @@
       "treeId": "cca4c1b3fed313cb8606d156c72612e761bb2c9e",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "fc6e594718fb03b6916fc6051f6903979d5bb8d5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T10:06:02Z",
+      "paths": [
+        ".moe/tasks/task-166d375f8ce9492aaf50587233545992.json",
+        ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T10:43:22.742Z",
+      "treeId": "e46a3a729e2dfb0bf35add148de38d9b06f05189",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/repository/repository-bootstrap-read.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-d81848bc@2026-09-06T10:06:02Z",
-    "at": "2026-09-06T10:06:15.313Z"
+    "at": "2026-09-06T10:43:22.742Z"
   },
   "completedAt": "2026-09-06T10:42:27.951Z",
   "reviewCompletedAt": "2026-09-06T10:42:27.951Z",

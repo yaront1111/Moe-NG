@@ -56,20 +56,39 @@ export function currentRunOf(
 /**
  * Has this goal's plan been sent back and not yet replanned?
  *
- * TRUE needs BOTH halves, and the second is what keeps it honest: the daemon has
- * moved the goal onto a run other than the one this screen was opened against, AND
- * it is not offering that run for approval yet. Once the compiler replans, the
- * successor's `approval.decide_intent` appears and this goes false on the same
- * frame that re-enables the controls - so the banner can never outlive the wait it
- * describes.
+ * TRUE needs ALL THREE halves below. The first two say the daemon has moved the goal
+ * onto a run other than the one this screen was opened against and is not offering
+ * that run for approval yet. Once the compiler replans, the successor's
+ * `approval.decide_intent` appears and this goes false on the same frame that
+ * re-enables the controls.
+ *
+ * THE THIRD IS WHAT KEEPS IT HONEST AFTER THE APPROVAL, and it was missing: the two
+ * negative halves are equally true of a goal whose successor the operator APPROVED,
+ * because `planningGoalRefs` keeps binding the successor for the goal's whole life
+ * (`affordance-planning-offers.ts` writes one ref per durable goal per read,
+ * regardless of offers) while the approval offer is withdrawn at activation. Measured
+ * live on UnAI 2026-09-06: an EXECUTION_ENABLED goal with four working nodes still
+ * bound `run-364badebfb47fdf2e0631b57` and offered NOTHING, so the board header read
+ * "Plan sent back / Waiting for a new plan" over agents that were already delivering,
+ * and Needs you held a card for a decision nobody could make.
+ *
+ * So the wait is asserted POSITIVELY: the daemon is only re-planning while it offers
+ * this goal a new decomposition. That offer is minted for exactly the state this
+ * banner describes - a goal whose current run is not reviewable, on the compiler lane
+ * with Gate 1 approved - and it survives a compiler seat holding the claim, because
+ * offers are derived from the ledger and claims ride the STEPS beside them.
  */
+const REPLAN_OFFER_KIND = "planning.submit_decomposition";
+
 export function planSentBack(
   frame: SurfaceFrame | null, goalId: string, planningRunRef: string,
 ): boolean {
   if (frame === null || frame.outcome !== "SURFACE") return false;
   const current = currentRunOf(frame, goalId, planningRunRef);
   if (current === planningRunRef) return false;
-  return !frame.offers.some((offer) =>
+  if (frame.offers.some((offer) =>
     offer["commandKind"] === "approval.decide_intent"
-    && offer["targetAggregateId"] === current);
+    && offer["targetAggregateId"] === current)) return false;
+  return frame.offers.some((offer) =>
+    offer["commandKind"] === REPLAN_OFFER_KIND && offer["targetAggregateId"] === goalId);
 }
