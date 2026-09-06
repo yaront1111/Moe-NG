@@ -196,7 +196,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-06T21:25:06.137Z",
+  "updatedAt": "2026-09-06T21:26:18.487Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 7,
@@ -324,6 +324,21 @@
       "treeId": "6a9495db9609d95e94cfebb98bd022d8fcb6abd0",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "fb0de22c75142dd6e7f10ff60343d52160f5ef50",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-adefb11e@2026-09-06T21:26:09Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json"
+      ],
+      "recordedBy": "worker-adefb11e",
+      "recordedAt": "2026-09-06T21:26:18.487Z",
+      "treeId": "6c5884686dfc1d2ff7711cc4a40279491c90cd6e",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -358,8 +373,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-adefb11e@2026-09-06T21:24:56Z",
-    "at": "2026-09-06T21:25:06.137Z"
+    "sessionId": "worker-adefb11e@2026-09-06T21:26:09Z",
+    "at": "2026-09-06T21:26:18.487Z"
   },
   "priorBlockedReason": "DoD 1's link + screenshots are UNREACHABLE from the browser at HEAD, and closing the gap is daemon work rail 1 forbids here. Steps 1-2 are done and landed (432217be, decision port, 6 arms green); this blocks the RENDERING half only.\n\nMEASURED: (1) the `preview.decide` offer is a bare envelope (affordance-planning-offers.ts:143-160: commandEnvelopeVersion, commandId, commandKind, expectedVersion, inputSchemaVersion, targetAggregateId) — no url, no screenshots. (2) `/activity/read` is an exact 7-key shape carrying VERDICTS only (enough for DoD 2, nothing for the receipt). (3) http-listener-read-dispatch.ts has 25 read routes and NOT ONE preview route; the runs read carries no preview member. (4) `createPreviewReceiptReader` is used only by affordance-read.ts:339 and its whole surface is `(goalId) => \"REFUSED\"|\"STARTED\"|null` — the url, pid and screenshots[] on PreviewReceiptV1 reach no HTTP consumer.\n\nTWO MISSING PIECES: (a) a read for the receipt (url + screenshots[] + outcome + code); (b) a way to SHOW a capture — the files live under .moe-next/previews/<goalId>/<sha>/ and no route serves those bytes, so even with (a) an img has nothing to point at.\n\nNOT WORKING AROUND IT: a synthetic card or a browser-side file read would satisfy the sentence and fail the operator; step 1 of this plan says a missing offer is a gap in the owning row, \"not something to work around with a synthetic card\".\n\nSTILL BUILDABLE WITH NO DAEMON CHANGE: the item + card off the OFFER alone (the daemon withholds it unless the receipt is STARTED), Approve, Reject + REWORK routing, the PREVIEW stage from the offer, and the four refusal words. Missing: the link, the screenshots, and the step-7 e2e assertions on them.\n\nRULING NEEDED: (1) file a sibling row for the receipt read + capture serving and I depend on it, (2) waive rail 1 so this row adds the read, or (3) narrow DoD 1. I will execute any of the three.",
   "declaredFiles": [
