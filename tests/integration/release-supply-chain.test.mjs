@@ -5,6 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { RELEASE_COMPONENTS, RELEASE_REFUSAL_REASONS } from "../../scripts/release/release-subject.mjs";
 
@@ -1273,6 +1274,45 @@ describe("release package command", () => {
       [],
       "package scripts name files absent from the committed tree",
     );
+  });
+
+  test("archives selected committed bytes with Git-for-Windows GNU tar", {
+    skip: process.platform !== "win32", timeout: 30_000,
+  }, () => {
+    const gitExecPath = execFileSync("git", ["--exec-path"], { encoding: "utf8", windowsHide: true }).trim();
+    const tar = join(gitExecPath, "..", "..", "..", "usr", "bin", "tar.exe");
+    assert.match(execFileSync(tar, ["--version"], { encoding: "utf8", windowsHide: true }), /^tar \(GNU tar\)/u);
+    const repositoryRoot = temp();
+    const git = (args) => execFileSync("git", args, {
+      cwd: repositoryRoot, encoding: "utf8", windowsHide: true,
+    }).trim();
+    git(["init", "--quiet"]);
+    git(["config", "user.email", "archive-test@example.invalid"]);
+    git(["config", "user.name", "Archive Test"]);
+    git(["config", "commit.gpgsign", "false"]);
+    git(["config", "core.autocrlf", "false"]);
+    writeFileSync(join(repositoryRoot, "tracked.txt"), "selected committed bytes\n");
+    git(["add", "tracked.txt"]);
+    git(["commit", "--quiet", "-m", "archive fixture"]);
+    const sourceSha = git(["rev-parse", "HEAD"]);
+    writeFileSync(join(repositoryRoot, "tracked.txt"), "uncommitted replacement\n");
+    const destination = join(temp(), "extracted");
+    const environment = Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => key.toUpperCase() !== "PATH" && key.toUpperCase() !== "TAR_OPTIONS"));
+    environment.PATH = `${dirname(tar)};${process.env.PATH ?? ""}`;
+    const run = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      const { archiveSource } = await import(process.argv[1]);
+      const result = await archiveSource(JSON.parse(process.argv[2]));
+      console.log(JSON.stringify({ ok: result.ok, reason: result.reason ?? null }));
+    `, pathToFileURL(join(REPO_ROOT, "scripts/release/supply-chain.mjs")).href,
+    JSON.stringify({ destination, repositoryRoot, sourceSha })], {
+      cwd: REPO_ROOT, encoding: "utf8", env: environment, timeout: 25_000, windowsHide: true,
+    });
+    assert.equal(run.error, undefined);
+    assert.equal(run.status, 0);
+    assert.deepEqual(JSON.parse(run.stdout), { ok: true, reason: null });
+    assert.equal(readFileSync(join(destination, "tracked.txt"), "utf8"), "selected committed bytes\n");
+    assert.equal(existsSync(`${destination}.tar`), false);
   });
 
   test("records truthful evidence through the actual package script", { timeout: 900_000 }, async () => {
