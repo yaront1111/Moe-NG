@@ -13,7 +13,11 @@
  * type, its name grammar and its "only set variables are returned" invariant are all defined in
  * this directory. `repository/deployment/` decides which infrastructure FILES to emit and takes
  * requirement ids, not variable names. The `.env.example` extension consumes this module's output
- * as a plain sorted `string[]`, so nothing there imports back into the environment area.
+ * as a plain sorted `string[]`, and it imports exactly ONE symbol back from here:
+ * `isContractVariableName`, at controlled-profile-root-templates.ts:24. That import is deliberate
+ * rather than a leak of this area into the generator: the grammar that filters names on their way
+ * into PUBLISHED bytes must be this module's copy, because a restated second copy could drift and
+ * the generator's is the copy whose drift would publish.
  *
  * WHY THE READ IS NOT A ONE-LINER OVER A FLATTENED REQUIREMENT LIST. Two helpers in this repo
  * spread all six requirement sections into a single array and return the BASE

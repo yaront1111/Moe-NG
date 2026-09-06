@@ -108,6 +108,30 @@ const ENV_EXAMPLE_PROFILE_LINES: readonly string[] = [
 ];
 
 /**
+ * THE NAMES THE PROFILE ITSELF ALREADY ASSIGNS, derived from the lines above rather than listed by
+ * hand: those lines are editable, and a hand-kept second list would drift silently the moment
+ * someone adds a variable to the profile.
+ *
+ * THE COLLISION RULE, AND WHY IT GOES THIS WAY. A contract may require a name the profile already
+ * supplies - `DATABASE_URL` and `POSTGRES_PASSWORD` are the obvious ones. The profile's line WINS
+ * and the contract's declaration is dropped, because the requirement is already SATISFIED by that
+ * line: the operator has a value to edit, which is more than a bare name gives them. Appending the
+ * name anyway would emit the key TWICE, and every consumer of these bytes is last-wins - README's
+ * `cp .env.example .env`, docker compose's dotenv load, and the generated app's
+ * `process.env.X ?? "<default>"`, which does NOT fall back on the empty string. The operator would
+ * get an empty value with no error naming the cause. The other resolution - letting the contract
+ * win and deleting the profile's line - would move the `/POSTGRES_PASSWORD=(\S+)/` read-back in
+ * `repository/deployment/deployment-infrastructure-generator.test.ts:305-306` and strip a working
+ * placeholder, so it is strictly worse.
+ */
+const ENV_EXAMPLE_PROFILE_ASSIGNED_NAMES: ReadonlySet<string> = new Set(
+  ENV_EXAMPLE_PROFILE_LINES.flatMap((line) => {
+    const separator = line.indexOf("=");
+    return line.startsWith("#") || separator <= 0 ? [] : [line.slice(0, separator)];
+  }),
+);
+
+/**
  * WHY THE CONTRACT'S NAMES GET THEIR OWN SECTION RATHER THAN BEING INTERLEAVED. The two halves of
  * this file are different KINDS of fact with different owners. The profile's lines are the
  * profile's, they carry chosen placeholder values, and `CHANGE_ME` is the token the README tells
@@ -131,6 +155,11 @@ const ENV_EXAMPLE_CONTRACT_HEADING: readonly string[] = [
  * feature existed — the golden manifest hash for that case does not move, and no project that
  * does not use this is affected.
  *
+ * THE EXCLUSION RUNS BEFORE THAT DECISION, deliberately. A contract whose names are ALL names the
+ * profile already assigns leaves nothing to list, and it must then emit the profile's bytes
+ * exactly - not a heading announcing a section with no lines under it. Filtering first makes the
+ * empty case and the fully-colliding case the same case.
+ *
  * Names are deduped, re-checked against the contract grammar and sorted by UTF-16 code unit HERE,
  * at the byte-emitting boundary, rather than trusted from the caller. The grammar predicate is
  * IMPORTED, not restated: a second copy could drift, and this is the copy whose drift would
@@ -140,6 +169,7 @@ const ENV_EXAMPLE_CONTRACT_HEADING: readonly string[] = [
  */
 const envExample = (requiredVariableNames: readonly string[]): string => {
   const names = [...new Set(requiredVariableNames.filter(isContractVariableName))]
+    .filter((name) => !ENV_EXAMPLE_PROFILE_ASSIGNED_NAMES.has(name))
     .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
   return names.length === 0
     ? file(ENV_EXAMPLE_PROFILE_LINES)

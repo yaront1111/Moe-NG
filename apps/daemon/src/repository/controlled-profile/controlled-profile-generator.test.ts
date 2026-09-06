@@ -288,6 +288,38 @@ describe("the contract's required variable names in .env.example", () => {
     expect(envExampleOf(withNames([...REQUIRED, ...REQUIRED]))).toBe(envExampleOf(withNames()));
   });
 
+  it("never re-declares a name the profile section already assigns", () => {
+    // The collision case, and it is not exotic: `DATABASE_URL` is the canonical required name in
+    // this row's own environment tests, and the profile already assigns it a real value. Appending
+    // the contract's names blind emits `DATABASE_URL=` a second time, and EVERY consumer of these
+    // bytes is last-wins — README:170 `cp .env.example .env`, docker-compose's dotenv load, and the
+    // generated app's `process.env.DATABASE_URL ?? "<default>"`, which does NOT fall back on "".
+    // So a blind append hands the operator an empty connection string and no error naming why.
+    const body = envExampleOf(withNames(["DATABASE_URL", "POSTGRES_PASSWORD"]));
+    const assignments = body.split("\n").filter((line) => !line.startsWith("#") && line.includes("="));
+    const keys = assignments.map((line) => line.slice(0, line.indexOf("=")));
+
+    // File-wide, not just for the two colliding names: no key may be assigned twice anywhere.
+    expect(keys).toEqual([...new Set(keys)]);
+    expect(assignments.filter((line) => line.startsWith("DATABASE_URL=")))
+      .toEqual(["DATABASE_URL=postgres://app:CHANGE_ME@localhost:5432/app"]);
+    expect(assignments.filter((line) => line.startsWith("POSTGRES_PASSWORD=")))
+      .toEqual(["POSTGRES_PASSWORD=CHANGE_ME"]);
+  });
+
+  it("emits the profile's own bytes when EVERY required name is one the profile assigns", () => {
+    // The exclusion has to happen BEFORE the "any names left?" decision, or a fully-colliding
+    // contract still gets the contract heading followed by nothing — a section announcing names
+    // it does not list. Byte-identity is the strongest available statement of that, and it is the
+    // same pin DoD 5 uses for the no-names case.
+    const untouched = envExampleOf(tree("alpha-product"));
+
+    expect(envExampleOf(withNames(["POSTGRES_PASSWORD"]))).toBe(untouched);
+    expect(envExampleOf(withNames(["DATABASE_URL", "POSTGRES_USER", "PORT"]))).toBe(untouched);
+    expect(envExampleOf(withNames(["DATABASE_URL", "APP_SECRET_NAME"])))
+      .toContain("\nAPP_SECRET_NAME=\n");
+  });
+
   it("drops a name the contract grammar could not have admitted", () => {
     // Only reachable by bypassing admission - and this is the boundary that writes bytes, so it
     // re-checks rather than trusting. A newline or an `=` in a name would inject a LINE.
