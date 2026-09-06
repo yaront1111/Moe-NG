@@ -196,7 +196,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-06T21:10:12.467Z",
+  "updatedAt": "2026-09-06T21:16:07.994Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 7,
@@ -269,6 +269,46 @@
       "treeId": "8e3949b26fe10b2aa4751bdf5ee393e3bb3b8198",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "bea8e16f4a5a02702af319d29d406c4289cc4212",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-adefb11e@2026-09-06T21:04:00.000Z",
+      "paths": [
+        "apps/control-room/src/live/live-preview.ts",
+        "apps/control-room/src/live/live-preview.test.ts",
+        "apps/control-room/src/v2/approvals/needs-you-preview.ts",
+        "apps/control-room/src/v2/approvals/needs-you-preview.test.ts",
+        "apps/control-room/src/v2/approvals/preview-card.tsx",
+        "apps/control-room/src/v2/approvals/preview-card.test.tsx",
+        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/approvals/live-needs-you.tsx",
+        "apps/control-room/src/v2/goals/use-goal-reads.ts",
+        "apps/control-room/src/v2/goals/use-goal-coverage.ts",
+        "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status-preview.ts",
+        "apps/control-room/src/v2/goals/goal-status-preview.test.ts",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/ops/activity-words.ts",
+        "apps/control-room/src/v2/ops/activity-words.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts",
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json"
+      ],
+      "recordedBy": "worker-adefb11e",
+      "recordedAt": "2026-09-06T21:16:07.994Z",
+      "treeId": "f2734293532e20b9849ee22c8521c1578b137be5",
+      "status": "WORKING",
+      "pushed": true,
+      "message": "feat(task-33ceae56edc348e9864bc592430fa1d0): Approve the working preview in the browser, and reject it into rework — closes both QA reject items in one commit: the six central deliverables land, and LIVE_PREVIEW_LAYER enters UNSCANNED_PRIVATE_LAYERS with its three coupled count pins in the same commit."
     }
   ],
   "filesModified": [
@@ -295,14 +335,16 @@
     "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
     ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
-    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json"
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    "tests/security/layer-visibility-cases.ts",
+    "tests/security/boundary-roster.security.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-0520a42e@2026-09-06T01:13:27Z",
-    "at": "2026-09-06T01:21:20.046Z"
+    "kind": "completion",
+    "sessionId": "worker-adefb11e@2026-09-06T21:04:00.000Z",
+    "at": "2026-09-06T21:16:07.994Z"
   },
   "priorBlockedReason": "DoD 1's link + screenshots are UNREACHABLE from the browser at HEAD, and closing the gap is daemon work rail 1 forbids here. Steps 1-2 are done and landed (432217be, decision port, 6 arms green); this blocks the RENDERING half only.\n\nMEASURED: (1) the `preview.decide` offer is a bare envelope (affordance-planning-offers.ts:143-160: commandEnvelopeVersion, commandId, commandKind, expectedVersion, inputSchemaVersion, targetAggregateId) — no url, no screenshots. (2) `/activity/read` is an exact 7-key shape carrying VERDICTS only (enough for DoD 2, nothing for the receipt). (3) http-listener-read-dispatch.ts has 25 read routes and NOT ONE preview route; the runs read carries no preview member. (4) `createPreviewReceiptReader` is used only by affordance-read.ts:339 and its whole surface is `(goalId) => \"REFUSED\"|\"STARTED\"|null` — the url, pid and screenshots[] on PreviewReceiptV1 reach no HTTP consumer.\n\nTWO MISSING PIECES: (a) a read for the receipt (url + screenshots[] + outcome + code); (b) a way to SHOW a capture — the files live under .moe-next/previews/<goalId>/<sha>/ and no route serves those bytes, so even with (a) an img has nothing to point at.\n\nNOT WORKING AROUND IT: a synthetic card or a browser-side file read would satisfy the sentence and fail the operator; step 1 of this plan says a missing offer is a gap in the owning row, \"not something to work around with a synthetic card\".\n\nSTILL BUILDABLE WITH NO DAEMON CHANGE: the item + card off the OFFER alone (the daemon withholds it unless the receipt is STARTED), Approve, Reject + REWORK routing, the PREVIEW stage from the offer, and the four refusal words. Missing: the link, the screenshots, and the step-7 e2e assertions on them.\n\nRULING NEEDED: (1) file a sibling row for the receipt read + capture serving and I depend on it, (2) waive rail 1 so this row adds the read, or (3) narrow DoD 1. I will execute any of the three.",
   "declaredFiles": [
