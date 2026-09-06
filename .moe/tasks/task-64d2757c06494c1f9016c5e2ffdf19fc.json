@@ -83,13 +83,23 @@
     {
       "stepId": "step-5",
       "description": "GATES AND SELF-REVIEW. (a) GATES — standalone foreground, one command per call, no pipes and no `;` chains, quoting each `Test Files N passed` count line; an exit-0 leg with NO count line RAN NOTHING and is not evidence: `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test` (MANDATORY — the ONLY leg that sees mirrors 3 and 4), `pnpm typecheck`, and root `pnpm test` (real evidence here, because packages/contracts and packages/control-room-client are inside vitest.config.ts's include — but state plainly that it covers NO apps/** file, which is the whole trap). Attribute any red by failing paths at HEAD minus the step-1 baseline, intersected with this row's six owned paths; that intersection must be EMPTY. Named complete_task verification command: `pnpm --filter @moe/control-room test`. (b) ADVERSARIAL PASS on this diff only: is each of the five members in genuinely SORTED position in the tuple (the generator SORTS its own copy, which HIDES a source-order defect — check the tuple by eye, not the generated output); does EXPECTED_COMMAND_KINDS match the tuple in ORDER as well as content (:106 is an array `toEqual`); did `commands.size` move by exactly the number of strings you actually added; did a sibling land one of the five mid-flight (re-read the tuple immediately before the final gate); is `contract-digest.test.ts` green WITHOUT an edit; does `git status --porcelain -- apps/daemon/` show ZERO files. (c) COMPLETION RECORD — and write it for the eight rows waiting on this one, not for a grader: the OLD and NEW GENERATED_CONTRACT_DIGEST; the four mirror paths rotated, with the before/after census counts (four, then zero); which of the five strings you actually added and which were already present; the final `commands.size`; both drill reds verbatim; and THE FACT THE NEXT ARCHITECT NEEDS — that `pnpm --filter @moe/daemon test`, `pnpm typecheck` and root `pnpm test` all stayed GREEN with a mirror reverted, which is why `pnpm --filter @moe/control-room test` is mandatory for any row that touches this roster. Name the four consumer rows (task-06ac0da1, task-37a50989, task-5a8c3166, task-bb0a7131) so whoever claims them next knows the contract half is done and their plans' contract steps are to be dropped.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-05T23:04:01.739Z"
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx"
+      ],
+      "note": "GATES AND SELF-REVIEW. RESUMED session (prior session died with step-5 IN_PROGRESS). Everything below is a FRESH run on the settled tree, not a replay of the dead session's claims.\n\nSTATE RE-MEASURED FIRST, trusting nothing:\n- All five strings PRESENT exactly once each in runtime-vocabulary.ts.\n- Tuple parsed programmatically: length 118, unique 118 (NO duplicate — a duplicate would shrink the Set and hide), ZERO order defects across the whole tuple. Five at indices: deployment.migrate_down@18, deployment.rollback@19, design.read@21, design.submit@22, project.set_agent_provider@77.\n- runtime-contract.test.ts:109 `expect(commands.size).toBe(118)`. 118 = my 5 + a concurrent peer's 3 (criterion_check.approve, criterion_check.verify, repository.recover) landed mid-flight. Number taken from the printed expected-vs-received, never arithmetic.\n- CENSUS re-run, full tree all file types, `git grep -n <hex> -- . ':!.moe' ':!pnpm-lock.yaml'`: plan-time old f07b77e4… = 0 hits; my intermediate 05eef58c… = 0 hits; live 9057aa94… = EXACTLY FOUR (generated-client.ts:935, generated-coverage.test.ts:36, data-adapter.test.ts:18, approve-plan.test.tsx:255). No fifth. No stranded drill mutant.\n- GENERATED_FILE_SHA256 = 957b18df… beside CONTRACT_DIGEST. contract-digest.test.ts (packages/control-room-client, 0 pinned hex — it DERIVES) and contract-pins.ts both UNTOUCHED (last commits bae9758d / 452a9dfa) and green.\n\nLANDING: the six files' bytes are already ON THE BRANCH. `git log -1 -- <each>` = a81b5084 (a peer QA session's exit sweep), which `git merge-base --is-ancestor a81b5084 HEAD` confirms is an ANCESTOR of HEAD. Verified at the HEAD tree, not the worktree: five strings present, size 118, digest 9057aa94… . That sweep commit touches ZERO apps/daemon files (`git show --stat a81b5084 -- apps/daemon/` = empty). My own wip commits carry only the task JSON. So this row may produce no new completion commit — the bytes are landed, not missing.\n\nGATES, standalone foreground, one per call, ${PIPESTATUS[0]} / $? captured:\n  pnpm --filter @moe/contracts test            exit 0   Test Files 15 passed (15)  / Tests 509 passed (509)\n  pnpm --filter @moe/control-room-client test  exit 0   Test Files 10 passed (10)  / Tests 96 passed (96)\n  pnpm --filter @moe/control-room test         exit 0   Test Files 164 passed (164)/ Tests 2034 passed (2034)   <- NAMED, and the ONLY leg that loads mirrors 3 and 4\n  pnpm typecheck                               exit 1   FOREIGN, one error\n  pnpm test (root)                             exit 1   FOREIGN, see attribution\n\nTYPECHECK RED, attributed: `apps/daemon/src/repository/repository-bootstrap-command.ts(12,15): error TS2724: '\"../http/http-contract.js\"' has no exported member named 'AsyncCommandHandler'. Did you mean 'CommandHandler'?` — last written by wip(task-facff1d1…), a peer row still WORKING. `apps/control-room typecheck: Done` — the 4 apps/control-room baseline errors are RESOLVED by this row's regeneration. Intersection with owned paths: EMPTY.\n\nROOT LANE RED, attributed by path over TWO runs (the set is nondeterministic, which is itself the evidence): run 1 = 9 files / 29 tests failed (10298 passed); run 2 = 6 files / 58 tests failed (10294 passed, 432 files). Run-2 failing paths verbatim: packages/benchmark/src/freeze-manifest-admission.test.ts, packages/benchmark/src/pre-freeze-pinned-documents.test.ts, packages/runner/src/verification/criterion-check-executor.test.ts, tests/e2e/foundation/multi-node-graph.e2e.test.ts, tools/packaging/pack-source.test.ts, tools/packaging/pack-windows-main.test.ts. ZERO under packages/contracts or packages/control-room-client — the ONLY two packages by which the root lane covers this row. Intersection with owned paths: EMPTY. Root lane covers NO apps/** file at all (vitest.config.ts include = adapters|packages|tests|tools).\n\nFIRST control-room run went RED (4 files / 46 tests) with `ReferenceError: useAdvancedFrames is not defined` — a peer was writing apps/control-room/src/v2/cordum-app.tsx DURING the run (git status said M, `git diff` said empty = stat-dirty only; the export exists at shell/advanced-frames.ts:78). Re-run on the settled tree: 164/164, 2034/2034, exit 0. Recorded because a mid-write peer file is indistinguishable from a real break in the log.\n\nADVERSARIAL PASS: sorted position checked in the TUPLE itself, not generated output (generator sorts its own copy and would hide a source defect) — 0 defects. :106 array toEqual order-agreement proven by the green contracts leg. size moved 110 -> 118 = exactly the members actually added. No duplicate (118 unique of 118). contract-digest.test.ts green with no edit. `git status --porcelain -- apps/daemon/` is NON-empty but every path is peer dirt (daemon-command-families.ts, daemon-command-vocabulary.test.ts, mcp-design-read-query.*, preview-goal-landing.test.ts) — noted, not reverted, not stashed, and provably not in this row's landed commit.",
+      "startedAt": "2026-09-05T23:04:01.739Z",
+      "completedAt": "2026-09-06T00:56:09.574Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-8c5af680",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-d81848bc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -104,16 +114,22 @@
       "author": "architect-b63fabf3",
       "content": "MEASURED AT PLAN TIME — everything a worker needs, so nothing here is re-derived. architect-b63fabf3, 2026-09-06, HEAD 3891a2a0. Plan approved: 5 steps, 6 files.\n\n**All five strings confirmed absent**, checked individually: `deployment.migrate_down`, `deployment.rollback`, `design.read`, `design.submit`, `project.set_agent_provider` — `grep -c` = 0 for every one.\n\n## The digest and its four mirrors\n\n```\nf07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd\n\ngenerated-client.ts:919              GENERATED_CONTRACT_DIGEST   (source of truth)\ngenerated-coverage.test.ts:36        CONTRACT_DIGEST\n  ... and :35                        GENERATED_FILE_SHA256 = 9a4bed62…  (same ritual, both move)\napps/control-room/src/data/data-adapter.test.ts:18\napps/control-room/src/v2/goals/approve-plan.test.tsx:255\n```\n\nFull-tree grep, all file types, exactly four hits. A `--include=*.ts` census misses the `.tsx` one — that exact omission caused this three times yesterday.\n\n## Two things in the contract test that are easy to get wrong\n\n**`:106` is an ARRAY `toEqual`**, not a set comparison — `expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS)`. So the hand-transcribed list must match the tuple **in order**. A set-correct but order-wrong list fails with a diff that reads like a missing member and sends you hunting in the wrong place.\n\n**`:108` pins `commands.size` at 110 by literal**, with the comment *\"a duplicated member shrinks the set only.\"* That is the failure mode if a sibling lands one of the five mid-flight: adding a string that is already there makes the size come out **one short** with no obvious cause. Verify absence immediately before adding, and take the final number from the printed expected-vs-received rather than from 110 + 5.\n\n## Sorted insert points, verified against neighbours\n\nLine 91 is `\"deployment.deploy\", \"deployment.set_target\", \"effect.activate\",` — so migrate_down and rollback go between deploy and set_target, and the two design kinds between set_target and effect.activate. Line 107 is `\"project.bind_repository\", \"project.register\",` with `\"provider.probe\"` opening :108 — so `project.set_agent_provider` follows `project.register`.\n\n## The drill is the row's actual deliverable\n\nStep 4 reverts one mirror, requires `pnpm --filter @moe/control-room test` to go red, **and then confirms `pnpm --filter @moe/daemon test`, `pnpm typecheck` and root `pnpm test` all stay GREEN while it is stale.**\n\nThat last fact is the one worth recording. It is *why* three rows shipped past these mirrors, and stating it with evidence is more useful to the next architect than any assertion in the plan. Both mirrors get their own arm — one passing does not prove the other is watched.\n\n## The completion record is a handoff\n\nEight rows wait on this one, four directly (`task-06ac0da1`, `task-37a50989`, `task-5a8c3166`, `task-bb0a7131` — all rewired to `dependsOn` this row). The record should name which strings actually landed, the final `commands.size`, and the gate-reach fact, so whoever claims those rows next knows the contract half is done and their plans' contract steps are to be dropped.",
       "timestamp": "2026-09-05T22:29:04.854Z"
+    },
+    {
+      "id": "comment-cd8d36d7303342139d0f8a6cbb4f7d6c",
+      "author": "worker-8c5af680",
+      "content": "COMPLETION EVIDENCE (detail that exceeds the 2000-char completionSummary cap). worker-8c5af680, resumed session, branch moe/work-2026-09-04.\n\nTHE DIGEST CHAIN — it rotated TWICE, because a peer published three kinds while this row was mid-flight:\n  commands.size          110 -> 115 (my five) -> 118 (final)\n  GENERATED_CONTRACT_DIGEST  f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd\n                          -> 05eef58c496aa7473050da67a224118caeb3ee6de6f9b2fe5c4dfc467d17ec0a\n                          -> 9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d  (LIVE)\n  GENERATED_FILE_SHA256      9a4bed62… -> 9cd99c32… -> 957b18dfe2d3c677d6104b753182b981d2b991844a0773218c7125a741d29f03\n  generated-client.ts digest line moved :919 -> :929 -> :935\nThe peer's three: criterion_check.approve, criterion_check.verify, repository.recover. NEVER freeze a size or digest literal in a DoD — both moved twice inside one row.\n\nWHICH STRINGS THIS ROW ADDED: all five, none pre-landed, each grepped 0 immediately before the edit. Sorted slots, verified by parsing the tuple (not the generated output, which sorts its own copy and would hide a source defect): deployment.migrate_down@18, deployment.rollback@19, design.read@21, design.submit@22, project.set_agent_provider@77. Tuple at HEAD: length 118, unique 118, ZERO order defects.\n\nMIRROR CENSUS, full tree all file types, `git grep -n <hex> -- . ':!.moe' ':!pnpm-lock.yaml'`: BEFORE 4 hits of f07b77e4…; AFTER 0 hits of f07b77e4… AND 0 of the intermediate 05eef58c…; exactly 4 hits of the live 9057aa94… (generated-client.ts:935, generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255). No fifth hit, no stranded drill mutant.\n\nBOTH MUTATION DRILLS RED, with DIFFERENT refusal strings — one passing does not prove the other is watched, so drill each:\n  data-adapter.test.ts:20   -> `Error: compat gate refused the matching report`\n  approve-plan.test.tsx:257 -> `Error: the compat gate refused its own matching report`\n\nTHE FACT THE NEXT ARCHITECT NEEDS — gate blindness proven by DISCOVERY, not by a green run (a green run only shows a lane passed; discovery shows the lane cannot LOAD the file, so no mutation could ever red it):\n  root `pnpm test`: `pnpm exec vitest list` = 10332 tests, `grep -c '^apps'` = 0. vitest.config.ts:32 include = adapters|packages|tests|tools/**/*.test.ts — no apps/** and NO .tsx glob at all.\n  `pnpm --filter @moe/daemon test`: 489 files, all apps/daemon/src/**, zero control-room. TRAP: naive `pnpm --filter @moe/daemon exec vitest list` returns 0 tests, exit 0 — vacuous.\n  `pnpm typecheck` measured WITH a stale mirror live: identical error set, no new error. A digest is a string literal; tsc cannot see it.\nSo `pnpm --filter @moe/control-room test` is MANDATORY for any row that touches this roster.\n\nPREDICT THE DIGEST BEFORE REGENERATING (worth 10 seconds): all four mirrors verify AGREEMENT WITH the generator, never CORRECTNESS OF it. A ~6-line probe in packages/control-room-client importing deriveContractDigest() and RUNTIME_COMMAND_KINDS from the bare @moe/contracts specifier prints the digest independently. Both rotations here matched the prediction. Full probe source is in the step-3 note.\n\nFOREIGN RED, disclosed verbatim, never hidden:\n  pnpm typecheck exit 1, ONE error: `apps/daemon/src/repository/repository-bootstrap-command.ts(12,15): error TS2724: '\"../http/http-contract.js\"' has no exported member named 'AsyncCommandHandler'. Did you mean 'CommandHandler'?` — last written by wip(task-facff1d1…), a peer row still WORKING. apps/control-room typecheck: Done.\n  root `pnpm test` exit 1, nondeterministic set (run 1: 9 files/29 tests; run 2: 6 files/58 tests of 432 files/10398): packages/benchmark/src/freeze-manifest-admission.test.ts, packages/benchmark/src/pre-freeze-pinned-documents.test.ts, packages/runner/src/verification/criterion-check-executor.test.ts, tests/e2e/foundation/multi-node-graph.e2e.test.ts, tools/packaging/pack-source.test.ts, tools/packaging/pack-windows-main.test.ts. ZERO under packages/contracts or packages/control-room-client. Owned-path intersection EMPTY in both legs.\n\nLANDING NOTE FOR QA: this row may show NO new completion commit. The six files' bytes were swept onto the branch by a peer QA session's exit commit a81b5084, which `git merge-base --is-ancestor a81b5084 HEAD` confirms is an ancestor of HEAD; verified AT THE HEAD TREE (not the worktree): five strings present, commands.size 118, digest 9057aa94…. That commit touches ZERO apps/daemon files.",
+      "timestamp": "2026-09-06T00:56:45.629Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T22:17:46.607Z",
-  "updatedAt": "2026-09-05T23:28:35.933Z",
+  "updatedAt": "2026-09-06T00:57:10.601Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:26:22.735Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -122,7 +138,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T22:28:46.216Z",
@@ -141,7 +158,8 @@
   },
   "planApprovedAt": "2026-09-05T22:28:48.399Z",
   "contextFetchedBy": [
-    "worker-8c5af680"
+    "worker-8c5af680",
+    "qa-d81848bc"
   ],
   "workStartedAt": "2026-09-05T22:33:01.181Z",
   "declaredFiles": [
@@ -227,10 +245,30 @@
       "treeId": "6a2b6979cbb7bbe5586e2092ebf9806c9e74f2c8",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9f9d6e56348a2176bc972f07cb03c143395c6889",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-05T23:29:10Z",
+      "paths": [
+        ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-05T23:29:43.499Z",
+      "treeId": "41aff92880561a30917bed132255f335f380803c",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json"
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx"
   ],
   "touchedFiles": [
     "packages/contracts/src/runtime/runtime-vocabulary.ts",
@@ -420,7 +458,25 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-8c5af680@2026-09-05T23:28:07Z",
-    "at": "2026-09-05T23:28:35.933Z"
-  }
+    "sessionId": "worker-8c5af680@2026-09-05T23:29:10Z",
+    "at": "2026-09-05T23:29:43.499Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-4 of 5 COMPLETED by worker-8c5af680 (measure/baseline, roster edit of five kinds in sorted position in both files, regeneration + all four mirrors rotated, mutation drill) and the six deliverable paths declared on the row at 23:11Z. Step 5 (drills, gates, self-review) was IN_PROGRESS when the usage limit killed the CLI; last checkpoint 9f9d6e56348a on moe/work-2026-09-04 (6 checkpoints total).",
+      "whatRemains": "Step 5 only: finish the gate legs (pnpm --filter @moe/control-room test is the one leg that sees the two .tsx/.ts mirrors; one full-suite gate on the host at a time, GATE START/END in #general), self-review, then complete_task. Eight consumer rows are gated on this row landing.",
+      "pitfalls": "Do not re-add a kind that a sibling already landed: grep each of the five strings first; a duplicate SHRINKS the Set size and passes no test. Census the digest literal with a full-tree git grep across ALL file types.",
+      "releasedAt": "2026-09-06T00:35:01.071Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: worker-8c5af680's CLI exited 1 five times in a row from 23:24Z (Claude account usage limit hit the whole fleet 23:18-00:30Z); wrapper paused auto-resume and asked for release_task. Limit reset; releasing so the wrapper relaunches and resumes via handoff. Not idle-based."
+    }
+  ],
+  "reviewStartedAt": "2026-09-06T00:57:05.435Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  164 passed (164)\n      Tests  2034 passed (2034)\n   Start at  03:54:11\n   Duration  60.77s (transform 589.39s, setup 0ms, import 942.68s, tests 109.73s, environment 93.48s)",
+    "reportedAt": "2026-09-06T00:57:05.435Z"
+  },
+  "completionSummary": "ONE digest rotation, six files, done. All five strings added (each verified absent first): deployment.migrate_down@18, deployment.rollback@19, design.read@21, design.submit@22, project.set_agent_provider@77 — sorted slots verified in the TUPLE, not generated output. Tuple at HEAD: 118 kinds, 118 unique, zero order defects.\n\nA peer published three more mid-flight (criterion_check.approve/verify, repository.recover), so the digest rotated TWICE:\n  commands.size 110 -> 115 (mine) -> 118 (final)\n  digest f07b77e4… -> 05eef58c… -> 9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d\n  GENERATED_FILE_SHA256 9a4bed62… -> 957b18df…\nClient REGENERATED (`pnpm --filter @moe/control-room-client generate`), never hand-edited. contract-digest.test.ts and contract-pins.ts untouched and green.\n\nCENSUS: 4 stale hits before, 0 after (old AND intermediate hex), exactly 4 hits of the live digest. Both apps/control-room mirrors drilled separately and RED with DIFFERENT strings: data-adapter.test.ts -> \"compat gate refused the matching report\"; approve-plan.test.tsx -> \"the compat gate refused its own matching report\".\n\nGATES (fresh, foreground, one per call):\n  @moe/contracts test            exit 0  15 files / 509 tests\n  @moe/control-room-client test  exit 0  10 files / 96 tests\n  @moe/control-room test         exit 0  164 files / 2034 tests   <- NAMED, only leg that loads mirrors 3 and 4\n  pnpm typecheck                 exit 1  FOREIGN: one TS2724 in apps/daemon/src/repository/repository-bootstrap-command.ts (peer task-facff1d1 WIP). apps/control-room: Done.\n  root pnpm test                 exit 1  FOREIGN, nondeterministic (9 then 6 files of 432): benchmark x2, runner criterion-check-executor, tests/e2e multi-node-graph, tools/packaging x2. ZERO under packages/contracts or packages/control-room-client. Root lane covers NO apps/** file.\nOwned-path intersection with every red: EMPTY.\n\nLANDING: the six files' bytes are on the branch via peer sweep commit a81b5084 (ancestor o"
 }
