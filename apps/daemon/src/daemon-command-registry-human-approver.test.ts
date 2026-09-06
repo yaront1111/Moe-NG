@@ -351,13 +351,13 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // operator bootstrap credential, so an advertised operator kind would let an agent arrive
       // AS THE OPERATOR — the exclusion is derived from OPERATOR_PRINCIPAL_KINDS, not typed here.
       "repository.bootstrap",
-      "release.decide", "deployment.deploy", "deployment.set_target",
+      "release.decide", "deployment.deploy", "deployment.rollback", "deployment.set_target",
       // Asking for a product preview runs the product on the daemon's host, so it is the
       // operator's act and never an agent's. Derived from OPERATOR_PRINCIPAL_KINDS like the rest.
       "preview.start",
     ]);
-    expect(expectedExclusions).toHaveLength(21);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(21);
+    expect(expectedExclusions).toHaveLength(22);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(22);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

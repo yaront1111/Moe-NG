@@ -13,6 +13,9 @@ import {
 } from "@moe/core";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
+import { HEALTH_PROBE_JOB_ID } from "./monitoring/health-probe-contracts.js";
+import { createHealthProbeRing } from "./monitoring/health-probe-ring.js";
+import { recordDeployReceipt } from "./deployment/deploy-ledger.js";
 
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
@@ -823,7 +826,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "approval.decide", "approval.decide_intent",
         "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
-        "deployment.deploy", "deployment.set_target",
+        "deployment.deploy", "deployment.rollback", "deployment.set_target",
         // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
         "design.submit",
         "effect.activate",
@@ -1124,10 +1127,10 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
   const deploymentMembers = (roster: Iterable<string>): readonly string[] =>
     [...roster].filter((kind) => kind.startsWith("deployment.")).sort();
 
-  it("advertises both kinds, so the equalities below have a non-empty subject", () => {
+  it("advertises the deployment kinds, so the equalities below have a non-empty subject", () => {
     // A roster arm whose subject is empty passes VACUOUSLY. This is the control that keeps the
     // three equalities meaningful, and it names the kinds once so a rename is caught here.
-    expect(advertised).toEqual(["deployment.deploy", "deployment.set_target"]);
+    expect(advertised).toEqual(["deployment.deploy", "deployment.rollback", "deployment.set_target"]);
   });
 
   it("fences every advertised deployment kind at dispatch, on MCP and in the wrapper", () => {
@@ -1162,5 +1165,85 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     // have. The membership is proved rather than declared in
     // daemon-command-async-entries.test.ts, which dispatches the kind through the entry.
     expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual(["deployment.deploy"]);
+  });
+});
+
+describe("production health probe registration", () => {
+  it("fails closed if the production probe timer cannot be armed", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-failed-timer-"));
+    const path = join(root, "store.db");
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-timer", storePath: path,
+      schedule: { timer: { set: () => { throw new Error("not disclosed"); }, clear: () => {} } } };
+    try {
+      expect(() => createStoreDependencies(config)).toThrow("SCHEDULE_TIMER_FAILED@DAEMON_INGRESS");
+      const reopened = SqliteEventStore.openForProject(path, config.projectId);
+      try { expect(reopened.getHealth().quickCheck).toBe("ok"); } finally { reopened.close(); }
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("rebinds one durable monitor on restart and retains the same probe rate", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-compose-"));
+    const path = join(root, "store.db");
+    const timers = new Map<() => void, number>();
+    let calls = 0;
+    let externalCalls = 0;
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor", storePath: path,
+      schedule: { timer: { set: (tick: () => void, interval: number) => { timers.set(tick, interval); return tick; },
+        clear: (handle: unknown) => { timers.delete(handle as () => void); } }, resolve: () => () => { externalCalls++; } },
+      healthProbeHttp: async () => { calls++; return 200; } };
+    let provider = createStoreDependencies(config);
+    const store = SqliteEventStore.openForProject(path, config.projectId);
+    try {
+      expect([...timers.values()]).toEqual([60000]);
+      expect(provider.schedules()).toBe(provider.schedules());
+      expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "monitor-deploy",
+        decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
+        refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
+      const tick = async (): Promise<void> => {
+        [...timers].find((entry) => entry[1] === 60000)?.[0]();
+        await new Promise<void>((done) => setImmediate(done));
+      };
+      await tick(); await tick(); expect(calls).toBe(2);
+      expect(provider.schedules().register("unrelated", () => { externalCalls++; }, 250)).toEqual({ ok: true });
+      provider.close(); expect(timers.size).toBe(0);
+      provider = createStoreDependencies(config);
+      expect([...timers.values()].sort((a, b) => a - b)).toEqual([250, 60000]);
+      await tick(); await tick(); expect(calls).toBe(4);
+      [...timers].find((entry) => entry[1] === 250)?.[0]();
+      expect(externalCalls).toBe(1);
+      const registrations = store.readEvents(`durable-schedule/${config.projectId}`)
+        .map((event) => JSON.parse(new TextDecoder().decode(event.payload)) as { id: string; intervalMs: number });
+      expect(registrations.filter((entry) => entry.id === HEALTH_PROBE_JOB_ID)).toEqual([{ id: HEALTH_PROBE_JOB_ID, intervalMs: 60000 }]);
+      const read = createHealthProbeRing(`${path}.health.sqlite`, config.projectId).read("preview");
+      if (!read.ok) throw new Error(read.code);
+      expect(read.value).toHaveLength(4);
+    } finally { provider.close(); store.close(); rmSync(root, { recursive: true, force: true }); }
+    expect(timers.size).toBe(0);
+  });
+
+  it("aborts the real registered callback on close without persisting a late observation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-abort-"));
+    const path = join(root, "store.db");
+    let tick: (() => void) | undefined;
+    let seen: AbortSignal | undefined;
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-abort", storePath: path,
+      schedule: { timer: { set: (callback: () => void) => { tick = callback; return callback; }, clear: () => { tick = undefined; } } },
+      healthProbeHttp: async (_url: string, signal: AbortSignal): Promise<number> => {
+        seen = signal; return new Promise<number>(() => { /* Deliberately ignores cancellation. */ });
+      } };
+    const provider = createStoreDependencies(config);
+    const store = SqliteEventStore.openForProject(path, config.projectId);
+    try {
+      expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "abort-deploy",
+        decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
+        refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
+      expect(tick).toBeTypeOf("function"); tick?.();
+      expect(seen?.aborted).toBe(false);
+      provider.close();
+      expect(seen?.aborted).toBe(true);
+      await new Promise<void>((done) => setImmediate(done));
+      expect(createHealthProbeRing(`${path}.health.sqlite`, config.projectId).read("preview")).toEqual({ ok: true, value: [] });
+      expect(tick).toBeUndefined();
+    } finally { provider.close(); store.close(); rmSync(root, { recursive: true, force: true }); }
   });
 });

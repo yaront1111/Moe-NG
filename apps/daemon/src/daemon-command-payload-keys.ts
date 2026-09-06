@@ -171,6 +171,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // build an arbitrary directory on the daemon's host. Both lists are the slice's own.
     "deployment.set_target": ["environment", "network", "sshTarget", "url"],
     "deployment.deploy": ["environment", "sha"],
+    "deployment.rollback": ["environment", "toReceiptRef", "restoreDatabase"],
     // `github` nests owner/name/visibility exactly as `observation` does above; `projectId` is
     // ABSENT BY CONSTRUCTION -- authenticated, so naming it is INPUT_INVALID at PAYLOAD_SHAPE.
     "repository.bootstrap": ["dir", "github", "productName", "profileVersion"],

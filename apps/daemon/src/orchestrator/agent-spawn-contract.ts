@@ -252,6 +252,8 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // stops the wrapper staffing it — and `deploy-command.ts` fences the dispatch itself, since an
   // async entry never reaches the registry's synchronous operator check.
   "deployment.set_target", "deployment.deploy",
+  // Replacing the running production image is an operator decision, never staffed work.
+  "deployment.rollback",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */

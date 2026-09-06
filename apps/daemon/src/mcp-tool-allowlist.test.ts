@@ -9,6 +9,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
@@ -202,7 +203,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(21);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(22);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -243,7 +244,7 @@ describe("wiredMcpToolKinds command half", () => {
     // advertised command plus one advertised query (`design.read`). A `design.submit` that had
     // been copied into OPERATOR_PRINCIPAL_KINDS by habit would show here as excluded: 18,
     // wired: 43.
-    }).toEqual({ excluded: 21, queries: 7, vocabulary: 58, wired: 44 });
+    }).toEqual({ excluded: 22, queries: 7, vocabulary: 59, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {
@@ -324,6 +325,11 @@ describe("task-4dd05f0c served/advertised parity", () => {
   });
 
   it("C2 keeps every excluded kind SERVED by the registry — this closes ONE transport", () => {
+    expect({
+      operator: OPERATOR_PRINCIPAL_KINDS.has("deployment.rollback"),
+      mcp: wiredMcpToolKinds().includes("deployment.rollback"),
+      human: HUMAN_ONLY_STEPS.has("deployment.rollback"),
+    }).toEqual({ operator: true, mcp: false, human: true });
     // Widened to string[] deliberately: `registry.keys()` is typed as the closed command-kind
     // union, and MCP_EXCLUDED_COMMAND_KINDS is `readonly string[]` so the roster can name a
     // kind the union does not yet carry. Comparing as strings is what makes the misspelling

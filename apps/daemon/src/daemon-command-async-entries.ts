@@ -38,6 +38,8 @@ import type { BootstrapGhPort } from "./repository/repository-bootstrap-contract
  * above it before it can be called.
  */
 export type AsyncCommandKind =
+  // Rollback replaces an image and polls health; a synchronous outcome would precede the effect.
+  | "deployment.rollback"
   | typeof RELEASE_DECIDE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND
   | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
@@ -129,6 +131,25 @@ function unconfiguredReleaseHandler(
   };
 }
 
+const ROLLBACK_CODE_LAYER_MAP = Object.freeze({
+  ROLLBACK_RECEIPT_UNKNOWN: "DAEMON_PREREQUISITE",
+} as const);
+
+/** Deliberate stub until task-da60dc4b supplies receipt resolution and the rollback effect. */
+function unconfiguredRollbackHandler(
+  operatorPrincipalId: string,
+): NonNullable<CommandRegistryEntry["asyncHandler"]> {
+  return async (input) => {
+    if (input.principal.principalId !== operatorPrincipalId) {
+      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
+        "this command requires the configured operator principal", 403);
+    }
+    throw new DomainRefusal("ROLLBACK_RECEIPT_UNKNOWN",
+      ROLLBACK_CODE_LAYER_MAP.ROLLBACK_RECEIPT_UNKNOWN,
+      "no rollback port is composed; the target receipt cannot be resolved", 422);
+  };
+}
+
 /** Async entries, keyed by kind so the registry can answer one lookup and stop. */
 export function createAsyncCommandEntries(
   options: AsyncCommandEntryOptions,
@@ -202,6 +223,11 @@ export function createAsyncCommandEntries(
       ? {} : { workspace: options.previewWorkspace }),
   });
   return Object.freeze({
+    "deployment.rollback": Object.freeze({
+      asyncHandler: unconfiguredRollbackHandler(options.operatorPrincipalId),
+      handler: foundationSyncHandler, kind: "deployment.rollback",
+      payloadKeys: PAYLOAD_KEYS["deployment.rollback"], requiredCapability: CAPABILITIES.GOAL,
+    }),
     [PREVIEW_START_COMMAND_KIND]: Object.freeze({
       asyncHandler: startPreviewCommand, handler: foundationSyncHandler,
       kind: PREVIEW_START_COMMAND_KIND,

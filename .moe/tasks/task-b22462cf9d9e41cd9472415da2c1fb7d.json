@@ -22,82 +22,147 @@
     {
       "stepId": "step-1",
       "description": "MEASURE LIVE. NO EDITS IN THIS STEP. Eight rows are contending these files (task-04b3ce7e, task-0a56ecee, task-537320ee, task-54b74b80, task-6cbcf5ff, task-c422b106, task-c851961b, task-dbc79d25), so every number and every line reference below is a plan-time reading.\n\n(a) THE GAP: `git grep -n \"deployment.rollback\" -- apps/daemon/src` - expected ZERO at plan time. If a sibling has wired it since, STOP and re-plan rather than landing a duplicate.\n\n(b) THE DERIVATION THAT CAUSED THIS RE-PLAN: read mcp-tool-allowlist.ts around the `MCP_EXCLUDED_COMMAND_KINDS` definition and confirm it is still\n  ...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()\nThis is why the fence files are in this plan: adding the kind to `OPERATOR_PRINCIPAL_KINDS` moves the exclusion and its count pins with NO edit to the allowlist source. There is no MCP-advertised interim to close.\n\n(c) THE ASYNC PRECEDENT: `grep -n \"DEPLOYMENT_DEPLOY_COMMAND_KIND\\|AsyncCommandKind\" apps/daemon/src/daemon-command-async-entries.ts` - `deployment.deploy` sits in that union (:56 at plan time) with a comment at :49 explaining why a synchronous handler cannot express it. Rollback is the same shape.\n\n(d) THE SIZE HAZARD: `wc -l apps/daemon/src/daemon-command-vocabulary.ts` - 392 at plan time against a 400 HARD cap. Plan your edit to fit, or move the family entry to daemon-command-families.ts.\n\n(e) THE CURRENT PIN VALUES: `git grep -n \"toHaveLength([0-9]\\+)\\|toBe([0-9]\\+)\" -- apps/daemon/src/daemon-command-registry.test.ts apps/daemon/src/daemon-command-registry-human-approver.test.ts apps/daemon/src/mcp-tool-allowlist.test.ts apps/daemon/src/mcp-main.test.ts apps/daemon/src/mcp-http/mcp-http-host.test.ts apps/daemon/src/daemon-v2-command-registry.test.ts`. RECORD THEM; do not trust them. `deployment.set_target` and `deployment.deploy` were already reconciled by task-54b74b80 and task-04b3ce7e - this row adds ONE kind, so each pin moves by ONE. Do not double-bump.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/mcp-tool-allowlist.ts"
-      ]
+      ],
+      "note": "Read-only at ec970f50b6cbd2bd943017b0463e9e9b513d1805. git grep deployment.rollback apps/daemon/src -> ZERO. Contractproducer64d DONE/landed verified from epicSiblings, no sharedcontract changes. mcp-tool-allowlist.ts84 derives operator exclusions, no advertised-interim premise. AsyncCommandKind56 contains deployment.deploy; entry has ownoperatorfence. Vocabulary392lines, plannedrollbackdelta fits400 by extending same-line family/union/fence fields. Livepin census: registry ROWS/size/order+3latepins58; operator22; vocabulary58; v2registry57; exclusion21, pair42, unchangedwired44/queries7. Exact pinlines recorded next comment. Full baseline authorizedf72 existing; own8filepre-edit baseline EXECUTED: Test Files1failed|7passed(8),Tests1failed|657passed(658),exit1,28.40s. Soleforeign red registry.test.ts1066 deployment.set_target expected BOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS but got BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE (task358 owner), not rollback. No sourceedits or liveprocesses remain. Effectda60 plan payload order environment,toReceiptRef,restoreDatabase (explicitrequiredboolean); no productionrollbackclosedmap exists. Requested governor narrowclosedmap rulings c3c382 without reversedep/cycle. Peer rosters preserved; full AFTER will require lease.",
+      "startedAt": "2026-09-06T12:01:21.209Z",
+      "completedAt": "2026-09-06T12:43:21.889Z"
     },
     {
       "stepId": "step-2",
       "description": "THE PRODUCTION ROSTER - three files, landed together so no intermediate HEAD is inconsistent.\n\n(1) `apps/daemon/src/daemon-command-vocabulary.ts` - add `deployment.rollback` to the family table and the `WiredCommandKind` union. IT IS 392 LINES AGAINST A 400 HARD CAP: pack onto shared lines as the file already does, or put the family entry in daemon-command-families.ts instead. `wc -l` after editing and quote it.\n(2) `apps/daemon/src/daemon-command-payload-keys.ts` - add its payload keys. THE KEY ORDER IS THE SERVED ORDER (DoD 1), so match the order the effect row task-da60dc4b expects: `{environment, toReceiptRef}` plus whatever it names for the optional database restore. Read that row's plan rather than inventing an order.\n(3) `apps/daemon/src/daemon-command-families.ts` - the family entry, if it belongs there rather than in the vocabulary table.\n\n`agentCapabilitiesFor` MUST RETURN NULL for this kind (DoD 1) - never staffable, whatever its family capability says. Rolling back a production environment is not work an agent can be assigned; assert it in step 7.\n\nDo NOT add it to the shared runtime contract (rail 5) - `deployment.rollback` is already published there by the task-64d2757c batch rotation, and re-publishing would rotate GENERATED_CONTRACT_DIGEST and invalidate every mirror.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-payload-keys.ts",
         "apps/daemon/src/daemon-command-families.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ],
+      "note": "TDD using existing vocabulary sweeps, not parallelarm: added rollbackrow RED4/184 (missingpayload/family plus58->59 anddeclared47->48). Production extends existing Bootstrap family with explicit rollback union, payloadordered environment,toReceiptRef,restoreDatabase from effectda60step2, agentCapabilitiesFor null. No newfamilyconstant/shape or sharedcontract edit; familyclassification alreadyreads commonmap so daemon-command-families.ts unchanged. Next RED exposed Bootstrapfamilypin15->16 from actualprintedoutput, reconciled. Fresh targeted vocabulary Test Files1passed(1),Tests184passed(184),exit0. Vocabulary395physical lines<400. Step5testrow was broughtforward for mandatoryTDD; sameapprovedscope. Fences/asyncentry next, nointermediatecommitclaimed.",
+      "startedAt": "2026-09-06T12:43:22.564Z",
+      "completedAt": "2026-09-06T12:45:19.526Z"
     },
     {
       "stepId": "step-3",
       "description": "THE TWO FENCES, AND THE DERIVED THIRD YOU GET FOR FREE.\n\n(1) `apps/daemon/src/daemon-command-vocabulary.ts` - add `deployment.rollback` to `OPERATOR_PRINCIPAL_KINDS`. THIS IS ALSO THE MCP FENCE: mcp-tool-allowlist.ts derives `MCP_EXCLUDED_COMMAND_KINDS` from this set, so the kind leaves the MCP roster with no edit there. That derivation is the whole reason this row was re-planned - the exclusion moves with the wiring, and its count pins move in steps 5 and 6.\n(2) `apps/daemon/src/orchestrator/agent-spawn-contract.ts` - add it to `HUMAN_ONLY_STEPS`, beside the existing `repository.publish` entry and in the same voice: rolling back a production environment replaces what users are running, which is the operator's decision about their own product. The MCP exclusion stops an agent reaching the kind over a transport; this stops the WRAPPER minting a session to take it. Both are wanted.\n\nBECAUSE THE FENCE AND THE PAYLOAD KEY LAND IN THE SAME COMMIT, no landed HEAD advertises this kind over MCP. Say that in the completion record - it is the correction this re-plan exists to make, and it matters because the MCP port authenticates with the operator bootstrap credential, so an advertised operator kind would mean an agent arriving AS the operator.\n\n`HUMAN_ONLY_STEPS` membership is UNGUARDED for non-`approval.*` kinds, so a deletion drill on the new entry may legitimately stay GREEN. Say so rather than faking a red, and add a membership arm in step 7 so the entry has a guard.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "note": "TDD existing C2 parityarm extended with three namedaxes operator/mcp/human: RED returned false/true/false vs true/false/true, confirming eachmissingfence. Addedoperator membership and HUMAN_ONLY_STEPS; MCPexclusion derived unchangedsource. Separatevocabularygate RED22->23 from observedcount, bothpinsupdated. Fresh targeted Test Files2passed(2),Tests186passed|21skipped(207),exit0. No parallelrostersweep orpertransportitadded; HUMANmembership guard nowdurable. Allfencesbeforeanycompletioncommit; no MCP-advertised landedstateclaim untilwrapperrecordscommit.",
+      "startedAt": "2026-09-06T12:45:20.199Z",
+      "completedAt": "2026-09-06T12:47:12.385Z"
     },
     {
       "stepId": "step-4",
       "description": "THE ASYNC ENTRY THAT REFUSES FAIL-CLOSED (DoD 3). `apps/daemon/src/daemon-command-async-entries.ts` (245 lines at plan time).\n\nAdd `deployment.rollback` to the `AsyncCommandKind` union beside `deployment.deploy` (:56), with a comment in the file's own voice: it redeploys a previous image and probes health until healthy, which a synchronous `CommandHandler` returning `ServiceOutcome` cannot express. The `deployment.deploy` comment at :49 is the model.\n\nIT REFUSES FAIL-CLOSED UNTIL THE EFFECT LANDS. The effect is task-da60dc4b39c5409788246f6ed7fa932c. Until it does, a WELL-FORMED payload gets a STABLE REFUSAL CODE whose layer is read from a CLOSED code->layer map - never a literal, never a fifth invented code (rail 2). Reuse an already-rostered layer; introduce no new `*_LAYER` constant, which would owe a security-roster row and cardinality pins foreign to this row.\n\nSAY IN THE COMPLETION RECORD that this is a DELIBERATE STUB and NAME task-da60dc4b as the successor that replaces it (DoD 3). Do NOT write a test arm whose only job is to pin the stub's refusal forever - that arm would have to be deleted by the successor, and a test that exists to be deleted is a liability.\n\nNOTE FOR THE RECORD: DoD 1 says \"a registry entry\", but the async seam is where this kind belongs and `deployment.deploy` is already there. Registering a rollback as a synchronous handler would return a `ServiceOutcome` describing a rollback that has not happened. Say which seam you used and why.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-async-entries.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "Added async rollback entry with unconditional configured-operator principal check before anywork. Localclosed one-code map supplies ROLLBACK_RECEIPT_UNKNOWN@existing DAEMON_PREREQUISITE; code already named in effectda60plan, no inventedfifthcode/new *_LAYER. This is deliberate UNCONFIGURED STUB, detail explicitly says no rollbackport/targetreceipt unresolved; task-da60dc4b39c5409788246f6ed7fa932c replaces it. No docker/restore/probe effect here. Existing ROWS family sweep now accepts optionaltestpayload, rollback uses wellformed unknown receipt with explicitrestorefalse so this test remains valid aftereffectlands (notstub-onlyarm). Existingpartitionassertion pins asyncHandler because genericregistryfallback preserveskindmembership ifasyncdeleted. RED3selected/6: missingasynchandler, BOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS instead ofrollbackrefusal, andoperatorfixturemissing; fixtureandentryfixed. Fresh6selectedpassed/377skipped exit0, no parallelit. Asyncfile271lines (preexisting245,net26), vocabulary395<400. Registryorder+operatortranscriptions broughtforward inapprovedscope; remainingcountpins next.",
+      "startedAt": "2026-09-06T12:47:13.099Z",
+      "completedAt": "2026-09-06T12:48:57.715Z"
     },
     {
       "stepId": "step-5",
       "description": "THE ROSTERED PINS - hand transcriptions that are the INDEPENDENT side of a set-equality. DO NOT REPLACE ANY WITH A DERIVED EXPRESSION: a list computed from the constant under test can never fail, which is the vacuity these transcriptions exist to prevent.\n\n- `apps/daemon/src/daemon-command-vocabulary.test.ts` - the roster row for this kind, with its payloadKeys in served order. Its own comment calls this roster \"a whole-tree census\" and warns that a missing row hides a served kind from every sweep in the file.\n- `apps/daemon/src/daemon-command-registry.test.ts` - the ROWS/registry.size/REGISTRATION_ORDER counts and the OPERATOR_ONLY count.\n- `apps/daemon/src/daemon-store-dependencies.test.ts` - the registry-keys vs PAYLOAD_KEYS set-equality. It needs no edit when the wiring is right; if it reds, the wiring is half-done - fix the wiring, never the assertion. If it carries an exclusion list for async kinds, `deployment.rollback` belongs there the way `deployment.deploy` does.\n- `apps/daemon/src/daemon-v2-command-registry.test.ts` and `apps/daemon/src/mcp-tool-allowlist.test.ts` - their counts.\n\nUSE THE PRINTED EXPECTED-VS-RECEIVED (rail 4). Run the leg, let each pin fail, and take the number it prints. Each moves by ONE - `deployment.set_target` and `deployment.deploy` were already reconciled by task-54b74b80 and task-04b3ce7e, so a pin that seems to need two is a sign you are double-bumping a sibling's work.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.test.ts",
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts",
         "apps/daemon/src/daemon-v2-command-registry.test.ts",
         "apps/daemon/src/mcp-tool-allowlist.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "note": "Reconciled printed roster deltas only: vocabulary59/operator23, BOOTSTRAP16, registry59/v2 58, MCP excluded22/queries7/wired44. Added both provider/native-child deployment.rollback literals (governor msg3bcdf26). RED 10 tests then GREEN fresh command pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts: Test Files5passed(5), Tests629passed(629), EXIT0. Preserved peer setter prerequisite-code repair and scheduler hunks. No new it arms.",
+      "startedAt": "2026-09-06T12:48:58.200Z",
+      "completedAt": "2026-09-06T12:55:22.046Z"
     },
     {
       "stepId": "step-6",
       "description": "THE UNROSTERED ASSERTERS - THE FILES WHOSE ABSENCE FORCED THIS RE-PLAN. They never name `deployment.rollback`, so no grep for the kind finds them; they COUNT the exclusion roster, which the step-3 edit moves by derivation.\n\n- `apps/daemon/src/daemon-command-registry-human-approver.test.ts` - the hand-written sorted exclusion roster AND both length pins. Insert the kind at its sorted position and move both numbers.\n- `apps/daemon/src/mcp-main.test.ts` - the `EXCLUSION_CASES.length` pin AND the DERIVED ARITHMETIC PIN `EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT`. DoD 4 calls the derived one \"the likeliest omission because its literal is not the number you are changing\" - a grep for the old roster count will not surface it.\n- `apps/daemon/src/mcp-http/mcp-http-host.test.ts` - the same pair, plus any second `EXCLUSION_CASES.length` pin later in the file.\n\nADD NO ARM HERE (rail 3, DoD 5). These per-transport sweeps `.map` over the exclusion roster, so the new member GENERATES its own cases automatically. Moving the size pins IS the work. THE TELL that you violated this: an `it(` counter that had to move - if you moved one, you added an arm that should not exist; revert it.\n\nBEWARE FALSE POSITIVES: unrelated suites pin the same numbers for their own reasons. Only the files named in this plan are yours; editing another suite to make a number match is a foreign edit.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
         "apps/daemon/src/mcp-main.test.ts",
         "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/preview/preview-start-command.test.ts"
+      ],
+      "note": "Observed RED4/37 at exclusion21→22; after those fixes RED2/54 printed derived product42→44 in stdio:245 and HTTP:692. Reconciled independent rosters and all relevant pins only; no it declaration/count moved (HTTP remains15). Governor scope grant msg9deedb8 permits preview-start-command.test.ts one-literal independent wrapper roster addition (prior RED set equality +rollback); path declared. Fresh standalone 4-file command (human-approver, mcp-main, mcp-http-host, preview-start-command) maxWorkers1/testTimeout30000 EXIT0 Test Files4passed(4),Tests54passed(54).",
+      "startedAt": "2026-09-06T12:55:23.044Z",
+      "completedAt": "2026-09-06T12:58:01.967Z"
     },
     {
       "stepId": "step-7",
       "description": "THE BEHAVIOURAL ARMS (DoD 2) - this row's real evidence, beyond count reconciliation.\n\n(1) THE THREE-AXIS FENCE, asserted TOGETHER for this kind and reporting WHICH axis failed: present in `OPERATOR_PRINCIPAL_KINDS`; ABSENT from `wiredMcpToolKinds()`; present in `HUMAN_ONLY_STEPS`.\nASSERT AXIS 2 AGAINST `wiredMcpToolKinds()` - the computed served-over-MCP surface - NOT against `MCP_EXCLUDED_COMMAND_KINDS`. The exclusion is DERIVED from `OPERATOR_PRINCIPAL_KINDS`, so asserting it alongside axis 1 asserts one fact twice and stays green with the fence broken. This is the single most likely way this row ships something that looks tested and is not.\n\n(2) AGENT REFUSED, OPERATOR REACHES THE HANDLER (DoD 2): an agent-authenticated dispatch is refused with its SPECIFIC reason CODE and the LAYER that refused; an operator-authenticated one reaches the handler (which, until the effect lands, is the fail-closed stub). Never assert merely that it failed - a second refusal layer could answer first and the arm would stay green while no longer testing its subject.\n\n(3) NEVER STAFFABLE (DoD 1): assert `agentCapabilitiesFor` returns NULL for this kind, whatever its family capability says.\n\n(4) A `HUMAN_ONLY_STEPS` MEMBERSHIP ARM, because that set is unguarded for non-`approval.*` kinds and a deletion drill there may legitimately stay green.\n\nExtend the existing arms rather than adding parallel ones (rail 3).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/mcp-tool-allowlist.test.ts",
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "note": "Extended existing arms only, already red-first in steps2-4: allowlist C2 asserts named axes operator:true/mcp:false/human:true against wiredMcpToolKinds production; vocabulary row asserts agentCapabilitiesFor null; existing registry it.each agent dispatch pins403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION at DISPATCH, operator unknown-receipt well-formed payload pins422 ROLLBACK_RECEIPT_UNKNOWN@DAEMON_PREREQUISITE. Shared row payload field preserves this unknown-receipt regression after successor replaces stub. Own asyncHandler presence assertion closes generic sync fallback hole. Fresh four-file behavioral gate result retained in command output; no new it declarations. Independent read-only review found no other asserting consumers after approved preview roster.",
+      "startedAt": "2026-09-06T12:58:02.411Z",
+      "completedAt": "2026-09-06T12:58:50.816Z"
     },
     {
       "stepId": "step-8",
       "description": "DRILLS, GATES, SELF-REVIEW.\n\nDRILLS (DoD 5) - `git status --porcelain` the exact mutated paths FIRST; all files here are TRACKED, so `git diff -- <path>` is a valid restore proof.\n- BIDIRECTIONAL, BOTH DIRECTIONS: delete the kind from the ADVERTISED roster, confirm RED, restore. Delete it from the SERVED side (the async entry), confirm RED, restore. Quote the failing assertion each time.\n- THE FENCE: remove the kind from `OPERATOR_PRINCIPAL_KINDS` and confirm BOTH the allowlist arms and the per-transport sweeps go red - the sweeps are the ones that prove no transport advertises it. Restore and prove it.\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm typecheck`.\nRoot `pnpm test` is NOT evidence for this row (DoD 6) - vitest.config.ts has no `apps/**` in its include. Respect the host's one-full-suite-at-a-time rule.\n\nEVERY COUNT PIN ENUMERATED BY file:line IN THE COMPLETION RECORD (DoD 4), with the before/after census showing zero stale literals in THIS ROW'S files.\n\nSELF-REVIEW:\n- `wc -l apps/daemon/src/daemon-command-vocabulary.ts` - must be at or under 400. It was 392.\n- Did an `it(` counter move? Then you added a parallel arm - revert it.\n- Did you double-bump a pin that task-54b74b80 or task-04b3ce7e already reconciled?\n- Is the kind MCP-advertised at any point? Compute `wiredMcpToolKinds()` at HEAD and assert absence.\n- Did you edit an unrelated suite that happens to pin the same number? Revert - foreign.\n- Does the completion record name task-da60dc4b as the successor that replaces the fail-closed stub, and say which seam (async, not sync) serves this kind and why?",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-async-entries.ts",
         "apps/daemon/src/mcp-tool-allowlist.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T12:58:51.308Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "DRILLS, GATES, SELF-REVIEW.\n\nDRILLS (DoD 5), UNCHANGED — `git status --porcelain` the exact mutated paths FIRST; all files here are TRACKED, so `git diff -- <path>` is a valid restore proof, run in a call SEPARATE from the restore.\n- BIDIRECTIONAL, BOTH DIRECTIONS: delete the kind from the ADVERTISED roster, confirm RED, restore. Delete it from the SERVED side (the async entry), confirm RED, restore. Quote the failing assertion each time.\n- THE FENCE: remove the kind from `OPERATOR_PRINCIPAL_KINDS` and confirm BOTH the allowlist arms and the per-transport sweeps go red — the sweeps are what prove no transport advertises it. Restore and prove it.\n\nGATES — DO NOT START YOUR OWN FULL DAEMON SUITE AND DO NOT QUEUE FOR THE EXCLUSIVE LEASE; release any position you hold. Governor ruling 7f7f6ab forbids a second full run while the designated convoy holds the lease, and the 11:44Z ruling (msg-a0b82d1b) makes full-run references shareable. Satisfy the repo-wide leg by CITING a named full `pnpm --filter @moe/daemon test`: give its holder, task, start/end timestamps and HEAD sha, and quote its `Test Files N passed` line verbatim. State explicitly whether that sha CONTAINS this row's landed bytes — if it does, treat it as this row's AFTER and say so; if it predates them, label it a BASELINE and say so. Then run standalone and foreground, one command per call, no pipes and no `;` chains:\n- your OWNED SCOPE, executed by you — the roster, fence and behavioural arms this row added. Quote the `Test Files N passed` count line; an exit-0 leg with NO count line RAN NOTHING (global rail 8).\n- `pnpm typecheck`, quoted.\nRoot `pnpm test` is NOT evidence for this row (DoD 6) — vitest.config.ts has no `apps/**` in its include.\n\nWHY THE EXCLUSIVE RUN IS NOT REQUIRED — state this in the completion record so it is not read as a narrowed DoD. The full suite would add one thing this row does not already prove directly: that no roster or fence drifted out of agreement somewhere else in the daemon. But DoD 5's BIDIRECTIONAL set-equality assertion enumerates the SERVED set from the dispatch seam itself and compares it to the advertised roster in both directions, and DoD 4 requires every count pin enumerated by file:line with a before/after census showing zero stale literals. Those are direct measurements at the production surface. Inferring the same property from a full suite that is independently red is weaker evidence, not stronger. No drill, no census and no line check is relaxed.\n\nATTRIBUTION (global rail 3): failing paths at HEAD minus the cited run's failing paths, intersected with this row's owned paths, must be EMPTY. Because you are CITING rather than running, you may NOT settle an owned path by arithmetic alone — for any owned path the cited run cannot attribute, run that FILE targeted and quote it. Disclose foreign red verbatim; never fabricate a green.\n\nEVERY COUNT PIN ENUMERATED BY file:line IN THE COMPLETION RECORD (DoD 4), with the before/after census showing zero stale literals in THIS ROW'S files.\n\nSELF-REVIEW, UNCHANGED:\n- `wc -l apps/daemon/src/daemon-command-vocabulary.ts` — must be at or under 400. It was 392.\n- Did an `it(` counter move? Then you added a parallel arm — revert it.\n- Did you double-bump a pin that task-54b74b80 or task-04b3ce7e already reconciled?\n- Is the kind MCP-advertised at any point? Compute `wiredMcpToolKinds()` at HEAD and assert absence.\n- Did you edit an unrelated suite that happens to pin the same number? Revert — foreign.\n- Does the completion record name task-da60dc4b as the successor that replaces the fail-closed stub, and say which seam (async, not sync) serves this kind and why?\n\nDoD 6 READING — say it plainly in the record, because DoD 6 names `pnpm --filter @moe/daemon test` literally and the DoD field outranks a step: that count line is satisfied by the CITED run identified above, alongside your executed owned-scope count line and `pnpm typecheck`, with governor rulings 7f7f6ab and msg-a0b82d1b named as the authority. If the cited route cannot settle a specific owned path, name that path and stop rather than starting a forbidden second run.",
+          "reason": "The gates leg ordered this row's own `pnpm --filter @moe/daemon test`, putting it in the exclusive full-suite-gate queue with steps 1-7 and all eight mutation drills already complete — \"step 8 lacks full daemon AFTER only\". Governor 7f7f6ab forbids a second run while the designated convoy holds the lease, and 11:44Z (msg-a0b82d1b) makes full-run references shareable. This row's hazard is roster/fence drift, which its own bidirectional set-equality arm and count-pin census prove DIRECTLY at the dispatch seam — strictly better evidence than inferring drift from a full suite that is independently red. Same amendment already applied to sibling task-54b74b80 step-8. Drills, the count-pin census, the line checks and the self-review are unchanged. Human-directed 2026-09-06.",
+          "amendedBy": "architect-aa54e231",
+          "amendedAt": "2026-09-06T13:49:18.527Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -122,20 +187,53 @@
       "author": "worker-e15d25c8",
       "content": "STEP1 READ-ONLY RE-MEASUREMENT at HEAD9218fda744887967520e3f45d066d1af58df9920. No code edits. Dependency64d2757c DONE/landed proves shared kind; runtime-vocabulary.ts91 confirms rollback present. Rollback has ZERO daemon literal occurrences; deploy/set_target now exist, so old missing-kind premise is stale. Effective plan inspected, including amendment fields: steps1-5 have no active amendment. Step1 says fence files are NOT yours and interim MCP-advertised; step2(3) requires OPERATOR_PRINCIPAL_KINDS addition. Production mcp-tool-allowlist.ts71/84 DERIVES exclusions from that set minus session.open, so following step2 immediately excludes rollback and changes four UNOWNED consumers. Exact shape census (git grep MCP_EXCLUDED_COMMAND_KINDS|OPERATOR_PRINCIPAL_KINDS|EXCLUSION_CASES.length|MCP_TRANSPORT_ENTRY_COUNT) plus reads identifies: mcp-tool-allowlist.test.ts205 (20) and231-245 exact summary; daemon-command-registry-human-approver.test.ts343-358 literal expectedExclusions +20 pins; mcp-main.test.ts211-248 expected roster +20/40 pins; mcp-http/mcp-http-host.test.ts690/692/721 (20/40/20). These are own rollback delta failures, not foreign deployment baseline. PAYLOAD_KEYS also moved: vocabulary.ts327 only re-exports; definition now daemon-command-payload-keys.ts75 (not owned). Corrected minimum paths =6 planned+1 payload producer+4 asserting consumers=11>10. Existing fence row2ab7b462ab5440d18fa294e4e69047e2 owns the seam and depends on this row; do not add reverse dependency/cycle or file duplicate. Architect must re-slice/amend these existing rows, preserving fail-closed interim and operator-only effective behavior. No full/typecheck baseline run: measurement found scope defect before implementation; no gate pass claimed. Peer dirt listed and preserved, NOT a stop premise; no files modified.",
       "timestamp": "2026-09-06T11:04:13.587Z"
+    },
+    {
+      "id": "comment-49a68896779f4e5abe08d2efe0ec665f",
+      "author": "worker-7bdbffac",
+      "content": "COUNT CENSUS, anchored current worktree at HEAD3c455b4c with b224 diff; printed reds are authority, not stale plan numbers. Paths prefixed apps/daemon/src/. daemon-command-vocabulary.test.ts:320,321 58→59;365 47→48;374 15→16;421,422 22→23. daemon-command-registry.test.ts:992,993,1042,1895,1917,1949 58→59;1213,1214 22→23. daemon-v2-command-registry.test.ts:271 57→58. mcp-tool-allowlist.test.ts:206 21→22;247 {excluded21→22,vocabulary58→59,queries7/wired44 unchanged}. daemon-command-registry-human-approver.test.ts:359,360 21→22. mcp-main.test.ts:243 21→22,:245 product42→44. mcp-http/mcp-http-host.test.ts:690,721 21→22,:692 product42→44. Independent literal consumers include provider native roster:826/deployment array:1130, human:354, stdio:226, approved preview-start-command.test.ts:79 (governor msg9deedb8). Relevant pre-change count pins first RED, then reconciled GREEN; zero stale relevant pins. Existing it/test declaration sites unchanged HEAD→diff: vocabulary10,registry71,provider30,v2=8,allowlist23,human13,stdio9,http15,preview17; generated registry row naturally adds6 runtime cases. Step7 fresh behavioral gate 4files603passed EXIT0; step6 4files54passed EXIT0. No arithmetic-derived replacement of handwritten rosters; no unrelated count edits. Read-only independent review repeated full-tree shape census, no additional unnamed consumers.",
+      "timestamp": "2026-09-06T13:00:31.676Z"
+    },
+    {
+      "id": "comment-f7849246da9e474bbeb100cfa12b2a87",
+      "author": "worker-7bdbffac",
+      "content": "MUTATION + SELF-REVIEW, worktree at 3c455b4c. No live file was mutated: Vite enforce:pre transforms copied production source text in memory; scratch config/logs ONLY %TEMP%/rollback-drills-worker-7bdbffac. git status --porcelain first confirmed four production paths TRACKED DIRTY, so empty git diff was never claimed. Out-of-tree backups taken. Eight applied production mutants RED: (1) delete payload advertisement -> vocabulary:322 exact keys lacks rollback (1 failed); (2) delete async entry -> registry:1036 asyncHandler undefined (1 failed, generic sync fallback is why set equality alone is insufficient); (3) remove operator-set literal -> allowlist C2 at332 operatorfalse/mcptrue AND stdio:243/HTTP:690,:721 count21vs22 (4 failed across3files); (4) remove HUMAN_ONLY literal -> C2 humanfalse (1 failed); (5) remove agentCapabilities null -> vocabulary:354 got[goal.write,work.write] vsnull (1 failed/58passed); (6) bypass async principal guard -> registry:1222 got422 ROLLBACK_RECEIPT_UNKNOWN@DAEMON_PREREQUISITE vs403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION (1failed/58passed); (7) mutate refusal code -> registry:1072 MUTATED_REASON vsROLLBACK_RECEIPT_UNKNOWN (1failed/58passed); (8) mutate map layer -> same assertion MUTATED_LAYER vsDAEMON_PREREQUISITE (1failed/58passed). Each mutant confirmed MUTATION_APPLIED and nonzero executed tests; initial too-narrow staff regex generated184skipped, REJECTED as evidence, fixed matching generated quoted titles and rerun RED. Separate post-drill call SHA256 equality against backups confirmed4/4: vocabulary5B2C1A69...,payload9FD78F96...,asyncD7CB0F78...,spawn4EF83C66.... No restore copy needed (no source edits), no scratch tracked. Node launcher shell:false/argv arrays/barepnpm/timeout/foreground, all children finished. Self-review: stub performs no external effect, stores no secret, duplicates/concurrency always stable refusal; malformed ingress keeps existing validation, wellformed reaches bounded stub; no TOCTOU/shared state/effect cleanup added. Direct principal guard independent of roster defends async seam. Vocabulary395lines<400; async271 (existing245). No new it declarations, no contractdigest rotation; successor task-da60dc4b replaces deliberate async stub with effect/receipt lookup.",
+      "timestamp": "2026-09-06T13:02:42.423Z"
+    },
+    {
+      "id": "comment-22da11617a144055ad98cbeaaff406ec",
+      "author": "worker-7bdbffac",
+      "content": "FINAL BYTES SHA256 anchor13:03Z, before any subsequent full daemon AFTER. All13 modified paths explicitly declared. Prefix apps/daemon/src/: daemon-command-vocabulary.ts 5B2C1A6953567C4D2EBF303D0876E2F1DD780724B7D74DE68EF6EAFBF70446D5; daemon-command-payload-keys.ts 9FD78F9614966572CBF83F218B965AF1F7D1B9072BE0627E28C30BB1AB7C3FF7; daemon-command-async-entries.ts D7CB0F788BA4EB43614D7B91FA3A25C53E5E7B28FC05B09A7DD4736ADF77203E; orchestrator/agent-spawn-contract.ts 4EF83C66B11A7F5385037578B867431BB1DA3B29F8F06DD5A67FBFE01D81883D; daemon-command-vocabulary.test.ts B570F6F517A8B8A612CD10F66E0119D1D2B2F2986F507D7F12DD503F07320E43; daemon-command-registry.test.ts C61953895EF75327BAFB7029F18C61A6C71327A1DB34B99F106DBF6E94B1EF84; daemon-store-dependencies.test.ts 36DBE1B35A0A60C497B31B061E08CED632EF610453D9B743663A93A5E5543D9E; daemon-v2-command-registry.test.ts 5E15F8C75EB0252678BE50CA46EF29AB9B9EE36BA9F130D3BFC4A9566F377833; mcp-tool-allowlist.test.ts D5826887D60462E517FA762F2D3F50BDEFAD60B0F798371EA7DA5278C50BDC04; daemon-command-registry-human-approver.test.ts 9B9F2EB2219101AC4CD5C092873349D03AE4A774C9878007321E5B6EEDC124CB; mcp-main.test.ts C7D9723215A1B0069DB7B17C74A1077F6438AF3F599BE0CB20876322E22D887F; mcp-http/mcp-http-host.test.ts 9D847B13A63ED55CC1F611C4DBC81E900411457F18CF2BBACD9525265028B261; preview/preview-start-command.test.ts 9F3297A2966C1A802A246E8229691851076537DF768EFB81B6FA9EAD94C65DB1. f72 run GATE START12:46:33 predates final edits, so cannot certify final row; governor agrees msg3e4cbc6. Fresh standalone pnpm typecheck EXIT0 all19 projects including daemon. Fresh pnpm --filter @moe/control-room test EXIT0 Test Files172passed(172),Tests2135passed(2135); no contract digest changes, actual six source mirrors (4ControlRoom,2client) located by literal144d81c9... fulltree grep. Root vitest excludes apps/**; root counts are not daemon evidence.",
+      "timestamp": "2026-09-06T13:03:49.975Z"
+    },
+    {
+      "id": "comment-8704d987792548e18614b34d9d87d1f4",
+      "author": "worker-7bdbffac",
+      "content": "FINAL NON-RESOURCE GATES, foreground finished 2026-09-06 13:05Z. (1) pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/daemon-command-registry-human-approver.test.ts src/mcp-main.test.ts src/mcp-http/mcp-http-host.test.ts src/preview/preview-start-command.test.ts => EXIT0, Test Files9passed(9),Tests683passed(683),32.51s, POST8DRILLS. (2) pnpm typecheck => EXIT0,19workspace projects including daemon Done. (3) pnpm --filter @moe/control-room test => EXIT0, Test Files172passed(172),Tests2135passed(2135),31.93s. (4) pnpm verify:foundation => EXIT0,35files756tests. (5) pnpm verify:store => EXIT0,52files675tests. (6) git diff --check over explicit13ownedpaths => EXIT0. All child sessions polled to exit; no own drill-runner process remains. Shared foreign WIP preserved, including setter-code hunk by f72 in registry test; no manual stage/commit. Implementation complete but task NOT complete: step8 still lacks required full pnpm --filter @moe/daemon test AFTER. Queue6 behind f72; its12:46Z run cannot certify final edits made12:57Z. Full root also not yet cited (designated shared root run), and root alone never covers apps. Await lease, run full AFTER and report exact delta vs authorized BEFORE, rerun scoped/typecheck if needed, complete_step8 then complete_task. Governor scoped verification/BEFORE-reference request msg2facf717.",
+      "timestamp": "2026-09-06T13:06:38.040Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:56.488Z",
-  "updatedAt": "2026-09-06T11:14:44.897Z",
+  "updatedAt": "2026-09-06T13:49:18.527Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.326Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 14
+    "plannedDistinctFileCount": 14,
+    "executedStepCount": 7
   },
   "planSizeWarnings": [
     "Plan touches 14 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T11:14:42.749Z",
   "planningNotes": {
@@ -144,13 +242,39 @@
   },
   "planApprovedAt": "2026-09-06T11:14:44.897Z",
   "contextFetchedBy": [
-    "worker-e15d25c8"
+    "worker-e15d25c8",
+    "worker-7bdbffac"
   ],
   "workStartedAt": "2026-09-06T11:02:45.095Z",
-  "blockedReason": null,
-  "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedReason": "RESOURCE WAIT ONLY. Steps1–7 complete, all production wiring and8 applied mutation drills complete; step8 lacks full daemon AFTER only. Fresh postdrill owned9files683tests0; typecheck19projects0; ControlRoom172files2135tests0; foundation35files756tests0;store52files675tests0;diffcheck0. Every child polled to completion; no own background jobs. All13paths declared; exactcount roster/drills/finalSHA evidence in rowcomments and Serena handoff. Queue6 behind currentholder f72. Governor msg3e4cbc6 confirms cannot cite f72 run because b224 final edits occurred during it; final13hashes anchored13:03Z for next run. No fullgate0 claimed. On grant verifyRAM/processes, announceGATE START, run pnpm --filter @moe/daemon test foreground, release immediately, disclose exactfailedpaths/counts and authorizedBEFORE∩owneddelta, finishstep8 and complete_task. Scoped verification/BEFOREreference request pending governor msg2facf717. Resource wait retainsseat and auto-unblocks; no safety/workblock, no manualgit or foreignWIP alteration.",
+  "blockedResourceId": "full-suite-gate",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T13:06:39.219Z",
   "priorBlockedReason": "Effective step1/2/5 re-read including disk activeAmendmentId/amendments: ALL null, so no superseding overlay. Step1 forbids fence files and calls interim MCP-advertised; step2(3) adds OPERATOR_PRINCIPAL_KINDS. Production mcp-tool-allowlist.ts84 now DERIVES exclusion from that set minus session.open. Thus this addition immediately changes four unnamed consumers: mcp-tool-allowlist.test.ts205/231-245, daemon-command-registry-human-approver.test.ts343-358, mcp-main.test.ts211-248, mcp-http/mcp-http-host.test.ts690/692/721. These would be OWN rollback delta failures, not foreign baseline. PAYLOAD_KEYS definition also moved out of planned vocabulary.ts into unowned daemon-command-payload-keys.ts75. Minimum scope6+1+4=11>10; global unnamed-consumer rail requires report before extra edits, not knowingly deliver red or evade checks. Existing fence sibling2ab7b462 already owns that seam and waits on this row; amend/re-slice existing rows, never reverse dependency/cycle. Evidence at HEAD9218fda7 in comment3b1d1bc7. No code edits; no gates run/pass claimed. Shared peer dirt preserved and NOT the block premise.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/preview/preview-start-command.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps1–7 complete. Rollback wired async, operator-only/MCP-excluded/HUMAN_ONLY/null-agent, deliberate stable-code stub for successor da60. All13 modifiedpaths declared. Eight applied production mutation drills red and source SHA equality proven. Fresh9files683tests0,typecheck19projects0,CR172files2135tests0,foundation35files756tests0,store52files675tests0. Detailed comments and task-task-b22462cf9d9e41cd9472415da2c1fb7d-handoff saved.",
+      "whatRemains": "Step8: full daemon AFTER under full-suite-gate lease. Final source hashes13:03Z in comment22da116. Cannot cite f72 run started12:46Z because our final edits occurred during it. On grant run foreground full daemon, record count/failing-path delta, release lease, complete_step8 then complete_task. User requested next task so seat handed back.",
+      "pitfalls": "No own processes running. No handcommit/stage/foreignWIP edits. Interactive Codex does not trigger wrapper postflight on ending turn; declare_files carries bytes to QA wrapper. Governor scoped verification/BEFORE reference request msg2facf717 pending.",
+      "releasedAt": "2026-09-06T13:28:51.451Z",
+      "releasedBy": "worker-7bdbffac",
+      "reason": "Explicit user request: next task. Handing off completed implementation with resource-only full daemon gate remaining; no completion claimed."
+    }
+  ]
 }

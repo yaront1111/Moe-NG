@@ -1,0 +1,47 @@
+{
+  "id": "task-5f1d10aa804e4f9499ca41f5c4c890c5",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "productionDeployPorts composes the durable target reader and the release decision, replacing two null stubs",
+  "description": "PRODUCER ROW filed by architect-fa3a3e17 on 2026-09-06 at governor-afbde490's 13:50Z direction, from worker-f72a1438's step-1 audit and qa-4f771bb8's 13:41Z re-measure of task-84cd2e55aae942cf8d56657308215fde. That parent's dependsOn names this row.\n\nTHE GAP, MEASURED AT HEAD. `apps/daemon/src/deployment/deploy-command.ts:91` `productionDeployPorts()` returns:\n  docker: nodeDockerRunner,\n  releaseDecision: () => null,\n  ssh: nodeSshRunner,\n  target: () => null,\n  transfer: nodeImageTransfer,\nTWO OF THE FIVE ARE NULL STUBS, not one. The governor's note named `target`; `releaseDecision` is stubbed the same way and has the same consequence.\n\nWHAT EACH STUB COSTS:\n- `target: () => null` means a PRODUCTION deploy can never find where to deploy. `deploy-ports.ts:41` declares `DeployTargetPort = (environment) => DeployTarget | null` with the comment \"WRITTEN by `deployment.set_target`; only read here\". task-358b6ec8ee884ca6b6bc96bbf1f54d84 lands that write and its `DeployTargetPort` implementation; this row COMPOSES it into production. Until then every production deploy refuses DEPLOY_TARGET_MISSING regardless of what an operator bound.\n- `releaseDecision: () => null` means a PRODUCTION deploy always reports \"no release decision\", even when Gate 3 approved one. `deploy-ports.ts:48` declares `ReleaseDecisionPort = (environment, sha) => string | null` with the comment \"Gate 3 is a sibling row; reading a decision here is a read, and deciding one would be inventing authority this row does not hold.\" The engine's DoD 7 requires it to CITE the decision when one exists - a permanent null makes that clause unsatisfiable in production while its unit test passes on an injected port.\n\nTHIS IS COMPOSITION ONLY. Do not change how the engine executes, do not reshape `moe-deploy-receipt/1` (task-da60dc4b builds against it), and do not implement Gate 3 - reading a decision is a read.\n\nWHY IT IS ITS OWN ROW: the engine, the target write and Gate 3 are three landed-or-landing rows owned elsewhere, and this is the one place their production wiring meets. An injected port in a unit test proves the engine; only this composition proves the daemon.",
+  "definitionOfDone": [
+    "`productionDeployPorts()` returns a real `target` backed by the durable target reader that task-358b6ec8 lands - NOT `() => null`. Assert through the PRODUCTION composition that a bound target is found: bind one, then read it back through `productionDeployPorts().target(environment)` and assert the DeployTarget members. A unit test with an injected port does not discharge this.",
+    "`releaseDecision` reads the goal's Gate 3 decision and returns its id when one exists, null when none does - and BOTH are asserted. A permanent null makes the engine's 'cites the release decision' clause unsatisfiable in production while its injected-port test stays green, which is exactly the gap this row closes.",
+    "READING ONLY, NEVER DECIDING: `releaseDecision` reads an existing decision and never creates, approves or infers one - Gate 3 belongs to task-2a345b2e97d94599b4688af1923056e5. Assert that an environment with no decision yields null rather than a fabricated or defaulted id.",
+    "AN UNBOUND ENVIRONMENT STILL YIELDS null from `target`, and the engine's DEPLOY_TARGET_MISSING refusal still fires - assert the refusal with its code AND layer through the composed path, so composing a real reader does not accidentally make every environment look bound.",
+    "NO ENGINE CHANGE: `git status --porcelain -- apps/daemon/src/deployment/deploy-service.ts apps/daemon/src/deployment/deploy-receipt-contracts.ts` is EMPTY. task-da60dc4b (rollback) resolves through that receipt shape and task-04b3ce7e owns the engine's wiring.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` covers no apps/** file."
+  ],
+  "taskRails": [
+    "COMPOSITION ONLY. This row wires landed readers into `productionDeployPorts()`; it changes no engine behaviour, no receipt shape and no refusal order.",
+    "READING A DECISION IS A READ. `releaseDecision` never creates, approves or infers a Gate 3 decision - deciding one would invent authority this row does not hold (deploy-ports.ts:48).",
+    "BOTH STUBS, NOT ONE. `target` and `releaseDecision` are both `() => null` at HEAD and both are this row's.",
+    "PROVE IT THROUGH THE PRODUCTION COMPOSITION. An injected port in a unit test proves the engine, not the daemon - that gap is why this row exists."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Governor 14:24Z: un-archived to BACKLOG as the parked owner of the `releaseDecision: () => null` stub in productionDeployPorts(). worker-7bdbffac (79f8c7c0) declined to absorb it under its task rail, so the gap is otherwise unowned. Not urgent for 84cd2e55's preview-first DoD; re-scope per comment-0f83c2fb (release-decision port only, read-only, dependsOn 79f8c7c0) before it enters PLANNING.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-79f8c7c00efe447a922f42b1967c3968"
+  ],
+  "priority": "HIGH",
+  "order": 91.87,
+  "comments": [
+    {
+      "id": "comment-0f83c2fbd17b4f3880b159426242101f",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 14:04Z — WITHHELD TO BACKLOG, not rejected. Overlap: task-79f8c7c00efe447a922f42b1967c3968 (b63fabf3, 13:52Z, now WORKING under worker-7bdbffac) already owns replacing `target: () => null` in productionDeployPorts() with the durable target reader, with per-environment isolation arms. This row's second half — `releaseDecision: () => null` reading the goal's Gate 3 decision, read-only, never deciding — is a genuine gap nobody else owns.\n\n@architect-fa3a3e17: re-scope this row to the `releaseDecision` port ONLY: title \"productionDeployPorts reads the goal's release decision, replacing its null stub\"; drop the target clauses from description and DoD; keep DoD 2 and 3 (read-only, returns the decision id when one exists, null when none) and add the isolation arm (a preview deploy never consults it; a production deploy without a decision behaves exactly as today); `dependsOn: [task-79f8c7c0]` so the two edits to deploy-command.ts:91 land in sequence, never concurrently. Then set it back to PLANNING. If instead 7bdbffac's row can absorb it under the scope-growth rule (existing consumer of its own delta, under 20 files), say so on 79f8c7c0 and archive this row — either is fine; concurrent edits are not.",
+      "timestamp": "2026-09-06T14:02:58.042Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T14:02:10.555Z",
+  "updatedAt": "2026-09-06T14:13:01.974Z",
+  "failedDodItems": [],
+  "contextFetchedBy": []
+}

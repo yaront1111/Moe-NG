@@ -70,6 +70,7 @@ import type { ProductContractGate1Authority }
  * the kind, also transcribed rather than recomputed from `capability`.
  */
 interface Row {
+  readonly payload?: Readonly<Record<string, unknown>>;
   readonly httpStatus?: number;
   readonly nonOperatorRefusal?: { readonly code: string; readonly layer: string };
   readonly agent: readonly string[] | null;
@@ -118,6 +119,10 @@ const ROWS: readonly Row[] = [
   // Existing deployment vocabulary backfilled into the independent served-kind census.
   { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "DEPLOY_BUILD_CONTEXT_UNCONFIGURED",
     kind: "deployment.deploy", layer: "DAEMON_COMMAND_SEAM", payloadKeys: ["environment", "sha"] },
+  { agent: null, asyncOnly: true, capability: GOAL, code: "ROLLBACK_RECEIPT_UNKNOWN",
+    kind: "deployment.rollback", layer: PREREQ_LAYER,
+    payload: { environment: "staging", toReceiptRef: "receipt-unknown", restoreDatabase: false },
+    payloadKeys: ["environment", "toReceiptRef", "restoreDatabase"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE,
     kind: "deployment.set_target", layer: PREREQ_LAYER,
     payloadKeys: ["environment", "network", "sshTarget", "url"] },
@@ -361,7 +366,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
   "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "repository.publish",
-  "release.decide", "deployment.set_target", "deployment.deploy",
+  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
   "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -382,7 +387,7 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
-  "release.decide", "deployment.set_target", "deployment.deploy",
+  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
   // The operator ANSWERS a material product question; an agent transport presenting
   // that answer would be quiet invention with a human label (see the vocabulary set).
   "product_contract.answer_clarification",
@@ -984,8 +989,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(58);
-    expect(deps.registry.size).toBe(58);
+    expect(ROWS).toHaveLength(59);
+    expect(deps.registry.size).toBe(59);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1028,12 +1033,13 @@ describe("registered command table", () => {
     // for any vocabulary kind, so deleting the async entry left the key in place and the set
     // assertions above stayed green while the command was no longer served by its own service.
     expect(deps.registry.get("repository.bootstrap")?.asyncHandler).toBeDefined();
+    expect(deps.registry.get("deployment.rollback")?.asyncHandler).toBeDefined();
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(58);
+    expect(REGISTRATION_ORDER).toHaveLength(59);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1060,7 +1066,7 @@ describe("registered command table", () => {
 
   it.each(ROWS)("$kind reaches its own family handler and refuses with its code", async (row) => {
     const answered = row.asyncOnly === true
-      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {}, CREDENTIAL,
+      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, row.payload ?? {}, CREDENTIAL,
         row.kind === "repository.recover" ? "HTTP_LISTENER" : "MCP_STDIO")
       : send(`cmd-empty-${row.kind}`, row.kind, {});
     expect(answered).toMatchObject({
@@ -1204,8 +1210,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(22);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(22);
+      expect(OPERATOR_ONLY).toHaveLength(23);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(23);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1886,7 +1892,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(58);
+    expect(ports.registry.size).toBe(59);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1908,7 +1914,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(58);
+    expect(supplied.registry.size).toBe(59);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1940,7 +1946,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(58);
+    expect(snapshotPorts.registry.size).toBe(59);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

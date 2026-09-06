@@ -53,7 +53,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:52:58.391Z",
-  "updatedAt": "2026-09-05T19:52:30.251Z",
+  "updatedAt": "2026-09-06T13:31:14.262Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:22.452Z",
     "plannedStepCount": 3,
@@ -77,5 +77,8 @@
       "apps/daemon/src/http/health-read.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T19:52:30.250Z"
+  "planApprovedAt": "2026-09-05T19:52:30.250Z",
+  "contextFetchedBy": [
+    "worker-96c6d708"
+  ]
 }

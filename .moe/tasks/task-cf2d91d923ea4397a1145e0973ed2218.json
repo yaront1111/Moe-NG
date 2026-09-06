@@ -1,0 +1,151 @@
+{
+  "id": "task-cf2d91d923ea4397a1145e0973ed2218",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The e2e lane runs a deploy against the real daemon composition with a fake docker port behind it",
+  "description": "PRODUCER ROW filed by architect-b63fabf3 on 2026-09-06 at governor-afbde490's 13:50Z direction (item 5 of five). Consumer is task-84cd2e55aae942cf8d56657308215fde, whose DoD 5 requires \"a Playwright journey against a REAL daemon (with a fake docker port behind the daemon)\".\n\nTHE GAP, from worker-f72a1438's audit: the seam EXISTS but is not forwarded end to end. `daemon-command-async-entries.ts:69-77`, `:92` and `:202-214` already define `DeploymentDeploySeams` and forward real handler options - but `daemon-command-registry.ts:108-155` / `:290-306` and the v2 registry do not carry it through to the composition an e2e lane actually starts. So a journey can reach a real daemon, and that daemon cannot be given a fake docker.\n\nWHY A FAKE DOCKER RATHER THAN REAL DOCKER IN THE LANE: a deploy runs `docker build`, optionally `docker save | ssh docker load`, and a health poll that waits out docker's own start-period. That is minutes of wall clock, a daemon on the lane host, and a container and port to leak. Epic rail 4 binds - anything this epic starts, it stops, on EVERY exit path - and a lane that leaks a container makes every later gate on this board inadmissible. The fake port keeps the DAEMON, the command edge, the ledger and the receipts real, and replaces only the process spawn.\n\nWHAT MUST STAY REAL, because the consumer's journey certifies exactly this: the daemon process, the command plane, the offer wire, the durable receipts, and the refusal codes. **Only the docker/ssh/transfer spawns are faked.** A journey whose daemon is also faked proves nothing about the product and would retire the question the consumer row exists to answer.\n\nNOT IN SCOPE: the journey itself and the card (the consumer's), the target reader, the deployment-state read, the target-binding control.\n\nVERIFICATION COMMAND for moe.complete_task: `pnpm test:e2e:browser`. Note it is `tsc -p ... && playwright test -c ...`, so quote the SPEC COUNT and not only the exit code - a typecheck failure means Playwright never ran. Also run `pnpm --filter @moe/daemon test` and `pnpm typecheck`.",
+  "definitionOfDone": [
+    "The e2e lane can start a REAL daemon whose deploy spawns are backed by an injected fake, forwarded through the production composition path the lane actually uses - not through a test-only constructor. Name the exact composition seam and assert the injected port is the one the deploy reaches, by observing the fake being called rather than by trusting the wiring.",
+    "ONLY THE SPAWNS ARE FAKE. Assert that with the fake in place the deploy still goes through the real command edge, the real admission, the real ledger and the real receipt: the durable receipt is written and readable through the production read path. A journey whose daemon is also faked certifies nothing, and this clause is what stops the seam widening into one.",
+    "THE FAKE IS UNAVAILABLE OUTSIDE THE LANE. Assert the production composition with NO seam supplied still gets the real docker runner - a default that silently falls back to a fake would make every production deploy a no-op that reports success. Assert the default by observing which runner is composed, not by reading the code.",
+    "BOTH OUTCOMES ARE DRIVABLE: the fake can produce a successful deploy AND each refusal the engine can raise, so the consumer's journey can cover the failure paths without real infrastructure. Assert at least one success and one refusal reaching a durable receipt with its code verbatim.",
+    "NOTHING LEAKS ON ANY EXIT PATH, including the failing ones (epic rail 4). No container, no port, no temp directory, no daemon process survives the lane - asserted in teardown rather than at the end of a happy path. A leaked container makes every later gate on this board inadmissible.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test:e2e:browser` with its SPEC COUNT quoted and the exercising spec named - the script is `tsc && playwright test`, so a typecheck failure means zero specs ran and the exit code alone cannot tell you."
+  ],
+  "taskRails": [
+    "ONLY THE SPAWNS ARE FAKE. The daemon, the command edge, the admission, the ledger and the receipts stay real. A journey whose daemon is faked retires the question the consumer row exists to answer.",
+    "THE PRODUCTION DEFAULT MUST BE THE REAL RUNNER. A composition that falls back to a fake when no seam is supplied turns every production deploy into a no-op that reports success - assert the default by observation.",
+    "NOTHING LEAKS ON ANY EXIT PATH, failures included (epic rail 4). Container, port, temp directory and daemon all die in teardown.",
+    "FORWARD THROUGH THE PRODUCTION COMPOSITION, not a test-only constructor. A seam the real lane cannot reach is a seam that proves nothing.",
+    "THE E2E SCRIPT HIDES A ZERO-SPEC RUN: `tsc -p ... && playwright test -c ...`. Quote the spec count and name the spec; a passing tsc with no matching spec looks like success."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, NO EDITS. Confirm the five facts and paste outputs. (a) `git grep -n \"deploymentDeploy\" -- apps/daemon/src` — expect the seam declared at daemon-command-async-entries.ts:69/:92 and consumed at :202, and NOTHING in daemon-command-registry.ts, daemon-store-foundation-composition.ts or daemon-v2-command-registry.ts. That absence IS this row's production diff; if a peer has since forwarded it, say so and shrink the row rather than duplicating the edit. (b) `grep -n \"repositoryBootstrap\" apps/daemon/src/daemon-command-registry.ts` — :154 declares it and :296-297 forwards it; that is the EXACT pattern to copy for deploymentDeploy. (c) `sed -n '288,305p' tests/e2e/control-room/daemon-ports.ts` — confirm the `--dependencies=` switch and the `fixedDemoGoal` flag that selects a lane provider. (d) Read tests/e2e/control-room/fixed-demo-goal-dependencies.ts end to end — 50 lines, and the working template for a lane provider that wraps the PRODUCTION composition. (e) Read the prerequisite's state: task-79f8c7c00efe447a922f42b1967c3968 via get_context.epicSiblings. If it has NOT landed, `productionDeployPorts` still returns `target: () => null` and no deploy can reach docker — your DoD-2 arm would be unprovable, and the correct response is to report that, NOT to plant a target event by hand. Record the global-rail-3 baseline: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test:e2e:browser`, saving the failing-path rosters and the SPEC COUNT.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "FORWARD THE SEAM THROUGH THE PRODUCTION COMPOSITION — three small edits, no new capability. (1) apps/daemon/src/daemon-command-registry.ts: add `readonly deploymentDeploy?: DeploymentDeploySeams;` to `DaemonCommandPortOptions` beside `repositoryBootstrap` (:154), and forward it into the `createAsyncCommandEntries` call using the SAME spread-not-assign idiom already used at :296-297 (`...(options.deploymentDeploy === undefined ? {} : { deploymentDeploy: options.deploymentDeploy })`) — under exactOptionalPropertyTypes an explicit `undefined` is a different thing from an absent key, and only the absent key means \"production default\". (2) apps/daemon/src/daemon-store-foundation-composition.ts: add the same optional field to `StoreDependencyConfig` and forward it into the `createDaemonCommandPorts({...})` call, with the same spread idiom. (3) apps/daemon/src/daemon-v2-command-registry.ts: forward it at its own `createDaemonCommandPorts` call (:71) — miss this and v1 gets the fake while v2 silently keeps the real runner, which is a lane that looks green over a half-wired daemon. BOTH FILES IN (1) AND (2) ARE ALREADY PAST THE 400-LINE CAP (531 and 580): add only the option and its forwarding, do not refactor, and do not reorder anything — several rows are editing both. NO FAKE, NO ENV-VAR CHECK AND NO DEFAULT FALLBACK MAY ENTER apps/daemon (task rail 2): absent seam must continue to mean the real runners.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-v2-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE DAEMON-SIDE ARMS, in apps/daemon/src/daemon-command-async-entries.test.ts (it already passes `deploymentDeploy` at :112, so the harness exists). Write these RED first. (1) THE PRODUCTION DEFAULT IS THE REAL RUNNER (DoD 3, and the anti-vacuity clause of this row): compose through the production path with NO seam supplied and assert by REFERENCE IDENTITY that the composed docker port IS the exported real runner (`nodeDockerRunner`), not a fake and not a wrapper. Assert what was COMPOSED — reading the source, or asserting only that a supplied seam works, would not catch a fallback added later. (2) THE SEAM ARRIVES WHEN SUPPLIED (DoD 1's daemon half): supply a `ports` object through the SAME production option chain you wired in step 2 — `createStoreDependencies`-level, not by calling `createAsyncCommandEntries` directly — and assert the injected port is the one the deploy reaches by OBSERVING IT BEING CALLED, not by trusting the wiring. (3) BOTH PLANES: repeat the identity assertion for the v2 registry path, since it composes separately. Keep these arms cheap and synchronous; the expensive proof is the lane's, in step 6.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE LANE PROVIDER — NEW FILE tests/e2e/control-room/fake-docker-dependencies.ts, modelled on fixed-demo-goal-dependencies.ts (read it first; 50 lines, same shape). It imports `createStoreDependencies` and `readStoreDependencyEnv` from `../../../apps/daemon/src/daemon-store-dependencies.js` — that import path is proven to work from the lane driver today — calls the PRODUCTION composition with `deploymentDeploy: { ports: <fake>, healthBudgetMs, pollMs, sleep }`, and re-exports the provider as the default export the way the template does. THE FAKE LIVES ENTIRELY IN THIS FILE, under tests/. It implements the `DeployPorts` shape and replaces ONLY the spawns — docker, ssh and transfer. It must NOT stub the ledger, the receipts, the admission or the command edge; those stay real and that is what DoD 2 certifies. SCRIPT ITS BEHAVIOUR FROM AN ENV VAR the spec sets when spawning the daemon (the spec cannot call into a child process): one variable selecting SUCCESS or a named refusal. Cover at least a success and `DEPLOY_DOCKER_UNAVAILABLE`, which the engine raises at deploy-service.ts:236 when the first `docker version` call returns nonzero and is the cheapest refusal to drive; use `healthBudgetMs`/`pollMs`/`sleep` from the seam for a timeout arm rather than adding new knobs or waiting real time. Default the variable to SUCCESS so a spec that forgets to set it does not silently exercise a refusal path.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/fake-docker-dependencies.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/fake-docker-dependencies.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "SELECT THE PROVIDER FROM THE LANE, in tests/e2e/control-room/daemon-ports.ts. Extend the existing dependency switch at :293-299 — do not write a second spawn path. Today it is a boolean (`fixedDemoGoal`) choosing between the lane provider and the production one; add the new provider as a third option in the same expression, keeping the PRODUCTION module the default so every existing spec is unaffected. Pass the fake's behaviour variable through the `env` map `spawnNode` already forwards (daemon-children.ts:81-84). Change nothing else about how the daemon is spawned: same ephemeral port, same `--dependencies=` flag, same operator-stdin handling. Confirm by reading the diff that no existing caller's behaviour changed — this file is shared by every lane spec, and a default flip here would silently re-point the whole lane at a fake daemon.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/daemon-ports.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE SPEC — NEW FILE tests/e2e/control-room/deploy-fake-docker.spec.ts, against a REAL daemon started through step 5's switch. FOUR ARMS. (1) SUCCESS REACHES A DURABLE RECEIPT (DoD 2): bind a target and deploy through the real command edge, then assert the receipt is written and readable THROUGH THE PRODUCTION READ PATH — not from the fake's own bookkeeping. Assert the fake was called, so the arm cannot pass against a daemon that never deployed. (2) A REFUSAL REACHES A DURABLE RECEIPT WITH ITS CODE VERBATIM (DoD 4): drive the fake to fail and assert the persisted code, with the layer, per global rail 1. (3) ONLY THE SPAWNS ARE FAKE (DoD 2, the clause that stops this seam widening): assert the admission, the ledger and the receipt are the real ones — the receipt read back through the production surface is the evidence. (4) TEARDOWN LEAVES NOTHING (DoD 5, epic rail 4): the daemon child, its port and its store directory die in a `finally`/`afterEach`, never at the end of a happy path, and assert `survivingChildren` (daemon-children.ts) is EMPTY rather than trusting `killTree` returned. Run the arms and QUOTE THE SPEC COUNT with the spec named — `test:e2e:browser` is `tsc && playwright test`, so a tsc failure means zero specs ran and exit code alone cannot tell you (task rail 5).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DRILLS, THEN GATES. `git status --porcelain` the exact mutated paths FIRST and say which restore proof applies to which — MIXED: the three apps/daemon files and daemon-ports.ts are TRACKED (empty `git diff -- <path>`, in a call SEPARATE from the restore); your two NEW files are UNTRACKED and `git diff` is BLIND to them, so back each up out of tree (%TEMP%, suffixed with your worker id) and prove restoration by SHA256 equality (global rail 13). THREE DRILLS: (i) THE ROW'S SUBJECT — remove the forwarding you added in step 2 from ONE plane only (v1 or v2) and confirm an arm reds; if nothing reds when only v2 loses it, your step-3 arm (3) is missing and the v2 plane is untested. (ii) THE ANTI-FALLBACK DRILL — make the production default return the fake instead of `nodeDockerRunner`; step 3 arm (1) MUST go red. If it stays green, that arm is asserting the seam rather than the default, which is exactly the hole task rail 2 exists to close. (iii) LEAK DRILL — make teardown skip the kill and confirm the `survivingChildren` assertion reds; restore. THEN THE GATES, standalone and foreground, one command per call, no pipes and no `;` chains: `pnpm --filter @moe/daemon test` (quote the `Test Files N passed` count line — an exit-0 leg with no count line RAN NOTHING), `pnpm typecheck`, and `pnpm test:e2e:browser` with its SPEC COUNT quoted and your spec NAMED. If the exclusive full-suite lease is contended, cite a named recent full daemon run (holder, task, timestamps, HEAD sha, count line) and state whether it contains your landed bytes, rather than queueing. Attribute red by HEAD minus step 1's baseline intersected with this row's owned paths; disclose foreign red verbatim.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+        "apps/daemon/src/daemon-command-async-entries.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL PASS AND COMPLETION RECORD. Load `adversarial-self-review` and read your diff as an attacker. Answer in writing: does ANY line of the fake, or any check that selects it, exist under apps/daemon — `git grep -n \"fake\\|FAKE\" -- apps/daemon/src` over your diff, because task rail 2's failure mode is a production deploy that no-ops and reports success; can the lane's default provider be reached accidentally by an existing spec, i.e. did step 5 change any current caller's behaviour; is the seam forwarded on BOTH command planes or only v1; does the fake stub anything beyond docker/ssh/transfer (if it touches the ledger, the admission or the receipt, the journey certifies nothing and DoD 2 fails); does the spec's teardown run on the FAILING path as well as the passing one; and can a daemon child, port or store directory survive a spec that throws mid-arm. THE COMPLETION RECORD MUST STATE: the exact composition seam by file and line, so the consumer row (task-84cd2e55) can point its journey at it without re-deriving it; that the fake lives only under tests/ and the production default is the real runner, with the observation that proves it; which refusal codes the fake can drive and how a spec selects them; the three drill outcomes with their restore proofs; and the e2e SPEC COUNT with the spec named. Report every path created or modified in complete_step.modifiedFiles. Named verification command: `pnpm test:e2e:browser`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-79f8c7c00efe447a922f42b1967c3968"
+  ],
+  "priority": "HIGH",
+  "order": 91.89,
+  "comments": [
+    {
+      "id": "comment-53163f3e85624dbe883edba3f7970ab9",
+      "author": "architect-fa3a3e17",
+      "content": "TWO NOTES CARRIED FROM A DUPLICATE ROW I FILED IN ERROR AND ARCHIVED (task-1bee7227). Both are measurements, not scope changes (architect-fa3a3e17, 2026-09-06).\n\n1. THE COMPOSITION ALREADY HAS THE SHAPE TO FOLLOW - no new mechanism needed. `apps/daemon/src/daemon-store-foundation-composition.ts` declares `StoreDependencyConfig` with optional injected config already: `schedule?: Pick<ScheduleConfig, \"timer\" | \"resolve\">`, `repositoryWorkspace?`, `affordanceMintId?`, `clock?`. A lane-supplied docker/ssh seam is the same pattern one entry wider. Inventing a second injection mechanism where this one fits would give the daemon two ways to be configured for tests.\nThe seam has to reach `productionDeployPorts()` (deploy-command.ts:91), which today hard-codes `docker: nodeDockerRunner` and `ssh: nodeSshRunner` with no substitution point.\n\n2. THE DISCLOSURE CONSTRAINT, which matters for whichever row consumes this. A journey running on a fake docker seam proves the daemon COMPOSED AND DISPATCHED correctly. It does NOT prove a container ran, an image was built, or a URL served. The consuming row (task-84cd2e55) has DoD clauses about an operator seeing \"where it went\", so it must state plainly which half its journey proves - otherwise a green browser journey reads as evidence of a working deploy when it is evidence of a working dispatch.\nTwo guardrails worth keeping when you plan this: production must be unchanged when no seam is supplied (assert the default explicitly), and the seam must not be reachable from an environment variable or ambient default - a test door an operator's daemon could open is a production hazard rather than a test affordance.\n\nContext for why this matters now: docker was absent from this host for most of 2026-09-05 and is present today (29.6.2). A browser journey depending on the host's docker goes red whenever the host loses it, which already parked task-3706b7e7's DoD 3 and task-99f364e3's docker-dependent clauses. A lane-injected seam makes the journey depend on the daemon's composition instead.",
+      "timestamp": "2026-09-06T14:05:06.639Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T13:55:10.484Z",
+  "updatedAt": "2026-09-06T14:05:06.639Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-06T14:00:23.896Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-aa54e231"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-06T14:03:45.253Z",
+  "planningNotes": {
+    "approachesConsidered": "HOW A FAKE REACHES A DAEMON THAT IS A SEPARATE PROCESS — the question the row's framing hides. The lane spawns the daemon: `spawnNode(args, cwd, env)` (daemon-children.ts:81-84) runs `apps/daemon/src/daemon-main.ts` as a Node CHILD. You cannot hand a `DeployPorts` OBJECT to another process, so \"inject the fake\" can only mean one of three things:\n\n(a) An env-var flag read inside apps/daemon that swaps in a fake. REJECTED, and it is the dangerous one: it would put fake-selection code in the production bundle, and task rail 2 exists precisely because a composition that can fall back to a fake turns every production deploy into a no-op reporting success. The fake must not ship in apps/daemon at all.\n(b) A test-only constructor called by the lane. REJECTED by task rail 4 — a seam the real lane cannot reach proves nothing, and it would bypass the composition the consumer's journey is supposed to certify.\n(c) CHOSEN, and the lane already does this: `daemon-main.ts` loads its dependency provider FROM A PATH given on argv (`--dependencies=<module>`), and daemon-ports.ts:293-299 already switches that path between the production provider and a lane provider. `fixed-demo-goal-dependencies.ts` is the working template: it imports the PRODUCTION `createStoreDependencies`, wraps it, and re-exports. So the fake lives in tests/, the daemon is real, the command edge is real, and the only substituted thing is the spawn.\n\nWHAT MUST BE BUILT IN PRODUCTION FOR (c) TO WORK. `DeploymentDeploySeams` already exists and `createAsyncCommandEntries` already consumes it (async-entries.ts:69-77, :92, :202) — but nothing carries it from `createStoreDependencies` down to that call. That forwarding is this row's entire production diff, and it is three small edits, not a feature.\n\nHOW THE SPEC SCRIPTS THE FAKE ACROSS A PROCESS BOUNDARY. The spec cannot call into the child, so the lane provider reads its BEHAVIOUR from an env var the spec sets when spawning (success / build-failed / docker-unavailable / health-timeout). That variable is read only by the module under tests/, never by apps/daemon — keeping rail 2 intact.\n\nDoD 3 BY OBSERVATION, not by reading code: `productionDeployPorts(...)` returns `docker: nodeDockerRunner`, so a daemon-side arm asserts REFERENCE IDENTITY against the exported real runner when no seam is supplied. That is observation of what was composed, and it fails loudly if a later edit adds a fallback.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-06 (global rail 6). The description is accurate; I confirmed each claim and found the lane precedent it does not mention.\n\nTHE FORWARDING GAP IS REAL AND IS THE WHOLE PRODUCTION DIFF:\n- `DeploymentDeploySeams` EXISTS — daemon-command-async-entries.ts:69-77 (`buildContext`, `clock`, `healthBudgetMs`, `pollMs`, `ports`, `sleep`), declared on `AsyncCommandEntryOptions.deploymentDeploy?` at :92 and consumed at :202 (`const deploySeams = options.deploymentDeploy ?? {}`). Its docstring already states the intent: \"Production passes NOTHING and gets the real docker and ssh runners on this host; a test passes `ports` and touches no docker daemon and no network.\"\n- IT IS NOT FORWARDED. `git grep -n \"deploymentDeploy\\|repositoryBootstrap\" apps/daemon/src/daemon-command-registry.ts` -> ONLY `repositoryBootstrap` (declared :154, forwarded :296-297). There is NO `deploymentDeploy` on `DaemonCommandPortOptions`.\n- `git grep -n \"deploymentDeploy\\|repositoryBootstrap\\|createAsyncCommandEntries\" apps/daemon/src/daemon-store-foundation-composition.ts` -> ZERO hits. The composition root forwards neither.\n- daemon-v2-command-registry.ts:71 calls `createDaemonCommandPorts({...})` and must carry the same option or the v2 plane silently keeps the real runner while v1 gets the fake.\nSo the chain to build is: `createStoreDependencies(config)` -> `createDaemonCommandPorts({...})` -> `createAsyncCommandEntries({deploymentDeploy})`. Existing consumers today: only `daemon-command-async-entries.test.ts:112` and `deploy-journey.test.ts:106` pass it, both by constructing entries directly.\n\nTHE LANE PRECEDENT THE DESCRIPTION DOES NOT MENTION — this is the key finding and it makes the row much smaller than it reads:\n- daemon-ports.ts:293-299 ALREADY switches the daemon's dependency module by path:\n```\nconst dependencies = fixedDemoGoal === true\n  ? `${root}/tests/e2e/control-room/fixed-demo-goal-dependencies.ts`\n  : `${root}/apps/daemon/src/daemon-store-dependencies.ts`;\nconst watched = spawnNode([ ..., `${root}/apps/daemon/src/daemon-main.ts`, `--dependencies=${dependencies}`, ...\n```\n- `fixed-demo-goal-dependencies.ts` (50 lines) is the WORKING TEMPLATE for a lane provider: it imports `createStoreDependencies` and `readStoreDependencyEnv` from `../../../apps/daemon/src/daemon-store-dependencies.js`, calls the PRODUCTION composition with an extra config field, spreads the result (`{...production, affordances: ...}`) and re-exports. Copy this shape.\n- So the e2e lane CAN import apps/daemon from its driver files — proven by that import existing and the lane typechecking today. (An older note claiming TS6059 applies to the driver is stale; it applies to the PAGE side.)\n\nTHE DAEMON IS A CHILD PROCESS: `spawnNode` (daemon-children.ts:81-84) = `spawn(process.execPath, args, {cwd, env})`. daemon-main.ts:133 reads `flag(argv, \"dependencies\")`. Hence path-based injection, not object injection.\n\nTHE ENGINE'S REFUSAL CODES, for DoD 4: `DEPLOY_BUILD_FAILED`, `DEPLOY_DOCKER_UNAVAILABLE`, `DEPLOY_HEALTH_TIMEOUT`, `DEPLOY_TARGET_MISSING` (imported at deploy-service.ts:4-5). `DEPLOY_DOCKER_UNAVAILABLE` is raised at :236 when the first `docker version` call returns nonzero, which is the cheapest refusal for the fake to drive.\n\nTHE SCRIPT HIDES A ZERO-SPEC RUN: `test:e2e:browser` = `tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts`. A tsc failure means Playwright never ran and the exit code alone cannot tell you — task rail 5.\n\nSIZES: daemon-store-foundation-composition.ts 580 (already far past the 400 cap — add ONLY the forwarding, do not refactor it), daemon-command-registry.ts 531 (same), daemon-command-async-entries.ts 271, daemon-ports.ts ~370, fixed-demo-goal-dependencies.ts 50.\n\nDEPENDENCY: task-79f8c7c0 (the target reader) is WORKING, not DONE, so `productionDeployPorts` may gain a `(store, projectId)` signature under you. dependsOn already gates the WORKING claim; read its completionSummary via epicSiblings rather than re-measuring.",
+    "risks": "1. THE FAKE MUST NEVER SHIP IN apps/daemon (task rail 2). Keep every line of it under tests/. If you find yourself adding an env-var check inside apps/daemon that selects a fake, stop — that is the failure mode the rail names, and it would make a production deploy a no-op that reports success.\n2. THE V2 PLANE IS EASY TO MISS. daemon-v2-command-registry.ts:71 calls `createDaemonCommandPorts` separately; forward the option there too or v1 gets the fake and v2 silently keeps the real runner. A lane that happens to use v1 would look green while the other plane is unwired.\n3. TWO FILES ARE ALREADY PAST THE LINE CAP (composition 580, registry 531). Add ONLY the option and its forwarding. Splitting either is not this row's job and would collide with the several rows editing them.\n4. A ZERO-SPEC E2E RUN LOOKS LIKE SUCCESS (task rail 5). `tsc && playwright test` — quote the SPEC COUNT and name your spec.\n5. LEAKS MAKE THE WHOLE BOARD INADMISSIBLE (epic rail 4). The daemon child, its port, its store directory and any temp tree die in TEARDOWN, not at the end of a happy path. daemon-children.ts already ships `killTree` and `survivingChildren` — use them and assert `survivingChildren` is empty rather than trusting the kill.\n6. DoD 3 IS THE ANTI-VACUITY CLAUSE and must be asserted by OBSERVATION — reference identity against the exported real runner when no seam is supplied. A test that merely reads the source, or that asserts the seam works when supplied, does not catch a fallback added later.\n7. THE PREREQUISITE IS STILL IN FLIGHT. task-79f8c7c0 may change `productionDeployPorts`'s signature to `(store, projectId)` while you work. Read its completionSummary via epicSiblings; if it has not landed, your DoD-2 arm cannot bind a target and you should report rather than plant a target event by hand.\n8. DO NOT WIDEN THE SEAM. `DeploymentDeploySeams` already carries `healthBudgetMs`, `pollMs` and `sleep` precisely so a timeout arm need not wait out docker's real start-period — use them rather than adding new knobs.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-async-entries.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/daemon/src/daemon-v2-command-registry.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
+      "tests/e2e/control-room/fixed-demo-goal-dependencies.ts",
+      "tests/e2e/control-room/daemon-children.ts",
+      "apps/daemon/src/deployment/deploy-service.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-06T14:03:47.458Z"
+}

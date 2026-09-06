@@ -63,13 +63,14 @@ export const CAPABILITIES = {
   REVIEW: "review.write", WORK: "work.write",
 } as const;
 
-export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
+export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind | "deployment.rollback", string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
   "repository.publish": CAPABILITIES.GOAL, "repository.bootstrap": CAPABILITIES.ADMIN,
   // Deploying a goal's landed code, and naming where it deploys to. GOAL-scoped like
   // `repository.publish` for the same reason: both act on the product a goal produced. The
   // capability fences REACH only -- the operator fence below is what makes them human acts.
   "deployment.set_target": CAPABILITIES.GOAL, "deployment.deploy": CAPABILITIES.GOAL,
+  "deployment.rollback": CAPABILITIES.GOAL,
   "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
   "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
@@ -213,6 +214,7 @@ export const DESIGN_FAMILY: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export type WiredCommandKind =
+  | "deployment.rollback"
   | typeof RELEASE_DECIDE_COMMAND_KIND
   | "design.submit"
   | "repository.recover"
@@ -258,6 +260,7 @@ export function familyCapabilityOf(kind: string): string | null {
 }
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
+  if (kind === "deployment.rollback") return null;
   if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
@@ -379,7 +382,7 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // `deployment.deploy` is served from an ASYNC entry and therefore never reaches the registry's
   // synchronous operator check -- it fences itself at handler entry, and this membership is what
   // keeps it off the MCP roster rather than what fences the dispatch.
-  "deployment.set_target", "deployment.deploy",
+  "deployment.set_target", "deployment.deploy", "deployment.rollback",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
   // `approval.decide` is reserved for. The other three propose, release or request and activate
