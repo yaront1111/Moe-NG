@@ -16,8 +16,9 @@ import { type DesignBrief, codeMission, compilerMission, designMission, mission 
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
 import type { ProviderPauseGate } from "./agent-provider-pause.js";
+import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
 import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
-import type { AgentSpawnStart, RunOnceReport,
+import type { AgentSpawnStart, ProviderPauseFacts, RunOnceReport,
   SpawnReport } from "./agent-spawn-contract.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
 
@@ -50,6 +51,8 @@ export interface SpawnRequest {
   readonly expiresAt: string;
   readonly kind: string;
   readonly mission: string;
+  /** The agent command THIS seat is spawned with; absent keeps the spawner's own chain. */
+  readonly provider?: string;
   readonly sessionId: string;
   readonly workItemId: string;
   /** For code nodes: the directory the agent works in; null for chain steps. */
@@ -66,6 +69,9 @@ export interface NodeMission {
 
 export interface AgentWrapperConfig {
   readonly affordances: AffordancePort;
+  /** The durable agent-provider setting for one scope ("" is the project default), or
+   *  null when it has none. A fact, not a store handle. */
+  readonly agentProvider?: ((goalId: string) => string | null) | undefined;
   /**
    * Claim lifetime per spawn: the reap horizon when a child dies without
    * releasing. The agent renews it if the work runs longer.
@@ -178,7 +184,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     kind: string, outcome: string, sessionId: string | null, workItemId: string,
   ): SpawnReport => ({ kind, outcome, refusal: null, sessionId, workItemId });
 
-  const staff = async (step: ChainStep): Promise<SpawnReport> => {
+  const staff = async (step: ChainStep, command: string): Promise<SpawnReport> => {
     const workItemId = workItemIdFor(step.kind, step.aggregateId);
     const capabilities = agentCapabilitiesFor(step.kind);
     if (capabilities === null) return uncoded(step.kind, "UNWIRED_KIND", null, workItemId);
@@ -302,10 +308,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return failSetup("mission", true);
     }
 
-    const request = {
-      credential: secret, expiresAt, kind: step.kind,
-      mission: missionText, sessionId, workItemId, workspace,
-    };
+    const request = { credential: secret, expiresAt, kind: step.kind, mission: missionText,
+      provider: command, sessionId, workItemId, workspace };
     return staffing.start({
       claimAggregateVersion: step.claimAggregateVersion,
       cleanupAuthority,
@@ -315,7 +319,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       // provider refused, the item never got its turn.
       onExit: config.providerPause?.exitObserver(sessionId, workItemId, () => {
         attempts.set(workItemId, Math.max(0, (attempts.get(workItemId) ?? 0) - 1));
-      }),
+      }, pauseProviderOf(command)),
       request,
       sessionId,
       spawnAgent: config.spawnAgent,
@@ -329,16 +333,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     if (priorFailure !== null) {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: priorFailure };
     }
-    // One MOE_AGENT_COMMAND per wrapper process, so one provider: while its pause is
-    // live this pass staffs nothing and keeps polling. The pass at or after the reset
-    // reads null and staffs normally.
-    const paused = config.providerPause?.paused(config.clock()) ?? null;
-    if (paused !== null) {
-      return {
-        active: staffing.activeCount(), paused, spawned: [],
-        surfaceOutcome: PROVIDER_PAUSED_OUTCOME,
-      };
-    }
+    // MANY providers per wrapper, one resolved per spawn, so the pause is consulted PER
+    // STEP against that seat's own provider (decideSeatProvider) and PROVIDER_PAUSED is
+    // reported only when a pause is why the pass staffed NOTHING. See that module.
+    let stalled: ProviderPauseFacts | null = null;
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: surface.code };
@@ -366,18 +364,21 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
         continue;
       }
-      const report = await staff(step);
+      const seat = decideSeatProvider({ aggregateId: step.aggregateId, kind: step.kind,
+        nowMs: config.clock(), pauseGate: config.providerPause,
+        settingFor: config.agentProvider });
+      if (seat.pause !== null) { stalled = seat.pause; continue; }
+      const report = await staff(step, seat.command);
       // Charged only for a try that got past the gate: a fence refusal spent
       // nothing and must not exhaust the item while its predecessor lives.
       if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
       spawned.push(report);
       if (staffing.failureOutcome() !== null) break;
     }
-    return {
-      active: staffing.activeCount(),
-      spawned,
-      surfaceOutcome: staffing.failureOutcome() ?? "SURFACE",
-    };
+    const idled = stalled !== null && spawned.length === 0;
+    return { active: staffing.activeCount(), spawned,
+      ...(idled && stalled !== null ? { paused: stalled } : {}),
+      surfaceOutcome: staffing.failureOutcome() ?? (idled ? PROVIDER_PAUSED_OUTCOME : "SURFACE") };
   };
 
   // Serialize passes, not child lifetimes: overlapping surface snapshots could

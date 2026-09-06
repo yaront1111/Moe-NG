@@ -19,6 +19,7 @@ import {
 } from "../review/verifier-authority-provider.js";
 import { launchDelivery } from "../environment/environment-launch-resolver.js";
 import { createProviderPauseGate } from "./agent-provider-pause.js";
+import { agentProviderFact } from "./agent-provider-resolve.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
@@ -239,10 +240,9 @@ async function main(): Promise<void> {
         if (secureSpawn === null) throw new Error("MCP_HTTP_HOST_NOT_STARTED");
         return secureSpawn(request);
       }),
-      // The seat command resolves exactly as the spawner resolves it
-      // (agent-spawner.ts: `options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude"`).
-      // An unknown command reads as "claude": a scripted seat double printing the claude
-      // limit line must park the provider it is imitating.
+      // Durable per-scope setting, read per staffed seat: NO provider is frozen at process
+      // start. `provider` below is only a fallback for a caller that resolved none.
+      agentProvider: agentProviderFact(verifierStore, config.projectId),
       providerPause: createProviderPauseGate({
         clock: () => Date.now(),
         log: (line) => { process.stdout.write(`${line}\n`); },

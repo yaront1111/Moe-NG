@@ -1,6 +1,8 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 
 import { SqliteEventStore } from "@moe/store";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -12,10 +14,12 @@ import {
   DEFAULT_PROVIDER_PAUSE_MS, PROVIDER_PAUSED_OUTCOME, createProviderPauseGate,
 } from "./agent-provider-pause.js";
 import { AgentProcessFailureError } from "./agent-spawn-contract.js";
-import type { SeatExitReading, SeatExitReport } from "./agent-spawn-contract.js";
+import type { AgentSpawnerOptions, SeatExitReading,
+  SeatExitReport } from "./agent-spawn-contract.js";
+import { claudeSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
-import { readProviderPause } from "./provider-pause-ledger.js";
+import { readProviderPause, recordProviderPause } from "./provider-pause-ledger.js";
 import { SEAT_EXIT_KINDS } from "./seat-exit-classifier.js";
 
 /**
@@ -36,6 +40,16 @@ const WEEKLY_RESET_AT = "2026-09-08T07:46:00.000Z";
 const EXIT_AT = "2026-09-03T18:04:00.000Z";
 const PARSED_RESET_AT = "2026-09-03T21:10:00.000Z";
 const PROJECT_ID = "proj-pause-gate";
+/** A loopback origin `trustedMcpOrigin` admits, for the arms that run the REAL spawner. */
+const SPAWN_ORIGIN = "http://127.0.0.1:39125";
+
+/** What one arm needs to read back off a spawned child: argv[0], argv and its env. */
+interface SpawnedChild {
+  readonly args: readonly string[];
+  readonly emitter: EventEmitter;
+  readonly env: NodeJS.ProcessEnv | undefined;
+  readonly file: string;
+}
 
 const sandboxes: string[] = [];
 const stores: SqliteEventStore[] = [];
@@ -474,7 +488,15 @@ describe("createAgentWrapper with a provider pause", () => {
     readonly wrapper: ReturnType<typeof createAgentWrapper>;
   }
 
-  function wrapperHarness(projectId: string): WrapperHarness {
+  interface WrapperOptions {
+    /** The durable per-scope setting fact; absent keeps the pre-2026-09-07 default. */
+    readonly agentProvider?: (goalId: string) => string | null;
+    /** Replaces the counting fake with a REAL spawn path, so argv[0] can be read back. */
+    readonly spawnAgent?: ReturnType<typeof createAgentWrapper> extends never ? never
+      : Parameters<typeof createAgentWrapper>[0]["spawnAgent"];
+  }
+
+  function wrapperHarness(projectId: string, options: WrapperOptions = {}): WrapperHarness {
     const sandbox = mkdtempSync(join(tmpdir(), "moe-pause-wrapper-"));
     const storePath = join(sandbox, "store.db");
     const isolated = createStoreDependencies({
@@ -490,6 +512,7 @@ describe("createAgentWrapper with a provider pause", () => {
     let suffix = 0;
     const wrapper = createAgentWrapper({
       affordances: port,
+      ...(options.agentProvider === undefined ? {} : { agentProvider: options.agentProvider }),
       claimTtlMs: 60_000,
       clock: () => now,
       deps: isolated.provide(),
@@ -504,12 +527,12 @@ describe("createAgentWrapper with a provider pause", () => {
         provider: "claude",
         store: reader,
       }),
-      spawnAgent: async () => {
+      spawnAgent: options.spawnAgent ?? (async () => {
         state.spawns += 1;
         const exit = deferred();
         exits.push(exit);
         return { exit: exit.promise, ok: true as const, pid: CHILD_PID };
-      },
+      }),
     });
     return {
       dispose: () => {
@@ -689,5 +712,155 @@ describe("createAgentWrapper with a provider pause", () => {
     } finally {
       harness.dispose();
     }
+  });
+
+  /**
+   * PER-PROVIDER PAUSE AND PER-SPAWN ARGV, over the REAL store, the REAL affordance
+   * surface and the REAL spawner. `MOE_AGENT_COMMAND` is cleared around every arm that
+   * claims the env is unset, so a host that exports it cannot make these vacuous.
+   */
+  describe("honours the durable provider per seat", () => {
+    const withEnvCommand = async <T>(value: string | undefined, run: () => Promise<T>):
+    Promise<T> => {
+      const before = process.env["MOE_AGENT_COMMAND"];
+      if (value === undefined) delete process.env["MOE_AGENT_COMMAND"];
+      else process.env["MOE_AGENT_COMMAND"] = value;
+      try {
+        return await run();
+      } finally {
+        if (before === undefined) delete process.env["MOE_AGENT_COMMAND"];
+        else process.env["MOE_AGENT_COMMAND"] = before;
+      }
+    };
+
+    /** A child that admits on the next tick, so the wrapper's start actually resolves. */
+    function spawnRecorder(): {
+      readonly children: SpawnedChild[];
+      readonly spawn: NonNullable<AgentSpawnerOptions["spawn"]>;
+    } {
+      const children: SpawnedChild[] = [];
+      const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, spawnOptions) => {
+        const emitter = new EventEmitter();
+        const stdin = new PassThrough();
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+        children.push({ args, emitter, env: spawnOptions?.env, file });
+        setImmediate(() => { emitter.emit("spawn"); });
+        return Object.assign(emitter, {
+          kill: () => true, pid: 5150, stderr, stdin, stdout, unref: () => undefined,
+        }) as unknown as ReturnType<NonNullable<AgentSpawnerOptions["spawn"]>>;
+      };
+      return { children, spawn };
+    }
+
+    /** Runs ONE pass with the real spawner behind it and answers the spawned child. */
+    async function spawnedUnder(projectId: string, setting: string | null): Promise<SpawnedChild> {
+      const { children, spawn } = spawnRecorder();
+      const harness = wrapperHarness(projectId, {
+        agentProvider: () => setting,
+        // POSIX argv semantics: on win32 the argv collapses into ONE shell line and
+        // `args` is empty, so an args-shaped assertion would be unreachable there.
+        spawnAgent: claudeSpawnStarter(SPAWN_ORIGIN, {
+          log: () => undefined, platform: "linux", spawn,
+        }),
+      });
+      try {
+        const report = await harness.wrapper.runOnce();
+        expect(report.spawned[0]).toMatchObject({ outcome: "SPAWNED" });
+        const child = children[0];
+        if (child === undefined) throw new Error("nothing spawned");
+        child.emitter.emit("close", 0, null);
+        await harness.wrapper.settle();
+        return child;
+      } finally {
+        harness.dispose();
+      }
+    }
+
+    it("spawns argv[0] codex when the durable setting says codex, env unset", async () => {
+      const child = await withEnvCommand(undefined,
+        async () => spawnedUnder("proj-seat-codex", "codex"));
+      expect(child.file).toBe("codex");
+      expect(child.args[0]).toBe("exec");
+      // The codex-only allowlist entry rides the child's OWN environment.
+      expect(child.env?.["MOE_AGENT_MCP_BEARER"]).toMatch(/^pause-0001/u);
+    });
+
+    it("spawns argv[0] claude when the durable setting says claude, env unset", async () => {
+      const child = await withEnvCommand(undefined,
+        async () => spawnedUnder("proj-seat-claude", "claude"));
+      expect(child.file).toBe("claude");
+      expect(child.args[0]).toBe("-p");
+      expect(child.env?.["MOE_AGENT_MCP_BEARER"]).toBeUndefined();
+    });
+
+    it("lets MOE_AGENT_COMMAND win over a contrary durable setting", async () => {
+      const child = await withEnvCommand("claude",
+        async () => spawnedUnder("proj-seat-env-wins", "codex"));
+      expect(child.file).toBe("claude");
+      expect(child.args[0]).toBe("-p");
+    });
+
+    /**
+     * DoD-3, BOTH directions with their own controls. One direction alone stays green
+     * while the gate ignores its provider argument entirely, so each pair asserts the
+     * SAME work item is staffed under the other provider's pause and is NOT staffed
+     * under its own.
+     */
+    async function passUnder(projectId: string, setting: string, paused: string): Promise<{
+      readonly outcome: string;
+      readonly pausedProvider: string | undefined;
+      readonly staffed: string | undefined;
+    }> {
+      const harness = wrapperHarness(projectId, { agentProvider: () => setting });
+      try {
+        const planted = recordProviderPause(harness.reader, {
+          cause: { lastLine: LIMIT_LINE, workItemId: "planted" },
+          projectId,
+          provider: paused,
+          resetAt: nowIso(NOW + 600_000),
+          since: nowIso(NOW),
+        });
+        expect(planted.ok, "the pause was not planted").toBe(true);
+        const report = await harness.wrapper.runOnce();
+        for (const exit of harness.exits) exit.resolve({ exitCode: 0, signal: null, tail: [] });
+        await harness.wrapper.settle();
+        return {
+          outcome: report.surfaceOutcome,
+          pausedProvider: report.paused?.provider,
+          staffed: report.spawned[0]?.workItemId,
+        };
+      } finally {
+        harness.dispose();
+      }
+    }
+
+    it("staffs a codex seat while CLAUDE is paused, and refuses it while codex is", async () => {
+      await withEnvCommand(undefined, async () => {
+        const free = await passUnder("proj-cross-codex-free", "codex", "claude");
+        expect(free.outcome).toBe("SURFACE");
+        expect(free.pausedProvider).toBeUndefined();
+        expect(free.staffed).toBe("policy.install@proj-cross-codex-free-policy");
+
+        const held = await passUnder("proj-cross-codex-held", "codex", "codex");
+        expect(held.outcome).toBe(PROVIDER_PAUSED_OUTCOME);
+        expect(held.pausedProvider).toBe("codex");
+        expect(held.staffed).toBeUndefined();
+      });
+    });
+
+    it("staffs a claude seat while CODEX is paused, and refuses it while claude is", async () => {
+      await withEnvCommand(undefined, async () => {
+        const free = await passUnder("proj-cross-claude-free", "claude", "codex");
+        expect(free.outcome).toBe("SURFACE");
+        expect(free.pausedProvider).toBeUndefined();
+        expect(free.staffed).toBe("policy.install@proj-cross-claude-free-policy");
+
+        const held = await passUnder("proj-cross-claude-held", "claude", "claude");
+        expect(held.outcome).toBe(PROVIDER_PAUSED_OUTCOME);
+        expect(held.pausedProvider).toBe("claude");
+        expect(held.staffed).toBeUndefined();
+      });
+    });
   });
 });

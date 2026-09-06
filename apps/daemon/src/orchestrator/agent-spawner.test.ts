@@ -316,6 +316,134 @@ describe("claudeSpawner", () => {
     await done;
   });
 
+  /**
+   * PER-SPAWN PROVIDER. One wrapper process serves many providers, so the command is
+   * resolved from THE REQUEST at each spawn and not once at construction. Every arm
+   * below asserts the SPAWNED CHILD — `child.file` is argv[0] as the OS would see it —
+   * never an internal field, and each pins the codex-only bearer variable in the child's
+   * env so a codex invocation can never quietly get the claude environment or the reverse.
+   */
+  describe("resolves the seat command per spawn", () => {
+    const withoutEnvCommand = <T>(run: () => T): T => {
+      const before = process.env["MOE_AGENT_COMMAND"];
+      delete process.env["MOE_AGENT_COMMAND"];
+      try {
+        return run();
+      } finally {
+        if (before !== undefined) process.env["MOE_AGENT_COMMAND"] = before;
+      }
+    };
+
+    it("spawns codex for a codex request with MOE_AGENT_COMMAND unset", async () => {
+      const { calls, spawn } = fakeSpawn();
+      const { configDir, made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+        log: () => undefined, platform: "linux", spawn,
+      }));
+      const done = spawner(request({ provider: "codex", workspace: "D:/ws/node-1" }));
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+      expect(child.file).toBe("codex");
+      expect(child.args[0]).toBe("exec");
+      // The codex-only allowlist entry: the scoped bearer rides the child's OWN env.
+      expect(child.options.env?.["MOE_AGENT_MCP_BEARER"]).toBe("agent-secret-0001");
+      // ...and no credentialed MCP config file is written for a codex seat.
+      expect(readdirSync(configDir)).toEqual([]);
+      child.emitter.emit("close", 0, null);
+      await done;
+    });
+
+    it("spawns claude for a claude request with MOE_AGENT_COMMAND unset", async () => {
+      const { calls, spawn } = fakeSpawn();
+      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+        log: () => undefined, platform: "linux", spawn,
+      }));
+      const done = spawner(request({ provider: "claude" }));
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+      expect(child.file).toBe("claude");
+      expect(child.args[0]).toBe("-p");
+      // The codex-only variable must NOT reach a claude seat.
+      expect(child.options.env?.["MOE_AGENT_MCP_BEARER"]).toBeUndefined();
+      child.emitter.emit("close", 0, null);
+      await done;
+    });
+
+    it("spawns each request's own command from ONE spawner, codex then claude", async () => {
+      const { calls, spawn } = fakeSpawn();
+      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+        log: () => undefined, platform: "linux", spawn,
+      }));
+      const first = spawner(request({ provider: "codex", sessionId: "sess-wrap-000a" }));
+      const second = spawner(request({ provider: "claude", sessionId: "sess-wrap-000b" }));
+      expect(calls.map((child) => child.file)).toEqual(["codex", "claude"]);
+      expect(calls[0]?.options.env?.["MOE_AGENT_MCP_BEARER"]).toBe("agent-secret-0001");
+      expect(calls[1]?.options.env?.["MOE_AGENT_MCP_BEARER"]).toBeUndefined();
+      calls[0]?.emitter.emit("close", 0, null);
+      calls[1]?.emitter.emit("close", 0, null);
+      await Promise.all([first, second]);
+    });
+
+    // The host env is set to the CONTRARY value on purpose: with it unset this arm
+    // passes under any ordering of the fallback chain and proves nothing.
+    it("keeps the spawner's own option ahead of the host env when no request names one",
+      async () => {
+        const { calls, spawn } = fakeSpawn();
+        const before = process.env["MOE_AGENT_COMMAND"];
+        process.env["MOE_AGENT_COMMAND"] = "codex";
+        try {
+          const { made: spawner } = inSandbox(claudeSpawner, {
+            command: "claude", log: () => undefined, platform: "linux", spawn,
+          });
+          const done = spawner(request());
+          const child = calls[0];
+          if (child === undefined) throw new Error("nothing spawned");
+          expect(child.file).toBe("claude");
+          expect(child.args[0]).toBe("-p");
+          child.emitter.emit("close", 0, null);
+          await done;
+        } finally {
+          if (before === undefined) delete process.env["MOE_AGENT_COMMAND"];
+          else process.env["MOE_AGENT_COMMAND"] = before;
+        }
+      });
+
+    it("takes the host env when neither the request nor the option names a command",
+      async () => {
+        const { calls, spawn } = fakeSpawn();
+        const before = process.env["MOE_AGENT_COMMAND"];
+        process.env["MOE_AGENT_COMMAND"] = "codex";
+        try {
+          const { made: spawner } = inSandbox(claudeSpawner, {
+            log: () => undefined, platform: "linux", spawn,
+          });
+          const done = spawner(request());
+          const child = calls[0];
+          if (child === undefined) throw new Error("nothing spawned");
+          expect(child.file).toBe("codex");
+          expect(child.args[0]).toBe("exec");
+          child.emitter.emit("close", 0, null);
+          await done;
+        } finally {
+          if (before === undefined) delete process.env["MOE_AGENT_COMMAND"];
+          else process.env["MOE_AGENT_COMMAND"] = before;
+        }
+      });
+
+    it("falls back to claude when the request, the option and the host env are all absent",
+      async () => {
+        const { calls, spawn } = fakeSpawn();
+        const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+          log: () => undefined, platform: "linux", spawn,
+        }));
+        const done = spawner(request());
+        const child = calls[0];
+        if (child === undefined) throw new Error("nothing spawned");
+        expect(child.file).toBe("claude");
+        child.emitter.emit("close", 0, null);
+        await done;
+      });
+  });
+
   it("preserves an enterprise proxy while forcing loopback MCP to bypass it", async () => {
     const { calls, spawn } = fakeSpawn();
     const spawner = claudeSpawner(MCP_ORIGIN, {

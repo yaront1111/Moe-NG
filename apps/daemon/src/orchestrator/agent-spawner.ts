@@ -13,6 +13,7 @@ import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpa
   AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
   SpawnAttempt } from "./agent-spawn-contract.js";
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
+import { spawnSeatFor } from "./agent-provider-resolve.js";
 import { createOutputTail } from "./seat-output-tail.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -48,7 +49,6 @@ function spawnRuntime(
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   CONFIG_DIRS.add(configDir);
-  const command = options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude";
   const spawn = options.spawn ?? nodeSpawn;
   const log = options.log ?? ((line: string): void => { process.stdout.write(`${line}\n`); });
   const envTimeout = Number(process.env["MOE_AGENT_TIMEOUT_MS"] ?? "");
@@ -64,19 +64,19 @@ function spawnRuntime(
   const containmentFailures: AgentProcessContainmentError[] = [];
   let closed = false;
   let closing: Promise<void> | undefined;
-  // The seat's PROVIDER decides the invocation shape. `codex exec` (measured
-  // against codex-cli 0.151.0): the mission arrives on stdin via `-`, the MCP
-  // server is a streamable-HTTP config override, and the scoped bearer travels
-  // through an env var codex reads by name (`bearer_token_env_var`) — never
-  // through argv or a file. `--ignore-user-config` keeps the HOST's codex
+  // EACH SEAT's PROVIDER decides its own invocation shape, resolved per spawn from
+  // the request (see agent-provider-resolve.ts). `codex exec` (measured
+  // against codex-cli 0.151.0): the mission arrives on stdin via `-`, the MCP server
+  // is a streamable-HTTP config override, and the scoped bearer travels through an
+  // env var codex reads by name (`bearer_token_env_var`) — never through argv or a
+  // file. `--ignore-user-config` keeps the HOST's codex
   // config (and any MCP servers it names) out, the parallel of claude's
   // `--strict-mcp-config`; its help states auth still uses CODEX_HOME.
-  // Config values stay QUOTE-FREE on purpose: codex parses each `-c` value as
-  // TOML and falls back to the raw literal, and a quote-free arg is what the
-  // Windows cmd quoting fence admits.
-  const codexSeat = /(?:^|[\\/])codex(?:\.[a-z]+)?$/iu.test(command);
+  // Config values stay QUOTE-FREE on purpose: codex parses each `-c` value as TOML and
+  // falls back to the raw literal, and a quote-free arg is what the cmd quoting fence admits.
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
+    const { codex: codexSeat, command } = spawnSeatFor(request.provider, options.command);
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
     const role = agentRoleForWorkspace(request.workspace);

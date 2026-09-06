@@ -33,7 +33,13 @@ export interface ProviderPauseGateConfig {
   readonly defaultPauseMs?: number;
   readonly log: (line: string) => void;
   readonly projectId: string;
-  /** The provider this wrapper serves — one MOE_AGENT_COMMAND per wrapper process. */
+  /**
+   * The provider assumed when a caller names none. The wrapper serves MANY providers —
+   * each seat's command is resolved PER SPAWN (agent-provider-resolve.ts) and the pause
+   * is per (project, provider), so `paused` and `exitObserver` each take the seat's own
+   * provider. This is the fallback for a call site that has not resolved one, never a
+   * claim about the process.
+   */
   readonly provider: string;
   readonly store: SqliteEventStore;
 }
@@ -42,14 +48,19 @@ export interface ProviderPauseGate {
   /**
    * Reads ONE seat's exit. `refund` is called exactly when the reading is a
    * provider limit — the attempt was charged at spawn and the item never ran.
+   * `provider` is the seat's OWN provider; absent falls back to the config's.
    */
   readonly exitObserver: (
     sessionId: string,
     workItemId: string,
     refund: () => void,
+    provider?: string,
   ) => (report: SeatExitReport) => SeatExitReading;
-  /** The live pause at `nowMs`, or null when the provider is free to staff. */
-  readonly paused: (nowMs: number) => ProviderPauseFacts | null;
+  /**
+   * The live pause on ONE provider at `nowMs`, or null when that provider is free
+   * to staff. A live claude pause never answers for a codex seat.
+   */
+  readonly paused: (nowMs: number, provider?: string) => ProviderPauseFacts | null;
 }
 
 function messageOf(error: unknown): string {
@@ -57,13 +68,17 @@ function messageOf(error: unknown): string {
 }
 
 export function createProviderPauseGate(config: ProviderPauseGateConfig): ProviderPauseGate {
-  const { clock, log, projectId, provider, store } = config;
+  const { clock, log, projectId, store } = config;
   const defaultPauseMs = config.defaultPauseMs ?? DEFAULT_PROVIDER_PAUSE_MS;
+  /** Every ledger read and write below is keyed by the SEAT's provider, defaulting only
+   *  when a caller names none — the ledger has always been keyed by (project, provider). */
+  const seatOf = (provider?: string): string => provider ?? config.provider;
 
   /** The pause the ledger answers with at this instant; an unreadable clock parks nothing. */
-  const livePause = (nowMs: number): ProviderPauseFacts | null => {
+  const livePause = (nowMs: number, provider?: string): ProviderPauseFacts | null => {
     if (!Number.isFinite(nowMs)) return null;
-    const record = readProviderPause(store, projectId, provider, new Date(nowMs).toISOString());
+    const record = readProviderPause(store, projectId, seatOf(provider),
+      new Date(nowMs).toISOString());
     return record === null
       ? null
       : { provider: record.provider, resetAt: record.resetAt, since: record.since };
@@ -77,11 +92,11 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
    * line's own instant wins, and a line that names none (or names one already past)
    * falls back to the bounded default.
    */
-  const resetFor = (nowMs: number, lineReset: string | null): {
+  const resetFor = (nowMs: number, lineReset: string | null, provider: string): {
     readonly defaulted: boolean;
     readonly resetAt: string;
   } => {
-    const live = livePause(nowMs);
+    const live = livePause(nowMs, provider);
     if (live !== null) return { defaulted: false, resetAt: live.resetAt };
     if (lineReset !== null && Date.parse(lineReset) > nowMs) {
       return { defaulted: false, resetAt: lineReset };
@@ -95,6 +110,7 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
       readonly exitAt: string;
       readonly kind: SeatExitReading;
       readonly lastLine: string | null;
+      readonly provider: string;
       readonly report: SeatExitReport;
       readonly resetAt: string | null;
       readonly sessionId: string;
@@ -107,7 +123,7 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
       kind: input.kind,
       lastLine: input.lastLine,
       projectId,
-      provider,
+      provider: input.provider,
       resetAt: input.resetAt,
       sessionId: input.sessionId,
       workItemId: input.workItemId,
@@ -121,6 +137,7 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
       readonly lastLine: string | null;
       readonly nowMs: number;
       readonly exitAt: string;
+      readonly provider: string;
       readonly resetAt: string;
       readonly defaulted: boolean;
       readonly workItemId: string;
@@ -129,18 +146,19 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
     const result = recordProviderPause(store, {
       cause: { lastLine: input.lastLine, workItemId: input.workItemId },
       projectId,
-      provider,
+      provider: input.provider,
       resetAt: input.resetAt,
       since: input.exitAt,
     });
     if (!result.ok) log(`[wrapper] provider pause not recorded: ${result.code}`);
     const bound = input.defaulted ? " (DEFAULT_PROVIDER_PAUSE_MS)" : "";
-    log(`[wrapper] provider limit: ${provider} paused until ${input.resetAt}${bound}`
+    log(`[wrapper] provider limit: ${input.provider} paused until ${input.resetAt}${bound}`
       + ` (${input.lastLine ?? "no output"})`);
   };
 
   const observe = (
     sessionId: string, workItemId: string, refund: () => void, report: SeatExitReport,
+    provider: string,
   ): SeatExitReading => {
     const nowMs = clock();
     const exitAt = new Date(nowMs).toISOString();
@@ -153,27 +171,28 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
     });
     if (verdict.kind !== "PROVIDER_LIMIT") {
       recordExit({
-        exitAt, kind: verdict.kind, lastLine: verdict.lastLine, report,
+        exitAt, kind: verdict.kind, lastLine: verdict.lastLine, provider, report,
         resetAt: verdict.resetAt, sessionId, workItemId,
       });
       return verdict.kind;
     }
-    const { defaulted, resetAt } = resetFor(nowMs, verdict.resetAt);
+    const { defaulted, resetAt } = resetFor(nowMs, verdict.resetAt, provider);
     recordExit({
-      exitAt, kind: verdict.kind, lastLine: verdict.lastLine, report, resetAt, sessionId,
-      workItemId,
+      exitAt, kind: verdict.kind, lastLine: verdict.lastLine, provider, report, resetAt,
+      sessionId, workItemId,
     });
-    park({ defaulted, exitAt, lastLine: verdict.lastLine, nowMs, resetAt, workItemId });
+    park({ defaulted, exitAt, lastLine: verdict.lastLine, nowMs, provider, resetAt, workItemId });
     // The attempt was charged when the seat spawned; the provider, not the item, refused.
     refund();
     return verdict.kind;
   };
 
   const gate: ProviderPauseGate = {
-    exitObserver: (sessionId: string, workItemId: string, refund: () => void) =>
+    exitObserver: (sessionId: string, workItemId: string, refund: () => void,
+      provider?: string) =>
       (report: SeatExitReport): SeatExitReading => {
         try {
-          return observe(sessionId, workItemId, refund, report);
+          return observe(sessionId, workItemId, refund, report, seatOf(provider));
         } catch (error) {
           // Fail CLOSED to today's behaviour: an unreadable exit is an ordinary failure.
           log(`[wrapper] seat exit observer failed: ${messageOf(error)}`);
