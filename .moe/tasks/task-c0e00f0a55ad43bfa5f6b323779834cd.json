@@ -162,8 +162,8 @@
       "completedAt": "2026-09-06T02:43:53.385Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -221,12 +221,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:53:06.168Z",
-  "updatedAt": "2026-09-06T02:50:25.291Z",
+  "updatedAt": "2026-09-06T02:52:25.508Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:58:28.560Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-06T02:52:22.840Z",
+    "wallClockMs": 28434280
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -351,6 +353,21 @@
       "treeId": "3e948d5bba71a0c3d7e1ae55e5984e7b16d16627",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "a7ee87861930345d9c0d8974db0416109041041d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-b63fabf3@2026-09-06T01:43:46Z",
+      "paths": [
+        ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json"
+      ],
+      "recordedBy": "architect-b63fabf3",
+      "recordedAt": "2026-09-06T02:52:25.508Z",
+      "treeId": "64949affdf811b293358fbf119982dd8df66300d",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -370,9 +387,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-2739fee7@2026-09-06T02:00:41Z",
-    "at": "2026-09-06T02:47:15.498Z"
+    "kind": "checkpoint",
+    "sessionId": "architect-b63fabf3@2026-09-06T01:43:46Z",
+    "at": "2026-09-06T02:52:25.508Z"
   },
   "priorBlockedReason": "DoD-2 UNSATISFIABLE ON THE SHIPPED INFRASTRUCTURE - plan step 1(b)'s OWN named stop outcome (\"If the generated infrastructure has NO switch point ... STOP AND REPORT with the compose file quoted\"), antecedent measures TRUE. Step 1 complete; evidence + the three rulings in comment-790e601a83d14280b2aeaf2ea9fd860c.\n\nMEASURED. docker-compose.override.yml (task-3706b7e7, DONE) ships ONE service, `app`, binding the public port directly: `ports:` / `- \"3000:3000\"`. Base docker-compose.yml (task-4a0f7064, DONE) ships `db` only. ZERO nginx/traefik/caddy/reverse-proxy hits and ZERO `docker stack`/`update_config`/`start-first`/`docker service` hits across apps packages adapters tools. No proxy row among the epic's 44.\n\nWHY IT BLOCKS. A published host port is fixed at container create time and two containers cannot bind 0.0.0.0:3000 at once, so the engine cannot start the candidate alongside the incumbent and has nothing to flip: DoD-2's recorded call ORDER is not executable. Both workarounds are worse than a refusal - stop-then-start called atomic is the fabrication task rail 2 prevents; ephemeral-port-then-recreate-on-3000 means the container that finally takes traffic was never health-probed, defeating DoD-3 too. The proxy belongs in task-3706b7e7's `dockerComposeOverride`, which rail 1 forbids me to touch.\n\nNEEDED - ONE RULING (detailed in the comment): (1) prerequisite row adding a flippable upstream, DoD-2 unchanged; (2) network-alias switch, DoD-2 amended to the internal service name; (3) DoD-2 amended to what the infrastructure can back, outage window named. NOT blocked on a row - both producers are DONE.\n\nSALVAGEABLE ON YOUR WORD: steps 2-3 (`moe-deploy-receipt/1` contract + ports) are orthogonal, and rollback (task-7683a432) cannot depend on this row yet needs the shape. Amend the plan to allow them ahead of the ruling and they ship in one session.\n\nBASELINE: daemon typecheck exit 0 GREEN. ZERO files created/modified; 75 peer dirty paths untouched.",
   "blockedOnTaskIds": null,
@@ -395,5 +412,8 @@
     "apps/daemon/src/deployment/deploy-service.test.ts",
     "apps/daemon/src/deployment/deploy-service.ts",
     "apps/daemon/src/deployment/deploy-receipt-contracts.ts"
-  ]
+  ],
+  "completedAt": "2026-09-06T02:52:22.840Z",
+  "reviewCompletedAt": "2026-09-06T02:52:22.840Z",
+  "reviewSummary": "APPROVED. FULL LEDGER IN comment-472d35cd. Reviewed completion commit 2df6a01e (= HEAD); porcelain status on apps/daemon/src/deployment/ EMPTY and all 10 files in ls-tree, so this grades committed bytes.\n\nRE-RAN MYSELF: owned leg `vitest run --root . --config package.json src/deployment/` = Test Files 2 passed (2) / Tests 28 passed (28), exit 0, reproducing the recorded verification. `pnpm typecheck` exit 0, every package Done with the `$ tsc` echo.\n\nFOREIGN RED ATTRIBUTED AT THE COMMIT BOUNDARY (did not re-run the 574s daemon suite; replayed the one failing file that could grade this row). runtime-entrypoint.test.ts reports unexpected: repository/deployment/deployment-docker-probe.js, a different directory, and `git show 2df6a01e^:<path>` SUCCEEDS, so it predates the diff; adder e219aa43 (task-3706b7e7). Positive control same output: missing [], wrongContent []; the four .js bridges verified byte-for-byte via cat -A.\n\nDoD read as assertions, not test names. 1 PASS: tag asserted against the sha VALUE three ways, not a pattern. 3 PASS: incumbent HEALTHY, candidate REMOVED, serving()==[INCUMBENT] read from the port's final state, plus code and layer. 4 PASS: three codes with layer; BUILD_FAILED asserts the EXACT planted stderr with toBe. 5 PASS: null-pairing refused BOTH ways. 6 PASS: two receipts differing by sha and receiptId; retrieval call documented for task-da60dc4b39c. 7 PASS: both wordings. 8 PASS: spawn shell:false at all three sites, bare docker/ssh, no .cmd; teardown via afterEach, which runs on the throwing path.\n\nDoD-2 RULED OUT, verified durable: comment-0c8df7d1 moves it verbatim to task-db63dacc, on disk in PLANNING with dependsOn on this row. Rail 2 honoured literally: grep -il atomic over the delivered directory returns NOTHING.\n\nSIZE: no finding. customRules[1] makes task net LOC never a reject reason; per-file at HEAD is 280/223/207/206, under 400."
 }

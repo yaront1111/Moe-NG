@@ -21,14 +21,18 @@
     {
       "stepId": "step-1",
       "description": "GATE (manual - an architect seat cannot set this parent's dependsOn: [NOT_ALLOWED] role resolution; governors paged). Read the three SPIDR children on disk (.moe/tasks/<id>.json; SPIDR children may be absent from get_context.epicSiblings) and confirm each is DONE with a landed commit: 1 task-3780109018bb49b2bf3a00b18952d7ff (REJECT commits + REVISION successor + currentPlanningRun + verdict), 2 task-957bccf162b446f3a4db46b56e8e8f3a (offers follow the current run; compiler re-plans the successor with the reason), 3 task-a988ca1c240347178c54348c470d07ed (plan-gate Reject, Needs you PLAN_REJECTED, stage Plan sent back, docs). Verify on disk: `git log main --grep \"Moe-Task: task-<id>\" --oneline` = 1+ line each; `test -f apps/daemon/src/planning/approval-intent-rejection.ts`; `grep -c currentPlanningRun apps/daemon/src/http/affordance-planning-offers.ts` >= 1; `grep -n \"PLAN REJECTED\" apps/daemon/src/orchestrator/agent-mission-text.ts` >= 1; `grep -n \"cr.approve.reject\" apps/control-room/src/v2/goals/approve-plan-gate.tsx` >= 1; README names Reject. If ANY child is not DONE: `moe.report_blocked` with blockedOnTaskIds = the missing children and the exact grep results - this row owns 0 files and never re-implements a child's work. Record the measurements in the step note.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "GATE PASSED - all three SPIDR children DONE with landed commits on moe/work-2026-09-04; no block. Measured 2026-09-06.\n\nCHILD STATUS (from .moe/tasks/<id>.json + git log --grep \"Moe-Task: <id>\" --oneline):\n1. task-3780109018bb49b2bf3a00b18952d7ff = DONE; 11 commits, feat bb1afdf6 + fix 5d035120 (retry after qa_reject #1) + DONE a33076d7.\n2. task-957bccf162b446f3a4db46b56e8e8f3a = DONE; 9 commits, feat 7e160d59 + DONE 1b17941c. (Verification-only SPIDR parent; its own production bytes live in its children task-37801090 / task-138fab30 / task-2c016c04 - see mem:task-task-957bccf162b446f3a4db46b56e8e8f3a-handoff.)\n3. task-a988ca1c240347178c54348c470d07ed = DONE; feat 2911207a.\n\nDISK PROBES - 3 of 5 pass literally, 2 were STALE PATH GUESSES by the architect and were re-measured to their real locations (capability present, plan named the wrong file):\n- PASS `test -f apps/daemon/src/planning/approval-intent-rejection.ts` -> exists, 217 lines; consumed at apps/daemon/src/planning/approval-intent.ts:16.\n- PASS `grep -c \"cr.approve.reject\" apps/control-room/src/v2/goals/approve-plan-gate.tsx` -> 1 (:139).\n- PASS docs: README lines 19-21 name the send-back path (\"a human approves - or sends back with a reason, which re-plans it into a successor run the gate then follows\"); docs/agent-stack-runbook.md:668-680 has the \"SENDING THE PLAN BACK\" paragraph incl. APPROVAL_REJECT_REASON_REQUIRED @ APPROVAL_INTENT_REJECTION and the successor binding. NOTE `grep -ci reject README.md` = 0 - the README uses \"sends back\", not the word \"Reject\"; the clause IS there.\n- STALE `grep -c currentPlanningRun apps/daemon/src/http/affordance-planning-offers.ts` -> 0. Re-measured: defined apps/daemon/src/planning/current-planning-run.ts:120, exported apps/daemon/src/index.ts:38, consumed apps/daemon/src/http/affordance-read.ts:310 and apps/daemon/src/planning/compile-run-resolution.ts:50. The resolver landed in its own module, not in the offers file.\n- STALE `grep -n \"PLAN REJECTED\" apps/daemon/src/orchestrator/agent-mission-text.ts` -> 0. Re-measured: the sentence is built at apps/daemon/src/planning/rejection-instructions.ts:118 (`PLAN REJECTED by the operator: ${reason}. ${REJECTION_SENTENCE_TAIL}`) and reaches the mission via apps/daemon/src/orchestrator/agent-wrapper-main.ts:14/:209 `composeCompilerInstructions(brief, latestRejectionReason(...))`. Arms: rejection-instructions.test.ts + rejection-instructions-fence.test.ts.\n\nUI consumer edges confirmed non-test: needs-you-model.ts:36/:82/:127 PLAN_REJECTED, needs-you.tsx:45 + goal-status-strip.tsx:24 \"Plan sent back\", goal-status.ts:23/:207 GoalStage PLAN_REJECTED.\n\nThis row owns 0 files; modifiedFiles empty. Shared checkout has 21 foreign dirty paths (environment/*, deployment/, preview/*, verifier-process-runner*, .moe/*) - noted, not touched, not a stop condition.",
+      "startedAt": "2026-09-06T02:39:51.020Z",
+      "completedAt": "2026-09-06T02:41:22.689Z"
     },
     {
       "stepId": "step-2",
       "description": "LIVE DRIVE on UnAI (parent DoD 5; D:/projexts/UnAI, daemon + wrapper via scripts/up.ps1 - never restart the wrapper to unstick a seat, claim TTL 30 min). Find or create a goal whose plan is at the gate (decide_intent offered on its run). In the browser: Reject with a reason (write the exact reason text in the note). Record, with timestamps and ids read from the store (read-only node:sqlite peek): the intent decision (result {decision:\"REJECT\", decisionReason, successorRunId}), the rejected run's lifecycle REJECTED, the successor run at version 1 (REVISION), the affordance read showing decide_intent absent + submit_decomposition offered + planningGoalRefs[successor] = goal, the Seats/Needs-you screens (PLAN_REJECTED card with the reason), the wrapper log SPAWNED line for the compiler seat and the seat's mission excerpt quoting the reason between the operator markers (from wrapper stdout), the successor's PLAN_COMPILED, the gate returning with Approve/Reject bound to the successor, and the Approve commit (activation event id). If the owner's quota refuses the real seat, drive the resubmission with the scripted double from child 2's e2e and say so - quote the refusal line; never fabricate. Transcript in a row comment under 4500 chars (split if needed, one idea per comment).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T02:41:28.023Z"
     },
     {
       "stepId": "step-3",
@@ -38,7 +42,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0520a42e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -63,13 +67,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:58.848Z",
-  "updatedAt": "2026-09-04T10:44:19.521Z",
+  "updatedAt": "2026-09-06T02:41:28.023Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:23:28.743Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 0
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T10:28:54.275Z",
   "planningNotes": {
@@ -94,5 +101,9 @@
     "task-3780109018bb49b2bf3a00b18952d7ff",
     "task-957bccf162b446f3a4db46b56e8e8f3a",
     "task-a988ca1c240347178c54348c470d07ed"
-  ]
+  ],
+  "contextFetchedBy": [
+    "worker-0520a42e"
+  ],
+  "workStartedAt": "2026-09-06T02:39:51.020Z"
 }
