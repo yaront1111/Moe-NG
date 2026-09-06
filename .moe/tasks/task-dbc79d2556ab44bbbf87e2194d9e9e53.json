@@ -207,8 +207,8 @@
       "completedAt": "2026-09-06T11:54:54.659Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -251,16 +251,24 @@
       "author": "worker-deb4c7d8",
       "content": "EVIDENCE SHEET (worker-deb4c7d8) — part 2 of 2: the still-red owned path, the drills, and the caps.\n\nSTILL-RED OWNED PATH, `src/daemon-command-registry.test.ts`, ONE arm (baseline had FIVE, all now green):\n```\nFAIL > registered command table > 'deployment.set_target' reaches its own family handler and refuses with its code\nAssertionError: expected { httpStatus: 422, ok: false, ...(3) } to match object { httpStatus: 422, ok: false, ...(3) }\n-     \"code\": \"BOOTSTRAP_COMMAND_UNKNOWN\",      -     \"layer\": \"DAEMON_INGRESS\",\n+     \"code\": \"BOOTSTRAP_PREREQUISITE_MISSING\", +     \"layer\": \"DAEMON_PREREQUISITE\",\n```\nCause: `639574c8 fix(task-04b3ce7e...): COMMAND_PREREQUISITES covers the two deployment kinds` (13:39,\nAFTER my step-1 baseline) changed what that kind answers; the peer's own ROWS transcription still\nsays the old pair. **NOT ASSERTED — MEASURED.** I removed ONLY my `preview.start` ROWS entry and\nre-ran the file: the arm STILL FAILED (`Tests 3 failed | 370 passed (373)` — the other two being my\nown transcriptions going missing). So my entry is not the cause. File restored, proven in a separate\ncall by SHA256: `23167c4aab89b6da7ffb0325534344c33ad110da1345580fff57fa9072697404` == backup.\n\nSTRONGEST SINGLE ATTRIBUTION FACT: `grep -ci preview` over the entire `Failed Tests 18` section of\nthe final daemon log = **0**. Not one of the eighteen failures names a preview kind, file or symbol.\n\nOWNED-SCOPE LEG (the verification submitted with complete_task) — EXIT 0,\n`Test Files 13 passed (13)` / `Tests 397 passed (397)`, over:\npreview/preview-start-command, preview/preview-contracts, preview/preview-daemon-edge,\npreview/preview-supervisor, preview/preview-runner, preview/preview-ledger,\ndaemon-command-vocabulary, daemon-command-registry-human-approver, mcp-main, mcp-tool-allowlist,\nmcp-http/mcp-http-host, daemon-v2-command-registry, http/affordance-planning-offers.\nThe three owned files carrying peer-attributed arms (daemon-command-registry.test.ts,\ndaemon-store-dependencies.test.ts, runtime-entrypoint.test.ts) are EXCLUDED FROM THAT LEG AND\nDISCLOSED ABOVE rather than hidden.\n\nMUTATION DRILLS — SEVEN, each applied alone and restored. TWO SURVIVED FIRST TIME AND EXPOSED REAL\nGAPS; I closed each with new arms and re-drilled rather than excusing it.\n1. delete the operator fence -> RED, only arm C1 (`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`).\n2. answer from the writer's return value instead of `readPreviewReceipt` -> **SURVIVED 12/12 GREEN.**\n   The runner already reads its own write back, so the two are byte-identical on the happy path.\n   Closed with two arms that inject a supervisor DISAGREEING with the ledger (a fabricated STARTED\n   receipt that was never recorded; a refusal code differing from the recorded one). Re-drilled: RED.\n3. relax the decoder to \"pick the keys I know\" -> RED on 4 arms including E2 (the `workspace` guard).\n4. remove the kind from `OPERATOR_PRINCIPAL_KINDS` -> RED across 5 files / 6 arms — which is itself\n   the proof the MCP exclusion is DERIVED, not hand-kept.\n5. remove the kind from `HUMAN_ONLY_STEPS` -> RED, but **the set-equality half did NOT catch it**:\n   my \"direction 2\" was `wrapperFenced.filter(...).toStrictEqual([])`, and a deletion only SHRINKS\n   the filtered set. Replaced with true set-equality against a new hand-transcribed\n   `WRAPPER_FENCED_SERVED_KINDS` (17 kinds, measured off the seam via a planted placeholder), and\n   REORDERED so the set arm runs before the named-subject line. Re-drilled: the set arm reds with the\n   array delta printing exactly `- \"preview.start\"`.\n6. narrow `daemon-command-families.ts` back to the decide-only equality -> RED, but on an UNRELATED\n   kind (`deployment.set_target`, via shared-store test order). Nothing NAMED this kind, so I added a\n   direct arm on `commandFamilyFacts(\"preview.start\")` with a positive and a negative control.\n   Re-drilled: that arm reds.\n7. (added after the adversarial pass) disable the repeat-start short-circuit -> RED on\n   `REPLAYS the existing receipt and spawns NO second server`.\n\nRESTORE PROOF, in calls SEPARATE from every restore. Untracked paths by SHA256 vs out-of-tree\nbackups in `/tmp/drill-worker-deb4c7d8/`; tracked paths ALSO by SHA256 rather than `git diff`,\nbecause they carry uncommitted work and an empty diff would be the WRONG proof:\n```\npreview-start-command.ts       235a2e19a2a6cb4bb76fae2245e12c63cc94aace3c98fb5d23cce4507dbf268b\npreview-start-command.js       32087becc87cd21fadbd423baa9684a09c78630e14b93a6da73d526de24dbdbc\npreview-start-command.test.ts  7b3220e3cff3906110de2176595a24f2cac4a542fbd1d14902c5e5458ed1ab84\npreview-contracts.ts           a14096028b7cf9a902d81935bdc3861f0713defc5ed2c5917c3c7f1e0a53b6d6\ndaemon-command-vocabulary.ts   55bd735ba4895fd9729c901289babf4cec11a0af4c37c296992efd75e76302a9\ndaemon-command-families.ts     f5c5b1da0788e0054ac737af7bcc0af7d776a19b9e5ab5cd99d24c27a3cb8f3b\nagent-spawn-contract.ts        0ebf441c1978873f431f9470a0291d8e568f13b9d514760dd56936afb28adc82\ndaemon-command-registry.test.ts 23167c4aab89b6da7ffb0325534344c33ad110da1345580fff57fa9072697404\n```\nEvery one equals its backup. `grep -n \"if (false\"` over the handler -> NO MUTANT REMAINS.\n\nSELF-INFLICTED INCIDENT, disclosed rather than buried: mid-drill I restored `preview-contracts.ts`\nwith `git checkout -- <path>`. That file is TRACKED and its step-2 additions were UNCOMMITTED, so the\ncheckout reverted it to HEAD and DELETED them (back to 249 lines). Caught immediately by line count\nand grep, rebuilt from the step-2 record, verified at 328 lines with zero control characters and\n53/53 green across both preview test files. I then backed up ALL 20 working paths out of tree and used\nfile-copy restores only; `git checkout` was never used again. Recorded as a Serena gotcha.\n\nPER-FILE CAPS (production files touched): preview-contracts.ts 328 (was 249), preview-start-command.ts\n155 (new), daemon-command-vocabulary.ts 392 (was 371 — UNDER 400 by 8; I trimmed my own comments from\n396 to hold that margin rather than split a contended file), daemon-command-families.ts 202,\ndaemon-command-payload-keys.ts 186, daemon-command-async-entries.ts 245, agent-spawn-contract.ts 268\n(was 250), daemon-command-registry.ts 562 and daemon-store-foundation-composition.ts 608 — both\nalready past 400 BEFORE this row and deliberately not restructured (task rail 2).",
       "timestamp": "2026-09-06T11:56:03.275Z"
+    },
+    {
+      "id": "comment-e01814661b184120932f447fdf71e916",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE SHEET (qa-f2906c26) — full record for the approval; the approval summary is capped at 2000 chars and points here.\n\nSUBJECT. Delivered sha `ec970f50` — the recorded completion commit (kind=completion, worker-deb4c7d8), HEAD of moe/work-2026-09-04, pushed. `git merge-base --is-ancestor ec970f50 HEAD` = YES. 26 paths, 1733+/95-. No task-level LOC bar exists in this repo (project globalRails customRule 2); the real cap is per FILE and I measured it at the commit: preview-contracts.ts 328, preview-start-command.ts 155, daemon-command-vocabulary.ts 392 (under 400 by 8), families 202, payload-keys 186, async-entries 245, agent-spawn-contract 268 — all clear. daemon-command-registry.ts 562 and daemon-store-foundation-composition.ts 608 were ALREADY 547 / 595 at `ec970f50^`, i.e. past 400 before this row and explicitly out of scope per task rail 2.\n\nGATES I RE-RAN MYSELF, each standalone and foreground, at the delivered tree. I did NOT use the worker's own daemon-suite numbers: governor-afbde490's 11:36Z notice on this row declared its unleased 11:32Z run (pid 17048) inadmissible.\n1. recorded `verification.command` (19-file scoped daemon leg) — EXIT 0, `Test Files 19 passed (19)` / `Tests 449 passed (449)`. Reproduces the recorded evidence exactly.\n2. `pnpm --filter @moe/control-room test` — EXIT 0, `Test Files 170 passed (170)` / `Tests 2109 passed (2109)`. (DoD 7 and one DoD 8 leg. Higher than the worker's 168/2083 baseline because peers landed in between.)\n3. `pnpm typecheck` — EXIT 0, 19 projects, `$ tsc` script echoes present so the leg is non-vacuous, 11.3s.\n4. `src/runtime-entrypoint.test.ts` — EXIT 0, `Test Files 1 passed (1)` / `Tests 5 passed (5)`. Task rail 4 clear: the `unexpected` array carries NO `preview\\` entry, and the new `.js` bridge has its name-matched `.test.ts` sibling. The worker's own AFTER run had listed this file red; it is green at the delivered tree.\n5. the TWO owned files the worker excluded from its leg — `Tests 1 failed | 408 passed (409)`. `daemon-store-dependencies.test.ts` is now GREEN (peer-healed). The one red is `daemon-command-registry.test.ts > registered command table > 'deployment.set_target' reaches its own family handler and refuses with its code`, expecting `BOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS`, receiving `BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE` — stale w.r.t. `639574c8` (task-04b3ce7e).\n\nATTRIBUTION OF THAT RED, MEASURED BY ME RATHER THAN ACCEPTED FROM THE WORKER. The worker's argument was \"I removed my preview.start ROWS entry and it still failed\". Mine is stronger and does not depend on a mutation: the ROWS hunk that introduces the failing entry is a PEER SWEEP, not preview work — the same added block carries `deployment.deploy` AND `release.decide` (task-54b74b80's kind), and the commit adds `import { RELEASE_DECIDE_COMMAND_KIND } from \"./release/release-decide-contracts.js\"` at the top of the same file. `grep -i preview` over the failing arm = 0. The subject is a deployment kind whose answer was moved by task-04b3ce7e; it is that row's transcription to re-pin.\n\nCOVERAGE: 11 of 11 owned test paths, plus runtime-entrypoint, all run by me at `ec970f50`.\n\nDoD, ITEM BY ITEM.\n1 ✓ `preview.start` on the daemon roster: WiredCommandKind union, PREVIEW_FAMILY capability REVIEW, the agent-null branch, and OPERATOR_PRINCIPAL_KINDS in daemon-command-vocabulary.ts; the `preview:` equality in daemon-command-families.ts widened to a PAIR rather than turned into set membership (a narrowing back to one kind still compiles and reds only in the family arm — that is the point); exact payload roster `[\"goalId\",\"sha\"]` in daemon-command-payload-keys.ts. `decodePreviewStartPayload` sits beside the decide decoder in preview-contracts.ts and refuses an inexact key set with `PREVIEW_START_PAYLOAD_INVALID` minted through `previewRefusal`. NO layer literal: `previewRefusal(code, sourceCode, sourceLayer)` derives `layer` from the closed `PREVIEW_CODE_LAYERS` map, and the `\"DURABLE_STORE\"` string at preview-start-command.ts:146 is the pre-existing `sourceLayer` provenance argument, not the refusal's own layer.\n2 ✓ ASYNC entry. Registered in daemon-command-async-entries.ts. `git grep PREVIEW_START_COMMAND_KIND ec970f50 -- daemon-command-registry.ts` returns ONE hit and it is a docblock line — no synchronous branch was added. `createPreviewSupervisor` is never called from preview-start-command.ts; the supervisor arrives as `previewPort.supervisor` off the composed runtime (daemon-store-foundation-composition.ts), which is exactly the \"same object, no second instance\" the rail demands.\n3/4 ✓ The receipt is read back through `readPreviewReceipt`, the production surface, and asserted BY VALUE: outcome STARTED, code null, goalId, sha, `screenshots` toStrictEqual([SHOT]), `url` matching /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\/?$/u, `typeof pid === \"number\"` and pid > 0. REFUSED receipts assert the PERSISTED code (PREVIEW_COMMAND_MISSING, PREVIEW_GOAL_NOT_LANDED), so an absent receipt and a refused one are distinguishable. Drill 2 in the worker's sheet is the honest part of this: answering from the writer's return value survived 12/12 green, and the two arms that inject a supervisor DISAGREEING with the ledger are what actually pin the read-back.\n5 ✓ Six lettered arms C1–C6 over the real registry/async edge, every other gate made passable, each pinning code AND layer both literally and via `PREVIEW_CODE_LAYERS[code]`: OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION (with a positive control), PREVIEW_START_PAYLOAD_INVALID@REQUEST x2, PREVIEW_COMMAND_MISSING@RUNNER x2 (unwired supervisor; unconfigured workspace), PREVIEW_GOAL_NOT_LANDED@GOAL_AUTHORITY. The `workspace`-in-payload refusal is asserted too, which is what stops the security decision being undone quietly later.\n6 ✓ Bidirectional and MEASURED FROM THE SEAM: `const served = new Set([...deps.registry.keys()])`, set-equality in BOTH directions for the MCP half, and `[...served].filter(k => HUMAN_ONLY_STEPS.has(k)).sort()` compared to a hand-transcribed `WRAPPER_FENCED_SERVED_KINDS`. Drill 5 caught the original subset-filter being blind to a deletion and it was replaced; the existing explicit-roster arm was kept, so the assertion is not the tautology that file's own comment warns about.\n7 ✓ Census at HEAD before grading: `preview.start` is on `RUNTIME_COMMAND_KINDS` (runtime-vocabulary.ts:104), in the hand-transcribed runtime-contract.test.ts (:54, position-pinned at :155/:160), and in generated-client.ts (:246, :369). All three mirrors agree — the task-0e87ab34 prerequisite is intact, no regression to report.\n\nDoD 8 — THE ONE GAP, DISCLOSED RATHER THAN PAPERED OVER. Two of its three legs I re-ran myself with count lines (above). Nobody holds an ADMISSIBLE full `pnpm --filter @moe/daemon test` at `ec970f50`: the worker's only run of it was the unleased one the governor voided, and `full-suite-gate` has been held by worker-f78e0703 since 11:57Z with worker-f72a1438 and worker-adefb11e queued, so I would be position 3 — and I will not run it unleased. DoD 8 names NO exit code and explicitly authorises rail-3 path attribution for repo-wide red, so its grading function is attribution, and I performed that directly and exhaustively at the delivered sha instead of quoting a number I could not obtain. Host baseline cited: worker-96c6d708's LEASED 11:37Z run, `Test Files 13 failed | 506 passed (519)` / `Tests 20 failed | 9626 passed | 3 skipped (9649)` — the daemon suite is repo-wide red for foreign reasons independent of this row. I put this ruling to @governor-afbde490 in msg-b334287c before approving and had no reply in ~5 minutes; if the governor wants the literal leg at `ec970f50`, reopen the row and it queues for the lease.\n\nALSO DISCLOSED, and NOT a defect of this row: the wrapper swept peer WIP into `ec970f50` — task-54b74b80's `release.decide` roster hunks (RELEASE_FAMILY, the `release` family flag, its payload keys, the ROWS/REGISTRATION_ORDER/OPERATOR_ONLY entries) and task-e651725c's `createDurableSchedule` / `schedules()` hunks in daemon-store-foundation-composition.ts. Both are named `Moe-Contested` in the commit trailer. Landing order stays as the governor set it.",
+      "timestamp": "2026-09-06T12:11:24.730Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T07:34:31.792Z",
-  "updatedAt": "2026-09-06T11:59:04.246Z",
+  "updatedAt": "2026-09-06T12:11:49.199Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T07:40:12.601Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 17,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T12:11:49.199Z",
+    "wallClockMs": 16296598
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -338,7 +346,153 @@
     "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
     "apps/daemon/src/preview/preview-start-command.test.ts",
     "apps/daemon/src/preview/preview-contracts.test.ts",
-    "apps/daemon/src/http/affordance-planning-offers.test.ts"
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+    ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json",
+    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
   ],
-  "completionSummary": "`preview.start` is SERVED, FENCED and BEHAVIOURALLY PROVEN. 21 paths (18 modified, 3 created).\n\nDoD 1 ROSTER: kind + capability (REVIEW) + agent-null branch + OPERATOR_PRINCIPAL_KINDS in daemon-command-vocabulary.ts; the `preview:` EQUALITY widened to a pair in daemon-command-families.ts; the exact key roster in daemon-command-payload-keys.ts, placed after decide so REGISTRATION_ORDER index is 40. `decodePreviewStartPayload` lives beside the decide decoder in preview-contracts.ts and refuses an inexact key set with `PREVIEW_START_PAYLOAD_INVALID`, minted through `previewRefusal` — NO layer literal anywhere in the row.\n\nDoD 2 ASYNC: registered in daemon-command-async-entries.ts; NO sync branch added to daemon-command-registry.ts. The handler takes `previewPort.supervisor` composed by task-dd86f35e; `createPreviewSupervisor` is never called (comment-only mention, not imported).\n\nDoD 3/4 RECEIPTS: read back through `readPreviewReceipt`, asserted by VALUE — STARTED with `url` matching a real bound `http://127.0.0.1:<port>/`, `pid > 0`, exact `screenshots[]`, `goalId`, `sha`; REFUSED carrying `PREVIEW_COMMAND_MISSING`, url/pid null. Plus TWO arms injecting a supervisor that DISAGREES with the ledger — the only arms that can see the read-back at all (drill 2 proved the obvious ones cannot).\n\nDoD 5 REFUSALS: SIX arms over the REAL registry/async edge, every other gate made passable, each asserting code AND layer both literally and via `PREVIEW_CODE_LAYERS[code]` — OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION/403 (non-operator session that HOLDS REVIEW, with a positive control and no-effect assertions), PREVIEW_START_PAYLOAD_INVALID@REQUEST x2, PREVIEW_COMMAND_MISSING@RUNNER x2 (unwired supervisor; unconfigured workspace), PREVIEW_GOAL_NOT_LANDED@GOAL_AUTHORITY.\n\nDoD 6 FENCE, BIDIRECTIONAL: served set enumerated from `[...registry.keys()]`; SET-EQUALITY both ways for the MCP half and — after drill 5 exposed a subset filter a deletion shrinks its way out of — for the wra"
+  "completionSummary": "`preview.start` is SERVED, FENCED and BEHAVIOURALLY PROVEN. 21 paths (18 modified, 3 created).\n\nDoD 1 ROSTER: kind + capability (REVIEW) + agent-null branch + OPERATOR_PRINCIPAL_KINDS in daemon-command-vocabulary.ts; the `preview:` EQUALITY widened to a pair in daemon-command-families.ts; the exact key roster in daemon-command-payload-keys.ts, placed after decide so REGISTRATION_ORDER index is 40. `decodePreviewStartPayload` lives beside the decide decoder in preview-contracts.ts and refuses an inexact key set with `PREVIEW_START_PAYLOAD_INVALID`, minted through `previewRefusal` — NO layer literal anywhere in the row.\n\nDoD 2 ASYNC: registered in daemon-command-async-entries.ts; NO sync branch added to daemon-command-registry.ts. The handler takes `previewPort.supervisor` composed by task-dd86f35e; `createPreviewSupervisor` is never called (comment-only mention, not imported).\n\nDoD 3/4 RECEIPTS: read back through `readPreviewReceipt`, asserted by VALUE — STARTED with `url` matching a real bound `http://127.0.0.1:<port>/`, `pid > 0`, exact `screenshots[]`, `goalId`, `sha`; REFUSED carrying `PREVIEW_COMMAND_MISSING`, url/pid null. Plus TWO arms injecting a supervisor that DISAGREES with the ledger — the only arms that can see the read-back at all (drill 2 proved the obvious ones cannot).\n\nDoD 5 REFUSALS: SIX arms over the REAL registry/async edge, every other gate made passable, each asserting code AND layer both literally and via `PREVIEW_CODE_LAYERS[code]` — OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION/403 (non-operator session that HOLDS REVIEW, with a positive control and no-effect assertions), PREVIEW_START_PAYLOAD_INVALID@REQUEST x2, PREVIEW_COMMAND_MISSING@RUNNER x2 (unwired supervisor; unconfigured workspace), PREVIEW_GOAL_NOT_LANDED@GOAL_AUTHORITY.\n\nDoD 6 FENCE, BIDIRECTIONAL: served set enumerated from `[...registry.keys()]`; SET-EQUALITY both ways for the MCP half and — after drill 5 exposed a subset filter a deletion shrinks its way out of — for the wra",
+  "commits": [
+    {
+      "sha": "ec970f50b6cbd2bd943017b0463e9e9b513d1805",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T10:31:36Z",
+      "paths": [
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+        ".moe/tasks/task-de0598236f3b4d95aa3b6098b9d56995.json",
+        ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
+        ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/preview/preview-contracts.test.ts",
+        "apps/daemon/src/preview/preview-contracts.ts",
+        "apps/daemon/src/preview/preview-start-command.js",
+        "apps/daemon/src/preview/preview-start-command.test.ts",
+        "apps/daemon/src/preview/preview-start-command.ts"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T11:59:40.682Z",
+      "treeId": "5501e2e76fd9ef4ef8dcba380120f21d6c5caeb6",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-payload-keys.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-0a56ecee17b740a3abb7f850e5250c99"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-e651725c92434127a7b8d72f0ac5246b"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.test.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        },
+        {
+          "path": "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-main.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/preview/preview-contracts.test.ts",
+    "apps/daemon/src/preview/preview-start-command.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/preview/preview-contracts.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/http/affordance-planning-offers.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/preview/preview-start-command.js",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-deb4c7d8@2026-09-06T10:31:36Z",
+    "at": "2026-09-06T11:59:40.682Z"
+  },
+  "completedAt": "2026-09-06T12:11:49.199Z",
+  "reviewCompletedAt": "2026-09-06T12:11:49.199Z",
+  "reviewSummary": "APPROVED at delivered sha ec970f50 (recorded completion commit, HEAD, pushed, ancestor-verified). Full evidence: comment-e01814661b184120932f447fdf71e916.\n\nRE-RUN BY ME, foreground, at the delivered tree (worker's own daemon-suite numbers NOT used — governor voided its unleased 11:32Z run): recorded verification.command EXIT 0, `Test Files 19 passed (19)`/`Tests 449 passed (449)`, reproducing it exactly; control-room EXIT 0, `Test Files 170 passed (170)`/`Tests 2109 passed (2109)`; `pnpm typecheck` EXIT 0, 19 projects with `$ tsc` echoes; runtime-entrypoint EXIT 0 5/5 (rail 4: no `preview\\` in the unexpected array); the two owned files the worker excluded, `Tests 1 failed | 408 passed (409)`. 11 of 11 owned test paths measured by me.\n\nTHE ONE RED: `daemon-command-registry.test.ts > 'deployment.set_target' ... refuses with its code` (expects BOOTSTRAP_COMMAND_UNKNOWN@DAEMON_INGRESS, gets BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE), stale w.r.t. 639574c8/task-04b3ce7e. Attributed independently: that ROWS hunk is a peer sweep — same block carries release.decide, commit adds the RELEASE_DECIDE_COMMAND_KIND import; grep -i preview over the arm = 0.\n\nDoD 1-7 verified at the commit: async entry, no sync branch in the registry, injected supervisor never re-constructed, receipts read back via readPreviewReceipt and asserted by value, six C1-C6 arms pinning code AND layer via PREVIEW_CODE_LAYERS, set-equality from [...registry.keys()] both directions, contract mirrors intact. Per-file caps clear (max 392); registry.ts 562 and store-foundation-composition 608 were already 547/595 at ec970f50^.\n\nDoD 8 GAP, disclosed: no admissible full daemon leg exists at ec970f50 (gate held, I would be queue #3, will not run unleased). DoD 8 names no exit code and authorises rail-3 attribution, performed exhaustively; baseline = 96c6d708's LEASED 11:37Z run, 13 failed | 506 passed (519). Asked the governor in msg-b334287c, no reply in ~5 min. Reopen if the literal leg is wanted."
 }

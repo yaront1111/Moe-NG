@@ -1,5 +1,10 @@
 import type { JsonObject } from "@moe/contracts";
 
+import {
+  DESIGN_AGGREGATE_PREFIX, DESIGN_ENTITY_KEYS, DESIGN_JOURNEY_KEYS, DESIGN_NON_FUNCTIONAL_KEYS,
+  DESIGN_REVISION_KEYS, DESIGN_ROUTE_KEYS, DESIGN_SCREEN_KEYS, DESIGN_SECTION_KEYS,
+  MAX_DESIGN_TEXT,
+} from "../design/design-contracts.js";
 import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
@@ -44,16 +49,150 @@ function readFacts(projectId: string | null, workspace: string | null = null): s
     + `nothing else. ${agentRoleForWorkspace(workspace).fileInstructions}`;
 }
 
+/**
+ * THE PRD READ PROTOCOL, ONE DEFINITION, shared verbatim by every brief that pages the PRD.
+ *
+ * Lifted out of `compilerMission` byte-identically when the design brief needed the same
+ * paragraph: a seat that stops at the first page silently designs against a TRUNCATED PRD and
+ * cannot tell that it did, so the two briefs must not be free to drift into paraphrases of
+ * each other. Copying the text would have made them look identical while allowing exactly that.
+ */
+function prdPaging(goal: string): readonly string[] {
+  return [
+    `Read the PRD for ${goal} with documents_source_read: payload {"goalRef": "...",`,
+    "\"offset\": 0, \"limit\": 30000} answers one page (text, offset, totalLength, nextOffset)",
+    "- follow nextOffset until null; a payload of only {\"goalRef\"} answers the whole text at",
+    "once. Never invent a product decision the text does not state.",
+  ];
+}
+
+/**
+ * HOW A CLAIMING SEAT LETS GO, and why the version it releases at is not the obvious one.
+ *
+ * Shared by the two briefs whose SUBMIT takes their own step off the offer surface: measured
+ * 2026-09-05, the compiler seat's post-submit re-read answered WORK_ITEM_UNKNOWN and it could
+ * not release at all. A design submit flips the goal's rung from `design.submit` to
+ * `planning.submit_decomposition` the same way, so the design seat meets the identical trap.
+ */
+function releaseAndRefuse(workItemId: string, projectId: string | null): readonly string[] {
+  return [
+    "Renew your claim with work_renew if you need longer, and finish by calling",
+    `work_release with payload {"workItemId": "${workItemId}"}, targetAggregateId`,
+    `"${workItemId}" and expectedVersion = the claimAggregateVersion your step shows in`,
+    "work_get_context (re-read it right before releasing). If that re-read answers",
+    "WORK_ITEM_UNKNOWN because your accepted submit moved the step off the surface, release",
+    "with the claimAggregateVersion of your last successful read: a submit never moves the",
+    "claim's own version. Every refusal carries",
+    "a stable reason code - read it, correct the request, never work around a refusal,",
+    "and report what the daemon actually answered.",
+    RETRY_ON_CONFLICT,
+    readFacts(projectId),
+  ];
+}
+
+/**
+ * WHAT A MISSION KNOWS ABOUT A GOAL'S DESIGN — three outcomes, and the third is the point.
+ *
+ * A seat that simply receives no design section cannot tell "the operator decided to plan
+ * without one" from "the read failed", and a seat that cannot tell will guess. Modelling the
+ * skip as its own variant rather than as an absent ref is what makes the guess impossible:
+ * there is no value of this type that means "no design" ambiguously.
+ *
+ * SKIPPED mirrors the durable `DesignSkip` marker (design-contracts.ts:122) rather than
+ * re-deciding what a skip is, and carries the operator's reason for the same purpose the
+ * marker bounds it: an unexplained skip is a decision nobody can review later.
+ */
+export type DesignBrief =
+  | {
+    readonly entities: readonly string[];
+    readonly outcome: "PRESENT";
+    readonly ref: string;
+    readonly screens: readonly string[];
+  }
+  | { readonly outcome: "SKIPPED"; readonly reason: string }
+  | { readonly outcome: "ABSENT" };
+
+/**
+ * The design paragraph a PLANNING seat reads. Never empty: an omitted paragraph is precisely
+ * the ambiguity `DesignBrief` exists to remove, so the ABSENT branch is stated out loud and an
+ * unwired caller (`null`) is treated as ABSENT rather than as silence.
+ *
+ * Each branch is worded to be readable from the BYTES ALONE — no two share a phrase a seat
+ * would have to disambiguate — because the only reader is a language model holding one string.
+ */
+function compilerDesignLines(design: DesignBrief | null): readonly string[] {
+  if (design !== null && design.outcome === "PRESENT") {
+    return [
+      `A DESIGN EXISTS for this goal, submitted under design ref "${design.ref}". Read it with`,
+      "design_read, payload {\"goalRef\": \"...\"} and nothing else: it answers the five sections",
+      `${DESIGN_SECTION_KEYS.join(", ")} plus openDecisions. Plan the decomposition FROM it -`,
+      "every screen and entity it draws must be implemented by some node, and each node's",
+      "objective names the screens and entities that node implements.",
+    ];
+  }
+  if (design !== null && design.outcome === "SKIPPED") {
+    return [
+      "NO DESIGN EXISTS for this goal BECAUSE THE DESIGN STEP WAS SKIPPED: the operator",
+      `declared that this goal plans without one, stating "${design.reason}". This is a`,
+      "decision, not a missing read - plan from the approved contract and the PRD alone, and",
+      "do not wait for a design that is never coming.",
+    ];
+  }
+  return [
+    "NO DESIGN ACCOMPANIES THIS BRIEF, and the operator has not declared that it plans",
+    "without one. Plan from the approved contract and the PRD alone; if one was submitted",
+    "after you were staffed, design_read with payload {\"goalRef\": \"...\"} answers it.",
+  ];
+}
+
+/**
+ * The design paragraph a CODING seat reads. `null` is the one place it differs from ABSENT:
+ * a node step's aggregate is a nodeRef and the wrapper cannot resolve it back to a goal, so a
+ * null here means the caller knows nothing — and a claim about the design would be worse than
+ * saying nothing at all. An explicit ABSENT is still stated out loud.
+ */
+function nodeDesignLines(design: DesignBrief | null): readonly string[] {
+  if (design === null) return [];
+  if (design.outcome === "SKIPPED") {
+    return [
+      `This goal plans WITHOUT a design: the operator declared it, stating "${design.reason}".`,
+      "Implement exactly what your task states.",
+    ];
+  }
+  if (design.outcome === "ABSENT") {
+    return ["No design accompanies this brief. Implement exactly what your task states."];
+  }
+  // Listed only when non-empty: an empty list rendered inline reads as a dangling "draws ."
+  // that a seat has to interpret, and interpreting is the failure this whole type prevents.
+  const drawn = [
+    ...(design.screens.length === 0 ? [] : [`screens ${design.screens.join(", ")}`]),
+    ...(design.entities.length === 0 ? [] : [`entities ${design.entities.join(", ")}`]),
+  ];
+  return drawn.length === 0
+    ? [
+      `The design submitted under "${design.ref}" names no screens or entities yet, so cite`,
+      "none: implement exactly what your task states and do not invent a screen the design",
+      "does not draw.",
+    ]
+    : [
+      `Your node implements part of the design submitted under "${design.ref}", which draws`,
+      `${drawn.join(" and ")}. Name the ones your node implements in your report, and do not`,
+      "invent a screen the design does not draw.",
+    ];
+}
+
 /** Exported for its text contract: the agent learns the release payload shape from here. */
 export function codeMission(
   workItemId: string, nodeRef: string, expiresAt: string, brief: NodeMission,
   hints: { accept: JsonObject | null; submit: JsonObject | null },
   projectId: string | null = null,
+  design: DesignBrief | null = null,
 ): string {
   const lines = [
     `You are a moe-next coding agent. You hold the durable claim on code node "${nodeRef}"`,
     `(work item "${workItemId}") until ${expiresAt}. TASK — ${brief.title}:`,
     brief.instructions,
+    ...nodeDesignLines(design),
     `Work in the directory ${brief.workspace} (your working directory). Verify by running:`,
     `${brief.test} — it must exit 0 before you report anything as done.`,
     "Then record your submission durably over the moe-next MCP tools:",
@@ -89,17 +228,15 @@ export function compilerMission(
   gateRef: Readonly<Record<string, unknown>> | null = null,
   instructions: string | null = null,
   projectId: string | null = null,
+  design: DesignBrief | null = null,
 ): string {
   const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
   const shared = [
     `You are a moe-next PLANNING agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
     `First call work_get_context and find the daemon's offered command for your step.`,
-    `The product authority is the PRD text and, once approved, the contract. Read the PRD for`,
-    `${goal} with documents_source_read: payload {"goalRef": "...", "offset": 0, "limit": 30000}`,
-    "answers one page (text, offset, totalLength, nextOffset) - follow nextOffset until null;",
-    "a payload of only {\"goalRef\"} answers the whole text at once. Never invent a product",
-    "decision the text does not state.",
+    `The product authority is the PRD text and, once approved, the contract.`,
+    ...prdPaging(goal),
   ];
   const step = kind === "product_contract.propose_revision"
     ? [
@@ -133,6 +270,10 @@ export function compilerMission(
       "APPROVED revision - gateRef, requirements, and criteria with their criterionIds and",
       "statements. Those ids are what your structure binds; read the PRD pages only where a",
       "criterion's statement needs its context.",
+      // THE DECOMPOSITION ARM ONLY. A design is submitted AFTER Gate 1 approves a contract,
+      // so the propose_revision arm above runs at a moment when no design can exist yet and
+      // a paragraph about one there would be noise the seat has to discount.
+      ...compilerDesignLines(design),
       "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
       "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
       "\"structure\": {completionNodeKey, nodes: [{nodeKey, objective, criterionIds,",
@@ -156,20 +297,76 @@ export function compilerMission(
     "plan a DIFFERENT decomposition that addresses those findings, under NEW node keys.",
     `<<<OPERATOR INSTRUCTIONS\n${instructions.trim()}\nOPERATOR INSTRUCTIONS>>>`,
   ];
-  const close = [
-    "Renew your claim with work_renew if you need longer, and finish by calling",
-    `work_release with payload {"workItemId": "${workItemId}"}, targetAggregateId`,
-    `"${workItemId}" and expectedVersion = the claimAggregateVersion your step shows in`,
-    "work_get_context (re-read it right before releasing). If that re-read answers",
-    "WORK_ITEM_UNKNOWN because your accepted submit moved the step off the surface, release",
-    "with the claimAggregateVersion of your last successful read: a submit never moves the",
-    "claim's own version. Every refusal carries",
-    "a stable reason code - read it, correct the request, never work around a refusal,",
-    "and report what the daemon actually answered.",
-    RETRY_ON_CONFLICT,
-    readFacts(projectId),
-  ];
-  return [...shared, ...step, ...operator, ...close].join(" ");
+  return [
+    ...shared, ...step, ...operator, ...releaseAndRefuse(workItemId, projectId),
+  ].join(" ");
+}
+
+/**
+ * THE DESIGN SEAT'S BRIEF — the step between Gate 1 and the decomposition.
+ *
+ * The wrapper hands over the DESIGN AGGREGATE the surface offered (`design:<goalId>`), because
+ * that is the only id the offer carries (`affordance-planning-offers.ts:179`). Both reads this
+ * seat needs are keyed on the BARE goal ref, so the strip happens here rather than as a second
+ * wrapper parameter a caller could pass inconsistently with the first.
+ *
+ * EVERY KEY NAME IS INTERPOLATED FROM THE CONTRACT ROSTERS, never retyped. `decodeDesignRevision`
+ * compares by EXACT ARITY, so a brief naming a section the roster does not carry would read
+ * perfectly while producing a seat whose every submit is refused DESIGN_SHAPE_INVALID — the two
+ * would drift apart with both sides looking right.
+ *
+ * No payload-hint parameter, on `compilerMission`'s precedent: a hard-coded design proposed
+ * against a real PRD is the same race the compiler retires.
+ */
+export function designMission(
+  workItemId: string, kind: string, expiresAt: string, designRef: string | null,
+  projectId: string | null = null,
+): string {
+  // An id that is not prefixed is NOT mangled — it is simply not a goal ref, and neither is a
+  // bare `design:` with nothing after it. Both fall back to the generic phrase rather than
+  // sending the seat to page the PRD for the empty goal.
+  const goalRef = designRef !== null && designRef.startsWith(DESIGN_AGGREGATE_PREFIX)
+    ? designRef.slice(DESIGN_AGGREGATE_PREFIX.length)
+    : "";
+  const goal = goalRef === "" ? "the goal your offer targets" : `goal "${goalRef}"`;
+  const target = designRef === null
+    ? "the targetAggregateId your offer names"
+    : `targetAggregateId "${designRef}"`;
+  return [
+    `You are a moe-next DESIGN agent. You hold the durable claim on work item`,
+    `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
+    `First call work_get_context and find the daemon's offered command for your step.`,
+    "The product authority is the PRD text and the APPROVED Gate 1 contract. Call",
+    "product_contract_read with payload {\"goalRef\": \"...\"}: it answers the APPROVED",
+    "revision - gateRef, requirements, and criteria with their criterionIds and statements.",
+    "Design the product those criteria describe; every criterion must be reachable through",
+    "something you draw.",
+    ...prdPaging(goal),
+    `Submit via the offered command with ${target} and payload`,
+    "{\"contractRef\": {...}, \"goalRef\": \"...\", \"revision\": {...}} - EXACTLY those three",
+    "keys, and never name projectId, principalId, commandId, correlationId, decidedAt or",
+    "expectedVersion inside the payload: those are server facts the daemon re-attaches from",
+    "the envelope and the authenticated principal, and a payload naming one is refused at",
+    "PAYLOAD_SHAPE before your submit is read. contractRef is the Gate 1 triple",
+    "product_contract_read answered - contractId, revisionDigest, revisionId - and grants",
+    "nothing: the daemon re-proves the approval from durable state on every submit, so it",
+    "only says which revision you believe you designed against.",
+    `The revision carries EXACTLY these ${String(DESIGN_REVISION_KEYS.length)} keys:`,
+    `${DESIGN_REVISION_KEYS.join(", ")} - no more and no fewer, compared by exact arity.`,
+    `The ${String(DESIGN_SECTION_KEYS.length)} design sections are`,
+    `${DESIGN_SECTION_KEYS.join(", ")}, and openDecisions is REQUIRED and may be an empty`,
+    `list. screens is a list of {${DESIGN_JOURNEY_KEYS.join(", ")}} whose screens are each`,
+    `{${DESIGN_SCREEN_KEYS.join(", ")}}; componentList is a list of component names;`,
+    `dataModel is a list of {${DESIGN_ENTITY_KEYS.join(", ")}}; apiSurface is a list of`,
+    `{${DESIGN_ROUTE_KEYS.join(", ")}}; nonFunctional is ONE object`,
+    `{${DESIGN_NON_FUNCTIONAL_KEYS.join(", ")}}. Every string in the revision is non-empty,`,
+    `at most ${String(MAX_DESIGN_TEXT)} characters and free of NUL bytes.`,
+    "The decomposition is planned FROM this design and each node cites the screens and",
+    "entities it implements, so a screen you did not draw is a screen no node can build. If",
+    "the contract genuinely leaves a design decision open, record it in openDecisions rather",
+    "than guessing it into a screen.",
+    ...releaseAndRefuse(workItemId, projectId),
+  ].join(" ");
 }
 
 export function mission(

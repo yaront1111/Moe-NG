@@ -10,7 +10,9 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
-import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
+import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
+import { type DesignBrief, codeMission, compilerMission, designMission, mission }
+  from "./agent-mission-text.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
 import type { ProviderPauseGate } from "./agent-provider-pause.js";
@@ -98,6 +100,9 @@ export interface AgentWrapperConfig {
   readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
   /** The goal's own operator instructions (a replan's findings live there); null when absent. */
   readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
+  /** The goal's design outcome for briefs that plan from it. A null answer is STATED as ABSENT
+   *  in the brief, never omitted: a seat that cannot tell a skip from a failed read guesses. */
+  readonly designBrief?: ((kind: string, target: string | null) => DesignBrief | null) | undefined;
   /** The project the seat's MCP host serves, named in every brief so graph_get is callable. */
   readonly projectId?: string | undefined;
   /**
@@ -275,7 +280,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
           accept: null,
           submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
-        }, config.projectId ?? null);
+        }, config.projectId ?? null, config.designBrief?.(step.kind, step.aggregateId) ?? null);
+      } else if (step.kind === DESIGN_STEP_KIND) {
+        missionText = designMission(workItemId, step.kind, expiresAt, step.aggregateId,
+          config.projectId ?? null);
       } else if (COMPILER_STEPS.has(step.kind)) {
         // The planning lane gets its OWN brief and NO payload hint: the demo
         // `payloadFor` table proposing a hard-coded graph against a real PRD is
@@ -284,7 +292,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
           step.kind === "planning.submit_decomposition"
             ? config.compilerGateRef?.(step.aggregateId) ?? null
             : null,
-          config.compilerInstructions?.(step.aggregateId) ?? null, config.projectId ?? null);
+          config.compilerInstructions?.(step.aggregateId) ?? null, config.projectId ?? null,
+          config.designBrief?.(step.kind, step.aggregateId) ?? null);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
         missionText = mission(workItemId, step.kind, expiresAt, hint, config.projectId ?? null);
@@ -343,12 +352,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     for (const item of [...attempts.keys()]) {
       if (!ready.has(item)) attempts.delete(item);
     }
-    // Code nodes come first; visible human actions are never delegated.
-    const ordered = [...surface.steps].sort((a, b) => {
-      const rank = (step: ChainStep): number =>
-        step.kind === "node.deliver" ? 0 : step.kind === "goal.close" ? 2 : 1;
-      return rank(a) - rank(b);
-    });
+    const ordered = [...surface.steps].sort(byStaffingRank);
     for (const step of ordered) {
       if (HUMAN_ONLY_STEPS.has(step.kind)) continue;
       if (staffing.activeCount() >= config.maxAgents) break;

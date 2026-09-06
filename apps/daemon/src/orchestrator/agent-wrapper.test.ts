@@ -7,6 +7,7 @@ import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
 import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
@@ -22,7 +23,8 @@ import type { SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
-import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
+import { DESIGN_STEP_KIND } from "./agent-staffing-order.js";
+import { HUMAN_ONLY_STEPS, codeMission, createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 /**
@@ -2260,5 +2262,163 @@ describe("the wrapper respects the surface's dependency gate", () => {
     // quietly rehearsing a shape the daemon no longer produces.
     const source = readFileSync(new URL("../http/affordance-read.ts", import.meta.url), "utf8");
     expect(source).toContain(".map((nodeRef) => `depends:${nodeRef}`)");
+  });
+});
+
+/**
+ * THE DESIGN STEP, STAFFED — the wrapper half of the rung task-217f40b7 added to the surface.
+ *
+ * The surface offers `design.submit` on the goal's OWN design aggregate between Gate 1 and the
+ * decomposition. These arms prove the wrapper TAKES it, ORDERS it deliberately, and hands the
+ * seat the DESIGN brief rather than the generic one.
+ *
+ * Every spawn is asserted BY WORK-ITEM ID, never by a count: a count arm stays green when the
+ * wrapper staffs the wrong step, which is exactly the defect the id fences.
+ */
+describe("the wrapper staffs the design step the surface offers", () => {
+  const DESIGN_ITEM = workItemIdFor("design.submit", "design:goal-1");
+  const NODE_ITEM = workItemIdFor("node.deliver", "node-1");
+  const readyStep = (kind: string, aggregateId: string): ChainStep => ({
+    aggregateId, claim: null, claimAggregateVersion: 0, kind,
+    missing: [], status: "READY", version: 0,
+  }) as ChainStep;
+
+  /** A wrapper over a STUB surface offering exactly `steps`, recording every spawn request. */
+  const wrapperOver = (
+    harness: ReturnType<typeof isolatedHarness>, projectId: string, prefix: string,
+    steps: readonly ChainStep[], maxAgents: number, started: SpawnRequest[],
+  ): ReturnType<typeof createAgentWrapper> => {
+    let suffix = 0;
+    return createAgentWrapper({
+      affordances: {
+        boundProjectId: projectId,
+        readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE", steps: [...steps] }),
+      } as never,
+      claimTtlMs: 60_000,
+      clock: () => NOW,
+      deps: harness.isolated.provide(),
+      maxAgents,
+      mintSecret: () => `${prefix}-${String(suffix += 1).padStart(4, "0")}${"0".repeat(32)}`,
+      nodeMission: (nodeRef) => ({
+        instructions: `implement ${nodeRef}`, test: "pnpm test", title: nodeRef,
+        workspace: directory,
+      }),
+      operatorCredential: OPERATOR,
+      projectId,
+      // Held open for the whole case, so every assertion reads a pass whose children live.
+      spawnAgent: async (request) => {
+        started.push(request);
+        return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
+      },
+    });
+  };
+
+  it("staffs a READY unclaimed design step, named by its work-item id", async () => {
+    const projectId = "proj-wrapper-design-staffs";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const report = await wrapperOver(harness, projectId, "dsg1", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 2, started).runOnce();
+
+      expect(report.spawned.map((entry) => entry.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(report.spawned.map((entry) => entry.outcome)).toEqual(["SPAWNED"]);
+      expect(started.map((request) => request.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(started[0]?.kind).toBe("design.submit");
+      // maxAgents is 2 and exactly ONE seat was taken: the limit is not what shaped this.
+      expect(report.active).toBe(1);
+      expect(report.surfaceOutcome).toBe("SURFACE");
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("hands the design seat its OWN brief, not the generic mission", async () => {
+    const projectId = "proj-wrapper-design-brief";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      await wrapperOver(harness, projectId, "dsg2", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 1, started).runOnce();
+
+      const brief = started[0]?.mission ?? "";
+      expect(brief).toContain("You are a moe-next DESIGN agent");
+      expect(brief).toContain('targetAggregateId "design:goal-1"');
+      for (const section of DESIGN_SECTION_KEYS) expect(brief).toContain(section);
+      expect(DESIGN_SECTION_KEYS.length).toBe(5);
+      // The generic builder's tell. Its presence would mean the dispatch fell through.
+      expect(brief).not.toContain("Suggested development payload");
+      expect(brief).not.toContain("You are a moe-next agent.");
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  /**
+   * THE ORDERING DECISION, PINNED. A design gates the WHOLE decomposition behind it, so it
+   * outranks generic work; an in-flight `node.deliver` is already-planned work whose seat is
+   * the reason the loop exists, so it still outranks the design. maxAgents is 1 in both
+   * halves, which makes the RANK the only thing that can decide the pick, and the winner is
+   * listed LAST both times so surface order cannot be the explanation either.
+   */
+  it("ranks the design step AHEAD of generic work and BEHIND node.deliver", async () => {
+    const projectId = "proj-wrapper-design-rank";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const overGeneric = await wrapperOver(harness, projectId, "dsg3", [
+        readyStep("policy.install", "some-policy"),
+        readyStep("design.submit", "design:goal-1"),
+      ], 1, started).runOnce();
+      expect(overGeneric.spawned.map((entry) => entry.workItemId)).toEqual([DESIGN_ITEM]);
+
+      const underNode = await wrapperOver(harness, "proj-wrapper-design-rank-2", "dsg4", [
+        readyStep("design.submit", "design:goal-2"),
+        readyStep("node.deliver", "node-1"),
+      ], 1, started).runOnce();
+      expect(underNode.spawned.map((entry) => entry.workItemId)).toEqual([NODE_ITEM]);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("spells the design step kind exactly as the production surface emits it", () => {
+    // The offer surface NAMES this kind; the wrapper CONSUMES the name. Two sites minting the
+    // literal independently is how an offer and a staffer disagree while each passes its own
+    // tests, so read the PRODUCER's own source: a rename there reds here instead of leaving a
+    // design step nothing ever staffs.
+    const source = readFileSync(
+      new URL("../http/affordance-planning-offers.ts", import.meta.url), "utf8",
+    );
+    expect(source).toContain(`offer(input, "${DESIGN_STEP_KIND}", designAggregateId(goal.goalId))`);
+    // And it must never become a human act: HUMAN_ONLY_STEPS is consulted BEFORE the READY
+    // filter, so an entry added there would make the design step permanently unstaffable and
+    // the failure would surface only as a chain that silently never advances.
+    expect(HUMAN_ONLY_STEPS.has(DESIGN_STEP_KIND)).toBe(false);
+    // The positive control: this set is not simply empty of everything asked of it.
+    expect(HUMAN_ONLY_STEPS.has("goal.create")).toBe(true);
+  });
+
+  it("dedupes a design step across two passes rather than staffing it twice", async () => {
+    // `staffing.has(workItemId)` is the in-process guard; the design step must go THROUGH it
+    // and not around it, or a slow seat is restaffed under a second identity every poll.
+    const projectId = "proj-wrapper-design-dedupe";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const wrapper = wrapperOver(harness, projectId, "dsg5", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 2, started);
+      await wrapper.runOnce();
+      const second = await wrapper.runOnce();
+
+      expect(second.spawned.map((entry) => entry.workItemId)).toEqual([]);
+      expect(started.map((request) => request.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(second.active).toBe(1);
+    } finally {
+      harness.dispose();
+    }
   });
 });

@@ -23,19 +23,28 @@
     {
       "stepId": "step-1",
       "description": "VERIFY THE PREREQUISITES ON DISK, NO EDITS. This row certifies what two siblings shipped, so prove they are there rather than trusting the board (global rail 4 clause 2). (a) task-40e52fa8a85a4921b97bee933b00403f and task-5f883e4e12c34842b3cb6c2f218e4256 — `preview.decide` is in the daemon vocabulary, MCP-excluded, and in the regenerated client. (b) task-f5a74c23f8754665ab9d36cba386e1d0 — `grep -rn 'moe-preview-receipt' --include=*.ts apps/daemon/src` returns hits and a receipt carries {goalId, sha, url, pid, screenshots[], STARTED|REFUSED(code)}. Read its completion record for the one thing it was permitted to leave uncovered: whether the daemon-SHUTDOWN cleanup arm was reachable. If any prerequisite is absent, report_blocked with blockedOnTaskIds naming it — do NOT add a daemon field here (task rail 1). (c) Confirm the offer actually reaches the browser: the daemon must OFFER `preview.decide` on the affordance surface for a goal with a STARTED receipt, or no card can ever render. If the offer is missing, that is a gap in task-f5a74c23, not something to work around with a synthetic card.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-06T01:13:44.330Z"
+      "note": "PREREQUISITES VERIFIED ON DISK, no edits, all three present and TRACKED (not just DONE on the board).\n\n(a) `preview.decide` — apps/daemon/src/preview/preview-contracts.ts:43 defines PREVIEW_DECIDE_COMMAND_KIND. In the vocabulary: FAMILY at CAPABILITIES.REVIEW (daemon-command-vocabulary.ts:165), `agentCapabilitiesFor` returns null for it (:264), and it is in OPERATOR_PRINCIPAL_KINDS (:357) — which is what makes it MCP-excluded, since mcp-tool-allowlist.ts DERIVES MCP_EXCLUDED_COMMAND_KINDS from that set rather than keeping a hand list. Regenerated client carries it: packages/control-room-client/src/generated/generated-client.ts:245 declares `[\"preview.decide\"]: CommandBuilder<\"preview.decide\">` and :368 builds it. Siblings task-40e52fa8 and task-5f883e4e are DONE with landed=true.\n\n(b) The receipt — `grep -rn 'moe-preview-receipt' --include=*.ts apps/daemon/src` hits preview-receipt-contracts.ts:47 (PREVIEW_RECEIPT_VERSION = \"moe-preview-receipt/1\"). PreviewReceiptV1 (:57-68) carries exactly the members the DoD names: goalId, sha, url, pid, screenshots[] and outcome \"REFUSED\" | \"STARTED\" with a `code: PreviewCode | null`. task-f5a74c23 DONE, landed=true, its own verification `pnpm --filter @moe/daemon exec vitest run ... src/preview` exit 0.\n\nTHE ONE THING IT WAS PERMITTED TO LEAVE UNCOVERED IS COVERED. Its completion record states all FOUR cleanup arms exist — APPROVE, REJECT, forced TIMEOUT and DAEMON SHUTDOWN — and that rather than admitting the shutdown arm was unreachable, it changed the composition so it was reachable (createPreviewSupervisor owns the live roster, close() sweeps it, the arm holds two previews open), each arm asserting pid gone AND port free against the production probe. So this row inherits no known hole there.\n\n(c) THE OFFER REACHES THE BROWSER, and conditionally: apps/daemon/src/http/affordance-planning-offers.ts:222 offers `preview.decide` ONLY when `input.previewReceipt(goal.goalId) === \"STARTED\"`, on previewAggregateId(goal.goalId); the port's own comment (:78-87) states null means \"no preview has ever run\" and \"REFUSED\" is a record of one that never became answerable — both withhold the card. That is exactly the DoD-1 absence rule, already enforced daemon-side, so my step-3 model folds an offer that is already conditional rather than re-deciding it.\n\nALSO CONFIRMED, because the card is useless without it: `preview.start` is landed and tracked (apps/daemon/src/preview/preview-start-command.ts, -runner, -supervisor with .js bridges) and served from the ASYNC entry at daemon-command-async-entries.ts:205. The only untracked file under apps/daemon/src/preview is a peer's in-flight preview-goal-landing.test.ts.\n\nBROWSER SIDE IS EMPTY, as expected: `git grep -rn preview -- apps/control-room/src/live/live-activity.ts apps/control-room/src/v2/approvals/` returns nothing. Steps 2-6 are all net-new there.\n\nNo report_blocked needed.",
+      "startedAt": "2026-09-06T01:13:44.330Z",
+      "completedAt": "2026-09-06T12:22:19.097Z"
     },
     {
       "stepId": "step-2",
       "description": "THE DECISION PORT, in a new apps/control-room/src/v2/approvals/preview-port.ts, mirroring apps/control-room/src/v2/approvals/escalation-port.ts — 43 lines, and the closest working example of a human decision reaching the daemon. Same shape: a `PREVIEW_COMMAND_KIND` constant, a decision union (APPROVE | REJECT), and a port whose single method calls `spendOffer(wire, KIND, affordance, payload, \"<ui-source>\", LAYER)` from offer-wire.js. Do NOT invent a second decision wire (task rail 2): `spendOffer` is how every existing human decision is spent, and a parallel path would drift on offer accounting. Add preview-port.test.ts asserting the payload shape for APPROVE (no findings) and for REJECT (findings naming the nodes), and that a refusal from the wire is surfaced with its code rather than swallowed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/control-room/src/v2/approvals/preview-port.ts",
         "apps/control-room/src/v2/approvals/preview-port.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/approvals/preview-port.ts",
+        "apps/control-room/src/v2/approvals/preview-port.test.ts"
+      ],
+      "note": "THE DECISION PORT. Landed 432217be3586d4eb27d34cc5fe08f6093b249caf. apps/control-room/src/v2/approvals/preview-port.ts, 74 lines, one `spendOffer` call — no second decision wire.\n\nSHAPE MIRRORS escalation-port.ts: PREVIEW_COMMAND_KIND, a PreviewDecision union (APPROVE | REJECT), a CONTROL_ROOM_PREVIEW layer constant, and a single `submit` that passes the daemon's affordance through by IDENTITY and adds only payload members.\n\nTHE PAYLOADS ARE THE DAEMON'S, read off preview-contracts.ts rather than invented: `decodePreviewDecidePayload` enforces EXACT ARITY PER DECISION, so APPROVE is {decision, previewRef} (PREVIEW_APPROVE_PAYLOAD_KEYS) and REJECT is {decision, findings, previewRef} (PREVIEW_REJECT_PAYLOAD_KEYS) with `findings` non-empty and each finding exactly {detail, nodeRef} (PREVIEW_FINDING_KEYS). A `findings: []` added to APPROVE \"for symmetry\" is an UNKNOWN KEY there, not an empty roster, and is refused PREVIEW_DECISION_INVALID @ REQUEST — the test asserts the whole payload with toEqual so that cannot creep in.\n\n`previewRef` is taken from the offer's `targetAggregateId`, which the daemon sets to previewAggregateId(goalId) (affordance-planning-offers.ts:223), so the decision refers to the preview it was offered for rather than a ref the browser composed.\n\nONE ADDITION BEYOND THE MIRROR, and why: an empty REJECT is refused in the browser's own layer (PREVIEW_FINDINGS_REQUIRED @ CONTROL_ROOM_PREVIEW) WITHOUT spending the offer. Sending it would come back PREVIEW_DECISION_INVALID @ REQUEST — a code about a decode, which tells the operator nothing about the control they just used — and would burn the offer on a decision the daemon was always going to refuse. The step-4 control also blocks empty submissions, so this is defence in depth rather than the only guard.\n\nTESTS (6 arms, preview-port.test.ts): APPROVE's exact payload plus credential and correlationId shape (`/^ui-preview-[0-9a-f]{16}$/`), and the affordance passed by identity; REJECT's payload with two findings naming their nodes; findings COPIED not forwarded (mutating the caller's object after submit does not change what was sent — a component reusing its finding state would otherwise make the rendered rejection disagree with the durable one); the empty rejection refused with code AND layer and with BOTH the builder and the transport untouched; a daemon refusal surfaced at its own code and layer; a transport failure surfaced with a non-empty code rather than read as a decision.\n\nGATE: `pnpm --filter @moe/control-room exec vitest run src/v2/approvals/preview-port.test.ts` -> Test Files 1 passed (1), Tests 6 passed (6), 1.19s.\n\nNOTE for later steps: apps/control-room/src carries NO .js bridges (unlike apps/daemon/src), so none was added.",
+      "startedAt": "2026-09-06T12:24:15.606Z",
+      "completedAt": "2026-09-06T12:24:30.261Z"
     },
     {
       "stepId": "step-3",
@@ -88,7 +97,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -114,16 +123,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-06T09:15:26.305Z",
+  "updatedAt": "2026-09-06T12:26:38.385Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-04T23:13:28.242Z",
   "planningNotes": {
@@ -142,14 +155,15 @@
   },
   "planApprovedAt": "2026-09-04T23:13:30.442Z",
   "contextFetchedBy": [
-    "worker-0520a42e"
+    "worker-0520a42e",
+    "worker-1d53e70c"
   ],
   "workStartedAt": "2026-09-06T01:13:44.330Z",
-  "blockedReason": null,
+  "blockedReason": "DoD 1's link + screenshots are UNREACHABLE from the browser at HEAD, and closing the gap is daemon work rail 1 forbids here. Steps 1-2 are done and landed (432217be, decision port, 6 arms green); this blocks the RENDERING half only.\n\nMEASURED: (1) the `preview.decide` offer is a bare envelope (affordance-planning-offers.ts:143-160: commandEnvelopeVersion, commandId, commandKind, expectedVersion, inputSchemaVersion, targetAggregateId) — no url, no screenshots. (2) `/activity/read` is an exact 7-key shape carrying VERDICTS only (enough for DoD 2, nothing for the receipt). (3) http-listener-read-dispatch.ts has 25 read routes and NOT ONE preview route; the runs read carries no preview member. (4) `createPreviewReceiptReader` is used only by affordance-read.ts:339 and its whole surface is `(goalId) => \"REFUSED\"|\"STARTED\"|null` — the url, pid and screenshots[] on PreviewReceiptV1 reach no HTTP consumer.\n\nTWO MISSING PIECES: (a) a read for the receipt (url + screenshots[] + outcome + code); (b) a way to SHOW a capture — the files live under .moe-next/previews/<goalId>/<sha>/ and no route serves those bytes, so even with (a) an img has nothing to point at.\n\nNOT WORKING AROUND IT: a synthetic card or a browser-side file read would satisfy the sentence and fail the operator; step 1 of this plan says a missing offer is a gap in the owning row, \"not something to work around with a synthetic card\".\n\nSTILL BUILDABLE WITH NO DAEMON CHANGE: the item + card off the OFFER alone (the daemon withholds it unless the receipt is STARTED), Approve, Reject + REWORK routing, the PREVIEW stage from the offer, and the four refusal words. Missing: the link, the screenshots, and the step-7 e2e assertions on them.\n\nRULING NEEDED: (1) file a sibling row for the receipt read + capture serving and I depend on it, (2) waive rail 1 so this row adds the read, or (3) narrow DoD 1. I will execute any of the three.",
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T12:26:38.385Z",
   "commits": [
     {
       "sha": "b320bcb4515c4797df0ce617524f44f7ef54c800",
