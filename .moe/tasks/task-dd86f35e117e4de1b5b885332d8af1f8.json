@@ -179,8 +179,8 @@
       "completedAt": "2026-09-06T08:47:07.792Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -217,16 +217,24 @@
       "author": "worker-deb4c7d8",
       "content": "MUTATION-DRILL SHEET — worker-deb4c7d8, step 8, 2026-09-06. Every failure-path arm proven non-vacuous by mutating the PRODUCTION surface and confirming the arm goes RED naming the expected-vs-received code (global rail 1). Drills run in two passes because the edge was hardened between them (step 9 findings applied at step 8); the branches whose code changed were re-drilled after.\n\nRESTORE PROOF FIRST (global rail 13). `git status --porcelain` BEFORE drilling:\n  M apps/daemon/src/daemon-entry.ts\n  M apps/daemon/src/http/activity-read.ts\n  M apps/daemon/src/http/affordance-planning-offers.ts\n  ?? apps/daemon/src/preview/preview-daemon-edge.ts        <-- UNTRACKED, so `git diff` is blind to it\nOut-of-tree backups under %TEMP%/moe-drill-deb4c7d8/. SHA256 verified in a call SEPARATE from each restore:\n  pass 1 baseline  b0e78a5c327cb20b1c835f511eb4e5ba5f71f1718ac16e317e216fa4aba314fb  preview-daemon-edge.ts\n                   7f7ecc44fd0870f7dc0a31171538787267ed2466e31d94b21c4ad476f4ff0c1e  affordance-planning-offers.ts\n                   7f8f3c7b943e08fbfcac7bf06116977d5247ca57a68ce5eb1f67391b1ff94dc6  daemon-entry.ts\n  after D1-D4      preview-daemon-edge.ts -> b0e78a5c...  MATCH (\"RESTORED: byte-identical\")\n  after D5-D7      preview-daemon-edge.ts -> b0e78a5c...  MATCH\n  after D8-D9      all three -> MATCH against their backups (cmp -s, byte-identical)\n  pass 2 baseline  6cb326e445f797dfa90a92ac15b445cc43c03e91c02d2ca7999e6d6a77d67325  preview-daemon-edge.ts\n  after D4b/D10/D1b  6cb326e4...  MATCH\n\nTHE DRILLS (mutation -> the arm that reddened -> the printed expected-vs-received):\nD1  decoder refusal minted as PREVIEW_GOAL_NOT_LANDED -> \"refuses a payload the decoder will not admit\" -> expected 'PREVIEW_GOAL_NOT_LANDED' to be 'PREVIEW_DECISION_INVALID'\nD2  absent receipt minted as PREVIEW_START_TIMEOUT -> \"refuses when no receipt names the previewRef\" -> expected 'PREVIEW_START_TIMEOUT' to be 'PREVIEW_GOAL_NOT_LANDED'\nD3  landing gate minted as PREVIEW_COMMAND_MISSING -> \"refuses when the receipt is real but the goal's node is not landed\" -> expected 'PREVIEW_COMMAND_MISSING' to be 'PREVIEW_GOAL_NOT_LANDED'\nD4  RUNNER code RESTAMPED to PREVIEW_GOAL_NOT_LANDED -> BOTH runner arms -> expected 'PREVIEW_GOAL_NOT_LANDED' to be 'PREVIEW_COMMAND_MISSING' / to be 'PREVIEW_START_TIMEOUT'\nD5  unwired-port refusal minted as PREVIEW_START_TIMEOUT -> \"refuses PREVIEW_COMMAND_MISSING @ RUNNER when the daemon wired no preview port\" -> expected 'PREVIEW_START_TIMEOUT' to be 'PREVIEW_COMMAND_MISSING'\nD6  findings nodeRef gate short-circuited to false -> \"refuses a REJECT naming a node that is not on the goal's graph\" RED\nD7  `port.release(...)` removed -> \"stops the live preview process for the decided receipt\" -> expected [] to deeply equal [ Array(1) ]\nD8  preview card offered UNCONDITIONALLY (STARTED gate weakened) -> TEN arms red, including BOTH withholding arms (\"WITHHOLDS it when no preview has ever run\", \"WITHHOLDS it when the preview was REFUSED\") AND eight PRE-EXISTING roster arms in the same file, which is the set-equality guard doing its job on a stranger's arms\nD9  `await sweepPreviews(dependencies)` removed from daemon-entry shutdown -> \"stops a preview this daemon started, proven by its pid leaving the OS table\" -> expected false to be true. The sweep is genuinely what kills the child; the arm is not passing on the OS reaping it.\nD4b (post-hardening) REFUSED-receipt code restamped to PREVIEW_DECISION_INVALID -> both runner arms -> expected 'PREVIEW_DECISION_INVALID' to be 'PREVIEW_COMMAND_MISSING' / 'PREVIEW_START_TIMEOUT'\nD10 fenced decision READ AS SUCCESS (`if (false)`) -> \"refuses a stale expectedVersion with the store's own EXPECTED_VERSION_CONFLICT\" RED\nD1b (post-hardening) decoder refusal minted as PREVIEW_COMMAND_MISSING -> expected 'PREVIEW_COMMAND_MISSING' to be 'PREVIEW_DECISION_INVALID'\n\nD11 was OBSERVED RATHER THAN STAGED and is the strongest of the set: at step 3 the five commit-path arms were RED with `expected null to be \"APPROVE\"` for exactly as long as `\"preview.decide\"` was missing from `VERDICT_KINDS`, and went green on the one-line roster addition. The verdict assertion cannot pass without the production roster entry.\n\nNO DRILL WAS LEFT IN THE TREE. Every mutated path is byte-identical to its out-of-tree backup by SHA256, checked after the last drill in a call of its own.",
       "timestamp": "2026-09-06T08:24:46.076Z"
+    },
+    {
+      "id": "comment-1c04395cd81c46afa8cb464d6869831f",
+      "author": "qa-d81848bc",
+      "content": "QA EVIDENCE SHEET — qa-d81848bc, 2026-09-06, review of commit b0297796. The reviewSummary is capped at 2000 chars; this is the detail it points at.\n\nDELIVERED BYTES. `git show --stat b0297796 -- apps` = 12 files, +1008/-20. `git status --porcelain` over all 12 owned paths = EMPTY, so the reviewed bytes are the committed bytes and not a dirty tree. `git branch --contains b0297796` = moe/work-2026-09-04. task.commits records the row's two commits as `kind: checkpoint` (eb549e03 WORKING, b0297796 REVIEW), so qa_approve raises NO-COMPLETION-COMMIT. Investigated per global rail 5: the completion bytes ARE on the branch under the REVIEW checkpoint. Not a defect.\n\nGATES, each standalone and foreground.\n1. task.verification re-run VERBATIM -> `Test Files 5 passed (5)` / `Tests 85 passed (85)`, exit 0. Byte-matches the recorded outputTail.\n2. `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0. Matches the worker's quoted line.\n3. `pnpm typecheck` -> exit 1. Exactly TWO errors, both apps/daemon/src/bootstrap/bootstrap-sequence.ts: (45,12) TS2739 missing \"deployment.deploy\"/\"deployment.set_target\" from COMMAND_PREREQUISITES, and (109,10) TS7053. ZERO errors in any of this row's 12 files.\n4. `pnpm --filter @moe/daemon test` FULL, 914.39 s -> `Test Files 31 failed | 481 passed (512)` / `Tests 154 failed | 9199 passed | 47 skipped (9400)`, exit 1.\n\nATTRIBUTION OF (4) AND (3) — global rail 3, path-attributed baseline. ONE uncommitted peer edit is the whole cause: bootstrap-contracts.ts (status `M`, ABSENT from b0297796 — `git show --stat b0297796 | grep -c bootstrap-contracts` = 0) appends `deployment.set_target` and `deployment.deploy` to BOOTSTRAP_COMMAND_KINDS with no matching COMMAND_PREREQUISITES rows. Signature tally over the log: 15x `TypeError: Cannot read properties of undefined (reading 'filter')` at bootstrap-sequence.ts:109; every frozen roster count off by exactly +2 (56 vs 54 x4, 19 vs 17 x4, 55 vs 53, 15 vs 13); plus a separate foreign FOUNDATION_CONTEXT_STORE_UNAVAILABLE cluster in src/work/foundation-context-selection.test.ts, also untouched here.\n\nI did NOT attribute from the counts. A count is a lossy projection of a set, and `expected 56 to be 54` is equally compatible with \"this row added two kinds\". Three independent checks settled it:\n(a) Re-ran the SET arm alone: `vitest ... daemon-command-registry.test.ts -t \"keeps the registration order the payload table declares\"`. The printed array delta was EXACTLY `+ \"deployment.set_target\"` / `+ \"deployment.deploy\"` and nothing else. That also discharges DoD 7's second clause independently of the diff: this row adds NO runtime command kind.\n(b) `grep -ci \"preview\"` over the entire 914-second failure log -> **0**. Not one failing assertion, stack frame or path names preview anywhere.\n(c) runtime-entrypoint.test.ts's `unexpected` ARRAY read directly (the trap the plan named): exactly ONE entry, `repository\\deployment\\deployment-docker-probe.js` — the disclosed baseline. NO entry containing `preview\\`, so preview-daemon-edge.js is correctly RUNTIME-tier and the name-matched test file did its job.\n(d) src/daemon-store-dependencies.test.ts IS an owned path and IS red. Its object diff hunk is `@@ -62,10 +62,12 @@` on `commandKinds` ALONE; every other member matched — including the `providerKeys` exact-key set this row edited to add `\"previews\"`. The row's own edit is confirmed correct BY the foreign red.\n(e) src/http/affordance-read.test.ts and affordance-read-planning.test.ts (owned file) fail entirely at `unmetPrerequisites` bootstrap-sequence.ts:109, upstream of `resolvePlanningOffers` — affordance-read.ts appears only as a pre-existing intermediate stack frame; the new `previewReceipt` line at :314 is never reached.\nINTERSECTION of the HEAD failing-path set with this row's owned paths, after attribution = EMPTY.\n\nMY OWN MUTATION DRILL (global rail 1 — I did not take the worker's drill sheet on trust). Mutated the PRODUCTION surface: `if (port === undefined) refuse(previewRefusal(\"PREVIEW_COMMAND_MISSING\"))` -> `\"PREVIEW_START_TIMEOUT\"` in preview-daemon-edge.ts. Result: `Test Files 1 failed (1)` / `Tests 1 failed | 17 passed (18)`, exactly ONE arm red, naming expected-vs-received: `AssertionError: expected 'PREVIEW_START_TIMEOUT' to be 'PREVIEW_COMMAND_MISSING'`. The arm is non-vacuous and pins the code, not merely \"it refused\". RESTORE PROOF (global rail 13), in a call SEPARATE from the restore — the file is TRACKED at b0297796, so `git diff` is a valid proof here: `git status --porcelain -- <file>` EMPTY and `git diff b0297796 -- <file> | wc -l` = 0. Byte-identical.\n\nDoD, item by item.\n1 PASS. `git grep -n \"preview runner is not landed\" -- apps packages adapters` -> exit 1, ZERO. The only whole-tree hits are .moe chat/board JSONL quoting the old plan text, which is history, not code. APPROVE commits and the verdict is asserted from the ACTIVITY READ port, not the handler's return (verdictFromActivityRead, edge test :148).\n2 PASS. Findings are read back from the store element-by-element via readPreviewDecision and each nodeRef is checked against readGoalLandingStatus(...).nodes. Stronger than the clause requires: an off-graph nodeRef is refused IN PRODUCTION (edge :247), so \"reworkable on the graph\" is a production property, not a test asserting its own fixture.\n4 PASS. Six arms, all SET-EQUALITY on `commandKind@target` — offered for STARTED, ABSENT for null, ABSENT for REFUSED, plus a lifecycle arm, a laziness arm (asks only for a goal that could be offered) and a version-fence arm pinning expectedVersion 0 on `preview:<goalId>` against 3 on the goal.\n5 PASS. All four codes raised with EVERY other gate made passable, asserting code AND layer, each group carrying a positive control. PREVIEW_DECISION_INVALID @ REQUEST is ALSO proven over the REAL registry at daemon-command-registry.test.ts:220, which is what makes the registry delegation itself covered rather than only the edge function.\n6 PASS. Real listening child, real `startDaemon(...).shutdown()`, liveness asserted BY PID through `awaitPidGone` over the production probe `probeProcessAlive`. No third liveness helper.\n7 PASS, second clause. No new runtime command kind — proven independently by (a) above, not merely asserted in the record. control-room was run anyway and is green.\n8 PASS.\n3 and 7-FIRST-CLAUSE: reallocated by architect-aa54e231 in comment-0fe1031487b84ee6a0b8c2d7fb004ef0 AT PLANNING CLAIM, before any work, to task-dbc79d25 and task-0e87ab34 with dependsOn set on both. That is scope of record, not a delivery gap, and the completion record states it plainly as the clause requires.\n\nNOTED, DELIBERATELY NOT A REJECTION. Three touched files sit past the 400-line split threshold: daemon-command-registry.ts 531->547, daemon-store-foundation-composition.ts 578->595, affordance-read.ts 495->506. All three were ALREADY over 400 at merge-base; this row adds +16/+17/+11 of minimal delegation and puts the decide edge in its own 311-line module precisely for that reason, as step 4 of the approved plan directs. Splitting a roster file contended by concurrent rows is not this row's work.\n\nThe 12-file landing against the planned 10 is disclosed in comment-4cf895af738441a7a01469f51f4cc6e8 and the two extras (daemon-store-dependencies.ts + its test) are FORCED, not creep: without the forwarder the shutdown sweep runs in every injection test and never in the shipped moe-daemon.",
+      "timestamp": "2026-09-06T09:13:56.256Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T01:17:21.643Z",
-  "updatedAt": "2026-09-06T08:48:03.603Z",
+  "updatedAt": "2026-09-06T09:15:26.185Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T02:52:53.013Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T09:15:26.185Z",
+    "wallClockMs": 22953172
   },
   "contextFetchedBy": [
     "architect-aa54e231",
@@ -294,6 +302,80 @@
       "treeId": "8d7e0487e9f3fa01f6a184a31d50ea17df5bc22d",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "b02977967f115f456b096cd5fc1e3e06cfeb7ec1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T08:48:05Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+        ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+        ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-945bb541777a4b789983382f9513f43c.json",
+        ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+        ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+        ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+        ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/http/activity-read.ts",
+        "apps/daemon/src/http/affordance-planning-offers.test.ts",
+        "apps/daemon/src/http/affordance-planning-offers.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/preview/preview-daemon-edge.js",
+        "apps/daemon/src/preview/preview-daemon-edge.test.ts",
+        "apps/daemon/src/preview/preview-daemon-edge.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T08:48:59.458Z",
+      "treeId": "10dd98ad847859455f3c0529dec4f4613db2ffcb",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-entry.ts",
+          "taskId": "task-509c6c1609174adb9228940bc002f5c3"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.ts",
+          "taskId": "task-e651725c92434127a7b8d72f0ac5246b"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-e651725c92434127a7b8d72f0ac5246b"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.test.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-planning-offers.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        },
+        {
+          "path": "apps/daemon/src/http/affordance-read.ts",
+          "taskId": "task-217f40b7462e4f209ba25cb39f4acb2e"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -308,22 +390,29 @@
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.test.ts",
     "apps/daemon/src/http/affordance-planning-offers.ts",
-    "apps/daemon/src/http/affordance-read.ts"
+    "apps/daemon/src/http/affordance-read.ts",
+    ".moe/project.json",
+    ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/tasks/task-0a56ecee17b740a3abb7f850e5250c99.json",
+    ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+    ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+    ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-945bb541777a4b789983382f9513f43c.json",
+    ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+    ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+    ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+    ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-activation.ts",
-    "apps/control-room/src/v2/ops/activation-screen.tsx",
-    "apps/daemon/src/bootstrap/activation-receipts.ts",
-    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
-    "apps/daemon/src/bootstrap/bootstrap-services.ts",
-    "apps/daemon/src/deployment/deploy-target-contracts.ts",
-    "apps/daemon/src/http/activation-read.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "committed",
-    "kind": "checkpoint",
+    "outcome": "nothing",
+    "kind": "completion",
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
     "sessionId": "worker-deb4c7d8@2026-09-06T07:40:56Z",
-    "at": "2026-09-06T07:41:19.479Z"
+    "at": "2026-09-06T08:49:39.408Z"
   },
   "workStartedAt": "2026-09-06T07:42:06.279Z",
   "reviewStartedAt": "2026-09-06T08:47:39.998Z",
@@ -333,5 +422,8 @@
     "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  5 passed (5)\n      Tests  85 passed (85)\n   Start at  11:46:25\n   Duration  7.77s (transform 14.47s, setup 0ms, import 20.44s, tests 3.63s, environment 0ms)\n\nOWNED_EXIT=0",
     "reportedAt": "2026-09-06T08:47:39.998Z"
   },
-  "completionSummary": "preview.decide is WIRED. The fail-closed stub is gone (`git grep \"preview runner is not landed\" -- apps packages adapters` -> 0 hits) and the landed runner has real consumers.\n\nTHIS ROW ADDS NO NEW RUNTIME COMMAND KIND — DoD 7's second clause. `preview.decide` was already on the roster, registered-but-refusing; nothing here touches runtime vocabulary, any GENERATED_CONTRACT_DIGEST mirror or the generated client. `preview.start` and DoD 3 are carried by task-0e87ab34 + task-dbc79d25 (comment-0fe1031487b84ee6a0b8c2d7fb004ef0). The control-room leg was run anyway: GREEN, `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0.\n\nDELIVERED (12 files; the extra two beyond the planned ten are disclosed in comment-4cf895af738441a7a01469f51f4cc6e8):\n- NEW `preview/preview-daemon-edge.{ts,js,test.ts}` — the port (ONE supervisor), the receipt fact, `readPreviewDecision`, and `runPreviewDecideEdge`.\n- `daemon-command-registry.ts` delegates; `preview?: PreviewDaemonPort` optional, absence = REFUSING.\n- `daemon-store-foundation-composition.ts` builds the supervisor ONCE; `daemon-entry.ts` awaits `sweepPreviews` in the production shutdown (reachable from SIGINT/SIGTERM via daemon-main.ts:228-232); `daemon-store-dependencies.{ts,test.ts}` forward it so the SHIPPED daemon sweeps.\n- `http/affordance-planning-offers.{ts,test.ts}` offer the card off a lazy STARTED-receipt fact; `http/affordance-read.ts` supplies it from the SAME `readPreviewReceipt` authority the edge uses; `http/activity-read.ts` adds the kind to VERDICT_KINDS.\n\nDoD 1 APPROVE commits and the verdict is asserted from /activity/read. 2 REJECT's persisted findings are read back element-by-element, each nodeRef proven to be on the goal's graph — and a nodeRef that is NOT is refused in PRODUCTION. 4 offer arms assert SET-EQUALITY on commandKind@target, offered for STARTED, ABSENT for none and for REFUSED. 5 all four codes raised over the REAL edge with every other gate passable, code AND layer, three positive co"
+  "completionSummary": "preview.decide is WIRED. The fail-closed stub is gone (`git grep \"preview runner is not landed\" -- apps packages adapters` -> 0 hits) and the landed runner has real consumers.\n\nTHIS ROW ADDS NO NEW RUNTIME COMMAND KIND — DoD 7's second clause. `preview.decide` was already on the roster, registered-but-refusing; nothing here touches runtime vocabulary, any GENERATED_CONTRACT_DIGEST mirror or the generated client. `preview.start` and DoD 3 are carried by task-0e87ab34 + task-dbc79d25 (comment-0fe1031487b84ee6a0b8c2d7fb004ef0). The control-room leg was run anyway: GREEN, `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0.\n\nDELIVERED (12 files; the extra two beyond the planned ten are disclosed in comment-4cf895af738441a7a01469f51f4cc6e8):\n- NEW `preview/preview-daemon-edge.{ts,js,test.ts}` — the port (ONE supervisor), the receipt fact, `readPreviewDecision`, and `runPreviewDecideEdge`.\n- `daemon-command-registry.ts` delegates; `preview?: PreviewDaemonPort` optional, absence = REFUSING.\n- `daemon-store-foundation-composition.ts` builds the supervisor ONCE; `daemon-entry.ts` awaits `sweepPreviews` in the production shutdown (reachable from SIGINT/SIGTERM via daemon-main.ts:228-232); `daemon-store-dependencies.{ts,test.ts}` forward it so the SHIPPED daemon sweeps.\n- `http/affordance-planning-offers.{ts,test.ts}` offer the card off a lazy STARTED-receipt fact; `http/affordance-read.ts` supplies it from the SAME `readPreviewReceipt` authority the edge uses; `http/activity-read.ts` adds the kind to VERDICT_KINDS.\n\nDoD 1 APPROVE commits and the verdict is asserted from /activity/read. 2 REJECT's persisted findings are read back element-by-element, each nodeRef proven to be on the goal's graph — and a nodeRef that is NOT is refused in PRODUCTION. 4 offer arms assert SET-EQUALITY on commandKind@target, offered for STARTED, ABSENT for none and for REFUSED. 5 all four codes raised over the REAL edge with every other gate passable, code AND layer, three positive co",
+  "completedAt": "2026-09-06T09:15:26.185Z",
+  "reviewCompletedAt": "2026-09-06T09:15:26.185Z",
+  "reviewSummary": "APPROVED at b0297796 (12 files, +1008/-20, porcelain empty for every owned path). Evidence sheet: comment-1c04395cd81c46afa8cb464d6869831f.\n\nGATES I RE-RAN, standalone/foreground:\n- task.verification VERBATIM -> `Test Files 5 passed (5)` / `Tests 85 passed (85)`, exit 0. Reproduces the recorded outputTail.\n- control-room -> `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0.\n- typecheck -> exit 1, 2 errors, both bootstrap-sequence.ts. FOREIGN.\n- daemon FULL 914 s -> `31 failed | 481 passed (512)`. ALL FOREIGN.\n\nATTRIBUTION (rail 3): one UNCOMMITTED peer edit appends deployment.set_target + deployment.deploy to BOOTSTRAP_COMMAND_KINDS with no COMMAND_PREREQUISITES rows -> 15x `TypeError: ...(reading 'filter')` at bootstrap-sequence.ts:109, every count off by +2. Not attributed from counts: the SET arm's array delta printed ONLY those two names (which also discharges DoD 7 clause 2); `grep -ci preview` over the whole log = 0; runtime-entrypoint `unexpected` = the one disclosed baseline entry, no `preview\\`; owned daemon-store-dependencies.test.ts reds on commandKinds alone, its providerKeys set with \"previews\" MATCHED. Owned-path intersection EMPTY.\n\nMY DRILL: flipped the port-absent mint to PREVIEW_START_TIMEOUT -> one arm red, `expected 'PREVIEW_START_TIMEOUT' to be 'PREVIEW_COMMAND_MISSING'`. Restored; proof in a SEPARATE call: porcelain empty, `git diff b0297796 -- <file>` = 0 lines.\n\nDoD 1,2,4,5,6,7-clause-2,8 PASS: stub grep 0; verdict read off /activity/read; findings read back element-by-element, off-graph nodeRef refused IN PRODUCTION; set-equality offers with both withholding arms; four codes WITH layer + positive controls, INVALID@REQUEST also over the REAL registry (registry.test.ts:220); real child swept by real startDaemon().shutdown() via awaitPidGone. DoD 3 + 7-clause-1 were reallocated by architect-aa54e231 in comment-0fe1031 at planning claim to task-dbc79d25 / task-0e87ab34 with dependsOn — scope of record, not a gap."
 }

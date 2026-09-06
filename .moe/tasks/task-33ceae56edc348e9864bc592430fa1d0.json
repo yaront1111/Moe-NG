@@ -88,7 +88,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -114,7 +114,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-06T07:34:50.721Z",
+  "updatedAt": "2026-09-06T09:15:26.305Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 8,
@@ -145,13 +145,11 @@
     "worker-0520a42e"
   ],
   "workStartedAt": "2026-09-06T01:13:44.330Z",
-  "blockedReason": "STEP 1 ASKED ITS QUESTION; ANSWER IS NO. Step 1(c): a missing offer \"is a gap in task-f5a74c23, not something to work around with a synthetic card.\" NO EDITS; step-1 left IN_PROGRESS to force re-measurement at the new HEAD. FULL EVIDENCE: comment-66e75ba771c540fd9d8381ade1e74126 on this row.\n\nHEAD eb13d2f6. (a) kind PASSES; (b) receipt PASSES (preview-receipt-contracts.ts:47); (c) FAILS four ways:\n1. daemon-command-registry.ts:433-439 is an unconditional fail-closed stub - its comment at :432 calls it \"the FAIL-CLOSED stub the runner replaces\". EVERY well-formed APPROVE and REJECT throws PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. Nothing commits.\n2. git grep \"preview/preview-\" (minus dist + preview dir) -> 4 hits, ALL importing only preview-contracts.js, the vocabulary. createPreviewRunner/createPreviewSupervisor/previewReceiptId outside that dir -> ZERO. Runner unreachable from the live daemon.\n3. git grep \"preview\\.start\" over apps/ and packages/ -> ZERO. Nothing starts a preview; recordPreviewReceipt never runs.\n4. git grep -in preview -- apps/daemon/src/http/affordance-*.ts minus tests -> ZERO. No offer reaches the browser.\n\nA MISSING ROW, NOT AN UNDER-DELIVERY. Epic rail 1 makes a kind a four-row job with \"daemon wiring and operator fence\" third. Gate 2 shipped rows 1, 2, the FENCE HALF of 3, and 4. The release band has its wiring row explicitly (task-54b74b80); Gate 2 never got one.\n\nDoD 1,2,3,5,6 unreachable. DoD 2 is refused by the registry - the exact defect it exists to catch. Task rail 1 forbids repairing the subject inside the proof; parent rail 4 forbids a fixture substitute. planningNotes already rejected this: \"a card that offers a decision the daemon will refuse is worse than no card.\"\n\nFILED task-dd86f35e117e4de1b5b885332d8af1f8 (PLANNING, CRITICAL): registry edge, start trigger, offer, shutdown sweep. Commented task-f5a74c23 and parent task-f3edb8fb.\n\nASK: plan it; add it to task-f3edb8fb dependsOn (architect-only). Steps 2-8 stand unamended.",
-  "blockedOnTaskIds": [
-    "task-dd86f35e117e4de1b5b885332d8af1f8"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T01:20:12.940Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "b320bcb4515c4797df0ce617524f44f7ef54c800",
