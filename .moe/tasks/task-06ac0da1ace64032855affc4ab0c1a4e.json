@@ -125,7 +125,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:40:28.076Z",
-  "updatedAt": "2026-09-06T09:13:51.140Z",
+  "updatedAt": "2026-09-06T09:14:15.779Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:26:39.278Z",
     "plannedStepCount": 5,
@@ -211,7 +211,8 @@
     "apps/daemon/src/mcp-design-read-query.js",
     "apps/daemon/src/daemon-command-vocabulary.test.ts",
     "apps/daemon/src/daemon-command-registry.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts"
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
   ],
   "completionSummary": "ROUND 2. The one owned defect is fixed and the fix is proven with a control. FULL LEDGER: comment-20a9488b. No production logic changed this round — the round-1 diff was already on the branch and QA verified it.\n\nTHE FIX. `apps/daemon/src/mcp-design-read-query.js` declared to this row (moe.declare_files, addedPaths = exactly that path) so the wrapper lands it. NOT hand-written, NOT edited: sha256 ea8f0db4b727ccdb52cda2eeeb0dcd04471fb3510a70c3f36a60fc8658b63194, `export * from \"./mcp-design-read-query.ts\";` + one LF. Private detached worktree at HEAD, one file toggled:\n  bridge ABSENT  -> missing: [\"mcp-design-read-query.ts\"]\n  bridge PRESENT -> missing: []      wrongContent: [] both sides\nSo `mcp-dispatch-port.js` -> `.ts` -> `./mcp-design-read-query.js` now resolves from a fresh clone.\n\nWHY runtime-entrypoint.test.ts IS NOT THE EXIT-0 LEG: both runs also print `unexpected: [repository\\deployment\\deployment-docker-probe.js]`. That `.js` is TRACKED, landed by e219aa43 (task-3706b7e7), and present in `git ls-tree 51fbfc88` — your own control commit. The arm cannot exit 0 for anyone. Your ask was `missing: []`; that is met and quoted.\n\nRECORD CORRECTION: round 1 named foundation-attempt-windows.test.ts as the only daemon delta. Wrong — runtime-entrypoint.test.ts was a second, owned delta, and it was the defect.\n\nNEW FOREIGN RED SINCE f7ad50ee, with (2)-minus-(1). PAYLOAD_KEYS grew 25->27; diff = exactly `deployment.deploy`, `deployment.set_target`, landed to production with no test-roster rows and no COMMAND_PREREQUISITES entry. Round-1's scoped 7-file leg in the worktree, bridge toggled, is byte-identical both ways: `Test Files 4 failed | 3 passed (7)` / `Tests 8 failed | 614 passed (622)`, same 8 anchors. DELTA EMPTY. Grep of the whole 928s suite log for `design.` on FAIL/×/Assertion lines: ZERO hits. Their pins deliberately NOT bumped by me; raised in #general msg-38195ec6.\n\nGATES.\n  NAMED, exit 0, fresh 12:13Z: `Test Files 3 passed (3)` / `Tests 211 passed (211)` —",
   "commits": [
@@ -397,6 +398,28 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "62a5863e758ed569a0b3a5c220a76355a0a29c33",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T09:13:52Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        "apps/daemon/src/mcp-design-read-query.js"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T09:14:15.779Z",
+      "treeId": "339e0075780c44dbd2d3d11434766daf32e70d2d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/mcp-design-read-query.js",
+          "taskId": "task-7f9f20c7cddf4d50b49054951ab177fb"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -418,17 +441,12 @@
     "apps/daemon/src/daemon-command-design.js",
     "apps/daemon/src/daemon-command-registry.test.ts"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-activation.test.ts",
-    "apps/control-room/src/live/live-dispatch-production.test.ts",
-    "apps/control-room/src/v2/ops/activation-screen.test.tsx",
-    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-4f771bb8@2026-09-06T07:38:08Z",
-    "at": "2026-09-06T07:51:02.660Z"
+    "sessionId": "qa-f2906c26@2026-09-06T09:13:52Z",
+    "at": "2026-09-06T09:14:15.779Z"
   },
   "reviewCompletedAt": "2026-09-06T07:49:19.978Z",
   "rejectionDetails": {
