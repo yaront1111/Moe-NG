@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,9 @@ import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
+import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
@@ -318,6 +321,26 @@ describe("wiredMcpToolKinds query half, bound to the production port", () => {
  * cannot see.
  */
 
+/**
+ * The row's kind on the PRODUCTION async dispatch path — the same entry point the HTTP
+ * listener uses, not a hand-built handler call. `deployment.rollback` is served from an ASYNC
+ * entry (`daemon-command-async-entries.ts`), so the synchronous request never reaches its
+ * fence; calling `handleCommandRequest` here would test nothing.
+ */
+async function sendRollback(
+  commandId: string, payload: Readonly<Record<string, unknown>>, credential: string,
+): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
+  return await handleAsyncCommandRequest(provider.provide(), {
+    body: encoder.encode(JSON.stringify({
+      commandId, commandKind: "deployment.rollback", correlationId: "corr-rollback",
+      expectedVersion: 0, payload, requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: credential,
+      targetAggregateId: "agg-rollback",
+    })),
+    credential, protocolVersion: WIRE_PROTOCOL_VERSION,
+  }, "HTTP_LISTENER");
+}
+
 const decisionsIn = (): readonly { readonly commandKind: string }[] => {
   const store = SqliteEventStore.openForProject(storePath, PROJECT);
   try {
@@ -368,6 +391,68 @@ describe("task-4dd05f0c served/advertised parity", () => {
     for (const kind of MCP_EXCLUDED_COMMAND_KINDS) {
       expect({ kind, served: served.includes(kind) }).toEqual({ kind, served: true });
     }
+  });
+
+  /**
+   * C2b — THE SECOND FENCE, DISPATCHED RATHER THAN ASSERTED BY MEMBERSHIP.
+   *
+   * C2 above proves the kind is off the MCP roster and still served. It cannot prove the
+   * daemon REFUSES an agent who reaches the kind by some other route, because a set-membership
+   * triple dispatches nothing: it would read identically if the principal fence were deleted.
+   * This arm sends the real command through the production dispatch path twice, under two
+   * credentials, and asserts the exact code AND the layer that refused each.
+   *
+   * THE DISCRIMINATOR IS THAT THE TWO CODES DIFFER. The agent is stopped at
+   * OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, before the handler body runs. The
+   * operator gets PAST that line and is refused by the HANDLER itself, at
+   * ROLLBACK_RECEIPT_UNKNOWN @ DAEMON_PREREQUISITE (no rollback port is composed yet —
+   * task-da60dc4b supplies the effect). Same command, same payload: only the principal
+   * differs, and the two answers prove the fence sits BEFORE the handler rather than being
+   * the handler's own failure. A single shared refusal code could not tell those apart.
+   */
+  it("C2b refuses an agent-authenticated rollback at authorization, and lets the operator reach the handler", async () => {
+    const payload = { environment: "production", restoreDatabase: false, toReceiptRef: "receipt-absent" };
+    const before = decisionsIn().length;
+
+    const agentSecret = randomUUID();
+    const opened = handleCommandRequest(provider.provide(), {
+      body: encoder.encode(JSON.stringify({
+        commandId: "cmd-rollback-session", commandKind: "session.open",
+        correlationId: "corr-rollback", expectedVersion: 0, requestDigest: "a".repeat(64),
+        payload: {
+          capabilities: [CAPABILITIES.GOAL, CAPABILITIES.WORK],
+          credentialSha256: createHash("sha256").update(agentSecret, "utf8").digest("hex"),
+          expiresAt: "2027-01-01T00:00:00.000Z", sessionId: randomUUID(),
+        },
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: CREDENTIAL,
+        targetAggregateId: "agg-rollback",
+      })),
+      credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+    expect(opened).toMatchObject({ outcome: "ACCEPTED" });
+
+    // THE AGENT ARM. GOAL is the kind's own `requiredCapability`, so this session is NOT
+    // refused for lacking capability — it is refused for not being the operator. Handing it
+    // the exact capability the entry demands is what makes the arm about the principal fence.
+    expect(await sendRollback("cmd-rollback-agent", payload, agentSecret)).toMatchObject({
+      outcome: "PORT_REFUSED", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+
+    // THE OPERATOR ARM. Past the fence and into the handler, which refuses for an unrelated
+    // reason with an unrelated layer. That it is a DIFFERENT code is the whole point.
+    expect(await sendRollback("cmd-rollback-operator", payload, CREDENTIAL)).toMatchObject({
+      outcome: "PORT_REFUSED", httpStatus: 422,
+      refusal: { code: "ROLLBACK_RECEIPT_UNKNOWN", layer: "DAEMON_PREREQUISITE" },
+    });
+
+    // Neither arm wrote anything durable: a refusal that committed first is not a fence.
+    // `session.open` above is the one decision either arm is allowed to have added, and NO
+    // decision names the kind — counting alone would miss a rollback decision that replaced
+    // one the count already expected.
+    const after = decisionsIn();
+    expect(after.length).toBe(before + 1);
+    expect(after.filter((entry) => entry.commandKind === "deployment.rollback")).toEqual([]);
   });
 
   it("C3 names the ONE advertised kind the /2 plane withholds, so the gap stays visible", () => {

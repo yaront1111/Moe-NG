@@ -83,6 +83,14 @@ export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // becomes operator-only leaves the MCP roster with no edit here.
   // `project.set_agent_provider` chooses which vendor receives the operator's source and
   // session credentials: provider selection must not be delegated to an MCP caller.
+  // `deployment.rollback` REPLACES WHAT USERS ARE CURRENTLY RUNNING. It is not a repair and not
+  // a retry: it takes a product that is live and serving real traffic and puts an EARLIER build
+  // back in front of those users, discarding whatever the current one has been doing for them
+  // since it shipped. Whether that trade is worth making is a judgement about the operator's own
+  // product and its users, and only they can make it. The exclusion matters more here than
+  // capability scoping would: the MCP port authenticates with the operator bootstrap credential,
+  // so an advertised operator kind is an agent arriving AS the operator, and a capability gate
+  // would pass. Keeping the kind off this roster is the fence.
   ...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort(),
 ]);
 
