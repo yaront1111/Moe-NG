@@ -3,22 +3,14 @@ import type { ChangeEvent, JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
 import type { GoalDraft } from "../goals/goal-model.js";
+import { prdStatusText } from "../goals/new-goal-form-model.js";
 import { useGoalPrd } from "../goals/use-goal-prd.js";
 import type {
   BootstrapVisibility, NewProductRequest, NewProductRun,
 } from "./live-new-product.js";
 
-/**
- * NEW PRODUCT FROM A PRD - presentation only. Four inputs, four rendered outcomes, and no
- * authority of its own: every code below comes from the daemon and is shown VERBATIM.
- *
- * THE GITHUB HALF IS VISIBLY OPTIONAL, in the label rather than in a tooltip. A form that
- * implied GitHub was required would hide the local-only path the bootstrap command exists to
- * support. Visibility defaults to PRIVATE and the owner is typed or the GitHub half is not
- * requested at all: creating a public repository is a one-way mistake, so no default here can
- * make one. THERE IS NO CREDENTIAL FIELD - the daemon already authenticates this browser as
- * the operator principal, so a token input would be useless as well as a leak.
- */
+/** Presentation only: daemon codes stay verbatim. GitHub is optional, private by default,
+ * and requires a typed owner. No credential field or authority is introduced here. */
 
 export const VISIBILITY_OPTIONS: readonly BootstrapVisibility[] =
   Object.freeze(["private", "internal", "public"]);
@@ -36,14 +28,15 @@ export interface OutcomeWords {
 
 const retained = (detail: string): boolean => detail.endsWith("_LOCAL_REPOSITORY_RETAINED");
 
-/**
- * The daemon verdict in operator words, with its codes ALONGSIDE them and never instead.
- *
- * BOOTSTRAP_GH_UNAVAILABLE IS NOT A FAILURE and must not read as one. The repository exists,
- * is committed and is bound; only the GitHub half did not happen. An operator told that the
- * bootstrap failed deletes good work, so this branch says plainly that the repository is there
- * and must be kept.
- */
+function downstreamFailure(run: NewProductRun): string {
+  const step = run.chain.find((item) => item.state === "ANSWERED" && !item.outcome.ok);
+  if (step?.state === "ANSWERED" && !step.outcome.ok) {
+    return `${step.kind} did not complete: ${step.outcome.code} @ ${step.outcome.layer}.`;
+  }
+  return run.goal?.ok === false ? `Goal creation did not complete: ${run.goal.report}.` : "";
+}
+
+/** Keep local success distinct from GitHub, activation and goal creation failures. */
 export function newProductWords(run: NewProductRun | null): OutcomeWords | null {
   if (run === null) return null;
   const bootstrap = run.bootstrap;
@@ -51,8 +44,7 @@ export function newProductWords(run: NewProductRun | null): OutcomeWords | null 
     return {
       detail: `The daemon answered ${run.dispatch.ok ? "OK" : `${run.dispatch.code} at ${run.dispatch.layer}`}`
         + ". No repository was reported, so nothing here says one was created.",
-      headline: "The new product command did not go through.",
-      state: "ERROR",
+      headline: "The new product command did not go through.", state: "ERROR",
     };
   }
   if (bootstrap.state === "NO_RECEIPT") {
@@ -60,8 +52,7 @@ export function newProductWords(run: NewProductRun | null): OutcomeWords | null 
       detail: `The receipt could not be read: ${bootstrap.code} at ${bootstrap.layer}.`
         + " That is not a refusal. Read it again before you retry, because a retry over a"
         + " directory that is already set up is refused BOOTSTRAP_DIR_NOT_EMPTY.",
-      headline: "No bootstrap receipt was read.",
-      state: "UNKNOWN",
+      headline: "No bootstrap receipt was read.", state: "UNKNOWN",
     };
   }
   if (bootstrap.state === "REFUSED") {
@@ -69,29 +60,31 @@ export function newProductWords(run: NewProductRun | null): OutcomeWords | null 
     return {
       detail: `${code} (${detail}) refused by ${refusedBy}.`
         + (retained(detail)
-          ? " The local repository was created and is still on disk; it is not bound to a"
-            + " project yet. Keep it and bind it, or remove it deliberately."
+          ? " The local repository was created and is still on disk; it "
+            + (code === "BOOTSTRAP_CATALOG_FAILED" ? "is already bound to this project. Keep it; catalog registration did not complete."
+              : "is not bound to a project yet. Keep it and bind it, or remove it deliberately.")
           : " No repository was created."),
-      headline: "The product was not created.",
+      headline: retained(detail) ? "Local repository retained. Setup did not complete." : "The product was not created.",
       state: "ERROR",
     };
   }
   const { dir, remoteUrl, sha } = bootstrap.receipt;
   const where = `The repository at ${dir} exists, is committed at ${sha ?? "an unread sha"}`
     + " and is bound to this project.";
+  const stopped = downstreamFailure(run);
   if (bootstrap.state === "PARTIAL_SUCCESS") {
     const { code, detail } = bootstrap.githubRefusal;
     return {
-      detail: `${where} Keep it. Only the GitHub half did not happen: the daemon reported`
-        + ` ${code} (${detail}). You can add a remote later; nothing local needs redoing.`,
+      detail: `${where} Keep it. ${stopped === "" ? "Only the" : "The"} GitHub half did not happen: the daemon reported`
+        + ` ${code} (${detail}). You can add a remote later; nothing local needs redoing.${stopped === "" ? "" : ` ${stopped}`}`,
       headline: "Product created here. GitHub was not reached.",
       state: "PARTIAL",
     };
   }
   return {
-    detail: `${where}${remoteUrl === null ? "" : ` Remote: ${remoteUrl}.`}`,
-    headline: "Product created.",
-    state: "SUCCESS",
+    detail: `${where}${remoteUrl === null ? "" : ` Remote: ${remoteUrl}.`}${stopped === "" ? "" : ` Keep it. ${stopped}`}`,
+    headline: stopped === "" ? "Product created." : "Product created here. Setup did not complete.",
+    state: stopped === "" ? "SUCCESS" : "PARTIAL",
   };
 }
 
@@ -108,10 +101,11 @@ export function NewProductForm({ busy = false, onCreate, run = null }: NewProduc
   const [owner, setOwner] = useState("");
   const [repoName, setRepoName] = useState("");
   const [visibility, setVisibility] = useState<BootstrapVisibility>(DEFAULT_VISIBILITY);
-  const { acceptFile, prd, submittedPrd } = useGoalPrd();
+  const { acceptFile, prd, read, submittedPrd } = useGoalPrd();
   const words = newProductWords(run);
 
-  const disabled = busy || dir.trim() === "" || productName.trim() === "";
+  const unresolvedPrd = read !== null && (read === "READING" || read.status === "ERROR");
+  const disabled = busy || unresolvedPrd || dir.trim() === "" || productName.trim() === "";
   const submit = (): void => {
     if (disabled) return;
     const name = productName.trim();
@@ -169,6 +163,7 @@ export function NewProductForm({ busy = false, onCreate, run = null }: NewProduc
       {prd === null ? null : (
         <p className="cr2-prd-file" data-testid="cr.newproduct.prd.file">{prd.name}</p>
       )}
+      {read === null ? null : <p role="status" data-testid="cr.newproduct.prd.status">{prdStatusText(read)}</p>}
 
       <fieldset className="cr2-newproduct-github" data-testid="cr.newproduct.github">
         <legend className="cr2-field-label">

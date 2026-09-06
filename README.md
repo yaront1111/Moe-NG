@@ -38,6 +38,10 @@ entry points, environment, and knobs.
   running `<agent command> --version` on the host. Unmeasurable receipts stay
   `UNKNOWN` with their code and layer, an agent CLI that is not installed refuses
   activation outright, and the card never fabricates one.
+  The New product from a PRD form also creates a new local repository, makes
+  exactly one scaffold commit, binds and catalogs it, then creates the PRD-bound
+  goal. This unseeded browser path was measured on 2026-09-06. GitHub is optional;
+  remote creation was not live-proven because no owner or visibility was supplied.
 
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with
@@ -53,6 +57,14 @@ entry points, environment, and knobs.
   accepted. Growth therefore happens inside one goal; replanning into a
   successor goal remains the path for a review that has exhausted its attempts,
   not the path for adding work.
+- **Design step** ([VISION.md](./docs/VISION.md) journey item 4, UX and
+  architecture): running as of 2026-09-06. After Gate 1 approves the contract, a
+  design revision — screens, data model, API surface, components, non-functional
+  decisions — is submitted against it and the operator reads it on the goal, with
+  the version named on the plan-approval fold, so approving a plan states which
+  design that plan was compiled against. A goal planned without a design says so
+  in words rather than showing an empty section. Resubmitting bumps the version
+  and the superseded revision stays readable.
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`, the
   event stream, the affordance surface, and the operator's reads (goals, goal
   source, planning run, product-contract gate, document coverage, runs, policy,

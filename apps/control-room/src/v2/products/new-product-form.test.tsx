@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -9,14 +9,8 @@ import type { GoalDraft } from "../goals/goal-model.js";
 import type { NewProductRequest, NewProductRun } from "./live-new-product.js";
 import { DEFAULT_VISIBILITY, NewProductForm, newProductWords } from "./new-product-form.js";
 
-/**
- * The new-product form. Two obligations are load-bearing and both are one-way mistakes if
- * they go wrong: the GitHub half must read as OPTIONAL so the local-only path stays visible,
- * and BOOTSTRAP_GH_UNAVAILABLE must read as a PARTIAL SUCCESS so an operator does not delete
- * a repository that is real, committed and bound.
- *
- * Every arm stubs fetch with a throw: this form is presentation and must reach no route.
- */
+/** GitHub stays optional and partial success preserves local work.
+ * This presentation form must reach no route. */
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -49,13 +43,8 @@ const runOf = (bootstrap: BootstrapReceiptState): NewProductRun => Object.freeze
   bootstrap, chain: [], dispatch: { commandId: "command-1", ok: true as const }, goal: null,
 });
 
-/**
- * The wording that would make an operator destroy good work. It is a REAL matcher, not a
- * decorative one: the hard-refusal branch below is asserted to trip it, which is the positive
- * control that stops the partial-success absence assertion from passing vacuously.
- */
+/** Hard refusal is the positive control for this destructive-wording matcher. */
 const DESTRUCTIVE_WORDING = /bootstrap failed|was not created|could not be created/iu;
-
 describe("the GitHub half is visibly optional and the local-only path is reachable", () => {
   it("says optional in the labels and submits with every GitHub field empty", async () => {
     stubFetchThatMustNotBeCalled();
@@ -79,6 +68,7 @@ describe("the GitHub half is visibly optional and the local-only path is reachab
     // ABSENT, not empty. An empty object asks for a repository named nothing.
     expect(Object.hasOwn(request, "github")).toBe(false);
     expect(Object.keys(request).sort()).toEqual(["dir", "productName"]);
+    expect(seen[0]?.draft).toBeNull();
   });
 
   it("requests the GitHub half only once an owner is typed, and never invents one", async () => {
@@ -135,10 +125,10 @@ describe("the four outcomes render as operator words with their codes verbatim",
     expect(`${headline} ${detail}`).toMatch(DESTRUCTIVE_WORDING);
   });
 
-  it("keeps a retained local repository out of the total-failure reading", () => {
+  it.each(["BIND", "CATALOG"])("reports the actual binding state after retained %s failure", (stage) => {
     stubFetchThatMustNotBeCalled();
     const refusal = {
-      code: "BOOTSTRAP_BIND_FAILED", detail: "BIND_FAILED_LOCAL_REPOSITORY_RETAINED",
+      code: `BOOTSTRAP_${stage}_FAILED`, detail: `${stage}_FAILED_LOCAL_REPOSITORY_RETAINED`,
       refusedBy: "DAEMON_INGRESS",
     };
     render(<NewProductForm onCreate={() => undefined} run={runOf({
@@ -146,10 +136,13 @@ describe("the four outcomes render as operator words with their codes verbatim",
       refusal, state: "REFUSED",
     })} />);
     const detail = screen.getByTestId("cr.newproduct.outcome.detail").textContent ?? "";
-    expect(detail).toContain("BOOTSTRAP_BIND_FAILED");
-    expect(detail).toContain("BIND_FAILED_LOCAL_REPOSITORY_RETAINED");
+    expect(detail).toContain(refusal.code);
+    expect(detail).toContain(refusal.detail);
     expect(detail).toContain("still on disk");
     expect(detail).not.toContain("No repository was created");
+    expect(screen.getByTestId("cr.newproduct.outcome.headline").textContent).not.toMatch(DESTRUCTIVE_WORDING);
+    expect(detail).toContain(stage === "CATALOG" ? "is already bound" : "not bound");
+    if (stage === "CATALOG") expect(detail).not.toContain("not bound");
   });
 
   it("names the read code when no receipt could be read, and calls it not a refusal", () => {
@@ -181,11 +174,75 @@ describe("the four outcomes render as operator words with their codes verbatim",
   });
 });
 
-/**
- * THE ARM THIS ROW EXISTS FOR. BOOTSTRAPPED carrying a githubRefusal is a PARTIAL SUCCESS:
- * the repository is real, committed and bound. An operator who reads this screen as a failure
- * deletes it, which is the exact harm the row prevents.
- */
+function readyForm(onCreate: (request: NewProductRequest, draft: GoalDraft | null) => void): void {
+  stubFetchThatMustNotBeCalled();
+  render(<NewProductForm onCreate={onCreate} />);
+  fireEvent.change(screen.getByTestId("cr.newproduct.dir"), { target: { value: "D:/projects/demo" } });
+  fireEvent.change(screen.getByTestId("cr.newproduct.name"), { target: { value: "demo" } });
+}
+
+it("does not submit a selected PRD while its bytes are still being read", async () => {
+  const onCreate = vi.fn();
+  readyForm(onCreate);
+  let finish: (text: string) => void = () => { throw new Error("read not initialized"); };
+  const pending = new Promise<string>((resolve) => { finish = resolve; });
+  const file = new File(["# PRD"], "prd.md", { type: "text/markdown" });
+  Object.defineProperty(file, "text", { value: () => pending });
+  fireEvent.change(screen.getByTestId("cr.newproduct.prd"), { target: { files: [file] } });
+  try {
+    fireEvent.click(screen.getByTestId("cr.newproduct.create"));
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("cr.newproduct.prd.status").textContent).toBe("Reading...");
+  } finally { await act(async () => { finish("# PRD"); await pending; }); }
+  await waitFor(() => expect((screen.getByTestId("cr.newproduct.create") as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByTestId("cr.newproduct.create"));
+  expect(onCreate).toHaveBeenCalledExactlyOnceWith({ dir: "D:/projects/demo", productName: "demo" },
+    expect.objectContaining({ prd: expect.objectContaining({ name: "prd.md", text: "# PRD" }) }));
+});
+
+it.each(["PRD_FILE_TOO_LARGE", "PRD_FILE_UNREADABLE"])("keeps %s visible and blocks submission until replacement", async (code) => {
+  const onCreate = vi.fn();
+  readyForm(onCreate);
+  const file = new File(["x".repeat(code === "PRD_FILE_TOO_LARGE" ? 128 * 1024 + 1 : 1)], "bad.md");
+  Object.defineProperty(file, "text", { value: async () => { throw new Error("read refused"); } });
+  fireEvent.change(screen.getByTestId("cr.newproduct.prd"), { target: { files: [file] } });
+  await act(async () => { await Promise.resolve(); });
+  fireEvent.click(screen.getByTestId("cr.newproduct.create"));
+  expect(onCreate).not.toHaveBeenCalled();
+  expect(screen.getByTestId("cr.newproduct.prd.status").textContent).toBe(`Error - ${code} @ CONTROL_ROOM_NEWGOAL`);
+  const replacement = new File(["good"], "good.md");
+  Object.defineProperty(replacement, "text", { value: async () => "good" });
+  fireEvent.change(screen.getByTestId("cr.newproduct.prd"), { target: { files: [replacement] } });
+  await waitFor(() => expect((screen.getByTestId("cr.newproduct.create") as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByTestId("cr.newproduct.create"));
+  expect(onCreate).toHaveBeenCalledExactlyOnceWith({ dir: "D:/projects/demo", productName: "demo" },
+    expect.objectContaining({ prd: expect.objectContaining({ name: "good.md", text: "good" }) }));
+});
+
+it.each(["activation", "goal"])("retains local success but reports the exact downstream %s refusal", (stage) => {
+  stubFetchThatMustNotBeCalled();
+  for (const github of [false, true]) {
+    const bootstrap: BootstrapReceiptState = github
+      ? { state: "PARTIAL_SUCCESS", receipt: { ...RECEIPT, githubRefusal: GH_REFUSAL }, githubRefusal: GH_REFUSAL }
+      : { state: "FULL_SUCCESS", receipt: RECEIPT };
+    const code = stage === "activation" ? "ACTIVATION_POLICY_UNMEASURED" : "GOAL_SOURCE_INVALID";
+    const layer = stage === "activation" ? "DAEMON_ACTIVATION_RECEIPTS" : "DAEMON_INGRESS";
+    const run: NewProductRun = { ...runOf(bootstrap),
+      chain: stage === "activation" ? [{ kind: "project.activate", state: "ANSWERED", outcome: { ok: false, code, layer } }] : [],
+      goal: stage === "goal" ? { ok: false, report: `${code} @ ${layer}` } : null };
+    render(<NewProductForm onCreate={() => undefined} run={run} />);
+    expect(screen.getByTestId("cr.newproduct.outcome").getAttribute("data-state")).toBe("PARTIAL");
+    const detail = screen.getByTestId("cr.newproduct.outcome.detail").textContent ?? "";
+    expect(detail).toContain("exists, is committed");
+    expect(detail).toContain("is bound to this project");
+    expect(detail).toContain(code); expect(detail).toContain(layer);
+    if (github) expect(detail).toContain(GH_REFUSAL.code);
+    expect(detail).not.toMatch(DESTRUCTIVE_WORDING);
+    cleanup();
+  }
+});
+
+/** A GitHub refusal must never tell an operator to discard the committed local repository. */
 describe("BOOTSTRAP_GH_UNAVAILABLE renders as a partial success, never a failure", () => {
   it("says the repository exists and is bound, shows the code, and never says it failed", () => {
     stubFetchThatMustNotBeCalled();

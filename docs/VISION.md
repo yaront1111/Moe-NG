@@ -27,7 +27,7 @@ engine — not the product promise.
 1. PRD
 2. Clarify and validate
 3. **Product Contract** — Gate 1: approve
-4. UX and architecture
+4. **UX and architecture** — running since 2026-09-06
 5. Implementation plan
 6. Parallel development
 7. **Contract amendment** when a requirement is measured unbuildable as written — Gate 1½ *(proposed)*
@@ -124,7 +124,8 @@ always spawning a fixed agent team.
 
 "Any PRD" would fail. Start with **TypeScript web applications: React, Node,
 PostgreSQL, GitHub, containerized deployment, browser-based acceptance tests.**
-Support exceptionally well: new repository creation; authentication and
+Support exceptionally well: new repository creation (local browser bootstrap
+measured 2026-09-06; GitHub creation not live-proven); authentication and
 authorization; database schema and migrations; responsive UI; API; testing;
 deployment; observability; security; documentation. Build a benchmark of 20–30
 representative PRDs. Do not expand to mobile, desktop, embedded, games, or
@@ -138,7 +139,10 @@ Claude and Codex; isolated verifier; working browser preview; proof-carrying
 GitHub PR. *(proposed bar)* survives a crash **mid-write**, with recovery
 provable from durable records alone, never from agent memory.
 
-**Stage 2 — PRD → deployed MVP:** repository bootstrapping; infrastructure
+**Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
+browser path creates one commit, binds and catalogs the repository, and creates
+a PRD-bound goal, measured 2026-09-06; owner-directed GitHub creation remains
+unproven); infrastructure
 generation; preview and production deployment; secrets and environment
 management; database migrations; monitoring, backup, and rollback; release
 evidence.

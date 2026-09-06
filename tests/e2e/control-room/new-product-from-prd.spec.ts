@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { withDaemonBackedControlRoom } from "./daemon-ports.js";
+import { readWireProtocolVersion, withDaemonBackedControlRoom } from "./daemon-ports.js";
 import type { DaemonLane } from "./daemon-ports.js";
 
 /**
@@ -51,26 +52,16 @@ const sleep = (ms: number): Promise<void> => new Promise((done) => { setTimeout(
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Reads the version the generated client pins, the way publish-remote.spec.ts does. */
-function wireProtocolVersion(repoRoot: string): string {
-  const source = readFileSync(
-    join(repoRoot, "packages", "control-room-client", "src", "generated", "generated-client.ts"),
-    "utf8",
-  );
-  const found = /GENERATED_CONTRACT_PINS[^}]*?commandEnvelopeVersion:\s*"([^"]+)"/su.exec(source);
-  const version = found?.[1] ?? "";
-  expect(version, "the generated wire protocol version must load").not.toBe("");
-  return version;
-}
-
 /** Asks the DAEMON the same question the page asks, with the credentials the bundle carries. */
 async function askDaemon(lane: DaemonLane, path: string, body: string): Promise<unknown> {
+  const protocolVersion = await readWireProtocolVersion(lane.repoRoot);
+  expect(protocolVersion, "the generated wire protocol version must load").not.toBeNull();
   const response = await fetch(`${lane.baseUrl}${path}`, {
     body,
     headers: {
       "content-type": "application/json",
       "x-moe-csrf": lane.csrfToken,
-      "x-moe-protocol-version": wireProtocolVersion(lane.repoRoot),
+      "x-moe-protocol-version": protocolVersion ?? "",
       "x-moe-session-credential": lane.credential,
     },
     method: "POST",
@@ -113,8 +104,10 @@ test("a PRD and a directory become a bound repository and a goal, in the browser
   // OUTSIDE the repository and outside the lane's own scratch, so nothing this spec creates
   // can be mistaken for the checkout or for lane state. Registered for teardown immediately,
   // before anything can throw.
-  const productDir = mkdtempSync(join(tmpdir(), "moe-newproduct-"));
-  created.push(productDir);
+  const parentDir = mkdtempSync(join(tmpdir(), "moe-newproduct-"));
+  created.push(parentDir);
+  const productDir = join(parentDir, PRODUCT_NAME);
+  expect(existsSync(productDir), "the browser must create the submitted directory").toBe(false);
 
   const outcome = await withDaemonBackedControlRoom({
     approval: "HUMAN",
@@ -172,7 +165,7 @@ test("a PRD and a directory become a bound repository and a goal, in the browser
     expect(isRecord(receiptBody) && receiptBody["outcome"]).toBe("BOOTSTRAP_READ");
     const receipt = isRecord(receiptBody) ? receiptBody["receipt"] : null;
     expect(isRecord(receipt), `the daemon holds a durable receipt: ${JSON.stringify(receiptBody)}`).toBe(true);
-    if (!isRecord(receipt)) return { commits: lines.length, productHead };
+    if (!isRecord(receipt)) throw new Error("bootstrap receipt missing");
     expect(receipt["outcome"], "the daemon's own verdict").toBe("BOOTSTRAPPED");
     expect(receipt["refusal"]).toBeNull();
     expect(receipt["githubRefusal"], "no GitHub half was requested, so none was refused").toBeNull();
@@ -189,8 +182,14 @@ test("a PRD and a directory become a bound repository and a goal, in the browser
 
     // 5. THE PROJECT IS IN THE MANAGER CATALOG, read from the file the daemon wrote.
     expect(existsSync(lane.catalogPath), "the daemon wrote the manager catalog").toBe(true);
-    const catalog = readFileSync(lane.catalogPath, "utf8");
-    expect(catalog, `manager catalog at ${lane.catalogPath}`).toContain(PRODUCT_NAME);
+    const catalog: unknown = JSON.parse(readFileSync(lane.catalogPath, "utf8"));
+    const entries: unknown = isRecord(catalog) ? catalog["entries"] : null;
+    expect(Array.isArray(entries), "the manager catalog exposes its entries").toBe(true);
+    if (!Array.isArray(entries)) throw new Error("manager catalog entries missing");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ projectId: lane.projectId, title: PRODUCT_NAME });
+    expect(String((entries[0] as Record<string, unknown>)["root"]).replaceAll("\\", "/"))
+      .toBe(productDir.replaceAll("\\", "/"));
 
     // 6. THE PRD GOAL EXISTS AND THE LANE CONTINUES. The card reports the goal the daemon
     // accepted, and /goals/read is the durable catalog behind it - the card alone would only
@@ -198,14 +197,32 @@ test("a PRD and a directory become a bound repository and a goal, in the browser
     await expect(page.getByTestId("cr.newproduct.goal"), "the PRD goal was created")
       .toHaveText(`Goal created: ${PRODUCT_NAME}`, { timeout: RUN_MS });
     const goals = await askDaemon(lane, "/goals/read", "{}");
-    expect(JSON.stringify(goals), "the goal is in the daemon's durable catalog")
-      .toContain(PRODUCT_NAME);
+    expect(isRecord(goals) && goals["outcome"]).toBe("GOALS");
+    const rows: unknown = isRecord(goals) ? goals["goals"] : null;
+    expect(Array.isArray(rows), "the goal is in the daemon durable catalog").toBe(true);
+    if (!Array.isArray(rows)) throw new Error("goal catalog rows missing");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      brief: { title: PRODUCT_NAME },
+      binding: {
+        byteLength: Buffer.byteLength(PRD_TEXT, "utf8"),
+        contentSha256: createHash("sha256").update(PRD_TEXT, "utf8").digest("hex"),
+        sourceAggregateId: expect.any(String), sourceRef: expect.any(String),
+      },
+    });
 
-    return { commits: lines.length, productHead };
+    return {
+      commits: lines.length, productHead, receiptDecidedAt: receipt["decidedAt"],
+      receiptId: `${lane.projectId}-bootstrap`, remoteUrl: receipt["remoteUrl"],
+      githubRefusal: receipt["githubRefusal"],
+    };
   });
 
   expect(outcome.ok, `lane opened${outcome.ok ? "" : `: ${outcome.code} ${outcome.detail}`}`)
     .toBe(true);
   if (!outcome.ok) return;
   expect(outcome.value.commits, "exactly one commit in the new repository").toBe(1);
+  // The receipt has no standalone id field: its durable key is the project bootstrap aggregate.
+  // Only checked local facts are reported, after the lane teardown; no credential is included.
+  console.info(`[new-product-local-receipt] ${JSON.stringify(outcome.value)}`);
 });
