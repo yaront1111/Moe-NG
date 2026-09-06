@@ -32,10 +32,8 @@ import {
   shutdownWrapperRuntime,
 } from "./process-runner-lifecycle.js";
 import type { WrapperStopSignal } from "./process-runner-lifecycle.js";
-import {
-  createVerifierProcessRunner,
-  VerifierProcessCancelledError,
-} from "./verifier-process-runner.js";
+import { VerifierProcessCancelledError } from "./verifier-process-runner.js";
+import { createVerifierDatabaseRunner } from "./verifier-database.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
@@ -156,7 +154,7 @@ async function main(): Promise<void> {
     const staffingFence = createAgentSessionFence({
       isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,
     });
-    verifierRunner = createVerifierProcessRunner({ onFatalContainment: () => { stop.request(); } });
+    verifierRunner = createVerifierDatabaseRunner({ onFatalContainment: () => { stop.request(); } });
     delivery = createRepositoryDeliveryRuntime({
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
