@@ -195,10 +195,20 @@ test("a fresh project goes from empty store to a created goal, in the browser al
 
     // EVERY CHAIN STEP RECORDS, and each one is asserted OK by its own kind rather than by a
     // count — a count would pass with four refusals.
+    //
+    // `data-ok` ALONE IS NOT ENOUGH, and the reason is in the card: StepRow sets
+    // `ok = done || step.outcome.ok`, where `done` is the ALREADY_COMMITTED state
+    // (activation-screen.tsx:96-97). So a chain that committed NOTHING because every command
+    // was already committed renders `data-ok="true"` on every row. On this lane the store is
+    // empty and the refusal above proves nothing was committed before the click, but an arm
+    // that cannot tell "accepted" from "already done" would stop proving that the moment the
+    // lane's seed mode changed. The word the card renders is the discriminator, so assert it.
     for (const kind of ACTIVATION_CHAIN_KINDS) {
       const step = page.getByTestId(`cr.activate.step.${kind}`);
       await expect(step, `chain step ${kind}`).toBeVisible({ timeout: CHAIN_MS });
       await expect(step, `chain step ${kind} accepted`).toHaveAttribute("data-ok", "true");
+      await expect(step, `chain step ${kind} committed on THIS click`)
+        .toContainText("accepted");
     }
 
     // THE POINT OF THE ROW: the SAME draft the daemon just refused now succeeds, with nothing
