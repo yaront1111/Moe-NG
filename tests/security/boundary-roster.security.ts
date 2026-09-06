@@ -818,11 +818,11 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 73 module-private declarations against those 73 plus the 179 exported ones.
+ * 74 module-private declarations against those 74 plus the 179 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 252;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 290;
+const EXPECTED_INVISIBLE_DENOMINATOR = 253;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 292;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

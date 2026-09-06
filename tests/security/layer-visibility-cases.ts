@@ -148,13 +148,13 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 61 at
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 62 at
  * this HEAD; the single wide-only name is PRODUCT_CONTRACT_GATE_1_READ_LAYER, hidden twice
  * over — module-private AND digit-bearing. Quoting a private count against an exported count
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 73;
+const EXPECTED_PRIVATE_COUNT = 74;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -164,11 +164,12 @@ const EXPECTED_PRIVATE_COUNT = 73;
  * to make the population a number that cannot move without an arm going red.
  */
 const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
-  // Browser-only answer stamps: four live read decoders, two offer consumers, and
+  // Browser-only answer stamps: five live read decoders, two offer consumers, and
   // the advanced read-frame adapter. Enumerated individually; no scanner exemption.
   { constant: "LIVE_ACTIVATION_LAYER", file: "apps/control-room/src/live/live-activation.ts" },
   { constant: "LIVE_GRAPH_GET_LAYER", file: "apps/control-room/src/live/live-graph-get.ts" },
   { constant: "LIVE_GATE_1_LAYER", file: "apps/control-room/src/live/live-product-contract-gate-1.ts" },
+  { constant: "LIVE_PREVIEW_LAYER", file: "apps/control-room/src/live/live-preview.ts" },
   { constant: "LIVE_REPOSITORY_REMOTE_LAYER", file: "apps/control-room/src/live/live-repository-remote.ts" },
   { constant: "PREVIEW_LAYER", file: "apps/control-room/src/v2/approvals/preview-port.ts" },
   { constant: "DEPLOY_LAYER", file: "apps/control-room/src/v2/goals/deploy-port.ts" },

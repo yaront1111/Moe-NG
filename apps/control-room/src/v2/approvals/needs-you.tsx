@@ -6,6 +6,8 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
+import { PreviewCard } from "./preview-card.js";
+import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
 
 /**
@@ -35,6 +37,10 @@ export interface NeedsYouProps {
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
   /** Spends the daemon's offer this item carries; absent means no inline decision. */
   readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice) => void) | undefined;
+  /** Spends the PREVIEW item's `preview.decide` offer. Absent means the card renders read-only. */
+  readonly onPreviewDecide?: ((
+    item: NeedsYouItem, decision: PreviewDecision, findings: readonly PreviewFinding[],
+  ) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
 }
 
@@ -43,6 +49,7 @@ const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
   GATE_1: "Product contract",
   PLAN_APPROVAL: "Plan",
   PLAN_REJECTED: "Plan sent back",
+  PREVIEW: "Gate 2",
   READY_TO_CLOSE: "Ready to close",
 });
 
@@ -96,10 +103,11 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
-function DecisionCard({ item, onDecide, onOpenBoard, result }: {
+function DecisionCard({ item, onDecide, onOpenBoard, onPreviewDecide, result }: {
   readonly item: NeedsYouItem;
   readonly onDecide: NeedsYouProps["onDecide"];
   readonly onOpenBoard: NeedsYouProps["onOpenBoard"];
+  readonly onPreviewDecide: NeedsYouProps["onPreviewDecide"];
   readonly result: DecisionResult | undefined;
 }): JSX.Element {
   const [armed, setArmed] = useState(false);
@@ -115,6 +123,14 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
         <p className="cr2-slot-kicker">{`${KIND_EYEBROW[item.kind]} ${MIDDOT} ${item.title}`}</p>
         <h2 className="cr2-needs-headline">{item.headline}</h2>
         <p className="cr2-needs-detail">{item.detail}</p>
+        {item.preview === undefined || onPreviewDecide === undefined ? null : (
+          <PreviewCard
+            accepted={done}
+            busy={result?.busy === true}
+            facts={item.preview}
+            onDecide={(decision, findings): void => onPreviewDecide(item, decision, findings)}
+          />
+        )}
       </div>
       <div className="cr2-needs-action">
         {decision === null || onDecide === undefined ? null : (
@@ -177,7 +193,9 @@ function DecisionCard({ item, onDecide, onOpenBoard, result }: {
   );
 }
 
-export function NeedsYou({ data, decisionResults, onDecide, onOpenBoard }: NeedsYouProps): JSX.Element {
+export function NeedsYou({
+  data, decisionResults, onDecide, onOpenBoard, onPreviewDecide,
+}: NeedsYouProps): JSX.Element {
   return (
     <section className="cr2-needs" data-testid="cr.needsyou.root">
       <div className="cr2-needs-bar">
@@ -202,6 +220,7 @@ export function NeedsYou({ data, decisionResults, onDecide, onOpenBoard }: Needs
               key={`${item.kind}:${decisionKeyOf(item)}`}
               onDecide={onDecide}
               onOpenBoard={onOpenBoard}
+              onPreviewDecide={onPreviewDecide}
               result={decisionResults?.get(decisionKeyOf(item))}
             />
           ))}

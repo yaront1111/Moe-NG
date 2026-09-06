@@ -6,15 +6,20 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { createGoalCatalogFeed } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { readPreview } from "../../live/live-preview.js";
+import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { useGoalCoverage } from "../goals/use-goal-coverage.js";
+import { useGoalReads } from "../goals/use-goal-reads.js";
 import type { CoverageReader } from "../goals/use-goal-coverage.js";
 import { createEscalationPort } from "./escalation-port.js";
 import type { EscalationPort } from "./escalation-port.js";
 import { createReplanSuccessorPort } from "./replan-successor-port.js";
 import type { ReplanSuccessorPort } from "./replan-successor-port.js";
 import type { NeedsYouChoice } from "./needs-you.js";
+import { createPreviewPort } from "./preview-port.js";
+import type { PreviewDecision, PreviewFinding, PreviewPort } from "./preview-port.js";
 import { createGoalClosePort } from "./goal-close-port.js";
 import type { GoalClosePort } from "./goal-close-port.js";
 import { NeedsYou, decisionKeyOf } from "./needs-you.js";
@@ -46,14 +51,18 @@ export interface LiveNeedsYouProps {
   readonly onCount?: ((count: number) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   readonly readCoverage?: CoverageReader | undefined;
+  /** Injectable for tests; the default reads POST /preview/read with the session headers. */
+  readonly readPreview?: ((goalId: string) => Promise<PreviewReadOutcome>) | undefined;
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly previewPort?: PreviewPort | undefined;
   /** Injectable for tests; the default reads POST /runs/read with the session's headers. */
   readonly readRuns?: (() => Promise<RunsOutcome>) | undefined;
   readonly setup: LiveSetup;
 }
 
 export function LiveNeedsYou({
-  closePort, escalationPort, onConnection, onCount, onOpenBoard, readCoverage, readRuns: readRunsProp, setup,
-  successorPort,
+  closePort, escalationPort, onConnection, onCount, onOpenBoard, previewPort, readCoverage,
+  readPreview: readPreviewProp, readRuns: readRunsProp, setup, successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
@@ -62,6 +71,9 @@ export function LiveNeedsYou({
   const [runsReader] = useState(() => readRunsProp ?? ((): Promise<RunsOutcome> => readRuns(setup.headers)));
   const [escalate] = useState(() => escalationPort ?? createEscalationPort(setup));
   const [close] = useState(() => closePort ?? createGoalClosePort(setup));
+  const [preview] = useState(() => previewPort ?? createPreviewPort(setup));
+  const [previewReader] = useState(() => readPreviewProp
+    ?? ((goalId: string): Promise<PreviewReadOutcome> => readPreview(goalId, setup.headers)));
 
   const feed = useMemo(() => createBoardFeed({
     headers: setup.headers,
@@ -91,8 +103,10 @@ export function LiveNeedsYou({
   }, [runsReader]);
 
   const coverage = useGoalCoverage(catalog, readCoverage);
+  const previews = useGoalReads(catalog, previewReader);
   const data = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, runs, surface }), [catalog, coverage, runs, surface],
+    () => deriveNeedsYou({ catalog, coverage, previews, runs, surface }),
+    [catalog, coverage, previews, runs, surface],
   );
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;
@@ -121,7 +135,33 @@ export function LiveNeedsYou({
       }));
     });
   }, [close, escalate, runs, successor]);
+  // GATE 2. The offer is the daemon's and the port spends it verbatim; the result is kept
+  // under the goal, which is the key `decisionKeyOf` gives a PREVIEW item.
+  const onPreviewDecide = useCallback((
+    item: NeedsYouItem, decision: PreviewDecision, findings: readonly PreviewFinding[],
+  ) => {
+    const facts = item.preview;
+    if (facts === undefined) return;
+    const key = decisionKeyOf(item);
+    setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
+    void preview.submit(facts.affordance, decision, findings).then((outcome) => {
+      setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
+    }, () => {
+      setResults((previous) => new Map(previous).set(key, {
+        busy: false,
+        outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
+      }));
+    });
+  }, [preview]);
   useEffect(() => { onCount?.(data.items.length); }, [data.items.length, onCount]);
 
-  return <NeedsYou data={data} decisionResults={results} onDecide={onDecide} onOpenBoard={onOpenBoard} />;
+  return (
+    <NeedsYou
+      data={data}
+      decisionResults={results}
+      onDecide={onDecide}
+      onOpenBoard={onOpenBoard}
+      onPreviewDecide={onPreviewDecide}
+    />
+  );
 }

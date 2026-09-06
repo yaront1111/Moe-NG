@@ -1,14 +1,17 @@
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
+import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { ROUTE_WORDS } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
 import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
+import { previewOfferFor } from "./needs-you-preview.js";
+import type { PreviewFacts } from "./needs-you-preview.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
- * from things the daemon already states. Five kinds of item:
+ * from things the daemon already states. Six kinds of item:
  *
  *  - PLAN_APPROVAL: the affordance surface OFFERS `approval.decide_intent` for a goal's
  *    planning run. The offer is the daemon's own statement that the run is in review and
@@ -22,6 +25,10 @@ import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
  *  - ESCALATION: the surface OFFERS `escalation.decide` for a node, which the daemon does
  *    only when three review rounds failed and the kernel refuses more until a human decides.
  *    The runs read names the goal the node belongs to.
+ *  - PREVIEW: the surface OFFERS `preview.decide` for a goal whose preview receipt says
+ *    STARTED. That is Gate 2 - the operator looks at their product actually running and
+ *    says whether it is good enough. `needs-you-preview.ts` states the four facts that
+ *    must all hold; a goal with no receipt yields NO item rather than a dead control.
  *  - GATE_1: the coverage read says a Product Contract citing the goal's PRD is still
  *    PENDING at Gate 1 (the same fact the goal card's "Needs you" flag rests on).
  *  - READY_TO_CLOSE: every criterion the contract states is VERIFIED, every citing contract
@@ -33,7 +40,7 @@ import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
  */
 
 export const NEEDS_YOU_KINDS = [
-  "PLAN_APPROVAL", "PLAN_REJECTED", "ESCALATION", "GATE_1", "READY_TO_CLOSE",
+  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "ESCALATION", "GATE_1", "READY_TO_CLOSE",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
@@ -61,6 +68,8 @@ export interface NeedsYouItem {
   readonly headline: string;
   readonly kind: NeedsYouKind;
   readonly planningRunRef: string;
+  /** Present only for a PREVIEW item: the running url, its captures and the offer. */
+  readonly preview?: PreviewFacts | undefined;
   readonly title: string;
 }
 
@@ -74,12 +83,15 @@ export interface NeedsYouData {
 export interface NeedsYouInput {
   readonly catalog: GoalCatalogFrame | null;
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
+  /** One preview read per goal, keyed by goalId; absent means the read has not answered. */
+  readonly previews?: ReadonlyMap<string, PreviewReadOutcome> | undefined;
   readonly runs?: RunsOutcome | null | undefined;
   readonly surface: SurfaceFrame | null;
 }
 
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, ESCALATION: 2, GATE_1: 3, READY_TO_CLOSE: 4,
+  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, ESCALATION: 3, GATE_1: 4,
+  READY_TO_CLOSE: 5,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -95,6 +107,8 @@ function itemsFor(
   entry: LiveGoalCatalogEntry,
   coverage: DocumentCoverageOutcome | undefined,
   surface: SurfaceFrame | null,
+  previews: NeedsYouInput["previews"],
+  runs: RunsOutcome | null | undefined,
 ): NeedsYouItem[] {
   const title = entry.brief?.title ?? entry.goalId;
   const base = { goalId: entry.goalId, planningRunRef: entry.planningRunRef, title };
@@ -125,6 +139,13 @@ function itemsFor(
         + " Nothing needs you until it is offered for approval.",
       headline: "The plan you sent back is being re-planned",
       kind: "PLAN_REJECTED",
+    }));
+  }
+  const preview = previewOfferFor(entry.goalId, previews?.get(entry.goalId), surface, runs);
+  if (preview !== null) {
+    items.push(Object.freeze({
+      ...base, actionLabel: preview.actionLabel, detail: preview.detail,
+      headline: preview.headline, kind: "PREVIEW", preview: preview.facts,
     }));
   }
   if (coverage?.status === "COVERAGE") {
@@ -195,7 +216,7 @@ function escalationItems(
 }
 
 export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
-  const { catalog, coverage, runs, surface } = input;
+  const { catalog, coverage, previews, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
       countLabel: "Waiting for goals", items: Object.freeze([]),
@@ -209,7 +230,8 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
     });
   }
   const items = [
-    ...catalog.goals.flatMap((entry) => itemsFor(entry, coverage.get(entry.goalId), surface)),
+    ...catalog.goals.flatMap((entry) =>
+      itemsFor(entry, coverage.get(entry.goalId), surface, previews, runs)),
     ...escalationItems(surface, runs, catalog),
   ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));

@@ -1,7 +1,9 @@
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { pauseResetWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
+import { previewStage } from "./goal-status-preview.js";
 import { planSentBack } from "./plan-run-resolution.js";
 import { DEPENDS_TOKEN_PREFIX } from "./work-labels.js";
 
@@ -21,6 +23,7 @@ export type GoalStage =
   | "NO_PRD"
   | "PLAN"
   | "PLAN_REJECTED"
+  | "PREVIEW"
   | "READY_TO_CLOSE"
   | "REPLANNED"
   | "UNKNOWN"
@@ -164,6 +167,8 @@ export function deriveGoalStatus(input: {
   readonly goalId: string;
   /** The shell-wide provider pause, or null when none is known. Only WORKING reads it. */
   readonly paused?: ProviderPause | null | undefined;
+  /** This goal's preview receipt read, or null/absent when it has not answered. */
+  readonly preview?: PreviewReadOutcome | null | undefined;
   readonly runId: string;
   readonly surface: SurfaceFrame | null;
 }): GoalStatus {
@@ -223,6 +228,10 @@ export function deriveGoalStatus(input: {
       anchor: "needs-you", detail: "Allow more attempts from Needs you, or read the findings on the board to see what kept failing.", label: "Decide the escalation",
     }, { agents, progress });
   }
+  // BEFORE READY_TO_CLOSE on purpose: a product that is up and waiting for a verdict is what
+  // the operator should look at, even once every criterion is verified.
+  const gate2 = previewStage(input.preview);
+  if (gate2 !== null) return status(gate2.stage, gate2.headline, gate2.next, { agents, progress });
   const complete = progress !== null && progress.verified === progress.criteria
     && covered !== null && covered.contracts.length > 0;
   if (complete && OPEN_LIFECYCLES.includes(lifecycle ?? "")) {

@@ -130,9 +130,11 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/
  * /v2/product-contract/pending/read (gate1-approval.ts), not current.
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
- * /preview/read: task-4a6e7bdbef9a4344829a7ce49c6fb378 lands the daemon receipt read and the
- * capture-bytes route; task-33ceae56edc348e9864bc592430fa1d0 supplies the preview card that
- * consumes them and retires this entry.
+ * /preview/read WAS listed here and is now RETIRED, exactly as the entry said it would be:
+ * task-4a6e7bdbef9a4344829a7ce49c6fb378 landed the daemon receipt read and the capture-bytes
+ * route, and task-33ceae56edc348e9864bc592430fa1d0 supplies the preview card that fetches
+ * both. `/preview/capture` moves to the permitted-non-JSON list below rather than here: it is
+ * consumed and served, but it answers image bytes outside JSON_ROUTES.
  *
  * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
  * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
@@ -159,27 +161,27 @@ const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
   "/environments/read",
   "/events/resume",
-  // The preview receipt read. This row (task-4a6e7bdbef9a4344829a7ce49c6fb378) lands the
-  // DAEMON half only — the JSON receipt read and the capture-bytes route beneath it. The
-  // Needs-you preview card that fetches them, renders the loopback url as a link and the
-  // captures inline, is task-33ceae56edc348e9864bc592430fa1d0, which declares dependsOn
-  // against this row and RETIRES THIS ENTRY in the same edit that adds its consumer — exactly
-  // as task-e6000b57, task-1c9587ed and task-80322112 retired the three entries above it.
-  // The capture route is not listed here because it is not a JSON_ROUTES member; it is
-  // proxied-but-not-rostered, and the arm below names it there instead.
-  "/preview/read",
+  // `/release/read`, the release evidence read. The daemon half lands here
+  // (task-2b8431705baf4db5aafa750b5d0b5148); the Release card that fetches it is
+  // task-817d893fa1254a4d82d2888af1f87a47, which declares dependsOn against this row and
+  // RETIRES THIS ENTRY in the same edit that adds its consumer — exactly as task-e6000b57,
+  // task-1c9587ed, task-80322112 and the `/preview/read` entry above it were retired.
+  "/release/read",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
 ]);
 
 /**
- * Pairing/bootstrap paths the browser DOES fetch that live outside JSON_ROUTES.
- * The proxy list at the arm below also names `/session/pair`; no production
- * module fetches that tombstone, so consumption equality uses the four that
- * live-handshake.ts and live-keyed-session.ts actually call.
+ * Paths the browser DOES fetch that live outside JSON_ROUTES. The proxy list at the arm
+ * below also names `/session/pair`; no production module fetches that tombstone, so
+ * consumption equality uses the four that live-handshake.ts and live-keyed-session.ts
+ * actually call. `/preview/capture` joins them for a different reason: it IS served, but as
+ * image bytes matched by prefix ahead of the roster check, so it can never be a JSON_ROUTES
+ * member. live-preview.ts builds its url and the preview card renders it as an <img> src.
  */
 const PERMITTED_CONSUMED_NON_JSON_ROUTES: readonly string[] = Object.freeze([
-  "/bootstrap", "/session/pair/claim", "/session/pair/open", "/session/pair/request",
+  "/bootstrap", "/preview/capture", "/session/pair/claim", "/session/pair/open",
+  "/session/pair/request",
 ]);
 
 /**
@@ -334,7 +336,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(33);
+    expect(roster.size).toBe(34);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");

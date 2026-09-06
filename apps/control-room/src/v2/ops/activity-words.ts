@@ -21,6 +21,8 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "plan.propose": "proposed a plan",
   "planning.submit_decomposition": "submitted a compiled plan",
   "policy.install": "installed a policy slice",
+  "preview.decide": "decided the preview",
+  "preview.start": "started a preview of the product",
   "policy.validate": "evaluated the policy",
   "product_contract.answer_clarification": "answered a contract question",
   "product_contract.approve_gate_1": "approved the Product Contract at Gate 1",
@@ -65,10 +67,55 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
     if (verdict === "ALLOW_MORE_ATTEMPTS") return "allowed more review attempts";
     return `decided the exhausted review: ${verdict}`;
   }
+  if (commandKind === "preview.decide") {
+    if (verdict === "APPROVE") return "approved the running product";
+    if (verdict === "REJECT") return "sent the running product back with findings";
+    return `decided the preview: ${verdict}`;
+  }
   if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {
     return verdict === "APPROVE" ? "approved the plan" : verdict === "REJECT" ? "rejected the plan" : kindWords(commandKind);
   }
   return `${kindWords(commandKind)} (${verdict})`;
+}
+
+/**
+ * WHY A PREVIEW DID NOT RUN, in a person's words. Every sentence says what happened AND what
+ * the operator can do about it, because a refusal an operator cannot act on is just a wall.
+ *
+ * THE CODE IS SHOWN ALONGSIDE THE WORDS, NEVER INSTEAD OF THEM - `previewCodeSaid` composes
+ * both - and an UNROSTERED code falls through to the code ITSELF rather than to nothing. A map
+ * that silently swallowed an unknown code would leave a person staring at an empty card with
+ * no string to search for; the daemon can mint a fifth code without this file being edited.
+ */
+const PREVIEW_CODE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  PREVIEW_COMMAND_MISSING: "The preview command is not installed on this machine, so there was"
+    + " nothing to run. Install it, or set the command this project previews with, then start"
+    + " the preview again.",
+  PREVIEW_DECISION_INVALID: "The daemon refused the verdict as written. Send it back with at"
+    + " least one finding against a node, or approve it; an empty finding is not a decision.",
+  PREVIEW_GOAL_NOT_LANDED: "This goal has no landed commit yet, so there is no build to preview."
+    + " Wait for the work to land, then start the preview.",
+  PREVIEW_START_TIMEOUT: "The product did not answer before the daemon stopped waiting. It may"
+    + " still be starting, or it may be failing on launch - start the preview again, and read"
+    + " the board if it times out twice.",
+});
+
+/**
+ * The sentence for a refusal code; an unrostered code renders VERBATIM, never blank.
+ *
+ * `Object.hasOwn` AND NOT a bare index: a plain-object map answers `toString` and
+ * `constructor` from Object.prototype, so `PREVIEW_CODE_WORDS[code] ?? code` would render
+ * `[Function toString]` to an operator for a code spelled that way. A refusal code arrives
+ * from the wire, so "no daemon would send that" is not a guarantee this function may rely on.
+ */
+export function previewCodeWords(code: string): string {
+  return Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] ?? code : code;
+}
+
+/** The words AND the code, in that order, so a person can read it and still search for it. */
+export function previewCodeSaid(code: string): string {
+  const words = Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] : undefined;
+  return words === undefined ? code : `${words} (${code})`;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
