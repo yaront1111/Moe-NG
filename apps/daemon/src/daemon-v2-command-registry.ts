@@ -59,6 +59,7 @@ export function createDaemonV2CommandPorts(
   // Read every injected dependency once. The command plane must not be
   // retargetable after construction through getters or a mutable options bag.
   const clock = options.clock;
+  const deploymentDeploy = options.deploymentDeploy;
   const cutoverActivation = options.cutoverActivation;
   const eventSubscriberId = options.eventSubscriberId;
   const foundationCatalogSource = options.foundationCatalogSource;
@@ -72,6 +73,7 @@ export function createDaemonV2CommandPorts(
   const shared = createDaemonCommandPorts({
     authorityPlane: "V2", clock, operatorPrincipalId, projectId, store,
     ...(releaseDecide === undefined ? {} : { releaseDecide }),
+    ...(deploymentDeploy === undefined ? {} : { deploymentDeploy }),
     ...(cutoverActivation === undefined ? {} : { cutoverActivation }),
     ...(eventSubscriberId === undefined ? {} : { eventSubscriberId }),
     ...(foundationCatalogSource === undefined ? {} : { foundationCatalogSource }),

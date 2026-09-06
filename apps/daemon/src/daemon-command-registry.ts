@@ -52,7 +52,7 @@ import {
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
-import type { RepositoryBootstrapSeams, ReleaseDecideSeams } from "./daemon-command-async-entries.js";
+import type { DeploymentDeploySeams, RepositoryBootstrapSeams, ReleaseDecideSeams } from "./daemon-command-async-entries.js";
 import { runDesignSubmitEdge } from "./daemon-command-design.js";
 import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
@@ -156,6 +156,7 @@ export interface DaemonCommandPortOptions {
   /** `repository.bootstrap`'s two injectable halves. ABSENT means the real `gh` CLI and the
    *  real manager catalog — production passes nothing. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
+  readonly deploymentDeploy?: DeploymentDeploySeams;
   readonly store: SqliteEventStore;
   /** The daemon-startup VERIFICATION catalog: the host-scoped argv authority the
    *  recipe seal derives its command from. OPTIONAL on the same terms as the
@@ -300,6 +301,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { previewWorkspace: options.previewWorkspace }),
       ...(options.repositoryBootstrap === undefined
         ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
+      ...(options.deploymentDeploy === undefined
+        ? {} : { deploymentDeploy: options.deploymentDeploy }),
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
       ...(options.foundationContextSeal === undefined

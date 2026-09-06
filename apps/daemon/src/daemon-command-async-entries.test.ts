@@ -1,7 +1,10 @@
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
-import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { SqliteEventStore } from "@moe/store";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BOOTSTRAP_HANDLERS } from "./bootstrap/bootstrap-services.js";
 import { closeStores, driveThrough, openStore, PROJECT_ID }
@@ -9,9 +12,13 @@ import { closeStores, driveThrough, openStore, PROJECT_ID }
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { DomainRefusal } from "./daemon-command-dispatch.js";
+import { activateV2Directly } from "./cutover/v2-activation-test-fixtures.js";
+import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
+import * as deployService from "./deployment/deploy-service.js";
 import { DEPLOY_BUILD_CONTEXT_UNCONFIGURED } from "./deployment/deploy-command.js";
 import { readDeployLedger } from "./deployment/deploy-ledger.js";
-import { createDockerDouble } from "./deployment/deploy-ports.js";
+import { createDockerDouble, nodeDockerRunner } from "./deployment/deploy-ports.js";
 import type { DockerDouble, DeployTarget } from "./deployment/deploy-ports.js";
 import { deployImageTag } from "./deployment/deploy-receipt-contracts.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
@@ -38,6 +45,7 @@ import { REPOSITORY_BOOTSTRAP_COMMAND_KIND }
  */
 
 afterEach(closeStores);
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 const OPERATOR = "principal-1";
 const AGENT = "agent-7";
@@ -49,6 +57,58 @@ const DECIDED_AT = "2026-09-06T00:00:00.000Z";
 const PROXY_CONFIG =
   deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, []).get("docker/Caddyfile") ?? "";
 const LOCAL: DeployTarget = { network: "moe-net", sshTarget: null, url: "https://staging.test" };
+
+async function withComposition(
+  plane: "V1" | "V2", seams: DeploymentDeploySeams | undefined,
+  body: (deploy: () => Promise<unknown>, store: SqliteEventStore) => Promise<void>,
+): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "moe-deploy-composition-"));
+  const storePath = join(root, "store.sqlite");
+  const config = { clock: () => DECIDED_AT, credential: "composition-test", principalId: OPERATOR,
+    projectId: PROJECT_ID, storePath,
+    ...(seams === undefined ? {} : { deploymentDeploy: seams }) };
+  const provider = createStoreDependencies(config);
+  const store = SqliteEventStore.openForProject(storePath, PROJECT_ID);
+  try {
+    driveThrough(store, "goal.close");
+    if (plane === "V2") activateV2Directly(store, PROJECT_ID);
+    const deps = plane === "V1" ? provider.provide() : provider.provideV2?.();
+    const handler = deps?.registry.get(DEPLOYMENT_DEPLOY_COMMAND_KIND)?.asyncHandler;
+    if (handler === undefined) throw new Error("DEPLOY_ASYNC_ENTRY_ABSENT");
+    await body(() => handler({ principal: principal(OPERATOR),
+      envelope: envelopeFor(store, { environment: ENVIRONMENT, sha: SHA }, "composition-deploy") }), store);
+  } finally {
+    store.close(); provider.close(); rmSync(root, { force: true, recursive: true });
+  }
+}
+
+describe.each(["V1", "V2"] as const)("%s production deploy composition", (plane) => {
+  it("composes the real docker runner when no seam is supplied", async () => {
+    vi.stubEnv("MOE_DEPLOY_BUILD_CONTEXT", CONTEXT);
+    // Observe the ACTUAL service input, then stop before invoking any host process.
+    const reached = new Error("DEPLOY_COMPOSITION_OBSERVED");
+    const observed = vi.spyOn(deployService, "createDeployService").mockImplementation(() => { throw reached; });
+    await withComposition(plane, undefined, async (deploy) => {
+      await expect(deploy()).rejects.toBe(reached);
+      expect(observed).toHaveBeenCalledTimes(1);
+      expect(observed.mock.calls[0]?.[0].ports.docker).toBe(nodeDockerRunner);
+    });
+  });
+
+  it("calls the injected spawn through the store dependency root and persists its refusal", async () => {
+    const docker = createDockerDouble({ dockerUnavailable: true });
+    await withComposition(plane, { buildContext: CONTEXT, ports: {
+      build: docker.build, docker: docker.docker, ssh: docker.ssh, transfer: docker.transfer,
+      target: () => LOCAL, releaseDecision: () => null,
+    } }, async (deploy, store) => {
+      const refused = await refusalOf(deploy());
+      expect([refused.code, refused.layer]).toEqual(["DEPLOY_DOCKER_UNAVAILABLE", "DAEMON_DEPLOY_ENGINE"]);
+      expect(docker.calls).toEqual([["version", "--format", "{{.Server.Version}}"]]);
+      expect(readDeployLedger(store, PROJECT_ID).get(ENVIRONMENT)?.current.refusal)
+        .toMatchObject({ code: "DEPLOY_DOCKER_UNAVAILABLE", layer: "DAEMON_DEPLOY_ENGINE" });
+    });
+  });
+});
 
 /** The candidate answers `starting` once and then `healthy`, so the engine's poll loop runs
  *  rather than short-circuiting on its first probe — with a zero-cost sleep. */

@@ -24,13 +24,27 @@
  * the first section of this file.
  */
 import type { ChildProcess } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SqliteEventStore } from "@moe/store";
+
+import { OPERATOR_CAPABILITIES } from "../../../apps/daemon/src/daemon-command-vocabulary.js";
+import { createOperatorSessionHandshakePort, OPERATOR_SESSION_TTL_MS }
+  from "../../../apps/daemon/src/identity/session-handshake.js";
 import { freePort, killTree, spawnNode, survivingChildren } from "./daemon-children.js";
 import type { FakeDockerMode } from "./fake-docker-dependencies.js";
+
+/**
+ * The operator principal id the lane's minted seat is bound to.
+ *
+ * Distinct from the daemon's own configured operator so a seat this lane mints can never be
+ * mistaken for the one an actual operator paired into — two seats, two ids, one store.
+ */
+const LANE_OPERATOR_PRINCIPAL = "e2e-lane-operator";
 
 export { survivingPids } from "./daemon-children.js";
 
@@ -83,6 +97,22 @@ export interface LaneScratch {
   readonly catalogPath: string;
   /** Where the daemon reads its one code-node spec from. */
   readonly nodeSpecsDir: string;
+  /**
+   * A REAL git repository inside the scratch root, with one real commit.
+   *
+   * `repository.publish` measures its candidate by shelling out to git in this directory
+   * (`publication-candidate.ts`), so the lane cannot satisfy it with a path that merely exists.
+   * Handed to the daemon as MOE_NODE_WORKSPACE, which the production composition reads when
+   * `config.repositoryWorkspace` is undefined - no production seam is added for the lane.
+   */
+  readonly workspace: string;
+  /**
+   * The sha of that commit, READ BACK FROM GIT rather than written as a literal.
+   *
+   * A literal is what makes `seedLandingReceipt`'s fixture unusable here: the publish candidate
+   * check compares real objects, so a made-up sha names nothing this repository contains.
+   */
+  readonly workspaceSha: string;
   /** The aggregate id the seeded `node.deliver` step carries. Unique per run. */
   readonly nodeRef: string;
   readonly projectId: string;
@@ -98,23 +128,156 @@ export interface LaneScratch {
  * The spec's five string fields are all required by `readNodeSpec`; the first
  * `.json` by name is the one seeded, and this directory holds exactly one.
  */
-export function createLaneScratch(): LaneScratch {
+export function createLaneScratch(landing = false): LaneScratch {
   const root = mkdtempSync(join(tmpdir(), SCRATCH_PREFIX));
   const tag = basename(root).slice(SCRATCH_PREFIX.length).toLowerCase();
   const nodeSpecsDir = join(root, "node-specs");
   mkdirSync(nodeSpecsDir);
+  const workspace = createLaneWorkspace(root);
   const nodeRef = `node-e2e-${tag}`;
   writeFileSync(join(nodeSpecsDir, "node.json"), JSON.stringify({
     instructions: "The browser lane never runs this node; it only reads its step.",
     nodeRef,
     test: "node --eval \"process.exit(0)\"",
     title: "Daemon-backed browser lane node",
-    workspace: root.replaceAll("\\", "/"),
+    // THE SCRATCH ROOT, EXCEPT ON THE LANDING LANE. `repository-delivery-runtime.ts:61` resolves
+    // the brief's workspace with `resolveRepositoryExecutionIdentity` and drops any node whose
+    // workspace is not a git repository, so the scratch root - deliberately not a repository -
+    // can never be landed into. The deploy lane needs a REAL landing receipt written by the
+    // real lander (`publication-goal-integration.ts:24` refuses PUBLISH_GOAL_NOT_INTEGRATED on
+    // `receipts.length === 0`), so it points the node at the lane's own git workspace instead.
+    // Gated for the same reason MOE_NODE_WORKSPACE is: every other spec keeps today's bytes.
+    workspace: (landing ? workspace.path : root).replaceAll("\\", "/"),
   }), "utf8");
   return Object.freeze({
     catalogPath: join(root, "projects.json"), nodeRef, nodeSpecsDir,
     projectId: `e2e-proj-${tag}`, root, storePath: join(root, "store.sqlite"), tag,
+    workspace: workspace.path, workspaceSha: workspace.sha,
   });
+}
+
+/**
+ * The lander's identity flags, HAND-TRANSCRIBED from `apps/daemon/src/repository/git-landing-port.ts`
+ * (`LANDER_IDENTITY`) for the reason `publish-remote.spec.ts` gives: this directory's tsconfig
+ * cannot reach into apps/ (TS6059).
+ *
+ * They are stated rather than inherited so the lane does not depend on the host having a git
+ * identity configured. A lane that fails on an unconfigured developer machine is a lane that
+ * fails for the next person, not for a defect - and `commit.gpgsign=false` keeps a host that
+ * signs by default from blocking on a key this commit has no use for.
+ */
+const LANE_LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
+
+/**
+ * Builds a REAL one-commit git repository under the scratch root and reads its sha back.
+ *
+ * WHY A REAL REPOSITORY AND NOT A FIXTURE. `repository.publish` refuses
+ * PUBLISH_WORKSPACE_UNCONFIGURED until a workspace is configured, and then MEASURES that
+ * workspace with git: `publication-candidate.ts` runs `rev-parse --verify HEAD^{commit}` and
+ * `symbolic-ref --quiet HEAD`, re-reads both, and refuses PUBLISH_CANDIDATE_CHANGED unless the
+ * identity, sha and ref are stable across the two reads. Nothing short of an actual repository
+ * with an actual commit on a named branch survives that.
+ *
+ * `-b main` is explicit because the check requires a ref under `refs/heads/`, and a host whose
+ * `init.defaultBranch` is unset leaves HEAD on an unborn branch git will not resolve.
+ *
+ * GIT_* IS STRIPPED FROM THE CHILD ENV, mirroring `git-landing-port.ts`'s `landingEnvironment()`:
+ * a GIT_DIR or GIT_WORK_TREE exported by a parent shell would silently redirect every command
+ * below into the developer's own repository.
+ *
+ * TEARDOWN IS INHERITED: this lives under the scratch root the lane already removes on every
+ * exit path, including the throwing one. A leaked git tree is the same class of failure as a
+ * leaked container (epic rail 4), so it is deliberately not created anywhere else.
+ */
+function createLaneWorkspace(root: string): LaneWorkspace {
+  const path = join(root, "workspace");
+  mkdirSync(path);
+  laneGit(path, ["init", "-b", "main", "--quiet"]);
+  writeFileSync(join(path, "product.txt"), "The lane's own workspace, committed for real.\n", "utf8");
+  laneGit(path, ["add", "--", "product.txt"]);
+  laneGit(path, [...LANE_LANDER_IDENTITY, "commit", "--quiet", "--message", "Lane workspace baseline"]);
+  return Object.freeze({ path, sha: laneGit(path, ["rev-parse", "--verify", "HEAD^{commit}"]) });
+}
+
+/** The workspace path and its real head sha. Both are read, never assumed. */
+export interface LaneWorkspace {
+  readonly path: string;
+  readonly sha: string;
+}
+
+/**
+ * Re-reads an already-built lane workspace, for the scratch REDISCOVERY path in `wrapper-lane.ts`.
+ *
+ * Returns null rather than throwing when the directory is not a repository: rediscovery scans
+ * every scratch in the temp directory, and one left by an older build that predates this
+ * workspace is simply not this run's - the same reason the scan already skips a root with no
+ * store or no node spec.
+ */
+export function laneWorkspaceIdentity(root: string): LaneWorkspace | null {
+  const path = join(root, "workspace");
+  if (!existsSync(join(path, ".git"))) return null;
+  try { return Object.freeze({ path, sha: laneGit(path, ["rev-parse", "--verify", "HEAD^{commit}"]) }); }
+  catch { return null; }
+}
+
+/** An operator seat the lane can dispatch as: a HUMAN principal and its plaintext credential. */
+export interface LaneOperatorSeat {
+  readonly credential: string;
+  readonly principalId: string;
+}
+
+/**
+ * Mints a REAL operator seat against the lane's own store, through the production pairing seam.
+ *
+ * WHY THE LANE CREDENTIAL WILL NOT DO. `publish-services.ts:72` refuses PUBLISH_HUMAN_REQUIRED
+ * unless `isDurableHumanPrincipal` finds a principal record whose `kind` is `"HUMAN"`
+ * (`human-approver.ts:23-29`). The lane credential names no such principal, so every
+ * prerequisite dispatch a spec makes with it is refused at AUTHORIZATION before any of the ten
+ * checks behind it is reached — measured 21:03Z, and unchanged by pairing the browser.
+ *
+ * WHY PAIRING THE BROWSER IS NOT ENOUGH EITHER, which is the part that surprises. Pairing does
+ * mint a HUMAN principal, but the plaintext credential is "returned ONCE, never stored here or
+ * logged" (`session-handshake.ts`) — the ledger binds only its sha256. The browser keeps the
+ * only copy, so a spec-side `fetch` cannot borrow it and the lane cannot read it back.
+ *
+ * NOTHING IS FABRICATED HERE. `createOperatorSessionHandshakePort` is the same seam the daemon
+ * composes at `daemon-store-foundation-composition.ts:590`; it opens a real session through the
+ * same `session.open` machinery every other session travels, and the HUMAN kind is a server fact
+ * of that seam rather than a claim this lane makes. The alternative — asserting a principal
+ * record into the store — is the fabricated authority this row's rails forbid.
+ */
+export function mintLaneOperatorSeat(lane: DaemonLane): LaneOperatorSeat {
+  const store = SqliteEventStore.openForProject(join(dirname(lane.catalogPath), "store.sqlite"),
+    lane.projectId);
+  try {
+    const minted = createOperatorSessionHandshakePort({
+      capabilities: OPERATOR_CAPABILITIES,
+      clock: () => Date.now(),
+      operatorPrincipalId: LANE_OPERATOR_PRINCIPAL,
+      projectId: lane.projectId,
+      sessionTtlMs: OPERATOR_SESSION_TTL_MS,
+      store,
+    }).mint();
+    if (!minted.ok) throw new Error(`LANE_OPERATOR_SEAT_REFUSED: ${minted.code}@${minted.layer}`);
+    return Object.freeze({ credential: minted.credential, principalId: minted.principalId });
+  } finally { store.close(); }
+}
+
+/**
+ * Runs git in the lane's own workspace with GIT_* stripped from the child environment, mirroring
+ * `git-landing-port.ts`'s `landingEnvironment()`: a GIT_DIR or GIT_WORK_TREE exported by a parent
+ * shell would silently redirect every one of these commands into the developer's own repository.
+ */
+function laneGit(cwd: string, args: readonly string[]): string {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.toUpperCase().startsWith("GIT_")) environment[key] = value;
+  }
+  environment["GIT_OPTIONAL_LOCKS"] = "0";
+  return execFileSync("git", [...args], {
+    cwd, encoding: "utf8", env: environment,
+    shell: false, windowsHide: true, timeout: 10_000, maxBuffer: 16_384, stdio: ["ignore", "pipe", "pipe"],
+  }).replace(/\r?\n$/u, "");
 }
 
 /**
@@ -262,6 +425,17 @@ export interface DaemonLane {
    */
   readonly seedPid: number | null;
   readonly serverPid: number;
+  /**
+   * The lane's own git workspace and the sha it actually committed there.
+   *
+   * A spec that needs a sha the daemon can RESOLVE must use this one. A literal
+   * `"a".repeat(40)` names no object in any repository, so every check that walks git —
+   * `publication-candidate.ts`'s candidate read, `publication-goal-integration.ts`'s
+   * `merge-base --is-ancestor` — refuses on it for a reason that has nothing to do with
+   * what the spec meant to test.
+   */
+  readonly workspace: string;
+  readonly workspaceSha: string;
 }
 
 export interface LaneRefused {
@@ -309,7 +483,19 @@ async function startDaemon(
     // label the lane writes below reaches the SAME approval path an operator's keystroke
     // would. Nothing here approves on the daemon's behalf.
     ...(operatorChannel === true ? ["--operator-stdin"] : []),
-  ], root, { ...daemonEnv(scratch, approval), MOE_E2E_DEPLOY_MODE: fakeDocker });
+  ], root, {
+    ...daemonEnv(scratch, approval),
+    MOE_E2E_DEPLOY_MODE: fakeDocker,
+    // The composition reads MOE_NODE_WORKSPACE at daemon-store-foundation-composition.ts:190 when
+    // `config.repositoryWorkspace` is undefined, so the publish candidate reader measures the
+    // lane's own repository instead of refusing PUBLISH_WORKSPACE_UNCONFIGURED.
+    //
+    // GATED ON THE DEPLOY LANE. Supplying it unconditionally would move a refusal CODE for every
+    // other spec on this daemon - PUBLISH_WORKSPACE_UNCONFIGURED becomes PUBLISH_GOAL_NOT_INTEGRATED
+    // once a workspace exists - and this row has not run those specs to show none of them read it.
+    // Ungating is a one-line change once that measurement exists; guessing is not.
+    MOE_NODE_WORKSPACE: fakeDocker === undefined ? undefined : scratch.workspace,
+  });
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
   const failure: { message: string | null } = { message: null };
@@ -420,7 +606,7 @@ async function openLane<T>(
   root: string, options: DaemonLaneOptions, tracked: ChildProcess[], scratchRoots: string[],
   body: (lane: DaemonLane) => Promise<T>,
 ): Promise<LaneOutcome<T>> {
-  const scratch = createLaneScratch();
+  const scratch = createLaneScratch(options.fakeDocker !== undefined);
   const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
   const daemon = await startDaemon(
@@ -452,6 +638,8 @@ async function openLane<T>(
       daemonPid: daemon.pid,
       nodeRef: scratch.nodeRef,
       projectId: scratch.projectId,
+      workspace: scratch.workspace,
+      workspaceSha: scratch.workspaceSha,
       repoRoot: root,
       seedPid: seeded,
       serverPid: served.pid,

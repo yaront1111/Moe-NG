@@ -34,7 +34,7 @@ import type {
 } from "../../../apps/daemon/src/orchestrator/provider-pause-ledger.js";
 import { spawnNode } from "./daemon-children.js";
 import type { Watched } from "./daemon-children.js";
-import { daemonEnv } from "./daemon-ports.js";
+import { daemonEnv, laneWorkspaceIdentity } from "./daemon-ports.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
 
 /** Where `LIMIT_LINE`'s bytes were copied from, cited so a reader can re-check them. */
@@ -130,11 +130,12 @@ export const WRAPPER_INTERVAL_MS = 500;
  */
 export function wrapperEnv(
   scratch: LaneScratch, command: string, intervalMs: number = WRAPPER_INTERVAL_MS,
+  landing = false,
 ): Readonly<Record<string, string | undefined>> {
   return Object.freeze({
     ...daemonEnv(scratch),
     MOE_AGENT_COMMAND: command,
-    MOE_NODE_LANDING: "0",
+    MOE_NODE_LANDING: landing ? "1" : "0",
     MOE_WRAPPER_INTERVAL_MS: String(intervalMs),
     MOE_WRAPPER_MAX_AGENTS: "1",
   });
@@ -205,9 +206,13 @@ export function resolveLaneScratch(lane: DaemonLane): LaneScratch | null {
     if (!existsSync(storePath) || !existsSync(spec)) continue;
     // The spec names THIS lane's node, so a directory belonging to another run is never returned.
     if (!readFileSync(spec, "utf8").includes(`"nodeRef":"${lane.nodeRef}"`)) continue;
+    // Read back, never assumed: a root without a built workspace predates it and is not this run,
+    // the same reason a root with no store or no spec is skipped above.
+    const workspace = laneWorkspaceIdentity(root); if (workspace === null) continue;
     return Object.freeze({
       catalogPath: join(root, "projects.json"), nodeRef: lane.nodeRef, nodeSpecsDir,
       projectId: lane.projectId, root, storePath, tag,
+      workspace: workspace.path, workspaceSha: workspace.sha,
     });
   }
   return null;
