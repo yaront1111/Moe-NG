@@ -1212,19 +1212,23 @@ describe("foundation attempt dispatch — pre-launch context seal (task-203a5ca7
     expect(order).not.toContain("capture");
   });
 
-  it("carries each distinct seal refusal code through unrestamped, with zero provider effect", async () => {
-    const codes: readonly FoundationContextSealCode[] = [
-      "FOUNDATION_CONTEXT_SEAL_CONFIGURATION_UNBOUND",
-      "FOUNDATION_CONTEXT_SEAL_PROFILE_UNREADABLE",
-      "FOUNDATION_CONTEXT_SEAL_REFUSED",
-      "FOUNDATION_CONTEXT_SEAL_RUNTIME_UNOBSERVED",
-      "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED",
-    ];
-    // A SWEEP THAT GENERATES NOTHING PASSES. The generated count is asserted against the
-    // roster length, so a table that silently emptied cannot read as five green cases.
-    expect(codes.length).toBe(5);
-    let generated = 0;
-    for (const code of codes) {
+  const contextSealCodes: readonly FoundationContextSealCode[] = [
+    "FOUNDATION_CONTEXT_SEAL_CONFIGURATION_UNBOUND",
+    "FOUNDATION_CONTEXT_SEAL_PROFILE_UNREADABLE",
+    "FOUNDATION_CONTEXT_SEAL_REFUSED",
+    "FOUNDATION_CONTEXT_SEAL_RUNTIME_UNOBSERVED",
+    "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED",
+  ];
+
+  it("keeps a nonzero census of all five distinct context seal refusals", () => {
+    expect(contextSealCodes).toHaveLength(5);
+    expect(new Set(contextSealCodes).size).toBe(5);
+  });
+
+  // Each refusal creates its own real dispatch fixture and receives the normal per-case
+  // timeout. A slow host must not make five independent cases share one deadline.
+  it.each(contextSealCodes)(
+    "carries seal refusal %s through unrestamped, with zero provider effect", async (code) => {
       providerBoundaryProbe.commits.length = 0;
       providerBoundaryProbe.launches.length = 0;
       const store = readyStore(`context-seal-code-${code}`);
@@ -1232,13 +1236,11 @@ describe("foundation attempt dispatch — pre-launch context seal (task-203a5ca7
 
       const outcome = await service.dispatch(dispatchRequest());
 
-      generated += 1;
       expectRefusal(outcome, code, "FOUNDATION_CONTEXT_SEAL");
       expect(providerBoundaryProbe.launches).toHaveLength(0);
       expect(providerBoundaryProbe.commits).toHaveLength(0);
-    }
-    expect(generated).toBe(codes.length);
-  });
+    },
+  );
 
   it("seals the context BEFORE the provider boundary is ever crossed", async () => {
     const store = readyStore("context-seal-order");

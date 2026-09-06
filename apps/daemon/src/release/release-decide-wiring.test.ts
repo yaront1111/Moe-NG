@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { RuntimeCommandEnvelope } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
@@ -9,6 +10,7 @@ import type { ReleaseDecideSeams } from "../daemon-command-async-entries.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release-decide-contracts.js";
+import { releaseDossierAggregateId } from "./release-dossier-contracts.js";
 import type { ReleaseDossierFacts } from "./release-decide-service.js";
 import { GOAL_ID, HEAD_SHA, ancestryOf, dossierInput } from "./release-dossier-fixtures.js";
 
@@ -30,10 +32,17 @@ function inputOf(): CommandHandlerInput {
   return {
     envelope: {
       commandId: "cmd-release-wiring",
+      commandKind: RELEASE_DECIDE_COMMAND_KIND,
+      correlationId: "corr-release-wiring",
+      expectedVersion: 0,
+      requestDigest: "0".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: randomUUID(),
+      targetAggregateId: releaseDossierAggregateId(GOAL_ID),
       payload: { base: "main", decision: "APPROVE", goalId: GOAL_ID, sha: HEAD_SHA },
-    } as unknown as RuntimeCommandEnvelope,
-    principal: { principalId: OPERATOR },
-  } as unknown as CommandHandlerInput;
+    },
+    principal: { principalId: OPERATOR, projectId: PROJECT_ID, capabilities: [CAPABILITIES.GOAL] },
+  };
 }
 
 function facts(): ReleaseDossierFacts {

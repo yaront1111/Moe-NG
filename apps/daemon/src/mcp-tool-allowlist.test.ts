@@ -12,6 +12,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { readDeployReceipt } from "./deployment/deploy-ledger.js";
+import { deployReceiptId } from "./deployment/deploy-receipt-contracts.js";
 import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
@@ -324,7 +326,7 @@ async function sendRollback(
       commandId, commandKind: "deployment.rollback", correlationId: "corr-rollback",
       expectedVersion: 0, payload, requestDigest: "a".repeat(64),
       schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: credential,
-      targetAggregateId: "agg-rollback",
+      targetAggregateId: PROJECT,
     })),
     credential, protocolVersion: WIRE_PROTOCOL_VERSION,
   }, "HTTP_LISTENER");
@@ -394,13 +396,18 @@ describe("task-4dd05f0c served/advertised parity", () => {
    * THE DISCRIMINATOR IS THAT THE TWO CODES DIFFER. The agent is stopped at
    * OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, before the handler body runs. The
    * operator gets PAST that line and is refused by the HANDLER itself, at
-   * ROLLBACK_RECEIPT_UNKNOWN @ DAEMON_PREREQUISITE (no rollback port is composed yet —
-   * task-da60dc4b supplies the effect). Same command, same payload: only the principal
+   * DEPLOY_ROLLBACK_RECEIPT_INVALID @ DAEMON_COMMAND_SEAM because the selected deployment
+   * receipt is durably absent. Same command, same payload: only the principal
    * differs, and the two answers prove the fence sits BEFORE the handler rather than being
    * the handler's own failure. A single shared refusal code could not tell those apart.
    */
   it("C2b refuses an agent-authenticated rollback at authorization, and lets the operator reach the handler", async () => {
-    const payload = { environment: "production", restoreDatabase: false, toReceiptRef: "receipt-absent" };
+    const toReceiptRef = deployReceiptId(PROJECT, "production", "rollback-receipt-not-recorded");
+    const payload = { environment: "production", restoreDatabase: false, toReceiptRef };
+    // A valid receipt identifier and project target let the operator reach the real receipt
+    // reader. Missing evidence must refuse before an intent or any deployment effect is written.
+    expect(readDeployReceipt(contractStore, PROJECT, toReceiptRef))
+      .toEqual({ code: "DEPLOY_RECEIPT_NOT_FOUND", ok: false });
     const before = decisionsIn().length;
 
     const agentSecret = randomUUID();
@@ -432,7 +439,7 @@ describe("task-4dd05f0c served/advertised parity", () => {
     // reason with an unrelated layer. That it is a DIFFERENT code is the whole point.
     expect(await sendRollback("cmd-rollback-operator", payload, CREDENTIAL)).toMatchObject({
       outcome: "PORT_REFUSED", httpStatus: 422,
-      refusal: { code: "ROLLBACK_RECEIPT_UNKNOWN", layer: "DAEMON_PREREQUISITE" },
+      refusal: { code: "DEPLOY_ROLLBACK_RECEIPT_INVALID", layer: "DAEMON_COMMAND_SEAM" },
     });
 
     // Neither arm wrote anything durable: a refusal that committed first is not a fence.

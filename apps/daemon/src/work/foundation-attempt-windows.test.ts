@@ -818,6 +818,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     if (!found.ok) return assertRuntimeAbsent(found.refusal);
     const { installedRoot, observation } = found;
     const root = scratch("observed-control");
+    const isolated = isolatedTarget("observed-control-trees");
     const store = readyStore(root);
     const pinRoot = join(root, "pins");
     // THE PRODUCED TEMPLATE, NOT A HAND-BUILT ONE. The hand-built environment
@@ -829,7 +830,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     // directory, bootstrap digest and this arm's own bounded limits stay.
     const launchTemplate = {
       argv: [...SEALED_TEMPLATE.argv],
-      bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+      bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
       environment: { ...SEALED_TEMPLATE.environment },
       launchSelection: SEALED_TEMPLATE.launchSelection,
       // BOUNDED, AND MEASURED. The produced argv is a real provider session
@@ -851,7 +852,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const service = createFoundationAttemptService({
       completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
-      lifecycle: lifecycleFor(store), store,
+      lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
 
     try {
@@ -861,7 +862,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     // SETTLEMENT RELEASED THE TREE. A proven durable result is the ONLY thing
     // that may, and the physical evidence is that the derived worktree — which
     // had to exist for the launch to run in it — is gone afterwards.
-    expect(existsSync(DERIVED_WORKTREE)).toBe(false);
+    expect(existsSync(isolated.worktreePath)).toBe(false);
     expect(observedBoundaryProbe.launches).toHaveLength(1);
     expect(observedBoundaryProbe.launches[0]?.input.providerRun).toEqual({
       attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
@@ -954,11 +955,12 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     if (!found.ok) return assertRuntimeAbsent(found.refusal);
     const { installedRoot, observation } = found;
     const root = scratch("unproven-retention");
+    const isolated = isolatedTarget("unproven-retention-trees");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
     const launchTemplate = {
       argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-      bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+      bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
       environment: {
         COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
         PATH: process.env["Path"] ?? join(systemRoot, "System32"),
@@ -978,7 +980,8 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const service = createFoundationAttemptService({
       completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: () => { throw new Error("the capture answer is unavailable"); },
-      launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(store), store,
+      launchOptions: { platform: "win32" },
+      lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
 
     try {
@@ -989,7 +992,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       // retention alone would also pass if nothing had ever been materialized.
       expect(observedBoundaryProbe.launches).toHaveLength(1);
       expect(outcome.ok).toBe(false);
-      expect(existsSync(DERIVED_WORKTREE)).toBe(true);
+      expect(existsSync(isolated.worktreePath)).toBe(true);
     } finally {
       store.close();
     }
