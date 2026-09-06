@@ -144,15 +144,36 @@
     {
       "stepId": "step-7",
       "description": "DOCS, DRILLS, GATES, SELF-REVIEW.\n\n**(a) DOCS (DoD 6), MINIMAL EDIT.** `README.md` collides with FIVE peer rows — change only the sentence the DoD names and rebase around their text. Rewrite the \"no working preview\" clause to the measured truth and confirm `git grep -n \"no working preview\"` returns 0. **If the live drive did not happen, say so plainly rather than implying it did** — DoD 6 asks for exactly that honesty.\n\n**(b) LIVE DRIVE (DoD 6):** a preview started for UnAI or a fresh scaffold app, with a real screenshot (path + sha256) and the committed decision, in a row comment under ~4500 chars (comments truncate silently at 5000). If it did not happen, record that instead — never imply a drive you did not run.\n\n**(c) DRILLS.** `git status --porcelain` every path you will mutate and RECORD it. For EVERY path — tracked or not — back it up out of tree (%TEMP%, suffixed with your worker id) and **restore FROM THE BACKUP, never `git checkout --`**: a tracked file can hold a peer's uncommitted delivery, and three rows are editing `needs-you-model.ts` concurrently. Prove each restore in a call SEPARATE from the restore — for a CLEAN path an empty `git diff` confirms it; **for a path already ` M`, sha256 against the backup is the ONLY admissible proof**, because there an empty `git diff` means you reverted the peer and the reassuring output is byte-identical to the catastrophic one.\n\nTHREE MUTATIONS, each alone, the named arm confirmed RED, then restored:\n  1. Render the card when no receipt exists -> the DoD-1 absence arm reds.\n  2. Assert the approve verdict from component state instead of `/activity/read` -> the DoD-2 arm should red when the click does not reach the daemon. **This drill proves the arm tests the daemon, not the DOM.**\n  3. Swallow an unknown refusal code to blank -> the DoD-4 verbatim arm reds.\n\n**(d) GATES**, each standalone and foreground: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, and `pnpm test:e2e:browser` with its SPEC COUNT quoted and the spec named. Quote every `Test Files N passed` count line — an exit-0 leg with no count line RAN NOTHING. Note which legs cover no `apps/**` file rather than offering a bare root count as evidence.\n\n**(e) ADVERSARIAL PASS** — answer in writing: Can the card render from anything other than a real daemon receipt? Does Approve prove the daemon received it, or only that the DOM changed? Does an unknown code ever render blank? Does the aria-live region re-announce on every poll? Did any peer's `NEEDS_YOU_KINDS` entry get dropped in a rebase? Is any preview process or port left alive after the journey?\n\n**(f)** DECLARE EVERY PATH in `complete_step.modifiedFiles`, then re-check `git status --porcelain` for anything unreported, including mutate-and-restore paths, which must show CLEAN.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "README.md"
       ],
-      "startedAt": "2026-09-06T21:10:12.467Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-preview.ts",
+        "apps/control-room/src/live/live-preview.test.ts",
+        "apps/control-room/src/v2/approvals/preview-card.tsx",
+        "apps/control-room/src/v2/approvals/preview-card.test.tsx",
+        "apps/control-room/src/v2/approvals/needs-you-preview.ts",
+        "apps/control-room/src/v2/approvals/needs-you-preview.test.ts",
+        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status-preview.ts",
+        "apps/control-room/src/v2/goals/goal-status-preview.test.ts",
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/goals/use-goal-reads.ts",
+        "apps/control-room/src/v2/goals/use-goal-coverage.ts",
+        "apps/control-room/src/v2/ops/activity-words.test.ts",
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "POST-REOPEN CLOSE-OUT. No bytes rebuilt - QA said the work is not in question. This session MEASURED, attributed one red, and disclosed. Full evidence: comment-18f42d92.\n\nITEM 1 CLOSED. All deliverables are at HEAD via `bea8e16f` (feat(task-33ceae56...), 25 files, +2089/-87), which the daemon records as landing.lastCompletion.sha, pushed: true. `git cat-file -e HEAD:<p>` = 0 for all eleven named paths; the http-listener-read-dispatch.test.ts census edit is in the SAME commit. QA graded 57446237, an ancestor of HEAD.\n\nITEM 2 CLOSED. layer-visibility-cases.ts:172 carries LIVE_PREVIEW_LAYER, in that same commit, with all three coupled pins moved: 73->74, 252->253, 290->292.\n\n(a) DOCS. `git grep -c \"no working preview\" -- README.md` = 0 hits. DoD 6 holds; the README states the measured truth and the live drive is recorded as pending on task-4cbaca29, never implied as done.\n\n(b) LIVE DRIVE - deferred to task-4cbaca29 by the 20:10Z governor amendment. Not run, not implied.\n\n(c) DRILLS - the three mutate-and-restore drills were run and recorded in the prior session's step notes against these same bytes; not re-run, because this session mutated nothing. Porcelain proof instead: every path in modifiedFiles above is CLEAN at HEAD (`git status --porcelain -- <all 17>` returns 0 lines).\n\n(d) GATES, foreground, standalone, at HEAD f99114f7:\n  - pnpm --filter @moe/control-room test -> Test Files 182 passed (182) / Tests 2278 passed (2278), EXIT 0. Count line present, so non-vacuous.\n  - targeted, this row's own six files -> Test Files 6 passed (6) / Tests 53 passed (53), EXIT 0. Proves the 2278 is not riding past my arms.\n  - pnpm test:security -> Test Files 2 failed | 10 passed (12) / Tests 6 failed | 994 passed (1000), EXIT 1. FOREIGN, attributed below.\n  - typecheck EXIT 1, daemon six-file red, DoD 2/6 split: QA's reopen states verbatim these are NOT reasons; the prior gate table stands and QA reproduced 180/2261 EXIT 0 itself.\n\nTHE SECURITY RED IS task-817d893f's, PROVEN BY BISECT NOT BY CLAIM:\n  SCANNED=75 ALLOWLIST=74; UNLISTED = RELEASE_LAYER@apps/control-room/src/v2/goals/release-port.ts; STALE = none.\n  BASELINE detached worktree at bea8e16f (release-port.ts ABSENT), -t \"TASK-LV module-private\": 12 passed | 988 skipped, EXIT 0.\n  HEAD aee65ba4, same filter: 6 failed | 6 passed | 988 skipped, EXIT 1, \"expected 75 to be 74\".\n(2)-minus-(1) intersected with this row's owned paths is EMPTY, and the STALE direction is empty so nothing of mine left the roster. I did NOT bump 74->75: epic rail 3 forbids two rows moving one count literal concurrently and that row is in flight on the file. Notified with the exact four-edit fix at comment-672a6a61 on task-817d893f.\nWorktree torn down safely: 18 junctions deleted as links, 0 reparse points, real node_modules survived 13 / 5 / 2, no longer in `git worktree list`.\n\n(e) ADVERSARIAL PASS.\n  - Card from anything but a real daemon receipt? No. live-preview.ts is the only reader, exact-key decoding, ABSENT distinct from every failure; no fixture anywhere in preview-approve.spec.ts.\n  - Does Approve prove the daemon received it? At component level yes (offer spent through the landed preview-port, read-back shape from a recorded frame). The /activity/read verdict read-back is NOT proven here and is not claimed - deferred to task-4cbaca29 per the 20:10Z amendment, because a STARTED preview needs a LANDED goal and no HTTP route writes internal.repository.landing_receipt.\n  - Unknown code blank? No - falls through to the raw code, asserted, and the lookup uses Object.hasOwn so a code named `toString` cannot render a prototype method.\n  - aria-live re-announce per poll? No - announced once, counters outside the region.\n  - Peer NEEDS_YOU_KINDS entry dropped? Checked the inverse too: task-817d893f's in-flight RELEASE dirt sits on top of my landed bytes in needs-you-model.ts, live-needs-you.tsx, activity-words.ts and plan-rejected-surfaces.test.tsx; my \"PREVIEW\" kind and preview words all survive, and control-room is green WITH that dirt in tree.\n  - Preview process or port left alive? No - teardown is on every exit path.\n\n(f) PEER DIRT, DELIBERATELY EXCLUDED FROM modifiedFiles so the wrapper cannot sweep it: needs-you-model.ts, live-needs-you.tsx, activity-words.ts, plan-rejected-surfaces.test.tsx (all task-817d893f RELEASE work) and http-listener-read-dispatch.test.ts (task-817d893f retiring /release/read; MY census edit to that file already landed in bea8e16f). 54 dirty paths in the checkout overall. Not reverted, not stashed, not committed - noted and left alone. My own bytes in those four shared files are already on the branch, so excluding them loses nothing.",
+      "startedAt": "2026-09-06T21:10:12.467Z",
+      "completedAt": "2026-09-06T22:15:52.263Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-767c9887",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-97200064",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -192,16 +213,22 @@
       "author": "qa-4f771bb8",
       "content": "QA REVIEW EVIDENCE (qa-4f771bb8) — **two items, both narrow. The work itself is not in question and must not be rebuilt.**\n\n**ACCEPTED FIRST.** I re-ran the recorded gate: `pnpm --filter @moe/control-room test` → **Test Files 180 passed (180), Tests 2261 passed (2261), EXIT 0**, exact reproduction. The DoD-2 and DoD-6 split to task-4cbaca29 is **on the board in the DoD text itself**, not only in chat, which is exactly the bar I stated at 20:12Z — a narrowing stated is approvable. Your typecheck attribution is the best method anyone has used today: a **scratch worktree at clean HEAD with junctioned node_modules**, daemon tsc EXIT 0 there, then EXIT 0 again with your census edit copied in, porcelain 0 lines both times. That is how you prove a red is not yours.\n\n**ITEM 1 — THE ROW'S CENTRAL DELIVERABLES ARE NOT IN HEAD.** Measured per path at `57446237`:\n```\n??  apps/control-room/src/live/live-preview.ts\n??  apps/control-room/src/live/live-preview.test.ts\n??  apps/control-room/src/v2/approvals/preview-card.tsx\n??  apps/control-room/src/v2/approvals/needs-you-preview.ts\n??  apps/control-room/src/v2/goals/goal-status-preview.ts\n??  tests/e2e/control-room/preview-approve.spec.ts\n M  apps/daemon/src/http/http-listener-read-dispatch.test.ts\n```\n`task.commits` holds only checkpoint `b320bcb4` from a different session (worker-0520a42e@01:13Z). So the 2261-test green — mine and yours — describes the WORKING TREE; at HEAD the preview card, its reader, its model, the status stage and the Playwright spec do not exist. This is not a paperwork gap: **DoD 1, 3, 4 and 5 have no bytes behind them in the branch.**\n\n**ITEM 2 — LANDING `live-preview.ts` AS-IS MAKES `pnpm test:security` RED AT HEAD, AND IT IS THIS ROW'S FILE.** `live-preview.ts:24` declares a column-0, module-private `const LIVE_PREVIEW_LAYER = \"CONTROL_ROOM_LIVE_PREVIEW\"`. `tests/security/boundary-roster.security.ts` documents at :22-27 that `DECLARATION_PATTERN` is anchored `^export const` and therefore cannot see module-private declarations — so there is a **separate arm**, \"TASK-LV allowlists every scanned module-private declaration (scan minus allowlist is empty)\", which reddens the moment one appears unlisted. `git grep LIVE_PREVIEW_LAYER -- tests/security packages` returns **nothing**.\n\n@worker-d107a8ef measured the live consequence at 20:08Z from the other side — `pnpm test:security` EXIT 1, `Tests 6 failed | 994 passed (1000)`, sole cause `LIVE_PREVIEW_LAYER@apps/control-room/src/live/live-preview.ts`, SCANNED=74 / ALLOWLIST=73 / UNLISTED=[that one] — and correctly attributed it to **this row**. So another row is currently absorbing your file's red as foreign WIP, and it converts from transient to permanent the moment you land.\n\n**DoD 7 names five gates and `pnpm test:security` is not among them**, which is why this was invisible to your own sheet. That is a plan gap as much as a delivery one; the security lane is invisible to the daemon leg, the control-room leg and typecheck alike.\n\n**TO CLOSE, both cheap:** (1) land the six untracked paths plus the census edit; (2) add `LIVE_PREVIEW_LAYER` to the module-private allowlist in the same commit, so the file and its roster entry never exist apart, and quote `pnpm test:security` with its count line. If the allowlist needs a counterpart count pin moved, take the number from the printed expected-vs-received rather than from this comment.\n\n**NOT reasons, do not spend a round on them:** the DoD 2/6 split (correctly recorded); the typecheck EXIT 1 (attributed to untracked peer `release-read.test.ts` with the cleanest proof on the board); the daemon leg's six-file red (the governor's 20:20Z baseline covers it).",
       "timestamp": "2026-09-06T21:01:19.119Z"
+    },
+    {
+      "id": "comment-18f42d92849e4ed495c7a33f26fdee18",
+      "author": "worker-767c9887",
+      "content": "REOPEN CLOSED. Both items discharged; measurements below, all re-taken this session.\n\nITEM 1 - BYTES ARE AT HEAD. Landed as `bea8e16f` (`feat(task-33ceae56...)`, 25 files, +2089/-87), recorded by the daemon as `landing.lastCompletion.sha = bea8e16f4a5a02702af319d29d406c4289cc4212`, `pushed: true`. `git cat-file -e HEAD:<path>` returns 0 for all eleven: live-preview.{ts,test.ts}, preview-card.{tsx,test.tsx}, needs-you-preview.{ts,test.ts}, goal-status-preview.{ts,test.ts}, activity-words.test.ts, preview-rejection-invariants.test.tsx, preview-approve.spec.ts. The census edit to http-listener-read-dispatch.test.ts is in the SAME commit (38 lines). QA graded 57446237; it is an ancestor of HEAD.\n\nITEM 2 - LIVE_PREVIEW_LAYER IS ROSTERED, IN THAT SAME COMMIT. `layer-visibility-cases.ts:172` carries `{ constant: \"LIVE_PREVIEW_LAYER\", file: \"apps/control-room/src/live/live-preview.ts\" }`, with all three coupled pins moved together: EXPECTED_PRIVATE_COUNT 73->74, EXPECTED_INVISIBLE_DENOMINATOR 252->253, EXPECTED_INVISIBLE_SHARE_PER_MILLE 290->292.\n\nTHE SECURITY LANE IS RED AT HEAD AND IT IS NOT THIS ROW. Disclosed verbatim, not hidden:\n\n  pnpm test:security -> Test Files 2 failed | 10 passed (12) / Tests 6 failed | 994 passed (1000), EXIT 1\n  AssertionError: expected 75 to be 74 // Object.is equality\n  boundary-roster.security.ts:837 (scan minus allowlist is empty)\n  boundary-roster.security.ts:849 (counts exactly EXPECTED_PRIVATE_COUNT)\n  boundary-roster.security.ts:862 (pins the invisible share)\n  (each arm fails twice - durable-store-boundaries.security.ts re-runs the same shared describe)\n\nAll 6 are one family, one cause. Re-running the scan with the roster's own `isProductionModule` + SCAN_ROOTS and diffing against UNSCANNED_PRIVATE_LAYERS:\n\n  SCANNED=75 ALLOWLIST=74\n  UNLISTED: RELEASE_LAYER@apps/control-room/src/v2/goals/release-port.ts\n  STALE:    (none)\n\nThat file is NOT an owned path of this row. It is task-817d893fa1254a4d82d2888af1f87a47's, landed by its checkpoint `1693c205`. `release-port.ts:11` is `const RELEASE_LAYER = \"CONTROL_ROOM_RELEASE\" as const;` - a column-0 module-private const, the same shape mine was.\n\nPATH-ATTRIBUTED BASELINE, measured not asserted. Detached worktree at `bea8e16f` (my completion commit), 18 node_modules junctions, no pnpm install, porcelain 0 lines. `release-port.ts` is ABSENT in that tree.\n\n  BASELINE bea8e16f, -t \"TASK-LV module-private\": Test Files 2 passed | 10 skipped (12), Tests 12 passed | 988 skipped, EXIT 0\n  HEAD     aee65ba4, same filter:                 Test Files 2 failed | 10 skipped (12), Tests 6 failed | 6 passed | 988 skipped, EXIT 1\n\n(2) minus (1) is exactly one constant, and its intersection with this row's owned paths is EMPTY. My entry is present and the STALE direction is empty, so nothing of mine is missing from the roster. I am deliberately NOT bumping 74->75 here: epic rail 3 forbids two rows moving the same count literal at once, and task-817d893f is in flight on that file. Notified on that row.\n\nTeardown proved: 18 junctions deleted as links, 0 reparse points left, real node_modules survived at 13 / 5 / 2 entries, `git worktree list` no longer names the path.",
+      "timestamp": "2026-09-06T22:15:04.205Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-06T22:05:35.105Z",
+  "updatedAt": "2026-09-06T22:16:47.889Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 15,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -214,7 +241,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -247,7 +275,8 @@
   "contextFetchedBy": [
     "worker-adefb11e",
     "worker-deb4c7d8",
-    "worker-767c9887"
+    "worker-767c9887",
+    "qa-97200064"
   ],
   "workStartedAt": "2026-09-06T01:13:44.330Z",
   "blockedReason": null,
@@ -356,43 +385,63 @@
       "treeId": "76644cf7a2a11b629284e701bc70c8efc94e0491",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9abee603a54398c3ffe1a4e9d411a374d53fc6e9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-06T22:05:35Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-3a0478f57eec44579269b2ed27c91d92.json",
+        ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-06T22:05:40.407Z",
+      "treeId": "826272d6a3426bb59fa32e47b07fdfc7b13d18d1",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/control-room/src/live/live-preview.ts",
     "apps/control-room/src/live/live-preview.test.ts",
-    "apps/control-room/src/v2/approvals/needs-you-preview.ts",
-    "apps/control-room/src/v2/approvals/needs-you-preview.test.ts",
-    "apps/control-room/src/v2/approvals/preview-card.tsx",
-    "apps/control-room/src/v2/approvals/preview-card.test.tsx",
     "apps/control-room/src/v2/approvals/needs-you-model.ts",
     "apps/control-room/src/v2/approvals/needs-you.tsx",
     "apps/control-room/src/v2/approvals/live-needs-you.tsx",
+    "apps/control-room/src/v2/approvals/preview-card.tsx",
+    "apps/control-room/src/v2/approvals/preview-card.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-preview.ts",
+    "apps/control-room/src/v2/approvals/needs-you-preview.test.ts",
     "apps/control-room/src/v2/goals/use-goal-reads.ts",
     "apps/control-room/src/v2/goals/use-goal-coverage.ts",
-    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
-    "apps/control-room/src/v2/goals/goals-home.test.tsx",
     "apps/control-room/src/v2/ops/activity-words.ts",
     "apps/control-room/src/v2/ops/activity-words.test.ts",
+    "apps/control-room/src/v2/goals/goal-status.ts",
     "apps/control-room/src/v2/goals/goal-status-preview.ts",
     "apps/control-room/src/v2/goals/goal-status-preview.test.ts",
-    "apps/control-room/src/v2/goals/goal-status.ts",
     "apps/control-room/src/v2/goals/goal-status-strip.tsx",
     "tests/e2e/control-room/preview-approve.spec.ts",
     "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
-    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
-    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
     "tests/security/layer-visibility-cases.ts",
     "tests/security/boundary-roster.security.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-adefb11e@2026-09-06T21:40:38Z",
-    "at": "2026-09-06T21:40:43.058Z"
+    "sessionId": "worker-767c9887@2026-09-06T22:05:35Z",
+    "at": "2026-09-06T22:05:40.407Z"
   },
   "priorBlockedReason": "DoD 1's link + screenshots are UNREACHABLE from the browser at HEAD, and closing the gap is daemon work rail 1 forbids here. Steps 1-2 are done and landed (432217be, decision port, 6 arms green); this blocks the RENDERING half only.\n\nMEASURED: (1) the `preview.decide` offer is a bare envelope (affordance-planning-offers.ts:143-160: commandEnvelopeVersion, commandId, commandKind, expectedVersion, inputSchemaVersion, targetAggregateId) — no url, no screenshots. (2) `/activity/read` is an exact 7-key shape carrying VERDICTS only (enough for DoD 2, nothing for the receipt). (3) http-listener-read-dispatch.ts has 25 read routes and NOT ONE preview route; the runs read carries no preview member. (4) `createPreviewReceiptReader` is used only by affordance-read.ts:339 and its whole surface is `(goalId) => \"REFUSED\"|\"STARTED\"|null` — the url, pid and screenshots[] on PreviewReceiptV1 reach no HTTP consumer.\n\nTWO MISSING PIECES: (a) a read for the receipt (url + screenshots[] + outcome + code); (b) a way to SHOW a capture — the files live under .moe-next/previews/<goalId>/<sha>/ and no route serves those bytes, so even with (a) an img has nothing to point at.\n\nNOT WORKING AROUND IT: a synthetic card or a browser-side file read would satisfy the sentence and fail the operator; step 1 of this plan says a missing offer is a gap in the owning row, \"not something to work around with a synthetic card\".\n\nSTILL BUILDABLE WITH NO DAEMON CHANGE: the item + card off the OFFER alone (the daemon withholds it unless the receipt is STARTED), Approve, Reject + REWORK routing, the PREVIEW stage from the offer, and the four refusal words. Missing: the link, the screenshots, and the step-7 e2e assertions on them.\n\nRULING NEEDED: (1) file a sibling row for the receipt read + capture serving and I depend on it, (2) waive rail 1 so this row adds the read, or (3) narrow DoD 1. I will execute any of the three.",
   "declaredFiles": [
@@ -420,14 +469,14 @@
     "README.md",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
   ],
-  "reviewStartedAt": "2026-09-06T20:59:35.775Z",
+  "reviewStartedAt": "2026-09-06T22:16:42.965Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room test",
     "exitCode": 0,
-    "outputTail": "RUN AT THE DELIVERED TREE, FOREGROUND, FRESH:\n\n$ pnpm --filter @moe/control-room test\n Test Files  180 passed (180)\n      Tests  2261 passed (2261)\n   Duration  16.11s\nEXIT 0\n\nThis is the gate that covers this row's own files. The other four DoD-7 legs, quoted in the step-7 note, are NOT exit 0 and are NOT this row's:\n\n$ pnpm typecheck -> EXIT 1. 18 of 19 projects Done. All 5 errors in apps/daemon/src/http/release-read.test.ts, which is ?? UNTRACKED peer work. Attribution: scratch worktree at clean HEAD 405995e2 (junctioned node_modules, no pnpm install), daemon tsc EXIT 0, then EXIT 0 AGAIN with my census edit copied in; worktree porcelain 0 lines before and after.\n\n$ pnpm --filter @moe/daemon test -> EXIT 1. Test Files 6 failed | 561 passed (567) / Tests 8 failed | 10191 passed | 7 skipped (10206). Clean-HEAD baseline of exactly those files: 7 failed / 5 files, the known criterion-evidence family. Delta = runtime-entrypoint.test.ts (1), which demands .js bridges for two ?? UNTRACKED peer files. Owned-path intersection EMPTY.\n\n$ pnpm test -> EXIT 1. Test Files 2 failed | 430 passed | 1 skipped (433) / Tests 6 failed | 10353 passed | 44 skipped (10403). Clean-HEAD baseline: IDENTICAL 6 failures. Covers no apps/** file of mine.\n\n$ pnpm test:e2e:browser -> EXIT 1. Running 34 tests using 1 worker; 7 failed; 27 passed (7.8m). preview-approve.spec.ts PASSES, and passes alone (1 passed, 5.5s). The 7 are foreign (deploy-fake-docker x2 BOOTSTRAP_PREREQUISITE_MISSING; journeys CR-J1-002 nav-rail Resources enabled; journeys CR-A11Y-001; prd-persistence-boundary; prd-to-approval, reproduced at clean HEAD; provider-pause wrapper staffing).",
-    "reportedAt": "2026-09-06T20:59:35.775Z"
+    "outputTail": "HEAD at verification time: f99114f7\n Test Files  182 passed (182)\n      Tests  2284 passed (2284)\nEXIT=0\n\nRun fresh, foreground, standalone, in the shared checkout at HEAD f99114f7 (54 dirty paths present, all peer work, none reverted). Count line present so the leg is non-vacuous. Targeted control that this row's own arms actually execute rather than riding the total: vitest on the six files this row owns -> Test Files 6 passed (6) / Tests 53 passed (53), EXIT 0.",
+    "reportedAt": "2026-09-06T22:16:42.965Z"
   },
-  "completionSummary": "Gate 2's operator side, delivered and green on its own gate; two DoD clauses NOT discharged and named.\n\nDELIVERED: the Needs-you preview card (loopback url as a new-tab link, captures inline as <img>, Approve and Reject-with-findings), a PREVIEW stage on the goal status strip, the four refusal codes rendered verbatim as operator words with an unknown code never blank, and a Playwright journey against a REAL daemon. 180 control-room test files / 2261 tests pass.\n\nNOT DISCHARGED, and this is the main thing for QA to weigh: DoD 2's /activity/read verdict read-back and DoD 6's LIVE DRIVE. Both need a STARTED preview, which needs a LANDED goal, and landing is recorded by internal.repository.landing_receipt, which is in no registry, async entry or PAYLOAD_KEYS roster - no HTTP ingress, so nothing a browser can do makes a goal landed. Approve therefore proves the transport answered ok, NOT that the daemon recorded a verdict. A fixture would satisfy both clauses and parent rail 4 forbids one. README states this measured truth; git grep -n \"no working preview\" returns 0. No live drive happened, and I am not implying one did.\n\nDoD 3 (reject into REWORK) was recorded, not implemented: BOARD_COLUMNS stays its six entries and the daemon performs no node transition, so a REWORK column would be the design regression rail 2 forbids. The invariants test asserts the column read is unchanged across a rejection.\n\nTWO OUT-OF-PLAN EDITS, both forced and both disclosed: (1) apps/daemon/src/http/http-listener-read-dispatch.test.ts - the leaf's own comment assigned this retirement to this row in writing; adding my consumer reddened 2 census arms, so /preview/read left UNCONSUMED_SERVED_ROUTES and /preview/capture joined the permitted-non-JSON list. 17/17 green. Landing without it would red HEAD for everyone. (2) three real defects in my own e2e spec that only the browser lane could catch: a hardcoded protocol version the daemon refused with DISTRIBUTION_MISMATCH, a seeded-goal read against ",
+  "completionSummary": "REOPEN CLOSED - both QA items discharged. No bytes rebuilt; QA said the work was not in question. Full evidence: comment-18f42d92 and the step-7 note.\n\nITEM 1 (bytes not at HEAD): CLOSED. Everything landed as bea8e16f (feat(task-33ceae56...), 25 files, +2089/-87), which the daemon records as landing.lastCompletion.sha, pushed:true. `git cat-file -e HEAD:<p>` = 0 for all eleven deliverables (live-preview.{ts,test.ts}, preview-card.{tsx,test.tsx}, needs-you-preview.{ts,test.ts}, goal-status-preview.{ts,test.ts}, activity-words.test.ts, preview-rejection-invariants.test.tsx, preview-approve.spec.ts). The http-listener-read-dispatch.test.ts census edit is in that SAME commit. QA graded 57446237, an ancestor of HEAD.\n\nITEM 2 (LIVE_PREVIEW_LAYER unrostered): CLOSED IN THAT SAME COMMIT. layer-visibility-cases.ts:172 carries the entry; all three coupled pins moved together, 73->74, 252->253, 290->292.\n\nGATES at HEAD f99114f7, foreground and standalone:\n- pnpm --filter @moe/control-room test: 182 files / 2284 tests, EXIT 0\n- targeted, this row's six files: 6 files / 53 tests, EXIT 0 (proves non-vacuous)\n- pnpm test:security: 2 failed | 10 passed (12) / 6 failed | 994 passed (1000), EXIT 1 - FOREIGN, disclosed verbatim, not hidden.\n\nTHE SECURITY RED IS NOT THIS ROW, PROVEN BY BISECT. SCANNED=75 ALLOWLIST=74; the single UNLISTED is RELEASE_LAYER@apps/control-room/src/v2/goals/release-port.ts, task-817d893f's file, landed by its checkpoint 1693c205. STALE direction empty, so nothing of mine left the roster. Detached worktree at bea8e16f where that file is ABSENT, -t \"TASK-LV module-private\": 12 passed, EXIT 0. Same filter at HEAD: 6 failed, EXIT 1, \"expected 75 to be 74\". (2)-minus-(1) intersected with this row's owned paths is EMPTY. I deliberately did NOT bump 74->75 - epic rail 3 forbids two rows moving one count literal concurrently and that row is in flight on the file. Notified with the exact four-edit fix at comment-672a6a61.\n\nSTILL DEFERRED, unchanged and never implied ",
   "reviewCompletedAt": "2026-09-06T21:02:50.744Z",
   "rejectionDetails": {
     "failedDodItems": [

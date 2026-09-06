@@ -21,14 +21,18 @@
     {
       "stepId": "step-1",
       "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-5e90317e80ac4b86a9704b6b8ba8874a (the versioned design aggregate and the two seat kinds), task-de0598236f3b4d95aa3b6098b9d56995 (the staffed step, the compiler mission carrying the design, and the skip toggle), task-f3409f9a1f3a4925a73974ea371098e5 (the Design tab, the version on the approval card, the e2e, the live drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Read-only roll-up at delivered HEAD f213b41d60adfd60c52e920b2598a01cc122569f. All EIGHT actual dependsOn rows are DONE and epicSiblings.landing.merged=true. Read each verification/completionSummary/reviewSummary, not inferred from checkout. Child landing anchors: 5e90317e aggregate completion 34baaf520cdfcf05b4ea431d258ed004f1c2d67c, 2 files/48 tests; 06ac0da1 seat publication completion b3682c14ffb27a672353771c6c3b6742db31214f, 3 files/211 tests; 7f9f20c7 MCP checkpoint 408fccfa583ceb6abe542d03bec4e4d48bebe5bd then fc6e594718fb03b6916fc6051f6903979d5bb8d5, scoped 2 files/15 passed/20 skipped; de059823 wrapper checkpoint 3c455b4c5033ac2b6530f22a474777a132108bea, 3 files/97 tests; 7ca9dca3 HTTP completion e2aa3fb109c4de1e698326430148496ddc5c0ea2, QA 3 files/22 tests; eb2bb09d composition checkpoints 5cde885cf247bc33f4ddabc18137f11228635768 then df4a56a027ead9320277cf10bd549bb5d3fe61c2, QA 4 files/51 tests; e9cb2442 Design tab completion 9a25ff5422763ee81f45111b6167e035d067ec3e, CR 153 files/1903 tests; f3409f9a browser/live/docs completion f213b41d60adfd60c52e920b2598a01cc122569f, fresh recorded browser 1 passed. All quoted gate counts are CHILD-recorded at their own anchors, not current parent runs. Rows lacking lastCompletion are explicitly checkpoints, not fabricated completion commits; merged and QA-DONE recorded. The parent planned three original children; their own split/composition descendants supply the eight actual dependencies. All shared checkout dirt is foreign; zero paths touched. Integration follow-through has found an unwired designBrief root, being measured in step 2 rather than silently accepting the child's helper-level claim.",
+      "startedAt": "2026-09-06T20:04:30.755Z",
+      "completedAt": "2026-09-06T20:09:23.918Z"
     },
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (design.submit and design.read published with roster backfill, three refusals with code + layer, bidirectional roster tests) -> child task-5e90317e. DoD 2 (the wrapper staffs the step; the compiler mission bytes carry the design ref and the five section headings) -> child task-de059823. DoD 3 (the Design tab, the version, the resubmit bump, the approval card naming the version) -> child task-f3409f9a. DoD 4 (the skip toggle) -> child task-de059823. DoD 5 (live drive; VISION/README journey step 4) -> child task-f3409f9a. RECORD ONE DESIGN DECISION EXPLICITLY so QA does not grade it against the wrong pattern: `design.submit` and `design.read` are SEAT kinds, deliberately NOT human-only and NOT MCP-excluded — the opposite of every other kind this epic added. Copying approval.decide's human-only shape would have made the design step unstaffable, and child 1 carries an arm asserting an agent-authenticated dispatch REACHES the handler.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T20:09:24.328Z"
     },
     {
       "stepId": "step-3",
@@ -54,15 +58,34 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Spun-out rows are filed in PLANNING (BACKLOG is human-gated and invisible to claim_next_task); created without the status field by mistake.",
+  "reopenReason": "Governor 22:10Z, owner-approved — retiring a DOUBLE-HOLD, not clearing the block. The designBrief composition gap is real and unchanged; it is carried by dependsOn task-e735fefa (PLANNING producer row filed 20:19Z), which gates every WORKING claim on this row until that producer is DONE. Leaving the row BLOCKED as well added nothing: BLOCKED with no blockedOnTaskIds and no blockedResourceId can never auto-unblock, so the row fired a 'nothing will auto-unblock it' age alert every 25 min since 21:13Z with no action available. dependsOn is now the sole and sufficient gate. No DoD change, no plan change, no assignment, no promotion.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 60,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f95b0ac38782419a967d64f1f62e4f30",
+      "author": "worker-f78e0703",
+      "content": "PRODUCTION COMPOSITION GAP found by read-only parent roll-up; anchor f213b41d60adfd60c52e920b2598a01cc122569f, 2026-09-06 20:09Z. No source edits or mutations.\n\nSurviving reproduction:\ngit grep -n designBrief f213b41d60adfd60c52e920b2598a01cc122569f -- apps packages tests\nExactly THREE hits, all in apps/daemon/src/orchestrator/agent-wrapper.ts:105 (optional config callback), :283 (codeMission argument), :296 (compilerMission argument). NO producer/caller supplies the callback anywhere. Same working-tree rg result.\n\nProduction root: git show f213b41d60adfd60c52e920b2598a01cc122569f:apps/daemon/src/orchestrator/agent-wrapper-main.ts\ncreateAgentWrapper object at :185 supplies compilerGateRef, compilerInstructions and nodeMission, but not designBrief. Its optional accesses therefore evaluate undefined ?? null for every real compiler/node seat.\n\nConsequences in agent-mission-text.ts at same SHA:\n- :123-150 compilerDesignLines(null) emits \"NO DESIGN ACCOMPANIES THIS BRIEF, and the operator has not declared that it plans without one\", even if durable state is PRESENT or SKIPPED.\n- :154-155 nodeDesignLines(null) returns [].\nThe actual design entity cannot be traced through this composition edge into node mission bytes. The design aggregate and MCP read ARE real, and real design-seat submission is recorded by f3409f9a; those do not supply this missing edge.\n\nWhy child evidence missed it: agent-mission-text.test.ts:128-144 constructs PRESENT {entities:[\"Account\",\"Session\"], ref:\"design:goal-1\", screens:[\"Dashboard\",\"Settings\"]} and calls compilerMission directly; :200-206 directly passes a hand-built PRESENT to codeMission. Root coverage never supplies designBrief. Fresh focused command:\npnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/orchestrator/agent-mission-text.test.ts src/orchestrator/agent-wrapper.test.ts src/orchestrator/agent-wrapper-main.test.ts\nEXIT 0; Test Files 3 passed (3); Tests 126 passed (126); Duration 9.70s. This is evidence of a coverage hole, NOT proof the missing production edge works.\n\nRequired owning implementation repair: resolve durable goal design/skip in the real wrapper composition; resolve node goal plus compiled design-version provenance rather than latest; wire designBrief; test PRESENT/SKIPPED actual composed mission bytes and a named entity. Do not collapse unreadable state into absent or invent node provenance. This is within de059823's originally claimed load-bearing mission capability (DoD 4/5 and skip compiler words), not a new evidence-only row. Parent writes no production code; no full-suite convoy launched to paper over the gap.",
+      "timestamp": "2026-09-06T20:10:40.972Z"
+    },
+    {
+      "id": "comment-80b806eee4724c0bbee265c133c00faa",
+      "author": "worker-f78e0703",
+      "content": "STEP 2 reconciliation, read-only at f213b41d; NOT a completion claim.\n1. Contract/aggregate/refusals -> 5e90317e; published seat command -> 06ac0da1; MCP advertisement+dispatch -> 7f9f20c7; HTTP/production read -> 7ca9dca3 + eb2bb09d. Their DONE verification/review records include exact code AND layer and bidirectional roster drills.\n2. Staffing/design mission -> de059823, real design-seat live proof -> f3409f9a. Compiler/node load-bearing half UNMET at integrated production root: designBrief callback is never supplied (comment-f95b0ac38782419a967d64f1f62e4f30). Do not infer production composition from pure mission text tests.\n3. Design tab/version/read history -> e9cb2442 + f3409f9a. Child real-daemon browser passes v1 display, resubmit v2, retained v1 read, then compile and card version2. Production card read uses planningRunRef; design-store resolves compiled binding designVersion. Child 4ac0dbda supplied that selector (f340 record). Post-compile resubmit browser journey itself is NOT covered: its v2 is submitted BEFORE compile; add this to existing integration hardening, not a new proof row.\n4. Skip marker -> 365e5d97 and ladder unblocking -> 217f40b7 (transitive dependencies of de059823). Their existence does NOT fix the compiler saying absent rather than skipped: same missing root callback. Per-goal UI toggle/no-seat end-to-end has not yet been independently traced by this parent; no affirmative claim.\n5. REAL Claude seat (not double) recorded in f3409f9a comment-6bc04f6c7ad744e4ad5c699a17e13f00: design.submit SPAWNED 2026-09-06T19:09:39.036Z, submittedAt19:10:18.947Z, read found valid design19:10:36.461Z. Ref design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93 v1, entities Operator/Item/OperatorSession. No DESIGN_SHAPE_INVALID; valid first submission. Parent did NOT re-run that live seat. README:60-66 and VISION:30 at delivered SHA say running2026-09-06, matching live date. Store-path/source-SHA live provenance remains in child/external driver and should be pinned before final parent completion.\n6. Parent fresh scoped diagnostic 3files126testsEXIT0 only; NO full daemon/control-room/root/browser or typecheck pass claimed. Child record full runs carry disclosed foreign reds. Earlier gate-convoy substitution request is paused on substantive production gap.\nDESIGN DECISION: design.submit/read are SEAT kinds, deliberately NOT human-only and NOT MCP-excluded. Agent-authenticated reach is required; approval/decide human-only fences must never be copied to them.\nNo paths edited; preserve all foreign dirty paths. Step1 complete; step2 holds this unresolved reconciliation.",
+      "timestamp": "2026-09-06T20:11:57.766Z"
+    },
+    {
+      "id": "comment-7ba39af5bc3a4d7aaa11cc4dba643f71",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 20:23Z — worker-f78e0703's roll-up finding (comment-f95b0ac3: createAgentWrapper never supplies `designBrief`, so real compiler/node missions get the ABSENT sentence regardless of durable PRESENT/SKIPPED) is accepted as measured and routed to a producer row: task-e735fefa4c5f4b00adb364f7c9dcdab7 (HIGH, order 61, parent = this row, PLANNING). task-de0598236 stays DONE (not reopened). This parent now depends on e735fefa and stays BLOCKED until it lands; the governor then restores WORKING and the roll-up certifies DoD 2 / trace / skip from e735fefa's composed-mission evidence. Scoped + citations gate form for this parent stands (msg-580618e2 in #architects): scoped daemon suites named, leased fulls cited with START/END, daemon full suite not certified while task-0397287d is open.",
+      "timestamp": "2026-09-06T20:20:20.902Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:00.823Z",
-  "updatedAt": "2026-09-05T14:28:57.313Z",
+  "updatedAt": "2026-09-06T22:09:25.945Z",
   "dependsOn": [
     "task-5e90317e80ac4b86a9704b6b8ba8874a",
     "task-06ac0da1ace64032855affc4ab0c1a4e",
@@ -71,14 +94,18 @@
     "task-7f9f20c7cddf4d50b49054951ab177fb",
     "task-7ca9dca37fb44b40ac35abfc3c36cb9a",
     "task-e9cb2442a9a44408bea35cfce6a1897b",
-    "task-eb2bb09d4efa4691803a519901eb2f97"
+    "task-eb2bb09d4efa4691803a519901eb2f97",
+    "task-e735fefa4c5f4b00adb364f7c9dcdab7"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-05T00:37:48.144Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 0
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T00:38:32.679Z",
   "planningNotes": {
@@ -93,5 +120,15 @@
       "apps/control-room/src/live/dev-proxy-paths.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T00:38:34.949Z"
+  "planApprovedAt": "2026-09-05T00:38:34.949Z",
+  "contextFetchedBy": [
+    "worker-f78e0703"
+  ],
+  "workStartedAt": "2026-09-06T20:04:30.755Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Measured production composition gap at delivered f213b41d60adfd60c52e920b2598a01cc122569f, parent comment-f95b0ac38782419a967d64f1f62e4f30. agent-wrapper-main createAgentWrapper never supplies optional designBrief; full-tree grep has only declaration+two uses. Real compiler therefore gets ABSENT bytes for PRESENT/SKIPPED and node gets no design paragraph. Parent DoD2 and integration trace/skip clauses cannot be honestly certified. Pure/root suites fresh3files126testsEXIT0 miss the unwired edge. This is a read-only shell with no production edits authorized; owning mission child's DONE record must be reopened/extended (specific task id is in the comment/governor request). No paths modified, no resources or background processes. Not blocking on foreign reds or proof polish.",
+  "blockedOnTaskIds": null
 }

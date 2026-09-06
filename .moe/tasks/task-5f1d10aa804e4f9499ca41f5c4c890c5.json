@@ -18,12 +18,12 @@
     "PROVE IT THROUGH THE PRODUCTION COMPOSITION. An injected port in a unit test proves the engine, not the daemon - that gap is why this row exists."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "Governor 14:24Z: un-archived to BACKLOG as the parked owner of the `releaseDecision: () => null` stub in productionDeployPorts(). worker-7bdbffac (79f8c7c0) declined to absorb it under its task rail, so the gap is otherwise unowned. Not urgent for 84cd2e55's preview-first DoD; re-scope per comment-0f83c2fb (release-decision port only, read-only, dependsOn 79f8c7c0) before it enters PLANNING.",
+  "reopenReason": "Governor 22:10Z, owner-approved promote. Row was parked in BACKLOG (out of the claim pool entirely) with dependsOnUnmet 0, priority HIGH, planStepCount 0 and reopenCount 1 — nothing was gating it but the BACKLOG status itself, and no seat can claim BACKLOG. Promoting to PLANNING so a planning-capable seat can plan it (it has no steps yet). Two null stubs in productionDeployPorts (durable target reader + release decision) are the subject; its only dependency task-79f8c7c0 is already satisfied.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "dependsOn": [
@@ -41,7 +41,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:02:10.555Z",
-  "updatedAt": "2026-09-06T14:13:01.974Z",
+  "updatedAt": "2026-09-06T22:09:32.646Z",
   "failedDodItems": [],
   "contextFetchedBy": []
 }

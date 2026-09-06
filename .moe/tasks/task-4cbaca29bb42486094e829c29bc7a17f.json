@@ -1,0 +1,147 @@
+{
+  "id": "task-4cbaca29bb42486094e829c29bc7a17f",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Gate 2 end to end on a LANDED goal: the approve verdict reads back from /activity/read and a real preview is driven live",
+  "description": "Split from task-33ceae56 by governor ruling (20:10Z). A STARTED preview needs a LANDED goal; landing is recorded by `internal.repository.landing_receipt`, which no HTTP route, async entry or PAYLOAD_KEYS roster exposes, so the browser lane cannot reach a started preview today, and parent rail 4 forbids a fixture. task-cf2d91d9 is establishing the lane's real landing precondition (a real landing through the lane, or a lane-committed sha); this row CONSUMES that, it does not build a second one. Evidence of the gap: task-33ceae56's step-5 note and Serena memory gotcha-a-landed-goal-is-unreachable-over-http-so-gate-2-cannot-be-driven-in-a-browser. task-33ceae56 keeps every surface, component proof and the daemon-backed spec up to the reachable boundary; the two clauses below moved here verbatim.",
+  "definitionOfDone": [
+    "A preview STARTS from a goal that reached LANDED through the production landing path (reuse task-cf2d91d9's precondition; do not build a second one): `internal.repository.landing_receipt` is written by the real lander, never seeded by hand; the spec FAILS, not skips, when no landing receipt exists.",
+    "APPROVE commits a durable decision that is read back from `/activity/read` carrying its verdict - assert the verdict value from the activity read, not from local component state, so a click that never reached the daemon cannot pass.",
+    "REJECT with findings is read back the same way and the named node is in REWORK on the board with the findings text visible.",
+    "LIVE DRIVE: a preview started for UnAI (D:/projexts/UnAI) or a fresh scaffold app, with a real screenshot (path + sha256) and the committed decision recorded in a row comment under ~4500 chars. If the live drive did not happen, say so plainly rather than implying it did.",
+    "README's working-preview clause states the measured truth after this row; gates quoted with count lines: `pnpm test:e2e:browser` (spec count quoted, the Gate 2 spec named), `pnpm --filter @moe/control-room test`, `pnpm typecheck` - leased through `full-suite-gate` / `browser-e2e-gate`; foreign reds path-attributed, never certified."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE THE PRECONDITION BEFORE WRITING A LINE. task-cf2d91d9 is still WORKING and declares two files this plan depends on, so confirm its bytes are still where the architect measured them. Run and record verbatim in the step note: (a) `git ls-files tests/e2e/control-room/lane-landing.ts` prints the path AND `git status --porcelain -- tests/e2e/control-room/ apps/daemon/src/preview/` — record every dirty path as foreign debris (`apps/daemon/src/preview/preview-goal-landing.test.ts` is expected `??`; never revert, stash or commit it); (b) `grep -n 'export async function landLaneNode' tests/e2e/control-room/lane-landing.ts`; (c) `grep -n 'MOE_NODE_LANDING: landing' tests/e2e/control-room/wrapper-lane.ts`; (d) `grep -n 'createLaneScratch(options.fakeDocker !== undefined)' tests/e2e/control-room/daemon-ports.ts`; (e) `grep -n 'port.release(receipt.receiptId, payload.decision)' apps/daemon/src/preview/preview-daemon-edge.ts`; (f) `grep -n 'preview.decide' apps/daemon/src/http/activity-read.ts`. Also record the HEAD sha. ALL SIX MUST HIT. If (a)–(d) have moved under you, stop and report blocked naming task-cf2d91d9 rather than re-implementing a second lander — this row consumes that one, it does not build one. No file is edited in this step.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-landing.ts",
+        "tests/e2e/control-room/wrapper-lane.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "apps/daemon/src/preview/preview-daemon-edge.ts",
+        "apps/daemon/src/http/activity-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "NEW MODULE `tests/e2e/control-room/lane-preview.ts` — the preview half of the lane, kept out of the spec so neither file crosses the 250-line cap. Export four things, each documented with WHY, mirroring `lane-landing.ts`'s house style.\n(1) `writePreviewScaffold(workspace)` — writes `package.json` (`{\"name\":\"lane-preview\",\"private\":true,\"scripts\":{\"dev\":\"node preview-server.js\"}}`) and `preview-server.js` into the lane's git workspace, then COMMITS them with the same `laneGit`-style invocation `lane-landing.ts` uses (git identity supplied on the command line; GIT_* stripped). Call it BEFORE `landLaneNode` so the landing sha carries the scaffold. `preview-server.js` MUST create a `node:http` server, `listen(0, \"127.0.0.1\")`, and print exactly `http://127.0.0.1:${port}` on stdout once listening — `detectPreviewPort` (preview-command-resolution.ts) matches that origin form and NOTHING else, and port 0 is required so parallel lanes in this shared checkout cannot collide. It serves one HTML page containing a recognisable literal the live drive can screenshot.\n(2) `startLanePreview(lane, goalId, sha)` — POSTs `preview.start` on `mintLaneOperatorSeat(lane)` (the lane credential is NOT the operator principal and is correctly refused `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`), payload EXACTLY `{goalId, sha}` (`PREVIEW_START_PAYLOAD_KEYS`; an extra key is refused by the ingress allow-list). Reuse the envelope shape from `deploy-fake-docker.spec.ts:44-62`, including `readWireProtocolVersion(lane.repoRoot)` and `schemaVersion: \"moe-runtime-command/1\"` — NEVER a literal protocol digit. `preview.start` is an ASYNC entry, so ACCEPTED is not a started preview: POLL `/preview/read` until the receipt reads STARTED, and on timeout FAIL carrying the receipt's own code and layer.\n(3) `decideLanePreview(lane, previewRef, decision, findings)` — POSTs `preview.decide` on the same minted seat; findings use EXACTLY `{detail, nodeRef}` (`PREVIEW_FINDING_KEYS`).\n(4) `readActivityVerdict(lane, goalId)` — POSTs `/activity/read` with `{goalRef: goalId}` and returns the entries, so an arm can assert the verdict from the daemon's answer rather than from component state.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-preview.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/lane-landing.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/lane-preview.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE APPROVE ARM, live, in `preview-approve.spec.ts`. Compose the lane with `withDaemonBackedControlRoom({..., fakeDocker: \"SUCCESS\", operatorChannel: ...})` — that existing switch is what gives the lane a git workspace, `MOE_NODE_WORKSPACE` and a landing-capable node spec (daemon-ports.ts:497/609/150); the docker doubles ride along unused and the spec header must say so. Sequence: `writePreviewScaffold(lane.workspace)` -> `landLaneNode(lane)` -> assert `landed.ok` with the wrapper transcript as the failure message and `landed.sha` a 40-hex that DIFFERS from `lane.workspaceSha` -> read the goal id from POST `/goals/read` with EXACTLY `{}` (NOT `/runs/read`, which is empty on a seeded lane) -> `startLanePreview` -> pair the browser and navigate to Needs you by TESTID (`cr.nav.approvals`; the accessible name \"Needs you\" is a strict-mode violation) -> assert the Gate-2 card root is VISIBLE (never assert an absence without asserting its container's presence) -> click Approve in the BROWSER -> `readActivityVerdict(lane, goalId)` and assert an entry with `commandKind: \"preview.decide\"`, `disposition: \"COMMITTED\"` and `verdict: \"APPROVE\"`. THE VERDICT ASSERTION READS THE DAEMON'S ANSWER, so a click that never reached the daemon cannot pass. DoD 1's fail-not-skip rule is binding: no `test.skip`, no conditional early return — a lane with no landing receipt FAILS with the lander's own transcript. Wrap start->decide in a `finally` that stops the preview on every exit path (including a throw between them) and push the preview pid onto the spec's tracked-pid list so teardown counts it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/e2e/control-room/lane-preview.ts",
+        "tests/e2e/control-room/lane-landing.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE REJECT ARM, in its OWN FRESH LANE — the receipt id is a function of (projectId, goalId, sha), so a second decide on the approved lane would answer REPLAYED rather than reject anything. Same land->scaffold->start sequence, then send back with findings whose `nodeRef` is a member of the landed goal's nodes (a nodeRef outside `readGoalLandingStatus(...).nodes` is refused `PREVIEW_DECISION_INVALID @ REQUEST` — assert that refusal's CODE AND LAYER in a negative arm too, so the happy path is not the only thing pinned). Assert: `readActivityVerdict` carries `commandKind: \"preview.decide\"` with `verdict: \"REJECT\"`; and in the browser the findings text is VISIBLE against the NAMED NODE. CRITICAL — DoD 3 says the node goes to \"REWORK\"; PRODUCTION HAS NO REWORK STATE and `apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx` encodes the governor ruling that a rejection moves NOTHING, with a source sweep that REDS on any REWORK spelling in the control room. Assert the ruling, not the stale sentence: the findings render against the named node and the node's board column is UNCHANGED across the rejection. Do NOT add a REWORK state, column or spelling anywhere.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/e2e/control-room/lane-preview.ts",
+        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TELL THE TRUTH IN BOTH DOCS, because this row demolishes two walls that are currently written down as permanent. (a) `preview-approve.spec.ts`'s header block (lines ~8-45) states \"NOT REACHABLE FROM A BROWSER LANE\" walls A and B and says `preview.decide` cannot stop a process. All three are now false: replace that half with what the live arms prove, HOW the landing is real (`landLaneNode` -> real wrapper -> real `node-lander`, nothing seeded), and why `port.release(...)` after the commit makes the dev server stoppable. (b) `README.md` lines 154-159: the clause \"Gate 2 is WIRED BUT NOT YET DRIVEN END TO END ... no preview has been run against a real landed product, because a landed goal is recorded by `internal.repository.landing_receipt`, which has no HTTP ingress\" must state the MEASURED truth after this row, and must not overclaim — if the DoD-4 live drive did not happen, the README says the lane drives it and the live drive did not, plainly. Keep the surrounding sentences (Gate 3, Codex seat, verifier) byte-identical. LINE CAP: after step 3 and 4, run `wc -l tests/e2e/control-room/preview-approve.spec.ts`; if it exceeds 250, move the two live arms into a new `tests/e2e/control-room/preview-approve-live.spec.ts` (declaring it as a modified file) and leave the corrected header pointing at it — do not let the file cross 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "README.md"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/preview-approve-live.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE LIVE DRIVE (DoD 4). Start a preview for UnAI (D:/projexts/UnAI) or, if that repository resolves no preview/dev script, a fresh scaffold app — take a REAL screenshot and record its absolute path plus its `sha256` (`Get-FileHash -Algorithm SHA256`), and record the COMMITTED decision (the `/activity/read` entry: commandKind, verdict, decidedAt, version) in a row comment under ~4500 chars. Comments truncate SILENTLY at 5000, so keep it one idea per comment. IF THE LIVE DRIVE DID NOT HAPPEN, SAY SO PLAINLY in the comment and in the completion summary — DoD 4 permits an honest negative and forbids an implied positive. Never fabricate a path, a hash or a verdict; a screenshot that was not taken has no sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "README.md"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW, one concentrated pass at the end. Lease `browser-e2e-gate` for the browser run and `full-suite-gate` for the repo-wide legs — one gate at a time, never two suites at once. Run each leg FOREGROUND and STANDALONE, and read the OUTPUT not the exit code: an exit-0 leg with no `Test Files N passed` count line RAN NOTHING. Legs: (1) `npx tsc -p tests/e2e/control-room/tsconfig.json` FIRST — the browser script is `tsc && playwright test`, so a tsc failure means ZERO specs ran; (2) `pnpm test:e2e:browser`, quoting the spec count and naming the Gate 2 spec explicitly; (3) `pnpm --filter @moe/control-room test` with its count line; (4) `pnpm typecheck`. Record the merge-base baseline and the HEAD result for each repo-wide leg and path-attribute the delta: report foreign red VERBATIM with its failing file paths, never certify it green and never claim it as yours. Then read your own diff as an attacker: does any exit path leak the dev server, the wrapper or the lane? Does the REJECT arm still fail if `port.release` were deleted? Does the verdict assertion still fail if the browser click were removed (mutate it once and confirm RED, then restore)? Are the protocol version and schemaVersion imported rather than written as literals? Is `preview-approve.spec.ts` under 250 lines? Finally confirm `git status --porcelain` shows only paths you own plus the foreign debris recorded in step 1, and report every path you touched in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/e2e/control-room/lane-preview.ts",
+        "README.md"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "GOVERNOR",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "dependsOn": [
+    "task-33ceae56edc348e9864bc592430fa1d0",
+    "task-cf2d91d923ea4397a1145e0973ed2218"
+  ],
+  "priority": "HIGH",
+  "order": 34,
+  "comments": [
+    {
+      "id": "comment-32ab0f565b9647d081f5d8e7fa7ff186",
+      "author": "architect-6e49a205",
+      "content": "PLANNING MEASUREMENT + ONE DoD CLAUSE THAT CANNOT BE SATISFIED AS WRITTEN. Measured at HEAD f99114f7, 2026-09-07.\n\n1. THE PRECONDITION IS ALREADY ON DISK — this row consumes it, builds nothing.\n`tests/e2e/control-room/lane-landing.ts` is TRACKED (`git ls-files` lists it; `git status --porcelain -- tests/e2e/control-room/` is empty) and exports `landLaneNode(lane)`, driving the REAL wrapper + REAL node-lander into the lane's git workspace. `deploy-fake-docker.spec.ts:74` already consumes it. `wrapper-lane.ts:138` carries `MOE_NODE_LANDING: landing ? \"1\" : \"0\"`. So the description's \"task-cf2d91d9 is establishing the lane's real landing precondition\" is STALE IN THE CLOSED DIRECTION: it is established. The plan re-verifies all of it in step 1 because cf2d91d9 is still WORKING and declares those files, and stops rather than re-implementing if they moved.\n\n2. BOTH WALLS IN THE 33ceae56 SPEC HEADER ARE NOW FALSE, INCLUDING THE SAFETY ONE.\nWall A is routed around by landing through the wrapper rather than over HTTP. Wall B falls to a preview scaffold committed into the lane workspace before landing (`resolvePreviewCommand` takes the first non-empty `PREVIEW_SCRIPT_ORDER` entry from `<workspace>/package.json`). And the leak fear is stale: `preview-daemon-edge.ts` ends with `port.release(receipt.receiptId, payload.decision)` AFTER the commit — `preview.decide` DOES stop the dev server, on APPROVE and REJECT alike. `capturePreviewJourneys` also returns `[]` and launches no Chromium with zero journeys, so a lane start spawns exactly one child.\n\n3. DoD 2 NEEDS NO PRODUCTION CHANGE. `/activity/read` already has `\"preview.decide\"` in `VERDICT_KINDS` (activity-read.ts) and `decisionWord` reads the record's `decision`. POST `{goalRef: goalId}` and read `entries[].verdict`.\n\n4. THE CLAUSE THAT COLLIDES — DoD 3's \"the named node is in REWORK on the board\".\n`grep -rn REWORK apps/daemon/src --include=*.ts` (non-test) returns ZERO producers. There is no REWORK state in this product. `apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx` encodes the governor ruling already made on parent task-33ceae56 — \"a rejection renders its findings against the NAMED NODE, and NOTHING MOVES\" — with a BOARD_COLUMNS roster arm and a source sweep that REDS on any REWORK spelling anywhere in the control room. DoD 3's phrasing was moved verbatim from 33ceae56 and predates that ruling; satisfying the sentence literally would redden a landed test and reverse a governor decision.\n\nPLANNED AGAINST THE RULING, NOT THE SENTENCE: step 4 asserts the REJECT verdict read back from `/activity/read`, the findings text visible against the NAMED node in the browser, and the node's board column UNCHANGED across the rejection — plus a negative arm pinning `PREVIEW_DECISION_INVALID` with its layer for a finding whose nodeRef is not a landed node. No REWORK state, column or spelling is introduced. QA: please grade DoD 3 against this ruling. If a governor wants the literal wording instead, that is a production change to the board vocabulary and a different row.",
+      "timestamp": "2026-09-06T22:16:25.899Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T20:09:11.812Z",
+  "updatedAt": "2026-09-06T22:16:25.899Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-06T22:10:20.084Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10
+  },
+  "contextFetchedBy": [
+    "architect-6e49a205"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-06T22:16:05.647Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WIDEN THE LANE GATING — add a `laneWorkspace?: boolean` option to `DaemonLaneOptions` so a preview lane gets a git workspace without dragging in the fake-docker doubles. REJECTED: `daemon-ports.ts` is a DECLARED path of task-cf2d91d9, which is still WORKING; editing it collides with a live peer in the shared checkout for zero delivered value. Instead the preview lane passes `fakeDocker: \"SUCCESS\"`, which is the EXISTING switch for `createLaneScratch(landing)` (daemon-ports.ts:609), `MOE_NODE_WORKSPACE` (:497) and the node spec's `workspace: workspace.path` (:150). The fake docker dependency doubles come along, but this spec never dispatches a deploy, so they are inert. Say so in the spec header rather than leaving a reader to wonder why a preview lane names docker.\n(2) SEED THE LANDING RECEIPT with `seedLandingReceipt`. FORBIDDEN by parent rail 4 and by DoD 1 — that fixture writes a literal sha and a `D:/fixture-workspace` path; a preview measured against it is fabricated authority. `lane-landing.ts`'s own header says the same.\n(3) DRIVE `preview.start` WITHOUT A PREVIEW SCRIPT to see the refusal. That is what task-33ceae56 already proved (PREVIEW_COMMAND_MISSING). It does not START anything, so it discharges no clause on this row.\n(4) PUT THE LIVE ARMS IN A SEPARATE `preview-approve-live.spec.ts`. Held as the CONDITIONAL fallback in step 5 only if `preview-approve.spec.ts` crosses 250 physical lines; the primary is one Gate-2 spec, because its header currently states two walls this row demolishes and that header must be rewritten in the same file either way.",
+    "codebaseInsights": "ALL MEASURED AT HEAD f99114f7 ON 2026-09-07, BOTH DIRECTIONS PER THE RE-MEASURE RAIL.\n\nTHE GAP THE DESCRIPTION CLAIMS IS ALREADY CLOSED — DO NOT REBUILD IT.\n`tests/e2e/control-room/lane-landing.ts` EXISTS and is TRACKED (`git ls-files tests/e2e/control-room/` lists it; `git status --porcelain -- tests/e2e/control-room/` is EMPTY). It exports `landLaneNode(lane)` -> `{ok:true, sha}` driving the REAL wrapper + REAL `node-lander` into the lane's git workspace, and `deploy-fake-docker.spec.ts:74` already consumes it. `wrapper-lane.ts:138` now reads `MOE_NODE_LANDING: landing ? \"1\" : \"0\"` — the opt-in parameter cf2d91d9 needed has landed. So task-cf2d91d9's precondition is ON DISK; this row CONSUMES `landLaneNode` and builds no second lander. `dependsOn` already names both parents ([task-33ceae56, task-cf2d91d9]) — no `set_task_dependencies` call was needed.\n\nBOTH WALLS IN THE SPEC HEADER ARE NOW FALSE.\nWall A (no HTTP ingress for landing) is routed around by `landLaneNode`, which lands through the wrapper, not over HTTP — the receipt is written by production code.\nWall B (no preview command in the bound workspace) falls to a scaffold this row commits INTO the lane workspace before landing: `resolvePreviewCommand` (preview-command-resolution.ts:126) takes the first non-empty entry of `PREVIEW_SCRIPT_ORDER` from `<workspace>/package.json`.\n\nTHE LEAK HAZARD THE OLD HEADER FEARED IS CLOSED IN PRODUCTION, MEASURED.\n`preview-daemon-edge.ts` ends with `port.release(receipt.receiptId, payload.decision)` AFTER the commit, on APPROVE and on REJECT alike. So `preview.decide` DOES stop the process; the 33ceae56-era header claim that it does not is stale. Additionally `capturePreviewJourneys` (preview-capture.ts:86) returns `[]` and launches NO Chromium when `journeys` is empty, and journeys are empty when there are no contract facts — so the lane's start spawns exactly ONE child, the dev server, and the decide stops it.\n\nWIRING, ALL CONFIRMED PRESENT:\n- `PREVIEW_START_COMMAND_KIND` / `PREVIEW_DECIDE_COMMAND_KIND` are in `WiredCommandKind` (daemon-command-vocabulary.ts:233-234), the payload-keys roster (daemon-command-payload-keys.ts:155/160) and the async entries (daemon-command-async-entries.ts:287). `preview.start` is ASYNC — the `/command` POST answers ACCEPTED and the receipt appears later, so the spec must POLL `/preview/read`, never assume.\n- `PREVIEW_START_PAYLOAD_KEYS = [\"goalId\",\"sha\"]` EXACTLY (preview-contracts.ts:60); the workspace is SERVER-HELD and refuses to be named by a caller (preview-start-command.ts:88-99).\n- `PREVIEW_FINDING_KEYS = [\"detail\",\"nodeRef\"]` EXACTLY (preview-contracts.ts:86); a finding whose `nodeRef` is not in `readGoalLandingStatus(...).nodes` is refused `PREVIEW_DECISION_INVALID`.\n- `preview.start` fences at handler ENTRY on `principal.principalId !== operatorPrincipalId` -> `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` (403). `mintLaneOperatorSeat(lane)` (daemon-ports.ts:249, already exported, already used at deploy-fake-docker.spec.ts:91) is what clears it.\n- `/activity/read` (activity-read.ts:22) ALREADY carries `\"preview.decide\"` in `VERDICT_KINDS`, and `decisionWord` reads the record's `decision` member. So DoD 2's read-back needs NO production change: POST `/activity/read` with `{goalRef: goalId}` and read `entries[].verdict`.\n\nPORT: `resolvePreviewCommand` returns `port: statedPort(statements)` = null with no contract facts, so the runner DETECTS the port from the child's stdout via `detectPreviewPort`, which demands a real `http(s)://127.0.0.1:<port>` origin. The scaffold server must therefore bind port 0 and PRINT its assigned origin in that exact form. A hard-coded port would collide with parallel lanes in this shared checkout.\n\nDoD 3's \"REWORK\" IS UNSATISFIABLE AS WRITTEN, AND A LANDED TEST FORBIDS IT — see `risks`.",
+    "risks": "DoD 3 SAYS \"REWORK\"; PRODUCTION HAS NO SUCH STATE AND A LANDED TEST REDS IF ONE APPEARS. `grep -rn REWORK apps/daemon/src --include=*.ts` (excluding tests) returns ZERO producers. `apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx` encodes the governor ruling already made on the parent row: \"a rejection renders its findings against the NAMED NODE, and NOTHING MOVES\", with a `BOARD_COLUMNS` roster arm and a source sweep that RED on any REWORK spelling anywhere in the control room. DoD 3's phrasing was moved verbatim from task-33ceae56 and predates that ruling. PLAN AGAINST THE RULING: the REJECT arm proves verdict `REJECT` off `/activity/read` plus findings rendered against the named node in the browser with the node's column UNCHANGED. Do NOT introduce a REWORK state to satisfy the sentence — that reddens a landed test and reverses a governor ruling. A row comment records this so QA grades the ruling, not the stale phrasing.\n\nCONCURRENCY / IDEMPOTENCE: the preview receipt id is a function of (projectId, goalId, sha), and a STARTED receipt makes a second `preview.start` answer REPLAYED (preview-start-command.ts). The APPROVE and REJECT arms must therefore each own a FRESH lane — a fresh landing gives a fresh sha. Do not try to reject a preview the same lane already approved.\n\nPROCESS LEAKS ARE THIS ROW'S REAL FAILURE MODE. Three children now exist per arm: the lane (daemon + dev server), the wrapper `landLaneNode` starts, and the DEV SERVER `preview.start` spawns. `landLaneNode` kills the wrapper in its own `finally`; `preview.decide` releases the dev server. Neither covers a spec that THROWS between start and decide. The arm must therefore carry its own `finally` that decides (or otherwise stops) the preview on every exit path, and the existing `assertStopped`-style teardown must count the preview's pid too. A leaked dev server holding a port makes every later gate on this board inadmissible under epic rail 4.\n\nSHARED CHECKOUT: task-cf2d91d9 is still WORKING and DECLARES `daemon-ports.ts` and `wrapper-lane.ts`. This plan edits NEITHER. If a step finds it needs to, STOP and report rather than taking the path. `apps/daemon/src/preview/preview-goal-landing.test.ts` is `??` untracked foreign debris — leave it, note it, never revert or commit it.\n\nBUDGET: `LANDING_BUDGET_MS` is 180 s per landing and there are two arms; plus pairing and a real dev server start. Give the arms a generous per-test timeout and expect `test:e2e:browser` wall clock to grow past the current 7.8 min.\n\nNO CENSUS BACKFILL IS EXPECTED. `http-listener-read-dispatch.test.ts` walks the CONTROL-ROOM module graph from `main.tsx`; this plan changes no control-room source, so no route gains or loses a control-room consumer. If the daemon leg reds on that file anyway, re-read `mem:gotcha-a-new-browser-consumer-obligates-a-daemon-census-roster-backfill` before calling it foreign.",
+    "keyFiles": [
+      "tests/e2e/control-room/lane-landing.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
+      "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+      "tests/e2e/control-room/preview-approve.spec.ts",
+      "apps/daemon/src/preview/preview-start-command.ts",
+      "apps/daemon/src/preview/preview-daemon-edge.ts",
+      "apps/daemon/src/preview/preview-command-resolution.ts",
+      "apps/daemon/src/http/activity-read.ts",
+      "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-06T22:16:07.849Z"
+}
