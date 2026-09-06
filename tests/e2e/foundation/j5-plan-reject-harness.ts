@@ -25,6 +25,7 @@ import {
   readDurableLedger, stateOf,
 } from "../../../apps/daemon/src/bootstrap/bootstrap-ledger.js";
 import { readGraphBody } from "../../../apps/daemon/src/planning/graph-body-record.js";
+import { designAggregateId } from "../../../apps/daemon/src/design/design-contracts.js";
 
 import { withStore } from "./multi-node-reads.js";
 import {
@@ -55,6 +56,7 @@ import {
   asObject,
   command,
   offerFor,
+  readSurface,
   send,
 } from "./multi-node-wire.js";
 import {
@@ -248,6 +250,22 @@ export async function preludeThroughGate1(
     || String(template.ref["revisionId"]) !== REVISION_ID) {
     throw new Error(`gate 1 approved an unexpected revision: ${JSON.stringify(template.ref)}`);
   }
+  await skipDesignForCompiler(scratch, wire, template.ref);
+}
+
+/** The compiler-only seat starts after the optional design has been explicitly skipped. */
+async function skipDesignForCompiler(
+  scratch: J5Scratch, wire: DaemonWire, contractRef: Frame,
+): Promise<void> {
+  const offer = offerFor(await readSurface(wire, scratch.projectId), "design.submit",
+    designAggregateId(GOAL_ID));
+  await send(wire, command(CORRELATION_ID, {
+    commandId: String(offer["commandId"]), commandKind: "design.submit",
+    expectedVersion: Number(offer["expectedVersion"]),
+    payload: { contractRef, goalRef: GOAL_ID,
+      revision: { skipped: true, reason: "Exercise re-staffed compiler missions without a design seat." } },
+    targetAggregateId: String(offer["targetAggregateId"]),
+  }), AGENT_SECRET);
 }
 
 /**

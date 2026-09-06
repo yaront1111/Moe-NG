@@ -7,6 +7,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { WIRE_PROTOCOL_VERSION } from "../../../apps/daemon/src/http/http-contract.js";
+import { designAggregateId } from "../../../apps/daemon/src/design/design-contracts.js";
 import { killTree, spawnNode, survivingPids } from "./daemon-children.js";
 import {
   LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv,
@@ -152,6 +153,23 @@ const NODE_SCOPES = Object.freeze({
   verificationRecipeRefs: ["recipe-a"],
   writeScopes: ["services/api/src/node"],
 });
+
+/** Keep this rejection journey about the compiler by recording a real optional-design skip. */
+async function skipDesign(
+  origin: string, goalId: string, contractRef: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const offer = await offerOf(origin, "design.submit", designAggregateId(goalId));
+  const result = await askDaemon(origin, "/command", {
+    commandId: offer["commandId"], commandKind: "design.submit",
+    correlationId: "e2e-reject-skip-design", expectedVersion: offer["expectedVersion"],
+    payload: { contractRef, goalRef: goalId,
+      revision: { skipped: true, reason: "Exercise plan rejection from the approved contract." } },
+    requestDigest: "d".repeat(64), schemaVersion: "moe-runtime-command/1",
+    sessionCredential: LANE_CREDENTIAL, targetAggregateId: offer["targetAggregateId"],
+  });
+  expect(result.status, `skip design:\n${result.text.slice(0, 800)}`).toBe(200);
+  expect(isRecord(result.body) ? result.body["outcome"] : null).toBe("ACCEPTED");
+}
 
 /**
  * The scripted seat's compile, dispatched through the daemon's own offer. The successor
@@ -325,6 +343,8 @@ test("the operator sends a plan back in the browser and the gate follows the suc
       return isRecord(after.body) ? after.body["outcome"] : null;
     }, { message: "Gate 1 must commit before the compiler can cite it", timeout: 30_000 })
       .toBe("NONE");
+
+    await skipDesign(origin, goalId, compileGateRef);
 
     // 8. A SCRIPTED SEAT compiles the plan against the APPROVED gate. The run reaches
     //    PLAN_REVIEW un-approved, so the daemon offers `approval.decide_intent` for it -

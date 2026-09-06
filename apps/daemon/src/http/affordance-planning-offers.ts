@@ -8,11 +8,17 @@ import { PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION }
   from "../product-contract/product-contract-command-contracts.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
+import { designAggregateId } from "../design/design-contracts.js";
 import type { CompilerLanePort } from "./affordance-compiler-lane.js";
 
 const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
 
+/** Which offers also render as staffable steps, independent of their payload schema family. */
 const COMPILER_OFFER_KINDS = Object.freeze([
+  "design.submit", "planning.submit_decomposition", "product_contract.propose_revision",
+] as const);
+/** Which kinds use the compiler schema; sharing a staffing lane does not imply sharing a wire. */
+const COMPILER_SCHEMA_KINDS = Object.freeze([
   "planning.submit_decomposition", "product_contract.propose_revision",
 ] as const);
 type CompilerOfferKind = (typeof COMPILER_OFFER_KINDS)[number];
@@ -44,6 +50,11 @@ export interface PlanningOfferInput {
    */
   readonly closeReadiness: (goalId: string) => GoalCloseReadiness["kind"];
   readonly compilerLane: CompilerLanePort;
+  /**
+   * A LAZY design fact, not a store handle: only an approved compiler goal needs this read.
+   * The skip marker belongs to task-365e5d97; task-06ac0da1 publishes the design kind.
+   */
+  readonly designState: (goalId: string) => "ABSENT" | "PRESENT" | "SKIPPED";
   /**
    * The goal's CURRENT planning run, resolved from its IMMUTABLE `planningRunRef`.
    *
@@ -141,7 +152,7 @@ function offer(
     commandId: input.mintId(kind),
     commandKind: kind,
     expectedVersion: versionOf(input.ledger, aggregateId),
-    inputSchemaVersion: COMPILER_OFFER_KINDS.some((compiler) => compiler === kind)
+    inputSchemaVersion: COMPILER_SCHEMA_KINDS.some((compiler) => compiler === kind)
       ? PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION
       : BOOTSTRAP_SCHEMA_VERSION,
     targetAggregateId: aggregateId,
@@ -159,10 +170,14 @@ function offersForGoal(
     // Gate 1 approves a revision citing its source, the dispatcher after. Both
     // target the GOAL aggregate — the compiled chain drives the run itself. A
     // binding that fails integrity offers NOTHING (fail closed, never legacy).
+    // Before dispatch, offer the design on its OWN aggregate until present or explicitly skipped.
     const facts = input.compilerLane.factsFor(goal.goalId);
     if (facts.lane === "WITHHELD") return [];
     if (facts.lane === "COMPILER") {
       if (facts.approvedGateRef !== null) {
+        if (input.designState(goal.goalId) === "ABSENT") {
+          return [offer(input, "design.submit", designAggregateId(goal.goalId))];
+        }
         return [offer(input, "planning.submit_decomposition", goal.goalId)];
       }
       // A revision awaiting Gate 1 is the human's turn: nothing to staff until they decide.

@@ -9,16 +9,20 @@ import {
   GOAL_ID as REJECT_GOAL,
   PROJECT_ID as REJECT_PROJECT,
   RUN_ID as REJECT_RUN,
+  OPERATOR as REJECT_OPERATOR,
   approveGate1,
   approvePlan,
   boundWorld,
   closeStores,
   committedRevision,
   rejectPlan,
-  rejectedWorld,
+  rejectedWorld as rejectedWorldWithoutDesign,
   submit,
 } from "../planning/plan-reject-test-fixtures.js";
 import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { designAggregateId, isDesignSkip } from "../design/design-contracts.js";
+import { readDesignRevision, submitDesignRevision } from "../design/design-store.js";
+import { designRevisionFixture, designSkipFixture } from "../design/design-test-fixtures.js";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
@@ -36,7 +40,7 @@ import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import type { PlanningAuthorityEntry } from "./affordance-planning-authorities.js";
 import {
-  DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, createAffordancePort,
+  DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, createAffordancePort, workItemIdFor,
 } from "./affordance-read.js";
 
 /**
@@ -1133,3 +1137,135 @@ function blindChainStore(store: SqliteEventStore, runId: string): SqliteEventSto
     },
   });
 }
+
+function designPort(store: SqliteEventStore) {
+  let issued = 0;
+  return createAffordancePort({
+    clock: () => "2026-09-06T00:00:00.000Z", mintId: () => `design-offer-${issued += 1}`,
+    projectId: REJECT_PROJECT, store,
+  });
+}
+
+function designFrame(port: ReturnType<typeof designPort>) {
+  const result = port.readSurface();
+  if (result.outcome !== "SURFACE") throw new Error(`${result.code}@${result.layer}`);
+  return result;
+}
+
+function designKinds(port: ReturnType<typeof designPort>) {
+  return new Set(designFrame(port).nextAllowedCommands
+    .filter((entry) => entry.commandKind === "design.submit"
+      || entry.commandKind === "planning.submit_decomposition")
+    .map((entry) => entry.commandKind));
+}
+
+function writeDesign(
+  store: SqliteEventStore, contractRef: unknown, revision: unknown, expectedVersion = 0,
+) {
+  const result = submitDesignRevision(store, {
+    commandId: `design-${expectedVersion}`, contractRef, correlationId: "design-surface",
+    decidedAt: "2026-09-06T00:00:00.000Z", expectedVersion, goalRef: REJECT_GOAL,
+    principalId: REJECT_OPERATOR, projectId: REJECT_PROJECT, revision,
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result;
+}
+
+/** Rejection arms keep their original subject: the optional design step was already skipped. */
+function rejectedWorld(reason: string) {
+  const world = rejectedWorldWithoutDesign(reason);
+  writeDesign(world.store, world.ref, designSkipFixture());
+  return world;
+}
+
+describe("the real design surface journey", () => {
+  afterAll(closeStores);
+
+  it("offers the exact design work-item only between Gate 1 and the first design", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set());
+    approveGate1(store, ref);
+    expect(designKinds(port)).toEqual(new Set(["design.submit"]));
+    const frame = designFrame(port);
+    const step = frame.steps.find((entry) => entry.kind === "design.submit");
+    if (step === undefined) throw new Error("design step missing");
+    expect(workItemIdFor(step.kind, step.aggregateId)).toBe("design.submit@design:goal-1");
+    expect(step).toMatchObject({
+      aggregateId: designAggregateId(REJECT_GOAL), status: "READY", version: 0,
+    });
+    const offered = frame.nextAllowedCommands.find((entry) => entry.commandKind === step.kind);
+    expect(offered).toMatchObject({ expectedVersion: 0, targetAggregateId: step.aggregateId });
+    if (offered === undefined) throw new Error("design offer missing");
+    // Use the actual offer's fence; the goal is already version 1, but the design is version 0.
+    expect(writeDesign(store, ref, designRevisionFixture(), offered.expectedVersion).record.version)
+      .toBe(1);
+    expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+    expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+  });
+
+  it("skips the design while the real chain still compiles and reaches approval", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designSkipFixture());
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+    expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+    const compiled = submit(store, ref);
+    if (!compiled.ok) throw new Error(`${compiled.code}@${compiled.layer}`);
+    expect(compiled.runId).toBe(REJECT_RUN);
+    expect(designKinds(port)).toEqual(new Set());
+    expect(designFrame(port).nextAllowedCommands.filter((entry) =>
+      entry.commandKind === "approval.decide_intent").map((entry) => entry.targetAggregateId))
+      .toEqual([compiled.runId]);
+    approvePlan(store, compiled.runId);
+    expect(designKinds(port)).toEqual(new Set());
+  });
+
+  it("refuses the surface with the design reader's code and layer when its ledger throws", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const blind = blindChainStore(store, designAggregateId(REJECT_GOAL));
+    expect(designPort(blind).readSurface()).toMatchObject({
+      code: "DESIGN_STORE_UNAVAILABLE", layer: "LEDGER", outcome: "REFUSED",
+    });
+  });
+
+  it.each([true, false])("reads the latest revision when skipped=%s changes between polls", (skipFirst) => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set(["design.submit"]));
+    for (const [index, skipped] of [skipFirst, !skipFirst].entries()) {
+      writeDesign(store, ref, skipped ? designSkipFixture() : designRevisionFixture(), index);
+      const read = readDesignRevision(store, { goalRef: REJECT_GOAL, projectId: REJECT_PROJECT });
+      if (!read.ok) throw new Error(`${read.code}@${read.layer}`);
+      expect(read.record.version).toBe(index + 1);
+      expect(isDesignSkip(read.record.revision)).toBe(skipped);
+      expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+    }
+  });
+
+  it("refuses malformed design bytes rather than offering a replacement over unreadable history", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designRevisionFixture());
+    const corrupt = new Proxy(store, {
+      get(target, property, receiver): unknown {
+        if (property === "readEvents") return (aggregateId: string) => target.readEvents(aggregateId)
+          .map((event) => aggregateId === designAggregateId(REJECT_GOAL)
+            ? { ...event, payload: encoder.encode("{}") } : event);
+        const value: unknown = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(designPort(corrupt).readSurface()).toMatchObject({
+      code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER", outcome: "REFUSED",
+    });
+  });
+});

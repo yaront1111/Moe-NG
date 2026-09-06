@@ -17,6 +17,8 @@ import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
 import { currentPlanningRun } from "../planning/current-planning-run.js";
 import { createPreviewReceiptReader } from "../preview/preview-daemon-edge.js";
+import { isDesignSkip } from "../design/design-contracts.js";
+import { readDesignRevision } from "../design/design-store.js";
 
 import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
@@ -29,6 +31,7 @@ import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
   AffordancePort,
+  AffordanceRefused,
   AffordanceSurfaceResult,
   ChainStep,
   ChainStepClaim,
@@ -296,6 +299,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const nodes = config.nodes?.() ?? [];
     const ledger = readDurableLedger(config.store, config.projectId);
     const landings = createGoalLandingReader(config.store, config.projectId, ledger);
+    const designFailures: AffordanceRefused[] = [];
     const planning = resolvePlanningOffers({
       // Derived per call, never cached: an acceptance that lands between two polls shows up on
       // the next one. The ladder invokes this only for a goal it could offer a close.
@@ -304,6 +308,17 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       compilerLane: createCompilerLanePort({
         ledger, projectId: config.projectId, store: config.store,
       }),
+      // Per poll, never cached: a submitted design or skip changes the very next offer.
+      designState: (goalRef) => {
+        const read = readDesignRevision(config.store, { goalRef, projectId: config.projectId });
+        if (read.ok) return isDesignSkip(read.record.revision) ? "SKIPPED" : "PRESENT";
+        if (read.code === "DESIGN_REVISION_ABSENT") return "ABSENT";
+        designFailures.push(Object.freeze({
+          code: read.code, layer: read.layer, outcome: "REFUSED",
+          detail: "the design ledger could not be read",
+        }));
+        return "PRESENT"; // Discard the whole resolution below; unreadable is NOT absence.
+      },
       // The goal's IMMUTABLE ref resolved to the run that matters NOW. The walk is a bounded
       // per-aggregate event read (16 hops, cycle-guarded) that never throws: a corrupt chain
       // degrades to the last id it could read, so one broken goal cannot cost the whole surface.
@@ -324,6 +339,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       previewReceipt: createPreviewReceiptReader(config.store, config.projectId),
       projectId: config.projectId,
     });
+    if (designFailures[0] !== undefined) return designFailures[0];
     offers.push(...planning.offers);
     // Derived from the SAME `planning` resolution that produced planningGoalRefs and the offers,
     // so the carried material and the binding it claims cannot disagree.

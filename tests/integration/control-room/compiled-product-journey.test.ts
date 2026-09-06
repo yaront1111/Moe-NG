@@ -10,7 +10,7 @@
  *     -> agent session proposes the Product Contract (writer commit)
  *     -> Gate 1 card read answers the pending revision + daemon-minted template
  *     -> paired durable HUMAN principal approves over the BROWSER origin
- *     -> ladder flips to planning.submit_decomposition
+ *     -> agent records the optional design skip; ladder offers planning.submit_decomposition
  *     -> agent submits PLAN ONLY (no scopes, no capability - the dispatcher
  *        states the closed risk profile, so no RUN_POLICY park is reachable)
  *     -> run REVIEWABLE, ladder offers both human approval wires
@@ -289,7 +289,17 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   expect(provider.productContractPending?.().readPending(GOAL_ID))
     .toEqual({ outcome: "NONE" });
 
-  // ---- LADDER 2: post-Gate-1 the goal offers the dispatcher ----
+  // This compiler journey explicitly skips design through its real offered command.
+  const designOffer = surface().nextAllowedCommands.find((offer) => offer.commandKind === "design.submit");
+  expect(designOffer).toBeDefined();
+  if (designOffer === undefined) throw new Error("design offer missing after Gate 1");
+  accepted("skip_design", dispatch("design.submit", {
+    contractRef: { ...pending.ref }, goalRef: GOAL_ID,
+    revision: { skipped: true, reason: "This journey exercises compilation from the approved contract." },
+  }, AGENT_SECRET, designOffer.commandId, String(designOffer.targetAggregateId),
+  designOffer.expectedVersion));
+
+  // ---- LADDER 2: post-Gate-1 and explicit skip, the goal offers the dispatcher ----
   const postGate = surface();
   const postKinds = offered(postGate.nextAllowedCommands);
   expect(postKinds).toContain("planning.submit_decomposition");
