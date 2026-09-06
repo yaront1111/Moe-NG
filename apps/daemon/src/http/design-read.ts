@@ -30,12 +30,12 @@ const refused = (code: string, layer: string = LAYER): DesignReadRefused =>
   Object.freeze({ code, layer, outcome: "REFUSED" as const });
 
 /**
- * Own enumerable keys are exactly `{goalRef}` or `{goalRef, version}`. version,
+ * Own enumerable keys are `{goalRef}`, `{goalRef, version}` or `{goalRef, planningRunRef}`. version,
  * when present, is a finite safe integer so a 1.5 cannot masquerade as ABSENT.
  */
 export function designReadBodyOf(
   body: unknown,
-): { readonly goalRef: string; readonly version?: number } | null {
+): Omit<DesignReadInput, "projectId"> | null {
   const decoded = decodeBoundedJsonBytes(body);
   if (!decoded.ok) return null;
   const value: unknown = decoded.value;
@@ -44,10 +44,16 @@ export function designReadBodyOf(
   const keys = Object.keys(record);
   const allowed = keys.length === 1
     ? keys[0] === "goalRef"
-    : keys.length === 2 && keys.includes("goalRef") && keys.includes("version");
+    : keys.length === 2 && keys.includes("goalRef")
+      && (keys.includes("version") || keys.includes("planningRunRef"));
   if (!allowed) return null;
   const goalRef = record["goalRef"];
   if (typeof goalRef !== "string" || goalRef.length === 0) return null;
+  if (Object.hasOwn(record, "planningRunRef")) {
+    const planningRunRef = record["planningRunRef"];
+    return typeof planningRunRef === "string" && planningRunRef.length > 0
+      && planningRunRef.length <= 4096 && !planningRunRef.includes("\0") ? { goalRef, planningRunRef } : null;
+  }
   if (!Object.hasOwn(record, "version")) return { goalRef };
   const version = record["version"];
   if (typeof version !== "number" || !Number.isFinite(version) || !Number.isSafeInteger(version)) {
@@ -95,8 +101,6 @@ export function handleDesignReadRequest(
   if (decoded === null) {
     return Object.freeze({ code: "LISTENER_DESIGN_REQUEST_INVALID", kind: "LISTENER_REFUSAL" });
   }
-  const input: DesignReadInput = decoded.version === undefined
-    ? { goalRef: decoded.goalRef, projectId: access.principal.projectId }
-    : { goalRef: decoded.goalRef, projectId: access.principal.projectId, version: decoded.version };
+  const input: DesignReadInput = { ...decoded, projectId: access.principal.projectId };
   return Object.freeze({ body: port.read(input), httpStatus: 200, kind: "REPLY" });
 }

@@ -170,6 +170,7 @@ async function main(): Promise<void> {
       onFatalContainment: () => { stop.request(); },
     });
     delivery = createRepositoryDeliveryRuntime({
+      publisher: provider.releasePublisher(),
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
       nodes: listNodes, storePath: config.storePath,

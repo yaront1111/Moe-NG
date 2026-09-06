@@ -174,6 +174,11 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
       const goalId = request.payload === undefined ? null : payloadRef(request.payload, "goalId");
       return `publish:${goalId ?? subject ?? request.projectId}`;
     }
+    case "deployment.deploy": {
+      // The async edge derives this internal field from the offered target, never the public payload.
+      const goalId = request.payload === undefined ? null : payloadRef(request.payload, "goalId");
+      return goalId === null ? request.projectId : `deploy:${goalId}`;
+    }
     default:
       return subject ?? request.projectId;
   }

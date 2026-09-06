@@ -26,6 +26,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { dispatchCompiledPlanning as dispatch } from "./compiled-planning-dispatch.js";
 import { COMPILED_CONTRACT_BINDING_VERSION, readCompiledContractBinding } from "./compiled-contract-binding.js";
+import { readDesignRevision } from "../design/design-store.js";
 import { resolveProductContractGate1 } from "../product-contract/product-contract-gate-1-resolver.js";
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
@@ -241,10 +242,6 @@ export function runSubmitDecomposition(
   });
   if (!compiled.ok) return refused(compiled.code, compiled.layer, compiled.detail);
 
-  const contractBinding = Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION,
-    projectId: input.projectId, goalRef, planningRunRef: runId, contractRef: ref,
-    graphContentHash: compiled.graphContentHash, submissionHash: compiled.submissionHash });
-
   const ids = idsOf(ref.revisionDigest, runId);
   // MEASURED, not inferred: the whole propose fold commits ONE run event and
   // the finalize a second - the chain items' 0..4 are fold-internal.
@@ -284,6 +281,16 @@ export function runSubmitDecomposition(
     Object.freeze({ ...fields, truthClass: "DAEMON_VERIFIED" });
 
   if (runVersion === target.baseVersion) {
+    // Capture the design once, with the proposal. A finalize/replay preserves that choice.
+    const design = readDesignRevision(store, { projectId: input.projectId, goalRef });
+    if (!design.ok && design.code !== "DESIGN_REVISION_ABSENT") return refused(design.code, design.layer);
+    if (design.ok && (design.record.contractRef.contractId !== ref.contractId
+      || design.record.contractRef.revisionId !== ref.revisionId
+      || design.record.contractRef.revisionDigest !== ref.revisionDigest)) return refused("DESIGN_CONTRACT_NOT_APPROVED");
+    const contractBinding = Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION,
+      projectId: input.projectId, goalRef, planningRunRef: runId, contractRef: ref,
+      designVersion: design.ok ? design.record.version : null,
+      graphContentHash: compiled.graphContentHash, submissionHash: compiled.submissionHash });
     const proposed = dispatch(store, input, ids["propose"] as string, runId, [
       {
         commandId: ids["create"], expectedVersion: 0, goalRef, kind: "planning.create_draft",

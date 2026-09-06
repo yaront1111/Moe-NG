@@ -23,6 +23,7 @@ import { LiveContractDossier } from "./goals/contract-dossier.js";
 import { LiveCriterionEvidence } from "./goals/live-criterion-evidence.js";
 import { LiveDesign } from "./goals/design-card.js";
 import { LiveDesignVersionNote } from "./goals/design-version-note.js";
+import { LiveGoalDeployments } from "./goals/live-goal-deployments.js";
 import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -300,6 +301,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             surface={boardFrame}
             title={open.title}
           />
+          <LiveGoalDeployments setup={attached} goalRef={open.goalId} frame={boardFrame} />
           <div id={GOAL_SECTION_IDS.contract}>
             {gate1Read !== null && gate1Port !== null ? (
               <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
@@ -345,7 +347,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
               name that design or the acceptance is uninformed. It sits INSIDE the fold,
               under the plan it qualifies, rather than beside the Design tab above.
             */}
-            <LiveDesignVersionNote goalRef={open.goalId} headers={attached.headers} />
+            <LiveDesignVersionNote goalRef={open.goalId} planningRunRef={planRunId} headers={attached.headers} />
           </details>
           {/* Reference material, folded: the raw daemon offers (which also feed the one
               affordance frame of the page), PRD coverage, the PRD itself, and the project boundary

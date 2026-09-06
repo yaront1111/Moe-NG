@@ -128,6 +128,28 @@ describe("ContractDossier", () => {
 });
 
 describe("LiveContractDossier", () => {
+  it("refreshes a refused gate after approval without changing the revision", async () => {
+    let approved = false;
+    let gateReads = 0;
+    render(<LiveContractDossier goalId="goal-sign-in" pollMs={10}
+      readCoverage={async () => decodedCoverage()}
+      readGate={async () => {
+        gateReads += 1;
+        return approved ? decodedGate() : {
+          status: "REFUSED", code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER",
+        };
+      }} />);
+    await waitFor(() => expect(screen.queryByTestId(
+      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`,
+    )).not.toBeNull());
+    approved = true;
+    await waitFor(() => expect(screen.queryByTestId(
+      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`,
+    )).not.toBeNull());
+    expect(gateReads).toBeGreaterThan(1);
+    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`)).toBeNull();
+  });
+
   it("reads coverage on the goal and one Gate 1 verdict per cited revision", async () => {
     const asked: unknown[] = [];
     render(

@@ -200,7 +200,7 @@ export function LiveContractDossier(
   { goalId, pollMs, readCoverage, readGate }: LiveContractDossierProps,
 ): JSX.Element {
   const [coverage, setCoverage] = useState<DocumentCoverageOutcome | null>(null);
-  const gates = useContractGates(coverage, readGate);
+  const gates = useContractGates(coverage, readGate, pollMs ?? DEFAULT_POLL_MS);
   const generation = useRef(0);
   useEffect(() => {
     const run = generation.current + 1;

@@ -5,6 +5,7 @@ import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { compiledContractAggregateId, readCompiledContractBinding } from "../planning/compiled-contract-binding.js";
 import { recordOf } from "../planning/planning-authority-reader-witness.js";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
 import { readApprovedNodeScope } from "./goal-close-prerequisite.js";
 import type { ApprovedNodeScope } from "./goal-close-prerequisite.js";
 
@@ -22,7 +23,10 @@ export function readApprovedExecutionScope(store: SqliteEventStore, projectId: s
     const approved = readApprovedNodeScope(store, goalRef); if (approved === null) return null;
     const goal = recordOf(stateOf(readDurableLedger(store, projectId), goalRef));
     if (goal?.["goalId"] !== goalRef || goal["projectId"] !== projectId) return null;
-    const runRef = goal["planningRunRef"]; if (typeof runRef !== "string") return null;
+    const initialRunRef = goal["planningRunRef"]; if (typeof initialRunRef !== "string") return null;
+    const current = currentPlanningRun(store, initialRunRef);
+    if (current.unreadable) return null;
+    const runRef = current.runId;
     const binding = readCompiledContractBinding(store, projectId, runRef);
     if (!binding.ok) {
       // The existing Foundation leg has no Product Contract binding. A damaged or hidden

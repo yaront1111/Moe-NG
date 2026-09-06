@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { chromium } from "playwright";
-import type { Browser } from "playwright";
+import { launchPreviewBrowser } from "./preview-browser.js";
+import type { PreviewBrowser } from "./preview-browser.js";
 
 import { previewCaptureDirectory } from "./preview-receipt-contracts.js";
 import type { PreviewScreenshot } from "./preview-receipt-contracts.js";
@@ -51,7 +51,7 @@ export interface PreviewCaptureInput {
 
 export interface PreviewCaptureOptions {
   /** Injected in tests so an arm can drive a stub browser; production launches Chromium. */
-  readonly launch?: () => Promise<Browser>;
+  readonly launch?: () => Promise<PreviewBrowser>;
   readonly navigationTimeoutMs?: number;
 }
 
@@ -86,7 +86,7 @@ export async function capturePreviewJourneys(
   if (wanted.length === 0) return [];
   mkdirSync(absoluteDirectory, { recursive: true });
 
-  const launch = options.launch ?? ((): Promise<Browser> => chromium.launch());
+  const launch = options.launch ?? launchPreviewBrowser;
   const navigationTimeout = options.navigationTimeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS;
   const browser = await launch();
   const written: PreviewScreenshot[] = [];

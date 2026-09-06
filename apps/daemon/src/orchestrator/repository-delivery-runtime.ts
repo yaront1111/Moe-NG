@@ -14,6 +14,7 @@ import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { createNodePublisher } from "./node-publisher.js";
+import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
 import { createRepositoryDeliveryCoordinator } from "./repository-delivery-coordinator.js";
@@ -22,6 +23,7 @@ import type { RepositoryDeliveryFacts } from "./repository-delivery-contracts.js
 import { probeProcessAlive } from "./process-runner-lifecycle.js";
 
 interface RepositoryDeliveryRuntimeConfig {
+  readonly publisher?: ReleasePublisher;
   readonly compiledWorkspace: string | null;
   readonly fence: AgentSessionFence;
   readonly landingOn: boolean;
@@ -105,7 +107,7 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     },
   });
   const storeId = realpathSync.native(config.storePath);
-  const publisher = createNodePublisher({ git: createGitPublicationPort(), repository, storeId,
+  const publisher = config.publisher ?? createNodePublisher({ git: createGitPublicationPort(), repository, storeId,
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
     projectId, store, workspace: config.compiledWorkspace });
   const criteria = createCriterionEvidenceService({ store, projectId, storeId,

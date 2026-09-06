@@ -14,6 +14,7 @@ import { dossierSha256, releaseReceiptId } from "./release-receipt-contracts.js"
 import { readReleaseReceipt, recordReleaseReceipt } from "./release-receipt-ledger.js";
 import type { ReleasePrPort } from "./release-pr-port.js";
 import type { SqliteEventStore } from "@moe/store";
+import { createReleaseDecideCommand } from "./release-decide-command.js";
 
 /**
  * `release.decide`: push the goal's branch through the EXISTING publisher, then open a
@@ -30,7 +31,7 @@ export interface ReleaseDossierFacts {
 }
 
 /** The ledger fold this row consumes, injected so the service stays offline-testable. */
-export type ReleaseDossierFactsPort = (goalId: string) => ReleaseDossierFacts | null;
+export type ReleaseDossierFactsPort = (goalId: string, sha: string) => ReleaseDossierFacts | null;
 
 /** Exactly `createNodePublisher(...)`'s return shape. REUSE, never a second push path. */
 export interface ReleasePublisher {
@@ -94,13 +95,15 @@ function decisionOf(commandId: string, effectId: string | null, resultCode: stri
  * this answers null and the caller refuses instead of spawning `gh --head ""`.
  */
 function pushedBranchOf(
-  store: SqliteEventStore, projectId: string, goalId: string,
+  store: SqliteEventStore, projectId: string, goalId: string, sha: string, remoteUrl: string,
 ): string | null {
   const state = readPublishLedger(store, projectId).get(goalId);
   if (state === undefined) return null;
   let branch: string | null = null;
   for (const receipt of state.receipts.values()) {
-    if (receipt.outcome === "PUSHED" && ref(receipt.branch)) branch = receipt.branch;
+    if (receipt.outcome === "PUSHED" && ref(receipt.branch)) {
+      branch = receipt.sha === sha && receipt.remoteUrl === remoteUrl ? receipt.branch : null;
+    }
   }
   return branch;
 }
@@ -109,7 +112,7 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
   const { dossierFacts, operatorPrincipalId, prPort, projectId, publisher, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
 
-  return async ({ envelope, principal }: CommandHandlerInput): Promise<DurableDecision> => {
+  const execute = async ({ envelope, principal }: CommandHandlerInput): Promise<DurableDecision> => {
     // FENCED AT ENTRY. Async entries bypass the registry's synchronous fence, so this is
     // the only operator check that will ever run for this kind.
     if (principal.principalId !== operatorPrincipalId) {
@@ -138,14 +141,15 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
     };
 
     // (1) UNBOUND REMOTE, before anything is pushed and before any receipt is written.
-    if (readProjectRemote(store, projectId) === null) {
+    const remote = readProjectRemote(store, projectId);
+    if (remote === null) {
       throw domainRefusalOf(releaseRefusal("RELEASE_REMOTE_MISSING",
         `no repository remote is bound for project ${projectId}`));
     }
 
     // (2) EVIDENCE GAPS, naming the criterion ids. "Evidence incomplete" without saying
     // WHAT is missing sends the operator hunting through a document by hand.
-    const facts = dossierFacts(goalId);
+    const facts = dossierFacts(goalId, sha);
     if (facts === null) {
       throw domainRefusalOf(releaseRefusal("RELEASE_EVIDENCE_INCOMPLETE",
         `no release evidence is readable for goal ${goalId}`));
@@ -172,23 +176,21 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
       return decisionOf(envelope.commandId, null, "REJECTED", false);
     }
 
-    // (3b) ALREADY RELEASED AT THIS SHA -> replay, do NOT open a second pull request.
-    // The receipt id is derived from (project, goal, sha, outcome, code), so the ledger
-    // already refuses a duplicate RECORD — but that check happens AFTER `gh` has run, which
-    // would leave a second pull request open against the same sha before the replay was
-    // noticed. Checking here moves the idempotence in front of the irreversible step.
+    // Command replay is answered by the admission journal. A receipt alone cannot prove
+    // this new command's base or decision, so it cannot authorize another release command.
     const alreadyReleased = readReleaseReceipt(
       store, projectId, releaseReceiptId(projectId, goalId, sha, "RELEASED", null),
     );
     if (alreadyReleased.ok) {
-      return decisionOf(envelope.commandId, alreadyReleased.receipt.receiptId, "RELEASED", true);
+      throw new DomainRefusal("RELEASE_COMMAND_ID_REQUIRED", "DAEMON_COMMAND_SEAM",
+        "this SHA was already released; replay the exact original command", 409);
     }
 
     // (4) PUSH THROUGH THE EXISTING PUBLISHER, then read ITS receipt. A head that was
     // never pushed has nothing for `gh` to open a PR from, so this stays inside the closed
     // three-code set rather than minting a fourth.
     const reports = await publisher.publishOnce();
-    const head = pushedBranchOf(store, projectId, goalId);
+    const head = pushedBranchOf(store, projectId, goalId, sha, remote.remoteUrl);
     if (head === null) {
       const mine = reports.find((entry) => entry.goalId === goalId);
       const detail = mine === undefined ? "the goal's branch was not pushed" : mine.detail;
@@ -204,7 +206,8 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
     // payload roster is exactly {base, decision, goalId, sha} and `decodeIntent` refuses
     // any key outside it, so a caller-supplied title could never arrive anyway.
     const opened = await prPort.open({
-      base, body: markdown, head, title: `Release ${goalId} at ${sha}`,
+      base, body: markdown, head, remoteUrl: remote.remoteUrl, sha,
+      title: `Release ${goalId} at ${sha}`,
     });
 
     // (6) Record the outcome either way. A refused release that recorded success is the
@@ -219,4 +222,5 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
     const written = record("RELEASED", opened.prUrl, null, markdown);
     return decisionOf(envelope.commandId, written.receiptId, "RELEASED", written.replayed);
   };
+  return createReleaseDecideCommand(options, execute);
 }

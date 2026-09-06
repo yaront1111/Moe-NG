@@ -31,6 +31,8 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { deriveProductContractRevisionAggregateId }
@@ -82,7 +84,8 @@ const ENABLED_LIFECYCLES = new Set(["EXECUTION_ENABLED", "CLOSING"]);
 
 /**
  * Every enabled goal's sealed compiled plan, read from durable state alone: the
- * folded goal names its run; the folded run names the sealed content hash core's
+ * folded goal names its initial run; rejection history resolves its successor and the
+ * activation witness must approve that successor. The run names the sealed content hash core's
  * own submission fold wrote; `readGraphBody` re-proves the bytes. A goal whose
  * chain does not re-prove contributes NOTHING (an unreadable plan is never
  * staffed), it does not take the listing down.
@@ -99,8 +102,17 @@ export function activeCompiledGraphs(
     const goal = dataRecord(stateOf(ledger, aggregateId));
     if (goal?.["goalId"] !== aggregateId || goal["projectId"] !== projectId) continue;
     if (!lifecycles.has(String(goal["lifecycle"]))) continue;
-    const planningRunRef = goal["planningRunRef"];
-    if (typeof planningRunRef !== "string") continue;
+    const initialRunRef = goal["planningRunRef"];
+    if (typeof initialRunRef !== "string") continue;
+    const current = currentPlanningRun(store, initialRunRef);
+    if (current.unreadable) continue;
+    const planningRunRef = current.runId;
+    // A rejection's successor is only executable once the goal's activation names it.
+    // Following the latest chain alone would also admit a compiled, unapproved successor.
+    if (current.hops > 0) {
+      const approval = readApprovedRunWitness(store, aggregateId);
+      if ("ok" in approval || approval.runId !== planningRunRef) continue;
+    }
     const run = dataRecord(stateOf(ledger, planningRunRef));
     const runState = dataRecord(run?.["state"]);
     if (runState?.["goalRef"] !== aggregateId) continue;

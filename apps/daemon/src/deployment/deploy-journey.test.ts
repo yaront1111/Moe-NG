@@ -109,9 +109,9 @@ function journey(options: {
       // Zero-cost time: the budget is exercised in poll COUNTS, never in wall clock.
       healthBudgetMs: 10, pollMs: 1, sleep: (): Promise<void> => Promise.resolve(),
       ports: options.durableTarget === true ? {
-        ...productionDeployPorts(options.targetRead?.(store) ?? store, PROJECT_ID), docker: docker.docker,
+        ...productionDeployPorts(options.targetRead?.(store) ?? store, PROJECT_ID), build: docker.build, docker: docker.docker,
       } : {
-        docker: docker.docker, releaseDecision: (): string | null => options.release ?? null,
+        build: docker.build, docker: docker.docker, releaseDecision: (): string | null => options.release ?? null,
         ssh: docker.ssh, transfer: docker.transfer,
         target: (): DeployTarget | null => (options.target === undefined ? LOCAL : options.target),
       },
@@ -231,7 +231,7 @@ describe("the registered deploy builds the landed sha (DoD 3)", () => {
       // The sha VALUE, byte for byte. A `/[0-9a-f]{40}/` pattern passes for the WRONG sha, and
       // every rollback and dossier claim downstream resolves through this tag.
       expect(context.docker.calls.find((call) => call[0] === "build"))
-        .toEqual(["build", "--tag", deployImageTag(STAGING, SHA), CONTEXT]);
+        .toEqual(["build", "--tag", deployImageTag(STAGING, SHA), "-"]);
       expect(context.docker.calls.find((call) => call[0] === "build")?.[2])
         .toBe(`moe-deploy-${STAGING}:${SHA}`);
       expect(decision).toMatchObject({ disposition: "DECIDED" });

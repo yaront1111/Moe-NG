@@ -12,7 +12,7 @@ import type {
  * The coverage read reports `gate1: "APPROVED" | "PENDING"` as a by-product of its join over
  * the ledger. That is a hint, not the gate: the AUTHORITY answer is what
  * /product-contract/gate-1/read derives from the stored human grant, re-checked against the
- * revision it was given for. So the dossier asks for it directly, once per revision triple,
+ * revision it was given for. So the dossier polls it directly for each revision triple,
  * and renders whatever comes back - including a refusal, with the code and layer its owner
  * stamped. A revision whose read has not answered yet is ABSENT from this map; the card says
  * it is still reading rather than showing a verdict nobody gave.
@@ -41,6 +41,7 @@ function citedContracts(
 export function useContractGates(
   coverage: DocumentCoverageOutcome | null,
   readGate: Gate1Reader | undefined,
+  pollMs: number = 2_000,
 ): ContractGateMap {
   const [gates, setGates] = useState<ContractGateMap>(new Map());
   // The triples travel as JSON, never as a delimited string: a delimiter is a guess about
@@ -57,17 +58,25 @@ export function useContractGates(
       return undefined;
     }
     let live = true;
-    void Promise.all(refs.map(async (ref) => {
-      try {
-        return [contractGateKey(ref), await readGate(ref)] as const;
-      } catch {
-        return null;
-      }
-    })).then((rows) => {
-      if (!live) return;
-      setGates(new Map(rows.flatMap((row) => (row === null ? [] : [row]))));
-    });
-    return (): void => { live = false; };
-  }, [readGate, refsJson]);
+    let inFlight = false;
+    const tick = (): void => {
+      if (inFlight) return;
+      inFlight = true;
+      void Promise.all(refs.map(async (ref) => {
+        try {
+          return [contractGateKey(ref), await readGate(ref)] as const;
+        } catch {
+          return null;
+        }
+      })).then((rows) => {
+        inFlight = false;
+        if (!live) return;
+        setGates(new Map(rows.flatMap((row) => (row === null ? [] : [row]))));
+      });
+    };
+    tick();
+    const timer = setInterval(tick, pollMs);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [readGate, refsJson, pollMs]);
   return gates;
 }

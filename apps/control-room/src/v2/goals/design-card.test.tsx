@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { DesignOutcome } from "../../live/live-design.js";
 import { DesignCard, LiveDesign } from "./design-card.js";
+import { LiveDesignVersionNote } from "./design-version-note.js";
 
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -22,6 +23,20 @@ const DESIGN: Extract<DesignOutcome, { status: "DESIGN" }> = {
     },
   },
 };
+
+it("reads the design bound to the approval run instead of the latest goal design", async () => {
+  const requests: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)); requests.push(body);
+    return { status: 200, json: async () => ({ ok: true, versions: [1, 2],
+      record: { ...DESIGN.record, version: body.planningRunRef === "run-compiled" ? 1 : 2 },
+    }) };
+  }));
+  render(<LiveDesignVersionNote goalRef="goal-1" planningRunRef="run-compiled" headers={{}} />);
+  await waitFor(() => expect(screen.getByTestId("cr.approve.design-version").textContent)
+    .toContain("Design version 1"));
+  expect(requests).toEqual([{ goalRef: "goal-1", planningRunRef: "run-compiled" }]);
+});
 
 describe("DesignCard", () => {
   it("is mounted on the opened goal with the attached session", () => {

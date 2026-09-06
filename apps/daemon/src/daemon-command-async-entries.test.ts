@@ -114,7 +114,7 @@ function seam(options: {
       // Zero-cost time: the budget is exercised in poll COUNTS, never in wall clock.
       healthBudgetMs: 10, pollMs: 1, sleep: (): Promise<void> => Promise.resolve(),
       ports: {
-        docker: docker.docker, releaseDecision: (): null => null, ssh: docker.ssh,
+        build: docker.build, docker: docker.docker, releaseDecision: (): null => null, ssh: docker.ssh,
         target: (): DeployTarget => LOCAL, transfer: docker.transfer,
       },
       ...(options.buildContext === undefined ? {} : { buildContext: options.buildContext }),
@@ -165,7 +165,7 @@ describe("the async command seam serves deployment.deploy", () => {
     // BYTE-FOR-BYTE against the sha VALUE. A `/[0-9a-f]{40}/` pattern passes for the WRONG sha,
     // and every later rollback and dossier claim resolves through this tag.
     expect(context.docker.calls.find((call) => call[0] === "build"))
-      .toEqual(["build", "--tag", `moe-deploy-${ENVIRONMENT}:${SHA}`, CONTEXT]);
+      .toEqual(["build", "--tag", `moe-deploy-${ENVIRONMENT}:${SHA}`, "-"]);
     expect(context.docker.calls.find((call) => call[0] === "build")?.[2])
       .toBe(deployImageTag(ENVIRONMENT, SHA));
     // The DURABLE receipt, read back from the store the handler committed through.

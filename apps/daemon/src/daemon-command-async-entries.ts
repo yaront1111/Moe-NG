@@ -26,6 +26,7 @@ import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-c
 import { createDeployCommandHandler, DEPLOY_BUILD_CONTEXT_ENV_KEY }
   from "./deployment/deploy-command.js";
 import type { DeployPorts } from "./deployment/deploy-ports.js";
+import { createRollbackCommandHandler } from "./deployment/rollback-command.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
 import { createMigrateDownCommandHandler, DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND }
   from "./deployment/migrate-down-command.js";
@@ -177,25 +178,6 @@ function unconfiguredReleaseHandler(
   };
 }
 
-const ROLLBACK_CODE_LAYER_MAP = Object.freeze({
-  ROLLBACK_RECEIPT_UNKNOWN: "DAEMON_PREREQUISITE",
-} as const);
-
-/** Deliberate stub until task-da60dc4b supplies receipt resolution and the rollback effect. */
-function unconfiguredRollbackHandler(
-  operatorPrincipalId: string,
-): NonNullable<CommandRegistryEntry["asyncHandler"]> {
-  return async (input) => {
-    if (input.principal.principalId !== operatorPrincipalId) {
-      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
-        "this command requires the configured operator principal", 403);
-    }
-    throw new DomainRefusal("ROLLBACK_RECEIPT_UNKNOWN",
-      ROLLBACK_CODE_LAYER_MAP.ROLLBACK_RECEIPT_UNKNOWN,
-      "no rollback port is composed; the target receipt cannot be resolved", 422);
-  };
-}
-
 /** Async entries, keyed by kind so the registry can answer one lookup and stop. */
 export function createAsyncCommandEntries(
   options: AsyncCommandEntryOptions,
@@ -297,7 +279,8 @@ export function createAsyncCommandEntries(
   });
   return Object.freeze({
     "deployment.rollback": Object.freeze({
-      asyncHandler: unconfiguredRollbackHandler(options.operatorPrincipalId),
+      asyncHandler: createRollbackCommandHandler({ ...deploySeams,
+        operatorPrincipalId: options.operatorPrincipalId, projectId, store }),
       handler: foundationSyncHandler, kind: "deployment.rollback",
       payloadKeys: PAYLOAD_KEYS["deployment.rollback"], requiredCapability: CAPABILITIES.GOAL,
     }),

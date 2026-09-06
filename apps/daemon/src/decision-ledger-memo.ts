@@ -17,17 +17,19 @@
  * decision, never a reader's.
  */
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
+import { DurableStoreError } from "@moe/store";
 
 interface DecisionLedgerMemo {
   readonly items: CommandDecisionRecord[];
   last: bigint;
+  version: number | null;
 }
 
 const memos = new WeakMap<SqliteEventStore, DecisionLedgerMemo>();
 
 /** Opts a long-lived handle in. Idempotent; a handle enrolled twice keeps its memo. */
 export function enrollDecisionLedgerMemo(store: SqliteEventStore): void {
-  if (!memos.has(store)) memos.set(store, { items: [], last: 0n });
+  if (!memos.has(store)) memos.set(store, { items: [], last: 0n, version: null });
 }
 
 /** Whether a handle keeps its decoded ledger between calls. */
@@ -69,6 +71,20 @@ export function decisionsOf(
 ): readonly CommandDecisionRecord[] {
   const memo = memos.get(store);
   if (memo === undefined) return walk(store, 0n, pageSize, [], () => undefined);
-  walk(store, memo.last, pageSize, memo.items, (last) => { memo.last = last; });
-  return memo.items;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const version = store.readCommandDecisionCacheVersion();
+    if (version !== memo.version) {
+      memo.items.length = 0;
+      memo.last = 0n;
+      memo.version = version;
+    }
+    walk(store, memo.last, pageSize, memo.items, (last) => { memo.last = last; });
+    // An external writer may commit between the token read and any page. Do not combine
+    // old memoized rows with that new snapshot; retry from zero under its new token.
+    if (store.readCommandDecisionCacheVersion() === version) return memo.items;
+  }
+  memo.items.length = 0;
+  memo.last = 0n;
+  memo.version = null;
+  throw new DurableStoreError("STORE_BUSY", "decision history changed during its read");
 }

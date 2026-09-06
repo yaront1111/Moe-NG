@@ -17,6 +17,7 @@ export type DossierGapCode =
   | "LANDING_NOT_ANCESTOR"
   | "LANDING_UNMEASURABLE"
   | "RECEIPT_ABSENT"
+  | "RECEIPT_SOURCE_UNPROVEN"
   | "RECEIPT_SHARED_NODE";
 
 export interface DossierGap {
@@ -48,6 +49,7 @@ export const GAP_SENTENCES: Readonly<Record<DossierGapCode, string>> = Object.fr
   LANDING_UNMEASURABLE:
     "git could not decide whether the cited landing commit is an ancestor of this sha",
   RECEIPT_ABSENT: "the verifying node recorded no verifier receipt",
+  RECEIPT_SOURCE_UNPROVEN: "the verifier receipt carries no measured source commit",
   RECEIPT_SHARED_NODE:
     "the verifying node key is carried by more than one activated plan, so its review ledger is"
     + " shared and its evidence cannot be attributed to this goal",

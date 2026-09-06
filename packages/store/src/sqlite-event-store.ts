@@ -340,6 +340,10 @@ export class SqliteEventStore {
     );
   }
 
+  public readCommandDecisionCacheVersion(): number {
+    return this.#core.readCommandDecisionCacheVersion();
+  }
+
   public readCommandDecisionsAfter(
     afterDecisionPosition: bigint,
     limit = 100,

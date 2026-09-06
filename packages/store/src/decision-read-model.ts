@@ -41,15 +41,35 @@ const DECODED_DECISION_CACHE_LIMIT = 100_000;
 
 export class DecisionReadModelStore extends EventLedgerStore {
   /**
-   * Decoded decisions by position, for the paged read path only. A committed decision never
-   * changes at its position (the ledger is append-only), so one decode plus sha verification is
-   * good for the life of this handle. Without it every read model walked the whole ledger from
+   * Decoded decisions by position, for the paged read path only. Writes through this handle
+   * append decisions; external writes invalidate the cache so corruption is re-proven on read.
+   * Without it every read model walked the whole ledger from
    * position 0 on every request, re-running two to three SELECTs, the receipt validation and the
    * hashing per decision each time: one control-room surface read cost ~14 s of CPU and the
    * daemon stopped answering its pollers (measured 2026-09-05). The startup validation scan and
    * the by-key read keep decoding fresh: they exist to prove the rows, not to serve them.
    */
   readonly #decodedByPosition = new Map<bigint, StoredCommandDecision>();
+  #decodedDataVersion: number | null = null;
+
+  /** Connection-local external-write token for consumers retaining decoded history.
+   * Compare only tokens from this handle. Same-handle ledger appends need no invalidation. */
+  public readCommandDecisionCacheVersion(): number {
+    return this.readSnapshotOperation("read decision cache version", () => {
+      this.assertLiveProjectBinding();
+      return this.refreshDecodedCacheVersion();
+    });
+  }
+
+  private refreshDecodedCacheVersion(): number {
+    const row = this.database.prepare("PRAGMA main.data_version").get();
+    const version = requireRowInteger(row ?? {}, "data_version");
+    if (version !== this.#decodedDataVersion) {
+      this.#decodedByPosition.clear();
+      this.#decodedDataVersion = version;
+    }
+    return version;
+  }
 
   // A snapshot read like its paged sibling below: decoding a decision loads
   // its receipt and validates the aggregate tail across several SELECTs, which
@@ -94,6 +114,7 @@ export class DecisionReadModelStore extends EventLedgerStore {
       );
       const safeLimit = requirePageLimit(limit);
       const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      this.refreshDecodedCacheVersion();
       const materialized = materializeDecisionCursorPage({
         candidates: this.database
           .prepare(COMMAND_DECISION_CANDIDATE_PAGE_QUERY)

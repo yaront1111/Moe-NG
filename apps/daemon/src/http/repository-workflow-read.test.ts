@@ -8,6 +8,21 @@ const request = (body: unknown, credential: string | null = GOOD_CREDENTIAL) => 
 const criteria = vi.fn(() => ({ outcome: "REFUSED" as const, code: "CRITERION_CONTRACT_UNBOUND", layer: "CRITERION_EVIDENCE" as const }));
 const recovery = vi.fn(() => ({ version: "moe-repository-recovery/1" as const, projectId: "project-1", reservations: [], code: null }));
 const deps = () => ({ authenticator: authenticator(), repositoryWorkflows: { boundProjectId: "proj-0001", readCriteria: criteria, readRecovery: recovery } });
+it("routes deployment reads to the exact goal after authentication", () => {
+  const readDeployments = vi.fn(() => ({ outcome: "DEPLOYMENTS" as const, goalRef: "goal-a",
+    sha: null, releaseDecision: null, environments: [] }));
+  const d = { ...deps(), repositoryWorkflows: { ...deps().repositoryWorkflows, readDeployments } };
+  expect(handleRepositoryWorkflowReadRequest("DEPLOYMENTS", d, request({ goalRef: "goal-a" }, null)))
+    .toMatchObject({ httpStatus: 401 });
+  expect(readDeployments).not.toHaveBeenCalled();
+  expect(handleRepositoryWorkflowReadRequest("DEPLOYMENTS", d, request({ goalRef: "goal-a" })))
+    .toMatchObject({ body: { outcome: "DEPLOYMENTS", goalRef: "goal-a" } });
+  expect(readDeployments).toHaveBeenLastCalledWith("goal-a");
+  readDeployments.mockClear();
+  expect(handleRepositoryWorkflowReadRequest("DEPLOYMENTS", d, request({ goalRef: "goal-a", projectId: "other" })))
+    .toMatchObject({ body: { code: "DEPLOYMENTS_READ_REQUEST_INVALID" } });
+  expect(readDeployments).not.toHaveBeenCalled();
+});
 it("authenticates before either workflow reader", () => {
   criteria.mockClear(); recovery.mockClear();
   expect(handleRepositoryWorkflowReadRequest("CRITERIA", deps(), request({ goalRef: "goal-a" }, null))).toMatchObject({ kind: "REPLY", httpStatus: 401 });

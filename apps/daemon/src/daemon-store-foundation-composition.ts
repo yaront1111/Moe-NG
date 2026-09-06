@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createProductionReleaseSeams } from "./release/release-production-wiring.js";
+import type { ReleasePublisher } from "./release/release-decide-service.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -160,6 +162,7 @@ function nodeSpecLoader(directory: string): () => readonly NodeSpec[] {
 }
 
 export type StoreDependencyProvider = DaemonDependencyProvider & {
+  releasePublisher(): ReleasePublisher;
   close(): void;
   schedules(): DurableSchedule;
   restore(): RestorePort;
@@ -183,6 +186,8 @@ export function createStoreDependencies(
   // from the last position instead of re-walking the whole ledger per request.
   enrollDecisionLedgerMemo(store);
   const repositoryWorkspace = config.repositoryWorkspace === undefined ? process.env["MOE_NODE_WORKSPACE"] ?? null : config.repositoryWorkspace;
+  const releaseDecide = createProductionReleaseSeams({ store, projectId: config.projectId,
+    storePath: config.storePath, workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, clock });
   const workflows = createRepositoryWorkflowWiring({ store, projectId: config.projectId, storePath: config.storePath,
     workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, nodeSpecsDir: config.nodeSpecsDir, clock });
   const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
@@ -231,6 +236,7 @@ export function createStoreDependencies(
   });
   const { decisions, registry } = createDaemonCommandPorts({
     ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
+    releaseDecide,
     criterionEvidence: workflows.criterionEvidence, repositoryRecovery: workflows.repositoryRecovery,
     readPublicationCandidate: workflows.readPublicationCandidate,
     clock,
@@ -258,6 +264,7 @@ export function createStoreDependencies(
   });
   const v2Ports = createDaemonV2CommandPorts({
     ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
+    releaseDecide,
     clock,
     ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,
@@ -633,6 +640,7 @@ export function createStoreDependencies(
     schedules: (): DurableSchedule => schedules,
     repositoryRemote,
     repositoryWorkflows: workflows.repositoryWorkflows,
+    releasePublisher: () => releaseDecide.publisher,
     runs,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,

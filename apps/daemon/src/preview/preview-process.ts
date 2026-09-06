@@ -8,6 +8,7 @@ import { probeProcessAlive } from "../orchestrator/process-runner-lifecycle.js";
 import { detectPreviewPort, previewOrigin } from "./preview-command-resolution.js";
 import { previewRefusal } from "./preview-contracts.js";
 import type { PreviewRefusal } from "./preview-contracts.js";
+import { previewOwnsListener } from "./preview-listener-owner.js";
 
 /**
  * THE PREVIEW SERVER'S LIFE, and — the part that actually matters — its DEATH.
@@ -196,6 +197,7 @@ export async function startPreviewProcess(
     : null;
 
   let child: ChildProcess;
+  if (input.port !== null && await portAccepts(input.port)) return previewRefusal("PREVIEW_START_TIMEOUT");
   try {
     child = spawn(input.command, [], {
       cwd: input.workspace,
@@ -214,7 +216,7 @@ export async function startPreviewProcess(
 
   let output = "";
   const absorb = (chunk: Buffer | string): void => {
-    output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
+    output = (output + (Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk)).slice(-65_536);
   };
   child.stdout?.on("data", absorb);
   child.stderr?.on("data", absorb);
@@ -266,7 +268,8 @@ export async function startPreviewProcess(
     // listens reaches the timeout in either.
     const candidate = input.port === null ? detectPreviewPort(output)?.port ?? null : input.port;
     const pid = child.pid;
-    if (candidate !== null && pid !== undefined && await portAccepts(candidate)) {
+    if (candidate !== null && pid !== undefined && aliveNow() && await portAccepts(candidate)
+      && await previewOwnsListener(pid, candidate, platform, sourceEnvironment) && aliveNow()) {
       return {
         handle: Object.freeze({
           alive: aliveNow, origin: previewOrigin(candidate), pid, port: candidate, stop,

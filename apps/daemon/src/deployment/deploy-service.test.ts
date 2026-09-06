@@ -79,12 +79,14 @@ function harness(options: {
     ...options.double,
   });
   const store = openStore();
+  const runDocker = options.wrapDocker?.(docker.docker) ?? docker.docker;
   const service = createDeployService({
     clock: () => "2026-09-06T00:00:00.000Z",
     // Zero-cost time: the budget is exercised in poll COUNTS, never in wall clock.
     pollMs: 1, healthBudgetMs: 10, sleep: () => Promise.resolve(),
     ports: {
-      docker: options.wrapDocker?.(docker.docker) ?? docker.docker,
+      build: request => runDocker(buildArgv(request.tag)),
+      docker: runDocker,
       releaseDecision: () => options.release ?? null,
       ssh: docker.ssh,
       target: () => (options.target === undefined ? LOCAL : options.target),
@@ -114,7 +116,7 @@ describe("the deploy engine builds at the landed sha (DoD 1)", () => {
     // would pass for the WRONG sha, and every later rollback resolves through
     // this tag.
     expect(argvFor(context.docker, "build")).toEqual([
-      "build", "--tag", `moe-deploy-production:${SHA}`, CONTEXT,
+      "build", "--tag", `moe-deploy-production:${SHA}`, "-",
     ]);
     expect(argvFor(context.docker, "build")?.[2]).toBe(deployImageTag(ENVIRONMENT, SHA));
     expect(argvFor(context.docker, "build")?.[2]?.split(":")[1]).toBe(SHA);
@@ -253,6 +255,7 @@ describe("the previous receipt is kept and readable (DoD 6)", () => {
       clock: () => "2026-09-06T01:00:00.000Z",
       pollMs: 1, healthBudgetMs: 10, sleep: () => Promise.resolve(),
       ports: {
+        build: first.docker.build,
         docker: createDockerDouble({
           proxyConfig: PROXY_CONFIG,
           running: { [INCUMBENT]: "HEALTHY" },
@@ -567,7 +570,7 @@ describe("the proxy flip keeps a healthy public route", () => {
     const context = harness();
     await context.deploy();
 
-    expect(buildArgv(deployImageTag(ENVIRONMENT, SHA), CONTEXT))
+    expect(buildArgv(deployImageTag(ENVIRONMENT, SHA)))
       .toEqual(argvFor(context.docker, "build"));
   });
 });

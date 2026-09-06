@@ -977,6 +977,11 @@ function renderWiredApp(
   const pendingReads: string[] = [];
   const planningReads: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
+    if (input === "/deployments/read") return Promise.resolve(jsonResponse({
+      outcome: "DEPLOYMENTS", goalRef: DURABLE.goalRef, sha: "a".repeat(40), releaseDecision: null,
+      environments: [{ environment: "staging", target: "local Docker (moe-test)", url: null,
+        code: null, detail: null, outcome: null, releaseDecision: null, sha: null, time: null }],
+    }));
     if (input === "/affordances/read") {
       return Promise.resolve(jsonResponse({
         nextAllowedCommands: [
@@ -1044,6 +1049,25 @@ async function openTheDurableBoard(): Promise<void> {
   expect((open as HTMLButtonElement).disabled).toBe(false);
   await userEvent.click(open);
 }
+
+it("mounts deployment on the live board and spends that goal's offer only on confirmation", async () => {
+  const sent: string[] = [];
+  renderWiredApp([{ ...APPROVAL_OFFER, commandId: "deploy-board", commandKind: "deployment.deploy",
+    targetAggregateId: `deploy:${DURABLE.goalRef}`, expectedVersion: 0 }], { outcome: "NONE" }, "V1", (body) => {
+    sent.push(body); return { ok: true };
+  });
+  await openTheDurableBoard();
+  const deploy = await screen.findByRole("button", { name: "Deploy this goal to staging" });
+  expect((deploy as HTMLButtonElement).disabled).toBe(false);
+  expect(sent).toEqual([]);
+  await userEvent.click(deploy);
+  expect(sent).toEqual([]);
+  await userEvent.click(deploy);
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(JSON.parse(sent[0]!)).toMatchObject({ commandKind: "deployment.deploy",
+    commandId: "deploy-board", targetAggregateId: `deploy:${DURABLE.goalRef}`,
+    expectedVersion: 0, payload: { environment: "staging", sha: "a".repeat(40) } });
+});
 
 /**
  * REACHABILITY, not existence. These render the MOUNTED app and look for the card where a

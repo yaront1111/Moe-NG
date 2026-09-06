@@ -163,13 +163,14 @@ export function mapDesignAnswer(status: number, response: unknown): DesignOutcom
 /** Session headers only; the project is selected by the daemon, never by the request body. */
 export async function readDesign(
   headers: Readonly<Record<string, string>>, goalRef: string, post?: (body: string) => Promise<Response>,
+  planningRunRef?: string,
 ): Promise<DesignOutcome> {
   const send = post ?? ((body: string): Promise<Response> => fetch("/design/read", {
     body, headers, method: "POST", signal: AbortSignal.timeout(15_000),
   }));
   let response: Response;
   try {
-    response = await send(JSON.stringify({ goalRef }));
+    response = await send(JSON.stringify({ goalRef, ...(planningRunRef === undefined ? {} : { planningRunRef }) }));
   } catch {
     return Object.freeze({ status: "ERROR", code: "TRANSPORT_REQUEST_FAILED", layer: LAYER });
   }

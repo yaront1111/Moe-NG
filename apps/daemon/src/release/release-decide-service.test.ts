@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { RuntimeCommandEnvelope } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
@@ -100,7 +100,7 @@ function recordPush(store: Store): void {
 }
 
 /** A SECOND publish decision + receipt, so the goal holds two PUSHED receipts in order. */
-function recordPushAgain(store: Store, branch: string | null, decisionId: string): void {
+function recordPushAgain(store: Store, branch: string | null, decisionId: string, sha = HEAD_SHA): void {
   const aggregateId = publishAggregateId(GOAL_ID);
   store.commitExpectedVersionDecision({
     commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
@@ -121,7 +121,7 @@ function recordPushAgain(store: Store, branch: string | null, decisionId: string
   });
   recordPublishReceipt(store, {
     branch, decidedAt: DECIDED_AT, decisionId, goalId: GOAL_ID, projectId: PROJECT_ID,
-    refusal: null, remoteUrl: REMOTE_URL, sha: HEAD_SHA,
+    refusal: null, remoteUrl: REMOTE_URL, sha,
     url: branch === null ? null : `${REMOTE_URL}/tree/${branch}`,
   });
 }
@@ -160,14 +160,18 @@ function fakePrPort(result: ReleasePrResult): ReleasePrPort & {
   };
 }
 
-function inputOf(decision: "APPROVE" | "REJECT" = "APPROVE"): CommandHandlerInput {
+function inputOf(store: Store, decision: "APPROVE" | "REJECT" = "APPROVE"): CommandHandlerInput {
   return {
     envelope: {
       commandId: "cmd-release-1",
+      commandKind: "release.decide", correlationId: "release-test",
+      expectedVersion: store.getAggregateVersion(releaseDossierAggregateId(GOAL_ID)),
+      requestDigest: "c".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: "test-session", targetAggregateId: releaseDossierAggregateId(GOAL_ID),
       payload: { base: BASE, decision, goalId: GOAL_ID, sha: HEAD_SHA },
-    } as unknown as RuntimeCommandEnvelope,
-    principal: { principalId: OPERATOR },
-  } as unknown as CommandHandlerInput;
+    },
+    principal: { principalId: OPERATOR, projectId: PROJECT_ID, capabilities: ["goal.write"] },
+  };
 }
 
 function facts(input: DossierInput): () => ReleaseDossierFacts {
@@ -226,12 +230,24 @@ function releasedReceiptCount(store: Store): number {
 }
 
 describe("release.decide service", () => {
+  it("refuses a branch whose latest pushed receipt names a different commit", async () => {
+    const store = openStore();
+    bindRemote(store);
+    recordPush(store);
+    recordPushAgain(store, BRANCH, "changed-branch", "f".repeat(40));
+    storeDossier(store, completeInput());
+    const { handler, prPort } = build(store, { pushOutcome: "REFUSED" });
+    const refusal = await refusalOf(handler(inputOf(store)));
+    expect(refusal.code).toBe("RELEASE_PR_FAILED");
+    expect(prPort.requests).toHaveLength(0);
+    expect(releasedReceiptCount(store)).toBe(0);
+  });
   it("refuses an unbound remote BEFORE anything is pushed or opened", async () => {
     const store = openStore();
     storeDossier(store, completeInput());
     const { handler, prPort, publisher } = build(store);
 
-    const refusal = await refusalOf(handler(inputOf()));
+    const refusal = await refusalOf(handler(inputOf(store)));
     expect(refusal.code).toBe("RELEASE_REMOTE_MISSING");
     expect(refusal.layer).toBe(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_REMOTE_MISSING);
     expect(refusal.layer).toBe("PROJECT_REDUCER");
@@ -248,7 +264,7 @@ describe("release.decide service", () => {
     const gappy = dossierInput({ projectId: PROJECT_ID });
     const { handler, prPort, publisher } = build(store, { input: gappy });
 
-    const refusal = await refusalOf(handler(inputOf()));
+    const refusal = await refusalOf(handler(inputOf(store)));
     expect(refusal.code).toBe("RELEASE_EVIDENCE_INCOMPLETE");
     expect(refusal.layer).toBe(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_EVIDENCE_INCOMPLETE);
     expect(refusal.layer).toBe("DAEMON_PREREQUISITE");
@@ -282,7 +298,7 @@ describe("release.decide service", () => {
 
     const { handler, prPort, publisher } = build(store, { input: drifted });
 
-    const decision = await handler(inputOf());
+    const decision = await handler(inputOf(store));
     expect(decision.resultCode).toBe("RELEASED");
     expect(decision.disposition).toBe("DECIDED");
 
@@ -302,6 +318,8 @@ describe("release.decide service", () => {
     expect(request.body).not.toContain("Retitled after the release record");
     // The whole request, byte for byte.
     expect(request).toEqual({
+      remoteUrl: REMOTE_URL,
+      sha: HEAD_SHA,
       base: BASE,
       body: readBack.dossier.markdown,
       head: BRANCH,
@@ -326,7 +344,7 @@ describe("release.decide service", () => {
         storeDossier(store, input);
         const { handler, prPort } = build(store, { input, prResult });
 
-        const refusal = await refusalOf(handler(inputOf()));
+        const refusal = await refusalOf(handler(inputOf(store)));
         expect(refusal.code).toBe("RELEASE_PR_FAILED");
         expect(refusal.layer).toBe(RELEASE_DECIDE_CODE_LAYER_MAP.RELEASE_PR_FAILED);
         expect(refusal.layer).toBe("RUNNER_WORKSPACE");
@@ -350,7 +368,7 @@ describe("release.decide service", () => {
     storeDossier(store, input);
     const { handler, prPort, publisher } = build(store, { input, pushOutcome: "REFUSED" });
 
-    const refusal = await refusalOf(handler(inputOf()));
+    const refusal = await refusalOf(handler(inputOf(store)));
     expect(refusal.code).toBe("RELEASE_PR_FAILED");
     expect(refusal.layer).toBe("RUNNER_WORKSPACE");
     expect(refusal.detail).toContain("PUBLISH_APPROVAL_REQUIRED");
@@ -370,7 +388,7 @@ describe("release.decide service", () => {
     storeDossier(store, input);
     const { handler, prPort } = build(store, { input });
 
-    await handler(inputOf());
+    await handler(inputOf(store));
     expect(prPort.requests[0]!.head).toBe("moe/goal-release-1-v2");
   });
 
@@ -385,7 +403,7 @@ describe("release.decide service", () => {
       storeDossier(store, input);
       const { handler, prPort } = build(store, { input });
 
-      const refusal = await refusalOf(handler(inputOf()));
+      const refusal = await refusalOf(handler(inputOf(store)));
       expect(refusal.code).toBe("RELEASE_PR_FAILED");
       expect(prPort.requests).toHaveLength(0);
     });
@@ -401,11 +419,12 @@ describe("release.decide service", () => {
     storeDossier(store, input);
     const { handler, prPort, publisher } = build(store, { input });
 
-    const first = await handler(inputOf());
+    const command = inputOf(store);
+    const first = await handler(command);
     expect(first.resultCode).toBe("RELEASED");
     expect(first.disposition).toBe("DECIDED");
 
-    const second = await handler(inputOf());
+    const second = await handler(command);
     expect(second.resultCode).toBe("RELEASED");
     expect(second.disposition).toBe("REPLAYED");
     expect(second.effectId).toBe(first.effectId);
@@ -422,7 +441,7 @@ describe("release.decide service", () => {
     storeDossier(store, input);
     const { handler, prPort, publisher } = build(store, { input });
 
-    const decision = await handler(inputOf("REJECT"));
+    const decision = await handler(inputOf(store, "REJECT"));
     expect(decision.resultCode).toBe("REJECTED");
     expect(publisher.calls).toHaveLength(0);
     expect(prPort.requests).toHaveLength(0);
@@ -433,7 +452,7 @@ describe("release.decide service", () => {
     const store = openStore();
     const { handler, prPort, publisher } = build(store);
     const agent = {
-      envelope: inputOf().envelope,
+      envelope: inputOf(store).envelope,
       principal: { principalId: "agent:worker-1" },
     } as unknown as CommandHandlerInput;
 

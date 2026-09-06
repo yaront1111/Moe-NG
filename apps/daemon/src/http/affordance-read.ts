@@ -24,6 +24,7 @@ import { isDesignSkip } from "../design/design-contracts.js";
 import { readDesignRevision } from "../design/design-store.js";
 
 import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
+import { readPublishLedger } from "../repository/publish-ledger.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
@@ -324,7 +325,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       // Planning offers are emitted per durable goal below. These steps remain
       // the demo seed chain's compatibility status until R3-10b scopes the board.
       if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close"
-        && kind !== "repository.publish") {
+        && kind !== "repository.publish" && kind !== "deployment.deploy") {
         offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       }
       return Object.freeze({
@@ -397,6 +398,23 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const planningSubject = soleLegacyPlanningSubject(planning.planningGoalRefs, planning.offers);
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now, planningSubject);
+    // Deployment follows each goal's own publication, independent of the legacy single-goal
+    // planning card. The environment remains a dispatch choice on that goal's offer.
+    const publications = readPublishLedger(config.store, config.projectId);
+    const deployBound = ENVIRONMENT_NAMES.some((environment) => deployTarget(environment) !== null);
+    const deploymentSteps: ChainStep[] = [];
+    for (const goalId of new Set(Object.values(planning.planningGoalRefs))) {
+      if ((publications.get(goalId)?.requests.length ?? 0) === 0) continue;
+      const aggregateId = `deploy:${goalId}`;
+      const version = versionOf(ledger, aggregateId);
+      if (deployBound) offers.push(offer("deployment.deploy", aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
+      deploymentSteps.push(Object.freeze({ aggregateId, version, kind: "deployment.deploy",
+        ...claimFields(claims, "deployment.deploy", aggregateId, now),
+        missing: deployBound ? [] : ["deployment.set_target"], status: deployBound ? "READY" : "BLOCKED" }));
+    }
+    if (deploymentSteps.length > 0) {
+      steps.splice(steps.findIndex((step) => step.kind === "deployment.deploy"), 1, ...deploymentSteps);
+    }
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer
     // above and this step share identity, so claim fencing works unchanged.

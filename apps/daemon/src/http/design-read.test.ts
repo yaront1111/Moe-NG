@@ -21,7 +21,7 @@ import {
 } from "./http-listener-guards.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { Authenticator } from "./http-contract.js";
-import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
+import { DESIGN_READ_PATH, designReadBodyOf, handleDesignReadRequest } from "./design-read.js";
 import type { DesignReadPort } from "./design-read.js";
 import { GOOD_CREDENTIAL } from "./http-test-fixtures.js";
 
@@ -84,6 +84,14 @@ function handle(
 }
 
 describe("design read route", () => {
+  it("preserves the compiled run selector and refuses ambiguous version selectors", () => {
+    expect(designReadBodyOf(body({ goalRef: GOAL_ID, planningRunRef: "run-compiled" })))
+      .toEqual({ goalRef: GOAL_ID, planningRunRef: "run-compiled" });
+    for (const selector of [{ goalRef: GOAL_ID, planningRunRef: "" },
+      { goalRef: GOAL_ID, planningRunRef: "run-compiled", version: 1 },
+      { goalRef: GOAL_ID, planningRunRef: "run-compiled", projectId: "other" },
+    ]) expect(designReadBodyOf(body(selector))).toBeNull();
+  });
   it("is routed at /design/read", () => {
     expect(DESIGN_READ_PATH).toBe("/design/read");
   });

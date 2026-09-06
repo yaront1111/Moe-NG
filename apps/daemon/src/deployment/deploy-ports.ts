@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { DeployBuildPort } from "./deploy-image-build.js";
 
 /**
  * The deploy engine's only effect boundary, plus the double that stands in for
@@ -48,6 +49,7 @@ export type DeployTargetPort = (environment: string) => DeployTarget | null;
 export type ReleaseDecisionPort = (environment: string, sha: string) => string | null;
 
 export interface DeployPorts {
+  readonly build: DeployBuildPort;
   readonly docker: DockerRunner;
   readonly releaseDecision: ReleaseDecisionPort;
   /** Carries the same docker argv to a REMOTE target: `ssh <target> docker <args>`. */
@@ -213,6 +215,7 @@ const failed = (stderr: string, code: number | null = 1): DeployRunResult =>
   ({ code, stderr, stdout: "" });
 
 export interface DockerDouble {
+  readonly build: DeployBuildPort;
   readonly transitions: readonly { readonly argv: readonly string[]; readonly serving: readonly string[] }[];
   readonly writes: readonly string[];
   upstream(): string;
@@ -340,6 +343,7 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
     return docked === -1 ? Promise.resolve(ok()) : docker(args.slice(docked + 1), stdin);
   };
   return {
+    build: request => docker(["build", "--tag", request.tag, "-"]),
     calls, docker, serving, transitions, writes,
     upstream: () => upstream, config: () => config, locked: () => locked,
     ssh, sshCalls, state: (name) => states.get(name) ?? "ABSENT", transfer,

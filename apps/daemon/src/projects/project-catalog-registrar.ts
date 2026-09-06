@@ -1,6 +1,7 @@
-import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+
+import { withProjectCatalogLock } from "./project-catalog-lock.js";
 
 import {
   PROJECT_CATALOG_LAYER,
@@ -60,15 +61,19 @@ export function createNodeProjectCatalogRegistrar(
   ports: ProjectCatalogPorts = createNodeProjectCatalogPorts(),
 ): RegisterProjectInCatalog {
   return async (input: RegisterCatalogProjectInput): Promise<void> => {
-    // An absent catalog loads as the empty v1 catalog, so a first product registers cleanly.
-    const loaded = await loadProjectCatalog(path, ports.fs);
-    if (!loaded.ok) throw new ProjectCatalogRefusalError(loaded.code);
-    const registered = await registerCatalogProject(loaded.catalog, input, ports);
-    if (!registered.ok) throw new ProjectCatalogRefusalError(registered.code);
-    // The atomic save opens a temp file BESIDE the catalog, so its directory must exist first.
-    try { await mkdir(dirname(path), { recursive: true }); }
-    catch { throw new ProjectCatalogRefusalError(PROJECT_CATALOG_WRITE_FAILED); }
-    const saved = await saveProjectCatalogAtomic(path, registered.catalog, ports);
-    if (!saved.ok) throw new ProjectCatalogRefusalError(saved.code);
+    try {
+      await withProjectCatalogLock(path, async (canonicalPath) => {
+        // Lock before loading: atomic replacement alone cannot prevent lost updates.
+        const loaded = await loadProjectCatalog(canonicalPath, ports.fs);
+        if (!loaded.ok) throw new ProjectCatalogRefusalError(loaded.code);
+        const registered = await registerCatalogProject(loaded.catalog, input, ports);
+        if (!registered.ok) throw new ProjectCatalogRefusalError(registered.code);
+        const saved = await saveProjectCatalogAtomic(canonicalPath, registered.catalog, ports);
+        if (!saved.ok) throw new ProjectCatalogRefusalError(saved.code);
+      });
+    } catch (error) {
+      if (error instanceof ProjectCatalogRefusalError) throw error;
+      throw new ProjectCatalogRefusalError(PROJECT_CATALOG_WRITE_FAILED);
+    }
   };
 }

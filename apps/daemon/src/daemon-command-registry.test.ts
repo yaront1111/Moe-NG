@@ -121,9 +121,9 @@ const ROWS: readonly Row[] = [
   // Existing deployment vocabulary backfilled into the independent served-kind census.
   { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "DEPLOY_BUILD_CONTEXT_UNCONFIGURED",
     kind: "deployment.deploy", layer: "DAEMON_COMMAND_SEAM", payloadKeys: ["environment", "sha"] },
-  { agent: null, asyncOnly: true, capability: GOAL, code: "ROLLBACK_RECEIPT_UNKNOWN",
-    kind: "deployment.rollback", layer: PREREQ_LAYER,
-    payload: { environment: "staging", toReceiptRef: "receipt-unknown", restoreDatabase: false },
+  { agent: null, asyncOnly: true, capability: GOAL, code: "DEPLOY_ROLLBACK_RECEIPT_INVALID",
+    kind: "deployment.rollback", layer: "DAEMON_COMMAND_SEAM",
+    payload: { environment: "staging", toReceiptRef: "a".repeat(64), restoreDatabase: false },
     payloadKeys: ["environment", "toReceiptRef", "restoreDatabase"] },
   // Async-served like the deploy above, and refusing at the SEAM for the same reason: the
   // shipped daemon names no database, workspace or project root to revert, so the composition
@@ -508,7 +508,7 @@ async function sendAsync(
     body: new TextEncoder().encode(JSON.stringify({
       commandId, commandKind, correlationId: "corr-registry", expectedVersion: 0, payload,
       requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-      sessionCredential: credential, targetAggregateId: "agg-registry",
+      sessionCredential: credential, targetAggregateId: commandKind === "deployment.rollback" ? PROJECT : "agg-registry",
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,

@@ -18,6 +18,7 @@ import {
 } from "./design-contracts.js";
 import { decodeDesignRecordBytes, encodeDesignRecord, type DesignRecord }
   from "./design-records.js";
+import { readCompiledContractBinding } from "../planning/compiled-contract-binding.js";
 
 /**
  * The VERSIONED durable aggregate `design:<goalId>`: one append-only history of design revisions
@@ -60,6 +61,8 @@ export interface DesignReadInput {
   readonly projectId: string;
   /** Omitted reads the LATEST; a number reads that version out of history. */
   readonly version?: number;
+  /** Reads the immutable design selection sealed by this run, never the latest design. */
+  readonly planningRunRef?: string;
 }
 
 export type DesignSubmitResult =
@@ -189,6 +192,15 @@ export function submitDesignRevision(
 export function readDesignRevision(
   store: SqliteEventStore, input: DesignReadInput,
 ): DesignReadResult {
+  let version = input.version;
+  if (input.planningRunRef !== undefined) {
+    if (version !== undefined) return designRefusal("DESIGN_RECORD_MALFORMED");
+    const compiled = readCompiledContractBinding(store, input.projectId, input.planningRunRef);
+    if (!compiled.ok || compiled.binding.goalRef !== input.goalRef
+      || compiled.binding.designVersion === undefined) return designRefusal("DESIGN_RECORD_MALFORMED");
+    if (compiled.binding.designVersion === null) return designRefusal("DESIGN_REVISION_ABSENT");
+    version = compiled.binding.designVersion;
+  }
   const events = designEvents(store, designAggregateId(input.goalRef));
   if (!Array.isArray(events)) return events as DesignRefusal;
   const records: DesignRecord[] = [];
@@ -201,11 +213,11 @@ export function readDesignRevision(
     }
     records.push(decoded.record);
   }
-  if (records.length === 0) return designRefusal("DESIGN_REVISION_ABSENT");
+  if (records.length === 0) return designRefusal(input.planningRunRef === undefined ? "DESIGN_REVISION_ABSENT" : "DESIGN_RECORD_MALFORMED");
   const versions = Object.freeze(records.map((entry) => entry.version));
-  const wanted = input.version === undefined
+  const wanted = version === undefined
     ? records[records.length - 1]
-    : records.find((entry) => entry.version === input.version);
-  if (wanted === undefined) return designRefusal("DESIGN_REVISION_ABSENT");
+    : records.find((entry) => entry.version === version);
+  if (wanted === undefined) return designRefusal(input.planningRunRef === undefined ? "DESIGN_REVISION_ABSENT" : "DESIGN_RECORD_MALFORMED");
   return Object.freeze({ ok: true as const, record: wanted, versions });
 }

@@ -15,9 +15,8 @@ import { OutcomeNote } from "../components/outcome-note.js";
  * and a blank or a zero collapses them into each other.
  *
  * It reads the SAME `/design/read` the Design card reads, through the SAME exact-key
- * decoder, so the version named here and the version rendered on the tab cannot drift.
- * Reading twice is deliberate: sharing one fetch would couple the approval surface to
- * whether the operator had opened the tab.
+ * decoder, with the approval's planning run selector. The daemon resolves that run's
+ * immutable design selection, while the Design tab can continue to show newer revisions.
  *
  * NO VERSION PICKER. An older revision stays readable by asking the daemon for it
  * (`/design/read` takes a version), which the journey exercises; a picker here would be
@@ -79,29 +78,31 @@ export function DesignVersionNote(
 
 interface LiveDesignVersionNoteProps {
   readonly goalRef: string;
+  readonly planningRunRef: string;
   readonly headers: Readonly<Record<string, string>>;
-  readonly read?: ((goalRef: string) => Promise<DesignOutcome>) | undefined;
+  readonly read?: ((goalRef: string, planningRunRef: string) => Promise<DesignOutcome>) | undefined;
 }
 
 /** Read on mount and on subject change; an old goal cannot publish a late answer. */
 export function LiveDesignVersionNote(props: LiveDesignVersionNoteProps): JSX.Element {
-  const { goalRef, headers, read } = props;
+  const { goalRef, headers, planningRunRef, read } = props;
   const [answer, setAnswer] = useState<{
     readonly subject: LiveDesignVersionNoteProps; readonly outcome: DesignOutcome;
   } | null>(null);
   useEffect(() => {
     let live = true;
     const publish = (outcome: DesignOutcome): void => {
-      if (live) setAnswer({ subject: { goalRef, headers, read }, outcome });
+      if (live) setAnswer({ subject: { goalRef, headers, planningRunRef, read }, outcome });
     };
     void Promise.resolve()
-      .then(() => read === undefined ? readDesign(headers, goalRef) : read(goalRef))
+      .then(() => read === undefined ? readDesign(headers, goalRef, undefined, planningRunRef) : read(goalRef, planningRunRef))
       .then(publish, () => publish({
         code: "DESIGN_READ_FAILED", layer: "CONTROL_ROOM_GOALS", status: "ERROR",
       }));
     return (): void => { live = false; };
-  }, [goalRef, headers, read]);
+  }, [goalRef, headers, planningRunRef, read]);
   const current = answer !== null && answer.subject.goalRef === goalRef
-    && answer.subject.headers === headers && answer.subject.read === read;
+    && answer.subject.headers === headers && answer.subject.read === read
+    && answer.subject.planningRunRef === planningRunRef;
   return <DesignVersionNote outcome={current ? answer.outcome : null} />;
 }

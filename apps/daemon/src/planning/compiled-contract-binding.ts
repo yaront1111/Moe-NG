@@ -13,6 +13,8 @@ export interface CompiledContractBinding {
   readonly contractRef: ProductContractRevisionRef;
   readonly graphContentHash: string;
   readonly submissionHash: string;
+  /** The design present at compilation; null is measured absence, omitted is legacy unknown. */
+  readonly designVersion?: number | null;
 }
 export const compiledContractAggregateId = (projectId: string, runId: string): string =>
   `compiled-contract/${createHash("sha256").update(JSON.stringify([
@@ -27,17 +29,23 @@ const object = (value: unknown): value is Record<string, unknown> =>
 export function decodeCompiledContractBinding(bytes: Uint8Array): CompiledContractBinding | null {
   let value: unknown;
   try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { return null; }
-  if (!object(value) || Object.keys(value).sort().join() !== ["version", "projectId", "goalRef",
-    "planningRunRef", "contractRef", "graphContentHash", "submissionHash"].sort().join()
+  if (!object(value)) return null;
+  const designKeys = Object.hasOwn(value, "designVersion") ? ["designVersion"] : [];
+  if (Object.keys(value).sort().join() !== ["version", "projectId", "goalRef",
+    "planningRunRef", "contractRef", "graphContentHash", "submissionHash", ...designKeys].sort().join()
     || value["version"] !== COMPILED_CONTRACT_BINDING_VERSION || !text(value["projectId"])
     || !text(value["goalRef"]) || !text(value["planningRunRef"]) || !hex(value["graphContentHash"])
     || !hex(value["submissionHash"])) return null;
+  const designVersion = value["designVersion"];
+  if (designKeys.length > 0 && designVersion !== null &&
+    (typeof designVersion !== "number" || !Number.isSafeInteger(designVersion) || designVersion <= 0)) return null;
   const ref = value["contractRef"];
   if (!object(ref) || Object.keys(ref).sort().join() !== "contractId,revisionDigest,revisionId"
     || !text(ref["contractId"]) || !text(ref["revisionId"]) || !hex(ref["revisionDigest"])) return null;
   return Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION, projectId: value["projectId"],
     goalRef: value["goalRef"], planningRunRef: value["planningRunRef"],
     graphContentHash: value["graphContentHash"], submissionHash: value["submissionHash"],
+    ...(designKeys.length === 0 ? {} : { designVersion: designVersion as number | null }),
     contractRef: Object.freeze({ contractId: ref["contractId"], revisionId: ref["revisionId"], revisionDigest: ref["revisionDigest"] }) });
 }
 export type CompiledContractBindingRead = Readonly<{ ok: true; binding: CompiledContractBinding }>

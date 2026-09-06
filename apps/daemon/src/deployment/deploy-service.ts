@@ -30,6 +30,14 @@ export interface DeployRequest {
   readonly sha: string;
 }
 
+export interface DeployRollbackRequest {
+  readonly decisionId: string;
+  readonly environment: string;
+  readonly receiptId: string;
+}
+export const DEPLOY_ROLLBACK_RECEIPT_INVALID = "DEPLOY_ROLLBACK_RECEIPT_INVALID" as const;
+export const DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE = "DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE" as const;
+
 export interface DeployServiceConfig {
   readonly clock?: () => string;
   readonly healthBudgetMs?: number;
@@ -55,9 +63,7 @@ export function candidateContainerName(
   return `moe-deploy-${environment}-${sha.slice(0, 12)}-${decision}`;
 }
 
-/** The build argv. The tag carries the sha VALUE; every later rollback resolves through it. */
-export const buildArgv = (tag: string, context: string): readonly string[] =>
-  ["build", "--tag", tag, context];
+export { dockerArchiveBuildArgv as buildArgv } from "./deploy-image-build.js";
 
 /** Internal candidate: no public port conflict with the incumbent or proxy. */
 export const runCandidateArgv = (
@@ -131,13 +137,13 @@ async function flipProxy(port: ProxyPort, lease: ProxyLease, name: string) {
   return { detail: recovered ? detail : "DEPLOY_PROXY_RECOVERY_REQUIRED", recoveryRequired: !recovered };
 }
 
-function readReplay(config: DeployServiceConfig, request: DeployRequest): DeployReport | null {
+function readReplay(config: DeployServiceConfig, request: DeployRequest, expectedDigest?: string): DeployReport | null {
   const { environment, sha } = request;
   const historical = readDeployReceipt(config.store, config.projectId,
     deployReceiptId(config.projectId, environment, request.decisionId));
   if (historical.ok) {
     const receipt = historical.receipt;
-    return receipt.sha === sha
+    return receipt.sha === sha && (expectedDigest === undefined || receipt.outcome !== "DEPLOYED" || receipt.imageDigest === expectedDigest)
       ? { outcome: receipt.outcome, detail: `replayed ${receipt.outcome}`, environment, receipt }
       : { outcome: "REFUSED", detail: "DEPLOY_DECISION_REPLAY_MISMATCH", environment, receipt: null };
   }
@@ -197,9 +203,9 @@ export function createDeployService(config: DeployServiceConfig) {
     return run(target, runCandidateArgv(name, target.network, tag));
   };
 
-  const deploy = async (request: DeployRequest): Promise<DeployReport> => {
+  const execute = async (request: DeployRequest, rollbackImage?: string): Promise<DeployReport> => {
     const { environment, sha } = request;
-    const historical = readReplay(config, request);
+    const historical = readReplay(config, request, rollbackImage);
     if (historical !== null) return historical;
     const releaseDecision = ports.releaseDecision(environment, sha);
     // DoD-7: a READ. It neither invents an approval nor refuses for the lack of
@@ -241,15 +247,23 @@ export function createDeployService(config: DeployServiceConfig) {
     let keepLock = false; let keepCandidate = false; let candidateStarted = false;
     const name = candidateContainerName(environment, sha, request.decisionId);
     try {
-      const replay = readReplay(config, request);
+      const replay = readReplay(config, request, rollbackImage);
       if (replay !== null) return replay;
-      const tag = deployImageTag(environment, sha);
-      const built = await run(target, buildArgv(tag, request.context));
-      // docker's OWN last stderr line: a generic message is undiagnosable from a receipt weeks later.
-      if (built.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(built.stderr));
-      if (target.sshTarget !== null) {
-        const moved = await ports.transfer(tag, target.sshTarget);
-        if (moved.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(moved.stderr));
+      const tag = rollbackImage ?? deployImageTag(environment, sha);
+      if (rollbackImage === undefined) {
+        let built: DeployRunResult;
+        try { built = await ports.build({ context: request.context, sha, tag }); }
+        catch { return refuse(target, DEPLOY_BUILD_FAILED, "DEPLOY_BUILD_UNAVAILABLE"); }
+        if (built.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(built.stderr));
+        if (target.sshTarget !== null) {
+          const moved = await ports.transfer(tag, target.sshTarget);
+          if (moved.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(moved.stderr));
+        }
+      }
+      const inspected = await run(target, ["image", "inspect", "--format", "{{.Id}}", tag]);
+      const digest = inspected.stdout.trim();
+      if (inspected.code !== 0 || !/^sha256:[0-9a-f]{64}$/u.test(digest) || (rollbackImage !== undefined && digest !== rollbackImage)) {
+        return refuse(target, DEPLOY_BUILD_FAILED, rollbackImage === undefined ? "DEPLOY_IMAGE_DIGEST_UNAVAILABLE" : DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE);
       }
       candidateStarted = true;
       const started = await startCandidate(target, name, tag);
@@ -259,11 +273,6 @@ export function createDeployService(config: DeployServiceConfig) {
       const healthy = await awaitHealthy(target, name);
       if (!healthy) {
         return refuse(target, DEPLOY_HEALTH_TIMEOUT, `${name} did not report healthy within ${String(budget)}ms`);
-      }
-      const inspected = await run(target, ["image", "inspect", "--format", "{{.Id}}", tag]);
-      const digest = inspected.stdout.trim();
-      if (inspected.code !== 0 || !/^sha256:[0-9a-f]{64}$/u.test(digest)) {
-        return refuse(target, DEPLOY_BUILD_FAILED, "DEPLOY_IMAGE_DIGEST_UNAVAILABLE");
       }
       const flipped = await flipProxy(proxyPort, lease, name);
       keepLock = flipped.recoveryRequired;
@@ -288,5 +297,14 @@ export function createDeployService(config: DeployServiceConfig) {
     }
   };
 
-  return Object.freeze({ deploy });
+  const rollback = async (request: DeployRollbackRequest): Promise<DeployReport> => {
+    const selected = readDeployReceipt(config.store, config.projectId, request.receiptId);
+    if (!selected.ok || selected.receipt.environment !== request.environment
+      || selected.receipt.projectId !== config.projectId || selected.receipt.outcome !== "DEPLOYED"
+      || selected.receipt.imageDigest === null) {
+      return { outcome: "REFUSED", detail: DEPLOY_ROLLBACK_RECEIPT_INVALID, environment: request.environment, receipt: null };
+    }
+    return execute({ context: "", decisionId: request.decisionId, environment: request.environment, sha: selected.receipt.sha }, selected.receipt.imageDigest);
+  };
+  return Object.freeze({ deploy: (request: DeployRequest) => execute(request), rollback });
 }

@@ -153,16 +153,21 @@ export interface EnvironmentDeliveryMerge {
 export function deliverEnvironment(
   allowlisted: NodeJS.ProcessEnv,
   delivered: EnvironmentDeliveredVariables | undefined,
+  platform: NodeJS.Platform = process.platform,
 ): EnvironmentDeliveryMerge {
   const names = delivered === undefined ? [] : Object.keys(delivered);
   if (names.length === 0) return { collisions: [], environment: allowlisted };
   const environment: NodeJS.ProcessEnv = { ...allowlisted };
   const collisions: string[] = [];
+  const runtimeNames = new Set(Object.keys(allowlisted).map((name) => (
+    platform === "win32" ? name.toUpperCase() : name
+  )));
   for (const name of names) {
-    // `in` rather than a truthiness test: an allowlisted key explicitly set to the empty string
+    // Presence rather than truthiness: an allowlisted key explicitly set to the empty string
     // is still the runtime's answer for that name, and letting an operator value replace it would
     // be the same displacement by a quieter route.
-    if (name in allowlisted) {
+    // Windows folds environment names at spawn, so Path also owns delivered PATH.
+    if (runtimeNames.has(platform === "win32" ? name.toUpperCase() : name)) {
       collisions.push(name);
       continue;
     }

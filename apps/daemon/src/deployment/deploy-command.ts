@@ -2,7 +2,7 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
-import { commitAccepted, refuse, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import { commitAccepted, refuse, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand }
@@ -11,10 +11,14 @@ import { DomainRefusal, decisionOf } from "../daemon-command-dispatch.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
+import { releaseReceiptId } from "../release/release-receipt-contracts.js";
+import { readReleaseReceipt } from "../release/release-receipt-ledger.js";
 import { bootstrapRequestBytes } from "../repository/repository-bootstrap-command.js";
+import { readPublishLedger } from "../repository/publish-ledger.js";
 import { nodeDockerRunner, nodeImageTransfer, nodeSshRunner } from "./deploy-ports.js";
 import type { DeployPorts } from "./deploy-ports.js";
 import { createDeployService } from "./deploy-service.js";
+import { nodeDeployBuild } from "./deploy-image-build.js";
 import type { DeployReport, DeployRequest } from "./deploy-service.js";
 import {
   DEPLOYMENT_DEPLOY_COMMAND_KIND, DEPLOY_TARGET_BOUND_EVENT, decodeDeployTarget,
@@ -84,12 +88,13 @@ export interface DeployCommandOptions {
 /**
  * The host effects and the latest durable, per-project/environment target. The target decoder
  * remains the setter's authority; unreadable or invalid bindings fail closed as a missing target.
- * `releaseDecision` deliberately remains unconfigured: Gate 3's release authority is separate.
+ * The command handler binds `releaseDecision` to its admitted goal and requested commit.
  */
 export function productionDeployPorts(
   store: Pick<SqliteEventStore, "readEvents">, projectId: string,
 ): DeployPorts {
   return Object.freeze({
+    build: nodeDeployBuild,
     docker: nodeDockerRunner,
     releaseDecision: () => null,
     ssh: nodeSshRunner,
@@ -188,17 +193,45 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
         "no docker build context is configured on this daemon", 422);
     }
     const decidedAt = clock();
+    const goalId = envelope.targetAggregateId.startsWith("deploy:") ? envelope.targetAggregateId.slice(7) : null;
+    if ((goalId !== null && goalId.length === 0) || (goalId === null && envelope.targetAggregateId !== projectId)) {
+      throw new DomainRefusal("DEPLOY_GOAL_UNBOUND", DAEMON_COMMAND_SEAM, "deployment target does not name a goal in this project", 422);
+    }
+    const payload = goalId === null ? envelope.payload : { ...envelope.payload, goalId };
     const bytes = bootstrapRequestBytes(DEPLOYMENT_DEPLOY_COMMAND_KIND, projectId, decidedAt,
-      envelope.payload, envelope, principal.principalId);
+      payload, envelope, principal.principalId);
     // ADMIT FIRST. A replay, an unbound environment's missing `deployment.set_target` or a
     // malformed envelope is answered here, before docker is asked for anything.
     const admitted = admitBootstrapCommand(store, bytes, {
       ...BOOTSTRAP_HANDLERS, [DEPLOYMENT_DEPLOY_COMMAND_KIND]: unreachableHandler,
     } satisfies HandlerTable);
     if ("outcome" in admitted) return decisionOf(admitted.outcome);
+    if (goalId !== null) {
+      const goal = stateOf(admitted.ledger, goalId);
+      if (typeof goal !== "object" || goal === null || Array.isArray(goal)
+        || (goal as JsonObject)["goalId"] !== goalId || (goal as JsonObject)["projectId"] !== projectId
+        || (readPublishLedger(store, projectId).get(goalId)?.requests.length ?? 0) === 0) {
+        throw new DomainRefusal("DEPLOY_GOAL_UNBOUND", DAEMON_COMMAND_SEAM, "deployment goal has no publication in this project", 422);
+      }
+    }
+    if (versionOf(admitted.ledger, aggregateIdFor(admitted.request, null)) !== envelope.expectedVersion) {
+      throw new DomainRefusal("BOOTSTRAP_EXPECTED_VERSION_STALE", DAEMON_COMMAND_SEAM, "deployment offer has a stale aggregate version", 409);
+    }
 
+    const ports = options.ports ?? {
+      ...productionDeployPorts(store, projectId),
+      releaseDecision: (_environment: string, sha: string): string | null => {
+        if (goalId === null) return null;
+        const release = readReleaseReceipt(store, projectId,
+          releaseReceiptId(projectId, goalId, sha, "RELEASED", null));
+        if (release.ok) return release.receipt.receiptId;
+        if (release.code === "RELEASE_RECEIPT_NOT_FOUND") return null;
+        throw new DomainRefusal(release.code, DAEMON_COMMAND_SEAM,
+          "the release receipt for this goal and commit could not be verified", 422);
+      },
+    };
     const report = await createDeployService({
-      ports: options.ports ?? productionDeployPorts(store, projectId), projectId, store,
+      ports, projectId, store,
       // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
       // is a DIFFERENT thing from an absent key, and only the absent key means "the engine's
       // own default".

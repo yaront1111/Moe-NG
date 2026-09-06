@@ -11,6 +11,8 @@ import type { ReleasePrRequest, SpawnGhProcess } from "./release-pr-port.js";
 
 const CWD = "/tmp/workspace";
 const REQUEST: ReleasePrRequest = {
+  remoteUrl: "https://github.com/acme/widget.git",
+  sha: "a".repeat(40),
   base: "main",
   body: "# Release dossier: widget\n\n- Goal: goal-1\n- Re-measured at sha: abc\n",
   head: "moe/goal-1",
@@ -50,13 +52,14 @@ interface Capture {
  */
 function fakeSpawn(
   act: (child: FakeChild) => void,
+  view?: (child: FakeChild) => void,
 ): { readonly captured: Capture[]; readonly spawn: SpawnGhProcess } {
   const captured: Capture[] = [];
   const spawn: SpawnGhProcess = (command, args, options) => {
     const child = new FakeChild();
     const argv = [...args];
     const bodyIndex = argv.indexOf("--body-file");
-    const bodyFilePath = argv[bodyIndex + 1] ?? "";
+    const bodyFilePath = bodyIndex < 0 ? "" : argv[bodyIndex + 1] ?? "";
     captured.push({
       argv,
       bodyFileContent: bodyFilePath === "" ? "" : readFileSync(bodyFilePath, "utf8"),
@@ -65,28 +68,63 @@ function fakeSpawn(
       command,
       options,
     });
-    setImmediate(() => { act(child); });
+    setImmediate(() => {
+      if (argv[1] !== "view") { act(child); return; }
+      if (view !== undefined) { view(child); return; }
+      child.stdout.emit("data", JSON.stringify({ headRefOid: REQUEST.sha, headRefName: REQUEST.head,
+        baseRefName: REQUEST.base, url: argv[2], state: "OPEN" }));
+      child.emit("close", 0);
+    });
     return child as unknown as ChildProcess;
   };
   return { captured, spawn };
 }
 
 describe("gh release pr port", () => {
+  it.each(["moved", "wrong-base", "unreadable", "malformed"])("does not certify a created PR when its head proof is %s", async (failure) => {
+    const { captured, spawn } = fakeSpawn(child => {
+      child.stdout.emit("data", "https://github.com/acme/widget/pull/7\n");
+      child.emit("close", 0);
+    }, child => {
+      child.stdout.emit("data", failure === "malformed" ? "{broken" : JSON.stringify({ url: "https://github.com/acme/widget/pull/7",
+        headRefOid: failure === "moved" ? "b".repeat(40) : REQUEST.sha,
+        headRefName: REQUEST.head, baseRefName: failure === "wrong-base" ? "other" : REQUEST.base,
+        state: "OPEN" }));
+      child.emit("close", failure === "unreadable" ? 1 : 0);
+    });
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn,
+      verifyHead: async () => true }).open(REQUEST);
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("unproven PR was certified");
+    expect(result.stderrLastLine).toContain("https://github.com/acme/widget/pull/7");
+    expect(captured[1]?.argv).toEqual(["pr", "view", "https://github.com/acme/widget/pull/7",
+      "--repo", REQUEST.remoteUrl, "--json", "url,headRefOid,headRefName,baseRefName,state"]);
+  });
+  it("does not open a PR when the remote branch no longer names the approved SHA", async () => {
+    const { captured, spawn } = fakeSpawn((child) => {
+      child.stdout.emit("data", "https://github.com/acme/widget/pull/7\n");
+      child.emit("close", 0);
+    });
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn,
+      verifyHead: async () => false }).open(REQUEST);
+    expect(result).toMatchObject({ ok: false, stderrLastLine: "RELEASE_HEAD_CHANGED" });
+    expect(captured).toHaveLength(0);
+  });
   it("spawns the exact argv and hands gh the body BYTE FOR BYTE in a file", async () => {
     const { captured, spawn } = fakeSpawn((child) => {
       child.stdout.emit("data", "https://github.com/acme/widget/pull/7\n");
       child.emit("close", 0);
     });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true }).open(REQUEST);
 
-    expect(captured).toHaveLength(1);
+    expect(captured).toHaveLength(2);
     const call = captured[0]!;
     // The bare name: Windows CreateProcess appends `.exe`, so gh.exe/gh.cmd would be wrong.
     expect(call.command).toBe(GH_EXECUTABLE);
     expect(call.command).toBe("gh");
     // Exact array equality, flag ORDER included — not a set, not a contains.
     expect(call.argv).toEqual([
-      "pr", "create",
+      "pr", "create", "--repo", REQUEST.remoteUrl,
       "--base", "main",
       "--head", "moe/goal-1",
       "--title", "Release goal-1",
@@ -116,7 +154,7 @@ describe("gh release pr port", () => {
       child.stdout.emit("data", "https://github.com/acme/widget/pull/9\n\n");
       child.emit("close", 0);
     });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true }).open(REQUEST);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected success");
     expect(result.prUrl).toBe("https://github.com/acme/widget/pull/9");
@@ -128,7 +166,7 @@ describe("gh release pr port", () => {
       const error = Object.assign(new Error("spawn gh ENOENT"), { code: "ENOENT" });
       child.emit("error", error);
     });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true }).open(REQUEST);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
@@ -145,7 +183,7 @@ describe("gh release pr port", () => {
       child.stderr.emit("data", "Alternatively, populate the GH_TOKEN environment variable.\n\n");
       child.emit("close", 1);
     });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true }).open(REQUEST);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
@@ -162,14 +200,14 @@ describe("gh release pr port", () => {
     // exit 0 alone is not success: an empty prUrl would mint a RELEASED receipt whose
     // decoder invariant (non-null prUrl) then refuses the bytes.
     const { spawn } = fakeSpawn((child) => { child.emit("close", 0); });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true }).open(REQUEST);
     expect(result.ok).toBe(false);
   });
 
   it("kills the child on timeout and settles ok:false", async () => {
     // The fake never emits close or error: only the timer can settle this call.
     const { captured, spawn } = fakeSpawn(() => undefined);
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn, timeoutMs: 5 }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true, timeoutMs: 5 }).open(REQUEST);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
@@ -189,7 +227,7 @@ describe("gh release pr port", () => {
         child.emit("close", 0);
       }, 40);
     });
-    const result = await createGhReleasePrPort({ cwd: CWD, spawn, timeoutMs: 5 }).open(REQUEST);
+    const result = await createGhReleasePrPort({ cwd: CWD, spawn, verifyHead: async () => true, timeoutMs: 5 }).open(REQUEST);
     expect(result.ok).toBe(false);
     await new Promise((resolve) => { setTimeout(resolve, 60); });
     // Still the timeout's answer, and the temp directory is gone exactly once.
@@ -217,11 +255,11 @@ describe("gh release pr port", () => {
     expect(code).not.toContain("gh.cmd");
     expect(GH_EXECUTABLE).toBe("gh");
     expect(ghPrArgv(REQUEST, "/posix/style/body.md")).toEqual([
-      "pr", "create", "--base", "main", "--head", "moe/goal-1",
+      "pr", "create", "--repo", REQUEST.remoteUrl, "--base", "main", "--head", "moe/goal-1",
       "--title", "Release goal-1", "--body-file", "/posix/style/body.md",
     ]);
     expect(ghPrArgv(REQUEST, "C:\\win32\\style\\body.md")).toEqual([
-      "pr", "create", "--base", "main", "--head", "moe/goal-1",
+      "pr", "create", "--repo", REQUEST.remoteUrl, "--base", "main", "--head", "moe/goal-1",
       "--title", "Release goal-1", "--body-file", "C:\\win32\\style\\body.md",
     ]);
   });

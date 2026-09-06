@@ -3,6 +3,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { verifyReleaseHead } from "./release-head-proof.js";
 
 /**
  * Opening the proof-carrying pull request, through the `gh` CLI and nothing else.
@@ -18,6 +19,8 @@ import { join } from "node:path";
  */
 
 export interface ReleasePrRequest {
+  readonly remoteUrl: string;
+  readonly sha: string;
   readonly base: string;
   readonly body: string;
   readonly head: string;
@@ -42,6 +45,7 @@ export type SpawnGhProcess = (
 ) => ChildProcess;
 
 export interface GhReleasePrPortConfig {
+  readonly verifyHead?: (request: ReleasePrRequest) => Promise<boolean>;
   readonly cwd: string;
   readonly spawn?: SpawnGhProcess;
   readonly timeoutMs?: number;
@@ -70,6 +74,7 @@ export function ghPrArgv(
 ): readonly string[] {
   return [
     "pr", "create",
+    "--repo", request.remoteUrl,
     "--base", request.base,
     "--head", request.head,
     "--title", request.title,
@@ -92,9 +97,11 @@ function errorCodeOf(error: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
-function refusal(stderr: string, spawnErrorCode: string | null): ReleasePrResult {
+function refusal(stderr: string, spawnErrorCode: string | null): Extract<ReleasePrResult, { ok: false }> {
   return { ok: false, spawnErrorCode, stderrLastLine: lastNonEmptyLine(stderr) };
 }
+
+type GhOutput = Readonly<{ ok: true; output: string }> | Extract<ReleasePrResult, { ok: false }>;
 
 /**
  * One `gh pr create`. Never rejects: every failure mode — the process not starting, a
@@ -104,13 +111,13 @@ function refusal(stderr: string, spawnErrorCode: string | null): ReleasePrResult
  */
 function runGh(
   spawn: SpawnGhProcess, cwd: string, timeoutMs: number, argv: readonly string[],
-): Promise<ReleasePrResult> {
-  return new Promise<ReleasePrResult>((resolve) => {
+): Promise<GhOutput> {
+  return new Promise<GhOutput>((resolve) => {
     let settled = false;
     let stdout = "";
     let stderr = "";
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const finish = (result: ReleasePrResult): void => {
+    const finish = (result: GhOutput): void => {
       if (settled) return;
       settled = true;
       if (timer !== undefined) clearTimeout(timer);
@@ -137,7 +144,7 @@ function runGh(
       finish(refusal(stderr, null));
     }, timeoutMs);
 
-    child.stdout?.on("data", (chunk: unknown) => { stdout += String(chunk); });
+    child.stdout?.on("data", (chunk: unknown) => { stdout = (stdout + String(chunk)).slice(-65_536); });
     child.stderr?.on("data", (chunk: unknown) => {
       stderr = (stderr + String(chunk)).slice(-STDERR_TAIL_LIMIT);
     });
@@ -148,9 +155,9 @@ function runGh(
       finish(refusal(stderr, errorCodeOf(error)));
     });
     child.on("close", (code: number | null) => {
-      const prUrl = lastNonEmptyLine(stdout);
-      if (code === 0 && prUrl.length > 0) {
-        finish({ ok: true, prUrl });
+      const output = stdout.trim();
+      if (code === 0 && output.length > 0) {
+        finish({ ok: true, output });
         return;
       }
       finish(refusal(stderr, null));
@@ -173,10 +180,33 @@ export function createGhReleasePrPort(config: GhReleasePrPortConfig): ReleasePrP
     async open(request: ReleasePrRequest): Promise<ReleasePrResult> {
       let directory: string | null = null;
       try {
+        const proven = await (config.verifyHead === undefined
+          ? verifyReleaseHead(config.cwd, request) : config.verifyHead(request));
+        if (!proven) return refusal("RELEASE_HEAD_CHANGED", null);
         directory = await mkdtemp(join(tmpdir(), "moe-release-pr-"));
         const bodyFile = join(directory, "body.md");
         await writeFile(bodyFile, request.body, "utf8");
-        return await runGh(spawn, config.cwd, timeoutMs, ghPrArgv(request, bodyFile));
+        const created = await runGh(spawn, config.cwd, timeoutMs, ghPrArgv(request, bodyFile));
+        if (!created.ok) return created;
+        const prUrl = lastNonEmptyLine(created.output);
+        if (!/^https:\/\/[^\s]+\/pull\/\d+$/u.test(prUrl)) return refusal("RELEASE_PR_URL_INVALID", null);
+        // The publisher's mutable branch can move after ls-remote. Measure the actual
+        // created PR before recording a receipt that claims it carries the approved SHA.
+        const viewed = await runGh(spawn, config.cwd, timeoutMs, ["pr", "view", prUrl,
+          "--repo", request.remoteUrl, "--json", "url,headRefOid,headRefName,baseRefName,state"]);
+        if (!viewed.ok) return refusal(`RELEASE_PR_HEAD_UNPROVEN: ${prUrl}`, viewed.spawnErrorCode);
+        let proof: unknown;
+        try { proof = JSON.parse(viewed.output); }
+        catch { return refusal(`RELEASE_PR_HEAD_UNPROVEN: ${prUrl}`, null); }
+        if (typeof proof !== "object" || proof === null
+          || !("headRefOid" in proof) || proof.headRefOid !== request.sha
+          || !("headRefName" in proof) || proof.headRefName !== request.head
+          || !("baseRefName" in proof) || proof.baseRefName !== request.base
+          || !("url" in proof) || proof.url !== prUrl
+          || !("state" in proof) || proof.state !== "OPEN") {
+          return refusal(`RELEASE_PR_HEAD_CHANGED: ${prUrl}`, null);
+        }
+        return { ok: true, prUrl };
       } catch (error) {
         return refusal("", errorCodeOf(error));
       } finally {

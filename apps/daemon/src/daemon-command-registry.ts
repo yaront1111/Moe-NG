@@ -51,7 +51,7 @@ import {
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
-import type { RepositoryBootstrapSeams } from "./daemon-command-async-entries.js";
+import type { RepositoryBootstrapSeams, ReleaseDecideSeams } from "./daemon-command-async-entries.js";
 import { runDesignSubmitEdge } from "./daemon-command-design.js";
 import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
@@ -108,6 +108,7 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  readonly releaseDecide?: ReleaseDecideSeams;
   readonly criterionEvidence?: CriterionCommandPort;
   readonly repositoryRecovery?: RepositoryRecoveryCommandPort;
   readonly readPublicationCandidate?: PublicationCandidateReader;
@@ -291,6 +292,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
       operatorPrincipalId, projectId, store,
+      ...(options.releaseDecide === undefined ? {} : { releaseDecide: options.releaseDecide }),
       ...(options.previewSupervisor === undefined
         ? {} : { previewSupervisor: options.previewSupervisor }),
       ...(options.previewWorkspace === undefined

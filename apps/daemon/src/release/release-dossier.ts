@@ -107,7 +107,8 @@ function rowOf(
   if (node.sharedAcrossPlans) return shared(criterion, node);
   const { gaps: landingGaps, landing } = landingOf(criterion, node, ancestry);
   const receipt = node.receipt;
-  const receiptGaps = receipt === null ? [gapOf("RECEIPT_ABSENT", criterion.criterionId)] : [];
+  const receiptGaps = receipt === null ? [gapOf("RECEIPT_ABSENT", criterion.criterionId)]
+    : receipt.sha === null ? [gapOf("RECEIPT_SOURCE_UNPROVEN", criterion.criterionId)] : [];
   return {
     command: receipt?.command ?? UNKNOWN,
     criterionId: criterion.criterionId,
