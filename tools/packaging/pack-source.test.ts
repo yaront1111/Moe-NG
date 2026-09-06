@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   PACK_SOURCE_ERROR_CODES,
@@ -32,6 +32,7 @@ import {
 import { isGitExecutableMode, parseRoster } from "./pack-source-integrity.js";
 import { isSensitivePackSourcePath } from "./pack-source-sensitive.js";
 import { materializedPackSourceLeaseEntries } from "./pack-source-lease.js";
+import { createPackSourceFixturePool } from "./pack-source-test-fixtures.js";
 
 const SECRET = "must-never-escape-pack-source";
 const SENSITIVE_BYTE_CASES = Object.freeze([
@@ -42,6 +43,10 @@ const SENSITIVE_BYTE_CASES = Object.freeze([
 ]);
 const HASH_BOUNDARY_OFFSETS = Object.freeze([-1, 0, 1]);
 const roots: string[] = [];
+// These cases execute real Git/archive processes. On a busy Windows host one unchanged
+// case measured 25.57s; independent seeded fixtures reduced it to 7.27s. Bound only those
+// integration cases at 30s. Pure guards and the global/default test budget stay unchanged.
+const GIT_INTEGRATION_TIMEOUT_MS = 30_000;
 
 function executableFromPath(name: string): string {
   const candidates = process.platform === "win32" ? [`${name}.exe`, name] : [name];
@@ -129,13 +134,13 @@ function write(root: string, path: string, contents: string): void {
   writeFileSync(target, contents, "utf8");
 }
 
-function createGitFixture(objectFormat: "sha1" | "sha256" = "sha1"): GitFixture {
-  const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), `moe-pack-source-${objectFormat}-`)));
-  roots.push(repositoryRoot);
+function buildGitFixture(repositoryRoot: string, objectFormat: "sha1" | "sha256"): GitFixture {
   run("git", ["init", "--quiet", `--object-format=${objectFormat}`], repositoryRoot);
   run("git", ["config", "user.email", "pack-source@example.invalid"], repositoryRoot);
   run("git", ["config", "user.name", "Pack Source Test"], repositoryRoot);
   run("git", ["config", "core.autocrlf", "false"], repositoryRoot);
+  // Fixture history has no signing authority; never inherit a host's signing process.
+  run("git", ["config", "commit.gpgsign", "false"], repositoryRoot);
 
   write(repositoryRoot, ".gitignore", "packages/contracts/.env\n");
   write(repositoryRoot, "packaging/manifest.json", "{\"version\":1}\n");
@@ -167,6 +172,14 @@ function createGitFixture(objectFormat: "sha1" | "sha256" = "sha1"): GitFixture 
     ]),
   };
 }
+
+const fixturePool = createPackSourceFixturePool(buildGitFixture, (root) => roots.push(root));
+const createGitFixture = (format: "sha1" | "sha256" = "sha1"): GitFixture => fixturePool.create(format);
+
+// Real Git preparation is a suite setup cost, paid once per object format. Every case
+// receives an independent copy; production limits and refusal assertions stay intact.
+beforeAll(() => fixturePool.prepare(), 120_000);
+afterAll(() => fixturePool.dispose());
 
 function commitSymlink(fixture: GitFixture, path: string, target: string): string {
   const objectSha = run("git", ["hash-object", "-w", "--stdin"], fixture.repositoryRoot, target)
@@ -235,6 +248,29 @@ afterEach(() => {
 });
 
 describe("exact-commit packaging source", () => {
+  it.each(["sha1", "sha256"] as const)("isolates %s fixture Git and working bytes from sibling and future copies", (format) => {
+    const first = createGitFixture(format);
+    const sibling = createGitFixture(format);
+    expect(readFileSync(join(sibling.repositoryRoot, ".git/config"), "utf8"))
+      .toMatch(/^\s*gpgsign = false$/mu);
+    const paths = ["src/version.txt", ".git/HEAD", ".git/index", ".git/config",
+      `.git/objects/${first.blobSha.slice(0, 2)}/${first.blobSha.slice(2)}`];
+    const original = paths.map((path) => readFileSync(join(sibling.repositoryRoot, path)));
+    for (const path of paths) {
+      // Git objects are read-only on Windows. Change only this copy, then mutate in place
+      // so a hardlinked object would corrupt the sibling and fail the byte comparison.
+      chmodSync(join(first.repositoryRoot, path), 0o600);
+      writeFileSync(join(first.repositoryRoot, path), "mutated fixture bytes");
+    }
+    const later = createGitFixture(format);
+    for (const fixture of [sibling, later]) {
+      expect(fixture.repositoryRoot).not.toBe(first.repositoryRoot);
+      expect(paths.map((path) => readFileSync(join(fixture.repositoryRoot, path)))).toEqual(original);
+      expect(existsSync(join(fixture.repositoryRoot, ".git/objects/info/alternates"))).toBe(false);
+    }
+    expect(later.repositoryRoot).not.toBe(sibling.repositoryRoot);
+  });
+
   it("treats only owner execute as Git executability", () => {
     expect(isGitExecutableMode(0o100755)).toBe(true);
     expect(isGitExecutableMode(0o100644)).toBe(false);
@@ -330,7 +366,7 @@ describe("exact-commit packaging source", () => {
     }]);
   });
 
-  it("materializes a selected commit without its tracked runtime state", () => {
+  it("materializes a selected commit without its tracked runtime state", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const releaseContents = "#!/bin/sh\nexit 0\n";
     write(fixture.repositoryRoot, ".moe/runtime/state.json", "{\"state\":\"ephemeral\"}\n");
@@ -362,7 +398,7 @@ describe("exact-commit packaging source", () => {
     expect(HASH_BOUNDARY_OFFSETS).toHaveLength(3);
   });
 
-  it.each(SENSITIVE_BYTE_CASES)("refuses $name bytes on an ordinary tracked path", ({ contents }) => {
+  it.each(SENSITIVE_BYTE_CASES)("refuses $name bytes on an ordinary tracked path", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, ({ contents }) => {
     const fixture = createGitFixture();
     write(fixture.repositoryRoot, "docs/release-input.txt", contents);
     run("git", ["add", "--", "docs/release-input.txt"], fixture.repositoryRoot);
@@ -384,7 +420,7 @@ describe("exact-commit packaging source", () => {
 
   it.each(HASH_BOUNDARY_OFFSETS)(
     "refuses sensitive bytes split across the hash chunk boundary at offset %i",
-    (edgeOffset) => {
+    { timeout: GIT_INTEGRATION_TIMEOUT_MS }, (edgeOffset) => {
       const fixture = createGitFixture();
       const contents = SENSITIVE_BYTE_CASES[0]?.contents;
       if (contents === undefined) throw new Error("missing sensitive-byte boundary fixture");
@@ -405,7 +441,7 @@ describe("exact-commit packaging source", () => {
     },
   );
 
-  it("admits deterministic binary bytes without a sensitive marker", () => {
+  it("admits deterministic binary bytes without a sensitive marker", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const contents = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x42, 0x69, 0x6e, 0x61, 0x72, 0x79]);
     const target = join(fixture.repositoryRoot, "docs", "binary-input.dat");
@@ -441,7 +477,7 @@ describe("exact-commit packaging source", () => {
     "packages/contracts/service.key.backup",
     "packages/contracts/serviceAccountKey.json",
     "packages/contracts/.config/gh/hosts.yml",
-  ])("refuses sensitive tracked Git object %s before archive extraction", (path) => {
+  ])("refuses sensitive tracked Git object %s before archive extraction", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, (path) => {
     const fixture = createGitFixture();
     write(fixture.repositoryRoot, path, SECRET);
     run("git", ["add", "--force", "--", path], fixture.repositoryRoot);
@@ -457,7 +493,7 @@ describe("exact-commit packaging source", () => {
     expect(consumed).toBe(false);
   });
 
-  it("materializes only the selected commit's tracked bytes and cleans its callback-only root", () => {
+  it("materializes only the selected commit's tracked bytes and cleans its callback-only root", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     let sourceRoot = "";
     const answer = withMaterializedPackSource({
@@ -482,7 +518,7 @@ describe("exact-commit packaging source", () => {
     expect(fixture.headSha).not.toBe(fixture.selectedSha);
   });
 
-  it("reverifies every tracked blob after the synchronous consumer returns", () => {
+  it("reverifies every tracked blob after the synchronous consumer returns", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
 
     expectPackSourceError(() => withMaterializedPackSource({
@@ -525,7 +561,7 @@ describe("exact-commit packaging source", () => {
     "apps/control-room/dist/service.key.backup",
     "apps/control-room/dist/serviceAccountKey.json",
     "apps/control-room/dist/.config/gh/hosts.yml",
-  ])("refuses sensitive path %s added by the consumer", (path) => {
+  ])("refuses sensitive path %s added by the consumer", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, (path) => {
     const fixture = createGitFixture();
 
     expectPackSourceError(() => withMaterializedPackSource({
@@ -541,7 +577,7 @@ describe("exact-commit packaging source", () => {
     "packages/contracts/generated.txt",
     "apps/control-room/distributed/app.js",
     "apps/daemon/dist/app.js",
-  ])("refuses non-generated path %s added by the consumer", (path) => {
+  ])("refuses non-generated path %s added by the consumer", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, (path) => {
     const fixture = createGitFixture();
 
     expectPackSourceError(() => withMaterializedPackSource({
@@ -558,7 +594,7 @@ describe("exact-commit packaging source", () => {
     "apps/daemon/node_modules/@moe/contracts/package.json",
     "packages/contracts/node_modules/dependency/package.json",
     "apps/control-room/dist/assets/app.js",
-  ])("permits generated build path %s after the consumer", (path) => {
+  ])("permits generated build path %s after the consumer", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, (path) => {
     const fixture = createGitFixture();
 
     const answer = withMaterializedPackSource({
@@ -572,7 +608,7 @@ describe("exact-commit packaging source", () => {
     expect(answer).toBe(17);
   });
 
-  it("accepts an exact lowercase SHA-256 commit without weakening the SHA-1 path", () => {
+  it("accepts an exact lowercase SHA-256 commit without weakening the SHA-1 path", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture("sha256");
     expect(fixture.selectedSha).toMatch(/^[0-9a-f]{64}$/u);
     const observed = withMaterializedPackSource({
@@ -582,7 +618,7 @@ describe("exact-commit packaging source", () => {
     expect(observed).toEqual({ sha: fixture.selectedSha, paths: fixture.trackedPaths });
   });
 
-  it("ignores local Git replacement refs that try to restamp HEAD as the selected commit", () => {
+  it("ignores local Git replacement refs that try to restamp HEAD as the selected commit", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     run("git", ["replace", fixture.selectedSha, fixture.headSha], fixture.repositoryRoot);
     const materialized = withMaterializedPackSource({
@@ -612,7 +648,7 @@ describe("exact-commit packaging source", () => {
     }
   }, 30_000);
 
-  it("uses only pre-resolved absolute tools and runs tar outside the repository", () => {
+  it("uses only pre-resolved absolute tools and runs tar outside the repository", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     write(fixture.repositoryRoot, process.platform === "win32" ? "git.exe" : "git", SECRET);
     write(fixture.repositoryRoot, process.platform === "win32" ? "tar.exe" : "tar", SECRET);
@@ -640,7 +676,7 @@ describe("exact-commit packaging source", () => {
     expect(existsSync(dirname(extractedSourceRoot))).toBe(false);
   });
 
-  it("rejects a repository-local executable before spawning it", () => {
+  it("rejects a repository-local executable before spawning it", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     expectPackSourceError(() => withMaterializedPackSource({
       repositoryRoot: fixture.repositoryRoot,
@@ -650,7 +686,7 @@ describe("exact-commit packaging source", () => {
     }), "PACK_SOURCE_TOOLCHAIN_INVALID");
   });
 
-  it("rejects a repository-local executable under a dot-dot-prefixed child", () => {
+  it("rejects a repository-local executable under a dot-dot-prefixed child", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const executable = repositoryPath(fixture.repositoryRoot, "..tools/git.exe");
     copyFileSync(TOOLCHAIN.gitExecutable, executable);
@@ -660,7 +696,7 @@ describe("exact-commit packaging source", () => {
     }, () => undefined, { gitExecutable: executable }), "PACK_SOURCE_TOOLCHAIN_INVALID");
   });
 
-  it("snapshots request fields once before resolving authority", () => {
+  it("snapshots request fields once before resolving authority", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     let sourceReads = 0;
     const request = Object.defineProperties({}, {
@@ -676,7 +712,7 @@ describe("exact-commit packaging source", () => {
     expect(sourceReads).toBe(1);
   });
 
-  it("rejects a declared tar flavor that the absolute tool does not report", () => {
+  it("rejects a declared tar flavor that the absolute tool does not report", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     expectPackSourceError(() => withMaterializedPackSource({
       repositoryRoot: fixture.repositoryRoot,
@@ -686,7 +722,7 @@ describe("exact-commit packaging source", () => {
     }), "PACK_SOURCE_TOOLCHAIN_INVALID");
   });
 
-  it.skipIf(process.platform !== "win32")("uses GNU tar's Windows argument contract when declared", () => {
+  it.skipIf(process.platform !== "win32")("uses GNU tar's Windows argument contract when declared", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     let observed = false;
     const materialized = withMaterializedPackSource({
@@ -721,7 +757,7 @@ describe("exact-commit packaging source", () => {
     expect(observed).toBe(true);
   });
 
-  it("refuses Git archive export-subst body rewrites before the callback", () => {
+  it("refuses Git archive export-subst body rewrites before the callback", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     write(fixture.repositoryRoot, ".gitattributes", "src/substituted.txt export-subst\n");
     write(fixture.repositoryRoot, "src/substituted.txt", "$Format:%H$\n");
@@ -737,7 +773,7 @@ describe("exact-commit packaging source", () => {
     expect(callbackCalled).toBe(false);
   });
 
-  it("refuses a tracked symlink whose committed target can escape the materialized root", () => {
+  it("refuses a tracked symlink whose committed target can escape the materialized root", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const sourceSha = commitSymlink(fixture, "src/host-secret", `C:/host/${SECRET}`);
     let callbackCalled = false;
@@ -748,7 +784,7 @@ describe("exact-commit packaging source", () => {
     expect(callbackCalled).toBe(false);
   });
 
-  it("rejects a drive-qualified Git path before archive extraction", () => {
+  it("rejects a drive-qualified Git path before archive extraction", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     let archiveCalled = false;
     const command: PackSourceCommand = (executable, args, cwd) => {
@@ -769,7 +805,7 @@ describe("exact-commit packaging source", () => {
     expect(archiveCalled).toBe(false);
   });
 
-  it("rejects a tracked-byte budget overflow before creating an owner", () => {
+  it("rejects a tracked-byte budget overflow before creating an owner", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const injected = temporaryOwner({
       command: (executable, args, cwd) => isExecutable(executable, "git")
@@ -789,7 +825,7 @@ describe("exact-commit packaging source", () => {
     expect(injected.owners).toEqual([]);
   });
 
-  it("refuses an asynchronous consumer and cleans before its continuation", async () => {
+  it("refuses an asynchronous consumer and cleans before its continuation", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, async () => {
     const fixture = createGitFixture();
     let sourceRoot = "";
     let existedAfterAwait: boolean | undefined;
@@ -809,7 +845,7 @@ describe("exact-commit packaging source", () => {
   });
 
   const invalidInputNames = Object.freeze(["symbolic", "mixed-case", "short"] as const);
-  it("rejects symbolic, mixed-case, and short identities before spawning archive authority", () => {
+  it("rejects symbolic, mixed-case, and short identities before spawning archive authority", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const cases = [
       { name: "symbolic", sourceSha: "HEAD" },
@@ -826,7 +862,7 @@ describe("exact-commit packaging source", () => {
     }
   });
 
-  it("rejects a full-length blob identity because it is not a commit", () => {
+  it("rejects a full-length blob identity because it is not a commit", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     expect(fixture.blobSha).toMatch(/^[0-9a-f]{40}$/u);
     expectPackSourceError(() => withMaterializedPackSource({
@@ -835,7 +871,7 @@ describe("exact-commit packaging source", () => {
     }, () => undefined), "PACK_SOURCE_COMMIT_UNAVAILABLE");
   });
 
-  it("rejects malformed request records at the same input boundary", () => {
+  it("rejects malformed request records at the same input boundary", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const cases: readonly unknown[] = Object.freeze([
       null,
@@ -907,7 +943,7 @@ describe("packaging-source failures and cleanup", () => {
     },
   ] as const);
 
-  it("never adopts or cleans a non-owned temporary root", () => {
+  it("never adopts or cleans a non-owned temporary root", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     let cleanupCalled = false;
     expectPackSourceError(() => withMaterializedPackSource({
@@ -921,7 +957,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(existsSync(fixture.repositoryRoot)).toBe(true);
   });
 
-  it("maps command failures to exact non-secret codes and cleans every owner root", () => {
+  it("maps command failures to exact non-secret codes and cleans every owner root", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     expect(commandFailures.length).toBeGreaterThan(0);
     for (const testCase of commandFailures) {
       const fixture = createGitFixture();
@@ -938,7 +974,7 @@ describe("packaging-source failures and cleanup", () => {
     }
   });
 
-  it("maps a synchronously throwing command port without leaking its cause", () => {
+  it("maps a synchronously throwing command port without leaking its cause", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     expectPackSourceError(() => withMaterializedPackSource({
       repositoryRoot: fixture.repositoryRoot,
@@ -948,7 +984,7 @@ describe("packaging-source failures and cleanup", () => {
     }), "PACK_SOURCE_COMMIT_UNAVAILABLE");
   });
 
-  it("maps malformed and throwing command results without leaking their cause", () => {
+  it("maps malformed and throwing command results without leaking their cause", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const cases: readonly unknown[] = [
       null,
@@ -967,7 +1003,7 @@ describe("packaging-source failures and cleanup", () => {
     }
   });
 
-  it("refuses oversized archive output before writing it to disk", () => {
+  it("refuses oversized archive output before writing it to disk", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const oversized = new Uint8Array(0);
     Object.defineProperty(oversized, "byteLength", { value: Number.MAX_SAFE_INTEGER });
@@ -984,7 +1020,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.every((owner) => !existsSync(owner))).toBe(true);
   });
 
-  it("rejects decorated commit output instead of trimming it into authority", () => {
+  it("rejects decorated commit output instead of trimming it into authority", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     expectPackSourceError(() => withMaterializedPackSource({
       repositoryRoot: fixture.repositoryRoot,
@@ -998,7 +1034,7 @@ describe("packaging-source failures and cleanup", () => {
     }), "PACK_SOURCE_COMMIT_UNAVAILABLE");
   });
 
-  it("refuses an extracted tree whose paths do not exactly match the Git roster", () => {
+  it("refuses an extracted tree whose paths do not exactly match the Git roster", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const command: PackSourceCommand = (executable, args, cwd) => {
       const result = systemCommand(executable, args, cwd);
@@ -1019,7 +1055,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.every((owner) => !existsSync(owner))).toBe(true);
   });
 
-  it("prefers Git blob mismatch when extracted bytes are also sensitive", () => {
+  it("prefers Git blob mismatch when extracted bytes are also sensitive", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const replacement = SENSITIVE_BYTE_CASES[1]?.contents;
     if (replacement === undefined) throw new Error("missing sensitive-byte precedence fixture");
@@ -1050,7 +1086,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.every((owner) => !existsSync(owner))).toBe(true);
   });
 
-  it.skipIf(process.platform === "win32")("refuses a changed executable mode", () => {
+  it.skipIf(process.platform === "win32")("refuses a changed executable mode", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const command: PackSourceCommand = (executable, args, cwd) => {
       const result = systemCommand(executable, args, cwd);
@@ -1068,7 +1104,7 @@ describe("packaging-source failures and cleanup", () => {
 
   it.skipIf(process.platform === "win32")(
     "refuses when owner execute is cleared but another execute bit remains",
-    () => {
+    { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
       const fixture = createGitFixture();
       run("git", ["update-index", "--chmod=+x", "src/version.txt"], fixture.repositoryRoot);
       run("git", ["commit", "--quiet", "-m", "owner executable"], fixture.repositoryRoot);
@@ -1092,7 +1128,7 @@ describe("packaging-source failures and cleanup", () => {
     },
   );
 
-  it("preserves the consumer exception while reporting a subordinate cleanup code only", () => {
+  it("preserves the consumer exception while reporting a subordinate cleanup code only", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const primary = new Error("consumer failure is primary");
     const reports: string[] = [];
@@ -1110,7 +1146,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.some((owner) => existsSync(owner))).toBe(true);
   });
 
-  it("throws the stable cleanup error when cleanup is the only failure", () => {
+  it("throws the stable cleanup error when cleanup is the only failure", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const injected = temporaryOwner({
       removeTemporaryRoot: () => { throw new Error(SECRET); },
@@ -1123,7 +1159,7 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.some((owner) => existsSync(owner))).toBe(true);
   });
 
-  it("preserves a materialization error when cleanup also fails", () => {
+  it("preserves a materialization error when cleanup also fails", { timeout: GIT_INTEGRATION_TIMEOUT_MS }, () => {
     const fixture = createGitFixture();
     const reports: string[] = [];
     const injected = temporaryOwner({

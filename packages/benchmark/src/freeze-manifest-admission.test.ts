@@ -49,7 +49,7 @@ const makeRepository = (): { readonly path: string; readonly head: string } => {
   runGit(path, ["config", "user.name", "Freeze Test"]);
   writeFileSync(join(path, "README.md"), "clean\n", "utf8");
   runGit(path, ["add", "README.md"]);
-  runGit(path, ["commit", "--quiet", "-m", "fixture"]);
+  runGit(path, ["commit", "--quiet", "--no-gpg-sign", "-m", "fixture"]);
   return { path, head: runGit(path, ["rev-parse", "HEAD"]).trim() };
 };
 
@@ -411,7 +411,9 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     if (savedRoot !== undefined) process.env[PINNED_DOCUMENT_ROOT_ENV] = savedRoot;
   });
 
-  it("attributes independently re-read pinned-document drift to its source reader", () => {
+  // Two real Git repositories plus a child Node read measured 10.75s with signing disabled.
+  // Bound this integration arm separately from the pure admission checks.
+  it("attributes independently re-read pinned-document drift to its source reader", { timeout: 30_000 }, () => {
     const repository = makeRepository();
     const root = mkdtempSync(join(tmpdir(), "moe-pins-"));
     try {
@@ -426,7 +428,7 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
       runGit(root, ["config", "user.email", "freeze-test@example.invalid"]);
       runGit(root, ["config", "user.name", "Freeze Test"]);
       runGit(root, ["add", "--all"]);
-      runGit(root, ["commit", "--quiet", "-m", "tampered corpus fixture"]);
+      runGit(root, ["commit", "--quiet", "--no-gpg-sign", "-m", "tampered corpus fixture"]);
       const result = childAdmission(repository.path, manifestBytes(buildManifest(repository.head)), {
         MOE_PINNED_DOCUMENT_ROOT: root,
       });
