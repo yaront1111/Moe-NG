@@ -19,7 +19,7 @@ import type { OfferOutcome, OfferWire } from "../approvals/offer-wire.js";
  *
  * EVERY KEY THE ROSTER ADMITS IS ALWAYS SENT. `PAYLOAD_KEYS["deployment.deploy"]` is EXACTLY
  * `["environment", "sha"]` and the daemon's decoder is exact-arity, so an omitted key arrives
- * as a missing member and is read as malformed rather than as a default — the same trap
+ * as a missing member and is read as malformed rather than as a default -- the same trap
  * publish-port.ts documents for a null `remoteUrl`. `sha` is therefore always present: the
  * caller sends the landed sha it is deploying, which becomes the image tag verbatim.
  */
