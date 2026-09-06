@@ -77,7 +77,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -113,7 +113,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T00:48:33.889Z",
+  "updatedAt": "2026-09-06T01:39:49.098Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 5,
@@ -230,11 +230,9 @@
     "at": "2026-09-06T00:48:33.889Z"
   },
   "workStartedAt": "2026-09-06T00:36:19.092Z",
-  "blockedReason": "A CONCURRENT KIND-PUBLISHING ROW HOLDS 5 OF THIS ROW'S 9 OWNED PATHS, UNCOMMITTED, RIGHT NOW. Epic rail 3 prescribes the dependency. Blocked on task-a2409cba9ad841a690961692a2948c41 (WORKING, worker-caece97b, step 4/9).\n\nLIVENESS MEASURED: `date` 03:43:36 JST 2026-09-06; that row's task json mtime 03:41:24; daemon-command-vocabulary.test.ts mtime 03:39:28. Mid-measurement that file went red (03:38) -> green (03:39) with no edit of mine.\n\nOVERLAP: its affectedFiles are vocabulary.ts/.test.ts, registry.ts/.test.ts, payload-keys.ts, families.ts. Five are this row's owned paths and both rows must bump the SAME count literals. vocabulary.test.ts and families.ts are UNCOMMITTED foreign WIP: editing them means committing another session's bytes under this task id, or not reporting a path I modified -- global rail 5 forbids both. That is the delivery-bias rail's \"overwrite foreign WIP\" condition, and not re-orderable: DoD 1 requires all four pins reconciled IN THE SAME COMMIT as the wiring.\n\nNO SAFE PARTIAL SLICE: all four pin files are ALREADY RED AT HEAD, foreign, one cause (production carries environment.set_variable, environment.unset_variable, repository.bootstrap; the pins do not). registry.test.ts :875/:1735/:1757/:1789 `expected 53 to be 50`; store-dependencies.test.ts:769 same three kinds; v2-command-registry.test.ts:267 `expected 52 to be 49`; mcp-tool-allowlist.test.ts:143 `expected 17 to be 14`. Greening them means transcribing that row's three kinds while it is mid-flight there.\n\nARCHITECT DECISION WANTED, 1 point: MCP_EXCLUDED_COMMAND_KINDS is now DERIVED from OPERATOR_PRINCIPAL_KINDS (mcp-tool-allowlist.ts:68, less session.open), so this row's own OPERATOR_PRINCIPAL_KINDS edit MCP-excludes release.decide with no allowlist edit and moves the `excluded` denominator plus the 3 pins comment-eb460c84 gave sibling task-20b7d6bb. Step 2(d) cannot hold as written.\n\nSTATE CLEAN: no production edits, probes deleted in-command, foreign dirt untouched.",
-  "blockedOnTaskIds": [
-    "task-a2409cba9ad841a690961692a2948c41"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T00:47:24.575Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
