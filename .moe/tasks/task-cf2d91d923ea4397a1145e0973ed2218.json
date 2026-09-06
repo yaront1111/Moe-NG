@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T21:19:12.453Z",
+  "updatedAt": "2026-09-06T21:25:04.410Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
@@ -219,16 +219,62 @@
       "pushed": true,
       "recoveredBy": "worker-1d53e70c",
       "message": "Governor attribution: task-80322112's wrapper exit (17446e73) swept this row's in-flight e2e-lane bytes — fake-docker-dependencies.ts (67 lines, the MOE_E2E_DEPLOY_MODE docker double) whole, and the fakeDocker hunks of daemon-ports.ts (FakeDockerMode import, LaneOptions.fakeDocker, the dependencies switch and MOE_E2E_DEPLOY_MODE env). daemon-ports.ts is MIXED in that commit: the catalogPath / MOE_PROJECT_CATALOG hunks are 80322112's own. Commit trailers name both paths Moe-Contested for cf2d91d9. Next cf2d91d9 claimer: these steps are already in HEAD; verify against HEAD, do not re-create."
+    },
+    {
+      "sha": "8634e3f64571b417941fbb12cce73fdc519c413e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1d53e70c@2026-09-06T21:17:45Z",
+      "paths": [
+        ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+        "apps/daemon/src/daemon-command-async-entries.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-v2-command-registry.ts",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+        "tests/e2e/control-room/lane-landing.ts",
+        "tests/e2e/control-room/wrapper-lane.ts"
+      ],
+      "recordedBy": "worker-1d53e70c",
+      "recordedAt": "2026-09-06T21:25:04.410Z",
+      "treeId": "7b5f9c4a039e93ac8947cb11607de54395d1b625",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-60008fcf4719490f97075c7754ac5807"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.ts",
+          "taskId": "task-df64aa204d6f4c35810376226980e4b7"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     "tests/e2e/control-room/fake-docker-dependencies.ts",
-    "tests/e2e/control-room/daemon-ports.ts"
+    "tests/e2e/control-room/daemon-ports.ts",
+    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+    "apps/daemon/src/daemon-command-async-entries.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-v2-command-registry.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+    "tests/e2e/control-room/lane-landing.ts",
+    "tests/e2e/control-room/wrapper-lane.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "governor-afbde490@2026-09-06T16:40:00Z",
-    "at": "2026-09-06T16:39:09.998Z"
-  }
+    "sessionId": "worker-1d53e70c@2026-09-06T21:17:45Z",
+    "at": "2026-09-06T21:25:04.410Z"
+  },
+  "touchedFiles": [
+    "tests/e2e/control-room/wrapper-lane.ts",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "tests/e2e/control-room/lane-landing.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+  ],
+  "unattributedPaths": []
 }
