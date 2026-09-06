@@ -183,6 +183,7 @@ const REMOTE_FAILURE: RepositoryRemoteOutcome = Object.freeze({ code: "REPOSITOR
 const CATALOG_FAILURE: GoalCatalogFrame = Object.freeze({ connection: "DISCONNECTED" as const, detail: "catalog read failed", goals: Object.freeze([]), outcome: "UNDELIVERED" as const });
 
 export interface LiveBoardProps {
+  readonly deploying?: BoardDeploying | undefined; /** Forwarded VERBATIM: unlike `publishing`, no board-owned read joins it. */
   readonly goalId: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly onNeedsYou?: (() => void) | undefined;
@@ -202,7 +203,7 @@ export interface LiveBoardProps {
 }
 
 export function LiveBoard(props: LiveBoardProps): JSX.Element {
-  const { goalId, headers, onNeedsYou, pollMs, publishing, runId, surface, title } = props;
+  const { deploying, goalId, headers, onNeedsYou, pollMs, publishing, runId, surface, title } = props;
   // The base readers are latched once (the injected ones for tests, the wire ones otherwise);
   // the goal they read is taken at call time, so opening another goal re-polls that goal.
   const [runsBase] = useState(() => props.readRuns ?? ((ref: string): Promise<RunsOutcome> => readRuns(headers, undefined, ref)));
@@ -234,6 +235,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
       activity={activity.value}
       brief={brief}
       coverage={coverage.value}
+      deploying={deploying}
       goalId={goalId}
       nowMs={runs.nowMs}
       onNeedsYou={onNeedsYou}

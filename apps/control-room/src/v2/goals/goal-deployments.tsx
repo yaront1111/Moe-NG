@@ -185,8 +185,12 @@ export function GoalDeployments({
                 </p>
               )}
               {view.code !== "DEPLOY_TARGET_MISSING" ? null : (
+                // NAMES THE PREREQUISITE, THE COMMAND THAT BINDS IT, AND THE HONEST LIMIT: no
+                // set_target affordance is offered, so a control here would have none to spend.
                 <p className="cr2-slot-kicker" data-testid={environmentTestId(view.environment, "settarget")}>
-                  Bind a target for this environment, then deploy again.
+                  {`Bind a target for ${view.environment} first, with deployment.set_target.`
+                    + " This screen cannot bind one yet, so it has to be bound outside the"
+                    + " browser before a deploy here can go through."}
                 </p>
               )}
               {!isArmed || view.environment !== PRODUCTION ? null : (

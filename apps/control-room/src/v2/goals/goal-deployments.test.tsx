@@ -10,7 +10,9 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { GoalDeployments, deployOffer, deploymentLine, releaseLine, targetLine }
   from "./goal-deployments.js";
 import type { DeploymentEnvironmentView } from "./goal-deployments.js";
+import { createDeployPort } from "./deploy-port.js";
 import type { DeployPort } from "./deploy-port.js";
+import type { OfferWire } from "../approvals/offer-wire.js";
 
 /**
  * THE CARD PUTS PREVIEW AND PRODUCTION ON ONE SURFACE, so the arms below are written against
@@ -66,13 +68,43 @@ function recordingPort(answer: Awaited<ReturnType<DeployPort["submit"]>> = { com
 } {
   const calls: { readonly environment: string; readonly sha: string }[] = [];
   const port: DeployPort = {
-    setTarget: async () => answer,
     submit: async (_affordance, environmentName, sha) => {
       calls.push({ environment: environmentName, sha });
       return answer;
     },
   };
   return { calls, port };
+}
+
+/**
+ * A FAKE OFFER WIRE, so an arm can render the REAL `createDeployPort` rather than a literal.
+ * Copied from goal-publish.test.tsx:61-72, which is the precedent this row was told to mirror.
+ *
+ * WHY THIS EXISTS AT ALL: every other arm in this file hands the card a hand-built DeployPort,
+ * which proves what the CARD does with a port but never that the port itself builds the right
+ * command. deploy-port.ts passes `affordance` and `payload` -- both
+ * Readonly<Record<string, unknown>> -- and `correlationPrefix` and `layer`, both string, as four
+ * positional arguments to `spendOffer`. Either pair can be transposed and still typecheck, so
+ * without this wire the only thing standing between a swapped argument and a shipped deploy is
+ * a human reading the line.
+ */
+function wireWith(response: unknown): {
+  readonly built: Record<string, unknown>[]; readonly wire: OfferWire;
+} {
+  const built: Record<string, unknown>[] = [];
+  const wire = {
+    client: { commands: { "deployment.deploy": (
+      affordance: unknown, input: Record<string, unknown>,
+    ) => {
+      built.push({ affordance, ...input });
+      return { envelope: { commandId: "cmd-deploy", payload: input["payload"] }, ok: true };
+    } } },
+    sessionCredential: "cred-1",
+    transport: { sendCommand: vi.fn(async () => ({
+      delivered: true as const, response, status: 200,
+    })) },
+  } as unknown as OfferWire;
+  return { built, wire };
 }
 
 function renderCard(props: Partial<Parameters<typeof GoalDeployments>[0]> = {}): {
@@ -212,14 +244,25 @@ describe("the four refusals render as operator words (DoD 5)", () => {
       .toContain("DEPLOY_SOMETHING_NEW");
   });
 
-  it("DEPLOY_TARGET_MISSING offers a way to set a target; the others do not", () => {
+  it("DEPLOY_TARGET_MISSING names the prerequisite, the command that binds it, and that this "
+    + "screen cannot; the others say nothing", () => {
     renderCard({ environments: [
       environment({ code: "DEPLOY_TARGET_MISSING", environment: "preview", outcome: "REFUSED" }),
       environment({ code: "DEPLOY_HEALTH_TIMEOUT", environment: "production", outcome: "REFUSED" }),
     ] });
 
-    expect(screen.getByTestId("cr.deploy.preview.settarget").textContent ?? "")
-      .toContain("Bind a target");
+    const note = screen.getByTestId("cr.deploy.preview.settarget").textContent ?? "";
+    expect(note).toContain("Bind a target");
+    // THE ENVIRONMENT, since one wording serves every row and a target is bound per environment.
+    expect(note).toContain("preview");
+    // THE COMMAND THAT ACTUALLY BINDS ONE. Naming the prerequisite without naming the means is
+    // what QA rejected here; the operator has to be able to carry this somewhere.
+    expect(note).toContain("deployment.set_target");
+    // AND THE HONEST LIMIT. The daemon offers no set_target affordance on any frame, so this
+    // screen cannot bind one. The note must not imply a retry here will start working -- it
+    // must NOT read as "then deploy again", which sends the operator round the same loop.
+    expect(note).toContain("cannot bind one yet");
+    expect(note).not.toContain("then deploy again");
     expect(screen.queryByTestId("cr.deploy.production.settarget")).toBeNull();
   });
 
@@ -306,7 +349,6 @@ describe("the adversarial pass, on this diff only", () => {
   it("NAMES THE ENVIRONMENT in the refusal note, since one note serves both rows", async () => {
     const calls: { readonly environment: string; readonly sha: string }[] = [];
     const port: DeployPort = {
-      setTarget: async () => ({ code: "X", layer: "Y", ok: false }),
       submit: async (_affordance, environmentName, sha) => {
         calls.push({ environment: environmentName, sha });
         return { code: "DEPLOY_TARGET_MISSING", layer: "DAEMON_DEPLOY_ENGINE", ok: false };
@@ -336,7 +378,6 @@ describe("the adversarial pass, on this diff only", () => {
     const calls: { readonly environment: string; readonly sha: string }[] = [];
     const inFlight: (() => void)[] = [];
     const port: DeployPort = {
-      setTarget: async () => ({ commandId: "c", ok: true }),
       submit: async (_affordance, environmentName, sha) => {
         calls.push({ environment: environmentName, sha });
         await new Promise<void>((resolve) => { inFlight.push(resolve); });
@@ -362,6 +403,39 @@ describe("the adversarial pass, on this diff only", () => {
     inFlight.forEach((resolve) => { resolve(); });
   });
 
+  it("A DEPLOY IN FLIGHT BLOCKS ARMING THE OTHER ENVIRONMENT, not just re-clicking its own",
+    async () => {
+      const calls: { readonly environment: string; readonly sha: string }[] = [];
+      const inFlight: (() => void)[] = [];
+      const port: DeployPort = {
+        submit: async (_affordance, environmentName, sha) => {
+          calls.push({ environment: environmentName, sha });
+          await new Promise<void>((resolve) => { inFlight.push(resolve); });
+          return { commandId: "cmd-deploy", ok: true };
+        },
+      };
+      render(
+        <GoalDeployments
+          environments={[PREVIEW, PRODUCTION]} frame={FRAME} goalId={GOAL} port={port}
+          releaseDecision={null} sha={SHA}
+        />,
+      );
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("cr.deploy.preview.button"));
+      await user.click(screen.getByTestId("cr.deploy.preview.button"));
+
+      // PREVIEW IS NOW IN FLIGHT. The dangerous shape is a card that disables only the busy row:
+      // production would still arm, and the operator would be one click from a production deploy
+      // while a preview deploy they cannot see the result of is still running.
+      expect(screen.getByTestId("cr.deploy.production.button").hasAttribute("disabled")).toBe(true);
+      await user.click(screen.getByTestId("cr.deploy.production.button"));
+      expect(screen.getByTestId("cr.deploy.production.button").textContent ?? "")
+        .not.toContain("Confirm");
+      expect(calls).toEqual([{ environment: "preview", sha: SHA }]);
+      inFlight.forEach((resolve) => { resolve(); });
+    });
+
   it("renders an environment the daemon names that is neither preview nor production", () => {
     renderCard({ environments: [environment({ environment: "canary", outcome: null })] });
 
@@ -382,5 +456,87 @@ describe("the adversarial pass, on this diff only", () => {
     // The third click RE-ARMS production, because preview held the arm. The dangerous ordering
     // is the one where an operator believes production is still armed from two clicks ago.
     expect(calls).toEqual([]);
+  });
+});
+
+describe("the card dispatches through the REAL deploy port (DoD 1)", () => {
+  it("spends the goal's own offer as deployment.deploy with payload EXACTLY {environment, sha}",
+    async () => {
+      const { built, wire } = wireWith({ ok: true });
+      render(
+        <GoalDeployments
+          environments={[PREVIEW, PRODUCTION]} frame={FRAME} goalId={GOAL}
+          port={createDeployPort(wire)} releaseDecision={null} sha={SHA}
+        />,
+      );
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("cr.deploy.production.button"));
+      // ARMED ONLY. Nothing may reach the wire from the first click.
+      expect(built).toHaveLength(0);
+      await user.click(screen.getByTestId("cr.deploy.production.button"));
+      await waitFor(() => { expect(built).toHaveLength(1); });
+
+      // BYTE-EXACT, and toEqual rather than toMatchObject on purpose: the daemon's decoder is
+      // exact-arity (daemon-command-payload-keys.ts:173 is ["environment", "sha"]), so an EXTRA
+      // key is malformed just as a missing one is, and toMatchObject would pass an extra.
+      expect(built[0]?.["payload"]).toEqual({ environment: "production", sha: SHA });
+      // THE AFFORDANCE IS THE DAEMON'S OWN OFFER OBJECT, by identity. This is the assertion that
+      // catches transposing `affordance` and `payload` at deploy-port.ts: both are
+      // Readonly<Record<string, unknown>>, so the swap compiles and the payload check alone
+      // would still fail in a confusing way rather than naming the cause.
+      expect(built[0]?.["affordance"]).toBe(OFFER);
+      // AND THE CORRELATION PREFIX, which catches the OTHER transposable pair. If
+      // `correlationPrefix` and `layer` were swapped, this would read
+      // "CONTROL_ROOM_DEPLOY-<digest>" and still typecheck, because both are string.
+      expect(String(built[0]?.["correlationId"] ?? "")).toMatch(/^ui-deploy-[0-9a-f]{16}$/u);
+    });
+
+  it("carries CONTROL_ROOM_DEPLOY as the layer when the daemon answer cannot be read",
+    async () => {
+      // An unreadable answer is the one path where spendOffer surfaces the LAYER argument it was
+      // given (offer-wire.ts: OFFER_ANSWER_UNREADABLE is returned with that layer), so this is
+      // what pins the fourth positional argument from the other side.
+      const { wire } = wireWith(null);
+      render(
+        <GoalDeployments
+          environments={[PREVIEW]} frame={FRAME} goalId={GOAL}
+          port={createDeployPort(wire)} releaseDecision={null} sha={SHA}
+        />,
+      );
+      const user = userEvent.setup();
+
+      await user.click(screen.getByTestId("cr.deploy.preview.button"));
+      await user.click(screen.getByTestId("cr.deploy.preview.button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("cr.deploy.answer").textContent ?? "")
+          .toContain("OFFER_ANSWER_UNREADABLE");
+      });
+      expect(screen.getByTestId("cr.deploy.answer").textContent ?? "")
+        .toContain("CONTROL_ROOM_DEPLOY");
+    });
+
+  it("refuses a kind the wire cannot build rather than sending anything", async () => {
+    // The offer names deployment.deploy; a wire whose command roster lacks it must refuse at the
+    // build step. Proves the port asks the roster for the kind it declares, not for some other.
+    const { built, wire } = wireWith({ ok: true });
+    const narrowed = { ...wire, client: { commands: {} } } as unknown as OfferWire;
+    render(
+      <GoalDeployments
+        environments={[PREVIEW]} frame={FRAME} goalId={GOAL}
+        port={createDeployPort(narrowed)} releaseDecision={null} sha={SHA}
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+    await user.click(screen.getByTestId("cr.deploy.preview.button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.deploy.answer").textContent ?? "")
+        .toContain("OFFER_KIND_UNBUILDABLE");
+    });
+    expect(built).toHaveLength(0);
   });
 });

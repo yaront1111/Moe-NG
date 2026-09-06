@@ -22,27 +22,25 @@ import type { OfferOutcome, OfferWire } from "../approvals/offer-wire.js";
  * as a missing member and is read as malformed rather than as a default -- the same trap
  * publish-port.ts documents for a null `remoteUrl`. `sha` is therefore always present: the
  * caller sends the landed sha it is deploying, which becomes the image tag verbatim.
+ *
+ * THERE IS DELIBERATELY NO `setTarget` HERE, and the absence is the considered answer rather
+ * than an omission. `spendOffer` spends an OFFER, and at this tree the daemon's affordance
+ * surface emits NO deployment kind at all: `git grep -n 'deployment\.' -- apps/daemon/src/http`
+ * excluding tests returns zero. So a `deployment.set_target` dispatch has no affordance to
+ * spend and could only ever have been called with the DEPLOY offer, which is a different
+ * decision. An exported kind wired to nothing is a second decision wire in waiting (rail 2),
+ * so it is gone rather than parked. The command itself belongs to task-358b6ec8 on the daemon
+ * side; a browser affordance for it belongs to the containerized-deployment parent
+ * task-5d309484, which is where the surface that offers it will land. Until then this card
+ * NAMES the missing target as a prerequisite and does not pretend to a control it cannot spend.
  */
 
 export const DEPLOY_COMMAND_KIND = "deployment.deploy" as const;
-export const SET_TARGET_COMMAND_KIND = "deployment.set_target" as const;
 const DEPLOY_LAYER = "CONTROL_ROOM_DEPLOY" as const;
 
 export type DeployOutcome = OfferOutcome;
 
-export interface DeployTargetInput {
-  readonly environment: string;
-  readonly network: string;
-  readonly sshTarget: string | null;
-  readonly url: string | null;
-}
-
 export interface DeployPort {
-  /** Binds where an environment deploys to. Its roster is exact-arity too, so `sshTarget` and
-   *  `url` are ALWAYS sent, carrying null for a local target rather than being omitted. */
-  setTarget(
-    affordance: Readonly<Record<string, unknown>>, target: DeployTargetInput,
-  ): Promise<DeployOutcome>;
   submit(
     affordance: Readonly<Record<string, unknown>>, environment: string, sha: string,
   ): Promise<DeployOutcome>;
@@ -50,13 +48,6 @@ export interface DeployPort {
 
 export function createDeployPort(wire: OfferWire): DeployPort {
   return Object.freeze({
-    setTarget: (
-      affordance: Readonly<Record<string, unknown>>, target: DeployTargetInput,
-    ): Promise<DeployOutcome> =>
-      spendOffer(wire, SET_TARGET_COMMAND_KIND, affordance, {
-        environment: target.environment, network: target.network,
-        sshTarget: target.sshTarget, url: target.url,
-      }, "ui-deploy-target", DEPLOY_LAYER),
     submit: (
       affordance: Readonly<Record<string, unknown>>, environment: string, sha: string,
     ): Promise<DeployOutcome> =>
