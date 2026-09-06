@@ -83,7 +83,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T16:02:46.251Z",
-  "updatedAt": "2026-09-06T16:17:22.668Z",
+  "updatedAt": "2026-09-06T16:17:40.473Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T16:03:35.623Z",
     "plannedStepCount": 4,
@@ -115,5 +115,36 @@
   "blockedReason": "PREMISE FALSIFIED — re-plan needed, not a fix. Step 1 (measure, no edits) done; ZERO production bytes. No step amendments (all four activeAmendmentId=null). Evidence + probe source: comment-f2b43fa6 and the step-1 note.\n\n1. MAPPING ALREADY CORRECT. Real openForProject store: readEvents(\"design:goal-never\") returns [] — EMPTY, does NOT throw. storeFailure unreachable, so DESIGN_STORE_UNAVAILABLE is impossible for a never-designed goal. design-store.ts:204 fires: DESIGN_REVISION_ABSENT @ LEDGER — exactly what affordance-read.ts:358 already maps to ABSENT. Step 2 would change nothing or break a correct branch.\n\n2. DoD 2/3/4/5 ALREADY EXIST, GREEN. affordance-read-planning.test.ts:1181-1270 \"the real design surface journey\": five arms, real store, real createAffordancePort, NO designState stub. :1184 design.submit@design:goal-1 IS offered after Gate 1; :1227 DESIGN_STORE_UNAVAILABLE@LEDGER; :1253 DESIGN_RECORD_MALFORMED@LEDGER; :1208 skip->decomposition. 33 passed. Landed by 36f12fc0 = task-217f40b7, the row blamed here.\n\n3. NO BLAST RADIUS: no designFailures entry for a never-designed goal, so :386 never collapses the surface.\n\nWHY BLOCK NOT COMPLETE: DoD 1 demands recording a reproduction that does not reproduce; DoD 6 a drill against a fix that should not exist. Both would be fabricated. Adding DoD 2/3/5 arms duplicates landed work.\n\nRE-PLAN LEAD (outside this row's files): affordance-compiler-lane.ts:95-108 resolves approvedGateRef by sweeping Gate-1 aggregates matching the goal's SOURCE-DOC contentSha256 — keyed on content, never goal identity, so two goals sharing source text share one approval. worker-1d53e70c's symptom stands: offers.ts:181 is the ONLY decomposition site, so their goal reached approvedGateRef!==null with designState non-ABSENT — a design record was READABLE at read time.\n\nGATES: pnpm typecheck fresh, exit 0. Probe created+deleted; only peer WIP left in apps/daemon/src/http/.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:17:22.668Z"
+  "blockedAt": "2026-09-06T16:17:22.668Z",
+  "commits": [
+    {
+      "sha": "afb302cfd1396aa0452abe550fe0ef0aa5b786ab",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T16:05:39Z",
+      "paths": [
+        ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+        ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T16:17:40.473Z",
+      "treeId": "a49722a0a328736bc5fa3f64c15603dee1eabad7",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+    ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-deb4c7d8@2026-09-06T16:05:39Z",
+    "at": "2026-09-06T16:17:40.473Z"
+  }
 }

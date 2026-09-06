@@ -137,7 +137,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -178,11 +178,17 @@
       "author": "governor-afbde490",
       "content": "GOVERNOR 15:02Z — UNBLOCKED BY DEPENDENCY. The owner's call (via governor, \"unblock more tasks\" after two escalations): the fence is widened in the narrowest shape the tree already has — task-6d5db404f6ae48c3a3551aa1f2ee2752 \"repository.bootstrap is reachable by a paired browser HUMAN holding ADMIN, through the typed waiver arm, with MCP exclusion and the directory guard untouched\". This row dependsOn it. Next claimer (after 6d5db404 is DONE): do not re-measure steps 1-5 and 7; re-run step 6's journey exactly as written (spec:152 expects SUCCESS), then step 8's gates under a lease (browser lane is one-runner). If the journey still fails with OPERATOR_PRINCIPAL_REQUIRED, the fence row is not done — report_blocked on it, do not touch the fence here.",
       "timestamp": "2026-09-06T15:01:51.437Z"
+    },
+    {
+      "id": "comment-c18311360bb446d794f8f6e6e3e8db6a",
+      "author": "worker-1d53e70c",
+      "content": "STEP 6, worker-1d53e70c, 2026-09-06 16:2xZ. THE FENCE ROW WORKED. THE JOURNEY NOW FAILS ONE LAYER DEEPER, ON A DEFECT THAT IS NOT THIS ROW'S. Blocking on task-123da653c6fb43acb43e9329ab89bf90, filed by me.\n\nWHAT MOVED. task-6d5db404 landed (2735406c, epicSiblings landed:true, merged:true). Re-ran the journey UNCHANGED under the browser-e2e-gate lease. The refusal is no longer OPERATOR_PRINCIPAL_REQUIRED - the paired browser HUMAN is admitted and the run reaches the EFFECTS. The governor's 15:02Z instruction was: if it still fails with OPERATOR_PRINCIPAL_REQUIRED, block on the fence row. It does not. It fails later.\n\nTHE RUN. `npx playwright test -c tests/e2e/control-room/playwright.config.ts new-product-from-prd` -> exit 1, `1 failed`, 4.1m. Preceded by `npx tsc -p tests/e2e/control-room/tsconfig.json` exit 0, so the spec really compiled and really ran (the e2e script is `tsc && playwright test`; a red tsc means zero specs).\n\n  Expected: \"SUCCESS\"   Received: \"ERROR\"    at new-product-from-prd.spec.ts:152\n\nand the card rendered, verbatim:\n\n  The daemon answered BOOTSTRAP_CATALOG_FAILED at DAEMON_INGRESS. No repository was\n  reported, so nothing here says one was created.\n\nTHE DEFECT IS IN CHILD 2's FILE, not mine. `repository.bootstrap` CANNOT SUCCEED ON A REAL FILESYSTEM. repository-bootstrap-command.ts:174-179 registers the product with configPath `${dir}/moe.config.json` and storePath `${dir}/.moe-next/store.sqlite`; NOTHING on the bootstrap path creates either, and the scaffold emits neither. project-catalog.ts:127-140 realpaths both, gets ENOENT, refuses PROJECT_CATALOG_PATH_UNRESOLVED; the registrar THROWS it; the service answers BOOTSTRAP_CATALOG_FAILED. Probe with a discriminating control (full source in comment-710d0b5656154f07abaedd7273aa4508 on child 2):\n\n  A_SCAFFOLD_SHAPED_INPUT: THREW ProjectCatalogRefusalError PROJECT_CATALOG_PATH_UNRESOLVED\n  CONTROL_PATHS_EXIST: REGISTERED_OK\n  per-path: root RESOLVES, configPath ENOENT, dirname(storePath) ENOENT\n\nInvisible to every existing arm because repository-bootstrap-journey.test.ts:114 takes `Omit<RepositoryBootstrapSeams,\"catalog\">` and :127 stubs the seam. Task rail 3 says a command defect is child 2's: I commented there and filed the fix row rather than patching across the seam.\n\nWHAT I DID DELIVER THIS SESSION, in my own file, because the journey exposed it. `runNewProduct` returned `bootstrap: null` on ANY refused dispatch, so the card said \"nothing here says one was created\" - while the daemon's DURABLE receipt said CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED. The repository was real, committed and BOUND. That is this row's own harm (task rail 2) arriving through the failure path instead of the GitHub one. Fixed: the refused path now reads the receipt, and trusts it ONLY when its refusal code equals the dispatch code - an admission-time refusal (repository-bootstrap-command.ts:207) writes no receipt, so an unguarded read would surface the PREVIOUS run's receipt and could render a refusal as a success.\n\n  live-new-product.tsx 241 lines (under 250). 3 new arms.\n  `pnpm --filter @moe/control-room exec vitest run src/v2/products --maxWorkers=1`\n    -> EXIT 0, Test Files 2 passed (2), Tests 28 passed (28)\n  `pnpm --filter @moe/control-room typecheck` -> EXIT 0, `$ tsc --project tsconfig.json` echoed.\n  DRILL: replacing the guard with `code === code` reds BOTH DISCARD arms (Tests 2 failed | 16 passed). Restored from an out-of-tree backup; SHA256 8f3ceaf901928af68f9ebda73abff250ee1ed1595e87c6637ef5c85790571d60 verified EQUAL in a call separate from the restore (both files are UNTRACKED, so `git diff` proves nothing here).\n\nHOUSEKEEPING. No leak: the spec's afterEach removed the product dir, both probes were deleted, test-results/ is gitignored by tests/e2e/control-room/.gitignore. browser-e2e-gate released. I did NOT touch PID45932.\n\nDISCLOSED, NOT MINE TO FIX: task.declaredFiles already contained four paths this row never wrote - tests/e2e/control-room/daemon-ports.ts, tests/e2e/control-room/wrapper-lane.ts, apps/control-room/src/v2/goals/design-version-note.tsx, tests/e2e/control-room/fake-docker-dependencies.ts. They are peer work (design and deploy rows). declare_files has no removal, so a governor should strip them before this row's completion commit or they will land under this task id.",
+      "timestamp": "2026-09-06T16:19:50.533Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:43:05.459Z",
-  "updatedAt": "2026-09-06T15:01:51.437Z",
+  "updatedAt": "2026-09-06T16:22:42.772Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:24:22.265Z",
     "plannedStepCount": 8,
@@ -193,7 +199,8 @@
     "architect-fa3a3e17",
     "worker-caece97b",
     "worker-7bdbffac",
-    "worker-adefb11e"
+    "worker-adefb11e",
+    "worker-1d53e70c"
   ],
   "planSizeWarnings": [
     "Plan touches 11 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -226,11 +233,13 @@
   },
   "planApprovedAt": "2026-09-06T11:35:34.143Z",
   "workStartedAt": "2026-09-06T02:25:16.845Z",
-  "blockedReason": null,
-  "blockedOnTaskIds": null,
+  "blockedReason": "THE FENCE ROW WORKED; THE JOURNEY FAILS ONE LAYER DEEPER, ON A DEFECT THIS ROW DOES NOT OWN. Do NOT re-block on task-6d5db404 - it landed (2735406c, merged) and the governor's 15:02Z conditional is SPENT: the refusal is no longer OPERATOR_PRINCIPAL_REQUIRED, the paired browser HUMAN is admitted and the run reaches the effects.\n\nBLOCKED ON task-123da653c6fb43acb43e9329ab89bf90, filed by me (PLANNING, CRITICAL, parent task-5ef1a0a9). `repository.bootstrap` CANNOT SUCCEED ON A REAL FILESYSTEM. repository-bootstrap-command.ts:174-179 registers configPath `${dir}/moe.config.json` and storePath `${dir}/.moe-next/store.sqlite`; nothing creates either and the scaffold emits neither. project-catalog.ts:127-140 realpaths both, ENOENT (root resolves), refuses PROJECT_CATALOG_PATH_UNRESOLVED; the registrar throws; the service answers BOOTSTRAP_CATALOG_FAILED - AFTER the repository is created, committed and BOUND. Probe with a discriminating control: comment-710d0b5656154f07abaedd7273aa4508 on child 2 (task-facff1d1e, whose file it is). Full record here: comment-c18311360bb446d794f8f6e6e3e8db6a. Invisible to every arm because repository-bootstrap-journey.test.ts:127 stubs the `catalog` seam. Task rail 3: commented there, did not patch across the seam.\n\nRUN: e2e tsc exit 0, then playwright new-product-from-prd exit 1, `1 failed`, 4.1m; spec:152 Expected SUCCESS Received ERROR.\n\nNOT IDLE: the journey exposed a real defect in MY file, now fixed. `runNewProduct` returned bootstrap:null on ANY refused dispatch, so the card said nothing was created while the receipt said CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED. The refused path now reads the receipt, trusted only on a code match. 3 new arms; products EXIT 0, Tests 28 passed (28); typecheck EXIT 0; drill reds both DISCARD arms.\n\nON UNBLOCK: re-run step 6 unchanged under a browser-e2e-gate lease, then step 8. Gate RELEASED, no leaks. GOVERNOR: declaredFiles carries 4 peer paths this row never wrote.",
+  "blockedOnTaskIds": [
+    "task-123da653c6fb43acb43e9329ab89bf90"
+  ],
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T16:22:42.772Z",
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "nothing",
@@ -243,6 +252,13 @@
   "declaredFiles": [
     "tests/e2e/control-room/new-product-from-prd.spec.ts",
     "tests/e2e/control-room/daemon-ports.ts",
-    "tests/e2e/control-room/wrapper-lane.ts"
+    "tests/e2e/control-room/wrapper-lane.ts",
+    "apps/control-room/src/v2/products/live-new-product.tsx",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    "apps/control-room/src/v2/products/new-product-form.tsx",
+    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "apps/control-room/src/live/live-bootstrap-receipt.ts",
+    "apps/control-room/src/v2/goals/design-version-note.tsx",
+    "tests/e2e/control-room/fake-docker-dependencies.ts"
   ]
 }

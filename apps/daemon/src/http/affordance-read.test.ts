@@ -475,12 +475,13 @@ const SERVED_BOOTSTRAP_KINDS: readonly string[] = [
 ];
 
 /**
- * Served, advertised — and NOT CARDED YET. The operator UI for `repository.bootstrap` is child 3
- * of task-5ef1a0a9; until it lands there is no step to offer, and inventing one here would card
- * a command with no surface behind it. Excluded BY NAME, so a kind that quietly stops being
- * carded still reds: the exemption is a list of one, not a predicate.
+ * Served, advertised — and not carded. EMPTY, which is the correct end state rather than a
+ * special case: `repository.bootstrap` was the one member, held out only until its operator UI
+ * existed, and task-80322112a48d44c69c6c55f846f8d43f landed that card (the New product form,
+ * mounted in cordum-app.tsx above the Activate card). The roster stays because it is a list and
+ * not a predicate, so a future hold-out is excluded BY NAME and cannot widen quietly.
  */
-const UNCARDED_SERVED_KINDS: readonly string[] = Object.freeze(["repository.bootstrap"]);
+const UNCARDED_SERVED_KINDS: readonly string[] = Object.freeze([]);
 
 /**
  * These lifecycle kinds are carded only from their durable per-goal offers — the exact four the
@@ -532,8 +533,12 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
     // green while a served capability silently vanishes from the surface.
     expect([...SERVED_BOOTSTRAP_KINDS].sort()).toEqual([...BOOTSTRAP_COMMAND_KINDS].sort());
     // The exemption cannot grow silently: every uncarded kind must still be a SERVED one.
+    // It is EMPTY now, so that line alone is a tautology; the control beside it proves the
+    // filter still discriminates and will bite the day a member is added back.
     expect(UNCARDED_SERVED_KINDS.filter((kind) => !SERVED_BOOTSTRAP_KINDS.includes(kind)))
       .toEqual([]);
+    expect(["not.a.served.kind"].filter((kind) => !SERVED_BOOTSTRAP_KINDS.includes(kind)))
+      .toEqual(["not.a.served.kind"]);
     expect(nonPlanningServed.filter((kind) => !carded.includes(kind))).toEqual([]);
     expect(nonPlanningCarded).toEqual([...nonPlanningServed].sort());
     expect(BOARD_PLANNING_KINDS.length).toBeGreaterThan(0);

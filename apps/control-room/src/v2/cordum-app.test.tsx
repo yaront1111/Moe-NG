@@ -1096,6 +1096,41 @@ describe("the Activate card is reachable on the goals screen", () => {
   });
 });
 
+/**
+ * REACHABILITY AGAIN, and the arm whose ABSENCE sent this row back once already. A component
+ * test that mounts NewProductForm on its own proves the form renders; only rendering the
+ * served app proves an operator can get to it. The ORDER is asserted too, because order is
+ * this card's whole argument: a project must EXIST before it can be ACTIVATED, so the new
+ * product form has to come before the Activate card rather than merely be somewhere on screen.
+ */
+describe("the New product card is reachable on the goals screen", () => {
+  it("mounts the new-product form in the live body, above the Activate card", async () => {
+    const sentCommands: string[] = [];
+    renderWiredApp([APPROVAL_OFFER], { outcome: "NONE" }, "V1", (body) => {
+      sentCommands.push(body);
+      return { ok: true };
+    });
+
+    const form = await screen.findByTestId("cr.newproduct.form");
+    // Awaited on a RECEIPT, for the reason the Activate arms give: the root is present in the
+    // loading branch too, so it would not prove the card read anything.
+    await screen.findByTestId("cr.activate.receipt.repository");
+    const activate = screen.getByTestId("cr.activate.root");
+
+    // DOCUMENT_POSITION_FOLLOWING on the form means Activate comes after it in the document.
+    expect(form.compareDocumentPosition(activate) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // The control every operator actually needs, and the optional half named as optional.
+    expect(screen.getByTestId("cr.newproduct.dir")).not.toBeNull();
+    expect(screen.getByTestId("cr.newproduct.name")).not.toBeNull();
+    expect(screen.getByTestId("cr.newproduct.create")).not.toBeNull();
+    expect(screen.getByTestId("cr.newproduct.github").textContent).toContain("optional");
+    // Nothing was reported before the operator submitted, and nothing was dispatched.
+    expect(screen.queryByTestId("cr.newproduct.outcome")).toBeNull();
+    expect(sentCommands).toHaveLength(0);
+  });
+});
+
 describe("CordumApp wires the durable run and the daemon's approval grant", () => {
   it("binds CURRENT admission to the project attached by the runtime handshake", async () => {
     const app = renderWiredApp(

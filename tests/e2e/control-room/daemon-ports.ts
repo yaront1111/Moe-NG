@@ -30,6 +30,7 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { freePort, killTree, spawnNode, survivingChildren } from "./daemon-children.js";
+import type { FakeDockerMode } from "./fake-docker-dependencies.js";
 
 export { survivingPids } from "./daemon-children.js";
 
@@ -71,6 +72,15 @@ export function repoRoot(): string | null {
 }
 
 export interface LaneScratch {
+  /**
+   * The MANAGER CATALOG this lane may write, inside the scratch root.
+   *
+   * `resolveProjectCatalogPath` falls back to `~/.moe-next/projects.json` when
+   * MOE_PROJECT_CATALOG is unset, so a lane driving `repository.bootstrap` would register
+   * its throwaway product in the REAL host catalog and leave it there. Scoping it here keeps
+   * the whole write inside the directory the lane already deletes on every exit path.
+   */
+  readonly catalogPath: string;
   /** Where the daemon reads its one code-node spec from. */
   readonly nodeSpecsDir: string;
   /** The aggregate id the seeded `node.deliver` step carries. Unique per run. */
@@ -102,8 +112,8 @@ export function createLaneScratch(): LaneScratch {
     workspace: root.replaceAll("\\", "/"),
   }), "utf8");
   return Object.freeze({
-    nodeRef, nodeSpecsDir, projectId: `e2e-proj-${tag}`,
-    root, storePath: join(root, "store.sqlite"), tag,
+    catalogPath: join(root, "projects.json"), nodeRef, nodeSpecsDir,
+    projectId: `e2e-proj-${tag}`, root, storePath: join(root, "store.sqlite"), tag,
   });
 }
 
@@ -143,6 +153,8 @@ export function daemonEnv(
     MOE_APPROVAL_MODE: speed ? "SPEED" : undefined,
     MOE_DAEMON_CREDENTIAL: LANE_CREDENTIAL,
     MOE_NODE_SPECS_DIR: scratch.nodeSpecsDir,
+    // Scratch-scoped, never the host default: see LaneScratch.catalogPath.
+    MOE_PROJECT_CATALOG: scratch.catalogPath,
     MOE_PROJECT_ID: scratch.projectId,
     MOE_SPEED_MODE_DELAY_MS: speed ? "0" : undefined,
     MOE_STORE_PATH: scratch.storePath,
@@ -222,6 +234,8 @@ export const SERVER_READY_BUDGET_MS = 60_000;
 export interface DaemonLane {
   /** The dev server's base URL — what the browser opens. */
   readonly baseUrl: string;
+  /** The manager catalog this lane's daemon writes, inside the scratch root it deletes. */
+  readonly catalogPath: string;
   readonly credential: string;
   readonly csrfToken: string;
   /**
@@ -276,8 +290,11 @@ interface StartedChild {
 async function startDaemon(
   root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
   operatorChannel: true | undefined, fixedDemoGoal: true | undefined,
+  fakeDocker: FakeDockerMode | undefined,
 ): Promise<LaneRefused | StartedChild> {
-  const dependencies = fixedDemoGoal === true
+  const dependencies = fakeDocker !== undefined
+    ? `${root}/tests/e2e/control-room/fake-docker-dependencies.ts`
+    : fixedDemoGoal === true
     ? `${root}/tests/e2e/control-room/fixed-demo-goal-dependencies.ts`
     : `${root}/apps/daemon/src/daemon-store-dependencies.ts`;
   const watched = spawnNode([
@@ -292,7 +309,7 @@ async function startDaemon(
     // label the lane writes below reaches the SAME approval path an operator's keystroke
     // would. Nothing here approves on the daemon's behalf.
     ...(operatorChannel === true ? ["--operator-stdin"] : []),
-  ], root, daemonEnv(scratch, approval));
+  ], root, { ...daemonEnv(scratch, approval), MOE_E2E_DEPLOY_MODE: fakeDocker });
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
   const failure: { message: string | null } = { message: null };
@@ -382,6 +399,8 @@ export interface DaemonLaneOptions {
   readonly approval?: LaneApprovalMode;
   /** Pin the one shipped dev authority identity while retaining the production dependency root. */
   readonly fixedDemoGoal?: true;
+  /** Replace only deploy spawns; omitted retains the production provider. */
+  readonly fakeDocker?: FakeDockerMode;
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
   /**
@@ -405,7 +424,7 @@ async function openLane<T>(
   const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
   const daemon = await startDaemon(
-    root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal,
+    root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal, options.fakeDocker,
   );
   if ("ok" in daemon) return daemon;
   // NULL is "no seed child was ever spawned", which is a different fact from
@@ -426,6 +445,7 @@ async function openLane<T>(
 `);
         },
       baseUrl: served.announced,
+      catalogPath: scratch.catalogPath,
       credential: LANE_CREDENTIAL,
       csrfToken: LANE_CSRF_TOKEN,
       daemonOrigin: daemon.announced,

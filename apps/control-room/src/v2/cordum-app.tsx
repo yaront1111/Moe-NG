@@ -22,6 +22,7 @@ import { BoardStub } from "./goals/board-stub.js";
 import { LiveContractDossier } from "./goals/contract-dossier.js";
 import { LiveCriterionEvidence } from "./goals/live-criterion-evidence.js";
 import { LiveDesign } from "./goals/design-card.js";
+import { LiveDesignVersionNote } from "./goals/design-version-note.js";
 import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -36,6 +37,7 @@ import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { currentRunOf, planSentBack } from "./goals/plan-run-resolution.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
+import { LiveNewProduct } from "./products/live-new-product.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
 import { useAdvancedFrames } from "./shell/advanced-frames.js";
 import { CordumShell } from "./shell/cordum-shell.js";
@@ -337,6 +339,13 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
               runId={planRunId}
               title={open.title}
             />
+            {/*
+              THE VERSION THE PLAN WAS COMPILED AGAINST, on the approval surface itself.
+              Approving the plan is how the human accepts the design, so the card has to
+              name that design or the acceptance is uninformed. It sits INSIDE the fold,
+              under the plan it qualifies, rather than beside the Design tab above.
+            */}
+            <LiveDesignVersionNote goalRef={open.goalId} headers={attached.headers} />
           </details>
           {/* Reference material, folded: the raw daemon offers (which also feed the one
               affordance frame of the page), PRD coverage, the PRD itself, and the project boundary
@@ -406,6 +415,15 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
           {!live.setup.ok && <LiveRefusalNotice
             busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
           />}
+          {/*
+            THE NEW PRODUCT CARD LIVES HERE, above Activate and for the same reason Activate
+            is not behind a nav id: it is where the operator hits the wall, and this wall is
+            one step HARDER than the next one. Activate is refused until a project exists;
+            before this card there was no way to make one from the browser at all, so a fresh
+            operator had nothing to activate and no route to a first goal. ORDER IS THE
+            ARGUMENT - a project must EXIST before it can be ACTIVATED - so it renders first.
+          */}
+          {live.setup.ok && <LiveNewProduct setup={live.setup} />}
           {/*
             THE ACTIVATE CARD LIVES HERE, not behind a nav id of its own: this is where the
             operator hits the wall, because New goal below is refused until the project is

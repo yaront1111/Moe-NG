@@ -206,7 +206,8 @@ export function resolveLaneScratch(lane: DaemonLane): LaneScratch | null {
     // The spec names THIS lane's node, so a directory belonging to another run is never returned.
     if (!readFileSync(spec, "utf8").includes(`"nodeRef":"${lane.nodeRef}"`)) continue;
     return Object.freeze({
-      nodeRef: lane.nodeRef, nodeSpecsDir, projectId: lane.projectId, root, storePath, tag,
+      catalogPath: join(root, "projects.json"), nodeRef: lane.nodeRef, nodeSpecsDir,
+      projectId: lane.projectId, root, storePath, tag,
     });
   }
   return null;

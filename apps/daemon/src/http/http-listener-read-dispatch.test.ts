@@ -130,8 +130,6 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/
  * /v2/product-contract/pending/read (gate1-approval.ts), not current.
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
- * /repository/bootstrap/read: task-53267f86 lands the daemon disclosure only;
- * task-80322112a48d44c69c6c55f846f8d43f supplies its browser consumer and retires this entry.
  *
  * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
  * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
@@ -158,7 +156,6 @@ const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
   "/environments/read",
   "/events/resume",
-  "/repository/bootstrap/read",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
 ]);
