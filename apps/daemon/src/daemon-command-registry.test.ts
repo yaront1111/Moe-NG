@@ -1,3 +1,4 @@
+import { readAgentProvider } from "./orchestrator/agent-provider-store.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
@@ -260,7 +261,7 @@ const ROWS: readonly Row[] = [
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
-  { agent: null, capability: ADMIN, code: "AGENT_PROVIDER_UNCONFIGURED",
+  { agent: null, capability: ADMIN, code: "AGENT_PROVIDER_PAYLOAD_INVALID",
     kind: "project.set_agent_provider", layer: "DAEMON_COMPOSITION",
     payloadKeys: ["base", "goalId", "provider"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
@@ -528,7 +529,7 @@ function openSession(
   return secret;
 }
 
-describe("project.set_agent_provider fails closed on its own synchronous edge", () => {
+describe("project.set_agent_provider persists on its fenced synchronous edge", () => {
   const payload = { base: "main", goalId: "", provider: "codex" };
   const snapshot = () => {
     const reader = SqliteEventStore.openForProject(storePath, PROJECT);
@@ -537,13 +538,49 @@ describe("project.set_agent_provider fails closed on its own synchronous edge", 
     } finally { reader.close(); }
   };
 
-  it("refuses a well-formed operator dispatch without any durable write", () => {
+  it("persists exactly one setting event and reads it through a reopened store", () => {
     const before = snapshot();
-    expect(send("cmd-provider-unconfigured", "project.set_agent_provider", payload)).toMatchObject({
-      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
-      refusal: { code: "AGENT_PROVIDER_UNCONFIGURED", layer: "DAEMON_COMPOSITION" },
+    expect(send("cmd-provider-configured", "project.set_agent_provider", payload)).toMatchObject({
+      outcome: "ACCEPTED", decision: { resultCode: "AGENT_PROVIDER_SET", disposition: "DECIDED" },
     });
+    // Direct setting commits have an event/receipt, not a manufactured domain decision row.
+    expect(snapshot()).toEqual({ decisions: before.decisions, eventHorizon: before.eventHorizon + 1n });
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      expect(readAgentProvider({ store: reader, projectId: PROJECT, now: () => "unused" }, "goal-new"))
+        .toEqual({ ok: true, provider: "codex" });
+    } finally { reader.close(); }
+  });
+
+  it.each([{}, { ...payload, base: 3 }, { ...payload, goalId: null }])(
+    "refuses malformed provider payload %j without a setting event", badPayload => {
+      const before = snapshot();
+      expect(send("cmd-provider-malformed", "project.set_agent_provider", badPayload)).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "AGENT_PROVIDER_PAYLOAD_INVALID", layer: "DAEMON_COMPOSITION" },
+      });
+      expect(snapshot()).toEqual(before);
+    },
+  );
+
+  it("preserves the store's unknown-provider code and layer without writing", () => {
+    const before = snapshot();
+    expect(send("cmd-provider-unknown", "project.set_agent_provider", { ...payload, provider: "third-provider" }))
+      .toMatchObject({ outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "AGENT_PROVIDER_UNKNOWN", layer: "DURABLE_STORE" } });
     expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses a repeated command identity at the store without a second setting write", () => {
+    expect(send("cmd-provider-retry", "project.set_agent_provider", payload).outcome).toBe("ACCEPTED");
+    const after = snapshot();
+    for (const retried of [payload, { ...payload, provider: "claude" }]) {
+      expect(send("cmd-provider-retry", "project.set_agent_provider", retried)).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 503,
+        refusal: { code: "COMMAND_ID_CONFLICT", layer: "DURABLE_STORE" },
+      });
+      expect(snapshot()).toEqual(after);
+    }
   });
 
   it("refuses the non-operator at authorization before composition", () => {

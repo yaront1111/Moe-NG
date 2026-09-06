@@ -20,16 +20,19 @@
     {
       "stepId": "step-1",
       "description": "MEASURE THE THREE PINS AND THE TWO LITERALS. NO EDITS. The previous attempt was handed back because these were not in its roster.\n\n(a) THE ASSERTING CONSUMER the governor added: read `apps/daemon/src/daemon-command-registry.test.ts` at\n  :255-257 - the sweep row and its comment about the empty payload reaching the prerequisite gate;\n  :530-536 - `describe(\"project.set_agent_provider fails closed on its own synchronous edge\")`, its `payload = { base: \"main\", goalId: \"\", provider: \"codex\" }` and its `snapshot()` over `decisionCount(reader)` and `reader.readEventHorizon()`;\n  :1119-1129 - the three-axis operator fence and its \"THE SUBJECT IS ACTUALLY SERVED\" guard.\nRecord what each asserts TODAY, because step 4 changes exactly one of them and must leave the other two green.\n\n(b) THE LITERALS: `grep -n \"DAEMON_COMPOSITION\" apps/daemon/src/orchestrator/agent-provider-command.ts` - expect it at :11 beside `AGENT_PROVIDER_UNCONFIGURED`. Confirm `DURABLE_STORE` is a rostered literal used elsewhere. YOU WILL DECLARE NO EXPORTED CONSTANT MATCHING `^export const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))` - tests/security/boundary-roster.security.ts:736-738 fails any scanned constant absent from the roster, :746-747 pins the roster's cardinality, and completeness.security.ts:300-307 demands BEFORE/AFTER/RACE coverage for a new boundary. All three are outside this row.\n\n(c) `grep -n \"KNOWN_PROVIDERS\" apps/daemon/src/http/health-read.ts` - expect it near :34. IMPORT it; do NOT move it (rail 1). That file is concurrently edited by task-509c6c16 and is not in this row's owned paths.\n\n(d) Confirm the stub: `apps/daemon/src/orchestrator/agent-provider-command.ts` is grandchild B's fail-closed handler that step 3 replaces.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/orchestrator/agent-provider-command.ts"
-      ]
+      ],
+      "note": "Fresh census HEAD7d78aa19, sixplannedpaths clean; prerequisitec422 DONE landed completion2d94a928 via epicSiblings. Current registrytest263-265 EXACTLY pins AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION for {}, NOT PREREQUISITE as replan mistakenly says; validoperator540-547 same422 and decisions/eventHorizon unchanged;549-557 nonoperator403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION/no writes;559-565 oneADMIN synchronous entry/no staffing. Unitcommand.test12-16 keeps no-config422. Registry362 calls runAgentProviderCommand() before bootstrap, has store/projectId/clock inclosure202, input.envelope/principal325-326. Therefore realhandler will require updating the existing empty-payload ROW to actual payload refusal within already-owned registrytest; retaining stale UNCONFIGURED for configured{} would fabricate state. KNOWN_PROVIDERS health-read35 imported, not moved. Existing DAEMON_COMPOSITION command11 and DURABLE_STORE dispatchrefusalFor already literal; no exported *_LAYER constants will be minted. Newstore absent; environment-store commitshape and actual SqliteEventStore contracts read. Registry exceeds400 beforeedits, entry-onlyplanned. Fresh standalone narrow baseline pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/orchestrator/agent-provider-command.test.ts src/daemon-command-registry.test.ts EXIT0: Test Files2passed(2),Tests404passed(404),10.43s19:40:32Z. No fullgate/pristinefleetclaim. No code edits; historical195unattributed foreignpaths are NOT owned.",
+      "startedAt": "2026-09-06T19:38:14.246Z",
+      "completedAt": "2026-09-06T19:41:14.563Z"
     },
     {
       "stepId": "step-2",
       "description": "THE DURABLE STORE (DoD 1). Create `apps/daemon/src/orchestrator/agent-provider-store.ts` (+ a one-line `.js` bridge - copy the `environment-store.js` form, per rail 4).\n\nSHAPE: a per-project `agentProvider` with a per-goal override. `goalId: \"\"` IS THE PROJECT DEFAULT; a non-empty goalId is that goal's override. A read with no write returns the default `claude` (DoD 1).\nMake that convention explicit in the code rather than implicit in a key format - an empty string carrying \"project default\" is the kind of thing a later reader inverts. Say in a comment why the empty string was chosen over a nullable field.\n\nPROVIDER NAMES COME FROM `KNOWN_PROVIDERS` (health-read.ts:34), IMPORTED (rail 1). Do not declare a second list and do not move the constant. DoD 2's arm exists precisely so that a test which widens production to a third name without changing that roster goes RED.\n\nREFUSE `AGENT_PROVIDER_UNKNOWN` with its LAYER for an unrecognised name, using a rostered layer LITERAL (`DURABLE_STORE` for a store-layer refusal, `DAEMON_COMPOSITION` for a composition one - pick per where the check runs and say which). DECLARE NO EXPORTED `*_LAYER`/`*_LAYERS` CONSTANT: the security lane scans for them and three arms would red.\n\nKeep the module at or under 250 lines (rail 4), and do NOT grow agent-spawner.ts, which is already 438.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-provider-store.ts",
         "apps/daemon/src/orchestrator/agent-provider-store.js"
@@ -37,48 +40,77 @@
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-provider-store.ts",
         "apps/daemon/src/orchestrator/agent-provider-store.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-provider-store.ts",
+        "apps/daemon/src/orchestrator/agent-provider-store.js",
+        "apps/daemon/src/orchestrator/agent-provider-store.test.ts"
+      ],
+      "note": "Implemented bounded durable store importing existing KNOWN_PROVIDERS; emptygoalId sentinel documented; exactoverride→project→claude fallback, no default on corrupt/mismatchedstore; immutable read/refusal/writeanswers, DURABLE_STORE literal reused, no new layerconstant. Oneeventcommit mirrors environment-store, so no fabricated domain-decision row. Providerunknown/code+layer and no writes, cross-instance actualSQLitepayloadread, scopes/corruption covered. TDD moved plannedstep5tests earlier in sameownedpath: initial12failed on unimplemented API,10green/2test-harness failures (readEventsAfter is CursorPage.items, verified and corrected), final19:45:37Z Test Files1passed(1),Tests12passed(12),5.68s EXIT0. Threepathsmodified exactly; production105physicallines/newbridgeone. No registry/handler edit yet, no rootmanifest or foreignWIPchanges. Directeventretry behavior intentionally defers storeconflict; composedexactcounters testednext.",
+      "startedAt": "2026-09-06T19:41:43.503Z",
+      "completedAt": "2026-09-06T19:46:20.076Z"
     },
     {
       "stepId": "step-3",
       "description": "REPLACE THE FAIL-CLOSED HANDLER (DoD 3). Edit `apps/daemon/src/orchestrator/agent-provider-command.ts` and register the real store handler in `apps/daemon/src/daemon-command-registry.ts`.\n\nREPLACE, DO NOT COEXIST (rail 3). Grandchild B's stub refuses `AGENT_PROVIDER_UNCONFIGURED` at :11; after this row a well-formed OPERATOR dispatch PERSISTS. Two handlers for one kind is a dispatch ambiguity and the registry sweep would then assert against whichever wins.\n\nWHAT STAYS IN GRANDCHILD B (rail 3, and the governor's instruction): the ABSENT-CONFIG arm and the NON-OPERATOR AUTHORIZATION arm are unit-level and stay where they are. A daemon composed WITHOUT the provider store must still refuse `AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION` - this row makes the CONFIGURED path durable, it does not remove the unconfigured one.\n\nREUSE THE LITERALS ALREADY IN THIS FILE. `\"DAEMON_COMPOSITION\"` is at :11; add no exported layer constant.\n\nThe registry edit is the entry only - `daemon-command-registry.ts` was 449 lines and past the 400 cap at the merge-base, so add nothing else to it and disclose that measurement in the completion record.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-provider-command.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "Configured synchronous edge persists via existingstore/projectId/clock, unchanged authority/operatorfence beforeentry; no-config directunit stillUNCONFIGURED. Plannedstep4tests authoredFIRST: sixintendedRED (configuredsuccess,malformed3,unknown,emptyrow), thenminimumwiring. Foundownimportcycle directcommand→store→health-read13→vocabulary/payloadkeys→command; registry-only green missed it. Repaired dependencyinversion: command type-onlyimportsstorecontract, registry injects productionsetAgentProvider atsingleentry+oneimport. No KNOWN_PROVIDERS move, newmodule, asyncwidening or registryoutcomeadapteredit. Final3files420tests EXIT0 at19:49:46Z11.21s, includesoriginalunitno-config and allregistryarms. Independentread-onlyreview confirmsfencesandcyclefix, requestedretry/corruptrowhardeningnext. Daemon typecheckEXIT1 ONLYforeignTS2741 migrate-down-journey138 and migrate-down-real133 missingbuild; notclaimedgreen. Sixownedpaths total, no backgroundtest, fullsuitequeued#2.",
+      "startedAt": "2026-09-06T19:46:21.032Z",
+      "completedAt": "2026-09-06T19:50:59.357Z"
     },
     {
       "stepId": "step-4",
       "description": "TRANSITION THE COMPOSED ARM TO DURABILITY (the governor's instruction (b)) - `apps/daemon/src/daemon-command-registry.test.ts`.\n\nTHE ARM AT :530-536 currently proves the stub: a valid operator payload `{ base: \"main\", goalId: \"\", provider: \"codex\" }` refuses and writes NOTHING, verified by a `snapshot()` over `decisionCount(reader)` and `reader.readEventHorizon()`. AFTER THIS ROW A VALID COMPOSED DISPATCH MUST PERSIST.\nCHANGE WHAT IT ASSERTS; DO NOT DELETE IT. Keep the snapshot technique - it is how \"no writes\" was proven and it is exactly how \"EXACTLY ONE write\" should be. Assert the decision count and event horizon MOVE by the expected amount, not merely that something changed: a handler that writes twice passes a \"changed\" assertion.\n\nLEAVE THE OTHER TWO PINS GREEN:\n- :255-257, the empty-payload sweep reaching `PREREQUISITE`. Its comment says the empty payload it sends is the CORRECT one for that row; if your change makes it red, you have altered the prerequisite gate rather than the handler.\n- :1119-1129, the three-axis operator fence. Its \"THE SUBJECT IS ACTUALLY SERVED\" guard exists because every axis would pass vacuously for an unserved kind - replacing the stub with a real handler must keep this GREEN, and if it trips, the registration is wrong.\n\nRe-read HEAD before editing: this file is contended by several rows.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "Validoperator arm transitioned notdeleted; exacteventHorizon+1 and decisionCount+0 (mandateddirecteventstorepattern), then NEWrealSqliteinstance reads codex fallback. Code/layerfullpins for configuredmalformedpayload and unknownprovider; unchangednonoperator403+nowrites, synchronousADMIN/no staffing, unrelatedproject.activateprerequisite and migrate_down threeaxis allGREEN. EmptyproviderROW corrected to actual AGENT_PROVIDER_PAYLOAD_INVALID@DAEMON_COMPOSITION, not staleUNCONFIGURED/prerequisite (replananchorsreferencedothercommands). AddedsamecommandId retry unchanged/changedprovider: observed503 COMMAND_ID_CONFLICT@DURABLE_STORE, snapshotexactlyunchanged, notfalseREPLAYED. Freshfullregistry1file407tests EXIT0 at19:51:05Z9.76s. No scopegrowth, alltestedthroughproductionHTTPregistry/store, noforeignhunksmodified.",
+      "startedAt": "2026-09-06T19:51:00.287Z",
+      "completedAt": "2026-09-06T19:52:11.754Z"
     },
     {
       "stepId": "step-5",
       "description": "THE STORE'S OWN ARMS (DoD 1, 2, 3) - `apps/daemon/src/orchestrator/agent-provider-store.test.ts`.\n\n(a) DEFAULT AND OVERRIDE: `goalId: \"\"` writes the project default; a non-empty goalId writes that goal's override; a read for a goal with no override falls back to the project default; a read with NO write at all returns `claude` (DoD 1). Four distinct reads, because the fallback chain is where an off-by-one in key handling hides.\n(b) DURABILITY ACROSS INSTANCES (DoD 3): write, then open a NEW `SqliteEventStore` against the SAME sqlite path and read back. An in-memory read proves the object, not the store - and DoD 3 names a second instance specifically.\n(c) UNKNOWN PROVIDER (DoD 2): refuses `AGENT_PROVIDER_UNKNOWN` with its LAYER. Never merely that it failed.\n(d) THE `KNOWN_PROVIDERS` COUPLING (DoD 2's real point): assert the accepted set EQUALS the imported `KNOWN_PROVIDERS`, so widening production to a third name without changing that roster goes RED. Import the constant and compare - do not re-spell the two names, which would make the arm agree with a copy rather than the source.\n(e) An override for a goal does not disturb the project default, and vice versa.\n\nDECLARE NO EXPORTED CONSTANT matching the security scan in the test file either - the scan reads source, not just production modules.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-provider-store.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-provider-store.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-provider-store.test.ts"
+      ],
+      "note": "Storetests now20: absentdefaults/projectfallback/goaloverride/mutualpreservation, realSQLiteclose+newinstance+actualeventprovider, acceptedset equals importedKNOWN_PROVIDERS + independentthird-namecontrol, unknownnames/types nowrites, mismatchedproject/runtimebadgoals failclosed, seveninvaliddurablebody/eventvariants. Independentreviewcaught weak default-update sequence; reordered explicitgoaloverridebeforedefaultupdate so override-lossmutation cannot hide. Productionunchangedthisstep. Three IN-MEMORYVite-transform drills (no shareddisksourcemutation, exactneedle/hitcount/diskbytesguards): acceptthirdprovider→1targetrosterarmRED; storelayerwrong→16refusaltestsRED; commandcompositionlayerwrong→5directunit/composedtestsRED. EachEXIT1expectedandhit1/diskunchangedtrue. Fresh restoredplainbroader8filegate19:55:19Z31.44s EXIT0: Test Files8passed(8),Tests696passed(696), includesunitdirectimport+registry+vocab/storedeps/V2/MCP/runtimeentrypoint. NativechildNode imports bothjsbridges and asserts functions→AGENT_PROVIDER_NODE_BRIDGES_OK EXIT0. Fullnameddaemon/security gates stillqueued; no complete_task or broadgreenclaim.",
+      "startedAt": "2026-09-06T19:52:12.655Z",
+      "completedAt": "2026-09-06T19:56:46.545Z"
     },
     {
       "stepId": "step-6",
       "description": "GATES AND SELF-REVIEW (DoD 4).\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm typecheck`.\nRoot `pnpm test` covers no apps/** file - say so.\nALSO RUN `pnpm test:security`. It is the lane that would catch a minted `*_LAYER` constant and it is invisible to both legs above. If it reds on a roster or cardinality arm, you declared a scanned constant - remove it rather than rostering it, because rostering owes BEFORE/AFTER/RACE coverage (completeness.security.ts:300-307) that is not this row's.\n\nSCOPE EVIDENCE - make each a command:\n- `git status --porcelain -- apps/daemon/src/http/health-read.ts` must be EMPTY. `KNOWN_PROVIDERS` is IMPORTED, not moved (rail 1), and task-509c6c16 is editing that file.\n- `git grep -n \"^export const [A-Z0-9_]*\\(LAYERS\\|LAYER\\|BOUNDARIES\\)\" -- apps/daemon/src/orchestrator/agent-provider-store.ts apps/daemon/src/orchestrator/agent-provider-command.ts` must return NOTHING.\n- `wc -l` the new module (250 target) and confirm agent-spawner.ts is untouched (rail 4).\n\nSELF-REVIEW:\n- Is the stub gone, or does a second handler still answer for this kind? Grep for both.\n- Does the `:530-536` arm now assert EXACTLY ONE write rather than \"something changed\"?\n- Are :255-257 and :1119-1129 still green? If the fence arm tripped, the registration is wrong, not the arm.\n- Does an unconfigured daemon still refuse `AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION` - grandchild B's arm, which this row must not break?\n- Is `goalId: \"\"` unambiguous, or could a real goal id ever be empty and collide with the project default?\n\nPATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when EMPTY. Disclose foreign red verbatim with paths. Disclose that daemon-command-registry.ts is past the 400-line cap at the merge-base and untouched beyond its one entry.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-provider-store.ts",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T19:56:47.312Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-d107a8ef",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -93,11 +125,35 @@
       "author": "worker-7bdbffac",
       "content": "CLAIM-TIME MEASUREMENT, delivered/working tree HEAD 17446e73b0f7bead6a3fa71536d940327d6ef076, 2026-09-06 16:32–16:35Z; NO SOURCE EDITS. Prerequisite B is DONE, landing.merged:true, completion 2d94a928ae6993e8d54936b45af8ccd367c33d86 per epicSiblings. git grep -n -E 'AGENT_PROVIDER_COMMAND_KIND|AGENT_PROVIDER_PAYLOAD_KEYS|runAgentProviderCommand|AGENT_PROVIDER_UNCONFIGURED' -- apps/daemon/src/orchestrator/agent-provider-command.ts apps/daemon/src/daemon-command-registry.ts => command.ts3 kind,4 frozen keys,9 function,11 refusal; registry.ts1 import,363 decisionOf(runAgentProviderCommand()). Get-ChildItem command.* => .ts/.js/.test.ts. git grep -n -E 'setAgentProvider|readAgentProvider' -- apps/daemon/src => zero: durable service absent.\n\nFULL existing unconfigured arms (git grep -n 'AGENT_PROVIDER' -- '*test*' '*spec*'):\nUNIT agent-provider-command.test.ts12–16:\nit(\"refuses an unconfigured provider command at composition, not bootstrap\", () => {\n  expect(runAgentProviderCommand).toThrowError(expect.objectContaining({\n    code: \"AGENT_PROVIDER_UNCONFIGURED\", layer: \"DAEMON_COMPOSITION\", httpStatus: 422,\n  }));\n});\nCOMPOSED daemon-command-registry.test.ts530–537:\nit(\"refuses a well-formed operator dispatch without any durable write\", () => {\n  const before = snapshot();\n  expect(send(\"cmd-provider-unconfigured\", \"project.set_agent_provider\", payload)).toMatchObject({\n    outcome: \"PORT_REFUSED\", stage: \"DISPATCH\", httpStatus: 422,\n    refusal: { code: \"AGENT_PROVIDER_UNCONFIGURED\", layer: \"DAEMON_COMPOSITION\" },\n  });\n  expect(snapshot()).toEqual(before);\n});\nIts payload :522 is {base:\"main\",goalId:\"\",provider:\"codex\"}; snapshot :523–528 opens same file SqliteEventStore, reads decisions and eventHorizon, closes in finally. Also literal ROWS :255–257 pins code AGENT_PROVIDER_UNCONFIGURED, kind project.set_agent_provider, layer DAEMON_COMPOSITION, payloadKeys [base,goalId,provider]. Consumer :1119–1129 sends {} and asserts row code/layer at DISPATCH. Therefore both composed arm and empty-payload row must change when real handler is wired. Unit absent-config arm stays untouched; nonoperator :539–546 and synchronous ADMIN entry :549–554 stay valid. registry.test.ts omitted from approved affectedFiles/newFiles. Independent read-only agent confirms no other source unconfigured consumers.\n\nForeign shared-tree dirty paths preserved; registry.ts has existing deploymentDeploy import/option/composition hunks, not mine. No paths created/modified and no gates launched.",
       "timestamp": "2026-09-06T16:35:53.029Z"
+    },
+    {
+      "id": "comment-3f3b91d8074c4075bf1e49b53e7018ca",
+      "author": "worker-f72a1438",
+      "content": "Step2 TDD in progress: planned storetests authored before behavior implementation; loadable API scaffold deliberately threw notimplemented,1file12/12failed19:43:31Z. Minimum store now10passed2failed because my test code wrongly assumed readEventsAfter returns array; actual CursorPage wrapper inspected and will correct test access (not relax assertions). No completionclaim. Store follows mandated environment-store directeventcommit, so composed snapshot must assert EXACT eventHorizon+1 and decisionCount+0, plus actual persisted event/reopenedread; a synthetic decisionCount+1 would require a different decisionledger API not the copiedshape. Command receipt is durable; no fabricated domainledgerdecision. Replan misplaced two other-commandanchors: project.activate251-258 and deployment.migrate_down1117-1138 remain untouched; provider actualmalformedpayloadrow263-265 consumed1169-1180 must reflect configuredpayloadrefusal. Within sixplannedpaths, no scopegrowth.",
+      "timestamp": "2026-09-06T19:45:12.321Z"
+    },
+    {
+      "id": "comment-c53c29e744644a07ad4eb378755131ba",
+      "author": "worker-f72a1438",
+      "content": "STEP6 pre-gate self-review evidence19:56Z. Full own tracked diffread and newstore/testread; independentsubagentreview no concreteblocker after dependencyinversion. Corrected missingadversarialtests (retry/no-doublewrite, defaultupdatepreservesoppositeoverride,7corruptshapes). Storeprojectbinding is checkedbeforeeachread/write; malformed durableevidence neverdefaultclaude; CASversion insideatomiccommit, retriesstoreconflict notmanufacturedreplay. Read-only result/refusalsfrozen, no shared mutablecache, alltestSQLitehandles/tempfinallycleanup; no providerspawn, /sessions, UI, MCPfence or layerroster edits. Synchronousregistryauthority/operatorchecks unchanged andgreen. Inputbase is recordedonlyasrequestidentity; settinglookupscopes areproject/goal. Directeventcommit deliberatelikeenvironmentstore: snapshot decisionCount+0,eventHorizon+1, actualreceipt/eventread notfakeledgerdecision. Newstore101physical lines, tests131, command33; registry569vsHEAD567, preexisting>400 andonly+1import/+1entryline. health-read andagent-spawnerstatusEMPTY. Bothtrackedgitgrepandfull-diskrg scan minted*_LAYER/LAYERS/BOUNDARIES zerohits (exit1), so untrackednewstore included too. gitdiffcheckEXIT0. PlainchildNode bridgeimport/functionsprobe EXIT0 AGENT_PROVIDER_NODE_BRIDGES_OK. Lastfreshbroader8files696tests0 includesallownplusvocab/storedeps/V2/MCP/runtimeentrypoint. THREEinmemoryproductiondrills logged in step5; no shareddiskmutations. Fullnameddaemon,rootpnpmtypecheck,securitygate NOTYETRUN; fullsuitequeued#2. Lastdaemontypecheck19:48EXIT1 onlytwoforeignTS2741deploymentfixtures138/133; notclaimedgreen. No backgroundprocesses, no ownedgatelease; sourceWIPnotdeliveryclaim.",
+      "timestamp": "2026-09-06T19:57:39.565Z"
+    },
+    {
+      "id": "comment-32f3d31e935443de9b4b2a62bc484a2b",
+      "author": "worker-d107a8ef",
+      "content": "STEP 6 GATE EVIDENCE (worker-d107a8ef), measured at HEAD f213b41d + this row's uncommitted diff.\n\n== LEG 1: `pnpm typecheck` -> EXIT 0 ==\nExecution evidence: 19 `$ tsc --project tsconfig.json` script echoes, every project printing `typecheck: Done`, including `apps/daemon typecheck: Done` and `apps/control-room typecheck: Done`. Elapsed 7.48s.\nPOSITIVE CONTROL (required because a 7s green over 19 projects could be incremental): planted `export const CONTROL: number = 'planted-not-a-number';` in a NEW file `apps/daemon/src/orchestrator/zz-typecheck-control-d107a8ef.ts`, ran `pnpm --filter @moe/daemon typecheck` -> EXIT 1 with `src/orchestrator/zz-typecheck-control-d107a8ef.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.` Control file removed in the same call; `git status --porcelain -- apps/daemon/src/orchestrator/` afterwards lists only this row's four paths and no control file. So the EXIT 0 is a real full compile, not a cached no-op.\nNOTE ON A STALE RED: the `apps/daemon/src/deployment/migrate-down-{journey,real}.test.ts` TS2741 `build`-member failure reported by the prior session (19:48Z) and by worker-adefb11e (20:05Z) is HEALED at f213b41d. Do not carry it forward.\n\n== LEG 2: `pnpm test:security` -> EXIT 1, FOREIGN, NOT THIS ROW ==\n`Test Files 2 failed | 10 passed (12)` / `Tests 6 failed | 994 passed (1000)`, 27.19s.\nFailing files: `tests/security/boundary-roster.security.ts`, `tests/security/durable-store-boundaries.security.ts`.\nVerbatim failing lines:\n  boundary-roster.security.ts:849:44  `expect(scanPrivateLayerDeclarations()).toHaveLength(EXPECTED_PRIVATE_COUNT)` -> `expected [ ...(74) ] to have a length of 73 but got 74`\n  boundary-roster.security.ts:862:23  `expect(numerator).toBe(EXPECTED_INVISIBLE_NUMERATOR)` -> `expected 74 to be 73`\nATTRIBUTION, by replicating the scanner EXACTLY (same `PRIVATE_DECLARATION_PATTERN` = /^const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))\\s*(?::[^=]+)?=/u, same `SCAN_ROOTS` = [\"apps\",\"packages\",\"adapters\"], same `isProductionModule` predicate from boundary-roster.security.ts:649) and diffing against `UNSCANNED_PRIVATE_LAYERS`:\n  SCANNED_PRIVATE_COUNT=74\n  ALLOWLIST_COUNT=73\n  UNLISTED=[\"LIVE_PREVIEW_LAYER@apps/control-room/src/live/live-preview.ts\"]\n  STALE=[]\n  OWNED_HITS=[]   (zero scanned declarations in any agent-provider-* or daemon-command-registry path)\n`apps/control-room/src/live/live-preview.ts` is UNTRACKED (`??` in git status) -> it is NOT at HEAD, so this is peer WIP dirt, not a HEAD red. It belongs to worker-adefb11e / task-33ceae56 (the preview-approve row). Left untouched: not reverted, not stashed, not deleted, not rostered.\nPATH-ATTRIBUTED BASELINE for this leg: failing-path set = {apps/control-room/src/live/live-preview.ts}; intersection with this row's owned paths = EMPTY.\nIndependently: `grep -nE \"^const [A-Z0-9_]+(LAYERS|LAYER|BOUNDARIES)\"` over all six owned paths returns NOTHING (exit 1), and the exported-form grep the plan named returns NOTHING. This row mints no scanned layer constant of either visibility.\n\n== SCOPE EVIDENCE ==\n`git status --porcelain -- apps/daemon/src/http/health-read.ts` -> EMPTY (KNOWN_PROVIDERS imported, never moved; task-509c6c16 owns that file).\n`git status --porcelain -- apps/daemon/src/orchestrator/agent-spawner.ts` -> EMPTY (untouched; 439 lines at HEAD).\n`wc -l`: agent-provider-store.ts 101 (target 250 OK), agent-provider-store.test.ts 131, agent-provider-command.ts 33, agent-provider-store.js 1, daemon-command-registry.ts 569, daemon-command-registry.test.ts 2368.\n\n== LINE-CAP DISCLOSURE, CORRECTING THE PLAN ==\nThe plan's step-3 text says `daemon-command-registry.ts` \"was 449 lines and past the 400 cap at the merge-base\". MEASURED: at the true merge-base `68eb1c5d` the file is 397 lines - UNDER the cap. It reached 567 lines on this branch through FOREIGN sibling rows landed between 68eb1c5d and f213b41d. This row's edit is `3 insertions(+), 1 deletion(-)` (one import line, one registry entry), taking it 567 -> 569. The over-cap condition is real at the branch parent but was not introduced here; this row adds nothing to it beyond the single entry the plan authorised.\n\n== STILL OWED ==\n`pnpm --filter @moe/daemon test` fresh foreground under the `full-suite-gate` lease (queued #1 behind worker-adefb11e / task-33ceae56). Root `pnpm test` is NOT named here and covers no apps/** file.",
+      "timestamp": "2026-09-06T20:04:27.969Z"
+    },
+    {
+      "id": "comment-a24e8334446846ff9e83b8dca094793b",
+      "author": "worker-d107a8ef",
+      "content": "STEP 6 SELF-REVIEW (worker-d107a8ef). Each of the plan's five questions answered by a MEASUREMENT, not by reading the design.\n\n1. IS THE STUB GONE, OR DOES A SECOND HANDLER STILL ANSWER FOR THIS KIND?\nGone. `daemon-command-registry.ts` has exactly ONE entry for the kind and the diff is the whole change:\n  -      if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(runAgentProviderCommand());\n  +      if (kind === AGENT_PROVIDER_COMMAND_KIND) return runAgentProviderCommand({\n  +        store, projectId, now: clock, envelope, setProvider: setAgentProvider });\nThe no-argument branch INSIDE `runAgentProviderCommand` survives deliberately - that is grandchild B's unconfigured-composition unit arm (rail 3: \"Unconfigured-daemon tests stay in B\"), reachable only by a direct call with no context, never by dispatch.\nDROPPING `decisionOf` IS CORRECT AND CHECKED, not an oversight: `decisionOf` (daemon-command-dispatch.ts:131) accepts a union of nine outcome types that does NOT include this handler's result, and it exists to unwrap `outcome.decision.decisionId` - which a direct event commit does not mint. `runCriterionCommandEdge` at :361 is the same shape and also returns without it. `effectId: null` is the established form for direct-commit edges: `daemon-command-environment.ts:101` (the module the plan told me to copy), plus criterion-command-edge.ts:36, repository-recovery-command.ts:32, preview-daemon-edge.ts:308. `DurableDecision.effectId` is typed `string | null` (http-contract.ts:155).\n\n2. DOES THE :530-536 ARM ASSERT EXACTLY ONE WRITE RATHER THAN \"SOMETHING CHANGED\"?\nYes, and by equality on both axes:\n  expect(snapshot()).toEqual({ decisions: before.decisions, eventHorizon: before.eventHorizon + 1n });\nA handler writing twice fails (`+2n`), and a handler that manufactured a domain decision row fails on `decisions`. The `snapshot()` technique the arm used to prove \"no writes\" is preserved verbatim; the describe was renamed and the assertion transitioned, NOT deleted. It then reopens a fresh `SqliteEventStore.openForProject(storePath, PROJECT)` and reads `codex` back through `readAgentProvider` (DoD 3's second-instance clause).\n\n3. GOALID \"\" - COULD A REAL GOAL ID BE EMPTY AND COLLIDE WITH THE PROJECT DEFAULT?\nNo. `goalAggregateIdOf` (apps/daemon/src/goals/goal-identity.ts:27-29) returns `${GOAL_AGGREGATE_PREFIX}${commandId}` - a non-empty constant prefix on every minted goal id, so no real goal id can ever be the empty string. The sentinel is unambiguous by construction, and the store says so in a comment at agent-provider-store.ts:72-73 rather than leaving it implicit in a key format.\n\n4. KNOWN_PROVIDERS COUPLING.\n`apps/daemon/src/http/health-read.ts:35` (plan said :34 - off by one, disclosed): `export const KNOWN_PROVIDERS = Object.freeze([\"claude\", \"codex\"] as const);`. Because of `as const`, `type AgentProvider = (typeof KNOWN_PROVIDERS)[number]` narrows to `\"claude\" | \"codex\"` at the type level, and `isProvider` tests membership of the IMPORTED array at runtime - no second list anywhere. The store test compares the accepted set to the imported constant rather than re-spelling the two names, so widening production to a third name without editing that roster goes RED.\n\n5. FAIL-CLOSED SURFACE, re-read adversarially.\n`readState` rejects on: non-string/empty projectId, a store whose `getHealth().projectId` differs from the bound projectId (SCOPE_INVALID), and any event whose type, key count (!== 3), version, goalId type or provider membership is off (STORE_UNREADABLE) - it never silently falls back to `claude` on corrupt bytes. `decoder` is `new TextDecoder(\"utf-8\", { fatal: true })`, so invalid UTF-8 throws into the same STORE_UNREADABLE catch rather than decoding to replacement characters. Read fallback is exact-goal override -> project default -> `claude`, three lookups, no key concatenation to get off by one on. Refusals and read answers are all `Object.freeze`d.\n\nRESIDUAL RISK ACCEPTED AND STATED: `setAgentProvider` reads `getAggregateVersion` immediately before `commit`, so a concurrent writer on the same aggregate loses the optimistic-concurrency race and the commit throws rather than silently overwriting. That is the environment-store's own shape and is fail-closed; no second write can occur (the retry arm pins zero second write on a repeated command identity, for both an identical payload and a CHANGED provider).",
+      "timestamp": "2026-09-06T20:06:52.335Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.227Z",
-  "updatedAt": "2026-09-06T17:51:10.266Z",
+  "updatedAt": "2026-09-06T20:08:26.011Z",
   "dependsOn": [
     "task-c422b106af2945b1a1ad4ed49556bf66"
   ],
@@ -105,16 +161,24 @@
     "firstClaimAt": "2026-09-05T16:49:23.744Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 1
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-aa54e231",
-    "worker-7bdbffac"
+    "worker-7bdbffac",
+    "worker-f72a1438",
+    "worker-d107a8ef"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T17:51:08.048Z",
   "planningNotes": {
@@ -348,10 +412,29 @@
     "at": "2026-09-05T23:16:20.696Z"
   },
   "workStartedAt": "2026-09-06T16:33:01.400Z",
-  "blockedReason": null,
-  "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedReason": "RESOURCE WAIT ONLY - implementation COMPLETE, every non-leased obligation discharged. Queued #1 on full-suite-gate behind worker-adefb11e / task-33ceae56 (granted 19:57:05Z, worker alive, legitimately mid-run). NOT force-releasing.\n\nOWED ON GRANT, nothing else: `pnpm --filter @moe/daemon test` fresh foreground, quoting its `Test Files N passed` count line, then complete_step step-6 and complete_task.\n\nALREADY DISCHARGED (evidence: comment-32f3d31e935443de9b4b2a62bc484a2b gates, comment-a24e8334446846ff9e83b8dca094793b self-review):\n- `pnpm typecheck` EXIT 0, 19 tsc script echoes all `Done`. Positive control: planted TS2322 in a NEW daemon file reddened it EXIT 1; control removed, porcelain clean. The migrate-down-{journey,real}.test.ts TS2741 red reported at 19:48Z and 20:05Z is HEALED at f213b41d - do not carry it forward.\n- `pnpm test:security` EXIT 1, `Tests 6 failed | 994 passed (1000)`, 100% FOREIGN. Sole cause `LIVE_PREVIEW_LAYER@apps/control-room/src/live/live-preview.ts`, an UNTRACKED peer WIP file of task-33ceae56 - proven by replicating the scanner exactly: SCANNED=74, ALLOWLIST=73, UNLISTED=[that one], STALE=[], ZERO scanned declarations in any owned path. Owned-path intersection EMPTY. Peer file untouched.\n- Scope: health-read.ts and agent-spawner.ts both porcelain-EMPTY. No exported or module-private *_LAYER/*_LAYERS/*_BOUNDARIES minted in any of the six owned paths.\n- Adversarial self-review complete; all five plan questions answered by measurement.\n\nPrior scoped run (8 files, EXIT 0, `Test Files 8 passed (8)` / `Tests 696 passed (696)`) plus three mutation drills are recorded but NOT substituted for the named full daemon gate.\n\nTWO PLAN FACTS MEASURED FALSE, for the architect: (1) step 3 says daemon-command-registry.ts \"was 449 lines and past the 400 cap at the merge-base\" - at merge-base 68eb1c5d it is 397 lines, UNDER the cap; it reached 567 via foreign sibling rows, this row adds +3/-1. (2) KNOWN_PROVIDERS is at health-read.ts:35, not :34.",
+  "blockedResourceId": "full-suite-gate",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T20:08:26.011Z",
   "priorBlockedReason": "Claim-time scope remeasurement found mandatory asserting consumers omitted from the effective approved plan (fresh get_context: no active amendments). NO SOURCE EDITS. Step5 wires real provider store, but apps/daemon/src/daemon-command-registry.test.ts255–257/1119–1129 pins empty-payload AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and530–536 valid operator refusal plus NO writes; only command.test.ts was listed. The valid composed arm must transition to durability, not unconditional refusal; preserve unit absent-config and nonoperator authorization. Step3 also requires AGENT_PROVIDER_LAYERS + AGENT_PROVIDER_CODE_LAYERS; BOTH match tests/security/boundary-roster.security.ts603, failing unrostered scan736–738/cardinality746–747, with added boundary coverage enforced by completeness.security.ts300–307. Plan codebaseInsights4 asserts no global roster obligation incorrectly. Planned9 paths +omitted registrytest=10 already, before security consumers. Cannot implement honestly green within approved scope or rename/reformat declarations to evade scanner. Full command/arm source in row comment. Prerequisite B is DONE/merged2d94a928, NOT a dependency block. Foreign WIP preserved, not block premise.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/orchestrator/agent-provider-store.ts",
+    "apps/daemon/src/orchestrator/agent-provider-store.js",
+    "apps/daemon/src/orchestrator/agent-provider-store.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "SixfiledurableagentProvider implementation and tests ready in sharedWIP, NOT landed. Steps1-5 completed; latest8files696testsEXIT0 plusrealNodebridges0; threeinmemoryproductiondrillsREDanddiskunchanged. Store101lines,command33; registryoneimport/entry; defaults/overrides/knownroster/persistence/scopes/corruption/retryno-doublewrite covered. FullhandoffSerena task-task-c851961b968942f880950acc16dc575a-handoff.",
+      "whatRemains": "Step6: leasefull-suite-gate/currentRAMfloor; freshnamed pnpm --filter @moe/daemon test, pnpm typecheck, pnpm test:security. Recordcounts/path-attributedred, repeatadversarial, onlycompletewithnamedEXIT0. Allsourcefrozen; no productionworkknownowed.",
+      "pitfalls": "Command must TYPE-onlyimportstore (health/vocabularycycle); registryinjectssetter. DirecteventcommitmeansdecisionCount+0/eventHorizon+1; retrystoreCOMMAND_ID_CONFLICT503, notREPLAYED. Sixdeclaredpathsareallours;195historicalunattributedpathsforeign. LastHEADd0f4 afterownerfixes; 696runprelatestjoin, don'tclaimfreshintegratedgreen. SourceWIPnotcompletioncommit; no manualgit.",
+      "openQuestions": "No own correctness blocker. OlderforeignTS2741deployfixtures may nowbefixedbyincomingownercommits; reverify ratherthanreuse red. Userdirectednexttask; queueleft/no leases.",
+      "releasedAt": "2026-09-06T19:59:45.412Z",
+      "releasedBy": "worker-f72a1438",
+      "reason": "Explicit user-directed handoff: user asked 'next task'. Implementationsteps1-5 done and allsixpathsdeclared; step6 remainingverificationonly, no tests/processes running. Left full-suite-gate queue before release."
+    }
+  ]
 }

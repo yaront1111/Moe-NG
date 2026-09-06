@@ -103,7 +103,12 @@
     "task-463f195efd2f4fd2886790029a474194",
     "task-ff41c5c9efa34494b7b91e6f0ddcb7c2",
     "task-0a56ecee17b740a3abb7f850e5250c99",
-    "task-537320eed95348dc9bc3afc879dc0563"
+    "task-537320eed95348dc9bc3afc879dc0563",
+    "task-2db55fcaad604aa4861139b22941095f",
+    "task-60008fcf4719490f97075c7754ac5807",
+    "task-122b55fd2c284174876bd1d5573bdcc5",
+    "task-8f1f15bcb0ab40d88f07134a757630e4",
+    "task-c9e76f53010149adb2ba1ba55838f41c"
   ],
   "priority": "HIGH",
   "order": 113,
@@ -123,7 +128,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-06T19:27:01.500Z",
+  "updatedAt": "2026-09-06T20:06:59.339Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 8,

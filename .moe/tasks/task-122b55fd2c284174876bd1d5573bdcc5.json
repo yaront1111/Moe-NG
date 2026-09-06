@@ -14,8 +14,69 @@
     "No filename/diff inference, no browser-minted node authority, no silent rewrite of historical hashes.",
     "This row owns declaration and read contract only; parent78 owns wording/UI. Test every changed codec/canonicalization consumer."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "COMPLETE THE CENSUS AND CHOOSE THE COMPATIBILITY POLICY BEFORE CHANGING FORMAT (DoD 3 requires this explicitly). NO EDITS.\n\nRE-RUN THE WHOLE-TREE CENSUS: `git grep -ln \"NODE_DEFINITION_KEYS\\|NodeDefinitionKey\" -- 'packages/**' 'apps/**' 'tests/**'`. At plan time: node-authority-contract.ts, node-authority-codec.ts, node-authority-compose.ts, node-authority-public.ts, node-authority-codec.test.ts, index-surface.test.ts. Then widen it - a fixture body that must now carry the member will not mention the roster at all, so ALSO grep for bodies constructed with the roster's field names (`nodeKey` beside `writeScopes`, say) across apps/daemon fixtures.\n\nREAD THE THREE GATES AND CONFIRM THEY STILL READ AS MEASURED:\n  codec:146 `hasOnlyOwnStringKeys(value, NODE_DEFINITION_KEYS)` - exact-key, refuses an extra field;\n  codec:150 `pick(value,\"schemaVersion\") !== NODE_AUTHORITY_SCHEMA_VERSION` - a SINGLE equality, not a supported set;\n  codec:70-71 `nodeBodyDigest(bodyJson)` then `canonicalEnvelopeJson(digest, bodyJson)` - the digest is bound to the canonical order, and contract:65 says the roster IS that order.\n\nTHEN WRITE THE POLICY DOWN before any format change, as DoD 3 demands. It must answer: which schema versions are SUPPORTED for read; what canonical key order each uses; how an old body's digest stays byte-identical; and how UNKNOWN (a pre-declaration node) differs from an explicit empty declaration. Record it in the row and in a comment at the contract.\n\nIF THE POLICY YOU REACH REQUIRES REWRITING ANY HISTORICAL DIGEST, STOP AND REPORT. Rail 1 forbids it, and a plan that discovers this at step 5 has already changed the format.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE ROSTER MEMBER (DoD 1), in `packages/scheduler/src/node-authority/node-authority-contract.ts`.\n\nAdd the migration-identifier member to `NODE_DEFINITION_KEYS` (:65-71) AT ITS ALPHABETICAL POSITION - the roster's own comment says it is \"the one canonical serialization order\", so position is not style, it is the serialization.\n\nCLASSIFY IT AS CALLER-STATED, NOT DERIVED. DoD 1 says \"a node author can explicitly declare\", so it must appear in `NODE_AUTHORITY_DRAFT_KEYS` (:76) and NOT in `DERIVED_KEYS` (:73). A derived member cannot be stated by a caller, which would turn the declaration into inference - exactly what rail 1 forbids.\n\nCONFIRM IT BELONGS IN NEITHER `NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS` (:80) NOR `NODE_AUTHORITY_EXCLUDED_STATE_KEYS` (:85), and say why in the note - those rosters exist to keep identity and execution state out of the contract, and a reader should not have to re-derive that this member is neither.\n\nBOUND IT: DoD 1 requires bounded identifiers, rejecting malformed, DUPLICATE and OVERSIZED declarations. Add the limits beside the existing ones in `NODE_AUTHORITY_LIMITS` rather than inventing a second limits home, and pick a stable refusal code from the existing `NODE_AUTHORITY_CODES` roster (:88) - do not mint a new code family, and declare no exported constant matching the security lane's `^export const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))` scan.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "VERSIONED ADMISSION AND SERIALIZATION (DoD 2 and 3) - the row's real design work, in `node-authority-codec.ts`.\n\nCHANGE codec:150 FROM A SINGLE EQUALITY TO A SUPPORTED SET. Today `!== NODE_AUTHORITY_SCHEMA_VERSION` refuses everything else; after this row an OLD version is still readable and a NEW one carries the member. DoD 3's \"existing persisted nodes without this member remain readable without minting a false declaration\" is unreachable without this.\n\nSERIALIZE EACH VERSION IN ITS OWN KEY ORDER. codec:155 iterates `NODE_DEFINITION_KEYS` to build the body; an old body must be built from the OLD roster so `nodeBodyDigest` (:70) reproduces its ORIGINAL digest byte-for-byte. Rail 1: no silent rewrite of historical hashes. Assert that in step 5 against a body persisted before this change, not against one you construct.\n\nEXACT-KEY STAYS EXACT (:146) - per version. An old body carrying the new member is malformed; a new body missing it is whatever your policy says (absent-means-UNKNOWN, or required-and-empty) - state which and enforce it.\n\nUNKNOWN IS NOT EMPTY (DoD 3). A pre-declaration node has NO declaration; a node declaring none has an explicit empty one. Represent these differently in the decoded type - an optional field collapsing both to `[]` is the failure this clause names, and it is invisible until someone asks \"did the author say there are none, or did nobody ask?\".\n\n`node-authority-compose.ts:246` stamps `NODE_AUTHORITY_SCHEMA_VERSION` on what it composes - make sure it stamps the NEW version and that its output round-trips.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.ts",
+        "packages/scheduler/src/node-authority/node-authority-compose.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE EXPORT SURFACE. `packages/scheduler/src/node-authority/node-authority-public.ts:108` exports `NODE_DEFINITION_KEYS`; export whatever new type or limit the declaration needs alongside it, and nothing more.\n\n`packages/scheduler/src/index-surface.test.ts` PINS THAT SURFACE - :181 asserts `[\"NODE_DEFINITION_KEYS\", \"array\"]` among the exported shapes and :497 types `const keys: readonly NodeDefinitionKey[] = scheduler.NODE_DEFINITION_KEYS`. A new export must be added to that pin in the same diff or the package's own surface test reds.\n\nADD NOTHING TO THE PUBLIC SURFACE THAT THE READ ROW DOES NOT NEED. task-de65294bfa2649b99afc3aa4aa9399d0 consumes this from the daemon, so export the decoded TYPE it must name; keep the codec's internals internal. A public export is a contract another package can pin, and this one is already pinned twice.\n\nIf the declaration introduces a new runtime module, it needs a one-line `.js` bridge (DoD 5) and, if it crosses a workspace boundary, the consuming manifest and lockfile edge - but prefer putting it in the existing node-authority modules, which need neither.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-public.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE RED-FIRST ARMS (DoD 1, 2, 3) - in `node-authority-codec.test.ts`, TARGETING THE PRODUCTION SEAM, not a helper transcription (DoD 2 says so explicitly).\n\nDoD 1 - DECLARATION IS STATED, NOT INFERRED: zero, one and multiple identifiers each admit. Malformed, DUPLICATE and OVERSIZED each refuse with a stable code AND layer. And assert the negative that rail 1 is about: a node whose objective, filenames, writeScopes or verifier output mention a migration but which declares none has NO declaration. That arm is what stops inference creeping back.\n\nDoD 2 - AUTHORITY BINDING: mutating ONLY the declared identifiers CHANGES the authority binding or is refused. Assert the digest actually moves; a member excluded from canonical serialization would leave it unchanged and the declaration would be unauthenticated. This is the arm that proves the member is inside the digest rather than beside it.\n\nDoD 3 - COMPATIBILITY, asserted against a body PERSISTED BEFORE THIS CHANGE:\n- it still decodes;\n- its digest is BYTE-IDENTICAL to what it was (rail 1);\n- it reads as UNKNOWN, not as an empty declaration;\n- a new-version body declaring none reads as explicit empty, distinct from the above.\nUpdate `:309` (`Object.keys(definition).sort()` toEqual the roster) in the same diff - it fails by construction on an added key. `:310`'s `length >= 18` is a floor and survives.\n\nRED-FIRST: write each arm before the production change and confirm it fails for the right reason.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE FIXTURE SWEEP - the consumers that never name the roster.\n\nAny fixture or test constructing a node body must still satisfy codec:146's exact-key check for its declared version. These do not mention `NODE_DEFINITION_KEYS`, so step 1's symbol census does not find them: search for bodies built from the roster's field names instead (`nodeKey` beside `writeScopes`, `admissionAmounts`, `repositoryBaseTree`) across apps/daemon fixtures - the census listed activation-world-fixtures.ts, budget-ledger-fixtures.ts, foundation-registry-fixtures.ts, graph-query-test-fixtures.ts and journey-authority-bodies.ts among the files touching node authority.\n\nFOR EACH, DECIDE DELIBERATELY: does it declare the OLD version (and so stay untouched, proving compatibility) or the NEW one (and so gain the member)? Leaving them all on the old version is a legitimate and probably correct answer - it means the compatibility path is exercised by every existing test rather than by one bespoke arm. Say which you chose and why.\n\nIF THIS SWEEP EXCEEDS THIS PLAN'S FILE ROSTER, STOP AND REPORT rather than taking the extra paths. The row's description demanded the census up front precisely so this is not discovered mid-flight; a wider sweep than expected is a re-plan or a split, not a quiet expansion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND SELF-REVIEW (DoD 5).\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm test` - packages/scheduler is in the ROOT lane, so this IS valid evidence for this row's own package.\n- `pnpm --filter @moe/daemon test` - the fixture sweep touches daemon fixtures.\n- `pnpm typecheck`.\nSay which leg covers which half rather than quoting them interchangeably, and note that root `pnpm test` covers no apps/** file.\n\nSELF-REVIEW, and the first two are the ones that lose data if wrong:\n- IS ANY HISTORICAL DIGEST DIFFERENT? Take a body persisted before this change, decode it, re-serialize it, and compare the digest byte-for-byte with what was stored. Rail 1 forbids a silent rewrite, and nothing else in the suite would notice one.\n- IS UNKNOWN STILL DISTINGUISHABLE FROM EXPLICIT EMPTY after a full round-trip through persistence and replay? A codec that preserves it but a store that does not is the same defect one layer down.\n- Can the declaration be reached WITHOUT a caller stating it - from an objective, a filename, a diff, a writeScope or verifier output? Grep the new code for any read of those.\n- Is the member inside the canonical order (so the digest binds it) rather than beside it?\n- Did `index-surface.test.ts` need an update, and did you make it rather than working around it?\n- Did the fixture sweep stay inside this plan's roster?\n\nMUTATION DRILL: `git status --porcelain` the exact paths first. All files here are TRACKED, so `git diff -- <path>` is a valid restore proof. Mutate the canonical order to exclude the new member and confirm the DoD-2 digest arm reds; restore and prove it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.ts",
+        "packages/scheduler/src/node-authority/node-authority-contract.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,5 +96,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T19:15:27.611Z",
-  "updatedAt": "2026-09-06T19:21:36.976Z"
+  "updatedAt": "2026-09-06T20:07:10.313Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-06T20:03:45.024Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-06T20:07:08.175Z",
+  "planningNotes": {
+    "approachesConsidered": "BUMPING `NODE_AUTHORITY_SCHEMA_VERSION` AND ADDING THE KEY. Rejected on measurement: codec:150 is a single equality against the current version, so every historical node would refuse NODE_AUTHORITY_UNSUPPORTED_SCHEMA on readback - the exact opposite of DoD 3.\n\nADDING THE KEY WITHOUT A VERSION BUMP. Rejected: codec:146 is exact-key, so either old bodies refuse MALFORMED, or - if the key is made optional - the canonical order changes and every historical digest shifts, which rail 1 forbids as a silent rewrite of historical hashes.\n\nCHOSEN: a SUPPORTED-VERSION SET with per-version canonical key order. Old bodies keep their order, their key set and their digest; new bodies carry the member. That is the only shape satisfying DoD 2 (declaration survives digest binding) and DoD 3 (old nodes readable, UNKNOWN distinct from explicit empty) at once, and it is why the description warns this is not a safe additive change.\n\nDERIVED vs STATED. The member must be CALLER-STATED (DoD 1: \"a node author can explicitly declare\"), so it belongs in `NODE_AUTHORITY_DRAFT_KEYS` and NOT in `DERIVED_KEYS`. Putting it in the derived set would make it uninputtable and turn DoD 1 into inference, which rail 1 forbids.\n\nSPLITTING OFF THE READ CONTRACT. The row's title and description name two subjects and the authority half alone touches the roster, three derived rosters, the codec's three gates, compose, the public surface and two asserting test files. task-de65294bfa2649b99afc3aa4aa9399d0 takes DoD 4.\n\nSize: 6 files, 7 steps.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06. The row's description demands the consumer census BEFORE plan submission - \"Adding a field to a frozen hash without legacy handling is not a safe additive UI change\" - so that census is below and it changed both the scope and the design.\n\nTHE ROSTER AND ITS THREE GATES. `packages/scheduler/src/node-authority/node-authority-contract.ts:65-71`: `NODE_DEFINITION_KEYS` is \"The closed field roster, alphabetical - the one canonical serialization order\", 19 keys. Three derived structures hang off it:\n  :73 `DERIVED_KEYS = [\"criterionBindings\",\"monotonicPredicateProofs\",\"planExecutionContentDigest\",\"schemaVersion\"]`\n  :76 `NODE_AUTHORITY_DRAFT_KEYS` = the roster MINUS derived - \"the caller-stated subset; the four derived fields are never accepted as input\"\n  :80 `NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS`, :85 `NODE_AUTHORITY_EXCLUDED_STATE_KEYS`\nSo a new member must be placed ALPHABETICALLY (the roster IS the canonical order) and classified as stated-or-derived.\n\nTHE CODEC IS EXACT-KEY AND SINGLE-VERSION - and that is the crux of DoD 3. `node-authority-codec.ts`:\n  :146 `if (!hasOnlyOwnStringKeys(value, NODE_DEFINITION_KEYS))` -> refuse NODE_AUTHORITY_MALFORMED. An extra field is rejected today.\n  :150 `if (pick(value, \"schemaVersion\") !== NODE_AUTHORITY_SCHEMA_VERSION)` -> refuse NODE_AUTHORITY_UNSUPPORTED_SCHEMA.\nTHAT SECOND CHECK IS A SINGLE EQUALITY, NOT A SUPPORTED SET. So a naive version bump makes EVERY historical node refuse UNSUPPORTED_SCHEMA on readback, which breaks DoD 3's \"existing persisted nodes without this member remain readable\". And leaving the version alone while adding a key breaks :146 for old bodies or silently changes the digest for all of them. NEITHER SIMPLE MOVE WORKS - the codec has to accept a supported SET of versions, serialize each version's own key set, and bind the digest per version. That is the \"legacy handling\" the description says is mandatory, and it is the row's real design work.\n\nTHE DIGEST IS BOUND TO THE SERIALIZATION: :70 `digest = nodeBodyDigest(bodyJson)`, :71 `bytes = encoder.encode(canonicalEnvelopeJson(digest, bodyJson))`. Adding a key to the canonical order changes the digest of anything serialized under the new order - so historical bodies MUST keep the old order (rail 1: \"no silent rewrite of historical hashes\").\n\nEXACT-KEY / DIGEST / SCHEMA ASSERTING CONSUMERS, censused whole-tree (`git grep -ln \"NODE_DEFINITION_KEYS|NodeDefinitionKey\"` over packages, apps, tests):\n  packages/scheduler/src/node-authority/node-authority-contract.ts   (the roster and its three derived rosters)\n  packages/scheduler/src/node-authority/node-authority-codec.ts      (:146 exact-key, :150 schema, :70-71 digest, :155 the per-key read)\n  packages/scheduler/src/node-authority/node-authority-compose.ts    (:246 stamps NODE_AUTHORITY_SCHEMA_VERSION)\n  packages/scheduler/src/node-authority/node-authority-public.ts     (:108 exports the roster)\n  packages/scheduler/src/node-authority/node-authority-codec.test.ts (:309 `Object.keys(definition).sort()` toEqual the roster; :310 `length >= 18`)\n  packages/scheduler/src/index-surface.test.ts                       (:181 pins the export as an array; :497 types it)\nThe `>= 18` at :310 is a floor, not an equality, so it survives an addition - but the `toEqual` at :309 does not, and neither does any fixture body that must now carry the member.\n\nSCOPE SPLIT: this row's DoD 4 (the `/runs/read` contract and the browser decoder) went to task-de65294bfa2649b99afc3aa4aa9399d0, which dependsOn this row. `runs-read-contract.ts:76-94` and `live-runs.ts:58-72` carry no identifiers today and are not this row's paths."
+  },
+  "planApprovedAt": "2026-09-06T20:07:10.313Z"
 }

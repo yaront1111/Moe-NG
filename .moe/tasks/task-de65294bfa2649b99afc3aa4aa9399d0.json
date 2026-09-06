@@ -1,0 +1,40 @@
+{
+  "id": "task-de65294bfa2649b99afc3aa4aa9399d0",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "/runs/read serves the declared migration identifiers and the browser decoder preserves them",
+  "description": "SPIDR child of task-122b55fd2c284174876bd1d5573bdcc5, filed by architect-fa3a3e17 on 2026-09-06. That row's own title names two subjects - \"declare migration identifiers through durable authority\" AND \"Runs reads\" - and its description says \"Scope is authoritative declaration and production read contract\". Measured, those are far apart: the authority half touches the scheduler's frozen key roster, its canonical serialization, its digest binding and every compile/seal/replay consumer (10+ daemon files reference `nodeAuthorityHash`/`NodeDefinition` before the read contract is reached). The two together are well past a workable plan. THE PARENT KEEPS THE AUTHORITY (its DoD 1, 2, 3); this row takes the READ CONTRACT (its DoD 4).\n\ndependsOn the parent, because a read cannot serve a member the authority has not yet declared.\n\nTHE GAP, MEASURED AT HEAD by architect-fa3a3e17:\n- `apps/daemon/src/http/runs-read-contract.ts:76-94` carries no migration identifiers.\n- `apps/control-room/src/live/live-runs.ts:58-72` likewise none.\nSo the declaration the parent lands is invisible to the browser until this row serves it.\n\nWHAT THIS ROW OWNS: the production `/runs/read` contract serving the declared identifiers for the CORRECT EXECUTION IDENTITY, and the browser's exact-key decoder preserving them.\n\nFOUR PROPERTIES THE PARENT'S DoD 4 NAMES, all of them read-side and none of them obvious:\n1. THE CORRECT EXECUTION IDENTITY. A declaration belongs to one node's execution, and the read must not attribute it to another.\n2. NO SHARED-NODE-KEY CROSS-GOAL BLEED. Node keys are shared across goals; a read keyed on nodeKey alone will serve one goal's declaration on another goal's run. This is the defect most likely to pass a single-goal test.\n3. TWO DECLARED IDENTIFIERS BOTH SURVIVE - a read that keeps only the first passes every single-identifier fixture.\n4. MALFORMED WIRE FAILS CLOSED, with a stable code and layer.\nAND: NO RECEIPT OWNERSHIP INFERRED BY MATCHING FILENAME OR SHA (parent rail 1). If the read cannot establish ownership from durable identity, it serves nothing rather than guessing.\n\nNOT IN SCOPE: the declaration itself, the key roster, canonical serialization, the digest binding, schema versioning and compatibility - all the parent's. No UI wording or rendering: task-78eedd8ebc2b43c581ac21ea28648a9a owns that and renders via board-lanes.tsx (goal-nodes.tsx is only a wrapper).</description>",
+  "definitionOfDone": [
+    "Production `/runs/read` serves the declared migration identifiers for the CORRECT EXECUTION IDENTITY, asserted against a declaration written through the parent's real authority path - not a hand-built frame and not a fixture that mints the member directly.",
+    "NO SHARED-NODE-KEY CROSS-GOAL BLEED: two goals whose runs share a nodeKey, only one of which declares identifiers, are asserted separately - the declaring goal serves them and the other serves none. A read keyed on nodeKey alone passes a single-goal test and fails this one, which is why it is its own clause.",
+    "TWO DECLARED IDENTIFIERS BOTH SURVIVE the read and the browser decoder, asserted by value and by count. A read or decoder that keeps only the first passes every single-identifier fixture.",
+    "THE BROWSER DECODER IS EXACT-KEY AND PRESERVES THE MEMBER: `apps/control-room/src/live/live-runs.ts` decodes it, an unknown key and a missing key each refuse with the specific code AND the layer that refused, and a MALFORMED wire fails closed rather than dropping the member silently.",
+    "A RUN WITH NO DECLARATION IS DISTINCT FROM ONE DECLARING NONE - carry the parent's UNKNOWN-vs-explicit-empty distinction through the wire and the decoder rather than collapsing both to an empty array. Assert both.",
+    "NO OWNERSHIP INFERRED FROM A FILENAME OR A SHA (parent rail 1). If durable identity does not establish which execution a declaration belongs to, serve nothing and refuse - assert that path rather than falling back to a match.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Root `pnpm test` covers no apps/** file, so say that rather than quoting a bare root count line."
+  ],
+  "taskRails": [
+    "READ CONTRACT ONLY. The declaration, the key roster, canonical serialization, the digest binding and schema compatibility are the parent's (task-122b55fd). Touch none of packages/scheduler.",
+    "NO OWNERSHIP BY FILENAME OR SHA MATCH. Establish it from durable identity or serve nothing.",
+    "NO CROSS-GOAL BLEED. Node keys are shared across goals; key the read on the execution identity, not on nodeKey alone.",
+    "NO UI. Wording and rendering belong to task-78eedd8e, which renders via board-lanes.tsx.",
+    "EXACT-KEY DECODING with a stable code AND layer; a malformed wire fails closed rather than dropping the member."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-122b55fd2c284174876bd1d5573bdcc5",
+  "dependsOn": [
+    "task-122b55fd2c284174876bd1d5573bdcc5"
+  ],
+  "priority": "HIGH",
+  "order": 112.74,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T20:05:36.694Z",
+  "updatedAt": "2026-09-06T20:05:36.694Z"
+}

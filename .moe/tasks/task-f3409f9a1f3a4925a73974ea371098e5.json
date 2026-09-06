@@ -87,8 +87,8 @@
       "completedAt": "2026-09-06T19:58:43.540Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -119,21 +119,31 @@
       "author": "worker-deb4c7d8",
       "content": "LIVE DRIVE (DoD 6): A REAL SEAT SUBMITTED A DESIGN. Not the e2e double, not a scripted POST.\n\nDriver: D:/projexts/UnAI/.moe-next/live-drive-wdeb4c7d8/drive2.mjs (outside the repo), fresh scratch project `unai-design-drive`, real daemon-main + real demo-seed + real agent-wrapper-main with MOE_AGENT_COMMAND=claude. The script itself never posts design.submit -- everything below the wrapper spawn is the seat.\n\nFINDING 1, from v1 of the drive: A SCRIPT CANNOT APPROVE GATE 1, BY DESIGN. Driving `product_contract.approve_gate_1` with the daemon credential answers 422:\n  {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT\",...}}\n`product-contract-gate-1-bearer.ts:159` refuses when `readPrincipalRecord(store, witness.sessionId)` is ABSENT, and `:161` refuses `PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED` for any principal that is not HUMAN. That is the epic's human-gate fence holding: the operator credential is not a paired human. v2 therefore pairs a REAL headless browser (label 16ab-34ae-3ffd typed into the daemon's --operator-stdin) and clicks `cr.gate1.approve`; `/product-contract/pending/read` then answers outcome NONE.\n\nTRANSCRIPT, verbatim from drive2.log:\n  19:09:36.070 design.submit offered: {\"commandKind\":\"design.submit\",\"expectedVersion\":0,\"inputSchemaVersion\":\"moe-bootstrap-command/1\",\"targetAggregateId\":\"design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93\",...}\n  19:09:39.036 [wrapper] design.submit@design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93: SPAWNED\n  19:09:49.125 [wrapper] nothing to staff (surface SURFACE, active 2)\n  19:09:56.426 design read 200 {\"code\":\"DESIGN_REVISION_ABSENT\",\"layer\":\"LEDGER\",\"ok\":false,...}\n  19:10:36.461 DESIGN LANDED {\"ok\":true,\"record\":{...\n\nDESIGN REF: goalRef goal-4473bd1f-de5e-4886-892d-044f02fa6c93, aggregate design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93, version 1 (versions [1]), submittedAt 2026-09-06T19:10:18.947Z, profile typescript-web-app/react-node-postgresql, contractRef contract-item-shelf/rev-1 digest 359b5532... Full JSON: D:/projexts/UnAI/.moe-next/live-drive-wdeb4c7d8/design.json. Seat wall clock: SPAWNED 19:09:39 -> submitted 19:10:18, 39 s.\n\nPROVENANCE, from the drive's own store (command_decisions, node:sqlite readOnly):\n  design.submit id=3b827deb-45ab-40e5-b5b2-99f63e3de35d principal_id=sess-wrap-8fd495c7b73940d0a42a5bf3a75d4048\nA `sess-wrap-` session is one the WRAPPER minted for the spawned seat. It is not `live-drive-wdeb4c7d8-credential` (the drive's operator credential) and not the e2e lane credential, and it is the ONLY design.submit decision in the store.\n\nNO DESIGN_SHAPE_INVALID. The seat produced a valid revision first try -- five sections, all admitted:\n- dataModel: Operator, Item, OperatorSession\n- apiSurface: POST /api/session, DELETE /api/session, GET /api/session, GET /api/items\n- componentList (13): SignInScreen, SignInForm, SessionProvider, RequireSignedInOperator, ItemShelfScreen, ItemList, ItemRow, ItemTitle, ItemOwner, ShelfEmptyState, ShelfErrorState, ShelfLoadingState, ShelfRetryControl\n- screens: one journey (\"An operator signs in and reads the shelf of items they own (req-1, crit-1)\") over Sign-in and Item shelf\n- nonFunctional.auth, verbatim: \"Only a signed-in operator may read the shelf. Every shelf read is authorized from the server-held operator session, and the set of items returned is scoped to the operator that session identifies, so an operator can never read an item owned by another operator. A request without a valid session is refused with 401 and the client sends the operator to the Sign-in screen rather than rendering an empty shelf.\"\n- 6 openDecisions, each naming what the PRD does NOT state (sign-in mechanism, sort order, pagination bound, write path, extra item attributes, whether an owner can differ from the viewer) rather than inventing it.\n\nThe seat also cited the contract by id: the journey names req-1 and crit-1, which are the requirement and criterion the drive proposed at Gate 1.\n\nFINDING 2, unrelated to this row, recorded not worked around: in the same lane the wrapper answers `node.deliver@node-live-design-drive: REPOSITORY_EXECUTION_OWNER_MISMATCH (REPOSITORY_DELIVERY)` and `node.deliver@node:v1:880fb9d9...: NODE_BRIEF_MISSING`. Both are demo-seed node staffing on a scratch project with no bound repository, not the design rung.",
       "timestamp": "2026-09-06T19:11:28.778Z"
+    },
+    {
+      "id": "comment-b0dab87d38014f1782f75fa746477396",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE (qa-4f771bb8).\n\n**ONE LIMIT, STATED FIRST because it is the honest shape of this review: I did NOT re-run the recorded browser journey.** `verification.command` is `pnpm test:e2e:browser tests/e2e/control-room/design-operator.spec.ts`, and `browser-e2e-gate` is held by @worker-adefb11e (task-33ceae56) since 19:58:45Z with `full-suite-gate` too. Queueing behind an active delivery row to re-verify a passing journey would cost the fleet more than the re-verification is worth. So I verified everything the lane's two halves let me verify without it, and I say which:\n\n**THE LANE'S COMPILE HALF, RUN BY ME:** `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` → **EXIT 0**. `pnpm test:e2e:browser` is `tsc && playwright test`, so this rules out the specific false-green mode that matters here — a typecheck failure means ZERO specs run and the recorded `1 passed` could not have been produced. The recorded outputTail names the spec and the test title with its duration, which a vacuous run does not print.\n\n**UNIT COVERAGE FOR DoD 1-4, RUN BY ME:** `pnpm --filter @moe/control-room exec vitest run src/live/live-design.test.ts src/v2/goals/design-version-note.test.tsx --maxWorkers=1` → **Test Files 2 passed (2), Tests 21 passed (21), EXIT 0.**\n\n**DoD 1** — the decoder is exact-key and hostile-input aware: `live-design.test.ts:36` \"rejects extra and missing keys at every nested record\" and `:55` \"rejects invalid types, versions, prototypes and accessors **without invoking getters**\"; `live-design.ts:41` `exactDataRecord` documents the same. `:27` copies the exact HTTP record \"including the named data model entity\", against `design-read-frame.captured.json` — a REAL captured daemon frame, tracked and clean. The proxy pin is at `dev-proxy-paths.ts:23` **in HEAD**.\n\n**DoD 2 / DoD 4** — `design-version-note.test.tsx:33` names the version; `:41` \"says a plan was compiled with NO design rather than showing a blank or a zero\"; `:54` \"says the design step was SKIPPED, with the reason, rather than reading as blank\"; `:69` reports any OTHER refusal with its CODE and LAYER rather than as an absent design; `:80` a reading state rather than an empty slot. Four distinguishable states where a weaker row would have had one empty div. `:99` reads BY THE PLANNING RUN, which is what makes DoD 2's claim true rather than approximately true.\n\n**Scope discipline worth crediting:** `:155` asserts the row **does not edit `approve-plan.tsx`, which another row owns** — a test that pins a boundary rather than a behaviour, on a shared file, in a tree where that has cost the fleet all day.\n\n**DoD 5** — the spec drives a real daemon end to end: Gate 1 approved in the browser by a human, a scripted seat POSTing `design.submit` and asserting 200, then `cr.design.version` → \"Version 1\" and `cr.design.body` containing the named entity. Its comments record two ordering facts learned the hard way — nothing to name until a plan compiles, and the resubmit must precede the compile because afterwards the surface offers `approval.decide` instead.\n\n**DoD 6 — the live drive is real and its finding is better than a pass.** A real seat under `agent-wrapper-main` with `MOE_AGENT_COMMAND=claude`, driver outside the repo. v1 produced a genuine finding rather than a workaround: **a script CANNOT approve Gate 1 by design** — `PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT` 422, because `product-contract-gate-1-bearer.ts:159` refuses a principal that is not a paired HUMAN. That is the epic's human gate holding, reported as such; v2 then paired a real headless browser. Recording a fence that blocked you, instead of routing around it, is the behaviour the epic rails exist to produce.\n\n**DoD 7** — `docs/VISION.md:30` \"**UX and architecture** — running since 2026-09-06\" and the README \"Design step\" bullet are both **in HEAD**. Disclosure: they landed in **`7d78aa19`, my own commit**, which swept them while repairing task-80322112's doc gap; I recorded them as `contested` to that row at the time. The row's completion record states the same thing independently, which is how I know the two accounts agree.\n\n**LANDING** — all five paths I checked (`design-version-note.{tsx,test.tsx}`, `cordum-app.tsx`, `design-operator.spec.ts`, `dev-proxy-paths.ts`) are IN HEAD and clean, plus the captured frame. `design-version-note.test.tsx` was untracked at 19:21Z and its two `planningRunRef` TS2741 errors are gone: `pnpm typecheck` EXIT 0, 19/19, measured by me at `d0f4bed3`.",
+      "timestamp": "2026-09-06T20:01:44.230Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:37:41.269Z",
-  "updatedAt": "2026-09-06T19:59:32.661Z",
+  "updatedAt": "2026-09-06T20:04:31.471Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:19:17.986Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-06T20:02:48.466Z",
+    "wallClockMs": 107010480
   },
   "contextFetchedBy": [
     "architect-2e480458",
     "worker-1d53e70c",
-    "worker-deb4c7d8"
+    "worker-deb4c7d8",
+    "qa-4f771bb8",
+    "worker-f78e0703"
   ],
   "priorHandoffs": [
     {
@@ -233,6 +243,43 @@
       "pushed": true,
       "recoveredBy": "qa-4f771bb8",
       "message": "Governor attribution: this row's in-flight doc hunks (README.md design-step paragraph @@ -55,0 +60,8 written 19:07:27Z; docs/VISION.md \"4. UX and architecture — running since 2026-09-06\") were swept into task-80322112's completion landing (7cfa1700 → replayed as 7d78aa19). Bytes are f3409f9a's; verify at HEAD, do not re-add."
+    },
+    {
+      "sha": "f213b41d60adfd60c52e920b2598a01cc122569f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T18:57:14Z",
+      "paths": [
+        ".moe/tasks/task-122b55fd2c284174876bd1d5573bdcc5.json",
+        ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+        ".moe/tasks/task-2db55fcaad604aa4861139b22941095f.json",
+        ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json",
+        ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+        ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-8f1f15bcb0ab40d88f07134a757630e4.json",
+        ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+        ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+        ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+        "apps/control-room/src/v2/goals/design-read-frame.captured.json",
+        "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+        "README.md",
+        "tests/e2e/control-room/design-operator.spec.ts"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T19:59:39.293Z",
+      "treeId": "7a6dd934a531f9f0733e152446ea23d82561e767",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -241,13 +288,27 @@
     "apps/control-room/src/v2/goals/design-version-note.tsx",
     "apps/control-room/src/v2/goals/design-version-note.test.tsx",
     "tests/e2e/control-room/design-operator.spec.ts",
-    "apps/control-room/src/v2/goals/design-read-frame.captured.json"
+    "apps/control-room/src/v2/goals/design-read-frame.captured.json",
+    ".moe/tasks/task-122b55fd2c284174876bd1d5573bdcc5.json",
+    ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+    ".moe/tasks/task-2db55fcaad604aa4861139b22941095f.json",
+    ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json",
+    ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+    ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-8f1f15bcb0ab40d88f07134a757630e4.json",
+    ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+    ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json",
+    "README.md"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "governor-afbde490@2026-09-06T19:14:00Z",
-    "at": "2026-09-06T19:15:20.929Z"
+    "kind": "completion",
+    "sessionId": "worker-deb4c7d8@2026-09-06T18:57:14Z",
+    "at": "2026-09-06T19:59:39.293Z"
   },
   "reviewStartedAt": "2026-09-06T19:59:29.836Z",
   "verification": {
@@ -256,5 +317,17 @@
     "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\design-operator.spec.ts:193:1 > the operator reads the design and the plan fold names its version (11.1s)\n\n  1 passed (11.9s)\nexit=0",
     "reportedAt": "2026-09-06T19:59:29.836Z"
   },
-  "completionSummary": "THE OPERATOR READS THE DESIGN AND THE PLAN FOLD NAMES THE VERSION THE PLAN WAS COMPILED AGAINST - proved on a real daemon, plus a real agent seat.\n\nDELIVERED (3 new paths; I rebuilt nothing): tests/e2e/control-room/design-operator.spec.ts (446 lines), apps/control-room/src/v2/goals/design-version-note.test.tsx (210), apps/control-room/src/v2/goals/design-read-frame.captured.json (136). docs/VISION.md:30 and the README \"Design step\" bullet are MY DoD-7 edits but a peer sweep commit 7d78aa19 landed them first - both are in HEAD, both files read clean; README's remaining dirty hunk is a peer's Gate-2 paragraph and I did NOT report that path.\n\nJOURNEY (real daemon, vite build, demo-seed, browser pairing): operator pairs -> two goals from PRDs -> planner proposes Gate 1 -> human approves in the browser -> scripted seat submits design v1 -> tab shows Version 1 + ShelfItemV1Marker (DoD 1) -> resubmit v2 -> tab shows Version 2 + ShelfItemV2Marker, and POST /design/read {goalRef, version:1} still answers version 1 with ITS entity and not v2's (DoD 3) -> scripted seat compiles the plan -> fold says \"Design version 2\" and NOT \"Design version 1\" (DoD 2) -> the never-designed goal renders cr.design.none in words (DoD 4).\n\nMID-FLIGHT PRODUCTION CHANGE I FOLLOWED: owner commit 4ac0dbda rewrote design-version-note.tsx and cordum-app.tsx:350 to read /design/read with the plan run's selector, so the fold names the version THAT RUN compiled against (compile-dispatcher.ts:292). Consequences, all measured: nothing to name until a plan compiles (the daemon answers DESIGN_RECORD_MALFORMED @ LEDGER first); and the RESUBMIT must precede the COMPILE, because after a compile the surface offers approval.decide instead of design.submit. Both are commented at the step in the spec.\n\nFIXTURES ARE REAL FRAMES (DoD 5): two verbatim /design/read bodies captured from a live run, decoded by the PRODUCTION mapDesignAnswer; one extra key and one deleted key each answer DESIGN_RESPONSE_INVALID and the not"
+  "completionSummary": "THE OPERATOR READS THE DESIGN AND THE PLAN FOLD NAMES THE VERSION THE PLAN WAS COMPILED AGAINST - proved on a real daemon, plus a real agent seat.\n\nDELIVERED (3 new paths; I rebuilt nothing): tests/e2e/control-room/design-operator.spec.ts (446 lines), apps/control-room/src/v2/goals/design-version-note.test.tsx (210), apps/control-room/src/v2/goals/design-read-frame.captured.json (136). docs/VISION.md:30 and the README \"Design step\" bullet are MY DoD-7 edits but a peer sweep commit 7d78aa19 landed them first - both are in HEAD, both files read clean; README's remaining dirty hunk is a peer's Gate-2 paragraph and I did NOT report that path.\n\nJOURNEY (real daemon, vite build, demo-seed, browser pairing): operator pairs -> two goals from PRDs -> planner proposes Gate 1 -> human approves in the browser -> scripted seat submits design v1 -> tab shows Version 1 + ShelfItemV1Marker (DoD 1) -> resubmit v2 -> tab shows Version 2 + ShelfItemV2Marker, and POST /design/read {goalRef, version:1} still answers version 1 with ITS entity and not v2's (DoD 3) -> scripted seat compiles the plan -> fold says \"Design version 2\" and NOT \"Design version 1\" (DoD 2) -> the never-designed goal renders cr.design.none in words (DoD 4).\n\nMID-FLIGHT PRODUCTION CHANGE I FOLLOWED: owner commit 4ac0dbda rewrote design-version-note.tsx and cordum-app.tsx:350 to read /design/read with the plan run's selector, so the fold names the version THAT RUN compiled against (compile-dispatcher.ts:292). Consequences, all measured: nothing to name until a plan compiles (the daemon answers DESIGN_RECORD_MALFORMED @ LEDGER first); and the RESUBMIT must precede the COMPILE, because after a compile the surface offers approval.decide instead of design.submit. Both are commented at the step in the spec.\n\nFIXTURES ARE REAL FRAMES (DoD 5): two verbatim /design/read bodies captured from a live run, decoded by the PRODUCTION mapDesignAnswer; one extra key and one deleted key each answer DESIGN_RESPONSE_INVALID and the not",
+  "touchedFiles": [
+    "docs/VISION.md",
+    "apps/control-room/src/v2/goals/design-version-note.tsx",
+    "README.md",
+    "tests/e2e/control-room/design-operator.spec.ts",
+    "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+    "apps/control-room/src/v2/goals/design-read-frame.captured.json"
+  ],
+  "unattributedPaths": [],
+  "completedAt": "2026-09-06T20:02:48.466Z",
+  "reviewCompletedAt": "2026-09-06T20:02:48.466Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-b0dab87d.\n\nONE LIMIT, STATED FIRST: I did NOT re-run the recorded browser journey. browser-e2e-gate is held by worker-adefb11e since 19:58:45Z, and queueing behind an active delivery row to re-verify a passing journey costs more than it is worth. Instead:\n\nCOMPILE HALF, run by me: `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0. The lane is `tsc && playwright test`, so this rules out the false-green that matters - a tsc failure means ZERO specs run and the recorded \"1 passed\" could not exist. The outputTail names the spec, the title and the duration, which a vacuous run never prints.\nUNIT COVERAGE, run by me: live-design + design-version-note = 2 files / 21 tests EXIT 0.\n\nDoD1 exact-key decoder, hostile-input aware: rejects extra AND missing keys at every nested record, and invalid types/prototypes/accessors without invoking getters; copies the exact HTTP record including the named entity against a REAL captured daemon frame. Proxy pin at dev-proxy-paths.ts:23 in HEAD.\nDoD2/4 four distinguishable states where a weaker row would have one empty div: version named, NO design in words rather than a zero, SKIPPED with its reason, other refusals with CODE and LAYER, plus still-reading. It reads BY THE PLANNING RUN, which makes DoD 2 true rather than approximately true.\nDoD5 the spec drives a real daemon: Gate 1 approved by a human in the browser, a scripted seat POSTs design.submit asserting 200, the tab shows Version 1 with the named entity.\nDoD6 the live drive found better than a pass: a script CANNOT approve Gate 1 by design (422 BEARER_PRINCIPAL_ABSENT), reported as the human gate holding rather than routed around; v2 paired a real headless browser.\nDoD7 VISION:30 and the README bullet are in HEAD - landed in 7d78aa19, MY commit, recorded as contested to task-80322112.\n\nLANDING: five paths plus the captured frame IN HEAD and clean; typecheck EXIT 0 19/19 at d0f4bed3."
 }
