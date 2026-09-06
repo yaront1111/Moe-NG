@@ -36,6 +36,7 @@ import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
 import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
+import { RELEASE_READ_PATH, handleReleaseReadRequest } from "./release-read.js";
 import {
   handlePreviewCaptureRequest, isPreviewCapturePath, locatePreviewCapture,
   previewCaptureRequestPathOf,
@@ -104,6 +105,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   DESIGN_READ_PATH,
   ENVIRONMENTS_READ_PATH,
   PREVIEW_READ_PATH,
+  RELEASE_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -447,6 +449,24 @@ function servePreviewRead(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveReleaseRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleReleaseReadRequest({
+    authenticator: options.deps.authenticator,
+    releaseReads: options.releaseReads,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 /**
  * The capture-bytes route. It is NOT a JSON route and deliberately not in `JSON_ROUTES`: it
  * answers image bytes, is matched by PREFIX rather than by equality, and is served by the
@@ -598,6 +618,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_PREVIEW_REQUEST_INVALID");
     return;
   }
+  if (path === RELEASE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_RELEASE_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
     return;
@@ -682,5 +706,7 @@ export async function serveReadDispatch(
     serveEnvironments(response, request, options, body);
   } else if (path === PREVIEW_READ_PATH) {
     servePreviewRead(response, request, options, body);
+  } else if (path === RELEASE_READ_PATH) {
+    serveReleaseRead(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }

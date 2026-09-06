@@ -101,6 +101,12 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // PATH, these describe the surface.
   "LISTENER_PREVIEW_REQUEST_INVALID",
   "LISTENER_PREVIEW_UNAVAILABLE",
+  // The release evidence read (`/release/read`): same transport pair. REQUEST_INVALID covers a
+  // non-POST and any body that is not exactly `{goalId}`; UNAVAILABLE covers a daemon composed
+  // without the release reader. A goal with no evidence to show is NOT here — that is an
+  // ordinary ABSENT answer from the route, not a transport fault.
+  "LISTENER_RELEASE_REQUEST_INVALID",
+  "LISTENER_RELEASE_UNAVAILABLE",
   // The per-environment variable table: same transport pair. REQUEST_INVALID covers a non-POST
   // and any body that is not exactly `{environment}`; an environment NAME this project does not
   // have is NOT here, because that caller is refused by the store's own ENV_ENVIRONMENT_UNKNOWN
@@ -244,6 +250,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
   if (code === "LISTENER_PREVIEW_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PREVIEW_UNAVAILABLE") return 503;
+  if (code === "LISTENER_RELEASE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_RELEASE_UNAVAILABLE") return 503;
   if (code === "LISTENER_ENVIRONMENTS_REQUEST_INVALID") return 400;
   if (code === "LISTENER_ENVIRONMENTS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;

@@ -813,7 +813,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "planningRuns", "policy", "previewCaptures", "previewReads", "previews",
         "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
-        "provide", "provideV2", "reconciliation", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
+        "provide", "provideV2", "reconciliation", "releaseReads", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
         "schedules",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",
         "subscriptions",

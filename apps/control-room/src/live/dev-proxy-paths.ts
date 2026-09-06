@@ -38,6 +38,10 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/criteria/read",
   "/repository/recovery/read",
   "/repository/bootstrap/read",
+  // The release evidence read. Its consumer is the Release card
+  // (task-817d893fa1254a4d82d2888af1f87a47); without the pin the dev lane cannot reach the
+  // route and the card renders against Vite instead of against a daemon.
+  "/release/read",
   "/runs/read",
   // The browser reads the three OPEN_SESSION operands and completes the signed open on
   // the daemon's own origin; without these two the dev server answers them itself and the

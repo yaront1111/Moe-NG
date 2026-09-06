@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createProductionReleaseSeams } from "./release/release-production-wiring.js";
+import { createAncestryFactory, createProductionReleaseSeams } from "./release/release-production-wiring.js";
 import type { ReleasePublisher } from "./release/release-decide-service.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -43,6 +43,7 @@ import { readDesignRevision } from "./design/design-store.js";
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
 import { createPreviewReadPort } from "./http/preview-read.js";
+import { createReleaseReadPort } from "./http/release-evidence-read.js";
 import type { PreviewCapturePort } from "./http/preview-capture-route.js";
 import { launchDelivery } from "./environment/environment-launch-resolver.js";
 import { readEnvironmentVariables } from "./environment/environment-store.js";
@@ -637,6 +638,12 @@ export function createStoreDependencies(
     policy,
     previewCaptures,
     previewReads: () => createPreviewReadPort(store),
+    // The SAME workspace and the SAME ancestry measurement `createProductionReleaseSeams` above
+    // hands the decide edge. Resolving a second one here is how a card and the command it feeds
+    // come to disagree about which landings are re-measurable at the release sha.
+    releaseReads: () => createReleaseReadPort(
+      store, createAncestryFactory(repositoryWorkspace === "" ? null : repositoryWorkspace),
+    ),
     // The SAME instance the command registry above holds. Returned as a factory like every
     // other optional port, so the entry can sweep it from its already-async shutdown without
     // widening `close()` — which is SYNC and has six call sites outside this file.

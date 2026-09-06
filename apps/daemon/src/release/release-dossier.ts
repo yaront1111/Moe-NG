@@ -126,8 +126,15 @@ function rowOf(
  * a refusal names come from this function, so the PR body and the detail on
  * RELEASE_EVIDENCE_INCOMPLETE cannot disagree about what is missing — a second copy of
  * this pipeline is exactly how they would come to.
+ *
+ * EXPORTED for the release READ (`http/release-read.ts`), which is the third consumer and
+ * needs the rows THEMSELVES rather than the markdown or the flattened gap list: an operator
+ * deciding a release is shown covered-versus-UNKNOWN per criterion, and that distinction only
+ * survives at row granularity. Serving it from here rather than re-parsing the stored document
+ * is the same argument `releaseDossierGaps` makes below — a reader that recovered rows from
+ * prose would be a second, drifting implementation of this pipeline.
  */
-function criterionRows(
+export function criterionRows(
   input: DossierInput, ancestry: AncestryPredicate,
 ): readonly CriterionRow[] {
   const nodes = new Map(input.nodes.map((node) => [node.nodeKey, node]));

@@ -20,7 +20,24 @@ export interface OfferWire {
 
 export type OfferOutcome =
   | { readonly commandId: string; readonly ok: true }
-  | { readonly code: string; readonly layer: string; readonly ok: false };
+  | {
+    readonly code: string;
+    /**
+     * THE REFUSING AUTHORITY'S OWN WORDS, when it sent any. Present only then: the key is
+     * OMITTED rather than set to undefined or "", so every card that compares an outcome by
+     * shape keeps seeing exactly what it saw before this field existed.
+     *
+     * The daemon has always sent this and the browser has always dropped it.
+     * `domainRefusalOf` (daemon-command-dispatch.ts) puts it on the wire deliberately, for a
+     * reason worth repeating: "every edge used to pass the code as its own detail, so a seat
+     * read {"code":"X","detail":"X"} and could correct nothing". A code alone says a decision
+     * was refused; the detail says WHAT to go and fix — `release.decide` answers
+     * `unverified evidence for: <criterionIds>`, naming the criteria the operator must chase.
+     */
+    readonly detail?: string;
+    readonly layer: string;
+    readonly ok: false;
+  };
 
 type BuildResult =
   | { readonly envelope: unknown; readonly ok: true }
@@ -44,7 +61,17 @@ function refusalOf(value: unknown): OfferOutcome | null {
   const code = value["code"];
   if (typeof code !== "string" || code === "") return null;
   const layer = value["layer"];
-  return Object.freeze({ code, layer: typeof layer === "string" && layer !== "" ? layer : "DAEMON", ok: false as const });
+  const detail = value["detail"];
+  return Object.freeze({
+    code,
+    // Carried only when the authority actually said something, and never when it merely echoed
+    // its own code: `domainRefusalOf` falls back to the code when an edge supplies no detail,
+    // and surfacing "RELEASE_REMOTE_MISSING: RELEASE_REMOTE_MISSING" to an operator is noise
+    // wearing the shape of an explanation.
+    ...(typeof detail === "string" && detail !== "" && detail !== code ? { detail } : {}),
+    layer: typeof layer === "string" && layer !== "" ? layer : "DAEMON",
+    ok: false as const,
+  });
 }
 
 function answerOf(response: unknown, commandId: string, layer: string): OfferOutcome {

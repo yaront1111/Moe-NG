@@ -32,6 +32,7 @@ import type { GoalSourceReadPort } from "./documents/document-source-full-read.j
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
 import type { PreviewReadPort } from "./http/preview-read.js";
+import type { ReleaseReadPort } from "./http/release-evidence-read.js";
 import type { PreviewCapturePort } from "./http/preview-capture-route.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
@@ -57,6 +58,8 @@ export interface OptionalDaemonPortProvider {
   environmentReads?(): EnvironmentsReadPort;
   /** Durable preview receipts and captures from the runner's bound product workspace. */
   previewReads?(): PreviewReadPort;
+  /** The goal's release evidence and the receipt of a decision taken on it. */
+  releaseReads?(): ReleaseReadPort;
   previewCaptures?(): PreviewCapturePort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
@@ -135,6 +138,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly designReads?: DesignReadPort;
   readonly environmentReads?: EnvironmentsReadPort;
   readonly previewReads?: PreviewReadPort;
+  readonly releaseReads?: ReleaseReadPort;
   readonly previewCaptures?: PreviewCapturePort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
@@ -168,7 +172,7 @@ const FACTORIES = Object.freeze([
   "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "repositoryWorkflows", "goalSource",
   "designReads",
   "environmentReads",
-  "previewReads", "previewCaptures",
+  "previewReads", "previewCaptures", "releaseReads",
   "sessionHandshake",
 ] as const);
 
@@ -382,6 +386,14 @@ export function resolveOptionalDaemonPorts(
     if (previewReads !== undefined && !hasMethods(previewReads, ["read"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const releaseReadsFactory = provider.releaseReads;
+    if (releaseReadsFactory !== undefined && typeof releaseReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const releaseReads = releaseReadsFactory?.call(provider);
+    if (releaseReads !== undefined && !hasMethods(releaseReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const previewCapturesFactory = provider.previewCaptures;
     if (previewCapturesFactory !== undefined && typeof previewCapturesFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -487,6 +499,7 @@ export function resolveOptionalDaemonPorts(
       ...(designReads === undefined ? {} : { designReads }),
       ...(environmentReads === undefined ? {} : { environmentReads }),
       ...(previewReads === undefined ? {} : { previewReads }),
+      ...(releaseReads === undefined ? {} : { releaseReads }),
       ...(previewCaptures === undefined ? {} : { previewCaptures }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),

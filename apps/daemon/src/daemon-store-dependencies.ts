@@ -137,6 +137,11 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the preview reader is always wired");
     return port();
   },
+  releaseReads: () => {
+    const port = fromEnv().releaseReads;
+    if (port === undefined) throw new Error("unreachable: the release reader is always wired");
+    return port();
+  },
   previewCaptures: () => {
     const port = fromEnv().previewCaptures;
     if (port === undefined) throw new Error("unreachable: the preview capture reader is always wired");

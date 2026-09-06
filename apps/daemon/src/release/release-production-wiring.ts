@@ -30,6 +30,18 @@ function ancestryAt(workspace: string, sha: string): AncestryPredicate | null {
   };
 }
 
+/**
+ * THE SAME ancestry measurement the decide edge folds, handed to the release READ so the card
+ * and the command can never disagree about which citations are re-measurable. A null answer is
+ * "no workspace bound, or this sha names no commit here" — the read renders that as UNKNOWN
+ * landings with `ancestryMeasured: false` rather than as failed evidence.
+ */
+export function createAncestryFactory(
+  workspace: string | null,
+): (sha: string) => AncestryPredicate | null {
+  return (sha) => workspace === null ? null : ancestryAt(workspace, sha);
+}
+
 /** One publisher shared by this process's release command and delivery runtime. */
 export function createProductionReleaseSeams(options: {
   readonly store: SqliteEventStore; readonly projectId: string; readonly storePath: string;

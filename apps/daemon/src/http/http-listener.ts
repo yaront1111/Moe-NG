@@ -22,6 +22,7 @@ import type { DesignReadPort } from "./design-read.js";
 import type { EnvironmentsReadPort } from "./environments-read.js";
 import type { PreviewCapturePort } from "./preview-capture-route.js";
 import type { PreviewReadPort } from "./preview-read.js";
+import type { ReleaseReadPort } from "./release-evidence-read.js";
 import type {
   ProductContractV2CurrentReadPort,
 } from "./product-contract-v2-current-read.js";
@@ -168,6 +169,7 @@ export interface StartListenerOptions {
    * an unwired daemon must not tell a card "this goal has no preview".
    */
   readonly previewReads?: PreviewReadPort;
+  readonly releaseReads?: ReleaseReadPort;
   /**
    * Absent means the capture-bytes route refuses as unavailable. Present, it names the
    * ABSOLUTE project directory `.moe-next/previews` sits under; the route proves that root by
