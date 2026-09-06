@@ -195,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T22:59:32.724Z",
-  "updatedAt": "2026-09-06T01:13:24.396Z",
+  "updatedAt": "2026-09-06T01:13:36.911Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:09:42.913Z",
     "plannedStepCount": 8,
@@ -286,7 +286,8 @@
     ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json",
     ".moe/tasks/task-c0e00f0a55ad43bfa5f6b323779834cd.json",
     ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
-    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+    ".moe/tasks/task-8bdd14af6cdc44c4a5b86fbd920e07e6.json"
   ],
   "completionSummary": "The daemon-side preview runner: starts the product, captures it with a real browser, records a durable receipt, and ALWAYS stops the process. No UI (task rail 1).\n\nDELIVERED — 8 production modules + .js bridges under apps/daemon/src/preview/, 6 test files, 93 tests. preview-receipt-contracts (moe-preview-receipt/1, deterministic id, exact-key decoder), preview-ledger (durable write/read-back), preview-command-resolution, preview-goal-landing, preview-process, preview-capture, preview-supervisor, preview-runner.\n\nDEPENDENCY EDGE PROVEN 3 WAYS (global rail 7): apps/daemon/package.json:32 declares \"playwright\": \"1.62.1\"; pnpm-lock.yaml carries the @moe/daemon importer stanza (`playwright: specifier 1.62.1, version 1.62.1`, +3 lines); a bare-specifier probe typechecked EXIT 0 and was deleted in the same command, with a NEGATIVE CONTROL (bogus specifier -> TS2307 exit 1) proving the green was not vacuous.\n\nTHE PORT ASSERTION CAUGHT A REAL LEAK. My first killTree spawned `taskkill /T /F` and immediately SIGKILLed the shell without waiting. `shell: true` makes the direct child cmd.exe and the server its GRANDCHILD, so the shell died first and orphaned node: every PID assertion passed while the port stayed BOUND. Fixed by awaiting taskkill's exit (0 or 128) before any fallback kill. Asserting only by pid would have shipped it.\n\nFOUR CLEANUP ARMS, ALL PRESENT — APPROVE, REJECT, forced TIMEOUT, and DAEMON SHUTDOWN. The plan permitted admitting the 4th was unreachable; instead I made the composition allow it (createPreviewSupervisor owns the live roster, close() sweeps it, arm holds two previews open). Each asserts pid gone AND port free, polled to a budget over the PRODUCTION probe `probeProcessAlive`.\n\nTWO DEFECTS FOUND BY ADVERSARIAL REVIEW, both fixed with arms: concurrent starts of one revision spawned two servers (now serialised on the deterministic receipt id); the start loop opened ~72,000 sockets over a 30-min budget (now backs off after 10s).\n\nDRILLS (SHA256 restore ",
   "commits": [
@@ -447,6 +448,22 @@
       "treeId": "1be9c97228186b7d7a8c01d2532b295c849b9b86",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "746555520b285b30423a0de977ae450ee9760a5b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T00:36:22Z",
+      "paths": [
+        ".moe/tasks/task-8bdd14af6cdc44c4a5b86fbd920e07e6.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T01:13:36.911Z",
+      "treeId": "c3d166249ac030859d6a3e3f61622b5605e116d8",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -478,47 +495,14 @@
     "apps/daemon/src/preview/preview-ledger.test.ts"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/live/live-document-proxy.test.ts",
-    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
-    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
-    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
-    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
-    "apps/daemon/src/daemon-repository-workflows.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-workflows.test.ts",
-    "apps/daemon/src/planning/compiled-contract-binding.test.ts",
-    "apps/daemon/src/preview/preview-goal-landing.test.ts",
-    "apps/daemon/src/repository/publication-approval.test.ts",
-    "apps/daemon/src/repository/publication-effect-ledger.test.ts",
-    "apps/daemon/src/repository/publication-effect-ledger.ts",
-    "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-execution-workflows.test.ts",
-    "apps/daemon/src/repository/repository-landing-attempt.ts",
-    "apps/daemon/src/repository/repository-recovery-git.test.ts",
-    "apps/daemon/src/repository/repository-recovery-native.test.ts",
-    "docs/plans/2026-09-06-product-evidence-and-recovery.md",
-    "packages/runner/src/index-surface.test.ts",
-    "packages/runner/src/platform/windows/windows-boundary.test.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
-    "packages/runner/src/platform/windows/windows-status.ts",
-    "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts",
-    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
-    "tests/e2e/control-room/repository-workflows.spec.ts"
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-4f771bb8@2026-09-05T23:31:46Z",
-    "at": "2026-09-05T23:32:00.482Z"
+    "sessionId": "qa-4f771bb8@2026-09-06T00:36:22Z",
+    "at": "2026-09-06T01:13:36.911Z"
   },
   "priorHandoffs": [
     {
