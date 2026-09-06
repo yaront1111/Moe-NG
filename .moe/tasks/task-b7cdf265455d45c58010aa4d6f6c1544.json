@@ -1,0 +1,33 @@
+{
+  "id": "task-b7cdf265455d45c58010aa4d6f6c1544",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Rollback's database restore reaches a bound production destination: requested means applied, not requested means untouched",
+  "description": "Split from task-da60dc4b by governor ruling 21:25Z on worker-deb4c7d8's measurement: `apps/daemon/src/deployment/rollback-command.ts:86-88` refuses `DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE` (\"no database restoration port is bound to the selected deployment environment\") because `BackupPorts.restoreDatabase` (task-95e68a8d, DONE) only verifies a dump inside a temporary isolated database and has no bound production destination. So 'requested -> the restore is applied' is unsatisfiable today and 'not requested -> untouched' is vacuous. This row binds the destination and makes both arms real. task-da60dc4b keeps the refusal's code+layer assertion and the no-restore-call assertion.",
+  "definitionOfDone": [
+    "A production restore destination is bound per deployment environment (the selected environment's database, resolved through the existing environment credential seam - never process.env, never a browser-supplied URL); an environment with no bound destination keeps refusing `DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE` with code AND layer.",
+    "`deployment.rollback` with `restore: true` applies the recorded backup (the one named by the kept deploy receipt / backupRef) to that destination and the rollback receipt says so; `restore` not requested records NO restore call on the port - both arms asserted from the port's recorded calls.",
+    "A restore that fails leaves the schema as it was and the receipt REFUSED with the failing step named (code + layer); no automatic retry, no partial apply.",
+    "LIVE ARM on a disposable PostgreSQL through the production composition: backup, mutate the schema, rollback with `restore: true`, assert the schema is back; every container, temp tree and child process released in `finally` on every exit path; no connection value, SQL or password in logs or evidence.",
+    "Fresh focused daemon tests + `pnpm typecheck` EXIT 0 with a planted control; named broader gates per lease rules; paths declared; physical .js bridges for any new runtime module."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "GOVERNOR",
+  "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
+  "dependsOn": [
+    "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
+    "task-b22462cf9d9e41cd9472415da2c1fb7d"
+  ],
+  "priority": "HIGH",
+  "order": 122.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T21:24:00.423Z",
+  "updatedAt": "2026-09-06T21:24:00.423Z"
+}

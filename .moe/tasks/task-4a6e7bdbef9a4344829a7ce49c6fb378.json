@@ -131,8 +131,8 @@
       "completedAt": "2026-09-06T18:52:42.355Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -177,18 +177,26 @@
       "author": "worker-deb4c7d8",
       "content": "REOPEN ROUND 2 — comment 2 of 2: the FOREIGN RED VERBATIM, the NUL fix, the census, and the self-review.\n\nFOREIGN RED, disclosed with exact lines and paths. Four groups; none intersects this row.\n\n(a) PRESENT AT BASELINE TOO — 4 files / 6 tests, IDENTICAL at `67dd3103` and at HEAD:\n`src/criterion-evidence/criterion-integrated.test.ts`, `src/goals/goal-live-evidence.test.ts`, `src/goals/goal-services.test.ts`, `src/goals/j1-command-path.test.ts` (x3).\n```\nError: scoped criterion execution did not prove all checks:\n  ...,\"evidence\":{\"status\":\"UNKNOWN\",\"exitCode\":null,\n  \"outputSha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"byteCount\":0,...}\n ❯ Module.createScopedCloseWorld src/goals/goal-scoped-close-test-fixtures.ts:90:13\n```\n`outputSha256` is sha256 of the EMPTY string and `exitCode` is `null`: the `node -e` criterion check child produced no output and no exit status. That is a child-process failure inside the criterion executor. Owning commit `4b6d2bc2 fix: close goals on scoped criterion evidence`. Nothing an HTTP read route can cause.\n\n(b) LOAD-BORNE, 3 files, absent at baseline and GREEN when re-run in isolation at 60 s:\n`src/work/foundation-attempt-service.test.ts`, `src/work/foundation-capture-lifecycle.test.ts`, `src/work/foundation-capture-producer.test.ts` — each `Error: Test timed out in 30000ms.`\n\n(c) A PEER'S FILE THAT VANISHED MID-RUN:\n```\n FAIL  src/preview/preview-headcheck-qa.test.ts [ src/preview/preview-headcheck-qa.test.ts ]\nError: Cannot find module '/@id/D:/projexts/moe-next/apps/daemon/src/preview/preview-headcheck-qa.test.ts'\n```\nAbsent on disk, no git history. Collected, then deleted by another session. My row creates nothing under `src/preview/`.\n\n(d) run A only: `src/repository/repository-execution-recovery.test.ts` — `Error: REPOSITORY_IDENTITY_UNKNOWN` at `:19:83` (a `git init` in a temp dir). Green in run B.\n\nREOPEN ITEM (1), the NUL bytes — fixed last round, re-verified at HEAD this session and now PROVED BY THE CENSUS ITSELF. `tr -dc '\\000' | wc -c` = **0** for both modules; `file` reports `UTF-8 text`. `git grep -n \"MARK\" -- preview-capture-route.ts` prints four real lines where it printed `Binary file ... matches`:\n```\npreview-capture-route.ts:70:const GOAL_MARK = \"__GOAL_MARK__\";\npreview-capture-route.ts:71:const SHA_MARK = \"__SHA_MARK__\";\n```\nEPIC RAIL CENSUS, full tree, all file types — and note it needs `MSYS_NO_PATHCONV=1`: a bare `git grep \"/preview/read\"` is silently rewritten by MSYS into a Windows path and returns a FALSE EMPTY, which is its own way to ship a missed mirror. With it set, `preview/read` and `preview/capture` resolve to exactly: `dev-proxy-paths.ts`, `live-document-proxy.test.ts`, `http-listener-guards.ts`, `http-listener-read-dispatch.ts/.test.ts`, `preview-read.ts/.test.ts`, `preview-capture-route.ts/.test.ts`, `tests/security/layer-visibility-cases.ts`. Every mirror named, and `preview-capture-route.ts` now appears in its own census.\n\nSELF-REVIEW, the step's six questions.\n1. CAN ANY INPUT ESCAPE THE ROOT? Order is method -> decode -> traversal/segment -> shape -> type -> realpath -> containment -> size, and each input is stopped by a DIFFERENT guard: `..` at `judgeRequestPath` (`_PATH_TRAVERSAL`); an absolute path and a wrong segment count at the shape check (`_SEGMENT_INVALID`); `%2e%2e%2f`/double-encoded at `decodeRequestPath` (`_ENCODING_INVALID`) BEFORE the traversal check, which is the order that matters; a symlink out of the root only at containment, against the realpath.\n2. TYPE BEFORE OR AFTER CONFINEMENT? Type runs BEFORE any syscall, deliberately, so a `.sqlite` refusal cannot tell a caller the path resolved — the route is not an existence oracle. Containment must run AFTER resolution or it misses the symlink class. QA verified this last round.\n3. AUTHENTICATION: both routes call `authenticateHttpRequest` on the same footing as their neighbours, plus CSRF and Origin. Consequence for the consumer: a bare `<img src=\"/preview/capture/...\">` will NOT load — `fetch` the bytes and use a blob URL.\n4. UNSANITISED FILENAME? No. The goalId/sha/file never reach the filesystem before decode, traversal, segment, shape and type have all passed, and the join is against the realpath'd root.\n5. NEW REFUSAL CODE? No new ASSET code — my modules use only the rostered `_ENCODING_INVALID`, `_ROOT_INVALID`, `_SEGMENT_INVALID`, `_TYPE_UNKNOWN`. The two I did add, `LISTENER_PREVIEW_REQUEST_INVALID` (400) and `LISTENER_PREVIEW_UNAVAILABLE` (503), are the surface's transport pair in the same rostered enum with a status map and a `layer-visibility-cases.ts` census entry; they were part of the DoD 1-5 work QA already verified.\n6. ROSTER ARM EXEMPTION? None. The explicit branch is present; roster grew 31 -> 32.\n\nWORKTREE TEARDOWN (the dangerous half): junctions unlinked as LINKS via `Directory.Delete($j,$false)` after asserting `LinkType -eq 'Junction'`, reparse-point count re-asserted 0, only then the tree deleted. Real `node_modules` entry counts 13 / 5 before AND after; `git worktree list` no longer names my path.\n\nSTILL OPEN, unchanged and NOT a completion claim: the composition gap — `StartListenerOptions.previewReads`/`.previewCaptures` fail closed with `LISTENER_PREVIEW_UNAVAILABLE` (503) but the shipped daemon composes neither, so a real `POST /preview/read` answers 503. Five seams listed in my step-2 note. QA accepted this last round as outside DoD 4's named seam list; recommended fold-in is task-33ceae56.",
       "timestamp": "2026-09-06T18:53:59.352Z"
+    },
+    {
+      "id": "comment-0e86b915c49e4846b7c2a8ae6bdea224",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE SHEET (qa-f2906c26), reopen round 1 — the round I rejected. BOTH ITEMS CLOSED. Approving. No landing needed: all fourteen declared paths are CLEAN and the corrected bytes are at HEAD.\n\nITEM 1, NUL BYTES — FIXED, AND FIXED BETTER THAN I ASKED. Verified at the byte level at HEAD, not from the summary:\n```\ngit show HEAD:apps/daemon/src/http/preview-capture-route.ts | count b\"\\x00\"   ->  0\nfile apps/daemon/src/http/preview-capture-route.ts  ->  JavaScript source, Unicode text, UTF-8 text\ngrep -c \"PREVIEW_CAPTURE\" <that file>               ->  7   (was: \"Binary file ... matches\", no lines)\n```\nThe markers are now `\"__GOAL_MARK__\"` / `\"__SHA_MARK__\"` and the `endsWith` assertion is kept, so the one-statement-of-the-layout property survives. Two things make this better than the minimum I asked for. First, the constants carry a comment saying WHY plain ASCII — \"a NUL byte here would make this whole module read as BINARY to grep, git grep and `file`, so it would silently drop out of every text census run over this tree\" — so the next person to want a collision-proof sentinel is told, at the point of temptation, why not. Second, a DURABLE ARM: `preview-capture-route.test.ts:462`, \"ships no NUL byte in any module this row delivers\", scanning all six delivered files. And it is not vacuous, which is the part I would have checked hardest: `:469` runs the counter against a buffer that DOES carry a NUL and asserts it returns 1, so a broken counter cannot green the zero-count assertion. That is the two-sided control discipline, applied unprompted.\n\nITEM 2, DoD 7 — CLOSED UNDER THE LEASE, and the lease claim is independently corroborated. The row states `full-suite-gate` was granted to this task at 17:58:00.596Z. I did not take that on the row's word: TWO other seats' queue notes name the same holder and time — worker-adefb11e's (\"#1 in queue behind worker-deb4c7d8 (task-4a6e7bdbef9a, held 17:58:00Z)\") and worker-1d53e70c's (\"Holder worker-deb4c7d8 (task-4a6e7bdbef9a) since 17:58:00Z\"). So these are LEASED runs, not the inadmissible kind, and my rejection's premise is discharged.\nAll three gates are now quoted with count lines: daemon `Test Files 5 failed | 535 passed (541)` and a second run `9 failed | 533 passed (542)`, both EXIT 1 and both disclosed; control-room `173 passed (173)` / `2196 passed (2196)` EXIT 0; typecheck EXIT 0, 19 projects.\nTHREE THINGS IN THAT EVIDENCE I WANT ON THE RECORD AS GOOD PRACTICE. (a) The first daemon run was piped through `tail -80`, which ATE 3 of 7 failures — the row noticed and RE-RAN rather than reporting the truncated roster. (b) The two runs disagree (5 failed vs 9 failed, 541 vs 542 files) and that is disclosed rather than smoothed: the shared tree moved underneath, which is exactly what a full suite on this host does. (c) The typecheck came back in 7 seconds, the row judged that too fast to accept, and PLANTED AN ERROR — a new file importing `PreviewReadPort` typed as `number`, yielding `TS2322` and `apps/daemon typecheck: Failed` EXIT 1, probe deleted in the same command. That is the sub-second-typecheck control, and it converts \"EXIT 0\" into \"EXIT 0 having actually compiled my code\".\n\nWHAT I RE-RAN MYSELF at HEAD: `src/http` EXIT 0, `Test Files 56 passed (56)` / `Tests 807 passed (807)` — two more than last round's 805, which is the new NUL arm and its control. `pnpm typecheck` EXIT 0, 19 projects, `$ tsc` echoes present.\n\nNOT RE-OPENED, per my own rejection: DoD 1-6 were verified and accepted last round and I did not revisit them. The composition gap remains correctly disclosed and correctly out of scope.\n\nON THE COMMIT WARNING: `reviewStartedAt` is 18:54:46Z and the row's commits are `937fc69a` (17:23Z) and `3b1cc25b` (17:57Z), so `qa_approve` will flag NO-COMPLETION-COMMIT. That is the benign third meaning: every declared path is clean, HEAD carries the corrected bytes (0 NULs, the durable arm present, both confirmed by `git show HEAD:`), and `3b1cc25b` is the commit that carries the fix. There is nothing to land — a hand-landing here would produce an empty commit — so I accept the warning and record that I verified HEAD myself.",
+      "timestamp": "2026-09-06T18:56:49.235Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:45:16.222Z",
-  "updatedAt": "2026-09-06T18:54:51.116Z",
+  "updatedAt": "2026-09-06T18:57:15.121Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:48:11.208Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-06T18:57:15.121Z",
+    "wallClockMs": 14943913
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -217,7 +225,8 @@
   "planApprovedAt": "2026-09-06T14:50:20.722Z",
   "contextFetchedBy": [
     "worker-deb4c7d8",
-    "worker-f72a1438"
+    "worker-f72a1438",
+    "qa-f2906c26"
   ],
   "workStartedAt": "2026-09-06T16:18:42.082Z",
   "reviewStartedAt": "2026-09-06T18:54:46.670Z",
@@ -240,7 +249,8 @@
     "apps/daemon/src/http/preview-capture-route.js",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
     "apps/daemon/src/http/http-listener.ts",
-    "tests/security/layer-visibility-cases.ts"
+    "tests/security/layer-visibility-cases.ts",
+    ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json"
   ],
   "completionSummary": "REOPEN ROUND 2 CLOSED. Both items. No production behaviour changed this round; DoD 1-6 are last round's accepted work, untouched.\n\nITEM (1) NUL BYTES — FIXED (last round) and re-verified at HEAD: `tr -dc '\\000' | wc -c` = 0 for both modules, `file` says UTF-8 text, and `git grep -n \"MARK\"` now prints four real lines where it printed \"Binary file ... matches\". `GOAL_MARK`/`SHA_MARK` are `\"__GOAL_MARK__\"`/`\"__SHA_MARK__\"`; a comment at the constants says why ASCII, so it cannot regress silently. A durable arm scans all six delivered files for NUL with a two-sided positive control.\n\nITEM (2) DoD 7 — CLOSED UNDER THE LEASE. `full-suite-gate` was granted to this task at 17:58:00.596Z while my prior session was exiting; this session is the first to use it, so these are LEASED runs, not the inadmissible unleased kind. Frozen sha256 of all six delivered files IDENTICAL at 17:59:14Z and 18:52Z; porcelain EMPTY over all eleven owned paths at both ends.\n\nTHE THREE GATES, count lines quoted:\n- `pnpm --filter @moe/daemon test` — run twice (the first was piped through `tail -80`, which ate 3 of 7 failures; I re-ran rather than guess). A: `Test Files 5 failed | 535 passed (541)` / `Tests 7 failed | 10003 passed | 6 skipped`. B: `Test Files 9 failed | 533 passed (542)` / `Tests 10 failed | 10006 passed | 6 skipped`. Both EXIT 1.\n- `pnpm --filter @moe/control-room test` — `Test Files 173 passed (173)` / `Tests 2196 passed (2196)` EXIT 0.\n- `pnpm typecheck` — EXIT 0, 19 projects Done. It ran in 7 s, too fast to accept, so a PLANTED-ERROR CONTROL in a new file importing `PreviewReadPort` reddened it: `error TS2322: Type 'number' is not assignable to type 'PreviewReadPort'` / `apps/daemon typecheck: Failed`, EXIT 1; probe deleted in the same command. The green compiles my code.\nRoot `pnpm test` covers no apps/** file, so no root count line is quoted.\n\nTHE DAEMON EXIT 1 IS NOT MINE, and I proved it rather than asserted it. My first attempt — an import-closure argument — FAILED honestly:",
   "commits": [
@@ -320,6 +330,21 @@
       "treeId": "5bf2ea2efd96da3521eb00048befe76a42d90882",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "0737f06c66efe2575a7eefbfc09883a281c15b77",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T17:58:19Z",
+      "paths": [
+        ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T18:56:42.140Z",
+      "treeId": "bdf048384b08bde3392e90d310251f707c30460a",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -341,11 +366,11 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-deb4c7d8@2026-09-06T17:42:52Z",
-    "at": "2026-09-06T17:57:17.166Z"
+    "kind": "completion",
+    "sessionId": "worker-deb4c7d8@2026-09-06T17:58:19Z",
+    "at": "2026-09-06T18:56:42.140Z"
   },
-  "reviewCompletedAt": "2026-09-06T17:28:30.436Z",
+  "reviewCompletedAt": "2026-09-06T18:57:15.121Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 7: gates quoted with their count lines — `pnpm --filter @moe/daemon test` is neither run admissibly nor cited; the completion record quotes none of the three named gates."
@@ -393,5 +418,7 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "completedAt": "2026-09-06T18:57:15.121Z",
+  "reviewSummary": "APPROVED, reopen 1 — the round I rejected. BOTH ITEMS CLOSED. Evidence: comment-0e86b915c49e4846b7c2a8ae6bdea224. No landing needed: all fourteen declared paths are clean and the corrected bytes are at HEAD.\n\nITEM 1 (NUL bytes) FIXED, better than I asked. At HEAD: 0 NUL bytes, `file` says \"JavaScript source, Unicode text, UTF-8 text\", `grep -c PREVIEW_CAPTURE` returns 7 lines where it printed \"Binary file ... matches\". Markers are now `__GOAL_MARK__`/`__SHA_MARK__` with the `endsWith` assertion kept. Beyond the minimum: a comment at the constants saying WHY plain ASCII, so the next person is told at the point of temptation; and a DURABLE ARM (`preview-capture-route.test.ts:462`) scanning all six delivered files, made non-vacuous by a control at `:469` that runs the counter against a buffer which DOES carry a NUL and asserts 1.\n\nITEM 2 (DoD 7) CLOSED UNDER THE LEASE, and I did not take that on the row's word: two other seats' queue notes independently name the same holder and time (17:58:00Z, worker-deb4c7d8 / this task). So these are leased runs and my rejection's premise is discharged. All three gates quoted: daemon `5 failed | 535 passed (541)` and a second run `9 failed | 533 passed (542)`, both EXIT 1 and both disclosed; control-room 173/2196 EXIT 0; typecheck EXIT 0.\nThree practices worth naming: the first daemon run was piped through `tail -80`, which ATE 3 of 7 failures — the row noticed and re-ran rather than reporting the truncated roster; the two runs disagree and that is disclosed rather than smoothed; and the 7-second typecheck was judged too fast to accept, so a PLANTED TS2322 reddened it before the green was claimed.\n\nI RE-RAN: `src/http` EXIT 0, 56 files / 807 tests — two more than last round's 805, which is the new arm and its control. `pnpm typecheck` EXIT 0, 19 projects.\n\nDoD 1-6 not re-opened. The commit warning is the benign case: paths clean, HEAD carries the fix (`3b1cc25b`), nothing to land."
 }
