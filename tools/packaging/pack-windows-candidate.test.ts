@@ -71,6 +71,32 @@ try {
 }
 `;
 
+const HOLD_CANDIDATE_READER = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MoeCandidateReader {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security,
+    uint creation, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
+  public static IntPtr Open(string path) {
+    return CreateFileW(path, 0x80000000, 0x7, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero);
+  }
+  public static void Close(IntPtr handle) { CloseHandle(handle); }
+}
+'@
+$handle = [MoeCandidateReader]::Open($env:MOE_TEST_ARCHIVE)
+if ($handle -eq [IntPtr](-1)) {
+  [Console]::Error.WriteLine([Runtime.InteropServices.Marshal]::GetLastWin32Error())
+  exit 2
+}
+[IO.File]::WriteAllText($env:MOE_TEST_READY, 'ready')
+Start-Sleep -Milliseconds 3000
+[MoeCandidateReader]::Close($handle)
+`;
+
 interface PublisherReceipt {
   readonly status: number | null;
   readonly stderr: string;
@@ -146,7 +172,33 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(WINDOWS_PUBLICATION_CSHARP.indexOf(relaxedOpen))
       .toBeGreaterThan(WINDOWS_PUBLICATION_CSHARP.indexOf(guardCreate));
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("VerifyPublished(finalPath, temporary");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("RenameNoReplace(temporary, IntPtr.Zero, finalPath);");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("int bufferSize = nameOffset + 4 + name.Length;");
     expect(WINDOWS_PUBLICATION_CSHARP).not.toContain("Environment.Exit(0)");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("[MarshalAs(UnmanagedType.U1)] public bool DeleteFile;");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .not.toContain("[MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int FILE_DISPOSITION_INFO_EX_CLASS = 21;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("public uint Flags;");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("DISPOSITION_DELETE | DISPOSITION_POSIX_SEMANTICS");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("if (TryDeletePosix(handle, out extendedError)) return;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int DELETE_ATTEMPTS = 400;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error.NativeErrorCode != ERROR_DIR_NOT_EMPTY");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateDist)");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateRoot)");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain('"MOE_WINDOWS_PUBLICATION_FAILURE|" + stage + "|" + NativeError(error)');
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int VERIFY_ATTEMPTS = 100;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_FILE_NOT_FOUND");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_SHARING_VIOLATION");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_LOCK_VIOLATION");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("Thread.Sleep(25);");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain('stage = "verify";');
   });
 
   it("deletes the private candidate before an atomic no-replace commit", () => {
@@ -164,7 +216,43 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(published).toBe(join(outputRoot, "dist", "moe-windows.zip"));
     expect(readFileSync(published, "utf8")).toBe("trusted archive\n");
     expect(existsSync(candidate.root)).toBe(false);
-  });
+  }, 30_000);
+
+  it("waits for a bounded shared reader before committing", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-output-"));
+    const barrierRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-barrier-"));
+    const candidate = createPrivateWindowsCandidate();
+    roots.push(outputRoot, barrierRoot, candidate.root);
+    mkdirSync(join(candidate.root, "dist"));
+    const archive = join(candidate.root, "dist", "moe-windows.zip");
+    writeFileSync(archive, "reader-held archive\n");
+    const expected = observePrivateWindowsCandidate(candidate);
+    const ready = join(barrierRoot, "reader.ready");
+    const reader = spawn(powershell!.executable.path, [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-Command", HOLD_CANDIDATE_READER,
+    ], {
+      env: { ...process.env, MOE_TEST_ARCHIVE: archive, MOE_TEST_READY: ready },
+      stdio: ["ignore", "ignore", "pipe"], windowsHide: true,
+    });
+    let readerStderr = "";
+    reader.stderr.setEncoding("utf8");
+    reader.stderr.on("data", (chunk: string) => { readerStderr += chunk; });
+    const exited = new Promise<number | null>((resolve) => reader.once("exit", resolve));
+
+    let published: string;
+    try {
+      await waitForPath(ready);
+      published = publishPrivateWindowsCandidate(
+        candidate, expected, outputRoot, powershell!, process.env,
+      );
+    } finally {
+      expect(await exited).toBe(0);
+    }
+    expect(readerStderr).toBe("");
+    expect(readFileSync(published, "utf8")).toBe("reader-held archive\n");
+    expect(existsSync(candidate.root)).toBe(false);
+  }, 30_000);
 
   it("never replaces an incumbent public archive", () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-conflict-"));
@@ -295,9 +383,21 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     const expected = observePrivateWindowsCandidate(candidate);
     try {
       await waitForPath(ready);
-      expect(() => publishPrivateWindowsCandidate(
-        candidate, expected, outputRoot, powershell!, process.env,
-      )).toThrow(expect.objectContaining({ code: "PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE" }));
+      let refusal: unknown;
+      try {
+        publishPrivateWindowsCandidate(candidate, expected, outputRoot, powershell!, process.env);
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toEqual(expect.objectContaining({
+        cause: expect.objectContaining({
+          message: expect.stringMatching(
+            /^PACK_WINDOWS_PUBLICATION_FAILED:output-open:WIN32_(?:5|32|33)$/,
+          ),
+        }),
+        code: "PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE",
+        layer: "PACKAGING_OUTPUT",
+      }));
       expect(existsSync(join(outputDist, "moe-windows.zip"))).toBe(false);
       expect(existsSync(candidate.root)).toBe(true);
     } finally {

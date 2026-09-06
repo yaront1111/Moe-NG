@@ -18,8 +18,8 @@ export type PackOutputCode = (typeof PACK_OUTPUT_CODES)[number];
 export class PackOutputError extends Error {
   public readonly code: PackOutputCode;
   public readonly layer = PACKAGING_OUTPUT_LAYER;
-  public constructor(code: PackOutputCode) {
-    super(code);
+  public constructor(code: PackOutputCode, options?: ErrorOptions) {
+    super(code, options);
     this.name = "PackOutputError";
     this.code = code;
     Object.freeze(this);

@@ -18,6 +18,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 using Microsoft.Win32.SafeHandles;
 
@@ -37,7 +38,17 @@ public static class MoePackPublication {
   const uint OPEN_REPARSE_POINT = 0x00200000;
   const uint REPARSE_ATTRIBUTE = 0x400;
   const int FILE_DISPOSITION_INFO_CLASS = 4;
+  const int FILE_DISPOSITION_INFO_EX_CLASS = 21;
   const int FILE_RENAME_INFO_CLASS = 3;
+  const int ERROR_FILE_NOT_FOUND = 2;
+  const int ERROR_ACCESS_DENIED = 5;
+  const int ERROR_SHARING_VIOLATION = 32;
+  const int ERROR_LOCK_VIOLATION = 33;
+  const int ERROR_DIR_NOT_EMPTY = 145;
+  const uint DISPOSITION_DELETE = 0x1;
+  const uint DISPOSITION_POSIX_SEMANTICS = 0x2;
+  const int DELETE_ATTEMPTS = 400;
+  const int VERIFY_ATTEMPTS = 100;
   static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
 
   public sealed class Request {
@@ -73,8 +84,9 @@ public static class MoePackPublication {
     public uint IndexHigh; public uint IndexLow;
   }
   [StructLayout(LayoutKind.Sequential)] struct DISPOSITION_INFO {
-    [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;
+    [MarshalAs(UnmanagedType.U1)] public bool DeleteFile;
   }
+  [StructLayout(LayoutKind.Sequential)] struct DISPOSITION_INFO_EX { public uint Flags; }
 
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
   static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security,
@@ -91,6 +103,13 @@ public static class MoePackPublication {
   static ulong FileIndex(FILE_INFO info) { return ((ulong)info.IndexHigh << 32) | info.IndexLow; }
   static long FileSize(FILE_INFO info) { return (long)(((ulong)info.SizeHigh << 32) | info.SizeLow); }
   static string Hex(byte[] bytes) { return String.Concat(bytes.Select(b => b.ToString("x2"))); }
+  static int NativeError(Exception error) {
+    for (Exception current = error; current != null; current = current.InnerException) {
+      Win32Exception native = current as Win32Exception;
+      if (native != null) return native.NativeErrorCode;
+    }
+    return -1;
+  }
   static bool SamePath(string left, string right) {
     return String.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
   }
@@ -142,7 +161,26 @@ public static class MoePackPublication {
     }
   }
 
+  // Remove the name when this delete handle closes even if a scanner still owns a
+  // shared read handle. Older hosts may fall back, but every deletion remains before rename.
+  static bool TryDeletePosix(IntPtr handle, out int error) {
+    var info = new DISPOSITION_INFO_EX();
+    info.Flags = DISPOSITION_DELETE | DISPOSITION_POSIX_SEMANTICS;
+    int size = Marshal.SizeOf(typeof(DISPOSITION_INFO_EX)); IntPtr memory = Marshal.AllocHGlobal(size);
+    try {
+      Marshal.StructureToPtr(info, memory, false);
+      bool deleted = SetFileInformationByHandle(handle, FILE_DISPOSITION_INFO_EX_CLASS,
+        memory, (uint)size);
+      error = deleted ? 0 : Marshal.GetLastWin32Error();
+      return deleted;
+    } finally { Marshal.FreeHGlobal(memory); }
+  }
+
   static void DeleteOnClose(IntPtr handle) {
+    int extendedError;
+    if (TryDeletePosix(handle, out extendedError)) return;
+    // The extended class is filesystem-dependent. The legacy call uses the same
+    // DELETE-authorized handle and still fails closed if the name cannot be removed.
     var info = new DISPOSITION_INFO(); info.DeleteFile = true;
     int size = Marshal.SizeOf(typeof(DISPOSITION_INFO)); IntPtr memory = Marshal.AllocHGlobal(size);
     try {
@@ -151,12 +189,24 @@ public static class MoePackPublication {
     } finally { Marshal.FreeHGlobal(memory); }
   }
 
+  static void DeleteDirectoryOnClose(IntPtr handle) {
+    for (int attempt = 0; attempt < DELETE_ATTEMPTS; attempt++) {
+      try { DeleteOnClose(handle); return; }
+      catch (Win32Exception error) {
+        if (error.NativeErrorCode != ERROR_DIR_NOT_EMPTY || attempt + 1 >= DELETE_ATTEMPTS) throw;
+        Thread.Sleep(25);
+      }
+    }
+    throw new InvalidOperationException();
+  }
+
   static void RenameNoReplace(IntPtr file, IntPtr root, string leaf) {
     byte[] name = Encoding.Unicode.GetBytes(leaf);
     int rootOffset = IntPtr.Size == 8 ? 8 : 4;
     int lengthOffset = rootOffset + IntPtr.Size;
     int nameOffset = lengthOffset + 4;
-    int bufferSize = nameOffset + name.Length;
+    // FILE_RENAME_INFO requires sizeof(the padded structure) plus the name bytes.
+    int bufferSize = nameOffset + 4 + name.Length;
     IntPtr memory = Marshal.AllocHGlobal(bufferSize);
     try {
       for (int index = 0; index < bufferSize; index++) Marshal.WriteByte(memory, index, 0);
@@ -189,9 +239,18 @@ public static class MoePackPublication {
   }
 
   static void VerifyPublished(string path, IntPtr expected, long size, string sha256) {
-    IntPtr observed = CreateFileW(path, GENERIC_READ, SHARE_READ | SHARE_WRITE | SHARE_DELETE, IntPtr.Zero,
-      OPEN_EXISTING, OPEN_REPARSE_POINT, IntPtr.Zero);
-    if (observed == INVALID_HANDLE) throw new Win32Exception(Marshal.GetLastWin32Error());
+    IntPtr observed = INVALID_HANDLE;
+    for (int attempt = 0; attempt < VERIFY_ATTEMPTS; attempt++) {
+      observed = CreateFileW(path, GENERIC_READ, SHARE_READ | SHARE_WRITE | SHARE_DELETE, IntPtr.Zero,
+        OPEN_EXISTING, OPEN_REPARSE_POINT, IntPtr.Zero);
+      if (observed != INVALID_HANDLE) break;
+      int error = Marshal.GetLastWin32Error();
+      bool retryable = error == ERROR_FILE_NOT_FOUND || error == ERROR_ACCESS_DENIED
+        || error == ERROR_SHARING_VIOLATION || error == ERROR_LOCK_VIOLATION;
+      if (!retryable || attempt + 1 >= VERIFY_ATTEMPTS) throw new Win32Exception(error);
+      Thread.Sleep(25);
+    }
+    if (observed == INVALID_HANDLE) throw new InvalidOperationException();
     try {
       FILE_INFO left, right;
       Require(GetFileInformationByHandle(expected, out left));
@@ -257,19 +316,21 @@ public static class MoePackPublication {
       stage = "marker-delete";
       DeleteOnClose(marker); CloseHandle(marker); marker = IntPtr.Zero;
       stage = "dist-delete";
-      DeleteOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
       stage = "root-delete";
-      DeleteOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
 
       stage = "rename";
       string finalPath = Path.Combine(request.outputDist, request.finalName);
       RenameNoReplace(temporary, IntPtr.Zero, finalPath);
+      stage = "verify";
       VerifyPublished(finalPath, temporary, request.size, request.sha256);
       committed = true;
       Require(CloseHandle(temporary)); temporary = IntPtr.Zero;
       return;
     } catch (Exception error) {
-      throw new Exception(stage, error);
+      Console.Error.WriteLine("MOE_WINDOWS_PUBLICATION_FAILURE|" + stage + "|" + NativeError(error));
+      throw new Exception("PACK_WINDOWS_PUBLICATION_FAILED");
     } finally {
       if (!committed && temporary != IntPtr.Zero) {
         try { DeleteOnClose(temporary); } catch { }

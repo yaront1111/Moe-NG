@@ -17,24 +17,39 @@ import {
 import { withPrivateWindowsCandidate } from "./pack-windows-candidate.js";
 
 const roots: string[] = [];
+// Real Git/archive cases exceeded the 5s default on this Windows host. Keep only
+// these subprocess integrations bounded at 30s; pure guards keep their defaults.
+const GIT_COMPOSITION_TIMEOUT_MS = 30_000;
 
-function executableFromPath(name: string): string {
+interface TestCommand {
+  readonly args: readonly string[];
+  readonly executable: string;
+}
+
+function commandFromPath(name: string): TestCommand {
   for (const directory of (process.env["PATH"] ?? "").split(delimiter)) {
     const candidateRoot = directory.replace(/^"|"$/gu, "");
     if (!isAbsolute(candidateRoot)) continue;
-    for (const candidate of process.platform === "win32" ? [`${name}.exe`, name] : [name]) {
+    // Windows cannot launch an extensionless action-setup shell shim with shell:false.
+    for (const candidate of process.platform === "win32" ? [`${name}.exe`] : [name]) {
       try {
         const resolved = realpathSync(join(candidateRoot, candidate));
-        if (statSync(resolved).isFile()) return resolved;
+        if (statSync(resolved).isFile()) return { args: [], executable: resolved };
+      } catch { /* keep searching */ }
+    }
+    if (process.platform === "win32" && name === "pnpm") {
+      try {
+        const entry = realpathSync(join(candidateRoot, "..", "pnpm", "bin", "pnpm.cjs"));
+        if (statSync(entry).isFile()) return { args: [entry], executable: process.execPath };
       } catch { /* keep searching */ }
     }
   }
   throw new Error(`missing test executable: ${name}`);
 }
 
-const gitExecutable = executableFromPath("git");
-const pnpmExecutable = executableFromPath("pnpm");
-const tarExecutable = executableFromPath("tar");
+const gitExecutable = commandFromPath("git").executable;
+const pnpmCommand = commandFromPath("pnpm");
+const tarExecutable = commandFromPath("tar").executable;
 const tarVersion = spawnSync(tarExecutable, ["--version"], {
   cwd: dirname(tarExecutable), encoding: "utf8", shell: false, windowsHide: true,
 });
@@ -45,6 +60,8 @@ function git(args: readonly string[], cwd: string): string {
     cwd, encoding: "utf8", shell: false, windowsHide: true,
   });
   if (result.status !== 0) throw new Error(String(result.stderr));
+  // Disposable fixture history must not inherit the host's signing process.
+  if (args[0] === "init") git(["config", "--local", "commit.gpgsign", "false"], cwd);
   return result.stdout.trim();
 }
 
@@ -90,7 +107,9 @@ describe("the production Windows pack source composition", () => {
       "node tools/packaging/pack-windows-main.ts",
     );
 
-    const run = spawnSync(pnpmExecutable, ["run", "pack:windows", "--", "--allow-dirty"], {
+    const run = spawnSync(pnpmCommand.executable, [
+      ...pnpmCommand.args, "run", "pack:windows", "--", "--allow-dirty",
+    ], {
       cwd: repositoryRoot, encoding: "utf8", shell: false, windowsHide: true,
     });
     expect(run.status).toBe(1);
@@ -237,7 +256,7 @@ describe("the production Windows pack source composition", () => {
     )).toThrow(expect.objectContaining({
       code: "PACK_SOURCE_PACKER_DRIFT", layer: "PACKAGING_SOURCE",
     }));
-  });
+  }, GIT_COMPOSITION_TIMEOUT_MS);
 
   it("loads through physical runtime bridges and refuses obsolete dirty-pack arguments", () => {
     const run = spawnSync(process.execPath, [join(import.meta.dirname, "pack-windows-main.ts"), "--allow-dirty"], {
@@ -296,7 +315,7 @@ describe("the production Windows pack source composition", () => {
     expect(result).toBe(23);
     expect(temporarySourceRoot).not.toBe("");
     expect(existsSync(dirname(temporarySourceRoot))).toBe(false);
-  });
+  }, GIT_COMPOSITION_TIMEOUT_MS);
 
   it("publishes the private candidate only after tracked source re-verification", () => {
     const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-publish-"));
@@ -338,7 +357,7 @@ describe("the production Windows pack source composition", () => {
       .toBe("verified candidate\n");
     expect(candidateRoot).not.toBe("");
     expect(existsSync(candidateRoot)).toBe(false);
-  });
+  }, GIT_COMPOSITION_TIMEOUT_MS);
 
   it("publishes no public archive when the consumer mutates tracked source", () => {
     const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-mutation-"));
@@ -374,5 +393,5 @@ describe("the production Windows pack source composition", () => {
     expect(existsSync(join(outputRoot, "dist", "moe-windows.zip"))).toBe(false);
     expect(candidateRoot).not.toBe("");
     expect(existsSync(candidateRoot)).toBe(false);
-  });
+  }, GIT_COMPOSITION_TIMEOUT_MS);
 });

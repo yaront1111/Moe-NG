@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
@@ -18,7 +18,7 @@ import * as packCommand from "./pack-command.js";
 const roots: string[] = [];
 
 function temporary(prefix: string): string {
-  const root = mkdtempSync(join(tmpdir(), prefix));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   roots.push(root);
   return root;
 }
