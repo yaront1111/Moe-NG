@@ -60,6 +60,10 @@ export interface DeployCommandOptions {
    *  handler refuses rather than choosing a directory the operator never named. */
   readonly buildContext?: string;
   readonly clock?: () => string;
+  /** The health-poll budget and interval, and the sleep between probes. Forwarded UNTOUCHED to
+   *  the engine, which owns their defaults: an offline arm proving DEPLOY_HEALTH_TIMEOUT would
+   *  otherwise have to wait out docker's real start-period in wall clock. */
+  readonly healthBudgetMs?: number;
   /** THE ASYNC ENTRY MUST FENCE ITSELF: the registry's operator check lives in the SYNCHRONOUS
    *  handler path, which an async entry never reaches, so membership in the operator roster
    *  alone would leave this kind dispatchable by any GOAL-capable session — including an agent's,
@@ -67,7 +71,9 @@ export interface DeployCommandOptions {
   readonly operatorPrincipalId: string;
   /** ABSENT means production: the real docker and ssh runners on this host. */
   readonly ports?: DeployPorts;
+  readonly pollMs?: number;
   readonly projectId: string;
+  readonly sleep?: (ms: number) => Promise<void>;
   readonly store: SqliteEventStore;
 }
 
@@ -178,7 +184,13 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
 
     const report = await createDeployService({
       ports: options.ports ?? productionDeployPorts(), projectId, store,
+      // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
+      // is a DIFFERENT thing from an absent key, and only the absent key means "the engine's
+      // own default".
       ...(options.clock === undefined ? {} : { clock: options.clock }),
+      ...(options.healthBudgetMs === undefined ? {} : { healthBudgetMs: options.healthBudgetMs }),
+      ...(options.pollMs === undefined ? {} : { pollMs: options.pollMs }),
+      ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
     }).deploy(deployRequestOf(envelope, context));
 
     const committed = runBootstrapCommand(store, bytes, {

@@ -59,7 +59,12 @@ export type AsyncCommandKind =
 export interface DeploymentDeploySeams {
   readonly buildContext?: string;
   readonly clock?: () => string;
+  /** Health-poll timing, forwarded untouched to the engine: an arm proving the timeout refusal
+   *  must not wait out docker's real start-period in wall clock. */
+  readonly healthBudgetMs?: number;
+  readonly pollMs?: number;
   readonly ports?: DeployPorts;
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 /** The two injectable halves of the bootstrap command. Production passes NEITHER and gets the
@@ -164,7 +169,11 @@ export function createAsyncCommandEntries(
     // DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
     ...(buildContext === undefined ? {} : { buildContext }),
     ...(deploySeams.clock === undefined ? {} : { clock: deploySeams.clock }),
+    ...(deploySeams.healthBudgetMs === undefined
+      ? {} : { healthBudgetMs: deploySeams.healthBudgetMs }),
+    ...(deploySeams.pollMs === undefined ? {} : { pollMs: deploySeams.pollMs }),
     ...(deploySeams.ports === undefined ? {} : { ports: deploySeams.ports }),
+    ...(deploySeams.sleep === undefined ? {} : { sleep: deploySeams.sleep }),
   });
   return Object.freeze({
     [DEPLOYMENT_DEPLOY_COMMAND_KIND]: Object.freeze({
