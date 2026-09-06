@@ -20,8 +20,9 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AND BASELINE. NO EDITS. (a) CONFIRM THE PREREQUISITE LANDED. task-c851961b (grandchild C) owns the durable store and its read port; this row only HONOURS it. Prove it at the tree: `git grep -rn 'agentProvider' apps/daemon/src --include=*.ts | grep -v test` must show a store module with a read function, and `git grep -n 'set_agent_provider' apps/daemon/src/daemon-command-vocabulary.ts` must hit. If either is absent, moe.report_blocked with blockedOnTaskIds ['task-c851961b968942f880950acc16dc575a'] and stop. Read that row's completionSummary from get_context.epicSiblings for the EXACT read-port signature and the goalId convention (its DoD says goalId \"\" is the project default, a non-empty goalId is the override) rather than guessing them. (b) READ THE STRUCTURAL GAP THIS ROW'S DESCRIPTION DOES NOT MENTION, measured at HEAD f3b94eaa. `SpawnRequest` (agent-wrapper.ts:44-55) carries EXACTLY: credential, expiresAt, kind, mission, sessionId, workItemId, workspace. THERE IS NO projectId AND NO goalRef. `AgentSpawnerOptions` (agent-spawn-contract.ts:18-43) has NO store handle either. So `attemptSpawn` CANNOT resolve a per-project or per-goal setting from what it is given today - that is the real work of this row, and step 2 states the seam. (c) MEASURE THE CAPS, because two of the three files this row must edit are already over them: `wc -l` gives agent-spawner.ts 438 (OVER 400), agent-wrapper-main.ts 485 (OVER 400), agent-wrapper.ts 394 (SIX lines of headroom), agent-provider-pause.ts 186, agent-spawn-contract.ts 229. Nothing in this row may grow the first two, and agent-wrapper.ts has almost no room - the new module exists to absorb the logic. (d) NOTE THE PAUSE SHAPE: `createProviderPauseGate` is built ONCE at agent-wrapper-main.ts:287-292 with a single frozen `provider` string, and agent-wrapper.ts:326 calls `config.providerPause?.paused(...)` ONCE PER PASS, before the step loop. Per-provider pause therefore means moving that check from per-pass to per-step. (e) BASELINE (global rail 3), standalone foreground, quoting each count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. (f) `git status --porcelain -- apps/daemon/src/orchestrator` - note peer dirt, never revert it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T21:56:43.336Z"
     },
     {
       "stepId": "step-2",
@@ -91,7 +92,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.317Z",
-  "updatedAt": "2026-09-05T17:00:33.403Z",
+  "updatedAt": "2026-09-06T22:05:24.311Z",
   "dependsOn": [
     "task-c851961b968942f880950acc16dc575a"
   ],
@@ -121,5 +122,9 @@
       "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T17:00:14.688Z"
+  "planApprovedAt": "2026-09-05T17:00:14.688Z",
+  "contextFetchedBy": [
+    "worker-1d53e70c"
+  ],
+  "workStartedAt": "2026-09-06T21:56:43.336Z"
 }

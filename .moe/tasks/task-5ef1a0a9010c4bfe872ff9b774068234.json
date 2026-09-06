@@ -7,8 +7,8 @@
     "`repository.bootstrap` published operator-only, MCP-excluded, with the full roster backfill and bidirectional roster tests; BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE, BOOTSTRAP_PROFILE_VERSION_UNKNOWN asserted with code + layer.",
     "Scaffold generator golden test pins the exact file tree plus the package.json, compose and CI workflow bytes under a profile version constant; the generated app passes `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build` in a test that actually runs it (the child run's count lines quoted).",
     "Browser: 'New product from PRD' form -> directory created, first commit exists (`git log --oneline` = 1 line), repository bound, project in the manager catalog, PRD goal created - Playwright journey against a REAL daemon; count line quoted.",
-    "GitHub creation tested offline through a port asserting the `gh` argv; the live drive creates a throwaway repository under the owner's account (URL + receipt in a row comment) and refuses cleanly with `gh` absent (BOOTSTRAP_GH_UNAVAILABLE while the local bootstrap still succeeds).",
-    "Runbook + README updated ('new repository creation' listed as running); gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
+    "GitHub creation is tested OFFLINE through the port asserting the `gh` argv (child evidence) and refuses cleanly with `gh` absent (BOOTSTRAP_GH_UNAVAILABLE while the local bootstrap still succeeds). The LIVE GitHub drive is DEFERRED to the owner: no account/visibility was supplied, so the local-only journey IS the complete outcome (same ruling as child task-80322112's 17:55Z amendment) - record the deferral plainly in the roll-up; never create a remote without owner-supplied values. One bounded UI correction lands on THIS row: `apps/control-room/src/v2/products/new-product-form.tsx` PARTIAL wording must not claim GitHub 'did not happen' / 'was not reached' when the combined `gh repo create --push` port cannot distinguish remote-created-then-push-failed from create-failed - say the GitHub step did not complete and that a repository may already exist under the account; its test updated; both paths declared on this row.",
+    "Runbook + README updated: `docs/agent-stack-runbook.md` gains a short 'New product from PRD' section (what the form creates, where the repository lands, the local-only outcome with GitHub deferred, BOOTSTRAP_DIR_NOT_EMPTY on retry), landed on THIS row and declared; README already carries child 80322112's 'new repository creation' bullet - verify, do not duplicate. Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` - leased through `full-suite-gate`; foreign HEAD reds path-attributed, never certified as green."
   ],
   "taskRails": [
     "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
@@ -29,15 +29,23 @@
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (repository.bootstrap operator-only, MCP-excluded, roster backfill, four refusals with code + layer) -> child task-facff1d1. DoD 2 (the scaffold golden test AND the generated app passing its own install/typecheck/test/build) -> child task-4a0f7064. DoD 3 (the browser journey to a bound repository and a PRD goal) -> child task-80322112. DoD 4 (gh argv offline, plus the live throwaway repository and the clean `gh`-absent refusal) -> split across task-facff1d1 (the offline argv assertion) and task-80322112 (the live drive) — confirm BOTH, since an argv assertion with no live run proves the command shape and not the integration. DoD 5 (runbook + README 'new repository creation' running) -> child task-80322112. CONFIRM ONE THING EXPLICITLY: child 1's DoD required the generated app to be BUILT, not merely written. Quote its child-run gate output. A golden file tree that was never installed and built is a file list, and it is the single most likely place this feature ships broken.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-06T19:33:40.625Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "DoD reconciliation against current20:10 governor amendment, not superseded base GitHub-live demand. (1) facff1d1/db6da88a: operator-only async ingress, MCP/HUMAN_ONLY fences, bidirectional rosters and4refusalcode+layer; verification/review71files808pass2skip. (2)4a0f7064/2feed27b: generated app ACTUALLY BUILT, not onlygolden; child MOE_SCAFFOLD_BUILD=1 parent2tests0skips; generated API Test Files1passed/Tests3passed, web Test Files1passed/Tests1passed; install --frozen-lockfile/typecheck/test/build all0. These are CHILD-PRODUCT counts at child's anchor, not current Moe gates. (3)80322112/7d78aa19: real unseeded browser1passed16s, exactlyonecommit/binding/catalog/PRDgoal; receipt e2e-proj-tacng6-bootstrap@2026-09-06T18:06:52.854Z productSHA2ac4d140e8f52abad4ee3aa69d2ec205112cdeea. Read all three siblingverification/completion/review records and merged=true. (4) fac offlineghargv/cleanGH-absent partial covered; LIVEGitHub owner-deferred as currentDoD nowstates; no owner/account/visibility invented and no GH_UNAVAILABLE fabricated for absentowner. Authorizedparent UItruthfix nowimplemented: didnotcomplete/mayalreadyexist, actualcode+detail+layer and boundlocalfacts retained. (5)README existing runningnewrepo bullet verified, notduplicated; new23line runbooksection authoredhere withlocal-onlydated2026-09-06, placement/chain/partial/retry/noDBstartup guidance. Fullparentgates remainstep3. Freshown85tests3filesEXIT0,typecheck19/19EXIT0; detail TDD/drills SHAunchanged proof comment-6b434fd9fd774e209f310bdc28863438. Only3reportedpaths touched, all cleanatclaim; otherdirtpreserved. source242lines/test300. This step's edits authorizedbycurrentDoD4/5+comment63c3ae3a; base evidence-onlyhistory not treatedas currentprohibition.",
+      "startedAt": "2026-09-06T19:33:40.625Z",
+      "completedAt": "2026-09-06T20:23:01.311Z"
     },
     {
       "stepId": "step-3",
       "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. State that `pnpm test` covers NO apps/** (global rail 18) but IS real evidence here because child 2 touched packages/contracts and the generated client. KEEP THE TWO GATE UNIVERSES SEPARATE in the record: moe-next's own gates and the GENERATED product's gates are different runs with different count lines, and conflating them would let a green scaffold be claimed from moe-next's own suite. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T20:23:02.022Z"
     },
     {
       "stepId": "step-4",
@@ -80,11 +88,29 @@
       "author": "worker-f72a1438",
       "content": "PARENT ROLL-UP DISCOVERY at landed7d78aa19; source-confirmed truth gap, actual remote half-success NOT reproduced. new-product-form.tsx78-80 unconditionally renders PARTIAL_SUCCESS as 'GitHub half did not happen' / 'GitHub was not reached'. But daemon repository-bootstrap-ports.ts56-60 invokes combined gh repo create --source . --push and maps ANY nonzero exit to BOOTSTRAP_GH_UNAVAILABLE/GITHUB_REFUSED; service.ts25-26,61-69 retains bound local success with remoteUrl:null. Therefore a successfully created remote followed by push failure is not distinguishable, and those negative-existence/reachability claims are stronger than evidence. Exact tests cover nonzeroGITHUB_REFUSED at ports.test89-96 and service.test138-147, but no separate remote-created/push-failed arm. Needs bounded wording/test fix preserving unknown GitHub completion and local facts; do not mint a remote receipt or weaken stable codes. Parent currently evidence-only with no affected files; requesting governor amendment/reopen routing before editing. Loaded systematic-debugging, traced production→receipt→UI; zero modifications/probes/network effects.",
       "timestamp": "2026-09-06T19:36:25.996Z"
+    },
+    {
+      "id": "comment-63c3ae3a2e35480fb5145fd2050d8375",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 20:10Z — block resolved by DoD amendment, row restored to WORKING (steps 1 done, 2 in progress). DoD 4 and DoD 5 were rewritten on the board: (1) the live GitHub drive is DEFERRED to the owner (no account/visibility supplied); the local-only journey is the complete outcome, same ruling as child task-80322112's 17:55Z amendment — record the deferral, never create a remote without owner values. (2) One bounded UI correction lands on THIS row: apps/control-room/src/v2/products/new-product-form.tsx:74-84 PARTIAL wording (\"The GitHub half did not happen\" / \"GitHub was not reached\") overclaims — the combined `gh repo create --push` port (ports:56-60) and service:25-26 return null remote for both remote-created-then-push-failed and create-failed. Say the GitHub step did not complete and a repository may already exist under the account; update its test; declare both paths here. (3) docs/agent-stack-runbook.md gains a short \"New product from PRD\" section on this row; README already has child 80322112's bullet — verify, do not duplicate. Gates through `full-suite-gate` (worker-adefb11e holds it now, worker-d107a8ef queued); foreign HEAD reds are path-attributed, not certified. Step 3's browser leg: `pnpm test:e2e:browser` through `browser-e2e-gate`, spec count quoted.",
+      "timestamp": "2026-09-06T20:10:34.723Z"
+    },
+    {
+      "id": "comment-6b434fd9fd774e209f310bdc28863438",
+      "author": "worker-f78e0703",
+      "content": "GOVERNOR20:10 DoD4/5 correction implemented during step2: ONLY new-product-form.tsx/.test.ts and agent-stack-runbook.md, all explicitly declared, all clean at claim. GitHub PARTIAL now says step did not complete and a repository may already exist; code+detail+refusedBy retained. Local committed/bound facts and downstream exact refusal remain. No account/remote invented, live GitHub remains owner-deferred. Form242lines, test300. Runbook23-line new-product section: where/scaffold/firstcommit/bind/catalog/PRD chain, local-only/date, partial remote caveat, DIR_NOT_EMPTY retry and no automatic PostgreSQL/deploy.\nTDD: three named GH details (GH_EXECUTABLE_ABSENT, GH_EXECUTION_FAILED, GITHUB_REFUSED) red3/18 first on missing DAEMON_INGRESS; after layer-only correction all3 still red at headline expected 'The GitHub step did not complete' vs received 'GitHub was not reached'. Full correction green3files85tests. Fresh same3files85tests after all drills EXIT0; commands below.\nProcess-local production transform drills (no shared source mutation; temp Vite config removed): headline->old negative claim reds3tests at new-product-form.test.tsx264; uncertainty sentence->negative claim reds3at265; remove BOOTSTRAP_GH_UNAVAILABLE interpolation reds6 including3newarms at261, downstream arms239 and pure277. Every drill EXIT1 and 18tests actually generated/executed. Pre-status bothtrackedM; production SHA256 before/after in SEPARATE calls identical0614ca404e7f5f99484b04b7aa181a8c6eacf66a8e96e531cc752ab199eb660a. Disk needed no restore; no emptydiff claim. Test code+layer are asserted, not only PARTIAL.\nFresh command: pnpm --filter @moe/control-room test src/v2/products/new-product-form.test.tsx src/v2/products/live-new-product.test.tsx src/v2/cordum-app.test.tsx => Test Files3passed(3), Tests85passed(85), EXIT0. pnpm typecheck =>19/19Done EXIT0 after changes. git diff --check exact3paths EXIT0. Root pnpmtest covers NO apps; neither full/root/browser nor generated-product gates re-run here yet.\nRead own diff adversarially: pure presentation, no new effects/locks/state; all null/error branches untouched; React escapes receipt strings; no credential input or new observable secret. Existing two downstream-failure arms stillgreen. Remote half-success was NOT recreated: wording is bounded to what combined gh exit can establish, not a new remote fact. Parent integrated gates remain step3, not yet complete.",
+      "timestamp": "2026-09-06T20:22:06.780Z"
+    },
+    {
+      "id": "comment-8d2b6e47932e41c6ac4c6ae726d95fdb",
+      "author": "worker-f78e0703",
+      "content": "NON-RESOURCE adversarial integration work finished while queued; step4 not marked early (step3 gate ordering preserved). Anchor current405995e2e5b044cd2847f8ba3e7f40c2cf69e539 + only3owned dirty paths.\n(a) Existing real directory/command arms rerun: file+junction+dotfile-only+trailingseparator at repository-bootstrap-ports.test146-158; late arrival afterprepare120-126; command occupant preservation. lstat rejects final symlink/file and readdir counts hidden files; write rechecks and wx prevents overwrite. No claim of OS-atomic ancestor swap safety: productionports95-97 explicitly disclaims hostile concurrent local ancestor changes. Separate ordinarysymlink/backslash/ancestor-race variants not added; retain existing hardening note34e1bcdf, not new proof row.\n(b) Combined gh repo create --source . --push has one exit result; existing nonzero arms preserve real local commit/binding and nullremote; remote-created-then-push-failed cannot be distinguished. This row corrects operator words instead of claiming negative remote existence. No remote network operation performed; owner remote integration remains deferred.\n(c) Controlled-profile golden actually generated on this host by existing productiongenerator tests, current controlled-2; manifest plus package/compose/CI exactbytes green. LF-normalized pinnedlock asset, UTF16code-unit sorting (notlocaleCompare), no clock/cwd/toolversion input. Current profile differs from old childcontrolled-1 deliberately via latermigrationprofileproducer; do not call old22filecounts current.\n(d) Actualroottemplates46-47 emit db:migrate=node-pg-migrate up, db:migrate:down=down1;239postgres:17-alpine,324compose. Profile meets migration/PostgreSQL assumptions. Bootstrap does not launchDB; generated Compose live launch not established by these offline/source tests, retained historical caveat.\nFRESH standalone daemon diagnostic: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/repository/controlled-profile/controlled-profile-generator.test.ts src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts src/repository/repository-bootstrap-journey.test.ts => Test Files4passed(4), Tests93passed(93), EXIT0,38.64s. This does NOT rerun generated app install/build; that remains separately child/QA recorded (step2).\nFinal smallrefactor foldsheadline/state ontoone line so newProductWords stays50lines; productionfile241,test300. Final freshUI3files85testsEXIT0,11.81s afterrefactor; preexisting typecheck19/19Done0 and exactowned gitdiffcheck0. Drift/restoration hashes in earliercomment were at mutation time; current33c046201c6204838a7dc74a3f5ea4cfaa901b1b800deb3e6ea86bbfab08e387 differs ONLY by disclosed same-lineformatting, not lostrestore. No test/build processes remain. Await leased fullgate only before step3 closure; no whole-repo green asserted.",
+      "timestamp": "2026-09-06T20:26:40.426Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:49.471Z",
-  "updatedAt": "2026-09-06T19:36:27.484Z",
+  "updatedAt": "2026-09-06T21:55:33.412Z",
   "dependsOn": [
     "task-4a0f706437a042059789be2ebdb98bc0",
     "task-facff1d1e7ce44a6b1101490524890a9",
@@ -94,10 +120,11 @@
     "firstClaimAt": "2026-09-05T00:43:12.246Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T00:43:58.864Z",
@@ -114,7 +141,8 @@
   },
   "planApprovedAt": "2026-09-05T00:44:01.036Z",
   "contextFetchedBy": [
-    "worker-f72a1438"
+    "worker-f72a1438",
+    "worker-f78e0703"
   ],
   "priorHandoffs": [
     {
@@ -127,8 +155,15 @@
     }
   ],
   "workStartedAt": "2026-09-06T19:27:41.427Z",
-  "blockedReason": "Step1 complete: all3 children DONE/landed, latest8037d78aa19=origin. Step2 reconciliation cannot honestly confirm current parentDoD4: owner supplied no GitHub account/visibility, child80317:55 amendment explicitly accepts local-only but parentDoD4/steps2+5 still require actual remote URL (gh present/authenticated, no fabricated absence). ParentDoD5 also requires runbook update absent from child803 README/VISION scope; docs/agent-stack-runbook.md has no new-product guidance. During read-only reconciliation traced additional delivered UI overclaim: new-product-form.tsx78-80 says GitHub did not happen/was not reached for all PARTIAL, whereas combined gh create --push ports56-60 cannot distinguish remote-created/push-failed, and service25-26 returns nullremote for either. Actual remote half-success NOT reproduced; exact trace/comments on803/parent. Need authorized bounded UI+test/runbook amendment or owning child reopen before editing evidence-only shell (all affectedFiles empty). Do not mark DONE or cite old childgates as post7d78 green. Step2partial comment9d694e10, audit34e1bcdf; zerofilesmodified, no leases/processes.",
-  "blockedResourceId": null,
+  "blockedReason": "RESOURCE WAIT ONLY, queued#2 behind worker-d107a8ef and current holder worker-adefb11e. Governor20:10 requires leased full gates; no lease bypass/force release. Steps1/2 complete; authorized3path UIwording/test/runbook correction is done and explicitly declared/reported. All non-resource work finished and recorded (DoDreconciliation,3process-localred drills, composed-featuredirectory/GH/profile audit). Fresh finalUI3files85testsEXIT0; daemonprofile/bootstrap4files93testsEXIT0; typecheck19DoneEXIT0. No source changes outside3ownedpaths, no outstanding backgroundprocess. Await full daemon/control-room/root foreground gates; browsergate stillowedafterseparatelease (notqueuedyettoavoiddoublehold). No fullsuite/browsergreen claim; currentnamedcompletionpnpmtest:e2e:browser cannot be replaced by own85testscount withoutgovernorapproval. Childreal localbrowser and generatedappbuild evidence preserved separately; liveGitHub ownerdeferred peramendedDoD. Handoffsaved task-task-5ef1a0a9010c4bfe872ff9b774068234-handoff.",
+  "blockedResourceId": "full-suite-gate",
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T19:36:27.484Z"
+  "blockedAt": "2026-09-06T20:26:41.965Z",
+  "priorBlockedReason": "Step1 complete: all3 children DONE/landed, latest8037d78aa19=origin. Step2 reconciliation cannot honestly confirm current parentDoD4: owner supplied no GitHub account/visibility, child80317:55 amendment explicitly accepts local-only but parentDoD4/steps2+5 still require actual remote URL (gh present/authenticated, no fabricated absence). ParentDoD5 also requires runbook update absent from child803 README/VISION scope; docs/agent-stack-runbook.md has no new-product guidance. During read-only reconciliation traced additional delivered UI overclaim: new-product-form.tsx78-80 says GitHub did not happen/was not reached for all PARTIAL, whereas combined gh create --push ports56-60 cannot distinguish remote-created/push-failed, and service25-26 returns nullremote for either. Actual remote half-success NOT reproduced; exact trace/comments on803/parent. Need authorized bounded UI+test/runbook amendment or owning child reopen before editing evidence-only shell (all affectedFiles empty). Do not mark DONE or cite old childgates as post7d78 green. Step2partial comment9d694e10, audit34e1bcdf; zerofilesmodified, no leases/processes.",
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/control-room/src/v2/products/new-product-form.tsx",
+    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "docs/agent-stack-runbook.md"
+  ]
 }
