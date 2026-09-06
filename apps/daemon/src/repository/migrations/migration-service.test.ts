@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +48,7 @@ describe("migration receipt", () => {
   });
 
   it("round trips every member from a real store and refuses mismatched replay", () => {
-    const root = mkdtempSync(join(tmpdir(), "moe-migration-test-")); roots.push(root);
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-migration-test-"))); roots.push(root);
     const store = SqliteEventStore.openForProject(join(root, "events.sqlite"), "project");
     installTestRecoveryBinding(store);
     try {
@@ -66,7 +66,7 @@ describe("migration receipt", () => {
 });
 
 function world() {
-  const projectRoot = mkdtempSync(join(tmpdir(), "moe-migration-test-")); roots.push(projectRoot);
+  const projectRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-migration-test-"))); roots.push(projectRoot);
   const store = SqliteEventStore.openForProject(join(projectRoot, "events.sqlite"), "project");
   installTestRecoveryBinding(store);
   const database = new DatabaseSync(join(projectRoot, "schema.sqlite"));

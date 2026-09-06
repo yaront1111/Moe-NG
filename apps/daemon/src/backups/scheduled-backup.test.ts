@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -13,9 +13,12 @@ import { runScheduledBackup } from "./scheduled-backup.js";
 const roots: string[] = [];
 const failure = { code: "BACKUP_FAILED", layer: "DAEMON_ACTIVATION_RECEIPTS" };
 const clock = new Date("2026-09-06T10:00:00.000Z");
+// Linux CI provides Linux containers. Other hosts opt in only when configured to
+// run them; an enabled arm still fails if Docker or the required image is unavailable.
+const RUN_POSTGRES_RESTORE = process.platform === "linux" || process.env.MOE_MIGRATION_RESTORE === "1";
 const fileHash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 function fixture() {
-  const projectRoot = mkdtempSync(join(tmpdir(), "moe-backup-test-"));
+  const projectRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-backup-test-")));
   roots.push(projectRoot);
   const storePath = join(projectRoot, "store.sqlite");
   const db = new DatabaseSync(storePath);
@@ -186,7 +189,7 @@ describe("scheduled backups", () => {
   });
 });
 
-describe("real PostgreSQL backup restore", () => {
+describe.runIf(RUN_POSTGRES_RESTORE)("real PostgreSQL backup restore", () => {
   it("restores the seeded row, rejects corruption, and tears down on both exits", async () => {
     const before = containers();
     const name = `moe-backup-fixture-${randomUUID()}`;

@@ -217,6 +217,9 @@ function pinningRow(
 }
 
 const CAPTURE_PORT = {
+  context: {
+    sealFoundationContext: (): never => { throw new Error("context port must never be reached"); },
+  },
   captureResult: (): never => { throw new Error("capture port must never be reached"); },
   // Same sentinel discipline as the capture port: the only dispatch these rows
   // perform is refused at request decoding, so a lifecycle call is itself a

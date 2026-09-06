@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ const owner = { projectId: "project", storeId: "store", nodeRef: "node:scoped", 
 const oldController = { controllerId: "old-controller", controllerPid: 100 };
 
 function fixture(portOf: (actual: RepositoryExecutionPort) => RepositoryExecutionPort = (actual) => actual) {
-  const workspace = mkdtempSync(join(tmpdir(), "moe-delivery-recovery-")); roots.push(workspace);
+  const workspace = realpathSync(mkdtempSync(join(tmpdir(), "moe-delivery-recovery-"))); roots.push(workspace);
   execFileSync("git", ["init", "--quiet"], { cwd: workspace, windowsHide: true });
   const actual = createRepositoryExecutionPort();
   const port = portOf(actual);

@@ -5,10 +5,14 @@
  * Nothing here is a substitute for production: the host is the installed `moe-mcp-stdio` shim
  * over a real SqliteEventStore, the envelope is built by the shipped
  * `buildGoalBriefCommand`, and the read-back goes through `readGoalCatalog`, the same function
- * the daemon's /goals/read route calls. The only in-process step is the bootstrap seeding, and
- * that store handle is CLOSED before the host spawns.
+ * the daemon's /goals/read route calls. Bootstrap also traverses the installed host. Its
+ * activation measures an owned Git checkout, online SQLite backup, and a real Node version
+ * probe; no model execution or host provider login is needed for this goal-brief fixture.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
+import { sep } from "node:path";
 
 import { admitGoalBrief } from "@moe/contracts";
 import { SqliteEventStore } from "@moe/store";
@@ -228,6 +232,7 @@ interface SecondPlanResult {
 
 let workspace: PortabilityWorkspace;
 let catalog: GoalCatalogReadResult;
+let activationUsesOwnedStorage = false;
 let seededCounts: StoreCounts;
 let afterSubmissionCounts: StoreCounts;
 let pinnedTarget: Submitted | undefined;
@@ -326,7 +331,23 @@ const AUTHORITY_EXTRAS: readonly { readonly key: string; readonly value: unknown
 
 beforeAll(async () => {
   workspace = createWorkspace(PROJECT_ID);
-  const driver = await stdioDriver(workspace, workspace.credential);
+  const projectRoot = realpathSync(workspace.directory);
+  const gitEnvironment = Object.fromEntries(Object.entries(process.env)
+    .filter(([key]) => !key.toUpperCase().startsWith("GIT_")));
+  for (const args of [
+    ["init", "--quiet"],
+    ["-c", "user.name=Goal Brief Fixture", "-c", "user.email=goal-brief@example.invalid",
+      "commit", "--quiet", "--allow-empty", "--no-gpg-sign", "-m", "activation fixture"],
+  ]) {
+    const run = spawnSync("git", args, {
+      cwd: projectRoot, env: gitEnvironment, shell: false, windowsHide: true,
+    });
+    expect(run.status).toBe(0);
+  }
+  const driver = await stdioDriver(workspace, workspace.credential, {
+    MOE_AGENT_COMMAND: process.execPath,
+    MOE_PROJECT_ROOT: projectRoot,
+  });
   try {
     await driveChainThroughHost(driver);
     seededCounts = await readStoreCounts(workspace.storePath);
@@ -344,6 +365,7 @@ beforeAll(async () => {
       expectedVersion: offer["expectedVersion"],
       payload: {
         commands: planningChain({
+          budgetRef: null,
           correlationId,
           decidedAt: "2026-08-28T12:00:00.000Z",
           goalId,
@@ -398,7 +420,19 @@ beforeAll(async () => {
   }
   const store = SqliteEventStore.openForProject(workspace.storePath, PROJECT_ID);
   try {
-    catalog = readGoalCatalog(store, PROJECT_ID);
+    catalog = readGoalCatalog(store, PROJECT_ID, randomBytes(32));
+    activationUsesOwnedStorage = store.readEventsAfter(0n, 1_000).items.some((event) => {
+      const body = JSON.parse(new TextDecoder().decode(event.payload)) as {
+        readonly kind?: unknown;
+        readonly witness?: Readonly<Record<string, unknown>>;
+      };
+      if (body.kind !== "ProjectActivated") return false;
+      const artifact = body.witness?.["artifactPathRef"];
+      const backup = body.witness?.["backupPathRef"];
+      return typeof artifact === "string" && artifact.startsWith(`source-checkout/${projectRoot}@`)
+        && typeof backup === "string" && backup.startsWith(`${projectRoot}${sep}`)
+        && existsSync(backup.split("@sha256:")[0]!);
+    });
   } finally {
     store.close();
   }
@@ -409,6 +443,10 @@ afterAll(async () => {
 });
 
 describe("task-e10e1627 goal briefs through the installed MCP host", () => {
+  it("activates with measured source and backup inside the owned fixture", () => {
+    expect(activationUsesOwnedStorage).toBe(true);
+  });
+
   it("submits a nonzero roster of distinct briefs", () => {
     expect(SUBMITTED.length).toBeGreaterThan(0);
     expect(submitted).toHaveLength(2);

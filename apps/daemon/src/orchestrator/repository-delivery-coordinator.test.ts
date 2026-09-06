@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ import type { RepositoryDeliveryFacts } from "./repository-delivery-contracts.js
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function repository() {
-  const root = mkdtempSync(join(tmpdir(), "moe-delivery-coordinator-")); roots.push(root);
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-delivery-coordinator-"))); roots.push(root);
   execFileSync("git", ["init", "--quiet"], { cwd: root, windowsHide: true });
   return root;
 }

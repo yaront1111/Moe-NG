@@ -123,6 +123,8 @@ function healthyPorts(): {
     },
     installedPolicySliceRefs: () => Promise.resolve([SLICE_A, SLICE_B]),
     now: () => new Date(CLOCK),
+    // This HTTP fixture controls every measurement port; never inherit a host CLI.
+    providerVersion: () => Promise.resolve({ code: 0, stderr: "", stdout: "fixture-provider 1.0.0\n" }),
     sqliteApplicationId: () => SQLITE_APPLICATION_ID,
   };
   return { ports, state };
@@ -249,6 +251,34 @@ function rowOf(view: ActivationView, member: string): ActivationView["members"][
 }
 
 describe("the activation receipts read states every receipt over HTTP without writing", () => {
+  it("uses the fixture version probe without requiring an installed provider", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-activation-read-no-provider-"));
+    scratchRoots.push(root);
+    const command = join(root, "not-installed-provider");
+    const listener = await start(createActivationReadPort({
+      input: { ...INPUT, agentCommand: command }, ports: healthyPorts().ports,
+    }));
+    const view = viewOf(await post(listener));
+    expect(rowOf(view, "provider").measured).toBe(true);
+    expect(view.provider).toEqual({ command, version: "1.0.0" });
+  });
+
+  it("refuses an uninstalled provider when the real version probe is selected", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-activation-read-missing-provider-"));
+    scratchRoots.push(root);
+    const ports = { ...healthyPorts().ports };
+    delete ports.providerVersion;
+    const listener = await start(createActivationReadPort({
+      input: { ...INPUT, agentCommand: join(root, "not-installed-provider") }, ports,
+    }));
+    const view = viewOf(await post(listener));
+    expect(rowOf(view, "provider")).toMatchObject({
+      code: "ACTIVATION_PROVIDER_UNMEASURED", layer: RECEIPTS_LAYER, measured: false, ref: null,
+    });
+    expect(view.provider).toBeNull();
+    expect([...view.blocking]).toEqual(["provider"]);
+  });
+
   it("is REGISTERED, not merely written — the listener does not answer ROUTE_UNKNOWN", async () => {
     const listener = await start(portFor());
 
