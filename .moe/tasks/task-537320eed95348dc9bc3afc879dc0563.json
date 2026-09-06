@@ -166,8 +166,8 @@
       "completedAt": "2026-09-06T18:38:53.023Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,16 +191,24 @@
       "author": "worker-1d53e70c",
       "content": "GATE SHEET AND PATH ATTRIBUTION — step 8, DoD 7. worker-1d53e70c, 2026-09-06.\n\n(1) `pnpm --filter @moe/daemon test` — ONE run, under a legitimately acquired `full-suite-gate` lease (holders AND queue were both EMPTY when I took it at 17:47:36Z, so no convoy was displaced; RELEASED at 17:5xZ the moment the count line was captured, and the daemon granted it straight on to task-4a6e7bdbef9a4344829a7ce49c6fb378).\nStart 20:47:41, duration 603.87s, EXIT 1.\n`Test Files  8 failed | 533 passed (541)` / `Tests  11 failed | 10002 passed | 6 skipped (10019)`\n\nFOUR OF THE EIGHT WERE MINE — roster literals in files the plan does not name and my targeted legs did not include. This is exactly what the repo-wide leg is for. Each fixed by its PRINTED expected-vs-received:\n- src/daemon-v2-command-registry.test.ts \"snapshots the /2 authority dependencies exactly once at construction\" — `AssertionError: expected 61 to be 60`. `ports.registry.size` 60 -> 61 (the /2 plane excludes `planning.submit_decomposition`, hence 61 where the v1 registry is 62).\n- src/bootstrap/bootstrap-durability.test.ts \"drives every owned command kind…\" — `expected 13 to be 14`. The arm DERIVES `sequence.length` from `BOOTSTRAP_COMMAND_KINDS.length - UNDRIVEN_KINDS.length + REPEATED_REQUESTS`, so adding a bootstrap kind without listing it as undriven breaks the arithmetic. `deployment.migrate_down` added to UNDRIVEN_KINDS: `send` is a synchronous ledger drive and cannot run a child process, exactly as `deployment.deploy` and `repository.bootstrap` are excused there.\n- src/bootstrap/bootstrap-services.test.ts \"covers exactly the fifteen command kinds this surface owns\" — `expected Set{…(15)} to deeply equal Set{…(14)}`. OWNED_KINDS gained the kind; title \"fifteen\" -> \"sixteen\"; two `toHaveLength(15)` -> 16.\n- src/mcp-http/mcp-http-host.test.ts HTTP-1 and HTTP-2 — `expected 25 to be 24` twice, plus `expected 50 to be 48` on the derived `EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT`.\n\nTHE OTHER FOUR ARE FOREIGN and were red at the merge-base. Merge-base baseline is task-0a56ecee's recorded BEFORE/AFTER sheet (comment-91e7593f / its handoff), which names this exact set: criterion-evidence/criterion-integrated.test.ts:66:19; goals/goal-live-evidence.test.ts:380:19; goals/goal-services.test.ts:309:19; goals/j1-command-path.test.ts:203:19,265:43,314:19 — \"all one class (criterion execution UNKNOWN / byteCount 0 / run BLOCKED via shared fixture 90:13)\".\nRE-MEASURED AT MY HEAD, targeted, verbatim: `Test Files 4 failed (4)`, 6 arms, every one `Error: scoped criterion execution did not prove all checks: {\"outcome\":\"CRITERION_EVIDENCE\",…\"status\":\"UNKNOWN\",\"exitCode\":null,\"byteCount\":0,…\"run\":{…\"status\":\"BLOCKED\"}}` (criterion-integrated's is the `toMatchObject` form of the same fact). ZERO roster or command-kind failures among them, and the TWO roster arms this row edited inside j1-command-path.test.ts are GREEN.\n(HEAD failures) − (merge-base failures) = the four literal files above; after fixing them the difference is EMPTY, so the intersection with owned paths is EMPTY. Completion permitted under the path-attributed-baseline rail. I did NOT re-run the repo-wide leg after the fixes — the lease is now another task's and the ruling forbids a second run; the four are re-verified by the targeted leg in (5) instead, and that is stated rather than dressed up as a green full suite.\n\n(2) `pnpm typecheck` — EXIT 0, all 19 packages `Done` including `apps/daemon typecheck$ tsc --project tsconfig.json` (the script echo is the execution evidence).\n\n(3) `pnpm test` (root lane) — EXIT 1, `Test Files 11 failed | 419 passed | 2 skipped (432)` / `Tests 83 failed | 10269 passed | 46 skipped (10398)`. IT IS NOT EVIDENCE FOR ANYTHING THIS ROW OWNS, and that is structural, not an excuse: vitest.config.ts:32 `include: [\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\", \"tools/**/*.test.ts\"]` — NO `apps/**`. Every path this row touches is under `apps/daemon/**`, so the lane executes zero owned files and the owned intersection is EMPTY by construction. The 11 failing files confirm it: packages/benchmark (freeze-manifest-admission, pre-freeze-audit, pre-freeze-pinned-documents), packages/runner/src/verification/criterion-check-executor, tests/e2e/foundation/multi-node-graph.e2e, tests/integration/portability (bin-target-modes, portability-historical-receipt), tools/packaging (pack-command, pack-source, pack-windows-main, pack-windows). None under apps/.\n\n(4) `pnpm --filter @moe/control-room test` — EXIT 0, `Test Files 173 passed (173)` / `Tests 2190 passed (2190)`. Required by epic rail 1 for any row in the kind-publishing chain. NO digest mirror moved in this row: the contract half (task-5a8c3166) already published the kind and regenerated the client, so GENERATED_CONTRACT_DIGEST is untouched here. Census by HEX at my HEAD found the four mirrors unchanged from that row's landing. Leg quoted anyway, as the rail requires.\n\n(5) OWNED-SCOPE GATE, standalone, no pipe, exit code captured directly — this is the `verification` on complete_task:\n`npx vitest run --root . --config apps/daemon/package.json --maxWorkers=4 --testTimeout=120000 <19 files>` -> EXIT 0, `Test Files 19 passed (19)` / `Tests 1011 passed | 1 skipped (1012)`, 45.37s at 21:36:58. The 19 are every daemon file this row edited plus every file that reddened on it, including all four from (1).\n\n(6) `MOE_MIGRATION_RESTORE=1 … migrate-down-real.test.ts` -> `Test Files 1 passed (1)` / `Tests 2 passed (2)`; the same command unflagged -> `1 passed | 1 skipped (2)`, which is the discriminator proving the live arm executed. `docker ps -a` empty afterwards.\n\nSIZES (`wc -l`): daemon-command-vocabulary.ts 404 — EXACTLY the merge-base count, net zero from this row, and the 404 > 400 breach is PRE-EXISTING (`git show HEAD:… | wc -l` = 404). daemon-command-registry.ts 568 at HEAD, past the cap and UNTOUCHED here. New production files: migrate-down-command.ts 172, migration-down-service.ts 124, migration-down-ports.ts 115. Edited: payload-keys 200, async-entries 364, bootstrap-contracts 240, bootstrap-sequence 192, agent-spawn-contract 281, migration-receipt 118, migration-service 98. Every production file this row created or grew is under 400.",
       "timestamp": "2026-09-06T18:38:22.451Z"
+    },
+    {
+      "id": "comment-550a9e93f0b4422abb5c7b91a6b3bbac",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE (qa-4f771bb8).\n\n**GATE RE-RUN, recorded command verbatim** — `npx vitest run --root . --config apps/daemon/package.json --maxWorkers=4 --testTimeout=120000 apps/daemon/src/deployment/migrate-down-journey.test.ts apps/daemon/src/deployment/migrate-down-real.test.ts apps/daemon/src/daemon-command-registry.test.ts apps/daemon/src/daemon-store-dependencies.test.ts` → **Test Files 4 passed (4), Tests 446 passed | 1 skipped (447), EXIT 0.** Exact reproduction; every filter inside the string.\n\n**DoD 1** — `runtime-vocabulary.ts:91` and the hand-transcribed roster at `runtime-contract.test.ts:41` both carry the kind at its sorted position between `deployment.deploy` and `deployment.rollback`; the generated client has it twice. The clause's \"regenerate with OLD and NEW digest quoted\" belongs to the contract half (task-5a8c3166), and the record says so rather than claiming it — with a HEX census showing the four mirrors unchanged at this HEAD. Correct attribution, not a narrowing.\n\n**DoD 2** — the record's correction of the plan is right and I checked the premise rather than the claim: `CommandHandler = (context) => ServiceOutcome` is synchronous, and a revert spawns a child, so a GOAL_HANDLERS entry could only answer before the schema moved. Async entry, `createAsyncCommandEntries` spread at `daemon-command-registry.ts:293`, ZERO lines added to that 565-line file — task rail 3 honoured under the 400-cap pressure rather than around it.\n\n**DoD 3 — I looked in the wrong file first and want that recorded**, because it is the second time today a three-axis arm was not where I expected. `mcp-tool-allowlist.test.ts` carries only the aggregate-count arm for this kind, and on that reading DoD 3 looked unmet. The per-kind arm exists twice over: `daemon-store-dependencies.test.ts:1139-1152` asserts all three axes together for the whole deployment family — `OPERATOR_PRINCIPAL_KINDS` set-equal to advertised, `wiredMcpToolKinds()` set-equal to `[]` (which is exactly the surface DoD 3 demands, not the derived roster), `MCP_EXCLUDED_COMMAND_KINDS` asserted as the *second* side of the derivation with a comment explaining why one side alone would stay green, and `HUMAN_ONLY_STEPS` set-equal to advertised — with a NON-VACUITY control at `:1132` naming the four kinds so an empty subject cannot pass. And `daemon-command-registry.test.ts` carries the per-kind arm \"fences deployment.migrate_down at dispatch, on MCP and in the wrapper, all three\".\n\n**DoD 4** — the both-sides drill is real and the discriminator is the valuable part. D1 (delete the PAYLOAD_KEYS entry) reds `deployment.migrate_down is not served at all: expected false to be true`; D2 (delete the async registry entry, 738 chars) reds `lost its async entry: expected undefined to be defined` — and the note explains that `registry.has(kind)` STAYS TRUE under D2 because `entryOf` falls back to generic synchronous wiring, so a `has`-based arm would have passed while the command lost its own service. That is the roster-rail failure mode caught by construction. Restores: out-of-tree backups, SHA256 equal in a call separate from each restore, and `mcp-tool-allowlist.ts` restored byte-identically despite carrying PEER dirt.\n\n**DoD 5** — `migrate-down-journey.test.ts` drives the registered command against live PostgreSQL: `:202` takes the schema back and leaves the first batch standing; `:239` refuses an AGENT principal at `DAEMON_AUTHORIZATION` before it reads anything; `:259`/`:279`/`:296` pin `MIGRATE_DOWN_UNCONFIGURED`, `MIGRATION_DOWN_BATCH_UNKNOWN`, `MIGRATION_DOWN_NOT_LAST_BATCH` with the schema unchanged; `:361` replay; `:402` a second concurrent revert refused rather than raced. **`:326` is the arm I would keep** — \"would NOT pass if the revert moved nothing: a no-op port leaves the schema forward\" — a self-supplied control against a vacuous pass.\n\n**DoD 6** — the four roster literals the row moved were each fixed from the PRINTED expected-vs-received (`61 to be 60`, `13 to be 14`, `Set{15} vs Set{14}`, `25 to be 24`), not from any number in the description. `bootstrap-durability` is the instructive one: the arm DERIVES its length, so adding a bootstrap kind without listing it undriven breaks the arithmetic rather than a literal.\n\n**DoD 7 — all four gates present with count lines.** Daemon repo-wide EXIT 1 under a legitimately acquired lease (holders and queue both empty at 17:47:36Z, released as soon as the count line was captured), 8 failing files of which **FOUR were the row's own and were fixed**, four foreign and matched by name AND line against task-0a56ecee's merge-base sheet, then re-measured targeted at this HEAD; typecheck EXIT 0 19/19; root `pnpm test` EXIT 1 with its irrelevance argued structurally from `vitest.config.ts:32` (no `apps/**`) and all 11 failing files enumerated to show none is under `apps/`; control-room 173/2190 EXIT 0. **Not re-running the repo-wide leg after the fixes, and saying so rather than dressing it as a green suite, is the right call** — the lease had passed on and the ruling forbids a second run.\n\n**LANDING** — nine files still untracked/dirty under `deployment/` and `migrations/` at my review; `task.commits` carries checkpoint `187b3dc2` only. I did not hand-land: this row's paths overlap two live rows (`migration-receipt.ts`/`migration-service.ts` are task-0a56ecee's, currently ` M` from this row's successor work), so a QA landing here could not be hunk-clean without index surgery on files two other rows are mid-edit in. Its own wrapper should carry them; if it exits without doing so, that is a follow-up for whoever sees it, not a defect in this review.",
+      "timestamp": "2026-09-06T18:47:17.675Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:35:08.019Z",
-  "updatedAt": "2026-09-06T18:44:26.974Z",
+  "updatedAt": "2026-09-06T18:47:59.066Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:42:41.167Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-06T18:47:59.066Z",
+    "wallClockMs": 83117899
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -225,7 +233,8 @@
   "contextFetchedBy": [
     "worker-f72a1438",
     "worker-1d53e70c",
-    "worker-96c6d708"
+    "worker-96c6d708",
+    "qa-4f771bb8"
   ],
   "workStartedAt": "2026-09-06T17:15:38.737Z",
   "commits": [
@@ -257,6 +266,70 @@
       "pushed": true,
       "recoveredBy": "worker-adefb11e",
       "message": "Governor attribution: task-2ab7b462's completion exit (187b3dc2, worker-adefb11e, who wrote zero bytes) swept this row's in-flight deployment.migrate_down CONSUMER hunks (count pins 24->25, HUMAN_ONLY_STEPS member, membership arms) into HEAD ahead of the producer (vocabulary kind, async entry, migrate-down-command.ts, migration-down-*.ts — all still worktree-only). HEAD's daemon tests are inconsistent until this row's completion lands the producer half; land it as soon as gates finish."
+    },
+    {
+      "sha": "9048426d59d5a1df50abcfae9f1a29b29393f1c5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-1d53e70c@2026-09-06T17:14:43Z",
+      "paths": [
+        ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+        ".moe/tasks/task-166d375f8ce9492aaf50587233545992.json",
+        ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/deployment/migrate-down-command.js",
+        "apps/daemon/src/deployment/migrate-down-command.ts",
+        "apps/daemon/src/deployment/migrate-down-journey.test.ts",
+        "apps/daemon/src/deployment/migrate-down-real.test.ts",
+        "apps/daemon/src/goals/j1-command-path.test.ts",
+        "apps/daemon/src/repository/migrations/migration-down-ports.js",
+        "apps/daemon/src/repository/migrations/migration-down-ports.ts",
+        "apps/daemon/src/repository/migrations/migration-down-service.js",
+        "apps/daemon/src/repository/migrations/migration-down-service.ts",
+        "apps/daemon/src/repository/migrations/migration-receipt.ts",
+        "apps/daemon/src/repository/migrations/migration-service.ts"
+      ],
+      "recordedBy": "worker-1d53e70c",
+      "recordedAt": "2026-09-06T18:45:02.788Z",
+      "treeId": "f8f8aec3703db29eaadd17b99cbe9ce089fdbafa",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+          "taskId": "task-9aea412b10d141c084c9bfdb04c33a21"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-cf2d91d923ea4397a1145e0973ed2218"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-c851961b968942f880950acc16dc575a"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -287,13 +360,19 @@
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
     "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
     "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
-    "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+    ".moe/tasks/task-166d375f8ce9492aaf50587233545992.json",
+    ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
+    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "governor-afbde490@2026-09-06T17:50:00Z",
-    "at": "2026-09-06T17:50:25.674Z"
+    "kind": "completion",
+    "sessionId": "worker-1d53e70c@2026-09-06T17:14:43Z",
+    "at": "2026-09-06T18:45:02.788Z"
   },
   "declaredFiles": [
     "apps/daemon/src/daemon-command-vocabulary.ts",
@@ -332,5 +411,39 @@
     "outputTail": "Test Files  4 passed (4)\n      Tests  446 passed | 1 skipped (447)\n   Duration  8.93s\n\nEXIT=0, captured WITHOUT a pipe. Subject + fence + weld. The broader 19-file owned-scope leg is in comment-8b3d7da7: EXIT 0, Test Files 19 passed (19) / Tests 1011 passed | 1 skipped (1012), re-run after peer commit 125c160e landed and still EXIT 0.",
     "reportedAt": "2026-09-06T18:44:23.698Z"
   },
-  "completionSummary": "`deployment.migrate_down` is published HUMAN-ONLY and MCP-EXCLUDED, and it really reverts the last batch against a live PostgreSQL. Detail in comment-982e984a (drills) and comment-8b3d7da7 (gates, path attribution, sizes).\n\nTHE PLAN'S CENTRAL PREMISE WAS WRONG AND I SAY SO PLAINLY. A GOAL_HANDLERS row is IMPOSSIBLE for this kind: `CommandHandler = (context) => ServiceOutcome` is synchronous (bootstrap-ledger-vocabulary.ts:253) and a revert spawns a child process, so a sync adapter could only answer BEFORE the schema moved. It is an ASYNC ENTRY like `deployment.deploy`/`deployment.rollback` — which the codebase already states at bootstrap-contracts.ts:57-63 and deploy-command.ts:28. TASK RAIL 3 HONOURED: `createAsyncCommandEntries` is SPREAD at daemon-command-registry.ts:293, so ZERO lines were added to that 565-line file.\n\nSECOND GAP: THE ENGINE HAD NO REVERT (migration-ports.ts hard-codes `direction: 'up'`). Built where the plan says migration-tool invocation belongs — in the engine: migration-down-ports.ts (115) and migration-down-service.ts (124), plus the thin edge migrate-down-command.ts (172). The batch is named by the APPLIED RECEIPT that created it, never a count, because `node-pg-migrate down N` unwinds the N most recent rows whatever they are; the child re-checks `pgmigrations`' tail and refuses NOT_LAST_BATCH BEFORE reverting. It backs up first, under the SAME project-wide lock the forward path takes.\n\nDoD 3/4 — three axes asserted together in one arm naming WHICH failed, axis 2 against `wiredMcpToolKinds()`, never the derived exclusion roster. THREE DRILLS, all RED, all restored by SHA256 against out-of-tree backups: advertised side deleted, served side deleted, and the CIRCULARITY drill — removing the subtraction in WIRED_KINDS leaves `MCP_EXCLUDED.includes(kind)` TRUE while the kind IS advertised, so an exclusion-roster assertion stays green. That reproduces the false-green the rail predicts. The bidirectional set-equality tests already existed in thre"
+  "completionSummary": "`deployment.migrate_down` is published HUMAN-ONLY and MCP-EXCLUDED, and it really reverts the last batch against a live PostgreSQL. Detail in comment-982e984a (drills) and comment-8b3d7da7 (gates, path attribution, sizes).\n\nTHE PLAN'S CENTRAL PREMISE WAS WRONG AND I SAY SO PLAINLY. A GOAL_HANDLERS row is IMPOSSIBLE for this kind: `CommandHandler = (context) => ServiceOutcome` is synchronous (bootstrap-ledger-vocabulary.ts:253) and a revert spawns a child process, so a sync adapter could only answer BEFORE the schema moved. It is an ASYNC ENTRY like `deployment.deploy`/`deployment.rollback` — which the codebase already states at bootstrap-contracts.ts:57-63 and deploy-command.ts:28. TASK RAIL 3 HONOURED: `createAsyncCommandEntries` is SPREAD at daemon-command-registry.ts:293, so ZERO lines were added to that 565-line file.\n\nSECOND GAP: THE ENGINE HAD NO REVERT (migration-ports.ts hard-codes `direction: 'up'`). Built where the plan says migration-tool invocation belongs — in the engine: migration-down-ports.ts (115) and migration-down-service.ts (124), plus the thin edge migrate-down-command.ts (172). The batch is named by the APPLIED RECEIPT that created it, never a count, because `node-pg-migrate down N` unwinds the N most recent rows whatever they are; the child re-checks `pgmigrations`' tail and refuses NOT_LAST_BATCH BEFORE reverting. It backs up first, under the SAME project-wide lock the forward path takes.\n\nDoD 3/4 — three axes asserted together in one arm naming WHICH failed, axis 2 against `wiredMcpToolKinds()`, never the derived exclusion roster. THREE DRILLS, all RED, all restored by SHA256 against out-of-tree backups: advertised side deleted, served side deleted, and the CIRCULARITY drill — removing the subtraction in WIRED_KINDS leaves `MCP_EXCLUDED.includes(kind)` TRUE while the kind IS advertised, so an exclusion-roster assertion stays green. That reproduces the false-green the rail predicts. The bidirectional set-equality tests already existed in thre",
+  "touchedFiles": [
+    "apps/daemon/src/deployment/migrate-down-real.test.ts",
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/repository/migrations/migration-receipt.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/repository/migrations/migration-down-service.js",
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "apps/daemon/src/repository/migrations/migration-down-ports.js",
+    "apps/daemon/src/repository/migrations/migration-down-service.ts",
+    "apps/daemon/src/repository/migrations/migration-down-ports.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/deployment/migrate-down-journey.test.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/repository/migrations/migration-service.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+    "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+    "apps/daemon/src/deployment/migrate-down-command.js",
+    "apps/daemon/src/deployment/migrate-down-command.ts"
+  ],
+  "unattributedPaths": [],
+  "completedAt": "2026-09-06T18:47:59.066Z",
+  "reviewCompletedAt": "2026-09-06T18:47:59.066Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-550a9e93.\n\nRE-RAN the recorded command verbatim: 4 files / 446 passed | 1 skipped (447), EXIT 0.\n\nDoD1 published at the sorted position in runtime-vocabulary.ts:91 AND the hand roster at runtime-contract.test.ts:41. The regenerate-and-quote-digests clause belongs to the contract half (task-5a8c3166); the record says so with a HEX census showing the four mirrors unchanged - attribution, not narrowing.\nDoD2 the plan's GOAL_HANDLERS premise is genuinely impossible (CommandHandler is synchronous, a revert spawns a child) and the row says so plainly. Async entry spread at registry.ts:293, ZERO lines added to that 565-line file.\nDoD3 I looked in the wrong file first: mcp-tool-allowlist.test.ts carries only the aggregate-count arm. The per-kind arm exists twice - daemon-store-dependencies.test.ts:1139-1152 asserts all three axes together, with wiredMcpToolKinds() set-equal to [] (the surface DoD 3 demands), the derived roster as the SECOND side, plus a non-vacuity control at :1132.\nDoD4 both deletions red with verbatim messages, and the discriminator is the value: under D2 registry.has(kind) STAYS TRUE because entryOf falls back to generic sync wiring, so a has-based arm would have passed while the command lost its service. Restores SHA256-proven in separate calls.\nDoD5 live PostgreSQL: schema back with the first batch standing, AGENT refused at DAEMON_AUTHORIZATION before any read, three refusal codes with the schema unchanged, replay, concurrent-revert refusal - plus :326, a self-supplied no-op-port control against a vacuous pass.\nDoD6 the four moved literals taken from the printed expected-vs-received.\nDoD7 four gates with count lines. Daemon EXIT 1 under a legitimate lease; of 8 failing files FOUR were its own and fixed, four foreign matched by name and line.\n\nLANDING: nine paths still dirty; I did not hand-land - they overlap two live rows mid-edit."
 }

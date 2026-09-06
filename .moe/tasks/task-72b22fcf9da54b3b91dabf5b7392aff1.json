@@ -48,8 +48,8 @@
       "startedAt": "2026-09-06T02:49:50.688Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-1d53e70c",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -75,11 +75,17 @@
       "author": "worker-f72a1438",
       "content": "RESUME RE-MEASUREMENT 2026-09-06 07:59Z, HEAD4ad67796abc937a4bdf6e81a3cac1121f1def9b1. NO SOURCE EDITS. Handoff history read; steps1-2 COMPLETED, step3 already IN_PROGRESS (start_step returns INVALID_STATE; not reset). All3 declared children still DONE+landed in epicSiblings; verification/completion/review read there, not inferred from HEAD. store.ts:60 header and exact3 exports117/146/165 intact. B field now in core contract111/admission235-240, CRmirror28/107/110 and Cconsumer93; original packages/contracts/planning grep remains wrong locus.\nFRESH focused characterization: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/environment src/orchestrator/verifier-process-runner.test.ts src/orchestrator/agent-spawn-environment.test.ts src/repository/controlled-profile/controlled-profile-generator.test.ts -> EXIT0, Test Files11passed(11), Tests210passed(210), start10:59:22 local, duration11.69s. Polled to completion, not background claim. This is NOT step3's named full verification.\nATTRIBUTION: earlier8334cdc9 and96aed5d3 are1path task-JSON-only checkpoints; all7 unattributed activation/deploy source paths are foreign. environment-store.ts and agent-spawn-environment.ts appear ASSERTED only because completed read-only step1 had affectedFiles; both clean and this shell changed neither. Governor asked remove stale attribution, not sweep peer WIP.\nMISSING COMPOSITION rechecked via committed commands: git grep -n readEnvironmentDelivery -- apps/daemon/src ':!*.test.ts' returns only declaration environment-delivery.ts:104; git grep -n requiredVariableNames -- apps/daemon/src ':!*.test.ts' shows producer declaration90 and generator/template plumbing only, no bootstrap caller. BootstrapRequest61-67 omits names, command bootstrapRequestOf130 supplies no names, generator138 defaults empty. Existing210green tests prove injected seams, not real project-to-process/repository data flow. Raised to architect/governor before proof closure; no new implementation inside this NO-CODE shell. Whole-package daemon gate is queued AFTER worker7bdbffac (governor priority), no full gate token held.",
       "timestamp": "2026-09-06T08:00:20.661Z"
+    },
+    {
+      "id": "comment-0bf3296cfc8b4708a386409c49c38cd7",
+      "author": "worker-1d53e70c",
+      "content": "STEP 3 PARTIAL, PARKED ON `full-suite-gate` AT #2. worker-1d53e70c, 2026-09-06 18:47Z, HEAD 9048426d. NO PRODUCTION CODE THIS SESSION — zero files created or modified (this row is a composition shell).\n\nLEG 3 OF 3 DISCHARGED, NO REDO ON GRANT.\n`pnpm typecheck` — EXIT 0, standalone foreground, no pipe/chain.\nExecution evidence (not exit code alone): `$ pnpm --recursive typecheck` / `Scope: 19 of 20 workspace projects`, and every project printed its own `$ tsc --project tsconfig.json` echo followed by `Done` — including the two that matter here: `apps/control-room typecheck$ tsc --project tsconfig.json` / `apps/control-room typecheck: Done`, and `apps/daemon typecheck$ tsc --project tsconfig.json` / `apps/daemon typecheck: Done`. 19 `Done` lines, zero `Failed`.\n\nLEGS 1 AND 2 STILL OWED — deliberately NOT run unleased.\n`pnpm --filter @moe/daemon test` (this row's named complete_task verification command) and `pnpm --filter @moe/control-room test`. Census at 18:46Z: 169 node processes live, 2.49 GB free physical memory, `full-suite-gate` held by worker-deb4c7d8 (task-4a6e7bdbef9a) since 17:58:00Z with worker-adefb11e (task-2ab7b462) at #1. This row's own plan step 3 records the daemon suite as ~22 min and dominated by 30000ms spawn-latency timeouts on a loaded host; an unleased concurrent run here would produce exactly that inadmissible red. Queued at #2 with an ETA of 30 min. NOT force-releasing — the holder took the lease fairly and is running the one command their reopen requires.\n\nTHE COMPOSITION GAP THIS SHELL DISCLOSED IS CLOSED. task-14260d5ec20c43e697521a8a98904136 — the prerequisite row this shell filed after measuring that both delivery symbols had ZERO production callers — has LANDED on moe/work-2026-09-04: `8457ae33` feat (compose delivery into real launches + bootstrap required names) and `ca53eef2` test. Re-measured at the delivered tree, non-test files only:\n- `launchDelivery` (environment-launch-resolver.ts:177) is now imported by TWO production composition sites: `daemon-store-foundation-composition.ts:43` and `orchestrator/agent-wrapper-main.ts:20` — the real spawn seam, which previously supplied no delivery at all.\n- `requiredVariableNames` (environment-required-variables.ts:90) is now consumed by `repository/env-example-sync-command.ts:5,184`, whose handler is wired into the published command roster at `daemon-command-async-entries.ts:262` and `:344` under kind `product_contract.sync_env_example`, and reaches `.env.example` bytes through `controlled-profile-root-templates.ts:191 envExampleBytes` / `:320`.\n- Step 1's security re-check still holds at this tree: `environment-store.ts:60` still carries `NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE`, so grandchild A's value-returning read remains in its own module and the store's greppable claim was not widened.\n\nON GRANT: run both suites standalone and foreground, quote each `Test Files N passed` count line with N nonzero (an exit-0 leg with no count line is a missed filter, not a pass), attribute any red by path per global rail 3 — this row owns no production paths, so any red is a child's or a peer's and gets reported verbatim with its exact failing lines — then complete_step 3, complete_task, release_resource.",
+      "timestamp": "2026-09-06T18:48:31.640Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T18:08:47.202Z",
+  "updatedAt": "2026-09-06T18:48:43.001Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -111,7 +117,8 @@
   "planApprovedAt": "2026-09-05T19:12:08.066Z",
   "contextFetchedBy": [
     "worker-caece97b",
-    "worker-f72a1438"
+    "worker-f72a1438",
+    "worker-1d53e70c"
   ],
   "workStartedAt": "2026-09-06T02:45:52.083Z",
   "commits": [
@@ -235,9 +242,9 @@
       "reason": "Confirmed crash: worker-caece97b's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
     }
   ],
-  "blockedReason": null,
-  "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedReason": "RESOURCE WAIT ONLY, #2 on `full-suite-gate`. No production code owed; this row is a composition shell and this session created/modified ZERO files. Step 3 leg 3 of 3 IS DONE and needs no redo on grant: `pnpm typecheck` EXIT 0 at HEAD 9048426d, 19/20 projects scoped, 19 `Done`, zero `Failed`, with the `apps/daemon typecheck$ tsc --project tsconfig.json` and `apps/control-room typecheck$ tsc` execution echoes. OWED ON GRANT: `pnpm --filter @moe/daemon test` (the named verification command) and `pnpm --filter @moe/control-room test`, standalone foreground, count lines quoted. Deliberately not run unleased: census 18:46Z shows 169 node processes and 2.49 GB free, and this row's own plan records the daemon suite at ~22 min dominated by 30000ms spawn-latency timeouts on a loaded host — a concurrent run would be inadmissible, not merely slow. Holder worker-deb4c7d8 (task-4a6e7bdbef9a) since 17:58:00Z, worker-adefb11e (task-2ab7b462) at #1; NOT force-releasing either. Separately: the production composition gap this shell disclosed is CLOSED — task-14260d5ec20c43e697521a8a98904136 landed as 8457ae33 + ca53eef2, `launchDelivery` now has two production callers (daemon-store-foundation-composition.ts:43, orchestrator/agent-wrapper-main.ts:20) and `requiredVariableNames` reaches `.env.example` through the published `product_contract.sync_env_example` handler (daemon-command-async-entries.ts:262,344). Evidence: comment-0bf3296cfc8b4708a386409c49c38cd7.",
+  "blockedResourceId": "full-suite-gate",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T18:48:43.001Z",
   "blockedOnTaskIds": null
 }
