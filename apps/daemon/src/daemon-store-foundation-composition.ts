@@ -8,6 +8,7 @@ import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import type { DeploymentDeploySeams } from "./daemon-command-async-entries.js";
 import { cutoverActivationWiringOf } from "./daemon-store-cutover-wiring.js";
 import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
@@ -39,6 +40,7 @@ import type { DesignReadInput } from "./design/design-store.js";
 import { readDesignRevision } from "./design/design-store.js";
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
+import { launchDelivery } from "./environment/environment-launch-resolver.js";
 import { readEnvironmentVariables } from "./environment/environment-store.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { NodeSpec } from "./http/affordance-contract.js";
@@ -104,6 +106,7 @@ import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
 import { HEALTH_PROBE_JOB_ID } from "./monitoring/health-probe-contracts.js";
 
 export interface StoreDependencyConfig {
+  readonly deploymentDeploy?: DeploymentDeploySeams;
   readonly healthProbeHttp?: HealthHttpPort;
   readonly schedule?: Pick<ScheduleConfig, "timer" | "resolve">;
   readonly repositoryWorkspace?: string | null;
@@ -203,8 +206,31 @@ export function createStoreDependencies(
    * SAME object is handed to the command registry below and returned as `previews` for the
    * entry's shutdown sweep, which is what makes "stop it once between them" true.
    */
-  const previewPort = createPreviewDaemonPort({ projectId: config.projectId, store });
+  /**
+   * THE PREVIEW'S ENVIRONMENT DELIVERY. A preview runs the product's OWN dev server, so it is the
+   * one child in this process that legitimately needs the operator's variables.
+   *
+   * RESOLVED HERE BECAUSE THIS IS WHERE THE CREDENTIAL IS A FACT. `PreviewRunnerConfig` carries
+   * `projectId` and `store` but no credential; threading one down would put a SECOND
+   * `EnvironmentStoreConfig` construction inside the runner - a second place a value could be
+   * assembled, which is exactly what the environments READ port below refuses to do. This root
+   * already owns the same thunk (`environmentCredential`, a few lines down).
+   *
+   * The resolver takes a purpose and no environment name, so a preview cannot be pointed at
+   * `production` by a payload or a later edit here. `undefined` - no credential, or no `preview`
+   * variables - makes `deliverEnvironment` return the allowlisted object BY REFERENCE, so such a
+   * preview spawns byte-identically to before this line existed. Collisions are that module's
+   * call: the allowlisted runtime value wins, because the store admits names like `PATH`.
+   */
+  const previewDelivered = launchDelivery({
+    credential: () => config.credential, now: clock, projectId: config.projectId, store,
+  }, "PREVIEW");
+  const previewPort = createPreviewDaemonPort({
+    ...(previewDelivered === undefined ? {} : { process: { delivered: previewDelivered } }),
+    projectId: config.projectId, store,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
+    ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
     criterionEvidence: workflows.criterionEvidence, repositoryRecovery: workflows.repositoryRecovery,
     readPublicationCandidate: workflows.readPublicationCandidate,
     clock,
@@ -231,6 +257,7 @@ export function createStoreDependencies(
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
   const v2Ports = createDaemonV2CommandPorts({
+    ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
     clock,
     ...cutoverWiring,
     eventSubscriberId: DEFAULT_READER,

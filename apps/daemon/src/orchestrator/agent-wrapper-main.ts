@@ -17,6 +17,7 @@ import { createProductContractReadPort } from "../product-contract/product-contr
 import {
   createVerifierAuthorityProvider, readVerifierStandingAuthority,
 } from "../review/verifier-authority-provider.js";
+import { launchDelivery } from "../environment/environment-launch-resolver.js";
 import { createProviderPauseGate } from "./agent-provider-pause.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
@@ -154,7 +155,20 @@ async function main(): Promise<void> {
     const staffingFence = createAgentSessionFence({
       isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,
     });
-    verifierRunner = createVerifierDatabaseRunner({ onFatalContainment: () => { stop.request(); } });
+    const verifierDelivered = launchDelivery({
+      credential: () => config.credential, now: () => new Date().toISOString(),
+      projectId: config.projectId, store: verifierStore }, "VERIFIER");
+    // THE ONLY DELIVERING BOUNDARY IN THIS PROCESS. The recipe under test needs the project's own
+    // variables; `claudeSpawnStarter` below launches CODING seats and must NOT get them, so it
+    // keeps calling `agentEnvironment(...)` with ONE argument (agent-spawner.ts:156 and :159).
+    // The resolver takes a purpose and no environment name, so a verifier run cannot reach
+    // `production`, and CODING_SEAT resolves to a delivery whose value type is `never`. An
+    // `undefined` here (no credential, or no `verify` variables) spawns byte-identically to
+    // before. Collisions stay environment-delivery.ts's call: the allowlisted runtime wins.
+    verifierRunner = createVerifierDatabaseRunner({
+      ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
+      onFatalContainment: () => { stop.request(); },
+    });
     delivery = createRepositoryDeliveryRuntime({
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
