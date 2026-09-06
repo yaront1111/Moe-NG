@@ -22,26 +22,37 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AT CLAIM — NO EDITS. (a) Re-run `git grep -n \"setInterval\" -- apps/daemon/src` excluding `*.test.ts`. At plan time this returns ZERO production hits, which is this row's whole premise. If a recurring loop has appeared since, STOP and report: someone else built the daemon's first scheduler and this row would be a silent duplicate — `git log -- <that file>` names the owner. (b) Re-confirm the composition facts this plan rests on, because they are what parked the row once already: `createStoreDependencies` at daemon-store-foundation-composition.ts:158 with the store bound LEXICALLY at :165 and NOT returned on the provider; the provider's existing SYNC `close()` at :549; `fromEnv()`'s module-level `envProvider` singleton at daemon-store-dependencies.ts:59-62; `DaemonDependencyProvider` at daemon-entry.ts:68-72 with its optional `provideV2?()` precedent; the shutdown at daemon-entry.ts:328-335; and daemon-main.ts:201/:205/:228-232. (c) CONFIRM THE FACT THIS PLAN TURNS ON: the daemon never calls `provider.close()` — `git grep -n \"provider.close\\|\\.close()\" -- apps/daemon/src` and check the daemon's chain reaches only the LISTENER's close. If that has changed, say so, because it moves where the release belongs. (d) Read the shapes to copy: verifier-process-runner.ts:45-56 and :107-118 for injected ports and one idempotent cleanup; environment-store.ts:91-115 for the commit shape; environment-projection.ts:80-87 with environment-fold.ts:12-16 for the fold and its drop policy. (e) Record the global-rail-3 baseline: `pnpm --filter @moe/daemon test` and `pnpm typecheck`, saving the failing-file rosters for attribution in step 7.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.ts"
-      ]
+      ],
+      "note": "READ ONLY, owned four existing paths clean; peer dirt untouched. At408fccfa, setInterval census only preview-test-fixtures.ts85 EMBEDDED child fixture, zero production scheduler. Lexical store=createStoreDependencies:165; sync close; fromEnv singleton; daemon-main shutdown only listener, now preview sweep also exists. Read verifier-process-runner injection/cleanup and environment commit/fold. Shape census: only exact provider key consumer already-owned daemon-store-dependencies.test727/781; preserve DaemonStartResult union pinned by index-surface.test605. @moe/store edge manifest31 + lock166-168 exists. Baseline pnpm typecheck fresh exit1: bootstrap/bootstrap-sequence.ts45 TS2739 and109 TS7053 missing deployment.deploy/set_target, no scheduler edits. Targeted plain-Node provider test actually ran: Test Files1failed; Tests1failed27skipped; exact diff adds existing deployment.deploy and deployment.set_target to registryKinds at769 (NOT scheduler). First attempted root-config filter ran no tests and is NOT evidence. Governor ruling msg84011e18 explicitly authorizes TDD now and BEFORE reference f72 full daemon09:54/db16a103:34failed478passed,183failed9175passed47skipped, contention affected; own full AFTER queued b3->adef->7b with>=6GB. HEAD movement db16a103..408fccfa:18daemonpaths activation+MCP, no owned scheduler paths. Full baseline not independently rerun or claimed green. No persistent source/probe edits.",
+      "startedAt": "2026-09-06T10:10:30.258Z",
+      "completedAt": "2026-09-06T10:18:01.997Z"
     },
     {
       "stepId": "step-2",
       "description": "RED TESTS FIRST, ALL ON A FAKE CLOCK, in the new module's name-matched sibling. Rail 2 is absolute: no arm may wait on wall-clock time — this host has a measured spawn-latency cliff (~10s stalls) that reds timing-sensitive tests for unrelated reasons, making failures unattributable. Inject BOTH the clock and the timer; the test drives time forward explicitly and counts executions; nothing sleeps. Write these and watch them fail: (1) INTERVAL HONOURED (DoD 1) — a target at interval N executes once per N of injected time; advance a known window and assert the EXACT execution count, not \"at least once\". (2) REGISTRATION IDEMPOTENT (DoD 2) — register the SAME target twice, advance a fixed window, assert the count equals the single-registration count. Assert by COUNTING EXECUTIONS, never by inspecting a registry: a design that stores one entry while arming two timers passes a registry assertion and IS the bug. (3) RESTART DOES NOT DOUBLE (DoD 3) — run a window and record the rate; rebuild the scheduler from its durable records the way a restart would; run the SAME window and assert the second rate EQUALS the first. (4) DEFAULT INTERVAL APPLIES (DoD 5) — a target registered with no interval EXECUTES at the stated default; assert it runs, not that it was skipped, since a silently skipped target looks identical to nothing registered. (5) SHUTDOWN RELEASES (DoD 4) — after release, advancing the clock produces NO further executions, AND the injected timer reports ZERO armed handles (DoD 4 explicitly accepts an explicit handle count; a boolean flag proves only that the code believed it released). A second release is harmless. Assert against the production surface; never a helper that re-derives tick counts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/durable-schedule.test.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.js"
+      ],
+      "note": "RED FIRST: fake clock/timer + real ephemeral/disk SqliteEventStore. Narrow vitest name-matched test ran Test Files1failed; Tests5failed. Exact execution assertions expected4/5/5/3/6 received0, not missing-import errors. Added minimal no-op type/API skeleton+bridge (step3 paths pulled forward only to make behavioral RED observable). All temp stores/directories finally-cleaned. Restart arm closes/reopens disk store, rebuilds with resolver and re-registers same id; positive pre-rate check prevents vacuity.",
+      "startedAt": "2026-09-06T10:18:02.452Z",
+      "completedAt": "2026-09-06T10:20:05.957Z"
     },
     {
       "stepId": "step-3",
       "description": "THE SCHEDULER CORE — a new focused module at apps/daemon/src/orchestrator/durable-schedule.ts plus its one-line `.js` bridge (copy environment-store.js's shape). The test written in step 2 MUST be named `durable-schedule.test.ts` to match, or runtime-entrypoint.test.ts classifies the module TEST tier and reports the bridge as `unexpected`. KEEP IT GENERIC (rail 4): this is the daemon's first scheduled work and grandchild B is its FIRST CONSUMER, not its owner — no `probe`, no `health`, no `environment` vocabulary. A target is an id, an interval and a callback. Ports, all injectable, following verifier-process-runner.ts:45-56: `now(): number`, the timer pair (set/clear), and the store for step 4's durable half. FOUR POLICIES, DECIDED HERE rather than left open, because each is a seam the double-schedule can return through — implement them and state each in the step note: (1) IDEMPOTENCE — re-registering a target id already armed at the SAME interval is a NO-OP; if the interval DIFFERS, clean-replace (clear, then arm exactly one). Pure no-op would silently ignore an interval change; pure replace would re-phase the timer on every restart pass. Guard it in ONE place: if the in-memory arm and the durable write can disagree about whether a target is already scheduled, the double-schedule returns by that seam. (2) OVERLAP — if a callback is still running when its next tick arrives, SKIP rather than stack; a 90s callback on a 60s interval would otherwise accumulate concurrent runs and fill the store faster than its stated rate, the same symptom as a doubled schedule from a different cause. (3) A THROWING TARGET is contained and the next tick still fires — a probe that throws once must not silently stop all scheduling. (4) ONE IDEMPOTENT `release()` clearing every armed timer, in the shape of verifier-process-runner.ts:107-118: harmless twice, and does not throw when called mid-execution. Keep the module under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.ts",
         "apps/daemon/src/orchestrator/durable-schedule.js"
@@ -49,42 +60,75 @@
       "newFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.ts",
         "apps/daemon/src/orchestrator/durable-schedule.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/durable-schedule.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.test.ts"
+      ],
+      "note": "Core implemented after15 behavioral REDs. Latest narrow run14passed/1expected pending restart failure (no durable half yet): restart count0 vs5. Single arm() guard sameinterval no-op retains phase/callback; differentinterval clears then arms exactlyone. Per-id running AbortController map skips overlap even across interval replacement; throw caught with SCHEDULE_CALLBACK_FAILED@DAEMON_INGRESS, later ticks run. Release sync/idempotent clears timers and aborts in-flight callback signal; consumer owns actual effect teardown. Timer bound1..2147483647 integer rejects Node clamping hazards with exactcode/layer. No unref. Tests sharpened duplicate/restart to re-register half-way into an interval, pinning phase as well as exact rate. Module106lines, no health vocabulary.",
+      "startedAt": "2026-09-06T10:20:06.374Z",
+      "completedAt": "2026-09-06T10:22:12.054Z"
     },
     {
       "stepId": "step-4",
       "description": "THE DURABLE HALF — persistence and the restart rebuild, in the same module. Persist each registered target (id, interval, and whatever a consumer needs to reconstruct its binding) in the EVENT STORE using the environment-store.ts:91-115 commit shape named in step 1 — there is no settings directory in the daemon, so the event store is the durable home. Fold on read for the current target set the way environment-projection.ts:80-87 does: later events win, and a malformed record DROPS the target rather than being ignored, matching environment-fold.ts:12-16's reasoning — silently resurrecting a stale target is the more dangerous reading, because a dropped target is visibly absent while a resurrected one runs at an interval nobody chose. THE REBUILD IS WHERE THE DOUBLE SCHEDULE HAPPENS: on start the scheduler reads its durable targets and arms them, and the hazard is a start path that arms from durable records WHILE a caller also re-registers the same targets — each individually correct, together they double the rate. Registration must be idempotent ACROSS the rebuild, not merely within one process: the durable record is the identity, so re-registering a target the rebuild already armed is a no-op under the step-3 policy. Step 2's arm 3 is what proves it. A CALLBACK CANNOT BE PERSISTED: a rebuilt target reacquires its behaviour through a consumer-supplied resolver keyed by target id, and a target the resolver cannot resolve is DROPPED with a visible refusal — never an armed timer with no work attached, which would burn an interval forever doing nothing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/durable-schedule.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.test.ts"
+      ],
+      "note": "Durable half GREEN:1file19tests exit0. Registration persists id+validated interval in lexical caller-provided event store, private eventtype moe.durable-schedule.registered, aggregate durable-schedule/<project>. Default60000 persisted once. Commit CAS anchored at last aggregateSequence from SAME read. No settings, callbacks, or effect receipts persisted; no distributed/exactly-once claim. Restart reads latest fold; invalid latest identified record drops that target; unidentifiable corruption clears unverifiable set rather than revive old arms. Rebuild resolver keyed by id; absent/throwing resolver refuses SCHEDULE_TARGET_UNRESOLVED@DAEMON_INGRESS and leaves no live timer, durable identity retained for later explicit rebuild/rebind. Same arm() guard prevents replay+reregister phase/rate changes. Real disk close/reopen tests prove rates before5, rebuilt5, re-register5. New tests first saw5failures then all19green. Production now180lines.",
+      "startedAt": "2026-09-06T10:22:12.511Z",
+      "completedAt": "2026-09-06T10:24:12.895Z"
     },
     {
       "stepId": "step-5",
       "description": "COMPOSITION — THE STEP THAT PARKED THIS ROW; the old version named daemon-main.ts alone and was unsatisfiable. BUILD IT WHERE THE STORE IS A FACT: inside `createStoreDependencies` (daemon-store-foundation-composition.ts:158), over the LEXICAL `store` bound at :165. Do NOT call `acquireFoundationStore` again — daemon-store-acquisition.ts:28 opens a SECOND handle, which would give the scheduler a different store from the rest of the daemon. That file is 580 lines, already past the split threshold: add only the construction call and the release line, and do not refactor it. RELEASE IN TWO PLACES, ONE FUNCTION. (a) The provider's existing `close()` at :549 also calls `release()`. Keep that close SYNC — `clearInterval` is synchronous, and the signature has six call sites (mcp-main.ts:158, agent-wrapper-main.ts:366, four fixtures) that must not be widened. (b) daemon-entry.ts's shutdown at :328-335 releases too, because **the daemon process never calls `provider.close()`** — its chain is daemon-main.ts:205 `await started.shutdown()` -> daemon-entry.ts:333 `await started.close()`, the LISTENER's close, with everything else riding on `process.exit(0)` at daemon-main.ts:229. Releasing only at (a) leaves the shipped daemon's timers armed while a provider-level test passes. EXPOSE IT as an OPTIONAL member on `DaemonDependencyProvider` (daemon-entry.ts:68-72), following the `provideV2?()` precedent for a non-read optional member — NOT on `OptionalDaemonPortProvider`, whose 28 members are all READ ports handed to the listener. Then forward it on the frozen default provider in daemon-store-dependencies.ts:64 the way every other member forwards through `fromEnv()`. THREE THINGS NOT TO DO: do not add a SIGINT/SIGTERM handler (daemon-main.ts:228-232 already registers `process.once` for both; a second would race it and could exit before the release runs); do not make the daemon call `provider.close()` as a shortcut (`fromEnv()` memoises a module-level singleton, so that closes the SHARED store process-wide — a real latent bug, but a different row: note it, do not take it); and do not treat `unref()` as the release, since an unref'd timer still FIRES while the process lives — state whether you used it and why it is not a substitute.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.ts",
         "apps/daemon/src/daemon-entry.ts",
         "apps/daemon/src/daemon-store-dependencies.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.test.ts"
+      ],
+      "note": "Real composition + lifecycle GREEN25/25 after6intended REDs (shutdown calls5vs2 + handles1vs0; startupfailure leaks; missingproviderfactory). Scheduler constructed near final return over lexicalstore, no second acquire; optional config.schedule injects timer/resolver only, provider schedules() returns same instance. StoreDependencyProvider.close remains sync, releases before closingDB. Default frozen provider forwards schedules through existing fromEnv singleton. Daemon captures scheduler ONCE before dependencyresolution; failure finally releases for resolve/reconcile/listener/log paths and closes already-started listener; shutdown releases before await listener.close, previewcleanup in finally. No signal handlers, no shared provider.close on daemon shutdown. Existing daemon-entry379lines (<400); existing oversized composition surgical construction/return/close only. Fresh daemon typecheck no ownederrors; disclosed foreign bootstrap45/109 plus in-flight http/affordance-read.ts299 TS2741 missing designState. Additional3failure arms added for final gate/drills.",
+      "startedAt": "2026-09-06T10:24:13.279Z",
+      "completedAt": "2026-09-06T10:28:44.168Z"
     },
     {
       "stepId": "step-6",
       "description": "THE PROVIDER-KEY MIRROR — expected red, fixed honestly. daemon-store-dependencies.test.ts:727 computes `providerKeys: Object.keys(provider).sort()` and :781 asserts an EXACT roster inside a `toEqual`. Adding the scheduler member to the frozen default provider WILL red that arm: that is the exact-arity mirror doing its job, not a defect, and it is the proof that the member actually reached the SHIPPED provider rather than only a test double — which is precisely what this row was parked for failing to do. TAKE THE NEW ROSTER FROM THE PRINTED EXPECTED-VS-RECEIVED of the failing run, never by hand-writing what you think it should be. Note that this arm spawns a real child under `--experimental-strip-types` with a 180s timeout, so run it TARGETED before any full-suite leg. While you are here, confirm the arm still asserts VALUES rather than typeofs (its own comment at :735-737 says why: a binding that resolved to the wrong module, a registry that lost an entry, or a replay that ran an effect twice all have to show up here rather than pass as \"it imported\"). Do not weaken it to accommodate the new key.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.ts",
+        "apps/daemon/src/orchestrator/durable-schedule.test.ts",
+        "apps/daemon/src/daemon-entry.ts"
+      ],
+      "note": "Native child gate RED first ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, fixed own constructor parameter property to explicit property assignment (no flags/workaround). Then exact expected/received RED+schedules after runs; literal mirror updated from output; two PREEXISTING deployment registry literals synchronized in sameownedfile, governorack415bb777/coordination to04b3. Child now calls real default factory, registers durabletarget with production Node timer, finally releases before exit, asserts sameinstance and exact SCHEDULE_RELEASED@DAEMON_INGRESS; values/replay/registry remainexact. Targeted2files31passed25skipped (includes wholethen28scheduler+3existing relevant arms). Read-onlyreview found malformed lifecyclefactory + reentrant resolver/timer releaseleak;3newredtests ->31schedulerpassed aftervalidation/armrechecks. Added construction-failure finally coverage to temp helpers. Allowned2files full run now underway/polled before completion; no full-daemon claim.",
+      "startedAt": "2026-09-06T10:28:44.593Z",
+      "completedAt": "2026-09-06T10:34:14.024Z"
     },
     {
       "stepId": "step-7",
       "description": "DRILLS, THEN GATES. THREE DRILLS, each aimed at an arm that would otherwise be vacuous. (1) THE SUBJECT OF THE ROW: make the restart rebuild arm targets WITHOUT the idempotence guard; step 2's arm 3 MUST go red ON THE RATE COMPARISON. If it stays green, that arm is asserting work resumed rather than comparing rates — rewrite it before accepting, because that is exactly the assertion that lets a doubled schedule ship. (2) IDEMPOTENCE: register the same target twice with the guard removed; arm 2 must go red on the execution COUNT. If your arm inspects a registry it will stay green, which is the point of the drill. (3) THE RELEASE: remove the release from daemon-entry's shutdown; arm 5 must go red on executions-after-shutdown and on the armed-handle count, NOT on a flag. RESTORE PROOF (global rail 13): `git status --porcelain` the exact mutated paths FIRST, and say which proof applies to which — MIXED here: the three daemon files are TRACKED and take an empty `git diff -- <path>` run in a call SEPARATE from the restore; your new module, its bridge and its test are UNTRACKED and `git diff` is BLIND to them, so back each up out of tree (%TEMP%, suffixed with your worker id) and prove restoration by SHA256 equality. THEN THE GATES, each STANDALONE and FOREGROUND — no pipe, no `;` chain, no `&&` (a piped run reports tail's exit code; a chain reports only the last command's): `pnpm --filter @moe/daemon test`, then `pnpm typecheck`. READ THE OUTPUT, NOT THE EXIT CODE: a missed `--filter` exits 0, and \"No test files found\"/\"0 passed\" are also exit 0 — the discriminator is `Test Files N passed` with N nonzero; quote it for both. A bare `pnpm test` covers no `apps/**` and is not evidence. The daemon suite is slow (~22 min) and flaky here (back-to-back baselines gave `17 failed | 416 passed` then `10 failed | 423 passed`, dominated by 30000ms timeouts), so attribute red BY PATH against step 1's saved rosters, never by whole-suite delta. WATCH FOR NEW TIMEOUTS IN UNRELATED FILES: that is the signature of a leaked interval from this row contaminating its neighbours, and it is the one red here you should treat as YOURS even though the failing file is not.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/durable-schedule.test.ts",
         "apps/daemon/src/daemon-entry.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T10:34:14.454Z"
     },
     {
       "stepId": "step-8",
@@ -101,7 +145,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor handoff to re-plan (owner: \"unblock tasks\"). worker-7bdbffac parked this at 22:25Z: step 5 as written limits existing-file edits to daemon-main.ts yet requires composing the durable scheduler into a shutdown chain that lives in daemon-store-foundation-composition.ts:158-162 and daemon-store-dependencies.ts:59-62; MainOptions-only injection cannot reach the shipped store, so step 5 is unsatisfiable. No step was started; the step-1 census (tracked setInterval outside tests = 0) is in the task comments. Re-plan step 5's composition point and affectedFiles.",
+  "reopenReason": "Governor: the row was released by worker-7bdbffac (owner asked that seat for its next task) and its full-suite-gate queue entry was removed, so nothing would ever auto-unblock the resource park. Restored to WORKING, unassigned and claimable; steps 1-6 are done (59 owned tests, drills red-first, handoff note on the row). The next claimer runs only step 7: acquire the full-suite-gate lease, run the AFTER daemon gate, complete under the path-attributed rule.",
   "createdBy": "WORKER",
   "parentTaskId": "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
   "priority": "HIGH",
@@ -112,17 +156,61 @@
       "author": "worker-7bdbffac",
       "content": "Step1 measurements, NO source edits: tracked git grep setInterval excluding *.test.ts yields0. Full disk Get-ChildItem/Select-String finds only preview/preview-test-fixtures.ts85, an embedded SILENT_SERVER child fixture string (not daemon recurring scheduler); no rival scheduler. daemon-main.ts201 shutdownWithOperator/205 started.shutdown/228-232 existing signals confirmed. environment-store.ts91-115 real EventStore commit shape and environment-fold.ts current-state drop policy read; verifier-process-runner.ts cleanup at118+ idempotent timers inspected. @moe/store dependency manifest31 and lock apps/daemon importer166 link:../../packages/store present. No settings directory / recurring modules created.\nMEASURED COMPOSITION GAP, independently confirmed by read-only agent: Step5 explicitly says 'SHUTDOWN AND COMPOSITION — the only edit to an existing file in this row' and names daemon-main.ts. No active amendment. Main loads frozen default at44-58; DaemonDependencyProvider (daemon-entry.ts68-72) and StartedDaemon (93-100) expose NO store/scheduler. CommandAdapterDeps (http/http-contract.ts218-224) has authenticator/decisions/eventStreamAccess/registry only. Existing store is lexical at daemon-store-foundation-composition.ts158-162, not returned506-540; fromEnv private daemon-store-dependencies.ts59-62. Recalling acquireFoundationStore opens another handle at daemon-store-acquisition.ts28, not reuse.\nAn injectable MainOptions.startRecurring hook is feasible but would not wire shipped CLI, whose actual call daemon-main.ts221-233 supplies only operatorInput/onStarted. Do not substitute a test-injected hook for production composition. Smallest real provider edge requires additionally owning daemon-store-foundation-composition.ts (factory over existing store), daemon-store-dependencies.ts (forward factory), daemon-store-dependencies.test.ts (exact providerKeys roster752-763). Or architect explicitly approves intermediate injectable lifecycle seam and assigns actual default wiring to consumer B. Consumer B task-cc05c47362dc41b0b2b416a70ad45b42 DOES dependOn this row, but its current plan has no provider/default-CLI wiring path. Asked @architect-aa54e231 in msg-16c809dd5fae422c92e546ef3ff91c75; no source changes or broad gates started.",
       "timestamp": "2026-09-05T22:25:29.071Z"
+    },
+    {
+      "id": "comment-97602dcde9d5427e8358cf5e7bc5e5cf",
+      "author": "worker-7bdbffac",
+      "content": "Step6 plain-Node control caught a REAL own defect before delivery: ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, TypeScript parameter property is not supported in strip-only mode. Vitest/tsc had both accepted constructor(private readonly config...). Corrected to explicit property declaration + constructor assignment; no transform-types flag/workaround. Re-running exact child arm to observe scheduler key red after native import works. This is why the child bridge gate is load-bearing.",
+      "timestamp": "2026-09-06T10:29:52.657Z"
+    },
+    {
+      "id": "comment-7503ac60a0f143fa8cb367900cf66742",
+      "author": "worker-7bdbffac",
+      "content": "Step6 exact provider-key RED observed after native syntax fix: received +schedules after runs; only other diff is PRE-EXISTING +deployment.deploy/+deployment.set_target in registryKinds (identical step1 baseline). Updated owned literal provider roster from printed diff. Also synchronizing those TWO already-served deployment literals in same owned test, not changing production or broadening authority; this small mirror repair is required for the load-bearing child gate to be executable/green rather than leave an unrelated failure hiding our key assertion. Added actual default schedules() register/release code+layer values and stable instance proof, not typeof checks.",
+      "timestamp": "2026-09-06T10:31:00.205Z"
+    },
+    {
+      "id": "comment-14705ee66f0a45c08e153c0988b49eea",
+      "author": "worker-7bdbffac",
+      "content": "STEP7 drill evidence, target=actual current production bytes compiled through out-of-tree Vite pre-transform, tests unchanged; NO shared-root mutation to contaminate legacy full gates. Before status: daemon-entry.ts TRACKED dirty; durable-schedule.ts/test.ts UNTRACKED. Out-of-tree backups %TEMP%/schedule-drills-worker-7bdbffac. SHA256 equality independently checked AFTER all runs in separate command: module4B3BBD584B842A1E38611600501E093E22B7EACE11484A855CE89829594172D4; testCA64A15F328FD8896327D7AA2AE59603AD8052F4C75BA1476982CD031806BFF1; entryD6CC96A0092E3F5D743132024F8F4B5D79E9F3A3972DE86D7A41E3AF085599F4. No empty-git-diff restore claim; bytes never changed on disk. Each transform asserts exactneedle exists and emits MUTATION_APPLIED:<mode>.\n\nMandatory modes: double removes arm() sameintervalguard AND oldtimer clear: duplicate exactCOUNT9vs5 at test77, restart exactRATE9vs5 at100; 2failed29skipped/exit1. Release removes ONLY first `try { schedules?.release(); }` in daemon-entry (shutdown): SOFT assertions calls5vs2 AND armedhandles1vs0,1failed30skipped/exit1. Additional phase removes onlysameintervalguard: bothcounts4vs5,2failed/exit1 (proves phase is not reset). FailureCODE literal mutated at central refuse():17/17 selectednegative arms RED; LAYER literal mutated separately:same17/17RED. Entry invalid-port refusal changed DEPENDENCIES_INVALID->PROVIDER_THREW: malformedfactory arm RED on exactcode,1failed/exit1. No mutation reimplements scheduling or changes tests. Control via sameconfig modecontrol: Test Files1passed(1), Tests31passed(31),exit0. Full2ownedfiles subsequently/fresh gate will confirm nativechildtoo.\n\nBefore full-suite reference authorized by governor msg84011e18: f72 task532 baseline atdb16a103->d397676, comment074de9c27728487381d438d14fe06abb exact34path roster (actual189FAILblocks); contention disclaimer aac7af6197564cd19aa8c476d7bfbf84. NOT our independent baseline and notclean. Own initialHEAD408fccfa, laterpeerHEADmovement disclosed. Fresh own pnpm typecheck10:40exit0 all19workspace projects, after initialbootstrap45/109red and interimforeignaffordance299red were repaired by owners.",
+      "timestamp": "2026-09-06T10:40:54.160Z"
+    },
+    {
+      "id": "comment-269f32dc85844c50841fd60813b4053e",
+      "author": "worker-7bdbffac",
+      "content": "RESOURCE-WAIT HANDOFF 10:43Z, HEAD639574c8ba4e6b3c20e2ac260b1140dca83d5695 branchmoe/work-2026-09-04. Steps1-6 complete; step7 IN_PROGRESS (drills DONE, full gates PENDING), step8 PENDING. All seven approved paths declared explicitly; wrapper may checkpoint now, do NOT handcommit. No additional source edits pending; full-suite-gate acquired response queued#4, holdertask532/f72. Governor msg-e713cd6787b941dbadea3c6230c3a552 explicitly requires own full AFTER, so NO scoped-command override assumed, NO complete_task sent. On grant: verify lease/RAM>=6GB/no legacyrunners, announceGATE START, standalone pnpm --filter @moe/daemon test to completion + fresh pnpm typecheck, release lease/GATE END. Attribute after-before sevenownedintersection, using governor-authorized f72baseline refs incomment14705; remeasure currentHEAD. Named complete_task verification remains full daemon command; if fullred foreign andtoolrequires0, get explicit ruling/amendment, never invent0.\n\nCurrent own gates: full2ownedfiles Test Files2passed(2), Tests59passed(59),exit0 (31scheduler+28existingprovider). Fresh pnpm typecheck10:40 EXIT0 all19workspace legs. Supplemental command from apps/daemon pnpm exec vitest run --root . --config package.json src/daemon-entry.test.ts src/daemon-entry-port-resolution.test.ts src/index-surface.test.ts src/runtime-entrypoint.test.ts --maxWorkers=1 --testTimeout=30000 -> Test Files1failed|2passed(3); Tests1failed|235passed(236),exit1. There is no selected fourth port-resolution test; claimTHREEexecuted, notfour. ONLY red src/runtime-entrypoint.test.ts255 exact unexpected bridges: deployment\\\\deploy-target-contracts.js and repository\\\\deployment\\\\deployment-docker-probe.js. Neither thisrow'spaths; own durable-schedule.js is present, correctcontent, runtime-tier. Root pnpm test notrun, covers NOapps; no repo-widegreenclaim.\n\nProduction decisions: sameid/sameintervalno-op retainscallback+phase; changedinterval cleanreplace; runningcallback skipped on nextticks; errors contained/stablecode+layer, no rawerrorvalues. Resolver keyedid; unknown/throwing resolver durable-but-unarmed with visible refusal, explicitrebuild canrebindlater. Runtime intervalvalid1..2147483647; default60000durable. One releasefunction clearsintervals, abortssignals, synchronousproviderclose plusdaemonshutdown/startfailure. NativeNode property syntaxfixed; malformedportvalidation and reentrantrelease guards tested. No secondstore/no new readport/signalhandler/no unref. Consumerowns cancellation of its external effects; no distributedlease/exactlyonceeffectguarantee. Latent singletonstore lifecycle deliberatelyuntouched.\n\nDrillconfig +3backups remain inert at C:/Users/Yaron/AppData/Local/Temp/schedule-drills-worker-7bdbffac for re-run whiletaskwaits; NOrunningprocess/DB/timerthere. Allactualtest resources finallycleaned. Hashproof+redcounts comment14705; finalgatedeferredforresource, not codeproblem orpeerdirt.",
+      "timestamp": "2026-09-06T10:44:16.583Z"
+    },
+    {
+      "id": "comment-57593d6fd63841449a11abc042b9606c",
+      "author": "worker-7bdbffac",
+      "content": "Last foreground verification10:44Z finished (no sessions left): pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/orchestrator/durable-schedule.test.ts src/daemon-store-dependencies.test.ts -> EXIT0, Test Files2passed(2), Tests59passed(59),11.10s. This is owned evidence only, NOT the pending named full-suite completion gate. Serena handoff updated task-task-e651725c92434127a7b8d72f0ac5246b-handoff. All seven explicitpaths declared. Resource-block checkpoint will let04b3 consume the repaired provider mirror without this task falsely claiming fullverification.",
+      "timestamp": "2026-09-06T10:46:23.922Z"
+    },
+    {
+      "id": "comment-55f94d74caa2489390acba56c84c47ac",
+      "author": "worker-7bdbffac",
+      "content": "Continuation10:59Z, no source edits. HEADbcacfef14af3cb15e0e7fe1be65caa08535805d8; task stillBLOCKED/resource queue4. All7ownpaths remain dirty/untracked, task.commits[]/landing{}; governor1a13b761 confirms actualCLIexit needed before wrappercheckpoint, no manualcommit. f78 msgb39352bd added ONLY release.decide registry literal to sharedprovider test; acknowledged/preserved, belongsrelease54 notscheduler. Three own module/test/entry SHA256s exactly match prior14705drill hashes.\n\nUseful remaining short gates run standalone foreground and FINISHED: pnpm verify:foundation EXIT0, fullworkspace typecheck executed0 then Test Files35passed(35),Tests756passed(756),39.88s. pnpm verify:store EXIT0, typecheck0 then Test Files52passed(52),Tests675passed(675),17.57s. These are short package lanes, NOT rootpnpmtest orfull daemon; no lease bypass. No own jobs/timers/stores remain. Main requiredfull AFTER stillqueued; step7 remainsinprogress andstep8pending. Pergovernor endingnow forcheckpoint/autoresumeonlease, not claiming taskcomplete.",
+      "timestamp": "2026-09-06T11:00:21.791Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:47.487Z",
-  "updatedAt": "2026-09-06T07:55:31.963Z",
+  "updatedAt": "2026-09-06T11:26:48.504Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:54:49.847Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 6
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T07:55:29.680Z",
   "planningNotes": {
@@ -150,9 +238,28 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "priorBlockedReason": "Unamended step5 limits existing-file edits to daemon-main.ts while requiring durable scheduler composition into its shutdown chain. Measured main's provider and StartedDaemon expose no EventStore/scheduler; actual store is lexical in daemon-store-foundation-composition.ts158-162 and private fromEnv/default forwarder in daemon-store-dependencies.ts59-62. MainOptions-only injection would leave shipped CLI unwired; second acquisition opens a new handle rather than the existing composition. Real edge minimally needs ownership of daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, and exact providerKeys asserter daemon-store-dependencies.test.ts752-763, currently forbidden by step5. Need architect amend those paths or explicitly stage injectable lifecycle with an actual consumer-wiring owner. Consumer B dependsOn this row but current plan owns no default-provider wiring. No source modified; first-scheduler premise holds (only setInterval disk hit is embedded preview test fixture). Full measurements in task comment; no foreign-dirt or redundant-proof block.",
+  "priorBlockedReason": "Required full-daemon AFTER awaits full-suite-gate: fresh acquisition queue position2 behind current holder worker-96c6d708. All implementation and mandatory drills complete; steps1-6 completed, step7 full gate pending, step8 pending. No source edits or processes launched this continuation. Existing 59/59 owned tests, foundation756/store675 and workspace typecheck results retained as prior evidence, not a substitute for required full AFTER. Seven paths previously declared; task.commits[]/landing{} still no checkpoint. Handoff updated11:04Z. Resource-only wait; resume on grant, run full AFTER with RAM/process checks, then final review and complete_task.",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/orchestrator/durable-schedule.ts",
+    "apps/daemon/src/orchestrator/durable-schedule.js",
+    "apps/daemon/src/orchestrator/durable-schedule.test.ts",
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps1-6 complete. Durable recurring scheduler and production provider/daemon lifecycle composition implemented in seven explicitly declared paths. Owned59/59 tests green; mandatory double-rate, phase, shutdown, code/layer drills red with separate source hash proof. Foundation756/store675 and typecheck green in prior runs. Full details in Serena task-task-e651725c92434127a7b8d72f0ac5246b-handoff and row comments.",
+      "whatRemains": "Step7 required own full daemon AFTER under full-suite-gate lease (last queued2); path attribution against authorized f72 baseline. Step8 final review and complete_task with valid fresh verification. Wrapper checkpoint still unconfirmed; do not claim DONE.",
+      "pitfalls": "Preserve all seven owned paths and peer release/preview/deployment hunks in shared provider test. No handcommit, second store, provider.close from daemon shutdown, or live shared-file mutations. No own running jobs. If resource queue must be transferred, coordinate with governor rather than leave an unattended grant.",
+      "releasedAt": "2026-09-06T11:26:12.060Z",
+      "releasedBy": "worker-7bdbffac",
+      "reason": "Explicit user request: next task. Hand off implemented scheduler while its full-suite resource gate remains pending; no completion claimed."
+    }
   ]
 }

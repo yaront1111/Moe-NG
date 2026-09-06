@@ -51,17 +51,24 @@
       "author": "architect-b63fabf3",
       "content": "HEADS UP FROM THE task-54b74b80 RE-PLAN: **this row's DoD is fully absorbed by task-54b74b8041c64bc2868435bcbdac6dd6, and the two rows cannot be made independent.** Filing this before that row lands rather than after, so a governor can decide early.\n\nTHE MECHANISM. `apps/daemon/src/mcp-tool-allowlist.ts:85` is:\n```ts\n...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort(),\n```\n`MCP_EXCLUDED_COMMAND_KINDS` is **DERIVED**, not hand-kept. Its own comment says it: *\"a kind that becomes operator-only leaves the MCP roster with no edit here.\"* task-54b74b80 owns the `OPERATOR_PRINCIPAL_KINDS` edit. So the moment that row lands, `release.decide` is MCP-excluded, the `excluded` denominator moves, and six literals across three files red — **whether or not anyone edits a single byte in this row's name.**\n\nCLAUSE BY CLAUSE:\n- **Your DoD 1** — \"member of MCP_EXCLUDED_COMMAND_KINDS and of HUMAN_ONLY_STEPS\". The exclusion is forced by the derivation. `HUMAN_ONLY_STEPS` is claimed verbatim by task-54b74b80's own DoD 1 (\"...and it is in OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS\").\n- **Your DoD 2** — the bidirectional set-equality test. Word-for-word task-54b74b80's DoD 2.\n- **Your DoD 3** — the MCP refusal arm. task-54b74b80's DoD 3, second half.\n- **Your DoD 4** — \"every hand-written MCP exclusion count pin reconciled in the SAME commit\", naming mcp-tool-allowlist.test.ts, daemon-command-registry-human-approver.test.ts, mcp-main.test.ts, mcp-http-host.test.ts. Those four MUST be reconciled in task-54b74b80's commit or it lands a red HEAD in files it broke. They are in its `affectedFiles` per the governor's re-plan handoff.\n- **Your DoD 5** — drills (b) and (c). Both are in task-54b74b80's step 8.\n\nWHY I DID NOT NARROW EITHER ROW. Global rail 6 forbids a narrowed DoD, and here it is also physically impossible: the literals move on the `OPERATOR_PRINCIPAL_KINDS` edit alone, so a task-54b74b80 that declined them would leave HEAD red in three files it broke. There is no cut that keeps both rows green.\n\nWHAT I RECOMMEND: fold this row into task-54b74b80 and archive it once that row lands, or — if something here genuinely survives — amend this DoD down to only that. Reading it now, I do not see what would survive. **This is a governor/human call; I am not archiving it.**\n\nSame shape as task-5a8c3166 earlier today: a row whose work another row necessarily completes. The difference is that one was found after the fact; this one is flagged before task-54b74b80 starts, so nobody burns a session discovering it.\n\nCross-posted to #architects. Full reasoning in task-54b74b80's planningNotes (approachesConsidered).\n\n— architect-b63fabf3",
       "timestamp": "2026-09-06T10:38:27.666Z"
+    },
+    {
+      "id": "comment-3bda84d8f2d64196aa713cf1bfe2596b",
+      "author": "worker-f78e0703",
+      "content": "Release54 fold-in implementation is now complete through step7, with step8 full-suite resource gate pending (no completion commit yet; wrapper can only land completion after REVIEW). This archived sibling's exclusion/human-only/parity/MCP-refusal/count/drill clauses are covered by release54's13 declared paths and durable drill comments79de9af9/a7931c04. Actual MCP refusal is CAPABILITY_DENIED at adapter allowlist, not guessed INPUT_INVALID; real initialized-session arm pins code/-32002/FORBIDDEN403 and zero tool-port calls. All8 owned files658tests green,7mutation modes red, typecheck/foundation/store green. Governor already archived this row and rerouted consumer dependencies to54; verified live status ARCHIVED. Once54 completes, use task54 landing.lastCompletion/task.commits to name its wrapper commit; no nonexistent SHA asserted here.",
+      "timestamp": "2026-09-06T11:14:03.608Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T13:39:19.570Z",
-  "updatedAt": "2026-09-06T10:40:24.696Z",
+  "updatedAt": "2026-09-06T11:14:03.608Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:39:41.917Z"
   },
   "contextFetchedBy": [
     "worker-d6e44333",
-    "architect-2e480458"
+    "architect-2e480458",
+    "worker-f78e0703"
   ],
   "blockedReason": null,
   "blockedOnTaskIds": null,

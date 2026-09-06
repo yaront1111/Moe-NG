@@ -155,8 +155,8 @@
       "completedAt": "2026-09-06T11:00:45.448Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -237,16 +237,24 @@
       "author": "worker-b3d8772c",
       "content": "RESUMED FINAL EVIDENCE 2026-09-06 10:59Z (shared working tree, own bytes unchanged). Governor msg-e35611b7372a4108b45a95d3aaced56e explicitly ruled task463f evidence sufficient under path-attributed gate and directed completion without root pnpm test if no approved step names that lane. Re-read eight steps: daemon/typecheck only. Root pnpm test NOT RUN, no root/repo-wide green claim. My prior generic-root resource blocker was cleared; left full-suite-gate queue, no new full suite launched.\nFresh exact scoped command with MOE_SCAFFOLD_MIGRATE=1 and MOE_SCAFFOLD_BUILD=1:\npnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/repository/controlled-profile src/repository/repository-bootstrap-service.test.ts src/repository/deployment/deployment-infrastructure-generator.test.ts src/deployment/deploy-service.test.ts\nEXIT0; Test Files 6 passed (6); Tests 102 passed (102); 51.70s; NO skips. GENERATED PRODUCT frozen install0/lock byte-identical, up0 app_metadata PRESENT pgmigrations1, down0 app_metadata ABSENT pgmigrations0; generated typecheck/test/build0 (child api1file3tests, web1file1test). Docker moe-migrate-* census EMPTY after completion.\nFresh standalone pnpm typecheck EXIT1 with ONLY FOREIGN apps/daemon/src/mcp-tool-allowlist.test.ts(89,112) and (90,106): error TS2554: Expected 1 arguments, but got 2. Owner release54 notified, not edited. The earlier standalone full typecheck0 remains recorded but is NOT presented as latest green. Fresh strict scoped tsc of all six owned test files plus transitive production imports EXIT0, using same NodeNext/ES2024/strict/noUnused/exactOptional/noUnchecked flags as repo. Complete full-daemon run and all38 foreign failing paths/error lines remain in comments33f141/be10054/26bcfc; owned AFTER failures EMPTY. Previously executed foundation35files756tests0 and store52files675tests0 remain disclosed with original anchors. No extra scope changes on resume; self-review/diff-check unchanged and all nine paths already declared.",
       "timestamp": "2026-09-06T11:00:45.064Z"
+    },
+    {
+      "id": "comment-6dd06cb36f9a4c88b52ca8482a5f7393",
+      "author": "qa-4f771bb8",
+      "content": "QA EVIDENCE — qa-4f771bb8, 2026-09-06, all commands re-run by QA at HEAD=c8e211b3878be07e1fea931caa25a2bf459bc782 (owned paths `git status --porcelain` EMPTY, so delivered bytes == reviewed bytes).\n\nLANDING. task.commits holds ONE commit, kind=checkpoint (wrapper exit commit of the prior qa session), not kind=completion — qa_approve will warn NO-COMPLETION-COMMIT. Investigated per rail, not a reject: HEAD == that sha, it carries `Moe-Task: task-463f195efd2f4fd2886790029a474194`, `git branch --contains` = moe/work-2026-09-04, pushed=true, and its 12 paths are the 9 owned source paths + 3 .moe/tasks/*.json board files — no foreign source swept. `Moe-Contested: controlled-profile-generator.test.ts (task-f1e402960...)` is benign: that row is PLANNING, unassigned, filesModified null — a future declarer, not live WIP; the whole diff to that file is this row's concern.\n\nDoD 1. root package.json emits exact pins `\"node-pg-migrate\": \"9.0.0\"` and `\"pg\": \"8.23.0\"` (no range prefix), scripts `db:migrate`=`node-pg-migrate up`, `db:migrate:down`=`node-pg-migrate down 1`, plus `migrations/1700000000000-initial.js` creating app_metadata(key text pk, value text not null) with an explicit `down` that drops it. Version BUMP not edit-in-place: CONTROLLED_PROFILE_VERSION controlled-1 -> controlled-2, GOLDEN_FILE_COUNT 22 -> 23, three golden hashes changed (migration e3e86d8c…, root package.json 636ff642…, lock 0963d16c…). v2 lock asset minted and switched at LOCKFILE_ASSET; `grep node-pg-migrate` = 5 hits in v2, ZERO in v1; v1 asset preserved on disk.\n\nDoD 2 + DoD 3 — RE-RUN BY QA, not taken from the record. Exact task.verification command, 14:05:31, EXIT 0, `Test Files 6 passed (6)` / `Tests 102 passed (102)`, 46.65s. CHILD (generated product) transcript verbatim: `GENERATED PRODUCT pnpm db:migrate -> 0` … `CREATE TABLE \"app_metadata\"` … `GENERATED PRODUCT up: public.app_metadata PRESENT, pgmigrations=1`; `GENERATED PRODUCT pnpm db:migrate:down -> 0` … `DROP TABLE \"app_metadata\"` … `GENERATED PRODUCT down: public.app_metadata ABSENT, pgmigrations=0`. Not exit-0-only: to_regclass asserted false BEFORE up (negative control), true after up, false after down, with pgmigrations 0/1/0. Real disposable postgres:17-alpine.\n\nDoD 4. MIGRATION_TOOL_MISSING at generator.ts:43, in ControlledProfileRefusalCode at :55; layer REUSED (`expectTypeOf<ControlledProfileRefusal[\"refusedBy\"]>().toEqualTypeOf<\"DAEMON_INGRESS\">()`), no new *_LAYER constant, so the boundary roster stays in sync. Full-tree `git grep MIGRATION_TOOL_MISSING` = definition + union + 3 test lines only: no manufactured call site, as DoD 4 requires.\n\nDoD 5. Filename is hardcoded in the template, the CLI's timestamped `create` is never invoked; two-generation byte-identity and product-name `differing` == exactly [\"README.md\",\"package.json\"] both still asserted and green.\n\nDoD 6. `pnpm typecheck` EXIT 0, every package `Done` — the foreign mcp-tool-allowlist TS2554 the worker disclosed has since been healed by its owner, so this leg is now fully green. Full `--filter @moe/daemon test` not re-run whole; instead the blast radius was censused and run: `git grep` for the changed surface (generator/package-templates/root-templates modules, CONTROLLED_PROFILE_VERSION, generateControlledProfile, controlledProfile*Files, MIGRATION_TOOL_MISSING) + literals `controlled-1` and the 22/23 file count. `controlled-1` census outside the preserved v1 asset is EMPTY. Three consumers were OUTSIDE the worker's 6-file run — repository-bootstrap-journey.test.ts, daemon-command-async-entries.test.ts, deployment-image-build.test.ts — all three reference the CONSTANT, not a literal, and QA ran them: EXIT 0, `Test Files 3 passed (3)` / `Tests 27 passed | 1 skipped (28)`. Whole directories src/repository + src/deployment: 43 files, 440+ passed.\n\nFOREIGN RED, attributed, disclosed verbatim:\n(1) runtime-entrypoint.test.ts:255 `unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]`. PREEXISTING: bridge added by e219aa43 (task-3706b7e7). deployment-docker-probe.ts has no name-matched .test.ts sibling and NO non-test .ts importer, so runtimeTierModules puts it in test tier and its .js is unexpected. The rule excludes .test.ts from `modules`, and this row's apps/daemon/src delta adds only one .test.ts and one .yaml — it cannot move any module's tier. Delta ∩ owned = EMPTY.\n(2) git-landing-port.test.ts (3 tests) and repository-bootstrap-journey.test.ts (1 test): every failure is `Test timed out in 5000ms`, no assertion mismatch, and the SET IS NON-DETERMINISTIC ACROSS RUNS AT IDENTICAL HEAD — journey passed 16/16 at 14:07 and failed 1/16 at 14:28. Root cause measured, not guessed: `git --version` x5 = 3455ms (~690ms/spawn vs ~20ms healthy), mtkbtsvc holding 62,844 handles, 350,896 system-wide. Host spawn-latency cliff; inadmissible as a regression conclusion. Not owned.\n\nRAILS. No moe-next manifest or lockfile edit anywhere in the commit (checked by name) and no root `pnpm install` — the fleet-outage trap is clear. Per-FILE caps: generator 156, package-templates 267, root-templates 316, all < 400. Epic rail 4 teardown: `finally`, unique `moe-migrate-<uuid>` name, `docker rm --force --volumes` then an assertion the container is gone; `docker ps --all --filter name=moe-migrate` = 0 both before and after QA's run. Epic rail 3: loopback-only publish, POSTGRES_HOST_AUTH_METHOD=trust on a disposable container, no credential minted and no secret in any committed fixture.",
+      "timestamp": "2026-09-06T11:30:16.732Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:47:55.345Z",
-  "updatedAt": "2026-09-06T11:03:15.496Z",
+  "updatedAt": "2026-09-06T11:31:49.488Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:05.225Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-06T11:31:49.488Z",
+    "wallClockMs": 57584263
   },
   "stepsCompleted": [
     "step-1",
@@ -319,7 +327,54 @@
     "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
     "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
     "apps/daemon/src/deployment/deploy-service.test.ts",
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts"
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
+    ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
   ],
-  "completionSummary": "controlled-2 ships exact node-pg-migrate9.0.0 + pg8.23.0, migration scripts, deterministic initial app_metadata migration and v2 frozen lock; v1 asset preserved. Down uses down 1: exactly ONE most-recent migration, not all/last batch. MIGRATION_TOOL_MISSING defined/type-pinned at existing DAEMON_INGRESS here; verifier/deployment children2/3 own missing-script detection/refusal, no invented call site. Fixed1700000000000-initial.js/LF bytes; later CLI create timestamps coding-seat migrations. Golden identity/name-only difference preserved. Four drills RED at intended seams, SHA256 restores proved, no leaked containers. Fresh opt-in owned6files102tests EXIT0 (51.70s): GENERATED PRODUCT install/up/down/build0, table PRESENT then ABSENT, pgmigrations1 then0. Scoped strict tsc0. Latest full typecheck1 ONLY foreign mcp-tool-allowlist.test.ts89/90 TS2554; earlier typecheck0, foundation35files756tests0/store52files675tests0 recorded with original anchors. Full daemon1:38failed/476passed files,180failed/9284passed/50skipped tests; all failing paths foreign, exact lines and contention caveat in comments. Root NOT RUN per governor msg-e35611 (no approved step names it); no repo-wide green claim. Latest evidence comment23fa1ce0. Nine owned paths declared; no moe-next manifest changes/root install."
+  "completionSummary": "controlled-2 ships exact node-pg-migrate9.0.0 + pg8.23.0, migration scripts, deterministic initial app_metadata migration and v2 frozen lock; v1 asset preserved. Down uses down 1: exactly ONE most-recent migration, not all/last batch. MIGRATION_TOOL_MISSING defined/type-pinned at existing DAEMON_INGRESS here; verifier/deployment children2/3 own missing-script detection/refusal, no invented call site. Fixed1700000000000-initial.js/LF bytes; later CLI create timestamps coding-seat migrations. Golden identity/name-only difference preserved. Four drills RED at intended seams, SHA256 restores proved, no leaked containers. Fresh opt-in owned6files102tests EXIT0 (51.70s): GENERATED PRODUCT install/up/down/build0, table PRESENT then ABSENT, pgmigrations1 then0. Scoped strict tsc0. Latest full typecheck1 ONLY foreign mcp-tool-allowlist.test.ts89/90 TS2554; earlier typecheck0, foundation35files756tests0/store52files675tests0 recorded with original anchors. Full daemon1:38failed/476passed files,180failed/9284passed/50skipped tests; all failing paths foreign, exact lines and contention caveat in comments. Root NOT RUN per governor msg-e35611 (no approved step names it); no repo-wide green claim. Latest evidence comment23fa1ce0. Nine owned paths declared; no moe-next manifest changes/root install.",
+  "commits": [
+    {
+      "sha": "c8e211b3878be07e1fea931caa25a2bf459bc782",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T11:03:16Z",
+      "paths": [
+        ".moe/tasks/task-37a50989105c40de9fe069d739df9595.json",
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json",
+        "apps/daemon/src/deployment/deploy-service.test.ts",
+        "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T11:03:31.393Z",
+      "treeId": "18a67be48c271d56070b56d9ea702571867c7035",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-f1e402960ada4be7adc6410ec04c945a"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-06T11:03:16Z",
+    "at": "2026-09-06T11:03:31.393Z"
+  },
+  "completedAt": "2026-09-06T11:31:49.488Z",
+  "reviewCompletedAt": "2026-09-06T11:31:49.488Z",
+  "reviewSummary": "APPROVED. 6/6 DoD verified by QA RE-RUNNING commands at HEAD=c8e211b3. Evidence: comment-6dd06cb3.\nDoD2+3 re-run: exact task.verification command EXIT 0, Test Files 6 passed (6) / Tests 102 passed (102). Generated-product transcript: db:migrate -> 0, public.app_metadata PRESENT, pgmigrations=1; db:migrate:down -> 0, ABSENT, pgmigrations=0. Real postgres:17-alpine; to_regclass false BEFORE up too.\nDoD1: exact pins node-pg-migrate 9.0.0 + pg 8.23.0, both scripts, 1700000000000-initial.js with real CREATE TABLE and explicit down. Bump controlled-1->controlled-2, GOLDEN_FILE_COUNT 22->23, v2 lock minted (5 hits vs 0 in v1), v1 preserved.\nDoD4: MIGRATION_TOOL_MISSING defined + in union + layer REUSED (refusedBy pinned to existing DAEMON_INGRESS). Grep = definition/union/tests only; no manufactured call site.\nDoD5: filename hardcoded in template, CLI create never invoked; two-generation byte identity and differing == [\"README.md\",\"package.json\"] green.\nDoD6: pnpm typecheck EXIT 0, all packages Done (disclosed foreign TS2554 healed). Daemon suite not re-run whole; censused blast radius by symbol AND literal; 3 consumers outside the worker's 6 files, ran them: 3 passed (3) / 27 passed | 1 skipped. controlled-1 census outside v1 asset EMPTY.\nLANDING: sole commit is kind=checkpoint so NO-COMPLETION-COMMIT expected; investigated, not a defect. HEAD == that sha, Moe-Task trailer, on branch, pushed; 12 paths = 9 owned + 3 board JSONs, no foreign source.\nFOREIGN RED: runtime-entrypoint unexpected deployment-docker-probe.js is preexisting from e219aa43 and test-tier, unreachable by this row's src delta; git-landing-port 3 + journey 1 are all \"Test timed out in 5000ms\", non-deterministic at identical HEAD, measured cause git --version 690ms/spawn, mtkbtsvc 62,844 handles. Delta INTERSECT owned = EMPTY.\nRAILS: no manifest/lock edit, no root install; per-FILE 156/267/316 < 400; teardown in finally, 0 moe-migrate containers before and after; loopback DB, no fixture secret."
 }
