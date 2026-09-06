@@ -123,7 +123,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:13:38.542Z",
-  "updatedAt": "2026-09-06T01:25:30.816Z",
+  "updatedAt": "2026-09-06T01:26:35.233Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:26:28.199Z",
     "plannedStepCount": 5,
@@ -275,6 +275,22 @@
       "treeId": "4c7ca880f9fb48bffaeee65dabae34ab91f29c19",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "c85d18f4996ab70b7a3e89ed5390cc3d92830007",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T01:14:12Z",
+      "paths": [
+        ".moe/tasks/task-8bdd14af6cdc44c4a5b86fbd920e07e6.json",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T01:26:35.233Z",
+      "treeId": "e61de0f44b18d93c86408093991ffea2974b22d9",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -296,13 +312,13 @@
     "apps/daemon/src/goals/goal-intent-approved-closure.test.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+    "apps/control-room/src/v2/goals/approve-plan-body.tsx"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0520a42e@2026-09-06T00:35:26Z",
-    "at": "2026-09-06T01:11:51.905Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-06T01:14:12Z",
+    "at": "2026-09-06T01:26:35.233Z"
   },
   "priorHandoffs": [
     {

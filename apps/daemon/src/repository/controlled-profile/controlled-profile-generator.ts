@@ -49,6 +49,18 @@ export type ControlledProfileRefusalCode =
 export interface ControlledProfileRequest {
   readonly productName: string;
   readonly profileVersion: string;
+  /**
+   * Environment-variable NAMES the approved contract's deployment requirements require, from
+   * `requiredVariableNames` in `environment/environment-required-variables.ts`. Names only — the
+   * emitter writes each as `NAME=` with nothing after the `=`, because `.env.example` is
+   * committed and pushed.
+   *
+   * OPTIONAL, and absent is not the same as unsupported: omitted or empty emits `.env.example`
+   * byte-identically to a build from before this field existed, so the profile version still
+   * means one shape for every product that does not use it. Optional also keeps existing callers
+   * valid, including `bootstrapRepository`, which passes its whole `BootstrapRequest` here.
+   */
+  readonly requiredVariableNames?: readonly string[];
 }
 
 /** Paths are forward-slash relative, sorted by UTF-16 code unit; values are the file's full bytes. */
@@ -123,7 +135,7 @@ export function generateControlledProfile(request: ControlledProfileRequest): Co
   // over the assembled tree would silently enrol any future template that happened to contain the
   // same string, and the name-only diff assertion would stop meaning what it says.
   const entries: [string, string][] = [
-    ...controlledProfileRootFiles(request.productName),
+    ...controlledProfileRootFiles(request.productName, request.requiredVariableNames ?? []),
     ...controlledProfilePackageFiles(),
     ["pnpm-lock.yaml", lockfileBytes()],
   ];

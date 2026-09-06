@@ -199,6 +199,106 @@ describe("the controlled profile generator", () => {
   });
 });
 
+/**
+ * The contract-derived half of `.env.example`. These arms guard a file that is COMMITTED AND
+ * PUSHED into the product's repository, so "no value" is not a style preference here: a value
+ * written into these bytes is a value published, and a published file cannot be un-pushed.
+ */
+describe("the contract's required variable names in .env.example", () => {
+  const REQUIRED = ["APP_SECRET_NAME", "DATABASE_URL_EXTRA", "SESSION_SIGNING_KEY"];
+
+  /** Pinned like every other emitted file. Measured, never softened; the no-name pin stands too. */
+  const GOLDEN_ENV_EXAMPLE_WITH_NAMES =
+    "a391d228e1a3adbd5922aaf8adbce752b02365c01617f05a336338d8fdd379e1";
+
+  const withNames = (
+    requiredVariableNames: readonly string[] = REQUIRED,
+  ): ControlledProfileTree => {
+    const result = generateControlledProfile({
+      productName: "alpha-product",
+      profileVersion: CONTROLLED_PROFILE_VERSION,
+      requiredVariableNames,
+    });
+    if (!result.ok) throw new Error(`expected a tree, got refusal ${result.code}`);
+    return result;
+  };
+
+  const envExampleOf = (result: ControlledProfileTree): string =>
+    result.files.get(".env.example") ?? "";
+
+  it("names a contract requires NOTHING leaves the file byte-identical to the profile's own", () => {
+    // DoD 5. The pre-existing golden hash at the top of this file is the other half of this
+    // claim: if the extension were unconditional, `emits the pinned tree` would already be red.
+    const untouched = envExampleOf(tree("alpha-product"));
+
+    expect(envExampleOf(withNames([]))).toBe(untouched);
+    expect(sha256(untouched)).toBe(
+      GOLDEN_MANIFEST.find((row) => row.startsWith(".env.example "))?.split("  ")[1],
+    );
+  });
+
+  it("carries every required name, and NO VALUE for any of them", () => {
+    // DoD 3, in its strict form: each name is present AND the line it is on ENDS at the `=`.
+    // A containment check alone is satisfied by `NAME=secret`, which is exactly the leak.
+    const body = envExampleOf(withNames());
+
+    for (const name of REQUIRED) {
+      expect(body).toMatch(new RegExp(`^${name}=$`, "m"));
+      const assignments = body.split("\n").filter((line) => line.startsWith(`${name}=`));
+      expect(assignments).toEqual([`${name}=`]);
+    }
+  });
+
+  it("puts no CHANGE_ME token beside a contract name", () => {
+    const contractLines = envExampleOf(withNames())
+      .split("\n")
+      .filter((line) => REQUIRED.some((name) => line.startsWith(name)));
+
+    expect(contractLines).toEqual(REQUIRED.map((name) => `${name}=`));
+    for (const line of contractLines) expect(line).not.toContain("CHANGE_ME");
+  });
+
+  it("keeps the profile's own POSTGRES_PASSWORD placeholder readable, with and without names", () => {
+    // DoD 4. `repository/deployment/deployment-infrastructure-generator.test.ts` parses this
+    // exact shape back out of `.env.example` FROM ANOTHER DIRECTORY to prove no emitted file
+    // carries a credential literal. Reformatting the line reds a suite that never mentions
+    // this feature, so the coupling is asserted here too, where the edit happens.
+    for (const body of [envExampleOf(tree("alpha-product")), envExampleOf(withNames())]) {
+      expect(/POSTGRES_PASSWORD=(\S+)/.exec(body)?.[1]).toBe("CHANGE_ME");
+      expect(body).toContain("POSTGRES_USER=app");
+      expect(body).toContain("PORT=3000");
+    }
+  });
+
+  it("moves ONLY the .env.example hash, and pins its new value", () => {
+    const result = withNames();
+
+    expect(result.files.size).toBe(GOLDEN_FILE_COUNT);
+    expect(manifestOf(result)).toEqual(GOLDEN_MANIFEST.map((row) =>
+      row.startsWith(".env.example ")
+        ? `.env.example  ${GOLDEN_ENV_EXAMPLE_WITH_NAMES}`
+        : row));
+  });
+
+  it("emits the same bytes for the same SET of names, however they arrive", () => {
+    // The names feed a SHA256-pinned file, so caller order and duplicates must not reach it.
+    const shuffled = [...REQUIRED].reverse();
+
+    expect(envExampleOf(withNames(shuffled))).toBe(envExampleOf(withNames()));
+    expect(envExampleOf(withNames([...REQUIRED, ...REQUIRED]))).toBe(envExampleOf(withNames()));
+  });
+
+  it("drops a name the contract grammar could not have admitted", () => {
+    // Only reachable by bypassing admission - and this is the boundary that writes bytes, so it
+    // re-checks rather than trusting. A newline or an `=` in a name would inject a LINE.
+    const body = envExampleOf(withNames(["APP_SECRET_NAME", "OK\nSMUGGLED=secret", "lower"]));
+
+    expect(body).toMatch(/^APP_SECRET_NAME=$/m);
+    expect(body).not.toContain("SMUGGLED");
+    expect(body).not.toContain("lower");
+  });
+});
+
 describe("the controlled profile generator's refusals", () => {
   const INVALID_NAMES: readonly string[] = [
     "",

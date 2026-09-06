@@ -14,7 +14,14 @@
  * THE PRODUCT NAME REACHES EXACTLY TWO PATHS from this module: `package.json` (its `name`) and
  * `README.md`. docker-compose uses fixed service and database names, and `.env.example` carries
  * placeholder values only, so no emitted file carries a credential literal.
+ *
+ * THE ONE OTHER CALLER-SUPPLIED INPUT is `requiredVariableNames`, which reaches `.env.example`
+ * ALONE and as NAMES ONLY — never a value, and never beside a placeholder. That file is committed
+ * and pushed into the product's repository, so a value written there is a value published; the
+ * emitter re-checks every name against the contract's own grammar rather than trusting its
+ * caller, and an empty set emits the profile's bytes unchanged.
  */
+import { isContractVariableName } from "../../environment/environment-required-variables.js";
 
 const file = (lines: readonly string[]): string => `${lines.join("\n")}\n`;
 
@@ -83,7 +90,14 @@ const GITIGNORE = file([
   "test-results/",
 ]);
 
-const ENV_EXAMPLE = file([
+/**
+ * THE PROFILE'S OWN LINES. Placeholders, and they are the profile's to choose: docker-compose
+ * consumes `POSTGRES_PASSWORD` and `deployment-infrastructure-generator.test.ts` reads the
+ * `CHANGE_ME` token back out of these bytes from another directory to prove no emitted file
+ * carries a credential literal. Editing any of them moves the golden manifest and reds that
+ * cross-directory arm.
+ */
+const ENV_EXAMPLE_PROFILE_LINES: readonly string[] = [
   "# Copy to .env and replace every CHANGE_ME. .env is gitignored and must never be committed.",
   "# These are PLACEHOLDERS, not credentials.",
   "POSTGRES_USER=app",
@@ -91,7 +105,50 @@ const ENV_EXAMPLE = file([
   "POSTGRES_DB=app",
   "DATABASE_URL=postgres://app:CHANGE_ME@localhost:5432/app",
   "PORT=3000",
-]);
+];
+
+/**
+ * WHY THE CONTRACT'S NAMES GET THEIR OWN SECTION RATHER THAN BEING INTERLEAVED. The two halves of
+ * this file are different KINDS of fact with different owners. The profile's lines are the
+ * profile's, they carry chosen placeholder values, and `CHANGE_ME` is the token the README tells
+ * the operator to replace. The contract's names are the PRODUCT's, they carry NO value at all,
+ * and there is nothing to replace — only something to supply. Interleaving them would put a
+ * `CHANGE_ME`-bearing line beside a bare name and invite the next editor to "finish" the bare one
+ * with a placeholder, which is how a value gets published. The blank line and the heading make
+ * the boundary visible in the emitted bytes, not just in this module.
+ */
+const ENV_EXAMPLE_CONTRACT_HEADING: readonly string[] = [
+  "",
+  "# Required by the product contract. NAMES ONLY: no value is written here, because this file is",
+  "# committed and pushed. Supply each one in .env; none has a default and none has a placeholder.",
+];
+
+/**
+ * `.env.example` for a product whose contract requires `requiredVariableNames`.
+ *
+ * CONDITIONAL BY CONSTRUCTION. An empty name set returns the profile's lines and nothing else, so
+ * a product whose contract names no variables gets bytes IDENTICAL to those emitted before this
+ * feature existed — the golden manifest hash for that case does not move, and no project that
+ * does not use this is affected.
+ *
+ * Names are deduped, re-checked against the contract grammar and sorted by UTF-16 code unit HERE,
+ * at the byte-emitting boundary, rather than trusted from the caller. The grammar predicate is
+ * IMPORTED, not restated: a second copy could drift, and this is the copy whose drift would
+ * publish bytes. `NAME=` with nothing after the `=` is the emitted form — a bare `NAME` is not
+ * valid in a file the README tells the operator to `cp` to `.env`, and an empty right-hand side
+ * is unambiguously "declared, not supplied".
+ */
+const envExample = (requiredVariableNames: readonly string[]): string => {
+  const names = [...new Set(requiredVariableNames.filter(isContractVariableName))]
+    .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  return names.length === 0
+    ? file(ENV_EXAMPLE_PROFILE_LINES)
+    : file([
+      ...ENV_EXAMPLE_PROFILE_LINES,
+      ...ENV_EXAMPLE_CONTRACT_HEADING,
+      ...names.map((name) => `${name}=`),
+    ]);
+};
 
 const readme = (productName: string): string =>
   file([
@@ -198,10 +255,18 @@ const E2E_SMOKE = file([
   "});",
 ]);
 
-/** Workspace-root entries of the profile, keyed by forward-slash relative path. */
-export function controlledProfileRootFiles(productName: string): ReadonlyMap<string, string> {
+/**
+ * Workspace-root entries of the profile, keyed by forward-slash relative path.
+ *
+ * `requiredVariableNames` defaults to EMPTY so every existing call site keeps emitting the exact
+ * bytes it emitted before, and so the parameter can never be forgotten into a leak.
+ */
+export function controlledProfileRootFiles(
+  productName: string,
+  requiredVariableNames: readonly string[] = [],
+): ReadonlyMap<string, string> {
   return new Map([
-    [".env.example", ENV_EXAMPLE],
+    [".env.example", envExample(requiredVariableNames)],
     [".github/workflows/ci.yml", CI_WORKFLOW],
     [".gitignore", GITIGNORE],
     ["README.md", readme(productName)],
