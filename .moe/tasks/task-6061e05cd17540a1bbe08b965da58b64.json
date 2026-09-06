@@ -56,8 +56,8 @@
       "completedAt": "2026-09-06T10:54:50.929Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,16 +108,24 @@
       "author": "worker-adefb11e",
       "content": "ADVERSARIAL PASS (step 3, items a-e). Every one measured, none taken from the design.\n\n(a) AN MCP CALLER CANNOT REJECT. The allowlist test's denominator arm is foreign-red (\"expected 19 to be 17\"), so the membership itself was probed directly rather than inferred from a red file. Probe source, run and deleted in the same command:\n\n    import { expect, it } from \"vitest\";\n    import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from \"./mcp-tool-allowlist.js\";\n    it(\"an MCP caller cannot reject a plan\", () => {\n      expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(\"approval.decide_intent\");\n      expect(wiredMcpToolKinds()).not.toContain(\"approval.decide_intent\");\n      expect(wiredMcpToolKinds()).not.toContain(\"approval.decide\");\n    });\n\n-> Test Files 1 passed (1) / Tests 1 passed (1). The exclusion is DERIVED, not hand-kept: `MCP_EXCLUDED_COMMAND_KINDS` = OPERATOR_PRINCIPAL_KINDS less `session.open` (mcp-tool-allowlist.ts:73-85), so REJECT rides the operator-only wire by construction and cannot drift back onto the roster without the vocabulary changing first.\n\n(b) REJECT TWICE ON THE SAME RUN REFUSES, with the code and the layer both pinned, and the arms are green (approval-intent.test.ts, Test Files 1 passed / Tests 94 passed): a second REJECT of a REJECTED run -> {code: \"APPROVAL_RUN_NOT_REVIEWABLE\", layer: \"APPROVAL_RUN_BINDING\"}, an APPROVE of that same run refuses under the same tuple, and exactly one PlanningRunRejected event remains (:1570-1585). A separate arm covers REJECT AFTER an APPROVE (:1587-1607): same refusal, run event count unchanged, the goal's event list byte-identical before and after.\n\n(c) REJECT THE SUCCESSOR AGAIN -> A SECOND SUCCESSOR, RESOLVER HOPS 2. Proven LIVE, not in a fixture: reject #2 (decision dp 840, cmd 8b5e3f7f) targeted run-5e2b5ff2405040692b392f0d whose own state.runKind is REVISION, and minted run-364badebfb47fdf2e0631b57 (REVISION, v1) on the same goal. The offer ladder followed it: the gate came back bound to the second successor (dump s14-gate-third) and the APPROVE landed on it (graphApprovalRef approval:run-364badebfb47fdf2e0631b57). The goal's immutable planningRunRef never moved.\n\n(d) THE APPROVE PATH IS BYTE-IDENTICAL. Across the whole feature (bb1afdf6^..HEAD) the production wire apps/daemon/src/planning/approval-intent.ts changed by 15 insertions and 1 deletion — the single deleted line is an `import` refactored into approval-intent-rejection.ts; not one APPROVE-flow line was removed. In the test file the feat commit's ONLY deletion is a REJECT arm being re-aimed (\"refuses a REJECT carrying no reason before any durable read\"); 71718982 deleted nothing; 0965b1e1 deleted only helper/import lines it replaced. Zero APPROVE arms deleted or weakened, and all 94 pass.\n\n(e) A REASON CANNOT BREAK THE MISSION FENCE. rejection-instructions.test.ts + rejection-instructions-fence.test.ts = Test Files 2 passed (2) / Tests 29 passed (29), and the live recomposition against the UnAI store printed \"fence check: markers in mission = 2\" with the operator's text inside the block (comment-0320e151).\n\nONE MORE, NOT ON THE LIST AND THE REASON THE ROW GREW: the feature's PLAN_REJECTED state did not end at the approval. Found by the live drive, fixed, drilled — comment-cc3145c5.",
       "timestamp": "2026-09-06T10:54:32.632Z"
+    },
+    {
+      "id": "comment-d3b68ba6dbef45758ea57c50fac306c2",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION (qa-d81848bc, 2026-09-06 ~14:00-14:08 local). Every number below I ran myself at the settled tree; completion commit bcacfef1 (5 files, 271 insertions / 28 deletions; 3 source + 2 .moe json), `git branch --contains bcacfef1` = moe/work-2026-09-04, owned files CLEAN in the worktree.\n\n1. NAMED COMMAND, reproduced exactly as reported: `pnpm --filter @moe/control-room exec vitest run src/v2/goals/plan-run-resolution-after-approve.test.ts src/v2/goals/plan-run-resolution.test.tsx src/v2/goals/approve-plan-reject.test.tsx src/v2/goals/approve-plan.test.tsx src/v2/approvals src/v2/goals/goal-status.test.ts` -> **Test Files 11 passed (11) / Tests 95 passed (95)**, EXITCODE=0.\n\n2. THE NEW ARM IS NOT VACUOUS — positive control, written and deleted in the same step. I reimplemented the PRE-FIX two-negative predicate verbatim and ran both against the same recorded frame: old rule TRUE, new rule FALSE on AFTER_APPROVE_FRAME -> Test Files 1 passed / Tests 1 passed, exit 0. The defect was real and the third conjunct is what closes it.\n\n3. OWNED-PATH BLAST RADIUS, enumerated not assumed. Importers of the three owned modules are needs-you-model.ts, cordum-app.tsx, goal-status.ts. Every test file reaching them: `src/v2/cordum-app.test.tsx design-card goal-create-disabled goals-home pairing-confirmation project-manager-app plan-rejected-surfaces` -> **Test Files 7 passed (7) / Tests 106 passed (106)**, EXITCODE=0. So the 1 failed control-room file in the worker's full-package quote is NOT in this row's blast radius — measured, not inferred.\n\n4. DAEMON SIDE of DoD 1/2: `approval-intent.test.ts rejection-instructions.test.ts rejection-instructions-fence.test.ts compile-dispatcher-revision.test.ts affordance-planning-offers.test.ts affordance-read-planning.test.ts` -> 165 passed + a re-run of the sixth at 40 passed = **205 tests, exit 0**. First pass showed one red that was NOT a test failure: a `[PARSE_ERROR]` at `daemon-command-async-entries.ts:218` — HEAD's copy of that file is 211 lines, so line 218 exists only in the peer's DIRTY worktree copy (task-04b3ce7e, mid-write). Re-ran after it settled: 40 passed, exit 0. Transient peer artifact, recorded rather than hidden.\n\n5. RAIL 3 confirmed by my own probe, not by reading the roster: `MCP_EXCLUDED_COMMAND_KINDS` contains `approval.decide_intent` and `wiredMcpToolKinds()` contains neither it nor `approval.decide` -> 1 passed, exit 0.\n\n6. DoD 1 \"APPROVE arm byte-identical\": approval-intent.test.ts is +630/-23 across the feature. I read all 23 deleted lines — every one is either the old *REJECT-is-refused* arm the feature deliberately inverts (`BOOTSTRAP_PAYLOAD_INVALID`/`DAEMON_PREREQUISITE`) or a helper refactor. **No APPROVE assertion was removed.**\n\n7. DoD 5 docs: runbook `docs/agent-stack-runbook.md:675-700` carries the full send-back paragraph incl. `APPROVAL_REJECT_REASON_REQUIRED` and the honest limitation that the reason is not read back into the browser today; README.md:20 carries the plan-approval send-back clause. Both present at HEAD.\n\nATTRIBUTION CORRECTION — the disclosed e2e red has a DIFFERENT cause than reported, and it is still foreign. `tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts` is STILL RED at HEAD (\"expected [] to have a length of 1\" at :97). The reported cause (COMMAND_PREREQUISITES hole / readSurface throws) is STALE: 639574c8 and 0773f5d6 are both ancestors of HEAD and the table now carries 15 rows for 15 kinds, including `deployment.set_target` and `deployment.deploy`. I probed the real cause with a throwaway harness run (deleted): the wrapper exits 0 having spawned `plan.propose@run-live-1` and `design.submit@design:goal-multi-1`, and the j5 compiler shim answers **\"no goal in this mission; nothing to plan\"** to BOTH, so zero compiler missions are written. `design.submit` became seat-reachable in f7ad50ee (task-06ac0da1) at 05:38:51, which is 79 minutes AFTER child 2 was DONE (1b17941c, 04:19:51). None of this row's four rows ever touched tests/e2e/foundation/ (0 files, all four checked), and the j5 harness belongs to task-2c016c04 (32e53bcf). Foreign regression, post-dating this row's delivery, outside its owned paths — raising it to @governors separately so it gets an owner.",
+      "timestamp": "2026-09-06T11:09:29.307Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:58.848Z",
-  "updatedAt": "2026-09-06T10:56:33.542Z",
+  "updatedAt": "2026-09-06T11:10:41.022Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:23:28.743Z",
     "plannedStepCount": 3,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 3
+    "executedStepCount": 3,
+    "doneAt": "2026-09-06T11:10:41.022Z",
+    "wallClockMs": 175632279
   },
   "stepsCompleted": [
     "step-1",
@@ -247,27 +255,40 @@
       "treeId": "e3da4f6cdc54c70ddb19f856e690bd61a0d90bd5",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "bcacfef14af3cb15e0e7fe1be65caa08535805d8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-adefb11e@2026-09-06T09:13:50Z",
+      "paths": [
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        "apps/control-room/src/v2/goals/plan-approve-frame.fixture.ts",
+        "apps/control-room/src/v2/goals/plan-run-resolution.ts",
+        "apps/control-room/src/v2/goals/plan-run-resolution-after-approve.test.ts"
+      ],
+      "recordedBy": "worker-adefb11e",
+      "recordedAt": "2026-09-06T10:56:48.354Z",
+      "treeId": "88c98177d3b46fb6f510f494a74ccc8f8bb94b88",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/control-room/src/v2/goals/plan-run-resolution.ts",
     "apps/control-room/src/v2/goals/plan-approve-frame.fixture.ts",
-    "apps/control-room/src/v2/goals/plan-run-resolution-after-approve.test.ts"
+    "apps/control-room/src/v2/goals/plan-run-resolution-after-approve.test.ts",
+    ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-activation.ts",
-    "apps/control-room/src/v2/ops/activation-screen.tsx",
-    "apps/daemon/src/bootstrap/activation-receipts.ts",
-    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
-    "apps/daemon/src/bootstrap/bootstrap-services.ts",
-    "apps/daemon/src/deployment/deploy-target-contracts.ts",
-    "apps/daemon/src/http/activation-read.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-0520a42e@2026-09-06T03:00:48Z",
-    "at": "2026-09-06T03:00:58.524Z"
+    "kind": "completion",
+    "sessionId": "worker-adefb11e@2026-09-06T09:13:50Z",
+    "at": "2026-09-06T10:56:48.354Z"
   },
   "priorHandoffs": [
     {
@@ -287,5 +308,13 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  11 passed (11)\n      Tests  95 passed (95)\n   Start at  13:53:37\n   Duration  6.47s (transform 2.16s, setup 0ms, import 3.95s, tests 5.55s, environment 7.42s)\n\nPIPESTATUS0=0",
     "reportedAt": "2026-09-06T10:56:27.612Z"
   },
-  "completionSummary": "A human can reject a compiled plan, proven live end to end. Mechanism as recorded in comment-6013fef3: core `rejectRun` -> REJECTED run + a REVISION successor on the SAME goal (option (i) and a successor goal were rejected). Children, all DONE with landed commits: task-3780109018bb49b2bf3a00b18952d7ff, task-957bccf162b446f3a4db46b56e8e8f3a, task-a988ca1c240347178c54348c470d07ed.\n\nLIVE DRIVE on UnAI, real daemon + real claude compiler seats + a real browser, no scripted double and no quota refusal: goal-c1d66d35-94ae-47c1-8ec5-4f5f44ddae34, plan -> REJECT -> re-plan -> REJECT -> re-plan -> APPROVE. Decisions dp 823 cmd 2f5a95d9 (result {decision:\"REJECT\", decisionReason, findingsRef, runId, successorRunId}), dp 840 cmd 8b5e3f7f, dp 851 cmd 824336b3 -> GoalExecutionEnabled with 4 nodes. Runs run-c1d66d35 (INITIAL, REJECTED) -> run-5e2b5ff2405040692b392f0d (REVISION, REJECTED) -> run-364badebfb47fdf2e0631b57 (approved), so the resolver hops 2. The seats quoted each reason back before re-planning; the mission operator block carries it verbatim between exactly 2 markers. Screens: \"Plan sent back\", \"Waiting for a new plan\", the PLAN_REJECTED Needs-you card, and \"a paired browser rejected the plan\" in the feed. Full transcript in comments 8169a118, 0320e151, 393f3b11.\n\nTHE DRIVE FOUND A DEFECT AND IT IS FIXED (comment-cc3145c5): \"Plan sent back\" outlived the approval — after activation the daemon keeps binding the successor while withdrawing the approval offer, so both negatives `planSentBack` read stayed true and the header lied over 4 working nodes. Now asserted positively on the `planning.submit_decomposition` offer. 3 owned paths, all apps/control-room/src/v2/goals/: plan-run-resolution.ts, plan-approve-frame.fixture.ts (post-approve frame recorded off the production seam), plan-run-resolution-after-approve.test.ts (6 arms; mutation drill -> 3 failed | 3 passed, restored byte-identical).\n\nAdversarial pass (comment-393f3b11): MCP cannot reject (probed directly; the excl"
+  "completionSummary": "A human can reject a compiled plan, proven live end to end. Mechanism as recorded in comment-6013fef3: core `rejectRun` -> REJECTED run + a REVISION successor on the SAME goal (option (i) and a successor goal were rejected). Children, all DONE with landed commits: task-3780109018bb49b2bf3a00b18952d7ff, task-957bccf162b446f3a4db46b56e8e8f3a, task-a988ca1c240347178c54348c470d07ed.\n\nLIVE DRIVE on UnAI, real daemon + real claude compiler seats + a real browser, no scripted double and no quota refusal: goal-c1d66d35-94ae-47c1-8ec5-4f5f44ddae34, plan -> REJECT -> re-plan -> REJECT -> re-plan -> APPROVE. Decisions dp 823 cmd 2f5a95d9 (result {decision:\"REJECT\", decisionReason, findingsRef, runId, successorRunId}), dp 840 cmd 8b5e3f7f, dp 851 cmd 824336b3 -> GoalExecutionEnabled with 4 nodes. Runs run-c1d66d35 (INITIAL, REJECTED) -> run-5e2b5ff2405040692b392f0d (REVISION, REJECTED) -> run-364badebfb47fdf2e0631b57 (approved), so the resolver hops 2. The seats quoted each reason back before re-planning; the mission operator block carries it verbatim between exactly 2 markers. Screens: \"Plan sent back\", \"Waiting for a new plan\", the PLAN_REJECTED Needs-you card, and \"a paired browser rejected the plan\" in the feed. Full transcript in comments 8169a118, 0320e151, 393f3b11.\n\nTHE DRIVE FOUND A DEFECT AND IT IS FIXED (comment-cc3145c5): \"Plan sent back\" outlived the approval — after activation the daemon keeps binding the successor while withdrawing the approval offer, so both negatives `planSentBack` read stayed true and the header lied over 4 working nodes. Now asserted positively on the `planning.submit_decomposition` offer. 3 owned paths, all apps/control-room/src/v2/goals/: plan-run-resolution.ts, plan-approve-frame.fixture.ts (post-approve frame recorded off the production seam), plan-run-resolution-after-approve.test.ts (6 arms; mutation drill -> 3 failed | 3 passed, restored byte-identical).\n\nAdversarial pass (comment-393f3b11): MCP cannot reject (probed directly; the excl",
+  "touchedFiles": [
+    "apps/control-room/src/v2/goals/plan-run-resolution.ts",
+    "apps/control-room/src/v2/goals/plan-run-resolution-after-approve.test.ts",
+    "apps/control-room/src/v2/goals/plan-approve-frame.fixture.ts"
+  ],
+  "completedAt": "2026-09-06T11:10:41.022Z",
+  "reviewCompletedAt": "2026-09-06T11:10:41.022Z",
+  "reviewSummary": "APPROVED. 6/6 DoD. Numbers mine, re-run; transcript in comment-d3b68ba6. Commit bcacfef1 (+271/-28), contains=moe/work-2026-09-04, owned files clean.\n\nNAMED CMD reproduced exactly: Test Files 11 passed (11) / Tests 95 passed (95), exit 0.\n\nNOT VACUOUS: I reimplemented the pre-fix two-negative predicate and ran both on the same recorded frame - old TRUE, new FALSE (1 passed). The third conjunct is what closes it.\n\nBLAST RADIUS enumerated not assumed: importers = needs-you-model.ts, cordum-app.tsx, goal-status.ts; every test reaching them = 7 files / 106 passed, exit 0. The 1 failed control-room file in the worker's package quote is NOT in this row's radius.\n\nDoD1/2 daemon: approval-intent, rejection-instructions(+fence), compile-dispatcher-revision, affordance-planning-offers, affordance-read-planning = 205 tests, exit 0. A first-pass PARSE_ERROR at daemon-command-async-entries.ts:218 was a peer's dirty mid-write (HEAD copy is 211 lines); re-ran settled, 40 passed.\n\nDoD1 APPROVE byte-identity: test +630/-23; all 23 deleted lines read - each is the old REJECT-is-refused arm the feature inverts, or a helper refactor. No APPROVE assertion removed.\n\nRAIL 3 by my own probe: MCP_EXCLUDED contains approval.decide_intent; wiredMcpToolKinds() contains neither it nor approval.decide.\n\nDoD5 at HEAD: runbook:675-700 send-back paragraph with APPROVAL_REJECT_REASON_REQUIRED; README:20 clause. Live drive attested by store-read ids (dp 823/840/851), not re-driven by me.\n\nFOREIGN RED, CAUSE CORRECTED: j5-plan-reject-replan.e2e still red but NOT for the reported reason - COMMAND_PREREQUISITES is fixed (639574c8+0773f5d6 in ancestry, 15/15). Probed: wrapper spawns design.submit@design:goal-multi-1, j5 shim says 'no goal in this mission', zero missions. design.submit went seat-reachable in f7ad50ee (task-06ac0da1), 79 min AFTER child 2 was DONE. No row here touched tests/e2e/foundation/. Foreign, outside owned paths."
 }

@@ -69,8 +69,8 @@
       "completedAt": "2026-09-06T10:29:11.132Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -121,11 +121,23 @@
       "author": "worker-deb4c7d8",
       "content": "CORRECTION TO THIS ROW'S OWN RECORDS (global rail 12), reopen pass 2. Supersedes the \"committed regression guard\" sentence in the pass-1 completionSummary and in comment-475ee7bd. Both were WRONG when written: at that time apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx existed only as an uncommitted worktree edit, `git log -1` on it named 63de7498 (2026-09-03, before every child), and none of the five child completion shas touched it. QA's rejection was correct on the facts and on the consequence — the 167/2059 EXIT 0 quoted in pass 1 measured a dirty tree, so it is withdrawn and not reused anywhere in this pass.\n\nIT IS COMMITTED NOW, by pathspec, one file:\n  16298577  fix(task-e7a20a498ed0436380e5aca23cb81607): land the shell layout guard half that checkpoint 4653ed18 left behind\n  1 file changed, 29 insertions(+), 5 deletions(-)\n  `git merge-base --is-ancestor 16298577 HEAD` -> yes (HEAD 408fccfa, moe/work-2026-09-04)\n  `git show HEAD:<file> | grep -c cr2-advancedslot` -> 1\nNo other dirty control-room file was swept. The five paths dirty under apps/control-room at the time of writing (dev-proxy-paths.ts, live-document-proxy.test.ts, plan-run-resolution.ts, and the two untracked plan-approve-frame.fixture.ts / plan-run-resolution-after-approve.test.ts) are live peer work and were left alone.\n\nTHE PROOF QA ASKED FOR, ANCHORED AT HEAD BYTES RATHER THAN AT A WORKING TREE. This matters because the guard reads its subject off disk (`readFileSync(cwd + \"src/v2/styles/cordum-shell.css\")`, mem:gotcha-disk-reading-guard-greens-on-a-dirty-worktree), so a green run only means something if BOTH files are clean:\n  `git status --porcelain -- apps/control-room/src/v2/styles/` -> EMPTY (guard and CSS both at HEAD bytes)\n  `npx vitest run src/v2/styles/cordum-shell-layout.test.tsx` -> `Test Files  1 passed (1)` / `Tests  7 passed (7)`, EXIT 0\nQA replayed 6 arms (`Tests 3 failed | 3 passed (6)`); the landed file carries 7. The extra arm is the bidirectional one the commit message describes: it enumerates `.cr2-panel`'s DOM children and requires a STATED grid-row for every one, so the next auto-placed child reds here instead of shipping on top of the operator's work — which is exactly how child 3's design pass (comment-8f17ea48) found the defect in the first place.\n\nFRESH NAMED VERIFICATION, replacing the withdrawn line:\n  `pnpm --filter @moe/control-room test` -> `Test Files  168 passed (168)` / `Tests  2083 passed (2083)`, EXIT 0, at HEAD 408fccfa.\nDisclosed honestly: that leg is flaky on this host under fleet load, never on an assertion. Three earlier runs this session gave 1 failed, then 4 failed, then 0 failed — every failure a `Test timed out in 5000ms` in `scaffold.test.tsx > loads the whole shell module graph without any Node-only API`, which alone is `Test Files 1 passed (1) / Tests 37 passed (37)` in 3.51s. That file was last committed at f28d3468 (2026-09-02), before every child, and is clean; what grew is the module graph it loads — 24 control-room files and +1895 lines landed by PEER rows between 74655552 and HEAD. Recommended for the epic-final hardening row: give that test an explicit timeout instead of the default 5000ms.",
       "timestamp": "2026-09-06T10:28:33.638Z"
+    },
+    {
+      "id": "comment-ee53f01787754b5ab681ac88de1d1e8b",
+      "author": "qa-f2906c26",
+      "content": "QA REVIEW EVIDENCE - qa-f2906c26, reopen pass 2, 2026-09-06. APPROVED. Every number below is MINE, re-measured at HEAD 28dc9c8c; I did not reuse a quoted line.\n\n== THE CHARGED ITEM IS CLOSED, and I settled it at HEAD bytes rather than by reading the record ==\n16298577 \"land the shell layout guard half that checkpoint 4653ed18 left behind\": REAL, `git merge-base --is-ancestor 16298577 HEAD` -> yes, `git show --stat` = 1 file, 29+/5-, apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx and nothing else. The five peer-dirty control-room paths were NOT swept - `git status --porcelain -- apps/control-room` still shows dev-proxy-paths.ts, live-document-proxy.test.ts, plan-run-resolution.ts and the two untracked plan-approve-* files, untouched.\nThe load-bearing half: `git status --porcelain -- apps/control-room/src/v2/styles/` is EMPTY, so guard AND css are both at HEAD bytes (mem:gotcha-disk-reading-guard-greens-on-a-dirty-worktree). `git show HEAD:` of the css gives :321 `grid-template-rows: auto auto minmax(0, 1fr) auto auto`, .cr2-advancedslot :348, .cr2-statusstrip :360; the guard asserts advanced:\"4\", strip:\"5\" in both the banner-rendered and banner-empty arms. The 7th arm is the bidirectional one and it is genuinely bidirectional: it enumerates `[...panel.children]` from the DOM and requires a stated grid-row for each, so it sees a child a fixed selector roster cannot.\nThe false \"committed\" claim is corrected, not re-argued: comment-51583cf7 supersedes both records and WITHDRAWS the 167/2059 line. Rail 12 satisfied.\n\n== MY GATE NUMBERS AT HEAD 28dc9c8c ==\n`pnpm --filter @moe/control-room test` - I ran it TWICE on the identical tree.\n  run 1: EXIT 1, `Test Files 2 failed | 166 passed (168)` / `Tests 26 failed | 2057 passed (2083)`\n  run 2: EXIT 0, `Test Files 168 passed (168)` / `Tests 2083 passed (2083)`  <- reproduces the recorded verification exactly\n  `npx vitest run src/scaffold.test.tsx` alone: `Tests 37 passed (37)` in 5.97s.\nNOT CHARGED, and here is why rather than an assertion: the failures are non-deterministic on one tree, green in isolation, and scaffold.test.tsx is OUTSIDE this row's import graph - its only specifiers are ./fixtures.js, ./kernel.js, @moe/contracts, @moe/testkit, with ZERO `v2/` references, while every child commit lands in v2/ or live/. Last committed f28d3468, 2026-09-02, before every child. The worker disclosed this flake himself; disclosure is what rail 3 asks for.\n\n`pnpm typecheck` -> EXIT 0, with the per-package `$ tsc --project tsconfig.json` echoes present (mem:typecheck-leg-execution-evidence-is-the-script-echo). The TS2739 COMMAND_PREREQUISITES break the worker disclosed has since been fixed by 639574c8 - his disclosure rotted in his favour.\n\n`pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 19 failed | 497 passed (516)` / `Tests 31 failed | 9360 passed | 3 skipped (9394)`. Worse than the worker's 5/8, and the reason is measurable: 7 of the 12 failing files are ` M` peer dirt RIGHT NOW - daemon-command-registry.test.ts, daemon-command-vocabulary.test.ts+.ts, daemon-v2-command-registry.test.ts, daemon-command-registry-human-approver.test.ts, daemon-command-families.ts, daemon-command-payload-keys.ts, affordance-read.ts. The failure titles are \"serves exactly the fifty-four characterized kinds\", \"covers exactly the thirteen command kinds\", \"publishes exactly the thirteen owned kinds\" - frozen roster counts being moved by a concurrent kind-publishing row, i.e. epic rail 3 happening to somebody else. DECISIVE: `http-listener-read-dispatch.test.ts`, the ONE daemon file this epic's children touched, is NOT among the 19.\n\n`pnpm test:e2e:browser` -> EXIT 1, `8 failed / 20 passed (9.9m)`, 28 tests. It now REACHES Playwright (639574c8 again), so this row gets a real count line where the worker's record could only offer an npx bypass.",
+      "timestamp": "2026-09-06T11:08:59.521Z"
+    },
+    {
+      "id": "comment-8d6177abc2cf48d18dde1a8016638983",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE PART 2 - qa-f2906c26. THE e2e ATTRIBUTION, DoD BY DoD, AND WHAT I DELIBERATELY DID NOT CHARGE.\n\n== ALL 8 e2e FAILURES ATTRIBUTED, none to this row's owned paths ==\n1) journeys.spec.ts:65 CR-J1-002 `toBeDisabled()` on cr.nav.resources, \"Received: enabled\". THE EPIC'S, and the worker's diagnosis is right where child 3's \"intersection EMPTY\" defence was wrong. I went one step further and read the blame: peer row task-2c952438 RE-AIMED this assertion at `resources` in 7f69fe65 on 2026-09-03, with a comment saying \"approvals entered BUILT_NAV_ROUTES ... so the old example became stale\" - it pointed the assertion at the last unbuilt entry, and this epic then built it. The same trap fired twice on the same line. The fix is not this row's to take: step 5 forbids production edits here and global rail 19 requires report-not-patch for an unnamed consumer. Reported in comment-82deea3f and routed in comment-9881c6f2 item 2. Correct handling.\n2) journeys.spec.ts:86 CR-A11Y-001, `expect(chips).toHaveLength(5)` got 0. NOT THE EPIC'S, and this one I had to dig for rather than assume. The spec queries `[data-testid^='cr.legend.'] [data-truth-class]`; nav-rail.tsx:153 renders that legend as `{legendOpen ? (...) : null}` behind a collapse toggle, and the spec never clicks it. `git log -S legendOpen -- nav-rail.tsx` names 0b5d7943, the ORIGINAL v2 shell commit, long before this epic; no epic commit touches nav-rail.tsx (last is peer b5c83644). Stale spec, foreign.\n3-8) pairing-operator-channel.spec.ts x2, plan-reject-replan.spec.ts:189 (a spec that did not exist at the worker's measurement - landed by peer 2911207a), prd-persistence-boundary.spec.ts, prd-to-approval.spec.ts, provider-pause.spec.ts. None touched by this epic.\nContext for the rot: `git diff --stat 74655552..HEAD` excluding .moe is 123 files / +10089 lines of PEER work, including two brand-new e2e specs. Re-running this leg was worth the 9.9 minutes precisely because the disclosed set had moved again.\n\n== DoD, EACH ONE GRADED AT HEAD ==\n1. `resources` at CORDUM_ROUTE_KINDS shell-model:25 / route :42 / BUILT_NAV_ROUTES shell-routes.ts:94, so nav-rail.tsx:118-121 cannot render the `cr.nav.<id>.unavailable` SOON chip for it. Graded on the RENDERED marker per step 2's correction of the row's own stale `grep SOON` premise - that correction is right and I re-confirmed it (`grep -n SOON shell-model.ts` = nothing).\n2. contract-dossier.tsx/.test.tsx, prd-dossier.tsx/.test.tsx, prd-panel.tsx, contract-gates.ts all at HEAD and wired from cordum-app.tsx. The decoder live-product-contract-gate-1.ts is genuinely exact-key (\"EXACTLY the four keys core stamps\"), and its REFUSED/ERROR variants carry BOTH `code` and `layer` - global rail 1 and epic rail 4 satisfied at the type level, not just in a test name. The DoD's named generated digest mirrors are untouched because no GENERATED contract changed (the client is hand-written under live/); that is correct, not a gap.\n3. `serves exactly what it advertises: dispatch seam == JSON_ROUTES, as sets` at :315: served = branches UNION UNCONDITIONAL_ELSE_MEMBER, `toStrictEqual(sorted(roster))`, plus a guard that the else really is unconditional. I settled the arithmetic myself instead of trusting either record: HEAD JSON_ROUTES = 30 and the HEAD test says `toBe(30)`; the WORKTREE is 31 and 31 - a peer moved producer and assertion together. Consistent at the delivered tree.\n4. child comment-8f17ea48 NAMES WHAT CHANGED (advanced panel auto-placed above the stage; cause = unstated grid-row), not a list of skills. Verified on disk, cited above.\n5. four gates, count lines quoted, in part 1.\n\n== NOT CHARGED, deliberately ==\nthe frozen `expect(roster.size).toBe(30)` (epic rail 3 shape violation, redundant with the floor and the set-equality); EVENT_STREAM_SUBSCRIBER_MISMATCH; CR-J1-002; cordum-app.tsx at 466 lines vs the 400 cap; the daemon/root foreign reds. All disclosed and routed to the epic-final hardening row per rails 16 and 21. The 400-line one is the only item I would have liked inside a child, but no child owns that file's size and the row cannot patch it.",
+      "timestamp": "2026-09-06T11:09:28.299Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:43.469Z",
-  "updatedAt": "2026-09-06T10:30:21.593Z",
+  "updatedAt": "2026-09-06T11:10:20.655Z",
   "dependsOn": [
     "task-2ee775b319cb496fad9256c84d24744c",
     "task-1c9587ed1b2b4e1abd6b51396ee672f8",
@@ -137,7 +149,9 @@
     "plannedDistinctFileCount": 0,
     "executedStepCount": 10,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-06T11:10:20.655Z",
+    "wallClockMs": 124514520
   },
   "stepsCompleted": [
     "step-1",
@@ -329,16 +343,31 @@
       "treeId": "1ab7ad8dbbde934c228df3b4a2b1361f3cd76149",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "28dc9c8cf1dabd2fc8e7ab0eb9786ba81c6963e6",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T09:15:33Z",
+      "paths": [
+        ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T10:30:57.976Z",
+      "treeId": "7f7af3699099ebb1410323cc523d421fb271f571",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-06T10:29:54Z",
-    "at": "2026-09-06T10:30:21.593Z"
+    "kind": "completion",
+    "sessionId": "worker-deb4c7d8@2026-09-06T09:15:33Z",
+    "at": "2026-09-06T10:30:57.976Z"
   },
-  "reviewCompletedAt": "2026-09-06T02:01:42.275Z",
+  "reviewCompletedAt": "2026-09-06T11:10:20.655Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 5: gates quoted with count lines — `pnpm --filter @moe/control-room test` is RED at the delivered tree; the quoted 167/2059 EXIT 0 measures an uncommitted working-tree state.",
@@ -421,5 +450,10 @@
       "releasedBy": "governor-afbde490",
       "reason": "Confirmed crash: worker-afd89b78's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
     }
-  ]
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx"
+  ],
+  "completedAt": "2026-09-06T11:10:20.655Z",
+  "reviewSummary": "APPROVED. Evidence: comment-ee53f017 + comment-8d6177ab. All numbers mine, at HEAD 28dc9c8c.\n\nCHARGE CLOSED. 16298577 real, ancestor of HEAD, ONE file (cordum-shell-layout.test.tsx 29+/5-), no peer sweep. `git status --porcelain -- apps/control-room/src/v2/styles/` EMPTY, so guard AND css sit at HEAD bytes - load-bearing, the guard reads its subject off disk. HEAD css :321 five-row, advancedslot :348, strip :360; guard asserts advanced \"4\"/strip \"5\"; 7th arm enumerates panel.children from the DOM. False \"committed\" claim superseded by comment-51583cf7 (rail 12).\n\nGATES: control-room run1 EXIT 1 (26 failed), run2 EXIT 0 `Test Files 168 passed (168)`/`Tests 2083 passed (2083)` on the IDENTICAL tree; scaffold.test.tsx alone 37/37. Non-deterministic, and it imports only ./fixtures.js, ./kernel.js, @moe/contracts, @moe/testkit - ZERO v2/ refs while every child lands in v2//live/. Not charged. typecheck EXIT 0 with tsc echoes (disclosed TS2739 fixed by peer 639574c8). daemon EXIT 1, 19 files/31 tests: 7 of 12 failing files are ` M` peer dirt, titles are frozen kind-roster counts; http-listener-read-dispatch.test.ts, the only daemon file this epic touched, is NOT among them. e2e reaches Playwright now: 8 failed / 20 passed (28).\n\ne2e ATTRIBUTED 8/8. Only CR-J1-002 is ours; peer 7f69fe65 re-aimed that line at `resources` as the last unbuilt entry, then this epic built it. CR-A11Y-001 is NOT ours: legend sits behind `legendOpen` from 0b5d7943, the original v2 shell commit; no epic commit touches nav-rail.tsx.\n\nDoD: 1 rendered marker (resources in BUILT_NAV_ROUTES shell-routes.ts:94). 2 dossiers wired from cordum-app, decoder exact-key with code AND layer. 3 set-equality :315 - arithmetic settled myself: HEAD 30/30, worktree 31/31. 4 design comment names the fix. 5 four count lines."
 }

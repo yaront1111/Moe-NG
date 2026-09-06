@@ -22,8 +22,9 @@
     {
       "stepId": "step-1",
       "description": "MEASURE THE PINS YOURSELF — EVERY NUMBER IN THIS PLAN IS ALREADY STALE BY DESIGN. NO EDITS. (a) THIS ROW WAS NARROWED AFTER A HARD REJECT. Its first plan came in at 12 files and was refused (`[CONSTRAINT_VIOLATION] Plan too large: 12 distinct affected files (max 10)`), so the OPERATOR FENCE moved to task-2ab7b462 — MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS and the six files carrying their count pins are NOT yours. This row is the DAEMON ROSTER only. DoD-2 of the text you are reading belongs to that row; where description and plan disagree, THE PLAN IS AUTHORITY. Note the consequence and do not try to fix it here: between this row and that one the kind is SERVED and MCP-ADVERTISED, refusing fail-closed — an advertised tool that declines, not a reachable rollback. That row is CRITICAL and depends only on this one. (b) CONFIRM THE PREREQUISITE: `grep -n 'deployment.rollback' packages/contracts/src/runtime/runtime-vocabulary.ts` must hit — `ROWS.kind` is typed `RuntimeCommandKind`, so this row cannot TYPECHECK before task-37a50989 lands. If absent, moe.report_blocked with blockedOnTaskIds ['task-37a50989105c40de9fe069d739df9595'] and stop. (c) A SIBLING IS MOVING THE SAME LITERALS RIGHT NOW: `deployment.deploy` and `deployment.set_target` are on the CONTRACT roster but NOT in the daemon vocabulary (`grep -c 'deployment.deploy' apps/daemon/src/daemon-command-vocabulary.ts` = 0 at plan time), so task-04b3ce7e's daemon half is still to come and moves every count below. TAKE EVERY NUMBER FROM THE PRINTED EXPECTED-VS-RECEIVED of a failing run, never from this plan and never from arithmetic. (d) THE CENSUS, AS A MAP OF LOCATIONS: DAEMON ROSTER 47 — `daemon-command-vocabulary.test.ts:254` (ROWS) and `:255` (distinct-kind set); `daemon-command-registry.test.ts:862` (ROWS), `:863` (registry.size), `:870` (REGISTRATION_ORDER), and THREE MORE ~850 lines further down at `:1722` ports.registry.size, `:1744` supplied.registry.size, `:1776` snapshotPorts.registry.size — those three are the classic omission, so grep rather than eyeball. OPERATOR_ONLY 12 — `vocabulary.test.ts:346` and `:347` (OPERATOR_PRINCIPAL_KINDS.size), `registry.test.ts:1040` and `:1041`. Run `git grep -n 'toBe(47)|toHaveLength(47)|toBe(12)|toHaveLength(12)' -- apps/daemon/src` before starting and again at the end, and beware false positives — unrelated suites pin the same numbers; only the files named above are yours. (e) BASELINE, standalone foreground, quoting each count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. (f) `git status --porcelain -- apps/daemon/src` and note peer dirt.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T11:02:45.095Z"
     },
     {
       "stepId": "step-2",
@@ -59,16 +60,16 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor handoff to re-plan (owner: \"unblock\"): worker-e15d25c8 measured the same defect that forced 54b74b80's re-plan — steps 1/5 call the interim state \"MCP-advertised\" and forbid the fence files, but step 2(3) adds deployment.rollback to OPERATOR_PRINCIPAL_KINDS and mcp-tool-allowlist.ts:84 DERIVES the MCP exclusion from that set, so the exclusion and the count pins move with the wiring whether or not the plan names them. No amendments on disk; no edits made. Re-plan on the 54b74b80 pattern (architect-b63fabf3's 10:38Z re-plan): derived exclusion acknowledged, the asserting roster files in affectedFiles (cap 20), the set_target/deploy pins already reconciled by 54b74b80 and 04b3ce7e not double-bumped.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
-    "task-37a50989105c40de9fe069d739df9595"
+    "task-64d2757c06494c1f9016c5e2ffdf19fc"
   ],
   "priority": "HIGH",
   "order": 121.7,
@@ -78,11 +79,17 @@
       "author": "architect-b63fabf3",
       "content": "NARROWED AFTER A HARD REJECT — THE FENCE MOVED OUT. architect-b63fabf3, 2026-09-05, HEAD f3b94eaa. Plan approved: 5 steps, 6 files. Where description and plan disagree, THE PLAN IS AUTHORITY.\n\nI filed this row this afternoon and its first plan came in at **12 files** and was refused (`max 10`). The operator fence — `MCP_EXCLUDED_COMMAND_KINDS`, `HUMAN_ONLY_STEPS` and the six files carrying their count pins — is now **task-2ab7b462** (CRITICAL, `dependsOn` this row). DoD-2 of the description belongs there.\n\n## The seam is forced, not chosen\n\nTwo constraints pull against each other:\n\n1. `mcp-tool-allowlist.test.ts` asserts every excluded kind is a real `PAYLOAD_KEYS` key **and still served** — so the exclusion cannot land *before* the wiring.\n2. Four test files pin `MCP_EXCLUDED_COMMAND_KINDS.length` and two more pin a **derived product** of it — so the roster and its pins must land in **one** commit or the branch is red in between.\n\nWiring-then-fence is the only order where every commit is green. Putting the roster here and its pins next would leave a knowingly-red branch.\n\n## The interim, stated precisely rather than alarmingly\n\nBetween the two rows the kind is **served and MCP-advertised**. But this row's registry entry refuses **fail-closed**, so an MCP caller finds an advertised tool that declines — *\"advertised but refusing\"*, not *\"an agent can roll back production\"*.\n\nThat is exactly why the stub's refusal must be real: a stub throwing an uncoded error, or one whose layer came from a literal instead of the closed map, would turn a bounded hole into an unclear one.\n\n## The pin census is a map of LOCATIONS, not values\n\n**My own memo from this morning is already wrong.** It recorded the exclusion roster at 6 and its derived pin at 12; measured today they are **11 and 22**. The daemon roster moved **46 → 47** and OPERATOR_ONLY **11 → 12** within the same day, and `deployment.deploy`'s daemon half is *still unlanded* (`grep -c` in the vocabulary = 0) and will move them again.\n\nSo the plan gives file:line and forbids taking the values. Three specifics:\n\n- **Three distant 47s** at registry.test.ts `:1722`, `:1744`, `:1776` — ~850 lines below their siblings. Grep, don't eyeball.\n- **A third hand-written roster** in `daemon-store-dependencies.test.ts`, separate from the two obvious ones.\n- **The census grep has false positives** — unrelated suites pin the same numbers. Editing one because the grep matched is a foreign change that will look deliberate.\n\n## Two things not to do\n\n**Don't write a parallel set-equality test.** It already exists against the dispatch seam (`registry.keys()` vs `ROWS`, both directions) and covers this kind automatically once the two rosters gain it.\n\n**Don't add the family table entry late.** `familyCapabilityOf` returns null for an unclaimed kind and `requiredCapabilityOf` throws on it *while building the registry* — i.e. at daemon boot, not in a test. Drill (iii) proves that entry is load-bearing rather than decoration.",
       "timestamp": "2026-09-05T20:03:36.863Z"
+    },
+    {
+      "id": "comment-3b1d1bc7f04843e086ffcdaa9a80c4b5",
+      "author": "worker-e15d25c8",
+      "content": "STEP1 READ-ONLY RE-MEASUREMENT at HEAD9218fda744887967520e3f45d066d1af58df9920. No code edits. Dependency64d2757c DONE/landed proves shared kind; runtime-vocabulary.ts91 confirms rollback present. Rollback has ZERO daemon literal occurrences; deploy/set_target now exist, so old missing-kind premise is stale. Effective plan inspected, including amendment fields: steps1-5 have no active amendment. Step1 says fence files are NOT yours and interim MCP-advertised; step2(3) requires OPERATOR_PRINCIPAL_KINDS addition. Production mcp-tool-allowlist.ts71/84 DERIVES exclusions from that set minus session.open, so following step2 immediately excludes rollback and changes four UNOWNED consumers. Exact shape census (git grep MCP_EXCLUDED_COMMAND_KINDS|OPERATOR_PRINCIPAL_KINDS|EXCLUSION_CASES.length|MCP_TRANSPORT_ENTRY_COUNT) plus reads identifies: mcp-tool-allowlist.test.ts205 (20) and231-245 exact summary; daemon-command-registry-human-approver.test.ts343-358 literal expectedExclusions +20 pins; mcp-main.test.ts211-248 expected roster +20/40 pins; mcp-http/mcp-http-host.test.ts690/692/721 (20/40/20). These are own rollback delta failures, not foreign deployment baseline. PAYLOAD_KEYS also moved: vocabulary.ts327 only re-exports; definition now daemon-command-payload-keys.ts75 (not owned). Corrected minimum paths =6 planned+1 payload producer+4 asserting consumers=11>10. Existing fence row2ab7b462ab5440d18fa294e4e69047e2 owns the seam and depends on this row; do not add reverse dependency/cycle or file duplicate. Architect must re-slice/amend these existing rows, preserving fail-closed interim and operator-only effective behavior. No full/typecheck baseline run: measurement found scope defect before implementation; no gate pass claimed. Peer dirt listed and preserved, NOT a stop premise; no files modified.",
+      "timestamp": "2026-09-06T11:04:13.587Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:56.488Z",
-  "updatedAt": "2026-09-05T20:03:36.863Z",
+  "updatedAt": "2026-09-06T11:05:37.579Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.326Z",
     "plannedStepCount": 5,
@@ -107,5 +114,15 @@
       "apps/daemon/src/daemon-store-dependencies.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T20:03:21.900Z"
+  "planApprovedAt": "2026-09-05T20:03:21.900Z",
+  "contextFetchedBy": [
+    "worker-e15d25c8"
+  ],
+  "workStartedAt": "2026-09-06T11:02:45.095Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Effective step1/2/5 re-read including disk activeAmendmentId/amendments: ALL null, so no superseding overlay. Step1 forbids fence files and calls interim MCP-advertised; step2(3) adds OPERATOR_PRINCIPAL_KINDS. Production mcp-tool-allowlist.ts84 now DERIVES exclusion from that set minus session.open. Thus this addition immediately changes four unnamed consumers: mcp-tool-allowlist.test.ts205/231-245, daemon-command-registry-human-approver.test.ts343-358, mcp-main.test.ts211-248, mcp-http/mcp-http-host.test.ts690/692/721. These would be OWN rollback delta failures, not foreign baseline. PAYLOAD_KEYS definition also moved out of planned vocabulary.ts into unowned daemon-command-payload-keys.ts75. Minimum scope6+1+4=11>10; global unnamed-consumer rail requires report before extra edits, not knowingly deliver red or evade checks. Existing fence sibling2ab7b462 already owns that seam and waits on this row; amend/re-slice existing rows, never reverse dependency/cycle. Evidence at HEAD9218fda7 in comment3b1d1bc7. No code edits; no gates run/pass claimed. Shared peer dirt preserved and NOT the block premise.",
+  "blockedOnTaskIds": null
 }
