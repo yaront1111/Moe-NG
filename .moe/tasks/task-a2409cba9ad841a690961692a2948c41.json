@@ -205,7 +205,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-06T01:21:37.836Z",
+  "updatedAt": "2026-09-06T01:21:47.535Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -389,6 +389,67 @@
       "treeId": "30d9c8788732c3f67157a5acf55c979d7f5ab978",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "7804b4d4f8c0fa6eed3a615d75d33c563fb5a508",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        "apps/daemon/src/daemon-command-environment.js",
+        "apps/daemon/src/daemon-command-environment.test.ts",
+        "apps/daemon/src/daemon-command-environment.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T01:21:47.535Z",
+      "treeId": "d7ab0ee8b428b91e16ce798ce30916c01839d8a4",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-main.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -407,76 +468,16 @@
     "apps/daemon/src/mcp-tool-allowlist.test.ts",
     "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
     "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts"
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-effect-read.test.ts",
-    "apps/control-room/src/live/live-effect-read.ts",
-    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
-    "apps/control-room/src/v2/goals/publish-port.ts",
-    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
-    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
-    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
-    "apps/daemon/src/daemon-repository-workflows.test.ts",
-    "apps/daemon/src/daemon-repository-workflow-wiring.js",
-    "apps/daemon/src/daemon-repository-workflow-wiring.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.js",
-    "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.ts",
-    "apps/daemon/src/orchestrator/node-publisher-approved.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/repository/git-publication-native.test.ts",
-    "apps/daemon/src/repository/publication-approval.test.ts",
-    "apps/daemon/src/repository/publication-effect-ledger.ts",
-    "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-execution-recovery.ts",
-    "apps/daemon/src/repository/repository-landing-attempt.js",
-    "apps/daemon/src/repository/repository-landing-attempt.test.ts",
-    "apps/daemon/src/repository/repository-landing-attempt.ts",
-    "apps/daemon/src/repository/repository-recovery-approval.js",
-    "apps/daemon/src/repository/repository-recovery-approval.ts",
-    "apps/daemon/src/repository/repository-recovery-command.test.ts",
-    "apps/daemon/src/repository/repository-recovery-command.ts",
-    "apps/daemon/src/repository/repository-recovery-git.test.ts",
-    "apps/daemon/src/repository/repository-recovery-native.test.ts",
-    "apps/daemon/src/repository/repository-recovery-replay.js",
-    "apps/daemon/src/repository/repository-recovery-replay.ts",
-    "apps/daemon/src/repository/repository-recovery-service.test.ts",
-    "apps/daemon/src/repository/repository-recovery-service.ts",
-    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image.rs",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image_hash.rs",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image_windows.rs",
-    "packages/runner/src/platform/windows/native/broker/src/control.rs",
-    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
-    "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
-    "packages/runner/src/platform/windows/native/broker/src/session.rs",
-    "packages/runner/src/platform/windows/native/broker/tests/approved_image.rs",
-    "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
-    "packages/runner/src/platform/windows/windows-approved-image-launch.js",
-    "packages/runner/src/platform/windows/windows-approved-image-launch.ts",
-    "packages/runner/src/platform/windows/windows-boundary.test.ts",
-    "packages/runner/src/platform/windows/windows-boundary.ts",
-    "packages/runner/src/platform/windows/windows-process-broker-contract.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.ts",
-    "packages/runner/src/platform/windows/windows-status.ts",
-    "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts",
-    "tests/e2e/control-room/repository-workflows.spec.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-caece97b@2026-09-05T23:24:25Z",
-    "at": "2026-09-05T23:25:15.902Z"
+    "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+    "at": "2026-09-06T01:21:47.535Z"
   },
   "blockedReason": null,
   "blockedOnTaskIds": null,
