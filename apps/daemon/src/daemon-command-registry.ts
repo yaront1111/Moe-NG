@@ -1,3 +1,5 @@
+import { AGENT_PROVIDER_COMMAND_KIND, runAgentProviderCommand }
+  from "./orchestrator/agent-provider-command.js";
 import type { SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
@@ -355,6 +357,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       if (criterion) {
         return runCriterionCommandEdge(store, input, options.criterionEvidence);
       }
+      if (kind === AGENT_PROVIDER_COMMAND_KIND) return decisionOf(runAgentProviderCommand());
       // goal.create carried a `goalId` comparison here while the payload could still name one.
       // It cannot: the kind's allow-list is prose only, so `prepareCommand` refuses `goalId`
       // INPUT_INVALID at PAYLOAD_SHAPE in BOTH entries before any dispatch, and the goal
