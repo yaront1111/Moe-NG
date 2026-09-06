@@ -53,6 +53,15 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // per-environment and stays where it can be checked per-environment: the engine refuses
   // DEPLOY_TARGET_MISSING (deploy-service.ts, DoD 6) before any docker spawn.
   "deployment.deploy": Object.freeze(["repository.publish"]),
+  // THE DEPLOY, not the publish, and the difference is the ordering an operator feels during an
+  // incident. A revert undoes migrations that a DEPLOY applied, so an environment this project
+  // never deployed to has nothing to undo and the request is a mistake worth refusing before any
+  // database is touched. Naming `repository.publish` instead would admit a revert against a
+  // project that had only ever pushed code, which is strictly weaker. This table is keyed by KIND
+  // and reads COMMITTED DECISION KINDS, so it cannot express "this ENVIRONMENT was deployed" —
+  // that per-environment fact stays where it can be checked per-environment: the engine refuses
+  // MIGRATION_DOWN_BATCH_UNKNOWN when no APPLIED receipt for the named environment exists.
+  "deployment.migrate_down": Object.freeze(["deployment.deploy"]),
   "project.register": Object.freeze([]),
   "provider.probe": Object.freeze(["project.register"]),
 } as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>);

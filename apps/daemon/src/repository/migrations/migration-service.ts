@@ -17,7 +17,15 @@ export interface MigrationInput {
   readonly databaseUrl: string;
   readonly now?: Date;
 }
-function directoryFor(input: MigrationInput): string {
+/** The ONE project-wide migration lock leaf. Exported so the revert takes the SAME lock the
+ *  forward path does: an up and a down interleaving on one database is the half-applied schema
+ *  every guard here exists to prevent, and two leaf names would be two locks. */
+export const MIGRATION_LOCK_LEAF = ".migration.lock";
+
+/** The pre-migration backup directory for an environment, created 0700 and refused if anything
+ *  on the path is a symlink or not a directory. Exported for the revert, which backs up before
+ *  it destroys: a second derivation of this path would be a second place for the rule to live. */
+export function migrationBackupDirectory(input: Pick<MigrationInput, "projectRoot" | "environment">): string {
   let directory = realpathSync(input.projectRoot);
   for (const part of [BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF, input.environment]) {
     directory = join(directory, part);
@@ -77,10 +85,10 @@ export async function migrateWithBackup(
     return existing;
   }
   let directory: string;
-  try { directory = directoryFor(input); }
+  try { directory = migrationBackupDirectory(input); }
   catch { return recordMigrationReceipt(store, base); }
   // Project-wide lock spans the RECEIPT write too; a concurrent refusal must not win its id.
-  const lock = join(dirname(directory), ".migration.lock");
+  const lock = join(dirname(directory), MIGRATION_LOCK_LEAF);
   try { mkdirSync(lock); }
   catch { throw migrationError(existsSync(lock) ? "MIGRATION_IN_PROGRESS" : "MIGRATION_BACKUP_FAILED"); }
   try { return recordMigrationReceipt(store, await execute(input, ports, base, directory)); }

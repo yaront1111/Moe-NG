@@ -7,7 +7,12 @@ const principal = "daemon:migration-engine";
 const kind = "internal.repository.migration_receipt";
 const codeLayers = Object.freeze({ MIGRATION_BACKUP_FAILED: "DAEMON_INGRESS",
   MIGRATION_FAILED: "DAEMON_INGRESS", MIGRATION_IN_PROGRESS: "DAEMON_INGRESS", MIGRATION_RECEIPT_INVALID: "DAEMON_INGRESS",
-  MIGRATION_RECEIPT_CONFLICT: "DAEMON_INGRESS", MIGRATION_RECEIPT_WRITE_FAILED: "DAEMON_INGRESS" } as const);
+  MIGRATION_RECEIPT_CONFLICT: "DAEMON_INGRESS", MIGRATION_RECEIPT_WRITE_FAILED: "DAEMON_INGRESS",
+  // THE REVERT'S OWN CODES. Kept distinct from MIGRATION_FAILED because an operator reading a
+  // receipt weeks later needs to know whether the schema was left alone (the named batch was not
+  // the tail, so nothing ran) or whether a `down()` actually failed part way.
+  MIGRATION_DOWN_BATCH_UNKNOWN: "DAEMON_INGRESS", MIGRATION_DOWN_NOT_LAST_BATCH: "DAEMON_INGRESS",
+  MIGRATION_DOWN_FAILED: "DAEMON_INGRESS" } as const);
 export type MigrationCode = keyof typeof codeLayers;
 export const migrationRefusal = (code: MigrationCode, detail: string) =>
   Object.freeze({ code, layer: codeLayers[code], detail });
@@ -22,9 +27,12 @@ export interface MigrationReceipt {
   readonly environment: string;
   readonly sha: string;
   readonly decidedAt: string;
+  /** The migration files this receipt's effect MOVED: applied when APPLIED, UNDONE when
+   *  REVERTED. One field rather than two because the decoder's key set is exact — a twelfth key
+   *  would refuse every receipt already written. */
   readonly applied: readonly string[];
   readonly backupRef: string | null;
-  readonly outcome: "APPLIED" | "REFUSED";
+  readonly outcome: "APPLIED" | "REFUSED" | "REVERTED";
   readonly refusal: ReturnType<typeof migrationRefusal> | null;
 }
 type Decode = Readonly<{ ok: true; receipt: MigrationReceipt }>
@@ -62,8 +70,12 @@ export function decodeMigrationReceiptBytes(input: unknown): Decode {
       || v.refusal.layer !== codeLayers[v.refusal.code as MigrationCode] || !text(v.refusal.detail)) return invalid();
     refusal = migrationRefusal(v.refusal.code as MigrationCode, v.refusal.detail);
   }
-  if ((v.outcome !== "APPLIED" && v.outcome !== "REFUSED")
-    || (v.outcome === "APPLIED" && (refusal !== null || v.backupRef === null))
+  // REVERTED carries the same obligations APPLIED does -- no refusal, a real backup -- plus one
+  // more: a revert that undid NOTHING is a lie, so an empty list fails closed here rather than
+  // recording a successful-looking no-op an operator would read as "the schema went back".
+  if ((v.outcome !== "APPLIED" && v.outcome !== "REFUSED" && v.outcome !== "REVERTED")
+    || (v.outcome !== "REFUSED" && (refusal !== null || v.backupRef === null))
+    || (v.outcome === "REVERTED" && v.applied.length === 0)
     || (v.outcome === "REFUSED" && (refusal === null || v.applied.length !== 0))) return invalid();
   return { ok: true, receipt: Object.freeze({ version: MIGRATION_RECEIPT_VERSION,
     projectId: v.projectId, requestId: v.requestId, receiptId: v.receiptId as string,

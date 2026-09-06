@@ -27,6 +27,9 @@ import { createDeployCommandHandler, DEPLOY_BUILD_CONTEXT_ENV_KEY }
   from "./deployment/deploy-command.js";
 import type { DeployPorts } from "./deployment/deploy-ports.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
+import { createMigrateDownCommandHandler, DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND }
+  from "./deployment/migrate-down-command.js";
+import type { MigrateDownCommandOptions } from "./deployment/migrate-down-command.js";
 import { PREVIEW_START_COMMAND_KIND } from "./preview/preview-contracts.js";
 import { createPreviewStartHandler } from "./preview/preview-start-command.js";
 import type { PreviewSupervisor } from "./preview/preview-supervisor.js";
@@ -74,7 +77,13 @@ export type AsyncCommandKind =
   // through Playwright, so a synchronous `CommandHandler` could only answer BEFORE the preview
   // existed. Registered HERE for the same reason as the two kinds above: the registry is past
   // its size cap and this module is the seam it spreads for async kinds.
-  | typeof PREVIEW_START_COMMAND_KIND;
+  | typeof PREVIEW_START_COMMAND_KIND
+  // `deployment.migrate_down` dumps the database and then runs the generated product's migration
+  // tool in a child process. A synchronous `CommandHandler` could only answer BEFORE the schema
+  // moved back, so its receipt would describe an intention rather than a reverted schema.
+  // Registered HERE for the same reason as the kinds above: the registry is past its size cap
+  // and this module is the seam it spreads for async kinds.
+  | typeof DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND;
 
 /** The injectable half of the deploy. Production passes NOTHING and gets the real docker and ssh
  *  runners on this host; a test passes `ports` and touches no docker daemon and no network.
@@ -124,6 +133,11 @@ export interface AsyncCommandEntryOptions {
    *  the runner reads `<workspace>/package.json` and spawns a script out of it, so a
    *  caller-supplied path would be arbitrary command execution on this host. ABSENT refuses. */
   readonly previewWorkspace?: string | null;
+  /** The revert's injectable half plus its three HOST-SCOPED settings. ABSENT is a REFUSING
+   *  state (MIGRATE_DOWN_UNCONFIGURED @ the command seam), never a skipped one: a daemon that was
+   *  never told which database and workspace to revert must not guess either. */
+  readonly migrateDown?: Pick<MigrateDownCommandOptions,
+    "clock" | "databaseUrl" | "ports" | "projectRoot" | "workspace">;
   /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   /** ABSENT, or missing a publisher/facts/workspace, leaves release.decide fail-closed. */
@@ -301,6 +315,18 @@ export function createAsyncCommandEntries(
       payloadKeys: PAYLOAD_KEYS[DEPLOYMENT_DEPLOY_COMMAND_KIND],
       // GOAL-scoped, read off BOOTSTRAP_FAMILY's own reasoning: the capability fences REACH
       // only, and the operator fence at the handler's entry is what makes deploying a human act.
+      requiredCapability: CAPABILITIES.GOAL,
+    }),
+    [DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND]: Object.freeze({
+      asyncHandler: createMigrateDownCommandHandler({
+        ...(options.migrateDown ?? {}), operatorPrincipalId: options.operatorPrincipalId,
+        projectId, store,
+      }),
+      handler: foundationSyncHandler, kind: DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND],
+      // GOAL, read off BOOTSTRAP_FAMILY like its deployment siblings: the capability fences REACH
+      // only, and the operator fence at the handler's own entry is what makes the revert a human
+      // act. `agentCapabilitiesFor` additionally answers null, so no seat is ever granted it.
       requiredCapability: CAPABILITIES.GOAL,
     }),
     [RELEASE_DECIDE_COMMAND_KIND]: Object.freeze({

@@ -221,11 +221,17 @@
       "author": "worker-1d53e70c",
       "content": "CORRECTION to comment-710d0b5656154f07abaedd7273aa4508: the fix row's real id is task-123da653c6fb43acb43e9329ab89bf90 (\"repository.bootstrap registers the product in the manager catalog against paths that actually exist\"), filed in PLANNING under SPIDR parent task-5ef1a0a9010c4bfe872ff9b774068234. \"task-4a9dd0ff\" in that comment was written before the row existed and resolves to nothing - ignore it. Everything else in that comment stands: the finding, the probe source, the control output and the per-path ENOENT result are all as measured.",
       "timestamp": "2026-09-06T16:19:59.664Z"
+    },
+    {
+      "id": "comment-1777258fbacc4367aa96cc53e4281b23",
+      "author": "worker-f72a1438",
+      "content": "803 independent source audit found a concurrency/disclosure gap; NOT browser-reproduced yet. `http-adapter.ts:219–223`/`daemon-command-decision-port.ts:21–25` directly await async commit, no global serialization; `admitBootstrapCommand` bootstrap-services.ts283–300 does not fence expectedVersion. Async bootstrap command224–228 executes effects then re-admits, and commitReceipt106–115 chooses CURRENT ledger version. Two distinct pre-commit command IDs may therefore both append. `/repository/bootstrap/read` accepts exactly{} and returns latest project aggregate only, with no commandId. Browser refusedReceiptOf matches only refusal code, so same-code failures for two directories can cross-associate; success receipt is likewise not command-keyed. Directory string equality alone is not a robust repair because tree.prepare canonicalizes paths, and same-directory errors can overwrite a success. This proof row will not invent a second path canonicalizer or alter daemon authority. Please route durable receipt correlation/serialization to producer scope; existing single-tab browser proof remains green, concurrent request claim is NOT certified.",
+      "timestamp": "2026-09-06T18:01:49.296Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-06T16:19:59.664Z",
+  "updatedAt": "2026-09-06T18:01:49.296Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,

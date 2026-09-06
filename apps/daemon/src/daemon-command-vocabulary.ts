@@ -71,7 +71,7 @@ export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind | "deploymen
   // `repository.publish` for the same reason: both act on the product a goal produced. The
   // capability fences REACH only -- the operator fence below is what makes them human acts.
   "deployment.set_target": CAPABILITIES.GOAL, "deployment.deploy": CAPABILITIES.GOAL,
-  "deployment.rollback": CAPABILITIES.GOAL,
+  "deployment.rollback": CAPABILITIES.GOAL, "deployment.migrate_down": CAPABILITIES.GOAL,
   "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
   "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
@@ -266,7 +266,7 @@ export function familyCapabilityOf(kind: string): string | null {
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === AGENT_PROVIDER_COMMAND_KIND) return null;
-  if (kind === "deployment.rollback" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;
+  if (kind === "deployment.rollback" || kind === "deployment.migrate_down" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;
   if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
@@ -388,8 +388,8 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // credential, so an advertised operator kind is an agent arriving AS the operator.
   // `deployment.deploy` is served from an ASYNC entry and therefore never reaches the registry's
   // synchronous operator check -- it fences itself at handler entry, and this membership is what
-  // keeps it off the MCP roster rather than what fences the dispatch.
-  "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  // keeps it off the MCP roster rather than what fences the dispatch. `deployment.migrate_down` joins them for a sharper reason still: REVERTING A PRODUCTION SCHEMA IS NEVER AN AGENT'S DECISION, because it destroys the data the forward migration created and only the operator can weigh that loss.
+  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
   // Writing in the operator's own repository is their act. ASYNC-served like `deployment.deploy` above, so this membership keeps it off MCP; the handler fences itself at entry.
   ENV_EXAMPLE_SYNC_COMMAND_KIND,
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other

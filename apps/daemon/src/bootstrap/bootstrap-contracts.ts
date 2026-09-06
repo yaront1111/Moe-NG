@@ -50,6 +50,10 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   // served asynchronously, exactly as `repository.bootstrap` above.
   "deployment.set_target",
   "deployment.deploy",
+  // APPENDED, same rule. Undoing a schema change dumps the database and then runs the generated
+  // product's migration tool, so it admits through this surface and is then served
+  // asynchronously, exactly as `deployment.deploy` above.
+  "deployment.migrate_down",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];
@@ -68,6 +72,9 @@ export const ASYNC_SERVED_BOOTSTRAP_KINDS: readonly BootstrapCommandKind[] = Obj
   // out docker's own start-period. `deployment.set_target`, its sibling, writes one durable
   // binding and is a `BOOTSTRAP_HANDLERS` row like every other synchronous kind.
   "deployment.deploy",
+  // Same shape: a dump, then a child process running `node-pg-migrate down`. A synchronous
+  // handler would answer before the schema moved back.
+  "deployment.migrate_down",
 ]);
 
 export const BOOTSTRAP_REQUEST_KEYS = Object.freeze([

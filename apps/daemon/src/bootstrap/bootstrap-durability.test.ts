@@ -210,6 +210,11 @@ const UNDRIVEN_KINDS: readonly string[] = Object.freeze([
   // Synchronous, but this journey has no target to bind: the payload names a network, an ssh
   // target and a url for an environment, and the kind's own suite drives it against those.
   "deployment.set_target",
+  // Served on the ASYNC entry for the same reason as the deploy: it dumps a database and runs
+  // the generated product's migration tool in a child process. Driven end to end through the
+  // REGISTERED kind in deployment/migrate-down-journey.test.ts, and against a live PostgreSQL
+  // in deployment/migrate-down-real.test.ts.
+  "deployment.migrate_down",
 ]);
 
 /** `plan.propose` and `policy.install` each appear twice; both repeats are asserted below. */

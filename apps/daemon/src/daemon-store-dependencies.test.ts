@@ -826,7 +826,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "approval.decide", "approval.decide_intent",
         "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
-        "deployment.deploy", "deployment.rollback", "deployment.set_target",
+        "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
         // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
         "design.submit",
         "effect.activate",
@@ -1132,7 +1132,8 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
   it("advertises the deployment kinds, so the equalities below have a non-empty subject", () => {
     // A roster arm whose subject is empty passes VACUOUSLY. This is the control that keeps the
     // three equalities meaningful, and it names the kinds once so a rename is caught here.
-    expect(advertised).toEqual(["deployment.deploy", "deployment.rollback", "deployment.set_target"]);
+    expect(advertised).toEqual(["deployment.deploy", "deployment.migrate_down",
+      "deployment.rollback", "deployment.set_target"]);
   });
 
   it("fences every advertised deployment kind at dispatch, on MCP and in the wrapper", () => {
@@ -1166,7 +1167,8 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     // whose handler is a sibling row's, so naming it here would claim an async seam it does not
     // have. The membership is proved rather than declared in
     // daemon-command-async-entries.test.ts, which dispatches the kind through the entry.
-    expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual(["deployment.deploy"]);
+    expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS))
+      .toEqual(["deployment.deploy", "deployment.migrate_down"]);
   });
 });
 

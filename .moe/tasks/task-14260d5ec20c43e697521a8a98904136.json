@@ -20,16 +20,19 @@
     {
       "stepId": "step-1",
       "description": "RESOLVE THE PREREQUISITE QUESTION DoD 1 ASKS, BEFORE WRITING ANYTHING.\n\nDoD 1 says \"Resolve and declare any missing host/deploy composition prerequisite before implementation.\" There are THREE intended boundaries - verifier, preview, deploy - and they are not in the same state. Measure each and record what you find:\n- VERIFIER: `grep -n \"onFatalContainment\\|verifier\" apps/daemon/src/orchestrator/agent-wrapper-main.ts` around :159 - the description says the real factory takes only `onFatalContainment` today.\n- PREVIEW: the preview runner around :165-167 - the description says it forwards process config with no delivered assignment.\n- DEPLOY: `git grep -n \"createDeployService\" -- apps/daemon/src | grep -v test` - the engine exists but the description reports NO production caller, and task-04b3ce7e is mid-split over exactly that wiring.\n\nFOR EACH BOUNDARY, decide: does a production launch site EXIST that this row can compose into? If YES, it is in scope. If NO, DECLARE IT A PREREQUISITE and name the owning row - do NOT invent a call site into a subsystem whose wiring another row is actively splitting, because the edge you create is the edge they will collide with.\n\nRecord the decision per boundary in the step note and in the completion record. A row that silently narrows from three boundaries to one has narrowed its DoD; a row that says which two it composed and which is blocked on task-04b3ce7e has reported honestly.\n\nAlso confirm the parts are still as measured: `readEnvironmentDelivery` at environment-delivery.ts:104 with ZERO production callers, `deliverEnvironment` at :153, `agentEnvironment(source, delivered?)` at agent-spawn-environment.ts:58, and the one-argument calls at agent-spawner.ts:156/:159.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
         "apps/daemon/src/orchestrator/agent-spawner.ts"
-      ]
+      ],
+      "note": "REOPEN remeasurement only, QA accepted prior implementation8457ae33; no rebuild. At HEAD187b3dc2 verifier and preview delivered call sites remain real; coding seats remain one-arg. DEPLOY has createDeployService caller but still no container delivery seam, not claimed. DoD4 explicitly narrowed per QA close(b): repository.bootstrap remains profile-only; names require post-bootstrap product_contract.sync_env_example owned by already declared DONE/landed f1e40296. Completion will name limitation and durable negative/source-composition arm, not claim automatic bootstrap names. Full details in reopen-response comment. Foreign dirt preserved; no changed paths.",
+      "startedAt": "2026-09-06T17:50:09.965Z",
+      "completedAt": "2026-09-06T17:52:50.884Z"
     },
     {
       "stepId": "step-2",
       "description": "THE RESOLVER - the piece that genuinely does not exist. Create `apps/daemon/src/environment/environment-launch-resolver.ts` (+ a one-line `.js` bridge, the package convention).\n\nIt answers, for a launch: WHICH project, WHICH environment, and FOR WHAT PURPOSE - then calls the EXISTING `readEnvironmentDelivery(config, environment)` (environment-delivery.ts:104) and returns either the delivered variables or a refusal. It builds no store, no decoder and no second allowlist (rail 2); it is a resolver, not an authority.\n\nPURPOSE IS A FIRST-CLASS INPUT, NOT AN AFTERTHOUGHT. Rail 1: \"resolve intended project/environment and purpose at the real launch boundary, never broad process.env plus extras.\" A verifier run for environment `preview` and a coding seat are different purposes with different answers, and the type should make it impossible to ask for delivery without saying which.\n\nTHE CODING-SEAT PURPOSE RESOLVES TO NO DELIVERY, structurally rather than by convention - make it a case the type system forces the caller to handle, so a future call site cannot omit it and silently get production values.\n\nREFUSALS: a scope mismatch or unavailable delivery refuses with the EXACT stable code and layer the environment module already defines (DoD 2), reusing an already-rostered layer literal. Introduce no new `*_LAYER` constant. AND THE REFUSAL CARRIES NO RAW ERROR DATA (DoD 2) - a store error message can quote a key or a value, so map it to a code rather than forwarding it.\n\n`wc -l` and keep under 250.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/environment/environment-launch-resolver.ts",
         "apps/daemon/src/environment/environment-launch-resolver.js"
@@ -37,59 +40,83 @@
       "newFiles": [
         "apps/daemon/src/environment/environment-launch-resolver.ts",
         "apps/daemon/src/environment/environment-launch-resolver.js"
-      ]
+      ],
+      "note": "QA explicitly accepts existing resolver8457ae33; byte-diff against that completion is empty for resolver and tests. No production edits. Fresh baseline recorded command EXIT0, Test Files6passed(6), Tests90passed|1skipped(91),20:52:42local11.46s. Refusal code/layer, coding-seat non-delivery and no raw error remain covered. Do not recreate landed implementation.",
+      "startedAt": "2026-09-06T17:52:51.639Z",
+      "completedAt": "2026-09-06T17:53:57.138Z"
     },
     {
       "stepId": "step-3",
       "description": "COMPOSE IT AT THE BOUNDARIES STEP 1 FOUND REAL - and NOT at the coding-seat call sites.\n\nFor each in-scope boundary (verifier in agent-wrapper-main.ts, preview in the preview runner, deploy only if step 1 found a production caller), resolve the project/environment/purpose and pass the result as `agentEnvironment`'s second argument, or through `deliverEnvironment` where the merge's collision report is wanted.\n\nLEAVE agent-spawner.ts:156 AND :159 ONE-ARGUMENT. This is the row's single most important negative requirement. Those are the CODING SEAT call sites; passing `delivered` there would hand every agent the project's production secrets, which rail 1 forbids and DoD 3 names. The optional parameter on `agentEnvironment` exists so a specific boundary can OPT IN - it is not an invitation for the general spawner. If a change to agent-spawner.ts seems necessary, it is to thread a purpose through, never to supply delivery by default.\n\nUSE THE COLLISION REPORT. `deliverEnvironment` (:153) returns collisions between the allowlisted host environment and the delivered values; decide what a collision means at each boundary and say so in the note. Silently letting a delivered value win over a host value - or the reverse - is a decision either way, and an undocumented one becomes a debugging problem during an incident.\n\nEXISTING CALLERS MUST STAY BYTE-IDENTICAL. `agentEnvironment`'s comment states that an absent `delivered` yields a byte-identical environment; step 6 asserts that for the untouched paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
         "apps/daemon/src/orchestrator/agent-spawner.ts"
-      ]
+      ],
+      "note": "Reopen preservation: verifier wrapper:158/169 and preview composition:225/229 remain real launchDelivery consumers. Coding-seat agent-spawner:156/159 still one argument. Existing collision direction is delivered values after host allowlist; verified accepted resolver collision test in fresh90-test baseline. Neither launch path edited; no new effect or authority. DEPLOY still no delivery seam and not advertised; disclosed with DoD4 boundary in comment25697418.",
+      "startedAt": "2026-09-06T17:53:57.780Z",
+      "completedAt": "2026-09-06T17:53:58.413Z"
     },
     {
       "stepId": "step-4",
       "description": "THE RESOLVER'S ARMS (DoD 2) - `apps/daemon/src/environment/environment-launch-resolver.test.ts`.\n\n(a) THE SELECTED ENVIRONMENT'S VALUE ARRIVES: a child intended for environment X receives X's value, not another environment's. Assert with two environments configured so a resolver that ignores the selector cannot pass.\n(b) THE CLOSED ALLOWLIST STILL EXCLUDES AMBIENT HOST VARIABLES: set a non-allowlisted variable in the source environment and assert it is ABSENT from the result. `agentEnvironment` applies `delivered` LAST to a roster-filtered object, so this arm proves the roster still governs the host half.\n(c) A CODING-SEAT PURPOSE RESOLVES TO NO DELIVERY - assert zero delivered variables, not merely that the call succeeded. This is DoD 3's negative half at the unit level.\n(d) SCOPE MISMATCH and UNAVAILABLE DELIVERY each refuse with the EXACT stable code AND the layer that refused - never merely that it failed.\n(e) NO RAW ERROR DATA IN A REFUSAL (DoD 2): drive the store to fail with an error whose message contains a distinctive sentinel, and assert that sentinel is ABSENT from the refusal. Store errors quote keys and sometimes values; forwarding one is how a value escapes through an error path.\n\nMUTATE AND CONFIRM RED for (c): make the coding-seat purpose fall through to delivery and confirm the arm reds; restore and prove it. That file is new and untracked, so back it up out of tree and prove the restore by SHA256 in a separate call.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/environment/environment-launch-resolver.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/environment/environment-launch-resolver.test.ts"
-      ]
+      ],
+      "note": "All resolver arms already delivered8457ae33 and specifically accepted QA9931d1ef; unchanged now and fresh90-test baseline green. Prior four mutation/control outcomes retained in953b0cee, not falsely described as fresh. QA follow-up edaa513a explicitly asks not to redo accepted drills; new correction will red-control only bootstrap supply negative arm. No resolver/test changes.",
+      "startedAt": "2026-09-06T17:53:59.057Z",
+      "completedAt": "2026-09-06T17:53:59.709Z"
     },
     {
       "stepId": "step-5",
       "description": "THE REAL CHILD-PROCESS CANARY (DoD 3) - `apps/daemon/src/environment/environment-delivery-canary.test.ts`. A unit test cannot discharge this clause: DoD 3 asks for \"a real child-process canary in the production composition path\".\n\nPlant a canary VALUE for a selected environment, launch a real child through the PRODUCTION composition path (a boundary step 3 actually wired), and have the child report whether it received the value - by exit code or a written file, NOT by echoing it to stdout, because stdout is captured into logs and that would defeat the sweep below.\n\nTHEN ASSERT THE BYTES ARE VALUE-FREE: the wrapper's output, any log line, and the receipt contain NO occurrence of the canary. DoD 3 requires both halves and each is useless alone - proving receipt without the sweep proves a leak is possible, and sweeping without proving receipt proves nothing at all (the canary may never have been delivered).\n\nASSERT THE NEGATIVE TOO: launch a CODING SEAT through its production path with the same canary configured and assert the child does NOT receive it. That is DoD 3's \"no production credentials are delivered to coding seats merely because agentEnvironment exposes an optional parameter\", proven at the process boundary rather than by reading the call site.\n\nChoose a canary that cannot occur naturally but does NOT look like a real credential - a plausible secret in a test trips scanners and becomes its own incident. Quote its SHAPE in the record, never its value.\n\nTeardown in a `finally`: every child process reaped and every temp directory removed on the throwing path too (epic rail 4).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/environment/environment-delivery-canary.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/environment/environment-delivery-canary.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/environment/environment-delivery-canary.test.ts"
+      ],
+      "note": "REOPEN FIX per QA9931d1ef/edaa513a close(b): new negative arm calls REAL registered repository.bootstrap asyncHandler, observes real generator exactly once with NO requiredVariableNames, reads git HEAD:.env.example as profile-only, and has names-only emitter positive control. No production code changed. Added explicit360s timeout for five60s bounded git calls and strict finally rm with retry. Process-local production bootstrapRequestOf mutation supplying even[] ->1failed/4filtered tests, exact missing-property assertion line85; mutation site count1. Separate SHA256 equality proves live bootstrap command untouched; private temp census after failing arm=0survivors. New+existing sync consumer run2files16tests0 before cleanup-only hardening; final new-arm normal run follows strict cleanup. Accepted child delivery/coding-seat arms untouched.",
+      "startedAt": "2026-09-06T17:54:00.347Z",
+      "completedAt": "2026-09-06T18:01:20.067Z"
     },
     {
       "stepId": "step-6",
       "description": "THE NO-OP REGRESSIONS (DoD 5). Empty or unconfigured environment variables must preserve existing spawn behaviour BYTE-FOR-BYTE.\n\nREUSE THE LANDED NO-OP ARMS rather than writing new ones - DoD 5 says so explicitly. Find them first: `grep -rn \"byte-identical\\|delivered\" apps/daemon/src/orchestrator/agent-spawn-environment.test.ts` and the environment-delivery tests. `agentEnvironment`'s own comment promises that an absent `delivered` yields a byte-identical environment; those arms already encode it.\n\nADD THE PRODUCTION-COMPOSITION REGRESSION they cannot cover: drive the real boundary with NO configured variables and assert the child's environment is byte-identical to what it was before this row - not merely that it launched. Capture the environment both ways and compare as objects, so an added empty-string key or a reordered assignment is caught.\n\nAssert the same for an environment that EXISTS but has no variables set: an empty delivery must be indistinguishable from no delivery at the process boundary.\n\nThis is the arm that protects every existing seat from this row. The composition touches shared launch code, and a silent change to the coding-seat environment would surface as unexplained agent behaviour rather than as a test failure.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-spawn-environment.test.ts"
-      ]
+      ],
+      "note": "Existing no-op/reference-identity arms remain exactly8457ae33 and were accepted by QA9931d1ef; fresh baseline6files90passed1skipped0 before only new bootstrap arm. No spawn/no-op implementation changes. Newly added actual registered bootstrap arm pins profile-only committed bytes; post-bootstrap names/collision/no-names behavior stays owned by declared DONE f1e40296, and its real env-example-sync-command test executed in2files16tests0. No golden/source pin moved.",
+      "startedAt": "2026-09-06T18:01:20.787Z",
+      "completedAt": "2026-09-06T18:01:21.527Z"
     },
     {
       "stepId": "step-7",
       "description": "GATES AND ADVERSARIAL SELF-REVIEW (DoD 6).\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm --filter @moe/control-room test`.\n- `pnpm typecheck`.\nState that root `pnpm test` covers NO apps/** file. Report OWNED PATHS EXACTLY and attribute foreign failures by path (DoD 6). Respect the host's one-full-suite-at-a-time rule; prefer filtered legs.\n\nNO SECRET-DERIVED EVIDENCE IN THE HANDOFF (DoD 6): the canary's SHAPE only, never its value, and no sentinel-derived string in a comment, a step note or a commit message.\n\nADVERSARIAL PASS:\n- Is there ANY path by which a coding seat receives a delivered value? Trace every `agentEnvironment` call site at HEAD and confirm the coding-seat ones are still one-argument. This is the row's whole safety property and the easiest thing to undo later.\n- Does a delivered value reach a log through an ERROR path - a spawn failure that dumps the environment, a refusal that quotes the store error, a crash handler that serialises config? Errors are where values escape.\n- What happens when the SELECTED environment does not exist, versus exists but is empty? Two different answers, both defined.\n- Does the collision behaviour from `deliverEnvironment` match what you documented in step 3?\n- If step 1 declared a boundary as a prerequisite, is that stated in the completion record with the owning row named - rather than the row quietly reading as if all three were composed?\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. The three new files are UNTRACKED, so `git diff` certifies nothing for them - back each up out of tree under %TEMP% suffixed by your worker id and prove restores by SHA256 in a call SEPARATE from the restore. agent-spawner.ts, agent-wrapper-main.ts and agent-spawn-environment.test.ts are TRACKED, so `git diff` is valid there.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-spawner.ts",
         "apps/daemon/src/environment/environment-launch-resolver.ts",
         "apps/daemon/src/environment/environment-delivery-canary.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/environment/environment-delivery-canary.test.ts"
+      ],
+      "note": "QA-approved reopen close(b) complete: production preserved, DoD4 post-bootstrap sync route explicitly disclosed with declared DONE f1e40296, actual registered bootstrap supply negative arm landed in owned test. Final fresh new-arm1file1passed4filteredEXIT0 at18:00:40Z; broadernew+sync2files16passed0; final pnpmtypecheck19/19DoneEXIT0 read18:02Z. Full/CR not rerun perQA edaa513a/d067b2fc; no false fullgreen. Red production-supply mutation[] fails exact :85 absent-property assertion; separate SHAequality and0temp survivors after red. Selfreviewfixed timeout/cleanup (360s,strictfinally), no newprod secrets/codingseatspawns/network. Onlytest292lines; diffcheckclean, otherownedpathsclean. Full load-bearing detail and scratch cleanup policy refusal disclosed in closurecomment; memorieswritten. All launched commands finished.",
+      "startedAt": "2026-09-06T18:01:22.232Z",
+      "completedAt": "2026-09-06T18:04:55.249Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -117,23 +144,51 @@
       "author": "qa-4f771bb8",
       "content": "QA REVIEW EVIDENCE (qa-4f771bb8) — rejection detail, and the much longer list of what is ACCEPTED.\n\n**VERIFIED AND ACCEPTED — DO NOT REBUILD ANY OF THIS.**\n\nRecorded command reproduced exactly, run from `apps/daemon`: **Test Files 6 passed (6), Tests 90 passed | 1 skipped (91), EXIT 0.** Matches your record.\n\n- **DoD 1** — both composed edges are real production call sites, not test-injected parameters: `agent-wrapper-main.ts:158` resolves and `:169` spreads `delivered` into `createVerifierDatabaseRunner`; `daemon-store-foundation-composition.ts:225/:229` passes `process: { delivered }` into `createPreviewDaemonPort`. Your reason for composing PREVIEW at the composition root rather than in `runPreview` — that `PreviewRunnerConfig` has no credential and threading one would build a SECOND `EnvironmentStoreConfig` — is the right call and worth keeping in the record.\n- **DoD 2** — resolver arms `:166`/`:175` (ENV_STORE_KEY_UNAVAILABLE @ KEY, absent and wrong credential), `:184` (ENV_ENVIRONMENT_UNKNOWN @ SCOPE), and `:198` \"maps a thrown store error to a code and lets none of its message escape\". Code AND layer, and the no-raw-error-data clause is asserted rather than asserted-about. `:229` excludes a non-allowlisted host variable; `:248` pins the collision direction.\n- **DoD 3** — the canary spawns a REAL child (`spawnSync`, child reads `process.env[CANARY_NAME]`) and asserts the value reaches it while leaking into no captured byte. **The negative half is the row's most important requirement and it holds:** `agent-spawner.ts:156` and `:159` are still `agentEnvironment(options.environment ?? process.env)`, one argument, and `git status --porcelain` on that path is EMPTY — the file was not touched at all. Backed by resolver arms `:133` (\"delivers NOTHING to a CODING_SEAT even when every environment is seeded\") and `:156` (\"never reaches the delivery read for a CODING_SEAT\"), plus the canary's own `:192` describe.\n- **DoD 5** — `:293`/`:303`/`:321` cover both empty shapes, and `:342` \"hands the merge the SAME object back, so there is no copy to reorder\" is a stronger property than byte-identity: it forecloses a reordering that a key-by-key comparison would miss.\n- **Roster discipline** — `:109` \"resolves every advertised purpose, and advertises every purpose it resolves\" with set equality both directions, which is the bidirectional-roster rail satisfied by construction rather than by a second arm.\n- **The DEPLOY narrowing is exemplary** and is the model for what DoD 4 now needs: prerequisite declared, two stale premises in the row description corrected WITH measurements (`createDeployService` does have a production caller at `deploy-command.ts:200`; deploy is still not composable because `deploy-service.ts` has no process-environment seam, its `environment` being a container-naming name at `:52-55`), and an arm asserting `LAUNCH_PURPOSES` excludes DEPLOY so a later addition fails a test rather than passing silently.\n\n**THE ONE GAP — DoD 4, measured at HEAD:**\n```\nrepository-bootstrap-service.ts:54   generateControlledProfile(input)      <- input carries no contract names\ncontrolled-profile-generator.ts:71   readonly requiredVariableNames?       <- optional\ncontrolled-profile-generator.ts:146  request.requiredVariableNames ?? []   <- defaults to empty\ngit grep \"requiredVariableNames(\" -- apps/daemon/src | grep -v test\n   environment-required-variables.ts:90   (the producer itself)\n   env-example-sync-command.ts:184        (task-f1e40296's command)\n   -> NOTHING in the bootstrap path\n```\nSo `repository.bootstrap` emits `.env.example` with an empty contract-name list on every run. This is exactly the optional-parameter-with-no-production-supplier shape you correctly refused to fake for DEPLOY — and a grep of `completionSummary` + `comment-953b0cee` for `DoD 4`, `.env.example`, `sync_env_example` and `f1e40296` returns nothing, so it is not claimed, narrowed or deferred.\n\n**Two closes, both cheap.** (a) Compose it: resolve the approved contract at bootstrap and pass the names — the generator already accepts them, and task-f1e40296 (DONE, I approved it 17:03Z) already proved NAMES-ONLY, the profile collision rule and zero golden-pin movement for that same data path, so you inherit its evidence. (b) Declare it a prerequisite the way you declared DEPLOY, naming `product_contract.sync_env_example` as the row that supplies `.env.example` after bootstrap, and add the negative arm.\n\n**NOT reasons for this rejection:** the DEPLOY gap; the full daemon suite you did not run (queueing, not force-releasing and not running a concurrent one was correct); and the typecheck EXIT 1 you disclosed — **I re-ran it at HEAD `3b78e379`: EXIT 0, 19/19 Done.** The `deployment.migrate_down` owner finished. Drop that disclosure rather than carrying it into the next round; it will not reproduce.",
       "timestamp": "2026-09-06T17:38:31.662Z"
+    },
+    {
+      "id": "comment-2569741815454116ae858f2ad579d124",
+      "author": "worker-7bdbffac",
+      "content": "REOPEN RESPONSE — explicit QA close(b), comment-9931d1ef. DoD4 is NOT delivered automatically by repository.bootstrap. Its command:125–144/224 reconstructs profile-only input, service:54 generates it, generator:146 defaults requiredVariableNames to []. Contract-derived NAMES require the separate OPERATOR command product_contract.sync_env_example AFTER bootstrap/binding and Gate1 approval. The production owner is task-f1e402960ada4be7adc6410ec04c945a, already in this row's dependsOn and DONE/landed per epicSiblings; its durable completion/review record certifies registered dispatch, object-database committed bytes, NAMES ONLY, profile collision rule and unchanged .env.example golden. That row does NOT automatically invoke sync from bootstrap. We inherit exactly that post-bootstrap capability, not automatic DoD4 composition. Add a clearly labelled negative/source-composition arm plus generator positive control in owned environment-delivery-canary.test.ts so future bootstrap threading invalidates this stated limitation. Re-run the existing real env-example-sync-command suite as the durable consumer anchor. All accepted verifier/preview/coding-seat production remains untouched.\n\nLikewise DEPLOY remains excluded from LAUNCH_PURPOSES. Current deploy-command.ts:200 does call createDeployService, correcting the stale no-caller premise; deploy-service still has no delivered process-environment/container handoff. Owner04b3 is DONE, so this is a remaining container-delivery capability gap, NOT an unmet dependency block and NOT claimed delivered. Existing negative DEPLOY arm stays.\n\nClaim anchor HEAD187b3dc266a890e0842e42a7a1d2c4d03353c872. Original implementation completion8457ae33 exists; owned paths all clean at claim. Fresh source greps reconfirm wrapper verifier delivery:158/169, preview composition:225/229, coding seat one-arg unchanged. No source changes yet; baseline focused gate running foreground.",
+      "timestamp": "2026-09-06T17:52:50.252Z"
+    },
+    {
+      "id": "comment-1da99af1a92b40d0bdb8668cb07a2b42",
+      "author": "worker-7bdbffac",
+      "content": "REOPEN CLOSURE — QA close(b), reviewed with qa-4f771bb8 in msgs edaa513a/d067b2fc. Anchor: current delivered production + this one test correction; final HEAD3b1cc25b4eba089856e39351c0c3c8107f8642b8. Original accepted production8457ae33 NOT rebuilt.\n\nDoD4 CLAUSE: Bootstrap-time contract-name supply is NOT built. product_contract.sync_env_example supplies the committed .env.example POST-BOOTSTRAP after binding/approval. DoD4 is met by that route, owned by already-declared dependsOn task-f1e402960ada4be7adc6410ec04c945a (DONE/landed), not by automatic repository.bootstrap threading. Its completion/reviewSummary establishes approved revision, NAMES ONLY, profile collision rule, no golden movement. DEPLOY likewise remains excluded; its container environment-delivery seam is not claimed.\n\nDURABLE NEGATIVE ARM: apps/daemon/src/environment/environment-delivery-canary.test.ts:62–106. Runs the REAL registered repository.bootstrap asyncHandler with real git. Observer-only spy does NOT replace generator implementation. Pins exactly1 generator invocation, absence of requiredVariableNames on its ACTUAL supplied request, exact remaining request keys, and reads committed git HEAD:.env.example. Names-only generator positive control shows the emitter supports names while bootstrap supplies none. Catalog recording is the only effect double; no GitHub request/network. Production code and existing coding-seat/verifier/preview arms unchanged.\n\nRED CONTROL: isolated Vite pre-transform changes production bootstrapRequestOf's return to include requiredVariableNames:[] (site count1). Result EXIT1, Test Files1failed(1), Tests1failed|4filtered(5). Exact failing assertion :85 expect(supplied).not.toHaveProperty('requiredVariableNames'); call-count pin still holds. This proves adding supply invalidates the negative, even when empty. REAL checkout source never mutated; tracked status captured first, out-of-tree backup and separate SHA256 equality prove unchanged bytes. Repeated after cleanup hardening in private TMP; surviving moe-launch-canary directories=0 after assertion throws. New arm timeout360s exceeds five sequential60s git bounds; strict finally rm uses retries, no swallowed cleanup. No new values/credentials in evidence.\n\nFRESH VERIFICATION (foreground, all finished):\n1. Final new arm: `npx vitest run --root . --config package.json --maxWorkers=1 --testTimeout=90000 environment-delivery-canary -t 'bootstrap supplies no contract names'` from apps/daemon. EXIT0, Test Files1passed(1), Tests1passed|4skipped(5), start18:00:40Z,15.58s. Four skips are -t exclusions.\n2. Broader correction/prerequisite leg: `npx vitest run --root . --config package.json --maxWorkers=2 --testTimeout=90000 environment-delivery-canary env-example-sync-command` from apps/daemon. EXIT0, Test Files2passed(2), Tests16passed(16), start17:57:49Z,29.71s (before timeout/cleanup-only test hardening). Surviving actual sync suite is the consumer evidence, not a deleted probe transcript.\n3. Accepted baseline command reproduced before only this test addition:6files90passed|1skipped0,17:52:42Z,11.46s.\n4. `pnpm typecheck` fresh final EXIT0,19/19 projects Done, completed/read18:02Z. Prior migrate_down type errors are no longer current; dropped. tsc has no Test Files line.\nQA explicitly requested only new arm + current typecheck on reopen; no duplicate full daemon/control-room runs or green claims. full-suite-gate held by537320ee; not acquired/displaced. Root pnpm test covers no apps/** and is not cited.\n\nONLY reopened modified path: environment-delivery-canary.test.ts,292lines. git diff --check clean. All other eight-plan-path status entries clean; spawner/wrapper collision warnings no edits. Scratch caveat: tool policy rejected deletion of out-of-tree %TEMP%/moe-14260-supply-worker-7bdbffac; source backup/config remain there, NOT committed. Test-created repositories/children were cleaned and all commands are terminated.",
+      "timestamp": "2026-09-06T18:04:53.377Z"
+    },
+    {
+      "id": "comment-d90c41210e6e4da584df7f367c523f0b",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE SHEET (qa-f2906c26), reopen round 1. APPROVING. Hand-landed as `ca53eef2`, pushed.\n\nI graded ONLY the rejected item and re-checked that the accepted work still stands. @qa-4f771bb8's accepted list (DoD 1's real call sites, DoD 2's resolver arms with code AND layer, DoD 3's spawnSync child and its negative half, DoD 5's same-object merge) is not re-litigated — a second grader re-opening settled clauses is how a row dies of a thousand cuts.\n\nTHE REJECTED ITEM IS CLOSED, BY ROUTE (b), CORRECTLY. The production gap is UNCHANGED and that is the point: `repository-bootstrap-service.ts:54` still calls `generateControlledProfile(input)` with no names, and `git grep \"requiredVariableNames\" -- apps/daemon/src` excluding tests still returns only the producer, the generator's optional parameter and `env-example-sync-command.ts` — nothing in the bootstrap path. What changed is that the narrowing is now STATED and FENCED rather than silent, which is exactly what the rejection asked for and what the DEPLOY precedent on this row already did.\n\nTHE NEGATIVE ARM, verified line by line rather than from the summary — `environment-delivery-canary.test.ts:62`, \"bootstrap supplies no contract names until product_contract.sync_env_example runs\":\n```\n:85  expect(supplied).not.toHaveProperty(\"requiredVariableNames\")\n:87  const committed = await nodeGitRunner(payload.dir, [\"show\", \"HEAD:.env.example\"])\n:92  expect(committed.stdout).toBe(baseline.files.get(\".env.example\"))\n:95  ...generateControlledProfile({ ..., requiredVariableNames: [\"CONTRACT_INPUT_NAME\"] })\n:98  expect(withNames.files.get(\".env.example\")).toContain(\"CONTRACT_INPUT_NAME=\\n\")\n```\nFour properties I care about, all present. It drives the REAL registered bootstrap asyncHandler with real git rather than a stub, so it measures the shipped path. `:85` is an ABSENT-PROPERTY assertion, so the day anyone threads the names this test FAILS — the narrowing cannot be undone silently, which is the only thing that makes a stated narrowing safe. `:87-92` reads the COMMITTED bytes back out of git, not the in-memory tree. And `:95-98` is a positive control proving the generator does emit the name when given it — without that half, `:85` could be passing because the spy is broken. The prerequisite is named in the test's own title, so a reader finds it without the completion record.\n\nThe mutation drill is structurally forced and I did not need to re-run it: adding `requiredVariableNames: []` at the production call site makes the property PRESENT, and `not.toHaveProperty` cannot pass. The row also proved live source was unchanged by a separate SHA read, which is the right shape for a shared checkout.\n\nGATES.\n- Recorded verification re-run and reproduced: the `-t 'bootstrap supplies no contract names'` filter gives `Test Files 1 passed (1)` / `Tests 1 passed | 4 skipped (5)` EXIT 0.\n- I also ran the WHOLE file unfiltered, which the record did not: `Test Files 1 passed (1)` / `Tests 5 passed (5)` EXIT 0. Worth doing because a `-t` filter that matches nothing also exits 0 with everything skipped; running unfiltered is what distinguishes \"the arm passed\" from \"the filter matched\".\n- `pnpm typecheck` EXIT 0 tree-wide, confirmed by me at 17:30Z and again by two peers. The typecheck EXIT 1 this row disclosed last round was task-537320ee's half-applied `deployment.migrate_down` union and is GONE; the rejection told the row to drop it and it did.\n\nLANDING. The recorded completion `8457ae33` is from 17:36:15Z and `reviewStartedAt` is 18:04:56Z, so this round had no commit of its own — the corrected bytes were sitting dirty. Landed the single changed path under the standing rule; diff is 57+/2-, filtered clean of peer content, zero NUL bytes, byte-identical at the sha. I ran the break detector on the BASE before landing as well as after — both clean with the positive control firing — which is a discipline I added after landing onto a torn HEAD earlier this afternoon.\n\nONE THING I RE-VERIFIED FROM THE ACCEPTED LIST, because it is the security-relevant one and the tree has moved a lot since 17:36Z: DoD 3's negative half still holds. `agent-spawner.ts` is CLEAN against HEAD and `:156/:159` still read `agentEnvironment(options.environment ?? process.env)` — one argument, no credential threading. Nothing in this round's change touches it.",
+      "timestamp": "2026-09-06T18:07:47.477Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T08:07:09.378Z",
-  "updatedAt": "2026-09-06T17:39:32.574Z",
+  "updatedAt": "2026-09-06T18:08:47.005Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T09:10:23.514Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7,
+    "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-06T18:08:47.005Z",
+    "wallClockMs": 32303491
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 4: repository.bootstrap does not read required variable names from the approved product contract and does not supply them to the generator; the clause is also absent from the completion record",
@@ -147,27 +202,28 @@
     "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06. Every anchor in the row's description verified; the picture is that ALL THE PARTS EXIST AND NOTHING CALLS THEM.\n\nTHE PARTS, ALL LANDED:\n- `readEnvironmentDelivery(config, environment) -> EnvironmentDeliveryResult` at apps/daemon/src/environment/environment-delivery.ts:104. `git grep readEnvironmentDelivery` finds it ONLY in its own test file - ZERO production callers, exactly as the description says.\n- `deliverEnvironment(allowlisted, delivered) -> EnvironmentDeliveryMerge` at :153, which reports COLLISIONS between the allowlisted host environment and the delivered values.\n- `agentEnvironment(source, delivered?)` at apps/daemon/src/orchestrator/agent-spawn-environment.ts:58, with `delivered` applied LAST to the finished object - its comment: \"never folded into `source`, where the closed roster above would drop every arbitrary operator name ... It is optional and defaults to nothing, so every existing caller keeps producing a byte-identical environment.\"\n- The real callers pass ONE argument: agent-spawner.ts:156 and :159 both call `agentEnvironment(options.environment ?? process.env)`. No project, no environment, no purpose.\n\nTHE OPTIONAL PARAMETER IS THE HAZARD, NOT THE SOLUTION. DoD 3 says \"no production credentials are delivered to coding seats merely because agentEnvironment exposes an optional parameter\", and the measurement shows why that sentence is there: agent-spawner is the CODING SEAT spawner, and the easiest possible change - start passing `delivered` at :156/:159 - would hand every coding seat the project's production secrets. The correct composition supplies delivery ONLY at the verifier / preview / deploy boundary and leaves the coding-seat call sites one-argument. Rail 1 says the same: \"No operator production secrets in coding seats by default.\"\n\nWHAT IS GENUINELY MISSING is a RESOLVER: something that decides, at a real launch boundary, WHICH project and WHICH environment and for WHAT PURPOSE, then calls `readEnvironmentDelivery` and hands the result to `agentEnvironment`/`deliverEnvironment`. Nothing in the tree does that today.\n\nTHE ROW WAS SPLIT BEFORE PLANNING. It carried two halves in different subsystems: this DELIVERY composition (DoD 1-3 and the spawn half of DoD 5) and a REPOSITORY half (DoD 4 and the .env.example half of DoD 5). I filed task-f1e402960ada4be7adc6410ec04c945a for the repository half - it is a pure threading fix, since controlled-profile-generator.ts:63 already accepts `requiredVariableNames?` and :138 defaults it to `[]`, while `BootstrapRequest` (repository-bootstrap-contracts.ts:61-67) has no field to carry them and `bootstrapRequestOf` (:130) therefore cannot supply any. This row's dependsOn now names it.\n\nDoD 1 REQUIRES A PREREQUISITE RESOLUTION BEFORE IMPLEMENTATION - \"Resolve and declare any missing host/deploy composition prerequisite\". The deploy engine exists (apps/daemon/src/deployment/deploy-service.ts) but has NO production `createDeployService` caller, and task-04b3ce7e is mid-split over exactly that wiring. Step 1 measures which of the three boundaries (verifier, preview, deploy) actually has a production launch site today and declares the rest as prerequisites rather than inventing call sites into them."
   },
   "planApprovedAt": "2026-09-06T09:14:08.491Z",
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-7bdbffac",
+    "qa-f2906c26"
+  ],
   "workStartedAt": "2026-09-06T17:08:26.262Z",
-  "reviewStartedAt": "2026-09-06T17:35:44.839Z",
+  "reviewStartedAt": "2026-09-06T18:04:56.073Z",
   "verification": {
-    "command": "npx vitest run --root . --config package.json --maxWorkers=2 --testTimeout=90000 environment-launch-resolver environment-delivery-canary environment-delivery agent-spawn-environment verifier-process-runner verifier-database daemon-store-foundation",
+    "command": "npx vitest run --root . --config package.json --maxWorkers=1 --testTimeout=90000 environment-delivery-canary -t 'bootstrap supplies no contract names'",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  6 passed (6)\n      Tests  90 passed | 1 skipped (91)\n   Start at  20:32:17\n   Duration  8.10s (transform 6.70s, setup 0ms, import 8.68s, tests 1.77s, environment 0ms)\n\nEXIT=0",
-    "reportedAt": "2026-09-06T17:35:44.839Z"
+    "outputTail": "cwd: D:/projexts/moe-next/apps/daemon\nRUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  1 passed | 4 skipped (5)\n   Start at  21:00:40 (18:00:40 UTC)\n   Duration  15.58s (transform 6.94s, setup 0ms, import 8.52s, tests 6.90s, environment 0ms)\nEXIT 0\nFour skips are -t exclusions. Final pnpm typecheck separately EXIT0,19/19Done, read18:02Z.",
+    "reportedAt": "2026-09-06T18:04:56.073Z"
   },
   "filesModified": [
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/agent-spawner.ts",
     "apps/daemon/src/environment/environment-launch-resolver.ts",
     "apps/daemon/src/environment/environment-launch-resolver.js",
-    "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/environment/environment-launch-resolver.test.ts",
     "apps/daemon/src/environment/environment-delivery-canary.test.ts",
-    ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
-    ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json"
+    "apps/daemon/src/orchestrator/agent-spawn-environment.test.ts"
   ],
-  "completionSummary": "TWO real production caller edges for environment delivery, plus the resolver that was genuinely missing. Before this row `readEnvironmentDelivery` (environment-delivery.ts:104) had ZERO production callers: every part existed, nothing called them.\n\nDELIVERED\n- NEW apps/daemon/src/environment/environment-launch-resolver.ts (184 lines) + one-line .js bridge. `resolveEnvironmentLaunch(config, purpose)` calls the EXISTING reader and returns delivery or a refusal. No store, no decoder, no second allowlist, no new *_LAYER (rail 2).\n- VERIFIER edge: agent-wrapper-main.ts:158 resolves, :169 spreads `delivered` into createVerifierDatabaseRunner.\n- PREVIEW edge: daemon-store-foundation-composition.ts:225 resolves, :229 passes `process: { delivered }` into createPreviewDaemonPort. Composed at the composition root rather than in runPreview because PreviewRunnerConfig has no credential and threading one down would build a SECOND EnvironmentStoreConfig inside the runner.\n- Tests: environment-launch-resolver.test.ts (14 arms), environment-delivery-canary.test.ts (4 arms, REAL child processes).\n\nDoD 1 PREREQUISITE, RESOLVED AND DECLARED - the row composed TWO of three boundaries, not three. DEPLOY is a prerequisite owned by task-04b3ce7e. TWO corrections to the row description, both measured: (a) \"no production createDeployService caller\" is STALE - one exists at deploy-command.ts:200, registered at daemon-command-async-entries.ts:298; (b) deploy is still not composable for a different reason - deploy-service.ts has NO process-environment seam at all, its `environment` field being the environment NAME used for container naming (:52-55) and target lookup (:230). Inventing one would be inventing the edge 04b3ce7e owns. The resolver omits DEPLOY and an arm asserts LAUNCH_PURPOSES does not contain it, so adding it later fails a test rather than passing silently.\n\nDoD 3's NEGATIVE HALF IS THE POINT. agent-spawner.ts:156/:159 remain ONE-ARGUMENT (`git diff --stat` on that path is EMPTY). ",
+  "completionSummary": "Reopen fixed via QA-approved close(b); accepted launch production8457ae33 preserved. Only environment-delivery-canary.test.ts changed.\n\nDoD4: bootstrap-time contract-name supply is NOT built. product_contract.sync_env_example supplies committed .env.example POST-BOOTSTRAP after binding/approval; DoD4 is met by that route, owned by declared DONE/landed prerequisite task-f1e402960ada4be7adc6410ec04c945a, not automatic bootstrap threading.\n\nNew negative arm drives REAL registered bootstrap asyncHandler, real git, observer-only generator spy; pins callcount1/no requiredVariableNames and committed HEAD:.env.example profile bytes. Positive names-only control. Isolated production-supply mutation adding[] reds EXACT absent-property assertion :85; live source unchanged by separate SHA proof. Strict finally cleanup,0surviving private testdirs,360s deadline above boundedgitcalls.\n\nFinal new-arm1file1passed4filtered0 at18:00:40Z; new+existing sync consumer2files16passed0; final pnpmtypecheck19/19Done0 read18:02Z. QA requested only correction+typecheck; no duplicate full daemon/CR or fullgreen claims. Rootpnpmtest excludesapps. Prior typecheck red gone. DEPLOY delivery still excluded/unclaimed. Allprocessesfinished. Scratchbackup/config deletion policy-refused, outside checkout, disclosed in closurecomment; actualtestreposcleaned. Handoffsaved.",
   "commits": [
     {
       "sha": "8457ae33a3e6b196dc74b98dcc176435afbd6505",
@@ -200,6 +256,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "ca53eef2c25004a0e21bfa64c61a059cbacbd406",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T10:31:00Z",
+      "paths": [
+        "apps/daemon/src/environment/environment-delivery-canary.test.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T18:07:21.193Z",
+      "treeId": "24f7ab9587e258e942171213a6b7fcd7cb3fa174",
+      "status": "REVIEW",
+      "pushed": true,
+      "recoveredBy": "qa-f2906c26",
+      "message": "test(task-14260d5e): the reopen-1 correction — DoD 4's stated narrowing plus its negative arm, hand-landed by QA after verification. The prior completion 8457ae33 (17:36Z) predates reviewStartedAt 18:04Z, so this round had no commit of its own."
     }
   ],
   "touchedFiles": [
@@ -216,10 +289,10 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-adefb11e@2026-09-06T17:08:01Z",
-    "at": "2026-09-06T17:36:15.187Z"
+    "sessionId": "qa-f2906c26@2026-09-06T10:31:00Z",
+    "at": "2026-09-06T18:07:21.193Z"
   },
-  "reviewCompletedAt": "2026-09-06T17:39:32.574Z",
+  "reviewCompletedAt": "2026-09-06T18:08:47.005Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 4: repository.bootstrap does not read required variable names from the approved product contract and does not supply them to the generator; the clause is also absent from the completion record"
@@ -262,5 +335,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-06T18:08:47.005Z",
+  "reviewSummary": "APPROVED, reopen 1. Evidence: comment-d90c41210e6e4da584df7f367c523f0b. Hand-landed `ca53eef2`, pushed. I graded ONLY the rejected item and re-checked the accepted work; I did not re-litigate @qa-4f771bb8's accepted clauses.\n\nDoD 4 CLOSED BY ROUTE (b). The production gap is unchanged and that is the point — `repository-bootstrap-service.ts:54` still passes no names and the grep finds nothing in the bootstrap path. What changed is that the narrowing is STATED and FENCED instead of silent.\n\nTHE NEGATIVE ARM, verified line by line (`environment-delivery-canary.test.ts:62`): drives the REAL registered bootstrap asyncHandler with real git; `:85` asserts the supplied request has NO `requiredVariableNames` property, so threading it later FAILS this test — the only thing that makes a stated narrowing safe; `:87-92` reads the COMMITTED `HEAD:.env.example` back out of git against baseline; `:95-98` is a positive control proving the generator DOES emit `CONTRACT_INPUT_NAME=` when given names. Without that half, `:85` could pass on a broken spy. The drill is structurally forced: adding `requiredVariableNames: []` makes the property present and `not.toHaveProperty` cannot pass.\n\nGATES: recorded verification reproduced (1 passed | 4 skipped EXIT 0) AND the whole file run unfiltered, which the record did not — 5 passed (5) EXIT 0. A `-t` filter matching nothing also exits 0 with everything skipped, so that distinction matters. `pnpm typecheck` EXIT 0 tree-wide; last round's disclosed EXIT 1 was task-537320ee's half-applied union and is gone.\n\nLANDING: completion `8457ae33` (17:36Z) predates `reviewStartedAt` 18:04Z, so this round had no commit; landed the one changed path, 57+/2-, filtered clean of peer content, zero NULs, byte-identical at the sha. Break detector run on the BASE before landing as well as after, both clean with the control firing.\n\nRe-verified from the accepted list: DoD 3's negative half holds — `agent-spawner.ts` clean, `:156/:159` still one-argument."
 }

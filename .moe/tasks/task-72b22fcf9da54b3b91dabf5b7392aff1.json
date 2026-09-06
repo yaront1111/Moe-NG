@@ -48,7 +48,7 @@
       "startedAt": "2026-09-06T02:49:50.688Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -79,7 +79,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T08:07:56.887Z",
+  "updatedAt": "2026-09-06T18:08:47.202Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -235,11 +235,9 @@
       "reason": "Confirmed crash: worker-caece97b's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
     }
   ],
-  "blockedReason": "Governor rail4 ruling msg-6733786c: uncovered production composition, not proof-only gap. One child filed task-14260d5ec20c43e697521a8a98904136 in PLANNING; await its real encrypted-environment-to-launch and approved-contract-to-bootstrap-name consumer edges. Parent stays blocked until child lands, no closure over injected seams. Current owner of active worker work is separate53267f86; this call only adds explicit prerequisite to parked unassigned72.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T08:01:36.964Z",
-  "blockedOnTaskIds": [
-    "task-14260d5ec20c43e697521a8a98904136"
-  ]
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
 }

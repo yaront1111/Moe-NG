@@ -20,7 +20,9 @@ import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
-import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
+  from "./daemon-command-vocabulary.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
 import { COMMAND_PREREQUISITES } from "./bootstrap/bootstrap-sequence.js";
 import {
@@ -123,6 +125,12 @@ const ROWS: readonly Row[] = [
     kind: "deployment.rollback", layer: PREREQ_LAYER,
     payload: { environment: "staging", toReceiptRef: "receipt-unknown", restoreDatabase: false },
     payloadKeys: ["environment", "toReceiptRef", "restoreDatabase"] },
+  // Async-served like the deploy above, and refusing at the SEAM for the same reason: the
+  // shipped daemon names no database, workspace or project root to revert, so the composition
+  // root's own fail-closed branch answers. Registered and refusing, never absent.
+  { agent: null, asyncOnly: true, capability: GOAL, code: "MIGRATE_DOWN_UNCONFIGURED",
+    kind: "deployment.migrate_down", layer: "DAEMON_COMMAND_SEAM",
+    payloadKeys: ["environment", "toMigrationRequestId"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE,
     kind: "deployment.set_target", layer: PREREQ_LAYER,
     payloadKeys: ["environment", "network", "sshTarget", "url"] },
@@ -378,7 +386,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "project.bind_repository", "project.register", "project.set_agent_provider",
   "provider.probe", "repository.publish",
   "release.decide", "product_contract.sync_env_example",
-  "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
   "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -401,6 +409,8 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
   "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  // Reverting a production schema destroys the data the forward migration created.
+  "deployment.migrate_down",
   // Writing into and committing in the operator's own product repository is their act.
   "product_contract.sync_env_example",
   // The operator ANSWERS a material product question; an agent transport presenting
@@ -1041,8 +1051,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(61);
-    expect(deps.registry.size).toBe(61);
+    expect(ROWS).toHaveLength(62);
+    expect(deps.registry.size).toBe(62);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1088,10 +1098,50 @@ describe("registered command table", () => {
     expect(deps.registry.get("deployment.rollback")?.asyncHandler).toBeDefined();
   });
 
+  /**
+   * THE THREE-AXIS FENCE ON `deployment.migrate_down`, ASSERTED TOGETHER (DoD 3 of
+   * task-537320ee). Reverting a production schema destroys the data the forward migration
+   * created, so it is never an agent's decision — and the three rosters that say so are
+   * independent, which is exactly why they are asserted in ONE arm that names WHICH one failed.
+   * A kind fenced in two of the three is reachable through the third.
+   *
+   * AXIS 2 IS ASSERTED AGAINST `wiredMcpToolKinds()`, THE COMPUTED SERVED-OVER-MCP SURFACE, and
+   * deliberately NOT against `MCP_EXCLUDED_COMMAND_KINDS`. That roster is DERIVED from
+   * `OPERATOR_PRINCIPAL_KINDS` (mcp-tool-allowlist.ts), so asserting it beside axis 1 would
+   * assert ONE fact twice and stay green with the fence broken. This is the single most likely
+   * way this kind ships looking tested and is not.
+   *
+   * NO COUNT LITERAL AND NO TRANSCRIBED LIST: every value below is read from a production
+   * surface, so a sibling row moving a roster cannot red this arm spuriously.
+   */
+  it("fences deployment.migrate_down at dispatch, on MCP and in the wrapper, all three", () => {
+    const kind = "deployment.migrate_down";
+    // AXIS 1 -- the dispatch fence. Without it any GOAL-capable session could revert a schema.
+    expect(OPERATOR_PRINCIPAL_KINDS.has(kind), `${kind} missing from OPERATOR_PRINCIPAL_KINDS`)
+      .toBe(true);
+    // AXIS 2 -- the TRANSPORT. The MCP port authenticates with the operator bootstrap
+    // credential, so an advertised operator kind is an agent arriving AS the operator.
+    expect(wiredMcpToolKinds(), `${kind} is ADVERTISED over MCP`).not.toContain(kind);
+    // AXIS 3 -- the wrapper. `agentCapabilitiesFor` already answers null for this kind, so this
+    // is belt-and-braces; it is asserted anyway because the null capability is one edit away.
+    expect(HUMAN_ONLY_STEPS.has(kind), `${kind} missing from HUMAN_ONLY_STEPS`).toBe(true);
+    expect(agentCapabilitiesFor(kind), `${kind} is staffable`).toBeNull();
+    // THE SUBJECT IS ACTUALLY SERVED. Every arm above would pass vacuously for a kind the
+    // registry does not carry, which would make this a test of three rosters and nothing else.
+    expect(deps.registry.has(kind), `${kind} is not served at all`).toBe(true);
+    // SERVED BY ITS OWN ASYNC ENTRY, not by the generic synchronous fallback: `entryOf` answers
+    // any vocabulary kind, so membership alone cannot tell "registered" from "served".
+    expect(deps.registry.get(kind)?.asyncHandler, `${kind} lost its async entry`).toBeDefined();
+    // AND IT IS ADVERTISED. The bidirectional partition arm above relates the SERVED set to the
+    // two MCP halves; this pins the third roster the kind must appear in, so a PAYLOAD_KEYS
+    // deletion reds here rather than merely shrinking that arm's own iteration.
+    expect(Object.keys(PAYLOAD_KEYS), `${kind} missing from PAYLOAD_KEYS`).toContain(kind);
+  });
+
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(61);
+    expect(REGISTRATION_ORDER).toHaveLength(62);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1262,8 +1312,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(25);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(25);
+      expect(OPERATOR_ONLY).toHaveLength(26);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(26);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1944,7 +1994,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(61);
+    expect(ports.registry.size).toBe(62);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1966,7 +2016,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(61);
+    expect(supplied.registry.size).toBe(62);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1998,7 +2048,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(61);
+    expect(snapshotPorts.registry.size).toBe(62);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

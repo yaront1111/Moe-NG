@@ -242,6 +242,10 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["environment", "sha"] },
   { agent: null, capability: GOAL, family: "BOOTSTRAP", kind: "deployment.rollback",
     payloadKeys: ["environment", "toReceiptRef", "restoreDatabase"] },
+  // `agent` NULL like the rollback above, and deliberately unlike its two siblings: reverting a
+  // schema is never staffable, so no seat is granted reach in the first place.
+  { agent: null, capability: GOAL, family: "BOOTSTRAP", kind: "deployment.migrate_down",
+    payloadKeys: ["environment", "toMigrationRequestId"] },
   // Transcribed by task-a2409cba, which does NOT own this kind: it landed in PAYLOAD_KEYS and
   // BOOTSTRAP_FAMILY without its roster row, leaving this whole file red at HEAD before the
   // environment rows below existed. Backfilled rather than worked around -- the roster is a
@@ -303,7 +307,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish", "repository.bootstrap",
   "release.decide", "product_contract.sync_env_example",
-  "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
   // The operator ANSWERS a material product question -- the human act the clarification
   // fence exists to keep off every agent wire.
   "product_contract.answer_clarification",
@@ -326,8 +330,8 @@ describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(61);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(61);
+    expect(ROWS).toHaveLength(62);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(62);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -371,7 +375,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(50);
+    expect(declared).toHaveLength(51);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -380,7 +384,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
     expect(FAMILY_MAPS.CRITERION.size).toBe(2);
     expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(16);
+    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(17);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
     expect(FAMILY_MAPS.DESIGN.size).toBe(1);
     expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
@@ -430,8 +434,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(25);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(25);
+    expect(OPERATOR_ONLY).toHaveLength(26);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(26);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

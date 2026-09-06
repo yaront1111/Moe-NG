@@ -181,6 +181,10 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "deployment.set_target": ["environment", "network", "sshTarget", "url"],
     "deployment.deploy": ["environment", "sha"],
     "deployment.rollback": ["environment", "toReceiptRef", "restoreDatabase"],
+    // The batch to undo is named by the APPLIED migration receipt that created it, so the
+    // command can never mean "undo an unknown number of migrations". `projectId` is absent by
+    // construction like every kind above: it comes from the authenticated principal.
+    "deployment.migrate_down": ["environment", "toMigrationRequestId"],
     // `github` nests owner/name/visibility exactly as `observation` does above; `projectId` is
     // ABSENT BY CONSTRUCTION -- authenticated, so naming it is INPUT_INVALID at PAYLOAD_SHAPE.
     "repository.bootstrap": ["dir", "github", "productName", "profileVersion"],

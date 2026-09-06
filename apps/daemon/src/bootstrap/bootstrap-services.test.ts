@@ -71,6 +71,9 @@ const OWNED_KINDS = [
   // `repository.bootstrap` is -- it runs `docker` and an optional `ssh`, and polls health.
   "deployment.set_target",
   "deployment.deploy",
+  // The third deployment edge, async-served like the deploy: reverting a schema dumps the
+  // database and runs the product's migration tool.
+  "deployment.migrate_down",
 ] as const;
 
 function bytes(value: unknown): Uint8Array {
@@ -92,12 +95,12 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the fifteen command kinds this surface owns", () => {
+  it("covers exactly the sixteen command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
     // Moved 13 -> 15 from the PRINTED expected-vs-received of this arm when the two deployment
     // kinds joined the family, never from a number in a plan.
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(15);
-    expect(OWNED_KINDS).toHaveLength(15);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(16);
+    expect(OWNED_KINDS).toHaveLength(16);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

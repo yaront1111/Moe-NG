@@ -268,7 +268,7 @@ describe("daemon /2 command registry", () => {
       // the /1 side moves this count too. 52 -> 53 for `design.submit` (task-06ac0da1); the /2
       // registry stays one short of /1's 54 because it withholds `planning.submit_decomposition`
       // until that kind's /2 service lands.
-      expect(ports.registry.size).toBe(60);
+      expect(ports.registry.size).toBe(61);
       expect(reads).toEqual({ clock: 1, operatorPrincipalId: 1, projectId: 1, store: 1 });
     } finally {
       closeStores();
