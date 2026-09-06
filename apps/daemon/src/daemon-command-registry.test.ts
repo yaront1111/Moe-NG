@@ -118,8 +118,8 @@ const ROWS: readonly Row[] = [
   // Existing deployment vocabulary backfilled into the independent served-kind census.
   { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "DEPLOY_BUILD_CONTEXT_UNCONFIGURED",
     kind: "deployment.deploy", layer: "DAEMON_COMMAND_SEAM", payloadKeys: ["environment", "sha"] },
-  { agent: [GOAL, WORK], capability: GOAL, code: "BOOTSTRAP_COMMAND_UNKNOWN",
-    kind: "deployment.set_target", layer: INGRESS,
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE,
+    kind: "deployment.set_target", layer: PREREQ_LAYER,
     payloadKeys: ["environment", "network", "sshTarget", "url"] },
   // An empty payload carries none of the six sections, so the envelope decode —
   // the only stage above the recovery embargo — is what answers.

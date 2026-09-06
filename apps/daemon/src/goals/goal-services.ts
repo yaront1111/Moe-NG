@@ -27,6 +27,7 @@ import {
 } from "./goal-identity.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
 import { publishRepository } from "../repository/publish-services.js";
+import { setDeployTarget } from "../deployment/deploy-target-command.js";
 
 /**
  * Goal creation.
@@ -201,4 +202,5 @@ export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.close": closeGoal,
   "goal.create_with_source": createGoalWithSourceHandler,
   "repository.publish": publishRepository,
+  "deployment.set_target": setDeployTarget,
 });
