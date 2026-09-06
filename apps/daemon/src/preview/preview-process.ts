@@ -3,6 +3,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { connect } from "node:net";
 import { win32 as windowsPath } from "node:path";
 
+import { deliverEnvironment, type EnvironmentDeliveredVariables } from "../environment/environment-delivery.js";
 import { probeProcessAlive } from "../orchestrator/process-runner-lifecycle.js";
 import { detectPreviewPort, previewOrigin } from "./preview-command-resolution.js";
 import { previewRefusal } from "./preview-contracts.js";
@@ -54,6 +55,7 @@ type SpawnProcess = (
 ) => ChildProcess;
 
 export interface PreviewProcessOptions {
+  readonly delivered?: EnvironmentDeliveredVariables | undefined; // Onto the allowlisted RESULT.
   readonly environment?: NodeJS.ProcessEnv;
   readonly killGraceMs?: number;
   readonly killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
@@ -200,7 +202,9 @@ export async function startPreviewProcess(
       // detached gives POSIX a process GROUP the negative pid can address; on win32 the tree is
       // reached with taskkill /T instead.
       detached: platform !== "win32",
-      env: runtimeEnvironment(sourceEnvironment),
+      // UNDER the allowlist: the overlay lands on what the filter RETURNED, so an arbitrary
+      // operator name arrives without the closed roster being widened to admit it.
+      env: deliverEnvironment(runtimeEnvironment(sourceEnvironment), options.delivered).environment,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

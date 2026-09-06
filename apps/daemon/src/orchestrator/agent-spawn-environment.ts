@@ -7,6 +7,8 @@
  * under the per-file line rail while it grows a start-admission surface. Nothing
  * here spawns, writes, or observes: every function is pure over its arguments.
  */
+import { deliverEnvironment, type EnvironmentDeliveredVariables } from "../environment/environment-delivery.js";
+
 export { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS } from "./agent-role-contract.js";
 
 const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
@@ -47,7 +49,15 @@ export function trustedMcpOrigin(value: string): string {
 
 const DEFAULT_MCP_OUTPUT_TOKENS = "120000";
 
-export function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/**
+ * `delivered` is applied LAST, to the object this function has finished building - never folded
+ * into `source`, where the closed roster above would drop every arbitrary operator name and the
+ * only way to make one arrive would be to widen the roster. It is optional and defaults to
+ * nothing, so every existing caller keeps producing a byte-identical environment.
+ */
+export function agentEnvironment(
+  source: NodeJS.ProcessEnv, delivered?: EnvironmentDeliveredVariables,
+): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
     const normalized = key.toUpperCase();
@@ -77,5 +87,5 @@ export function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   }
   environment["NO_PROXY"] = bypass.join(",");
   environment["no_proxy"] = bypass.join(",");
-  return environment;
+  return deliverEnvironment(environment, delivered).environment;
 }
