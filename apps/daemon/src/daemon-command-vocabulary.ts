@@ -64,6 +64,10 @@ export const CAPABILITIES = {
 export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
   "repository.publish": CAPABILITIES.GOAL, "repository.bootstrap": CAPABILITIES.ADMIN,
+  // Deploying a goal's landed code, and naming where it deploys to. GOAL-scoped like
+  // `repository.publish` for the same reason: both act on the product a goal produced. The
+  // capability fences REACH only -- the operator fence below is what makes them human acts.
+  "deployment.set_target": CAPABILITIES.GOAL, "deployment.deploy": CAPABILITIES.GOAL,
   "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
   "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
@@ -347,6 +351,14 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // Publishing pushes the operator's repository to a remote they named; bootstrap CREATES one at
   // a path they supplied. Their own code, and MCP-unreachable like the approvals.
   "repository.publish", "repository.bootstrap",
+  // DEPLOYING A PRODUCT IS NEVER AN AGENT'S DECISION, and neither is naming the host it deploys
+  // to. Both are MCP-excluded by derivation from this set (`mcp-tool-allowlist.js`), which
+  // matters more here than elsewhere: the MCP port authenticates with the operator bootstrap
+  // credential, so an advertised operator kind is an agent arriving AS the operator.
+  // `deployment.deploy` is served from an ASYNC entry and therefore never reaches the registry's
+  // synchronous operator check -- it fences itself at handler entry, and this membership is what
+  // keeps it off the MCP roster rather than what fences the dispatch.
+  "deployment.set_target", "deployment.deploy",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
   // `approval.decide` is reserved for. The other three propose, release or request and activate

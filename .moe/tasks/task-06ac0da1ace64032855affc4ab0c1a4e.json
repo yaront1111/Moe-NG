@@ -148,7 +148,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:40:28.076Z",
-  "updatedAt": "2026-09-06T02:37:11.805Z",
+  "updatedAt": "2026-09-06T02:38:54.614Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:26:39.278Z",
     "plannedStepCount": 5,
@@ -231,7 +231,107 @@
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/mcp-tool-allowlist.test.ts",
     "apps/daemon/src/daemon-command-design.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts"
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
   ],
-  "completionSummary": "design.submit and design.read are published and REACHABLE BY A SEAT. Full evidence in step notes 1-5; the load-bearing numbers are below.\n\nSCOPE CORRECTION, MEASURED AT HEAD IN STEP 1 (the plan's step 4 assumed otherwise): this row adds ONE kind to the daemon COMMAND roster, not two. `git grep '\"product_contract.read\"|\"graph.get\"|\"events.read\"|\"documents.source_read\"' -- daemon-command-{payload-keys,registry,vocabulary,families}.ts returns ZERO hits — no served MCP query has a vocabulary/family/PAYLOAD_KEYS/registry entry. So `design.submit` is the command; `design.read` is a QUERY and gets exactly two edits. Every roster count moved by ONE. Moving them by two would have red 53->55.\n\nCONTRACT HALF: NOT MINE, AND UNTOUCHED. `git status --porcelain -- packages/` prints NOTHING. task-64d2757c (DONE) published both kinds — runtime-vocabulary.ts:92 hits both on one line. DoD-6's question is answered YES by that leaf: the browser does dispatch these kinds, which is why it published them.\n\nDELIVERED. PRODUCTION: DESIGN_FAMILY {design.submit: PLANNING} + union member + FAMILY_TABLES (vocabulary.ts); payload row [\"contractRef\",\"goalRef\",\"revision\"] (payload-keys.ts, where PAYLOAD_KEYS moved under task-a2409cba); `design` fact + predicate (families.ts); NEW daemon-command-design.ts (116 lines) + .js bridge with `runDesignSubmitEdge`, answered BEFORE `requestOf` so the slice's closed DESIGN_CODE_LAYERS map survives — no layer literal at any throw site, no new *_LAYER constant; a 22-line delegation branch in the registry (509->531, already over the bar at merge-base, which is why the edge is its own module). QUERY: `design.read` into MCP_SERVED_QUERY_KINDS + `\"design.read\": answerDesignRead` into QUERY_HANDLERS, SAME COMMIT, delegating to the already-tracked `mcp-design-read-query.ts` (5cde885c).\n\nTHE PLAN DID NOT NAME SEAT COMPOSITION AND WITHOUT IT THE TITLE WOULD BE FALSE. `agent-wrapper-main.ts:260` is the seats' ONLY MCP host; an advertised `design.read` with `config.desig"
+  "completionSummary": "design.submit and design.read are published and REACHABLE BY A SEAT. Full evidence in step notes 1-5; the load-bearing numbers are below.\n\nSCOPE CORRECTION, MEASURED AT HEAD IN STEP 1 (the plan's step 4 assumed otherwise): this row adds ONE kind to the daemon COMMAND roster, not two. `git grep '\"product_contract.read\"|\"graph.get\"|\"events.read\"|\"documents.source_read\"' -- daemon-command-{payload-keys,registry,vocabulary,families}.ts returns ZERO hits — no served MCP query has a vocabulary/family/PAYLOAD_KEYS/registry entry. So `design.submit` is the command; `design.read` is a QUERY and gets exactly two edits. Every roster count moved by ONE. Moving them by two would have red 53->55.\n\nCONTRACT HALF: NOT MINE, AND UNTOUCHED. `git status --porcelain -- packages/` prints NOTHING. task-64d2757c (DONE) published both kinds — runtime-vocabulary.ts:92 hits both on one line. DoD-6's question is answered YES by that leaf: the browser does dispatch these kinds, which is why it published them.\n\nDELIVERED. PRODUCTION: DESIGN_FAMILY {design.submit: PLANNING} + union member + FAMILY_TABLES (vocabulary.ts); payload row [\"contractRef\",\"goalRef\",\"revision\"] (payload-keys.ts, where PAYLOAD_KEYS moved under task-a2409cba); `design` fact + predicate (families.ts); NEW daemon-command-design.ts (116 lines) + .js bridge with `runDesignSubmitEdge`, answered BEFORE `requestOf` so the slice's closed DESIGN_CODE_LAYERS map survives — no layer literal at any throw site, no new *_LAYER constant; a 22-line delegation branch in the registry (509->531, already over the bar at merge-base, which is why the edge is its own module). QUERY: `design.read` into MCP_SERVED_QUERY_KINDS + `\"design.read\": answerDesignRead` into QUERY_HANDLERS, SAME COMMIT, delegating to the already-tracked `mcp-design-read-query.ts` (5cde885c).\n\nTHE PLAN DID NOT NAME SEAT COMPOSITION AND WITHOUT IT THE TITLE WOULD BE FALSE. `agent-wrapper-main.ts:260` is the seats' ONLY MCP host; an advertised `design.read` with `config.desig",
+  "commits": [
+    {
+      "sha": "f7ad50eeab290fe7c4a69832c0e7833a5bfa4940",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0520a42e@2026-09-06T01:21:53Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/daemon-command-design.js",
+        "apps/daemon/src/daemon-command-design.test.ts",
+        "apps/daemon/src/daemon-command-design.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.ts",
+        "apps/daemon/src/mcp-main.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+      ],
+      "recordedBy": "worker-0520a42e",
+      "recordedAt": "2026-09-06T02:38:54.614Z",
+      "treeId": "884aaf87dd68812b4157edc491d4335c5681cdc0",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-b22462cf9d9e41cd9472415da2c1fb7d"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/mcp-dispatch-port.ts",
+          "taskId": "task-7f9f20c7cddf4d50b49054951ab177fb"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+          "taskId": "task-3a0478f57eec44579269b2ed27c91d92"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/mcp-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-design.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-design.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/daemon-command-design.js",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-0520a42e@2026-09-06T01:21:53Z",
+    "at": "2026-09-06T02:38:54.614Z"
+  }
 }

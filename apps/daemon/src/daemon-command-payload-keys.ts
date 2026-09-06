@@ -159,6 +159,11 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
     "project.register": ["owner"], "provider.probe": ["observation"],
     "repository.publish": ["approval", "goalId", "remoteUrl"],
+    // The docker build CONTEXT is deliberately absent from the deploy: it is host-scoped daemon
+    // configuration, and a caller-supplied path would let any operator-authenticated request
+    // build an arbitrary directory on the daemon's host. Both lists are the slice's own.
+    [DEPLOYMENT_SET_TARGET_COMMAND_KIND]: DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS,
+    [DEPLOYMENT_DEPLOY_COMMAND_KIND]: DEPLOYMENT_DEPLOY_PAYLOAD_KEYS,
     // `github` nests owner/name/visibility exactly as `observation` does above; `projectId` is
     // ABSENT BY CONSTRUCTION -- authenticated, so naming it is INPUT_INVALID at PAYLOAD_SHAPE.
     "repository.bootstrap": ["dir", "github", "productName", "profileVersion"],
