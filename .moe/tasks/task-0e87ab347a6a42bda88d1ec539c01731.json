@@ -161,7 +161,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T07:33:41.784Z",
-  "updatedAt": "2026-09-06T09:56:38.461Z",
+  "updatedAt": "2026-09-06T09:56:47.985Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T07:39:15.908Z",
     "plannedStepCount": 7,
@@ -207,7 +207,72 @@
     "apps/control-room/src/data/data-adapter.test.ts",
     "apps/control-room/src/v2/goals/approve-plan.test.tsx",
     "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
-    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx"
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+    ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+    ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
   ],
-  "completionSummary": "`preview.start` is published on the shared runtime contract and every digest mirror is rotated. 8 files, +27/-13. Full evidence in comment-1c7cd711242c4e87870e19dca337fc05.\n\nDoD 1 - `\"preview.start\"` at its SORTED slot in runtime-vocabulary.ts:104 (`policy.install, policy.validate, preview.decide, preview.start`). Verified BY PARSING THE TUPLE ITSELF, not the generated output: 119 entries, `sort|uniq -d` empty (zero duplicates), `diff <(cat) <(LC_ALL=C sort)` empty (zero order defects). Absence confirmed before editing: `grep -n \"preview.start\" runtime-vocabulary.ts` and `git grep \"preview\\.start\" -- apps packages adapters` both exit 1.\n\nDoD 2 - runtime-contract.test.ts carries the hand-copied kind and the count is CORRECT AT HEAD. Count taken from the printed expected-vs-received, never frozen: ran the leg with the old literal, got `expected 119 to be 118` (Expected 118 / Received 119 at :109:27), set it to 119. A THIRD arm the plan did not name also had to move and is disclosed: the sorted-slot arm pins the product_contract bracket by OFFSET, so `position-2/-3` became `-3/-4` and a self-standing neighbour pin for preview.start was added (the goal.create_with_source precedent). Query/telemetry rosters confirmed unmoved by diff.\n\nDoD 3 - client REGENERATED via `pnpm --filter @moe/control-room-client generate`, never hand-edited. Digest CHANGED 9057aa94 -> 144d81c9 (an unchanged digest would have been the stop). Builder present at two generated sites: `:246 readonly [\"preview.start\"]: CommandBuilder<\"preview.start\">` and `:369 [\"preview.start\"]: commandBuilderFor(\"preview.start\")`. `git diff --stat` = 3 insertions, 1 deletion, no unrelated churn. Digest PREDICTED before regenerating by running the existing derivation arm (printed Received: 144d81c9...) - prediction matched the generator exactly, no probe file created.\n\nDoD 4 - census before AND after with `git grep -n --untracked`, all file types. Before 6 files; after: OLD hex 0 hits, NEW hex 6 files, same set. No s"
+  "completionSummary": "`preview.start` is published on the shared runtime contract and every digest mirror is rotated. 8 files, +27/-13. Full evidence in comment-1c7cd711242c4e87870e19dca337fc05.\n\nDoD 1 - `\"preview.start\"` at its SORTED slot in runtime-vocabulary.ts:104 (`policy.install, policy.validate, preview.decide, preview.start`). Verified BY PARSING THE TUPLE ITSELF, not the generated output: 119 entries, `sort|uniq -d` empty (zero duplicates), `diff <(cat) <(LC_ALL=C sort)` empty (zero order defects). Absence confirmed before editing: `grep -n \"preview.start\" runtime-vocabulary.ts` and `git grep \"preview\\.start\" -- apps packages adapters` both exit 1.\n\nDoD 2 - runtime-contract.test.ts carries the hand-copied kind and the count is CORRECT AT HEAD. Count taken from the printed expected-vs-received, never frozen: ran the leg with the old literal, got `expected 119 to be 118` (Expected 118 / Received 119 at :109:27), set it to 119. A THIRD arm the plan did not name also had to move and is disclosed: the sorted-slot arm pins the product_contract bracket by OFFSET, so `position-2/-3` became `-3/-4` and a self-standing neighbour pin for preview.start was added (the goal.create_with_source precedent). Query/telemetry rosters confirmed unmoved by diff.\n\nDoD 3 - client REGENERATED via `pnpm --filter @moe/control-room-client generate`, never hand-edited. Digest CHANGED 9057aa94 -> 144d81c9 (an unchanged digest would have been the stop). Builder present at two generated sites: `:246 readonly [\"preview.start\"]: CommandBuilder<\"preview.start\">` and `:369 [\"preview.start\"]: commandBuilderFor(\"preview.start\")`. `git diff --stat` = 3 insertions, 1 deletion, no unrelated churn. Digest PREDICTED before regenerating by running the existing derivation arm (printed Received: 144d81c9...) - prediction matched the generator exactly, no probe file created.\n\nDoD 4 - census before AND after with `git grep -n --untracked`, all file types. Before 6 files; after: OLD hex 0 hits, NEW hex 6 files, same set. No s",
+  "commits": [
+    {
+      "sha": "663b71097226db9d3ef9a4d82676146afc5ff841",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T09:56:39Z",
+      "paths": [
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+        ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+        "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+        "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T09:56:47.985Z",
+      "treeId": "82d862e8d0beeeab019755140c0bd66f5c2d9947",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/data/data-adapter.test.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-contract.test.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/contracts/src/runtime/runtime-vocabulary.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/control-room-client/src/generated/generated-client.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        },
+        {
+          "path": "packages/control-room-client/src/generated-coverage.test.ts",
+          "taskId": "task-37a50989105c40de9fe069d739df9595"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T09:56:39Z",
+    "at": "2026-09-06T09:56:47.985Z"
+  }
 }
