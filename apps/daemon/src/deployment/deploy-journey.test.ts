@@ -7,6 +7,10 @@ import {
   closeStores, driveThrough, openStore, PROJECT_ID,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createAsyncCommandEntries } from "../daemon-command-async-entries.js";
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
+import { handleCommandRequest } from "../http/http-adapter.js";
+import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
+import type { AuthenticationResult, Authenticator } from "../http/http-contract.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import type { AuthenticatedPrincipal } from "../http/http-contract.js";
 import { CONTROLLED_PROFILE_VERSION }
@@ -326,4 +330,95 @@ describe("a production deploy states its release standing (DoD 7)", () => {
     // renamed note that no longer says anything to an operator.
     expect(NO_RELEASE_DECISION_NOTE).toBe("no release decision");
   });
+});
+
+describe("the wiring itself, attacked (adversarial self-review)", () => {
+  /** The COMPOSED production registry, built with no deploy seams at all: the arm below never
+   *  reaches a handler, so no docker port is ever consulted and nothing spawns. */
+  function productionPorts(store: SqliteEventStore): ReturnType<typeof createDaemonCommandPorts> {
+    return createDaemonCommandPorts({
+      clock: (): string => DECIDED_AT, operatorPrincipalId: OPERATOR,
+      projectId: PROJECT_ID, store,
+    });
+  }
+
+  function operatorAuthenticator(): Authenticator {
+    return {
+      authenticate(credential: string | null): AuthenticationResult {
+        return credential === "journey-credential"
+          ? {
+            principal: { capabilities: ["goal.write"], principalId: OPERATOR, projectId: PROJECT_ID },
+            verdict: "AUTHENTICATED",
+          }
+          : { verdict: "UNAUTHENTICATED" };
+      },
+    };
+  }
+
+  it("has NO synchronous path at HEAD: the composed registry refuses the sync entry", () => {
+    const store = openStore();
+    const ports = productionPorts(store);
+
+    const entry = ports.registry.get(DEPLOYMENT_DEPLOY_COMMAND_KIND);
+    const answered = handleCommandRequest({
+      authenticator: operatorAuthenticator(), decisions: ports.decisions, registry: ports.registry,
+    }, {
+      body: new TextEncoder().encode(JSON.stringify({
+        commandId: "cmd-sync-attempt", commandKind: DEPLOYMENT_DEPLOY_COMMAND_KIND,
+        correlationId: "corr-sync", expectedVersion: store.getAggregateVersion(PROJECT_ID),
+        payload: { environment: STAGING, sha: SHA }, requestDigest: "e".repeat(64),
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: "journey-credential",
+        targetAggregateId: PROJECT_ID,
+      })),
+      credential: "journey-credential", protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+
+    // The kind IS registered — this is not "absent from the registry", which would refuse for
+    // the wrong reason — and the SYNCHRONOUS transport refuses it by code because it carries an
+    // async handler. Computed from the composed production registry at HEAD, so a future sync
+    // adapter reds here rather than answering before the deploy happened.
+    expect(entry?.asyncHandler).toBeDefined();
+    expect(answered).toMatchObject({
+      outcome: "PORT_REFUSED",
+      refusal: { code: "COMMAND_ASYNC_ENTRY_REQUIRED", layer: "DAEMON_COMMAND_SEAM" },
+    });
+  });
+
+  it("REFUSES a second concurrent deploy rather than racing it into a half-replaced container",
+    async () => {
+      const context = journey();
+
+      const [first, second] = await Promise.allSettled([
+        context.deploy({ commandId: "cmd-deploy-journey" }),
+        context.deploy({ commandId: "cmd-deploy-rival" }),
+      ]);
+
+      // ONE of the two answers; the other refuses at the proxy lease. Which one wins is a race,
+      // so the arm asserts the INVARIANT rather than an order: never two winners, never two
+      // losers, and the environment still has exactly one container serving at the end.
+      const outcomes = [first.status, second.status].sort();
+      expect(outcomes).toEqual(["fulfilled", "rejected"]);
+      const loser = first.status === "rejected" ? first.reason : (second as PromiseRejectedResult).reason;
+      expect(loser).toBeInstanceOf(DomainRefusal);
+      // The LOSER names a code, never a bare failure: a concurrent deploy that refused without
+      // one is indistinguishable from a crash to everyone downstream.
+      expect((loser as DomainRefusal).code).toBe(DEPLOY_BUILD_FAILED);
+      expect(context.docker.serving()).toHaveLength(1);
+      expect(context.docker.locked()).toBe(false);
+    });
+
+  it("carries NO credential material into a refusal detail beyond the tool's own stderr",
+    async () => {
+      const context = journey({
+        double: { buildStderr: "failed to solve: pull access denied for registry.example.test" },
+      });
+
+      const refusal = await refusalOf(context.deploy());
+
+      // The detail is docker's line and nothing else: no target url, no ssh target, no
+      // credential the daemon holds is appended to it on the way out.
+      expect(refusal.detail).toBe("failed to solve: pull access denied for registry.example.test");
+      expect(refusal.detail).not.toContain(LOCAL.url ?? "");
+      expect(refusal.detail).not.toMatch(/:\/\/[^/\s]*:[^/\s]*@/u);
+    });
 });
