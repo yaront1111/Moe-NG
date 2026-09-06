@@ -6,6 +6,7 @@ import type { RepositoryWorkflowReadPort } from "./http/repository-workflow-read
 import { createWrapperNodeMissions } from "./orchestrator/wrapper-node-missions.js";
 import { createPublicationCandidateReader } from "./repository/publication-candidate.js";
 import { createRepositoryRecoveryService } from "./repository/repository-recovery-service.js";
+import { readBootstrapReceipt } from "./repository/repository-bootstrap-read.js";
 /** Command/read processes only expose queueing. The wrapper owns advance and child shutdown. */
 export function createRepositoryWorkflowWiring(options: { readonly store: SqliteEventStore; readonly projectId: string;
   readonly storePath: string; readonly workspace: string | null; readonly nodeSpecsDir?: string | undefined; readonly clock: () => string }) {
@@ -19,7 +20,8 @@ export function createRepositoryWorkflowWiring(options: { readonly store: Sqlite
       ...missions.listNodes().flatMap(({ nodeRef }) => { const brief = missions.nodeMission(nodeRef); return brief === null ? [] : [brief.workspace]; }),
     ])] });
   const repositoryWorkflows = (): RepositoryWorkflowReadPort => Object.freeze({ boundProjectId: options.projectId,
-    readCriteria: criterionEvidence.read, readRecovery: repositoryRecovery.readRecovery });
+    readCriteria: criterionEvidence.read, readRecovery: repositoryRecovery.readRecovery,
+    readBootstrap: () => readBootstrapReceipt(options.store, options.projectId) });
   return Object.freeze({ criterionEvidence, repositoryRecovery, repositoryWorkflows,
     readPublicationCandidate: createPublicationCandidateReader(options.workspace) });
 }

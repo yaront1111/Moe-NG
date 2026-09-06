@@ -130,6 +130,8 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/environments/
  * /v2/product-contract/pending/read (gate1-approval.ts), not current.
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
+ * /repository/bootstrap/read: task-53267f86 lands the daemon disclosure only;
+ * task-80322112a48d44c69c6c55f846f8d43f supplies its browser consumer and retires this entry.
  *
  * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
  * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
@@ -156,6 +158,7 @@ const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
   "/environments/read",
   "/events/resume",
+  "/repository/bootstrap/read",
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
 ]);
@@ -322,7 +325,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(30);
+    expect(roster.size).toBe(31);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
@@ -373,6 +376,15 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(branchIdentifiers(source).has("DESIGN_READ_PATH")).toBe(true);
     expect(guardIdentifiers(source).has("DESIGN_READ_PATH")).toBe(true);
     expect(JSON_ROUTES).toContain("/design/read");
+  });
+
+  it("registers the bootstrap receipt read in all three seams and the dev proxy", () => {
+    const source = dispatchSource();
+    expect(rosterIdentifiers(source).has("REPOSITORY_BOOTSTRAP_READ_PATH")).toBe(true);
+    expect(branchIdentifiers(source).has("REPOSITORY_BOOTSTRAP_READ_PATH")).toBe(true);
+    expect(guardIdentifiers(source).has("REPOSITORY_BOOTSTRAP_READ_PATH")).toBe(true);
+    expect(JSON_ROUTES).toContain("/repository/bootstrap/read");
+    expect(proxiedPaths().has("/repository/bootstrap/read")).toBe(true);
   });
 
   it("proxies every served JSON route in development, bar a named census", () => {
