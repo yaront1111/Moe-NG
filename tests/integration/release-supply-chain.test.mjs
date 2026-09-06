@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
@@ -17,7 +17,7 @@ const temporary = [];
 const COMPONENT_IDS = Object.freeze(RELEASE_COMPONENTS.map((entry) => entry.componentId));
 
 const temp = () => {
-  const path = mkdtempSync(join(tmpdir(), "moe-release-test-"));
+  const path = realpathSync(mkdtempSync(join(tmpdir(), "moe-release-test-")));
   temporary.push(path);
   return path;
 };
