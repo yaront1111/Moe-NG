@@ -190,7 +190,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-deb4c7d8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -238,7 +238,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:14.023Z",
-  "updatedAt": "2026-09-06T17:22:55.603Z",
+  "updatedAt": "2026-09-06T17:23:43.601Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:23:57.854Z",
     "plannedStepCount": 11,

@@ -90,12 +90,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan handoff 17:23Z (BLOCKED->PLANNING nulls the block fields; premise quoted). worker-7bdbffac 16:35Z: \"Claim-time scope remeasurement found mandatory asserting consumers omitted from the effective approved plan. Step 5 wires the real provider store, but daemon-command-registry.test.ts:255-257/:1119-1129 pin empty-payload AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and :530-536 the valid operator refusal plus NO writes; only command.test.ts was listed. The valid composed arm must transition to durability, not unconditional refusal; preserve the unit absent-config and non-operator authorization arms. Step 3 requires AGENT_PROVIDER_LAYERS + AGENT_PROVIDER_CODE_LAYERS; both match tests/security/boundary-roster.security.ts:603 and fail the unrostered scan :736-738 / cardinality :746-747, with BEFORE/AFTER/RACE coverage demanded by completeness.security.ts:300-307. codebaseInsights item 4 (no global roster obligation) is false.\" RE-PLAN: (a) mint NO new *_LAYER / *_CODE_LAYERS constant — reuse rostered layer literals (DAEMON_COMPOSITION, DURABLE_STORE); (b) add daemon-command-registry.test.ts to the owned roster with the composed arm transitioning to durability; (c) stay at or under 10 distinct files, else split. Prerequisite c422b106 is DONE at 2d94a928. Step 1 (measure) was the only completed step; no source edits were made.",
   "createdBy": "WORKER",
   "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
   "priority": "HIGH",
@@ -110,7 +110,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.227Z",
-  "updatedAt": "2026-09-06T16:35:54.525Z",
+  "updatedAt": "2026-09-06T17:23:11.002Z",
   "dependsOn": [
     "task-c422b106af2945b1a1ad4ed49556bf66"
   ],
@@ -373,8 +373,10 @@
     "at": "2026-09-05T23:16:20.696Z"
   },
   "workStartedAt": "2026-09-06T16:33:01.400Z",
-  "blockedReason": "Claim-time scope remeasurement found mandatory asserting consumers omitted from the effective approved plan (fresh get_context: no active amendments). NO SOURCE EDITS. Step5 wires real provider store, but apps/daemon/src/daemon-command-registry.test.ts255–257/1119–1129 pins empty-payload AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and530–536 valid operator refusal plus NO writes; only command.test.ts was listed. The valid composed arm must transition to durability, not unconditional refusal; preserve unit absent-config and nonoperator authorization. Step3 also requires AGENT_PROVIDER_LAYERS + AGENT_PROVIDER_CODE_LAYERS; BOTH match tests/security/boundary-roster.security.ts603, failing unrostered scan736–738/cardinality746–747, with added boundary coverage enforced by completeness.security.ts300–307. Plan codebaseInsights4 asserts no global roster obligation incorrectly. Planned9 paths +omitted registrytest=10 already, before security consumers. Cannot implement honestly green within approved scope or rename/reformat declarations to evade scanner. Full command/arm source in row comment. Prerequisite B is DONE/merged2d94a928, NOT a dependency block. Foreign WIP preserved, not block premise.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:35:54.525Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Claim-time scope remeasurement found mandatory asserting consumers omitted from the effective approved plan (fresh get_context: no active amendments). NO SOURCE EDITS. Step5 wires real provider store, but apps/daemon/src/daemon-command-registry.test.ts255–257/1119–1129 pins empty-payload AGENT_PROVIDER_UNCONFIGURED@DAEMON_COMPOSITION and530–536 valid operator refusal plus NO writes; only command.test.ts was listed. The valid composed arm must transition to durability, not unconditional refusal; preserve unit absent-config and nonoperator authorization. Step3 also requires AGENT_PROVIDER_LAYERS + AGENT_PROVIDER_CODE_LAYERS; BOTH match tests/security/boundary-roster.security.ts603, failing unrostered scan736–738/cardinality746–747, with added boundary coverage enforced by completeness.security.ts300–307. Plan codebaseInsights4 asserts no global roster obligation incorrectly. Planned9 paths +omitted registrytest=10 already, before security consumers. Cannot implement honestly green within approved scope or rename/reformat declarations to evade scanner. Full command/arm source in row comment. Prerequisite B is DONE/merged2d94a928, NOT a dependency block. Foreign WIP preserved, not block premise.",
+  "blockedOnTaskIds": null
 }

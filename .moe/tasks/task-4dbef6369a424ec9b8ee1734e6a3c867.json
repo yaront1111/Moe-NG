@@ -63,12 +63,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-b63fabf3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan handoff 16:35Z (BLOCKED->PLANNING nulls the block fields, so the premise is quoted here). worker-deb4c7d8 16:17Z: \"PREMISE FALSIFIED - re-plan needed, not a fix. Real openForProject store: readEvents('design:goal-never') returns [] - EMPTY, does NOT throw; design-store.ts:204 fires DESIGN_REVISION_ABSENT @ LEDGER, exactly what affordance-read.ts:358 already maps to ABSENT. DoD 2/3/4/5 already exist green (affordance-read-planning.test.ts:1181-1270, landed 36f12fc0 = task-217f40b7). DoD 1 would record a reproduction that does not reproduce; DoD 6 a drill against a fix that should not exist.\" Evidence: comment-f2b43fa6 + the step-1 note; checkpoint afb302cf carries zero production bytes. architect-b63fabf3 already amended step 2 into a bisect (amend-1, 16:17:02Z), but DoD 2 and DoD 6 still aim at the struck mapping, and the description's DESIGN_STORE_UNAVAILABLE paragraph is struck. RE-PLAN AROUND THE SYMPTOM, which is real and unexplained: task-f3409f9a's real-daemon spec (tests/e2e/control-room/design-operator.spec.ts, measured twice) gets planning.submit_decomposition and NO design.submit for a goal whose Gate 1 was approved in the browser and that never had a design - so designState answered non-ABSENT: a design record (or the skip marker) was READABLE for that goalId at read time. Leads: affordance-compiler-lane.ts:95-108 resolves approvedGateRef by the source doc's contentSha256 (content-keyed, not goal-keyed); check whether the goal id / design aggregate id is content-derived, whether a prior spec run's design or skip marker is being read, and what the second run of the same spec reads. Steps: bisect first with no production edits, then the fix, one production-composition arm on a real store, and a mutation drill against the REAL fix; re-aim DoD 6 (and DoD 2's wording) to that fix - post the DoD text and the governor applies it on the board. task-f3409f9a now depends on this row.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -83,7 +83,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T16:02:46.251Z",
-  "updatedAt": "2026-09-06T16:17:40.473Z",
+  "updatedAt": "2026-09-06T17:02:59.052Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T16:03:35.623Z",
     "plannedStepCount": 4,
@@ -112,10 +112,10 @@
     "worker-deb4c7d8"
   ],
   "workStartedAt": "2026-09-06T16:06:19.287Z",
-  "blockedReason": "PREMISE FALSIFIED — re-plan needed, not a fix. Step 1 (measure, no edits) done; ZERO production bytes. No step amendments (all four activeAmendmentId=null). Evidence + probe source: comment-f2b43fa6 and the step-1 note.\n\n1. MAPPING ALREADY CORRECT. Real openForProject store: readEvents(\"design:goal-never\") returns [] — EMPTY, does NOT throw. storeFailure unreachable, so DESIGN_STORE_UNAVAILABLE is impossible for a never-designed goal. design-store.ts:204 fires: DESIGN_REVISION_ABSENT @ LEDGER — exactly what affordance-read.ts:358 already maps to ABSENT. Step 2 would change nothing or break a correct branch.\n\n2. DoD 2/3/4/5 ALREADY EXIST, GREEN. affordance-read-planning.test.ts:1181-1270 \"the real design surface journey\": five arms, real store, real createAffordancePort, NO designState stub. :1184 design.submit@design:goal-1 IS offered after Gate 1; :1227 DESIGN_STORE_UNAVAILABLE@LEDGER; :1253 DESIGN_RECORD_MALFORMED@LEDGER; :1208 skip->decomposition. 33 passed. Landed by 36f12fc0 = task-217f40b7, the row blamed here.\n\n3. NO BLAST RADIUS: no designFailures entry for a never-designed goal, so :386 never collapses the surface.\n\nWHY BLOCK NOT COMPLETE: DoD 1 demands recording a reproduction that does not reproduce; DoD 6 a drill against a fix that should not exist. Both would be fabricated. Adding DoD 2/3/5 arms duplicates landed work.\n\nRE-PLAN LEAD (outside this row's files): affordance-compiler-lane.ts:95-108 resolves approvedGateRef by sweeping Gate-1 aggregates matching the goal's SOURCE-DOC contentSha256 — keyed on content, never goal identity, so two goals sharing source text share one approval. worker-1d53e70c's symptom stands: offers.ts:181 is the ONLY decomposition site, so their goal reached approvedGateRef!==null with designState non-ABSENT — a design record was READABLE at read time.\n\nGATES: pnpm typecheck fresh, exit 0. Probe created+deleted; only peer WIP left in apps/daemon/src/http/.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:17:22.668Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "afb302cfd1396aa0452abe550fe0ef0aa5b786ab",
@@ -146,5 +146,7 @@
     "kind": "checkpoint",
     "sessionId": "worker-deb4c7d8@2026-09-06T16:05:39Z",
     "at": "2026-09-06T16:17:40.473Z"
-  }
+  },
+  "priorBlockedReason": "PREMISE FALSIFIED — re-plan needed, not a fix. Step 1 (measure, no edits) done; ZERO production bytes. No step amendments (all four activeAmendmentId=null). Evidence + probe source: comment-f2b43fa6 and the step-1 note.\n\n1. MAPPING ALREADY CORRECT. Real openForProject store: readEvents(\"design:goal-never\") returns [] — EMPTY, does NOT throw. storeFailure unreachable, so DESIGN_STORE_UNAVAILABLE is impossible for a never-designed goal. design-store.ts:204 fires: DESIGN_REVISION_ABSENT @ LEDGER — exactly what affordance-read.ts:358 already maps to ABSENT. Step 2 would change nothing or break a correct branch.\n\n2. DoD 2/3/4/5 ALREADY EXIST, GREEN. affordance-read-planning.test.ts:1181-1270 \"the real design surface journey\": five arms, real store, real createAffordancePort, NO designState stub. :1184 design.submit@design:goal-1 IS offered after Gate 1; :1227 DESIGN_STORE_UNAVAILABLE@LEDGER; :1253 DESIGN_RECORD_MALFORMED@LEDGER; :1208 skip->decomposition. 33 passed. Landed by 36f12fc0 = task-217f40b7, the row blamed here.\n\n3. NO BLAST RADIUS: no designFailures entry for a never-designed goal, so :386 never collapses the surface.\n\nWHY BLOCK NOT COMPLETE: DoD 1 demands recording a reproduction that does not reproduce; DoD 6 a drill against a fix that should not exist. Both would be fabricated. Adding DoD 2/3/5 arms duplicates landed work.\n\nRE-PLAN LEAD (outside this row's files): affordance-compiler-lane.ts:95-108 resolves approvedGateRef by sweeping Gate-1 aggregates matching the goal's SOURCE-DOC contentSha256 — keyed on content, never goal identity, so two goals sharing source text share one approval. worker-1d53e70c's symptom stands: offers.ts:181 is the ONLY decomposition site, so their goal reached approvedGateRef!==null with designState non-ABSENT — a design record was READABLE at read time.\n\nGATES: pnpm typecheck fresh, exit 0. Probe created+deleted; only peer WIP left in apps/daemon/src/http/.",
+  "blockedOnTaskIds": null
 }

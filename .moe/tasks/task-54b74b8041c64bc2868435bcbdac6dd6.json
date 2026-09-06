@@ -328,7 +328,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T14:39:21.919Z",
+  "updatedAt": "2026-09-06T14:40:29.084Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 8,
@@ -540,6 +540,30 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "6eb68c3e589c99c49bb065459ac885824999c5da",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T14:28:56Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+        ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T14:40:29.084Z",
+      "treeId": "c1f4593366ad8e87cbe5efd43933269450f49b9d",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -576,7 +600,8 @@
     ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
     ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
     ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
-    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json"
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+    ".moe/tasks/task-ff41c5c9efa34494b7b91e6f0ddcb7c2.json"
   ],
   "unattributedPaths": [
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
@@ -586,7 +611,7 @@
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-4f771bb8@2026-09-06T14:28:56Z",
-    "at": "2026-09-06T14:29:30.258Z"
+    "at": "2026-09-06T14:40:29.084Z"
   },
   "workStartedAt": "2026-09-06T00:36:19.092Z",
   "blockedReason": null,

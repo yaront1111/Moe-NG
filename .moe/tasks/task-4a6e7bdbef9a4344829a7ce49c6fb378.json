@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:45:16.222Z",
-  "updatedAt": "2026-09-06T17:21:42.107Z",
+  "updatedAt": "2026-09-06T17:23:12.542Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:48:11.208Z",
     "plannedStepCount": 7,
@@ -221,7 +221,94 @@
     "apps/control-room/src/live/live-document-proxy.test.ts",
     "apps/daemon/src/http/preview-read.test.ts",
     "apps/daemon/src/http/preview-capture-route.test.ts",
-    "tests/security/layer-visibility-cases.ts"
+    "tests/security/layer-visibility-cases.ts",
+    ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
+    ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+    ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
   ],
-  "completionSummary": "The daemon now serves the preview receipt and its captured screenshot bytes over two authenticated read routes. 14 owned paths; production files 236 and 207 lines.\n\n`/preview/read` (POST, exact-key `{goalId}`) PROJECTS `PreviewReceiptV1` through `readPreviewReceipt` and derives nothing: code, decidedAt, goalId, outcome, receiptId, screenshots[], sha, url. `receiptId` is included because it IS the `previewRef` a later `preview.decide` names. WITHHELD: pid (host process id), projectId (the principal's own), version. A goal with no receipt answers `{kind:\"ABSENT\"}`; a committed receipt that will not decode answers REFUSED with `PREVIEW_READ_RECEIPT_UNREADABLE` — absent and broken are different facts to a card. Screenshot paths are project-relative by the decoder's own construction, so no host path can reach the browser.\n`/preview/capture/<goalId>/<sha>/<file>.png` (GET/HEAD) serves the bytes, confined by DIRECTORY **and** TYPE. It is NOT a second file server: `locateControlRoomAsset` is called unchanged, `isContainedBy` appears zero times in my code, and there is still one statement of confinement in this daemon. `serveAsset` grew one OPTIONAL `locate` parameter so both roots share one response writer (host check, HEAD, ETag/304, byte read, real content-length). The narrowing publishes `image/png` ALONE, by an allowlist this module owns, checked BEFORE any syscall — so `.js`/`.html`/`.css`/`.svg` under the previews root refuse TYPE_UNKNOWN, and a type refusal is never an existence oracle.\n\nREGISTERED IN EVERY SEAM, no exemption anywhere: JSON_ROUTES + explicit branch + non-POST guard; roster count 31->32 (genuine growth); dev-proxy-paths.ts + its live-document-proxy.test.ts pin for BOTH routes; the capture route classified proxied-but-not-rostered beside `/bootstrap`, intercepted AHEAD of the roster check so it works on a daemon hosting no bundle. UNCONSUMED-ROUTE CENSUS entry for `/preview/read` names task-33ceae56edc348e9864bc592430fa1d0 as the row that retires it, t"
+  "completionSummary": "The daemon now serves the preview receipt and its captured screenshot bytes over two authenticated read routes. 14 owned paths; production files 236 and 207 lines.\n\n`/preview/read` (POST, exact-key `{goalId}`) PROJECTS `PreviewReceiptV1` through `readPreviewReceipt` and derives nothing: code, decidedAt, goalId, outcome, receiptId, screenshots[], sha, url. `receiptId` is included because it IS the `previewRef` a later `preview.decide` names. WITHHELD: pid (host process id), projectId (the principal's own), version. A goal with no receipt answers `{kind:\"ABSENT\"}`; a committed receipt that will not decode answers REFUSED with `PREVIEW_READ_RECEIPT_UNREADABLE` — absent and broken are different facts to a card. Screenshot paths are project-relative by the decoder's own construction, so no host path can reach the browser.\n`/preview/capture/<goalId>/<sha>/<file>.png` (GET/HEAD) serves the bytes, confined by DIRECTORY **and** TYPE. It is NOT a second file server: `locateControlRoomAsset` is called unchanged, `isContainedBy` appears zero times in my code, and there is still one statement of confinement in this daemon. `serveAsset` grew one OPTIONAL `locate` parameter so both roots share one response writer (host check, HEAD, ETag/304, byte read, real content-length). The narrowing publishes `image/png` ALONE, by an allowlist this module owns, checked BEFORE any syscall — so `.js`/`.html`/`.css`/`.svg` under the previews root refuse TYPE_UNKNOWN, and a type refusal is never an existence oracle.\n\nREGISTERED IN EVERY SEAM, no exemption anywhere: JSON_ROUTES + explicit branch + non-POST guard; roster count 31->32 (genuine growth); dev-proxy-paths.ts + its live-document-proxy.test.ts pin for BOTH routes; the capture route classified proxied-but-not-rostered beside `/bootstrap`, intercepted AHEAD of the roster check so it works on a daemon hosting no bundle. UNCONSUMED-ROUTE CENSUS entry for `/preview/read` names task-33ceae56edc348e9864bc592430fa1d0 as the row that retires it, t",
+  "commits": [
+    {
+      "sha": "937fc69a243b6ed38363f6a8df1c1caeccb85df8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T16:18:14Z",
+      "paths": [
+        ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
+        ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+        ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+        ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-command-stream-routes.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/preview-capture-route.js",
+        "apps/daemon/src/http/preview-capture-route.test.ts",
+        "apps/daemon/src/http/preview-capture-route.ts",
+        "apps/daemon/src/http/preview-read.js",
+        "apps/daemon/src/http/preview-read.test.ts",
+        "apps/daemon/src/http/preview-read.ts",
+        "tests/security/layer-visibility-cases.ts"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T17:23:12.542Z",
+      "treeId": "3fd738128bfd555776bab3a333d57471a654d457",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/dev-proxy-paths.ts",
+          "taskId": "task-85895a88a2484d8589046b2030efd445"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener.ts",
+          "taskId": "task-509c6c1609174adb9228940bc002f5c3"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-guards.ts",
+          "taskId": "task-509c6c1609174adb9228940bc002f5c3"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.ts",
+          "taskId": "task-509c6c1609174adb9228940bc002f5c3"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/preview-read.js",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/daemon/src/http/preview-capture-route.ts",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "tests/security/layer-visibility-cases.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.ts",
+    "apps/daemon/src/http/preview-read.ts",
+    "apps/daemon/src/http/preview-capture-route.js",
+    "apps/daemon/src/http/http-listener-command-stream-routes.ts",
+    "apps/daemon/src/http/preview-capture-route.test.ts",
+    "apps/daemon/src/http/preview-read.test.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/http/http-listener.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-deb4c7d8@2026-09-06T16:18:14Z",
+    "at": "2026-09-06T17:23:12.542Z"
+  }
 }
