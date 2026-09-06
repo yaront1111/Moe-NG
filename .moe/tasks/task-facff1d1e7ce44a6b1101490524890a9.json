@@ -170,8 +170,8 @@
       "completedAt": "2026-09-06T01:54:15.241Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,16 +191,30 @@
       "author": "worker-d6e44333",
       "content": "EVIDENCE DETAIL that exceeds the completionSummary cap. Counts with denominators, exact failing paths, and the follow-ups this row deliberately did NOT turn into new rows.\n\n== GATE LEGS, ALL RUN STANDALONE, COUNT LINES QUOTED ==\n- FRESH VERIFICATION (the one submitted with complete_task), 14 owned test files: `Test Files 14 passed (14)` / `Tests 582 passed (582)`, exit 0.\n- `pnpm typecheck`: exit 0, every workspace echoed `$ tsc --project tsconfig.json` then `Done`, including `apps/daemon typecheck: Done`.\n- `pnpm --filter @moe/control-room test`: `Test Files 164 passed (164)` / `Tests 2034 passed (2034)`, exit 0. Nonzero count line proves the leg executed.\n- `pnpm test` (root lane): `Test Files 5 failed | 425 passed | 2 skipped (432)` / `Tests 23 failed | 10329 passed | 46 skipped`. THE ROOT INCLUDE HAS NO `apps/**` — this leg is not evidence for anything under apps/daemon.\n- `pnpm --filter @moe/daemon test`: `Test Files 6 failed | 500 passed (506)` / `Tests 10 failed | 9235 passed | 2 skipped (9247)`, then one more fix (the j1 generated-sweep guard) removed a further red.\n\n== RED TRAJECTORY, MEASURED ACROSS FOUR FULL DAEMON RUNS ==\n18 -> 11 -> 10 -> foreign-only. Every removal was a roster consumer I had broken; the residue never moved.\n\n== FOREIGN REDS, VERBATIM, WITH ATTRIBUTION ==\ndaemon lane:\n- `src/runtime-entrypoint.test.ts` > \"has an exact .js bridge for every runtime module and none for test-tier ones\": `unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]`. Landed CLEAN AT HEAD by task-3706b7e7bb8741d88105f42c25166ea0, commit e219aa43. `git status` on that directory is EMPTY. My own two new bridges pass the same arm.\n- `src/criterion-evidence/criterion-integrated.test.ts` (22s), `src/goals/goal-live-evidence.test.ts` (18.9s), `src/goals/goal-services.test.ts` (20.7s), `src/goals/j1-command-path.test.ts` x3 goal.close journey arms (19-24s), `src/work/foundation-attempt-windows.test.ts` x2 (199.6s, 1.8s). All present in the FIRST full run of this session, before my roster edits touched those files. Duration-shaped, matching the known process-spawn-latency cliff on this host.\nroot lane (none in an owned path; this row touches no file under tools/, packages/ or tests/):\n- `tools/packaging/pack-source.test.ts` — `Error: Test timed out in 5000ms.`\n- `tools/packaging/pack-windows-main.test.ts` — `Error: Test timed out in 5000ms.`\n- `packages/benchmark/src/freeze-manifest-admission.test.ts` — `Error: Test timed out in 5000ms.`\n- `tests/e2e/foundation/multi-node-graph.e2e.test.ts` — `expected { runRef: 'multi-verify-all', ... } to match object { status: 'COMPLETED', ... }`\n- `packages/runner/src/verification/criterion-check-executor.test.ts` — `expected { ... } to match object { containment: 'PROVEN', ... }`\n\n== LIVE PEER WIP AT FINAL-RUN TIME ==\nA peer is mid-flight adding a 54th kind `design.submit`, present ONLY in their UNCOMMITTED working copy: `git show HEAD:apps/daemon/src/daemon-command-payload-keys.ts | grep -c \"design.submit\"` -> 0; the working file -> 1. With their WIP in the shared checkout, three count rosters read 54 where the delivered tree has 53 — `daemon-command-registry.test.ts` (5 arms), `daemon-store-dependencies.test.ts` (1), `daemon-v2-command-registry.test.ts` (1). 53 is CORRECT for HEAD-plus-this-row; bumping to 54 would ship a number wrong at the delivered tree. Not chased, not reverted, not stashed. QA: re-run those three after `design.submit` LANDS, not before.\n\n== MEASURED ROSTER TRUTH AT THE DELIVERED TREE ==\nPAYLOAD_KEYS / composed registry 53; OPERATOR_PRINCIPAL_KINDS 18; MCP_EXCLUDED_COMMAND_KINDS 17; BOOTSTRAP_COMMAND_KINDS 13. `agentCapabilitiesFor(\"repository.bootstrap\")` = [\"project.admin\",\"work.write\"]. Registration position: between `repository.publish` and `qualification.replan` (order follows PAYLOAD_KEYS declaration order, not the async-entries record order).\n\n== ABSORBED FOREIGN CENSUS, DISCLOSED ==\ntask-a2409cba landed `environment.set_variable` / `environment.unset_variable` into PAYLOAD_KEYS and OPERATOR_PRINCIPAL_KINDS WITHOUT backfilling the roster census, so the rosters were already red by 2 at HEAD before my diff. These rosters are exact SET EQUALITIES — there is no way to add one kind and reach green. I transcribed all three, with the two foreign rows' values MEASURED (`ENV_ENVIRONMENT_UNKNOWN` / `SCOPE`), commented as such at both sites, and their kinds added to OPERATOR_ONLY and the exclusion lists.\n\n== FOLLOW-UPS, filed here rather than as new rows (delivery-bias rail) ==\n1. `apps/daemon/src/daemon-command-registry.ts` is 509 lines, past the 400 cap. 449 at plan time, 479 at the merge-base BEFORE my diff, 485 after my +6 (option field, type import, one passthrough argument); peers added the rest. Pre-existing breach, not this row's to fix.\n2. `repository.bootstrap` has no affordance CARD. Child 3 of task-5ef1a0a9 owns the operator UI. `UNCARDED_SERVED_KINDS` in `http/affordance-read.test.ts` is a deliberate one-entry exemption with an arm proving it can only ever name a SERVED kind; delete it when the card lands.\n3. `MOE_PROJECT_CATALOG` is a new env key with a `<homedir>/.moe-next/projects.json` default. Nothing documents it yet — the epic-final hardening row's docs sweep should pick it up.\n4. `bootstrap-durability.test.ts` and `j1-command-path.test.ts` each now carry a NAMED two-entry exclusion list (`UNDRIVEN_KINDS` / `UNDRIVEN_BY_LEGACY_JOURNEY`). Both are synchronous journeys that cannot drive an async kind. If a third async bootstrap kind lands, extend the list rather than loosening the predicate.",
       "timestamp": "2026-09-06T01:56:34.262Z"
+    },
+    {
+      "id": "comment-7610a44a88234f7eb76a45b3854e4512",
+      "author": "qa-d81848bc",
+      "content": "QA ATTRIBUTION NOTE (not a reject; delivered tree is correct and green).\n\nFOREIGN WORK SWEPT INTO THE COMPLETION COMMIT. `git show db6da88a -- apps/daemon/src/daemon-command-registry.ts` is +24 lines, and `git show db6da88a -- apps/daemon/src/daemon-command-registry.ts | grep \"^[+-]\" | grep -i \"bootstrap\\|repository\"` returns ZERO lines. All 24 are the peer `design.submit` edge (`import { runDesignSubmitEdge }`, the `design` family destructure, and the `if (design) return runDesignSubmitEdge({...})` block). The commit's own trailer names it: `Moe-Contested: apps/daemon/src/daemon-command-registry.ts (task-06ac0da1ace64032855affc4ab0c1a4e)`.\n\nCause: step 3 declared `daemon-command-registry.ts` in modifiedFiles (correctly, at the time the async-entry wiring was being explored), the plan then correctly steered the entry into `daemon-command-async-entries.ts` instead, and the declaration was never withdrawn -- so the wrapper's pathspec commit picked up whatever a peer had left dirty at that path. This row added NOTHING to that file.\n\nConsequences measured, none harmful: HEAD compiles, the 47-file roster consumer slice is green at 54 kinds, and the peer's work is landed rather than reverted. Recording it so the design row's author is not surprised to find their edge already committed under a bootstrap subject line, and so the file's 509->531 line growth is not charged to this row.\n\nPER-FILE CAP, measured at HEAD (`git show HEAD:<f> | wc -l`): project-catalog-registrar.ts 74, repository-bootstrap-contracts.ts 116, daemon-command-async-entries.ts 130, repository-bootstrap-command.ts 220, bootstrap-contracts.ts 224, daemon-command-vocabulary.ts 359. Every path this row owns is inside the 250/400 bar. `daemon-command-registry.ts` at 531 is past 400, but the delta since the row started is entirely the foreign design edge above -- pre-existing and peer-grown, as the worker disclosed.\n\nFOLLOW-UPS for the epic-final hardening row, not new rows:\n1. `daemon-command-registry.ts` 531 lines, past the 400 cap. Pre-existing at 449 (plan time) / 509 (this row's merge-base).\n2. `repository.bootstrap` has no affordance card; `UNCARDED_SERVED_KINDS` in `http/affordance-read.test.ts` carries the one-entry exemption to delete when child 3 of task-5ef1a0a9 lands the UI.\n3. The journey's `recordingGh` helper rebuilds the `gh` argv it then asserts. Not vacuous in the delivered tree, because `repository-bootstrap-ports.test.ts` \"captures the exact offline GitHub argv\" pins the SAME literal against the production `createBootstrapGhPort` with an injected runner (verified green). The journey arm's real subject is that `{owner,name,visibility}` survives the dispatch seam un-mangled. Worth folding the argv literal into a shared constant so one edit moves both.",
+      "timestamp": "2026-09-06T02:21:47.728Z"
+    },
+    {
+      "id": "comment-ea1f31b82d4e4caf84aeb1a9cdbe0407",
+      "author": "qa-d81848bc",
+      "content": "QA EVIDENCE (detail exceeding the 2000-char reviewSummary cap). Verified against completion commit db6da88a, not the dirty shared tree.\n\nRE-RAN task.verification MYSELF, reproduces exactly: `cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/repository src/projects src/bootstrap src/mcp-http src/mcp-main.test.ts` -> `Test Files 71 passed (71)` / `Tests 808 passed | 2 skipped (810)`, PIPESTATUS[0]=0.\n\nDoD, each checked at HEAD:\n1. vocabulary :66 BOOTSTRAP_FAMILY=ADMIN, :349 OPERATOR_PRINCIPAL_KINDS, agent-spawn-contract :236 HUMAN_ONLY_STEPS. Bidirectional arm daemon-command-registry.test.ts:925 asserts SET EQUALITY with SERVED enumerated from the seam (`[...deps.registry.keys()]`) -- both directions, disjointness, and size -- plus :950 `registry.get(\"repository.bootstrap\")?.asyncHandler` toBeDefined, the shape pin the worker's own drill proved necessary (entryOf falls back to the generic sync wiring, so membership alone stayed green through the deletion). Counts moved: ROWS / registry.size / REGISTRATION_ORDER 54, OPERATOR_ONLY 18, MCP_EXCLUDED 17.\n2. journey :196 DIR_NOT_EMPTY code + layer DAEMON_INGRESS + stage DISPATCH, nothing-written proven by SHA DIGEST of the occupant rather than its name. :226 non-existent dir created and empty dir accepted, each asserting exactly one commit.\n3. :241 local-only ACCEPTED; `git log --oneline` toHaveLength(1) matching / chore: scaffold by Moe$/; rev-parse is-inside-work-tree true; receipt BOOTSTRAPPED + githubRefusal BOOTSTRAP_GH_UNAVAILABLE + remoteUrl null + 40-hex sha; bound through the EXISTING handler proven by durable ledger kinds == [project.bind_repository, project.register, repository.bootstrap]; catalog entry asserted.\n4. :284 gh argv offline. The journey helper rebuilds the argv it asserts, so I checked production: repository-bootstrap-ports.test.ts \"captures the exact offline GitHub argv\" pins [\"repo\",\"create\",\"moe-example/sample\",\"--private\",\"--source\",\".\",\"--push\"] against production createBootstrapGhPort with an injected runner, plus bare `gh` + shell:false. GIT_UNAVAILABLE :328 and PROFILE_VERSION_UNKNOWN :307 each code + layer.\n5. Receipt read back from a real SqliteEventStore; BOOTSTRAP_RECEIPT_VERSION = \"moe-bootstrap-receipt/1\"; REFUSED receipts carry code and sha: null.\nBeyond DoD: 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION before any byte; second run refuses rather than appending; 5-case hostile-dir sweep with a nonzero-roster guard so it cannot go vacuous; an epic-rail-3 arm pinning the refusal key set exactly and asserting the operator path, remote and owner appear nowhere in the answer.\n\n6. GATES, output quoted not exit codes.\n- `pnpm --filter @moe/control-room test` -> Test Files 167 passed (167) / Tests 2060 passed, exit 0. Epic rail 1 satisfied.\n- `pnpm typecheck` -> every workspace `Done` EXCEPT apps/daemon, one error: `src/environment/environment-delivery.test.ts(196,3): error TS2532`. `git status --porcelain` reports that path `??` UNTRACKED, and `git show HEAD:<path>` answers \"exists on disk, but not in HEAD\" -- peer WIP, absent from the delivered tree.\n- `pnpm test` root lane -> 426 passed | 4 failed files: tools/packaging/pack-source, packages/benchmark/freeze-manifest-admission, tests/e2e/foundation/multi-node-graph, packages/runner/criterion-check-executor. No apps/** coverage in this lane and no owned path among them.\n\nFULL DAEMON LEG NOT RUN: measured spread 560-2006s against a 600s call cap. Ran the row's own 71-file verification scope plus a 47-file roster consumer slice derived from the changed symbols (daemon-command-registry, -human-approver, -vocabulary, daemon-store-dependencies, mcp-tool-allowlist, http/affordance-read, goals/j1-command-path, orchestrator/) -> Test Files 1 failed | 46 passed (47), Tests 3 failed | 1180 passed.\n\nTHE 3 REDS ARE FOREIGN, ATTRIBUTED BY MEASUREMENT. All three sit in j1-command-path.test.ts (an owned path), all three throw from goal-scoped-close-test-fixtures.ts:90 `scoped criterion execution did not prove all checks`, with the spawned check recording `status: \"UNKNOWN\", exitCode: null, byteCount: 0`. Baseline-by-commit was unusable -- both fea3f73c^ and 5af467bb fail to resolve imports left by peer partial sweeps -- so I ran the fixture's OTHER consumers at the same tree: goal-live-evidence.test.ts and goal-services.test.ts, neither owned by this row nor present in db6da88a, fail with the byte-identical error from the same fixture line. The cause is the shared scoped-close criterion spawn, which no command-kind registration can produce. This row's j1 edit is confined to OWNED_KINDS 12->13, a HANDLERS-union-ASYNC_SERVED set arm read from production, and a named frozen UNDRIVEN_BY_LEGACY_JOURNEY exclusion whose replay coverage is discharged by the journey's second-run DIR_NOT_EMPTY arm. HEAD failing-path set minus baseline, intersected with owned paths: EMPTY.\n\nCleanup: the baseline worktree and the node_modules junctions I created were removed and verified GONE.",
+      "timestamp": "2026-09-06T02:22:49.760Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:42:35.381Z",
-  "updatedAt": "2026-09-06T02:00:56.788Z",
+  "updatedAt": "2026-09-06T02:24:37.384Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T17:19:02.537Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T02:24:37.384Z",
+    "wallClockMs": 32734847
   },
   "contextFetchedBy": [
     "architect-fa3a3e17",
@@ -356,6 +370,126 @@
       "treeId": "4c2fefed8fb1c9e80a53ddebed4cc10351965686",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "db6da88a1ea7e0b33f5b568a64391bf51fe8604d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-06T00:35:49Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/goals/j1-command-path.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/projects/project-catalog-registrar.js",
+        "apps/daemon/src/projects/project-catalog-registrar.ts",
+        "apps/daemon/src/repository/repository-bootstrap-command.js",
+        "apps/daemon/src/repository/repository-bootstrap-command.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-journey.test.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-06T02:01:04.364Z",
+      "treeId": "6481a1ef81876bfff550acd0b11130d219931dc6",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "b04a3621ae0233525ed89a0e84d47157b180e693",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T02:00:57Z",
+      "paths": [
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/goals/j1-command-path.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/projects/project-catalog-registrar.js",
+        "apps/daemon/src/projects/project-catalog-registrar.ts",
+        "apps/daemon/src/repository/repository-bootstrap-command.js",
+        "apps/daemon/src/repository/repository-bootstrap-command.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-journey.test.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T02:01:12.380Z",
+      "treeId": "25eb019bd7f66b5dd3a9a9c5932c8f01e7497ca5",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -376,86 +510,36 @@
     "apps/daemon/src/http/affordance-read.test.ts",
     "apps/daemon/src/repository/repository-bootstrap-journey.test.ts",
     "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
-    "apps/daemon/src/goals/j1-command-path.test.ts"
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
     "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
     "apps/daemon/src/repository/repository-bootstrap-command.ts",
-    "apps/daemon/src/daemon-command-vocabulary.ts"
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/projects/project-catalog-registrar.js",
+    "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/projects/project-catalog-registrar.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/repository/repository-bootstrap-journey.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/repository/repository-bootstrap-command.js",
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/live/live-effect-read.test.ts",
-    "apps/control-room/src/live/live-effect-read.ts",
-    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
-    "apps/control-room/src/v2/goals/publish-port.ts",
-    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
-    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
-    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
-    "apps/daemon/src/daemon-repository-workflows.test.ts",
-    "apps/daemon/src/daemon-repository-workflow-wiring.js",
-    "apps/daemon/src/daemon-repository-workflow-wiring.ts",
-    "apps/daemon/src/http/document-coverage-read.ts",
-    "apps/daemon/src/http/repository-workflow-read.test.ts",
-    "apps/daemon/src/http/repository-workflow-read.ts",
-    "apps/daemon/src/orchestrator/node-lander.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.js",
-    "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.ts",
-    "apps/daemon/src/orchestrator/node-publisher-approved.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/repository/git-publication-native.test.ts",
-    "apps/daemon/src/repository/publication-approval.test.ts",
-    "apps/daemon/src/repository/publication-effect-ledger.ts",
-    "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-execution-recovery.ts",
-    "apps/daemon/src/repository/repository-landing-attempt.js",
-    "apps/daemon/src/repository/repository-landing-attempt.test.ts",
-    "apps/daemon/src/repository/repository-landing-attempt.ts",
-    "apps/daemon/src/repository/repository-recovery-approval.js",
-    "apps/daemon/src/repository/repository-recovery-approval.ts",
-    "apps/daemon/src/repository/repository-recovery-command.js",
-    "apps/daemon/src/repository/repository-recovery-command.test.ts",
-    "apps/daemon/src/repository/repository-recovery-command.ts",
-    "apps/daemon/src/repository/repository-recovery-git.test.ts",
-    "apps/daemon/src/repository/repository-recovery-native.test.ts",
-    "apps/daemon/src/repository/repository-recovery-replay.js",
-    "apps/daemon/src/repository/repository-recovery-replay.ts",
-    "apps/daemon/src/repository/repository-recovery-service.test.ts",
-    "apps/daemon/src/repository/repository-recovery-service.ts",
-    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image.rs",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image_hash.rs",
-    "packages/runner/src/platform/windows/native/broker/src/approved_image_windows.rs",
-    "packages/runner/src/platform/windows/native/broker/src/control.rs",
-    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
-    "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
-    "packages/runner/src/platform/windows/native/broker/src/session.rs",
-    "packages/runner/src/platform/windows/native/broker/tests/approved_image.rs",
-    "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
-    "packages/runner/src/platform/windows/windows-approved-image-launch.js",
-    "packages/runner/src/platform/windows/windows-approved-image-launch.ts",
-    "packages/runner/src/platform/windows/windows-boundary.test.ts",
-    "packages/runner/src/platform/windows/windows-boundary.ts",
-    "packages/runner/src/platform/windows/windows-process-broker-contract.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.ts",
-    "packages/runner/src/platform/windows/windows-status.ts",
-    "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts",
-    "tests/e2e/control-room/repository-workflows.spec.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-d6e44333@2026-09-05T23:25:58Z",
-    "at": "2026-09-05T23:26:22.638Z"
+    "sessionId": "qa-d81848bc@2026-09-06T02:00:57Z",
+    "at": "2026-09-06T02:01:12.380Z"
   },
   "priorHandoffs": [
     {
@@ -491,5 +575,8 @@
     "outputTail": "FRESH_EXIT=0\n Test Files  71 passed (71)\n      Tests  808 passed | 2 skipped (810)\n   Start at  04:59:31\n   Duration  52.59s (transform 8.55s, setup 0ms, import 31.69s, tests 164.12s, environment 4ms)",
     "reportedAt": "2026-09-06T02:00:49.739Z"
   },
-  "completionSummary": "`repository.bootstrap` is wired, operator-fenced and proven end to end. TWO PRODUCTION BUGS FOUND AND FIXED — without either, the command could not have worked at all.\n\nSERVED ON THE ASYNC ENTRY, not as a `BOOTSTRAP_HANDLERS` row. Forced, not chosen: `CommandHandler` is synchronous and this command runs `git`, optionally `gh`, and a tree write. Entry lives in `daemon-command-async-entries.ts` (the module the registry already spreads); `daemon-command-registry.ts` gained only 6 lines. Prerequisite `project.register`; aggregate `${projectId}-bootstrap`.\n\nBUG 1 — THE OPERATOR FENCE DID NOTHING. `entryOf` answers async entries first and `wrapAsync` asserts only the cutover plane; the `OPERATOR_PRINCIPAL_KINDS` check lives in the SYNCHRONOUS handler an async entry never reaches. Measured: a non-operator ADMIN session got BOOTSTRAP_PREREQUISITE_MISSING/422 instead of 403. Fixed at handler ENTRY, before clock, decode or any effect.\n\nBUG 2 — EVERY SUCCESS REFUSED BOOTSTRAP_BIND_FAILED. The bind was driven with the BOOTSTRAP request's `expectedVersion`, but the PROJECT aggregate has already advanced past `project.register`, so the core reducer refused every successful bootstrap. Now reads the project aggregate's own version at bind time.\n\nALSO REQUIRED, invisible to a grep for the kind: `projects/project-catalog-registrar.ts` (NEW — `project-catalog.ts` had NO production consumer; composes load/register/saveAtomic plus the mkdir the atomic save needs, resolves `MOE_PROJECT_CATALOG` else `<homedir>/.moe-next/projects.json`, and THROWS its refusal so the engine's BOOTSTRAP_CATALOG_FAILED fires) and two `.js` bridges without which the plain-Node smoke child dies ERR_MODULE_NOT_FOUND.\n\nDoD 1: operator-only, MCP-EXCLUDED (derived from OPERATOR_PRINCIPAL_KINDS in the same commit, so no advertisement window exists at any landed HEAD), in HUMAN_ONLY_STEPS. Bidirectional arm partitions the SEAM-enumerated served set across the two MCP halves. THE DRILL CHANGED THE TEST: deleting the "
+  "completionSummary": "`repository.bootstrap` is wired, operator-fenced and proven end to end. TWO PRODUCTION BUGS FOUND AND FIXED — without either, the command could not have worked at all.\n\nSERVED ON THE ASYNC ENTRY, not as a `BOOTSTRAP_HANDLERS` row. Forced, not chosen: `CommandHandler` is synchronous and this command runs `git`, optionally `gh`, and a tree write. Entry lives in `daemon-command-async-entries.ts` (the module the registry already spreads); `daemon-command-registry.ts` gained only 6 lines. Prerequisite `project.register`; aggregate `${projectId}-bootstrap`.\n\nBUG 1 — THE OPERATOR FENCE DID NOTHING. `entryOf` answers async entries first and `wrapAsync` asserts only the cutover plane; the `OPERATOR_PRINCIPAL_KINDS` check lives in the SYNCHRONOUS handler an async entry never reaches. Measured: a non-operator ADMIN session got BOOTSTRAP_PREREQUISITE_MISSING/422 instead of 403. Fixed at handler ENTRY, before clock, decode or any effect.\n\nBUG 2 — EVERY SUCCESS REFUSED BOOTSTRAP_BIND_FAILED. The bind was driven with the BOOTSTRAP request's `expectedVersion`, but the PROJECT aggregate has already advanced past `project.register`, so the core reducer refused every successful bootstrap. Now reads the project aggregate's own version at bind time.\n\nALSO REQUIRED, invisible to a grep for the kind: `projects/project-catalog-registrar.ts` (NEW — `project-catalog.ts` had NO production consumer; composes load/register/saveAtomic plus the mkdir the atomic save needs, resolves `MOE_PROJECT_CATALOG` else `<homedir>/.moe-next/projects.json`, and THROWS its refusal so the engine's BOOTSTRAP_CATALOG_FAILED fires) and two `.js` bridges without which the plain-Node smoke child dies ERR_MODULE_NOT_FOUND.\n\nDoD 1: operator-only, MCP-EXCLUDED (derived from OPERATOR_PRINCIPAL_KINDS in the same commit, so no advertisement window exists at any landed HEAD), in HUMAN_ONLY_STEPS. Bidirectional arm partitions the SEAM-enumerated served set across the two MCP halves. THE DRILL CHANGED THE TEST: deleting the ",
+  "completedAt": "2026-09-06T02:24:37.384Z",
+  "reviewCompletedAt": "2026-09-06T02:24:37.384Z",
+  "reviewSummary": "APPROVED against completion commit db6da88a. Full evidence: comment-ea1f31b82d4e. Attribution: comment-7610a44a8823.\n\nRE-RAN task.verification myself, exact reproduction: Test Files 71 passed (71) / Tests 808 passed | 2 skipped (810), PIPESTATUS[0]=0.\n\nDoD 1-6 met at HEAD. Roster: vocabulary :66/:349, agent-spawn-contract :236, counts 54/18/17; the bidirectional arm (registry.test.ts:925) enumerates SERVED from the seam -- both directions, disjointness, size -- plus the :950 asyncHandler shape pin the worker's drill proved necessary. Journey: 16 arms, real store + real git + injected gh, no network. DIR_NOT_EMPTY code+layer with the occupant's bytes proven intact by DIGEST; absent dir created, empty accepted; local-only BOOTSTRAPPED, one commit \"chore: scaffold by Moe\", remoteUrl null, GH_UNAVAILABLE for the GitHub half, bound via the durable project.bind_repository decision, catalogued; gh argv byte-for-byte -- the journey helper rebuilds it, so I confirmed the PRODUCTION pin in repository-bootstrap-ports.test.ts; GIT_UNAVAILABLE and PROFILE_VERSION_UNKNOWN code+layer; receipt moe-bootstrap-receipt/1 read back, REFUSED carries code and no sha. Also 403 OPERATOR_PRINCIPAL_REQUIRED before any byte.\n\nGATES: control-room 167 files / 2060 tests exit 0. typecheck one error, environment-delivery.test.ts -- git status ??, absent from HEAD, peer WIP. Root pnpm test 426 passed / 4 failed, none owned. Full daemon leg skipped (560-2006s vs 600s cap); 47-file roster slice instead: 46 passed, 3 failed. Those 3 are FOREIGN: all throw from goal-scoped-close-test-fixtures.ts:90 with the spawned check UNKNOWN / exitCode null / byteCount 0, byte-identical in goal-live-evidence and goal-services, which this row neither owns nor touched. Owned-path intersection of HEAD-minus-baseline failures: EMPTY.\n\nPer-file caps: every owned file <=250. registry.ts 531 is past 400 but this row added ZERO lines to it; its +24 are a peer's design.submit edge."
 }
