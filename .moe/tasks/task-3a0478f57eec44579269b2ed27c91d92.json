@@ -73,7 +73,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b1872f24",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -92,7 +92,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.317Z",
-  "updatedAt": "2026-09-06T22:05:24.311Z",
+  "updatedAt": "2026-09-06T22:05:38.584Z",
   "dependsOn": [
     "task-c851961b968942f880950acc16dc575a"
   ],
@@ -124,7 +124,8 @@
   },
   "planApprovedAt": "2026-09-05T17:00:14.688Z",
   "contextFetchedBy": [
-    "worker-1d53e70c"
+    "worker-1d53e70c",
+    "worker-b1872f24"
   ],
   "workStartedAt": "2026-09-06T21:56:43.336Z"
 }
