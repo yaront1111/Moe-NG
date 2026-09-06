@@ -44,12 +44,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan handoff 18:58Z — no architect seat is registered, so the DoD-5 decision this shell waited for since 16:48Z cannot come from one; BLOCKED->PLANNING nulls the block fields, premise quoted. worker-f78e0703 16:52Z: \"Real production health composition violates the required custom-interval restart RATE and lacks a per-environment interval setting (probe source comment-af76eb60 at 17446e73: real store, 2 real deploy receipts, real createStoreDependencies/createHealthProbeJob, fake clock/HTTP only). An accepted durable HEALTH_PROBE_JOB_ID at 10000 ms yields 12 probes per 60000 ms before restart vs 2 after; persisted intervals [60000, 10000, 60000]; composition:579's interval-less register overwrites the rebuilt custom value at boot. The single job in health-probe-ring.ts sweeps all environments and has no per-environment interval reader/config. Existing 5 files / 131 tests check only the default composed rate. Cannot certify DoD 3/5. Plan step 1 forbids production code here; both child owners (e651725c, cc05c473, both DONE) notified (comments 08b5c88f / 67d1800a).\" GOVERNOR DECISION for the re-plan: this row stays a verification SHELL. Step 1 (children delivered; incident/ring/missing-URL arms strong and green) is done. Plan: (a) a step that FILES a follow-on child \"health probe interval survives restart and is settable per environment\" (composition:579 registers HEALTH_PROBE_JOB_ID without clobbering a durable custom interval; ring reads a per-environment interval), sets this row's dependsOn to include it, and records the id here; (b) DoD 5 is re-aimed to \"default 60 s durable schedule verified; per-environment/custom-interval behaviour delegated to <child id>\" — post the exact text and the governor applies it on the board; (c) gates as before. Do not reopen cc05c473 or e651725c.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
   "priority": "HIGH",
@@ -70,7 +70,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:52:58.391Z",
-  "updatedAt": "2026-09-06T16:52:17.359Z",
+  "updatedAt": "2026-09-06T18:58:30.405Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:22.452Z",
     "plannedStepCount": 3,
@@ -103,8 +103,10 @@
     "worker-f78e0703"
   ],
   "workStartedAt": "2026-09-06T16:47:08.087Z",
-  "blockedReason": "Real production health composition violates required custom-interval restart RATE and lacks per-environment interval setting. Full source parent comment-af76eb60fcb9495a8a55ed97e9f1c064 at workingtree HEAD17446e73: realstore,2realdeployreceipts,actualcreateStoreDependencies/createHealthProbeJob, fakeclock/HTTPonly. Accepted durable HEALTH_PROBE_JOB_ID10000ms yields12probes per60000ms before restart vs2after; persisted intervals[60000,10000,60000]. composition579's interval-lessregister overwrites rebuiltcustomvalue. Singlejob in health-probe-ring.ts sweepsallenvs and has no per-envintervalreader/config. Existing5files131tests0 checks onlydefaultcomposedrate/genericexplicitinterval; cannot certify DoD3/5. Approvedplan1 explicitly says NO productioncode here and routes shortfall to owningchild via comment/amendment; bothchildowners notified comments08b5c88f/67d1800a and governorsbc02133d. Need approvedexistingchildfix/scopeamendment, not fabricated per-envauthority or narrowedDoD. Healthincident/ring/missingURL armsstrong+green. No sourceedits, jobs, resourcelease, or foreignredblockpremise.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T16:52:17.359Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Real production health composition violates required custom-interval restart RATE and lacks per-environment interval setting. Full source parent comment-af76eb60fcb9495a8a55ed97e9f1c064 at workingtree HEAD17446e73: realstore,2realdeployreceipts,actualcreateStoreDependencies/createHealthProbeJob, fakeclock/HTTPonly. Accepted durable HEALTH_PROBE_JOB_ID10000ms yields12probes per60000ms before restart vs2after; persisted intervals[60000,10000,60000]. composition579's interval-lessregister overwrites rebuiltcustomvalue. Singlejob in health-probe-ring.ts sweepsallenvs and has no per-envintervalreader/config. Existing5files131tests0 checks onlydefaultcomposedrate/genericexplicitinterval; cannot certify DoD3/5. Approvedplan1 explicitly says NO productioncode here and routes shortfall to owningchild via comment/amendment; bothchildowners notified comments08b5c88f/67d1800a and governorsbc02133d. Need approvedexistingchildfix/scopeamendment, not fabricated per-envauthority or narrowedDoD. Healthincident/ring/missingURL armsstrong+green. No sourceedits, jobs, resourcelease, or foreignredblockpremise.",
+  "blockedOnTaskIds": null
 }

@@ -1,0 +1,36 @@
+{
+  "id": "task-60008fcf4719490f97075c7754ac5807",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The daemon resolves host context for human migration reverts",
+  "description": "Fourth producer child of task-78eedd8ebc2b43c581ac21ea28648a9a (logical producer2), governor-directed re-slice19:10Z. At local0737 and ownerorigin4253, no non-test migrateDown: configuration exists. async-entries.ts139/322 spreads optional options.migrateDown; migrate-down-command.ts139–146 refuses MIGRATE_DOWN_UNCONFIGURED without host databaseUrl/workspace/projectRoot. Command537 and real revert engine are DONE; DO NOT republish kind/rebuild revert. Forward sibling2db owns reusable per-project/environment host-context resolver; depend on it instead of creating a second secret-resolution policy. Resolve request environment freshly, not one daemon-wide static URL incorrectly reused for every environment. Preserve default unconfigured refusal where evidence absent. Parent78 is browser/live proof consumer.",
+  "definitionOfDone": [
+    "Default production daemon composition provides existing migrate-down command with host-resolved projectRoot/workspace and database context for exactly the admitted request environment. Test actual dispatch through default composition, not an isolated entry constructed with hardcoded databaseUrl; two environments prove isolation.",
+    "Unconfigured/missing/unreadable host context refuses MIGRATE_DOWN_UNCONFIGURED or the existing precise environment resolver code at its real layer before engine reads or writes. No fallback to arbitrary inherited DATABASE_URL, no browser-supplied URL/root/workspace, no secret-containing diagnostic.",
+    "Preserve HUMAN/operator-only async fence, HUMAN_ONLY_STEPS and MCP exclusion. Unauthorized real dispatch is rejected with code+layer before resolver/decrypt/engine effects; no new roster entries or authority widening. Authorized path reaches existing revertLastBatch and names the APPLIED request batch.",
+    "Live disposable-PostgreSQL arm through production composition applies two batches via shipped forward edge, reverts named last batch, asserts earlier schema remains and reverted schema disappears, then reads REVERTED receipt. Backup failure/not-last-batch/replay/concurrent revert preserve engine guarantees and unchanged schema where refused; no automatic restore.",
+    "Teardown every process/container/temp tree in finally on all outcomes; no connection value, SQL, password, derived credential value or tool banner in log/evidence. Fresh focused daemon tests/typecheck and named broader gates have nonzero counts; parent78 consumes wiring. Physical .js bridges for new runtime entrypoints."
+  ],
+  "taskRails": [
+    "Reuse sibling2db host context and existing revert engine/fence. Production database values never enter browser or durable payload.",
+    "Do not overwrite whole shared registry files. Coordinate explicit paths and re-read owner-origin changes after reconciliation."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "dependsOn": [
+    "task-537320eed95348dc9bc3afc879dc0563",
+    "task-2db55fcaad604aa4861139b22941095f"
+  ],
+  "priority": "HIGH",
+  "order": 112.74,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T19:16:23.587Z",
+  "updatedAt": "2026-09-06T19:16:23.587Z"
+}

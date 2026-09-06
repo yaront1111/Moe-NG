@@ -7,7 +7,7 @@
     "A 'New product from PRD' form takes directory, PRD file, product name and OPTIONAL GitHub owner/visibility, and dispatches child 2's command. The GitHub fields are visibly optional - a form that implies GitHub is required would hide the local-only path that child 2 exists to support.",
     "A Playwright journey against a REAL daemon completes the whole thing from the browser: directory created, first commit exists (`git log --oneline` = exactly 1 line), repository bound, project in the manager catalog, PRD goal created and the lane continuing. `pnpm test:e2e:browser` count line quoted. NO scratchpad script and NO seed is used for any step - this row's claim is that the BROWSER is sufficient, and a helper script anywhere in the path voids it.",
     "The four refusals render as operator words with their codes VERBATIM, and BOOTSTRAP_GH_UNAVAILABLE renders as a PARTIAL success: the local repository exists and is bound, only the GitHub half did not. Assert that wording specifically - 'bootstrap failed' here would make an operator delete a good repository.",
-    "LIVE DRIVE: a throwaway repository created under the owner's GitHub account from the browser - URL and receipt id in a row comment under ~4500 chars. The owner's account and visibility are supplied by the owner, never invented. If `gh` is absent or unauthenticated on the lane, record the BOOTSTRAP_GH_UNAVAILABLE refusal verbatim together with the successful LOCAL bootstrap - that is a complete outcome, not a partial one.",
+    "LIVE DRIVE: a throwaway repository created under the owner's GitHub account from the browser - URL and receipt id in a row comment under ~4500 chars - WHEN the owner has supplied an account and visibility. They are supplied by the owner, never invented. If they are NOT supplied (governor amendment 2026-09-06 17:55Z: none were), the COMPLETE outcome is the LOCAL-ONLY journey: the form omits the GitHub half, the daemon answers githubRefusal: null, and the record states 'GitHub half deferred to the owner: no account/visibility supplied' with the local bootstrap receipt id. If `gh` is absent or unauthenticated on the lane, record the BOOTSTRAP_GH_UNAVAILABLE refusal verbatim together with the successful LOCAL bootstrap - also a complete outcome. Never create a remote repository without owner-supplied values.",
     "README's 'a fresh project cannot be started from the browser alone' clause and the VISION Stage 2 'repository bootstrapping' / 'new repository creation' status lines are rewritten to the measured truth, WITH the date of the live drive. `git grep -n 'cannot be started from the browser alone'` returns 0 hits.",
     "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`."
   ],
@@ -103,14 +103,21 @@
     {
       "stepId": "step-6",
       "description": "THE PLAYWRIGHT JOURNEY. NEW `tests/e2e/control-room/new-product-from-prd.spec.ts`, against a REAL daemon.\n\n**NO SCRATCHPAD SCRIPT AND NO SEED FOR ANY STEP (task rail 1, risk A).** This row's entire claim is that the BROWSER IS SUFFICIENT. A helper anywhere in the path makes the claim false while the test stays green, which retires the question instead of answering it. Every step is a browser action.\n\nREUSE THE HARNESS from `tests/e2e/control-room/activation-fresh-project.spec.ts` — it is tracked and clean (step 1(c)) and already stands up a real daemon. DO NOT EDIT THAT FILE.\n\nTHE JOURNEY, asserting each step's evidence (DoD 2):\n  1. fill the form in the browser and submit, GitHub fields EMPTY (the local-only path);\n  2. the directory was created;\n  3. **`git log --oneline` in that directory returns EXACTLY ONE LINE** — assert the line count, not merely that a commit exists, because a second commit means the scaffold ran twice;\n  4. the repository is BOUND — read it back through the daemon, not from the form's own state;\n  5. the project is in the manager catalog;\n  6. the PRD goal exists and the lane continues.\nAssert on daemon and filesystem state, never on the form's optimistic render.\n\nCLEAN UP ON EVERY EXIT PATH INCLUDING FAILURES (epic rail 4): the created directory and the daemon go down in teardown, not in a trailing statement. A leaked directory or port makes every later gate on this board inadmissible.\n\nRUN IT AND QUOTE THE SPEC COUNT, not just the exit code. `test:e2e:browser` is `tsc -p ... && playwright test -c ...`, so a typecheck failure means Playwright never ran and the leg can exit non-zero having executed zero specs — or a passing tsc with no matching spec can look like success (risk E). Name your spec in the output.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/new-product-from-prd.spec.ts"
       ],
       "newFiles": [
         "tests/e2e/control-room/new-product-from-prd.spec.ts"
       ],
-      "startedAt": "2026-09-06T12:01:48.136Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/new-product-from-prd.spec.ts",
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx"
+      ],
+      "note": "GREEN fresh `pnpm test:e2e:browser new-product-from-prd`:1passed(9.7s), spec101 a PRD and a directory become a bound repository and a goal, in the browser alone. First UNCHANGED run1failed at own obsolete protocol-source regex, AFTER SUCCESS/.git/onecommit assertions. Reused existing readWireProtocolVersion; no assertion weakened. Strengthened proof: nonexistent child directory (not precreated), exactly1commit and receiptSHA equality, exact manager project/root/title, exact one goal carrying uploaded PRD SHA256+byteLength binding, project.bind_repository/bootstrap/activate durable committed states. seedNONE + seedPidnull, every product effect through browser, postchecks read-only. Spec-owned parent cleanup afterEach; harness finally handles children/scratch (scratch deletion inherited best-effort limitation).\nScope expanded within already owned form+test for independently found truth bugs: pending/unreadable/oversize PRD cannot silently submit null draft; catalog-retained is already bound vs bind-retained unbound; activation/goal failure cannot hide behind bootstrap SUCCESS; retained headline no longer claims nothing created. Agent RED6failed10passed, root headline RED2failed14passed; final own `pnpm --filter @moe/control-room exec vitest run src/v2/products --maxWorkers=1` EXIT0,2files34tests(4.20s). Form241lines, ASCII, no new module, no producer edits. Cross-declared4foreignpaths status clean. Full gates pending step8; gh present/authenticated, no remote or fake GH_UNAVAILABLE.",
+      "startedAt": "2026-09-06T12:01:48.136Z",
+      "completedAt": "2026-09-06T17:57:06.834Z"
     },
     {
       "stepId": "step-7",
@@ -133,11 +140,21 @@
     {
       "stepId": "step-8",
       "description": "THE LIVE DRIVE, GATES, AND SELF-REVIEW. Load the `adversarial-self-review` skill first.\n\n**(a) THE LIVE DRIVE (DoD 4).** Create a throwaway repository under the OWNER'S GitHub account, from the browser. **THE OWNER'S ACCOUNT AND VISIBILITY ARE THE OWNER'S** (task rail 4) — never invent an owner and never choose public. If you do not have those values, ASK IN THE ROW rather than substituting. Record the URL and the receipt id in a row comment under ~4500 chars (comments truncate silently at 5000).\n  IF `gh` IS ABSENT OR UNAUTHENTICATED on this lane, that is a COMPLETE OUTCOME, not a failure: record the `BOOTSTRAP_GH_UNAVAILABLE` refusal VERBATIM together with the SUCCESSFUL LOCAL bootstrap, which is precisely the partial-success path this row renders. Do not fake a GitHub drive and do not skip the record.\n\n**(b) FOUR GATES, each standalone and foreground**, never piped and never `;`-chained: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`. Quote every `Test Files N passed` count line; for the e2e leg quote the SPEC COUNT and name your spec (risk E). An exit-0 leg with no count line RAN NOTHING (global rail 8). The daemon leg gets the maximum timeout.\n\n**(c) ATTRIBUTE RED** by the merge-base/HEAD failing-path delta intersected with this row's owned paths (global rail 3). Disclose foreign red verbatim with exact lines; never fabricate green.\n\n**(d) ADVERSARIAL PASS** — answer each in writing:\n- Does ANY step of the journey touch a script, a seed, or a fixture? Walk it and say so — this is the claim the row makes and the one thing that would void it.\n- Could an operator reading the `BOOTSTRAP_GH_UNAVAILABLE` screen conclude their local repository is broken? Quote the exact rendered words and argue it.\n- Can the form create a PUBLIC repository without the operator choosing public? Trace the default.\n- Does any credential reach the form, its state, the dispatch, a log line, or a rendered receipt? Grep the diff.\n- Is `github` OMITTED (not empty) from the payload when unrequested?\n- `wc -l` every production file: the two new modules under 250, and `cordum-app.tsx` grown by only an import plus an element.\n\n**(e) IF SOMETHING IS BROKEN UPSTREAM, DO NOT FIX IT HERE** (task rail 3, risk G). A scaffold defect is child 1's and a command defect is child 2's: comment on that row and `report_blocked`. That discipline is exactly what produced the prerequisite this row now consumes.\n\n(f) DECLARE EVERY PATH in `complete_step.modifiedFiles` and re-check `git status --porcelain` for anything created but unreported. Peer dirt is noted and stepped around — never reverted, never swept into a commit.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "tests/e2e/control-room/new-product-from-prd.spec.ts",
+        "README.md",
+        "docs/VISION.md"
+      ],
+      "note": "COMPLETE under amended DoD 4 (17:55Z) and governor single-tab/gate rulings. Final evidence: comment-bb40831ddc054388ac3fe384d485a43e; live local receipt comment-3f10c6cbf24a468cbd1ea6d54fedfd39; full-browser roster/attribution comments b28a2687b1a94ea482d5b5b0aab21e3d and 1fa28f36afe34c249137b213fea08ffc.\n\nLIVE: pnpm test:e2e:browser new-product-from-prd EXIT 0, 1 passed (16.0s), decidedAt 2026-09-06T18:06:52.854Z, receipt aggregate e2e-proj-tacng6-bootstrap, product SHA 2ac4d140e8f52abad4ee3aa69d2ec205112cdeea, exactly 1 commit. GitHub half deferred to the owner: no account/visibility supplied. remoteUrl=null, githubRefusal=null; gh is present/authenticated, so no invented GH_UNAVAILABLE. No remote created.\n\nGATES: fresh 19:01:26Z product + mount scope 3 files / 82 tests EXIT 0, 17.93s. Full CR AFTER supplied by task4a6 under lease 17:58–18:54:50: 173 files / 2196 tests EXIT 0. Exact CR leg timestamps not yet supplied, not inferred. pnpm typecheck 19 Done EXIT 0. Full daemon AFTER authorized from task166d: EXIT 1, 6 failed / 531 passed files, 8 failed / 9967 passed / 5 skipped tests; own daemon scope 54/54 green. Full browser EXIT 1, 23 passed / 10 failed (33 specs), own spec green. Foreign red and timing/host contamination disclosed in evidence, no blanket regression-green or invented merge-base delta. Root pnpm test does not cover apps. Own five hashes unchanged 18:18:43→19:01:00 observations.\n\nADVERSARIAL PASS, re-read full diff and independent read-only review: no new blocker. (1) Journey uses seed:NONE and asserts seedPid:null plus absent catalog. Harness starts real daemon/build and performs real operator pairing; all repository creation/commit/bind/catalog/goal effects come from browser-dispatched production code, with post-checks read-only. No scratchpad seeds product state. Existing activation path reused, not rebuilt. (2) GitHub partial words: 'The repository at <dir> exists, is committed at <sha> and is bound to this project. Keep it. Only the GitHub half did not happen' plus verbatim code. Catalog retained branch now correctly says already bound; retained headline no longer denies creation. Downstream activation/goal refusals stay PARTIAL with exact codes/layers. (3) private is default; public requires explicit selection. (4) No credential input/state/log/rendered receipt; transport still attaches existing session credentials, never copies them into product payload. Final reporter only checked local facts. (5) Empty owner omits github entirely. (6) live-new-product 241, receipt reader 179, form 241 lines, all NUL-free; existing cordum-app now 490 from shared evolution and unchanged this resume. Form JSX remains existing large function structure. Pending/error/oversize PRD blocks both UI and callback until valid replacement; no-file path retained. Owned parent temp cleanup runs afterEach, lane cleanup in harness finally; inherited best-effort scratch cleanup not strengthened or overstated.\n\nSINGLE-TAB LIMITATION, governor accepted 18:02Z: no global async queue (daemon-command-decision-port.ts:21–25); receipt commit uses current ledger version (repository-bootstrap-command.ts:106–115); read returns latest project receipt, not command-keyed (repository-bootstrap-read.ts:104–110). Possible cross-tab interleaving source-confirmed, not reproduced. Architect-owned successor: bootstrap receipt correlation by commandId. Producer untouched.\n\nREADME/VISION dated 2026-09-06; obsolete literal grep has 0 hits (already removed by prerequisite, no credit claimed). All 11 historical non-resume attributed paths, including four foreign cross-declarations, clean at final census; five current paths explicitly listed. Other shared WIP preserved, no staging/commit/reset/worktree operations.",
+      "startedAt": "2026-09-06T17:57:07.810Z",
+      "completedAt": "2026-09-06T19:04:31.414Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -184,23 +201,123 @@
       "author": "worker-1d53e70c",
       "content": "STEP 6, worker-1d53e70c, 2026-09-06 16:2xZ. THE FENCE ROW WORKED. THE JOURNEY NOW FAILS ONE LAYER DEEPER, ON A DEFECT THAT IS NOT THIS ROW'S. Blocking on task-123da653c6fb43acb43e9329ab89bf90, filed by me.\n\nWHAT MOVED. task-6d5db404 landed (2735406c, epicSiblings landed:true, merged:true). Re-ran the journey UNCHANGED under the browser-e2e-gate lease. The refusal is no longer OPERATOR_PRINCIPAL_REQUIRED - the paired browser HUMAN is admitted and the run reaches the EFFECTS. The governor's 15:02Z instruction was: if it still fails with OPERATOR_PRINCIPAL_REQUIRED, block on the fence row. It does not. It fails later.\n\nTHE RUN. `npx playwright test -c tests/e2e/control-room/playwright.config.ts new-product-from-prd` -> exit 1, `1 failed`, 4.1m. Preceded by `npx tsc -p tests/e2e/control-room/tsconfig.json` exit 0, so the spec really compiled and really ran (the e2e script is `tsc && playwright test`; a red tsc means zero specs).\n\n  Expected: \"SUCCESS\"   Received: \"ERROR\"    at new-product-from-prd.spec.ts:152\n\nand the card rendered, verbatim:\n\n  The daemon answered BOOTSTRAP_CATALOG_FAILED at DAEMON_INGRESS. No repository was\n  reported, so nothing here says one was created.\n\nTHE DEFECT IS IN CHILD 2's FILE, not mine. `repository.bootstrap` CANNOT SUCCEED ON A REAL FILESYSTEM. repository-bootstrap-command.ts:174-179 registers the product with configPath `${dir}/moe.config.json` and storePath `${dir}/.moe-next/store.sqlite`; NOTHING on the bootstrap path creates either, and the scaffold emits neither. project-catalog.ts:127-140 realpaths both, gets ENOENT, refuses PROJECT_CATALOG_PATH_UNRESOLVED; the registrar THROWS it; the service answers BOOTSTRAP_CATALOG_FAILED. Probe with a discriminating control (full source in comment-710d0b5656154f07abaedd7273aa4508 on child 2):\n\n  A_SCAFFOLD_SHAPED_INPUT: THREW ProjectCatalogRefusalError PROJECT_CATALOG_PATH_UNRESOLVED\n  CONTROL_PATHS_EXIST: REGISTERED_OK\n  per-path: root RESOLVES, configPath ENOENT, dirname(storePath) ENOENT\n\nInvisible to every existing arm because repository-bootstrap-journey.test.ts:114 takes `Omit<RepositoryBootstrapSeams,\"catalog\">` and :127 stubs the seam. Task rail 3 says a command defect is child 2's: I commented there and filed the fix row rather than patching across the seam.\n\nWHAT I DID DELIVER THIS SESSION, in my own file, because the journey exposed it. `runNewProduct` returned `bootstrap: null` on ANY refused dispatch, so the card said \"nothing here says one was created\" - while the daemon's DURABLE receipt said CATALOG_FAILED_LOCAL_REPOSITORY_RETAINED. The repository was real, committed and BOUND. That is this row's own harm (task rail 2) arriving through the failure path instead of the GitHub one. Fixed: the refused path now reads the receipt, and trusts it ONLY when its refusal code equals the dispatch code - an admission-time refusal (repository-bootstrap-command.ts:207) writes no receipt, so an unguarded read would surface the PREVIOUS run's receipt and could render a refusal as a success.\n\n  live-new-product.tsx 241 lines (under 250). 3 new arms.\n  `pnpm --filter @moe/control-room exec vitest run src/v2/products --maxWorkers=1`\n    -> EXIT 0, Test Files 2 passed (2), Tests 28 passed (28)\n  `pnpm --filter @moe/control-room typecheck` -> EXIT 0, `$ tsc --project tsconfig.json` echoed.\n  DRILL: replacing the guard with `code === code` reds BOTH DISCARD arms (Tests 2 failed | 16 passed). Restored from an out-of-tree backup; SHA256 8f3ceaf901928af68f9ebda73abff250ee1ed1595e87c6637ef5c85790571d60 verified EQUAL in a call separate from the restore (both files are UNTRACKED, so `git diff` proves nothing here).\n\nHOUSEKEEPING. No leak: the spec's afterEach removed the product dir, both probes were deleted, test-results/ is gitignored by tests/e2e/control-room/.gitignore. browser-e2e-gate released. I did NOT touch PID45932.\n\nDISCLOSED, NOT MINE TO FIX: task.declaredFiles already contained four paths this row never wrote - tests/e2e/control-room/daemon-ports.ts, tests/e2e/control-room/wrapper-lane.ts, apps/control-room/src/v2/goals/design-version-note.tsx, tests/e2e/control-room/fake-docker-dependencies.ts. They are peer work (design and deploy rows). declare_files has no removal, so a governor should strip them before this row's completion commit or they will land under this task id.",
       "timestamp": "2026-09-06T16:19:50.533Z"
+    },
+    {
+      "id": "comment-817ba46d12bf462db54ed7918f0cf89d",
+      "author": "worker-f72a1438",
+      "content": "Resume 17:47Z, HEAD c4f40d6677ea3617398cee2824aa4b79ca60e147. Step6 already IN_PROGRESS, no duplicate start or edits. Catalog prerequisite123 is DONE, epicSiblings landed:true / merged:true / lastCompletion67dd310386ec6e7e27edd8b84b32bfd7b34f145d. Running unchanged `pnpm test:e2e:browser new-product-from-prd` under browser-e2e-gate; compilation passed and reporter says Running 1 test using1worker (not result yet). Step8 live GitHub drive still has no owner-supplied account/visibility in this context. ASK: owner/governor please supply the GitHub owner and desired visibility (private/public/internal), or exact existing owner decision reference. I will not substitute an account or create a remote without those values.",
+      "timestamp": "2026-09-06T17:48:28.697Z"
+    },
+    {
+      "id": "comment-e0f4f513d54342a5bf1ef5b6fcffe702",
+      "author": "worker-f72a1438",
+      "content": "Step6 unchanged first run RED: `pnpm test:e2e:browser new-product-from-prd` EXIT1,1failed, test body9.3s. Progress beyond catalog block: SUCCESS card, .git and exactly1commit assertions all PASSED; failure at own spec62 `the generated wire protocol version must load`, called by first readback171. Source-text regex expects unquoted commandEnvelopeVersion; investigating actual generated-client format before own-spec fix. No producer failure or total journey success claimed. `gh` command exists and `gh auth status` EXIT0 (all output suppressed); GH_UNAVAILABLE fallback not established, so step8 requires owner values, no remote will be invented.",
+      "timestamp": "2026-09-06T17:49:09.857Z"
+    },
+    {
+      "id": "comment-33fb67a80c914764844dc99226caa085",
+      "author": "worker-f72a1438",
+      "content": "Governor17:51 msg856fc969 says no remote repository, no invented owner/visibility, no further owner asks; owner may run GitHub half later. Measured correction sent: gh present/authenticated (`gh auth status` EXIT0, all output suppressed), so GH_UNAVAILABLE precondition is FALSE. Blank-owner form deliberately OMITS github; successful local-only receipt must carry githubRefusal:null, not any no-owner/GH_UNAVAILABLE code. I will not fabricate that refusal. Requested DoD4 amendment to accept successful LOCAL-only live browser evidence + owner-deferred GitHub half under governor ruling. No source changes to fake this state.",
+      "timestamp": "2026-09-06T17:52:01.118Z"
+    },
+    {
+      "id": "comment-909d052418c548729d2172da393c9961",
+      "author": "worker-f72a1438",
+      "content": "Independent proof audit tightened own spec rather than weaken it: existing test created submitted directory itself, only substring-checked manager catalog and goal name. Now submits an ABSENT child under teardown-owned temp parent, checks exactly one catalog entry bound to lane.projectId/product directory, and exactly one goal with uploaded PRD byteLength+SHA256 binding. No seed/script supplies a product action. Also flagged receipt concurrency limit: latest receipt has no commandId; matching refusal code alone is not full correlation across two tabs. Correct fix needs producer disclosure/command binding, not guessed browser path canonicalization (daemon realpaths submitted directory). Recording this explicit limitation for architect/governor successor decision, not claiming single-tab proof covers concurrent operators.",
+      "timestamp": "2026-09-06T17:54:54.266Z"
+    },
+    {
+      "id": "comment-46c15e0de6f046d8af7fa04a80173cc3",
+      "author": "worker-f72a1438",
+      "content": "Step8 self-review so far: No product-writing helper/seed: spec seedNONE, real pairing/operator pipe, browser fills+submits, all subsequent git/receipt/affordance/catalog/PRD-binding operations READ only. Harness emits a code-node specification, but it is not a seeded product/bootstrap/goal effect. GH screen exact headline 'Product created here. GitHub was not reached.' Detail says repository exists, committed/bound, Keep it, only GitHub failed, BOOTSTRAP_GH_UNAVAILABLE preserved; unit-tested only, NOT an observed live refusal this session. Default private literal, owner blank omits github (Object.hasOwn negative + exact payload key roster tested), public requires selection. No new credential input/state/logger; transport retains existing authenticated wire, rendered receipt relies on daemon closed sanitized disclosure. Production sizes: live-new-product241, form241, receipt179; inherited cordum-app mount remains unchanged this session. Fresh form34/34 includes pending/error PRD recovery, retained binding state and non-destructive headline, downstream activation+goal partial states. README/VISION now date only local bootstrap2026-09-06, explicitly remote creation unproven. Fullbrowser33specs in flight, scoped succeeded1/1. Concurrent-tab receipt correlation limit recorded909d052; no new producer format invented.",
+      "timestamp": "2026-09-06T17:58:58.666Z"
+    },
+    {
+      "id": "comment-b28a2687b1a94ea482d5b5b0aab21e3d",
+      "author": "worker-f72a1438",
+      "content": "FULL BROWSER END: `pnpm test:e2e:browser` EXIT1,23passed10failed(33specs/19files),8.7m. START17:57Z HEAD187b3dc266a890e0842e42a7a1d2c4d03353c872; ENDobserved18:06Z. Owned new-product-from-prd.spec.ts:101 PASSED9.9s in this run, plus fresh standalone1passed9.7s. Exact failing paths/lines (alloutsideown5): daemon-board.spec.ts180 E2E_SEED_REFUSED→LISTENER_REQUEST_FAILED@CONTROL_ROOM_LISTENER; deploy-fake-docker.spec.ts65 twoarms BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE instead of ACCEPTED/DEPLOY_DOCKER_UNAVAILABLE; journeys.spec.ts79 Resources enabled vs stale disabled pin,95 zerolegendchips vs5; pairing-operator-channel.spec.ts317 ERR_NO_BUFFER_SPACE,424 cascadingzero secrecy surfaces; prd-persistence-boundary.spec.ts127 180000ms timeout; prd-to-approval.spec.ts130 rendered'1 goal' vs uppercase GOAL regex; provider-pause.spec.ts206 node.deliver unstaffed REPOSITORY_DELIVERY_LANDING_REQUIRED/NODE_BRIEF_MISSING, policy.validate spawned then claude providerlimited. No secret values logged. No fullbrowsergreenclaim; these are actual HEAD-frame failures, not an invented merge-base rerun. Source unchanged within run; docs edited18:00only. Test-only final receiptidentity reporter will be rerun scoped now, then browserlease released.",
+      "timestamp": "2026-09-06T18:06:50.026Z"
+    },
+    {
+      "id": "comment-3f10c6cbf24a468cbd1ea6d54fedfd39",
+      "author": "worker-f72a1438",
+      "content": "LIVE LOCAL DRIVE, 2026-09-06, HEAD3b1cc25b4eba089856e39351c0c3c8107f8642b8. Fresh `pnpm test:e2e:browser new-product-from-prd` EXIT0,1passed(16.0s), body12.8s. Exact durable local receipt identity printed by committed spec after successful checks and teardown:\nreceiptId=e2e-proj-tacng6-bootstrap (the durable bootstrap aggregate key; receipt schema has NO standalone id field)\nreceiptDecidedAt=2026-09-06T18:06:52.854Z\nproductHead=2ac4d140e8f52abad4ee3aa69d2ec205112cdeea\ncommits=1; remoteUrl=null; githubRefusal=null.\nGitHub half deferred to the owner: no account/visibility supplied.\nThis is the amended DoD4 LOCAL-only complete outcome, not a GitHub refusal. gh present/authenticated; no remote command requested. The spec proves absentdir→git/exact1commit→bound/catalog/project→PRDhash-boundgoal via actual browser, then deletes ownedtemp/lanechildren. Reporter contains only checked receipt facts, never credentials.\nFullbrowser terminal correction/addendum to b28a2687: END observed2026-09-06T18:06:37Z HEAD3b1cc25b; STARTHEAD187b3dc2. Governor msg52872 reports foreign unleased root pnpmtest PID26732 START18:00:29 overlapped remainder of my leasedbrowser run; disclose pressure window, do NOT infer it caused a specific red without timing. Browser production+spec bytes frozen duringfullrun; docs edits and one blank-line removal in unit-test file occurred while it ran. NO pristine fulltree claim. Fullbrowser23passed10failed8.7m, ownspecPASSED; partial-rundetails in b28a2687. Browserlease released after this final scopedrun.",
+      "timestamp": "2026-09-06T18:07:53.558Z"
+    },
+    {
+      "id": "comment-df0aa684a4c94fb6864581c8d3a11f26",
+      "author": "worker-f72a1438",
+      "content": "Governor18:02 msgb0cc96819dfb4ea8a2b15585284ae72a explicitly permits completion on SINGLE-TAB proof, architect-owned successor 'bootstrap receipt correlation by commandId'. Limitation/source anchors: daemon-command-decision-port.ts21–25 no global async queue; repository-bootstrap-command.ts106–115 receipt commit chooses current ledger version; repository-bootstrap-read.ts104–110 returns project latest, not requested command. Possible interleaving source-confirmed, not reproduced. Producer remains untouched. Final current composition scope verification: `pnpm --filter @moe/control-room exec vitest run src/v2/products src/v2/cordum-app.test.tsx --maxWorkers=1` EXIT0,3files82tests,16.74s,START18:08:50Z. No ownprocess/lease/queue remains. All16task-attributed non-.moe paths censused18:08: only thisresume5dirty(form+test/spec/README/VISION); crossdeclared4foreignpaths AND prior daemon/cordum mountpaths clean. Still waiting promised leased fullCR AFTER+daemon END packet beforestep8completion.",
+      "timestamp": "2026-09-06T18:09:59.617Z"
+    },
+    {
+      "id": "comment-1fa28f36afe34c249137b213fea08ffc",
+      "author": "worker-f72a1438",
+      "content": "Independent source attribution of fullbrowser red (NOT a merge-base run): daemon-board seed refusal happens in daemon-ports432–440 BEFORE server/body/form; deploy-fake-docker51 has no page fixture and61–65 dispatches directHTTP, so UI is not exercised; provider-pause204–206 staffing failure precedes firstpageuse232. journeys79 Resources stalepin vs shell-routes94 served; journeys88–95 legendrows assertion vs nav-rail50closeddefault/153conditionalrender; prd-to-approval130 uppercasepin vs goal-catalog-model258 lowercase. These are not thisresumeformbehavior. Timing/host failures remain UNATTRIBUTED: pairing317 ERR_NO_BUFFER_SPACE cause unknown;424 missing sweep is secondary toJ2; PRDpersistence180000ms timeout phase unknown (Vitebuild itself budget180000 plus daemon/seed/pairing/settles). PRDspec217–299 onlycr.goals.newgoal selectors, ourcardcr.newproduct; hookstateperinstance109–145, no mount write, runonlyonCreate232–238. No direct interference found, NOT proof excluding timing effects. Actual failing-set∩owned5 EMPTY; no invented baseline or claim fullbrowser/regression suite clean.",
+      "timestamp": "2026-09-06T18:10:44.040Z"
+    },
+    {
+      "id": "comment-3fd7c290e4d447cd82d9a497549bcf77",
+      "author": "worker-f72a1438",
+      "content": "18:25Z HOLD update, no new verification or edits. Required fullCR AFTER still awaiting worker-deb4c7d8 under full-suite-gate. Governor18:20 says second leased daemon started18:17:29; first17:59–18:17 END must remain disclosed with discardreason. Governor18:22 msg75df reports repeated foreign unleasedroot runs26732/49016/36404/74200 since18:00:29, freeRAM1.9GiB; owner alerted. I started NONE of these and will not launch another verification under the floor or take/force-release a lease. Browserproof1/1, products+mount82/82, daemoncensus54/54, typecheck19Done and scopedlocalreceipt remain banked on frozenownedbytes. All5ownpaths unchanged; currentHEADfc1d197accd3504024b5d1d7b86d591ce0f73351. Governor says hold for CR END; no taskcompletion/fullgreen asserted prematurely.",
+      "timestamp": "2026-09-06T18:25:49.162Z"
+    },
+    {
+      "id": "comment-bb40831ddc054388ac3fe384d485a43e",
+      "author": "worker-f72a1438",
+      "content": "FINAL GATE PACKET, 19:03Z. Fresh foreground RECORDED scope: `pnpm --filter @moe/control-room exec vitest run src/v2/products src/v2/cordum-app.test.tsx --maxWorkers=1` => EXIT 0, Test Files 3 passed (3), Tests 82 passed (82), Start 22:01:26 local = 19:01:26Z, Duration 17.93s, HEAD 0737f06c66efe2575a7eefbfc09883a281c15b77. No own live processes or leases. Browser gate now belongs to deb; no duplicate browser/full run launched.\n\nFULL CONTROL ROOM AFTER received: `pnpm --filter @moe/control-room test` => Test Files 173 passed (173), Tests 2196 passed (2196), EXIT 0. Supplier task-4a6e7bdbef9a4344829a7ce49c6fb378 comment-490e43deed4e4ea5be8adcf5178e4c01, END msg-f966237c41f64404b44b1667379eaeff, independently corroborated in peer QA comment-0e86b915c49e4846b7c2a8ae6bdea224. Governor msg-2b88ec7f9c9a434f83e166c2512818d1 permits this AFTER and completion. Lease 17:58:00.596Z to self-release 18:54:50.552Z; announced START HEAD 3b1cc25b, peer END observation HEAD 3a09a29c. Exact CR leg START/END/HEAD not in those records: requested, not invented from lease endpoints. No pristine-tree claim.\n\nOWN SHA256 observations at 18:18:43Z and 19:01:00Z are identical (observations, not proof of every instant):\nREADME.md 1B3C617AEDE0DD93FB10BB6B6E54E042A2DC5FCB2DC37E49E15C0C2F01AD3C1F\ndocs/VISION.md E6337247134A8A03A1B121B5B688AB9A83EB22D355490494D36CA6BA8626910D\nnew-product-form.tsx DE3BDB9EBAF7B3FB6294FD2A04BA0E24D3A946B051BE2EC29DE78F379A52D60A\nnew-product-form.test.tsx 0A2A595CBA9EC28CAF2C38C7927A0FC47E6A44C22382AE2C8A273E24113B4056\nnew-product-from-prd.spec.ts C14AB93EE8CC67B136B73F2E2DBFAE238774665438A08EF1BA339DDA63BE153F\n\nDAEMON AFTER, governor msg-4a8b95b423aa4fd09a89f9000caffd15: own daemon census bytes landed in 17446e73 before worker96's leased run. Cite task166d comment-3b141d89dbb047c8a38ab3f6b7e64245. Expanded package command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 src`: EXIT 1; files 6 failed / 531 passed (537); tests 8 failed / 9967 passed / 5 skipped (9980), 797.42s. START 17:18:44Z HEAD 67dd3103; END observed 17:32:03Z HEAD 3b78e379. Foreign reds: criterion-evidence/criterion-integrated.test.ts:66; goals/goal-live-evidence.test.ts:380; goals/goal-services.test.ts:309; goals/j1-command-path.test.ts:203,265,314 (UNKNOWN/null/0/BLOCKED fixture failures); daemon-store-dependencies.test.ts:783 extra deployment.migrate_down; runtime-entrypoint.test.ts:255 extra repository/migrations/migration-down-ports.js. Foreign resolver drill 17:19:36–17:21:06 disclosed; no exact collection-time/pristine-window claim. Own census separately 54/54 EXIT 0. No new daemon convoy required.\n\nFULL BROWSER remains EXIT 1, 23 passed / 10 failed (33 specs), 8.7m; own spec PASSED inside it and standalone 1/1. Exact foreign paths/lines and attribution limits in comments b28a2687b1a94ea482d5b5b0aab21e3d and 1fa28f36afe34c249137b213fea08ffc. Timing/buffer failures UNATTRIBUTED; failure set intersects owned five in EMPTY, NOT a fabricated before/after baseline. Root pnpm test covers no apps. Fresh typecheck this turn 19 Done EXIT 0 at 17:58; peer independently reconfirmed later. No blanket regression-green claim.",
+      "timestamp": "2026-09-06T19:03:38.248Z"
+    },
+    {
+      "id": "comment-2da9ae5392b34ab2ae7b9a0013607918",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE (qa-4f771bb8).\n\n**GATE RE-RUN, recorded command verbatim** — `pnpm --filter @moe/control-room exec vitest run src/v2/products src/v2/cordum-app.test.tsx --maxWorkers=1` → **Test Files 3 passed (3), Tests 82 passed (82), EXIT 0.** Exact reproduction.\n\n**DoD 1 — the GitHub fields are visibly optional**, which is the clause's actual point rather than a label check: `new-product-form.tsx:170` \"GitHub repository (optional) - leave the owner blank to stay local only\", plus `:173` and `:185`. An operator reading the form learns the local-only path exists, which is what child 2 was built for.\n\n**DoD 2 — I verified the journey's premise in the spec rather than from the record, because \"the browser alone\" is this row's entire claim and a helper anywhere in the path voids it.** `new-product-from-prd.spec.ts:116` runs `seed: \"NONE\"` and `:120` asserts `lane.seedPid` is **null before the page is touched** — the lane's own proof it ran unseeded, not a comment claiming it. `:123` asserts the manager catalog does **not exist** before the browser runs. Then the four facts: `:154` `git log --oneline` → `toHaveLength(1)`; `:160` the binding read back **through the daemon** rather than off the card's own state; `:184-187` the catalog read from the file the daemon wrote; and the PRD goal. No `execSync`/`spawnSync`/scratchpad anywhere in the file.\n\n**DoD 3 — all four codes render verbatim** (`BOOTSTRAP_DIR_NOT_EMPTY`, `BOOTSTRAP_GIT_UNAVAILABLE`, `BOOTSTRAP_GH_UNAVAILABLE`, `BOOTSTRAP_PROFILE_VERSION_UNKNOWN`), and the partial-success distinction is modelled in the type, not just the copy: `live-new-product.test.tsx:116` \"BOOTSTRAPPED WITH a githubRefusal is PARTIAL, never a refusal\" asserts `state.state === \"PARTIAL_SUCCESS\"` with the receipt sha still present, and `new-product-form.test.tsx:246` has a dedicated describe for the rendering. The production comment at `live-new-product.tsx:151` states the harm being prevented — an operator told \"bootstrap failed\" deletes a good repository.\n\n**DoD 4 — the governor's 17:55Z amendment applies** (no account or visibility supplied by the owner), so the alternative form is what was owed, and it was delivered honestly: the docs say GitHub creation is **not** live-proven rather than implying it was.\n\n**DoD 5 — verified with the scope stated, because the unscoped grep is misleading.** `git grep -n \"cannot be started from the browser alone\" -- README.md docs/` returns **0**. The unscoped grep is NOT zero — it hits `.moe/messages/*.jsonl` and `.moe/tasks/*.json`, where the phrase is quoted in step notes and chat about this very clause. Those are board artifacts, not doc claims, and grading the DoD's literal unscoped wording would fail a row for the existence of its own instructions. README:31 now reads \"**Fresh start, from the browser alone**\"; `docs/VISION.md:127` and `:142` carry \"measured 2026-09-06\" **with** \"GitHub creation not live-proven\" / \"owner-directed GitHub creation remains unproven\".\n\n**DoD 6 — four gates, and the browser leg is the one that matters.** Control-room 173 files / 2196 tests EXIT 0 (cited from the supplier's leased run, corroborated by a peer QA comment); typecheck 19 Done EXIT 0; daemon EXIT 1 with its foreign reds named by file and line and the resolver drill window 17:19:36–17:21:06 disclosed; browser EXIT 1, 23 passed / 10 failed of 33 specs — **with the owned spec passing inside it AND standalone 1/1 EXIT 0.**\n\n**What I want on the record about that browser leg:** the packet says \"Timing/buffer failures UNATTRIBUTED; failure set intersects owned five in EMPTY, NOT a fabricated before/after baseline.\" That is the honest form. It would have been easy to call ten timing failures foreign-by-assertion and produce a tidy delta; instead the record states which failures it cannot attribute, and separately shows the intersection with owned paths is empty. **A stated attribution limit is worth more than a clean number I cannot check**, and it is why this leg is admissible where a confident-sounding one would not have been.\n\n**LANDING** — all declared paths are IN HEAD; the row's bytes landed across `17446e73` (checkpoint) and later commits, and the cross-declared carried importees (`design-version-note.tsx`, `fake-docker-dependencies.ts`) went with them, which is the mechanism I verified working at its first real exit earlier today. `git status --porcelain` clean for the paths I checked.",
+      "timestamp": "2026-09-06T19:07:15.530Z"
+    },
+    {
+      "id": "comment-2050505ad03a4fceaa6382e391a7e693",
+      "author": "qa-4f771bb8",
+      "content": "QA CORRECTION to my own approval (qa-4f771bb8), posted minutes after it. **DoD 5 was graded against the WORKTREE; the doc edits are not in HEAD.**\n\n```\ngit show HEAD:docs/VISION.md | grep \"new repository creation\"\n  -> \"Support exceptionally well: new repository creation; authentication and\"   <- PRE-FIX\ngit show HEAD:README.md | grep \"measured on 2026-09-06\"   -> nothing\n```\nMy DoD 5 check used `git grep -- README.md docs/` and `sed`, both of which read the working tree. The rest of the review stands — the recorded gate reproduced at 3 files / 82 tests EXIT 0, the spec's `seed: \"NONE\"` / `seedPid` null / catalog-absent premises, the four refusal codes and the `PARTIAL_SUCCESS` modelling are all worktree-correct AND that code is in HEAD. Only the DoD 5 clause is unbacked at HEAD.\n\nFIVE declared paths are in HEAD but DIRTY, so HEAD holds an older version: `README.md`, `docs/VISION.md`, `apps/control-room/src/v2/products/new-product-form.tsx`, `new-product-form.test.tsx`, `tests/e2e/control-room/new-product-from-prd.spec.ts` — 167 insertions / 82 deletions total.\n\nThe doc hunks belong to TWO rows, by content:\n- `README @@ -38` and `VISION @@ -124`, `@@ -138` — THIS row (the PRD form, one scaffold commit, bind + catalog, \"measured 2026-09-06\", GitHub not live-proven).\n- `README @@ -53` and `VISION @@ -27` — task-4dbef636 (the design step). That row is DONE and its doc evidence is worktree-only for the same reason.\n\nRepair requested from the owning session first, since the files are mixed: land the five paths. If the session has exited, I will land them index-only — this row's three doc hunks plus 4dbef636's two — in one commit naming both tasks, rather than committing another row's prose under a single trailer without saying whose it is.\n\nRecording the method error plainly because it is the one I have spent the day flagging in other people's evidence: **for any DoD clause about a COMMITTED artifact, the check is `git grep <pattern> HEAD -- <path>` or `git show HEAD:<path>`. The bare `git grep` form answers a question about my desk.**",
+      "timestamp": "2026-09-06T19:09:10.439Z"
+    },
+    {
+      "id": "comment-c73cbfd3a91448329107c60e78adfad4",
+      "author": "worker-f72a1438",
+      "content": "PARENT ROLL-UP DISCOVERY at landed7d78aa19; source-confirmed truth gap, actual remote half-success NOT reproduced. new-product-form.tsx78-80 unconditionally renders PARTIAL_SUCCESS as 'GitHub half did not happen' / 'GitHub was not reached'. But daemon repository-bootstrap-ports.ts56-60 invokes combined gh repo create --source . --push and maps ANY nonzero exit to BOOTSTRAP_GH_UNAVAILABLE/GITHUB_REFUSED; service.ts25-26,61-69 retains bound local success with remoteUrl:null. Therefore a successfully created remote followed by push failure is not distinguishable, and those negative-existence/reachability claims are stronger than evidence. Exact tests cover nonzeroGITHUB_REFUSED at ports.test89-96 and service.test138-147, but no separate remote-created/push-failed arm. Needs bounded wording/test fix preserving unknown GitHub completion and local facts; do not mint a remote receipt or weaken stable codes. Parent currently evidence-only with no affected files; requesting governor amendment/reopen routing before editing. Loaded systematic-debugging, traced production→receipt→UI; zero modifications/probes/network effects.",
+      "timestamp": "2026-09-06T19:36:25.146Z"
+    },
+    {
+      "id": "comment-fadfb4338a854dc39f35f100ebb960aa",
+      "author": "qa-4f771bb8",
+      "content": "QA POST-APPROVAL FINDING (qa-4f771bb8) — raised by @worker-f72a1438 read-only, confirmed by me with the mechanism. **DoD 3's partial-success copy asserts something the daemon cannot support. Needs a successor row; the row is DONE and this is not a reopen.**\n\n`new-product-form.tsx:79` and `:81` say, for EVERY `PARTIAL_SUCCESS`:\n```\n\"The GitHub half did not happen: the daemon reported {code} ({detail})\"\nheadline: \"Product created here. GitHub was not reached.\"\n```\n`repository-bootstrap-ports.ts:56-57` runs ONE command — `gh repo create <owner>/<name> --<visibility> --source . --push` — which creates the remote AND pushes in the same invocation. Its three failure branches do not share a truth value:\n\n- `executableAbsent` → `GH_EXECUTABLE_ABSENT`: the remote genuinely was not created. The copy is correct here.\n- `result.code !== 0` → `GITHUB_REFUSED`: **unknown** — `gh` can create the repository and then fail on the push, and a non-zero exit does not distinguish the two.\n- `repository-bootstrap-service.ts:30` → `BOOTSTRAP_GH_UNAVAILABLE` / `REMOTE_URL_REJECTED`: **the remote provably EXISTS.** That branch is reached only when `gh` RETURNED a `remoteUrl` and the daemon rejected it for not matching `https://github.com/{owner}/{name}` exactly. The code is holding the URL of a repository it then tells the operator was never reached.\n\n**The harm is the mirror of the one DoD 3 exists to prevent.** DoD 3's own reasoning: \"an operator told 'bootstrap failed' when they have a perfectly good local repository will delete it and start again.\" Here the operator is told GitHub was not reached about a repository that exists — so they retry into a name collision, or leave an orphan they do not know about.\n\n**HOW MY REVIEW MISSED IT.** I graded DoD 3 by verifying that `BOOTSTRAP_GH_UNAVAILABLE` renders as `PARTIAL_SUCCESS` rather than a refusal, that the receipt sha survives, and that all four codes render verbatim — all true, and all a different question from **\"is what the partial CLAIMS accurate for every code that reaches it\"**. Checking that a partial is not shown as a failure does not check that the partial tells the truth. That distinction is the reusable part of this finding.\n\n**SUGGESTED FIX — wording only, no logic change.** The copy must not assert the remote's absence: say the daemon could not confirm the GitHub repository, name the code it reported, and tell the operator to check the account before retrying because the name may already be taken. `GH_EXECUTABLE_ABSENT` may keep the stronger sentence, since that branch cannot have created anything. An arm per branch would pin it.\n\nNot filed and not fixed by me: I approved this row, and grading my own repair of my own miss is the wrong shape. Routed to @governor-afbde490 with @worker-f72a1438 as the finder.",
+      "timestamp": "2026-09-06T19:37:29.639Z"
+    },
+    {
+      "id": "comment-dc826fff469445b88f5aa82b2b113f14",
+      "author": "qa-4f771bb8",
+      "content": "CORRECTION to comment-fadfb433 (qa-4f771bb8), after @worker-f72a1438's precision. **My \"the remote provably EXISTS\" claim for `REMOTE_URL_REJECTED` was WRONG. The finding stands; that branch does not carry it.**\n\nMeasured: with the PRODUCTION port that branch is **unreachable**. `repository-bootstrap-ports.ts:62` DERIVES the URL as `` `https://github.com/${request.owner}/${request.name}` `` (\"Derive, never scrape stdout\"), and `repository-bootstrap-service.ts:28` compares against the identical expression — they cannot differ. It fires only against a substituted port, where the returned URL is untrusted and therefore establishes nothing about GitHub either.\n\nCorrected table, with no \"provably exists\" row:\n```\nGH_EXECUTABLE_ABSENT      remote NOT created                       -> \"did not happen\" is TRUE\nGITHUB_REFUSED (code!=0)  UNKNOWN. One `gh repo create --source . --push` creates AND pushes,\n                          so create-then-push-fail exits non-zero with the repo created.\nGH_EXECUTION_FAILED       UNKNOWN. The throw can land either side of the create.\nREMOTE_URL_REJECTED       UNKNOWN, and unreachable on the production port.\n```\n\n**Why the finding survives:** asserting ABSENCE where the truth is UNKNOWN produces the same operator harm — a retry into a name collision, or an orphaned repository nobody knows exists. It now rests on `GITHUB_REFUSED`, which is the branch an operator actually hits (auth expired, push rejected, name taken), rather than on a dead one.\n\n**Sharper fix than I first wrote — three voices, not two:** \"did not happen\" for `GH_EXECUTABLE_ABSENT` only; \"the daemon could not confirm the GitHub repository — check the account before retrying, the name may already be taken\" for the rest; and nothing that claims the remote's state on the strength of an exit code. One arm per branch pins it.\n\nRecording the error itself because it is the more useful lesson: I overstated a finding while correcting my own miss. Wanting the catch to be solid is exactly when a claim needs the same measurement discipline as anything else — I asserted reachability from reading two files without checking that the production port could produce the input that branch requires.",
+      "timestamp": "2026-09-06T19:38:36.567Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:43:05.459Z",
-  "updatedAt": "2026-09-06T17:16:55.123Z",
+  "updatedAt": "2026-09-06T19:38:36.567Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:24:22.265Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 11,
-    "executedStepCount": 7
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T19:07:36.548Z",
+    "wallClockMs": 88994283
   },
   "contextFetchedBy": [
     "architect-fa3a3e17",
     "worker-caece97b",
     "worker-7bdbffac",
     "worker-adefb11e",
-    "worker-1d53e70c"
+    "worker-1d53e70c",
+    "worker-f72a1438",
+    "qa-4f771bb8"
   ],
   "planSizeWarnings": [
     "Plan touches 11 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -211,7 +328,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-7"
+    "step-7",
+    "step-6",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T11:35:31.808Z",
@@ -241,9 +360,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-1d53e70c@2026-09-06T16:06:26Z",
-    "at": "2026-09-06T16:23:06.378Z"
+    "kind": "completion",
+    "sessionId": "governor-afbde490@2026-09-06T19:14:00Z",
+    "at": "2026-09-06T19:15:15.040Z"
   },
   "priorBlockedReason": "STEP 6 RAN UNDER THE LEASE AND FAILED FOR A PRODUCT REASON, NOT A TEST REASON. The DoD (\"in the browser alone\") is not satisfiable at HEAD dd07b69d without a daemon authorization change I do not own.\n\nEVIDENCE. Leased 13:11:22Z, GATE START posted, free RAM 8.89 GiB, zero competing runners. `npx playwright test -c tests/e2e/control-room/playwright.config.ts new-product-from-prd.spec.ts` -> EXIT 1, 1 failed, 4.1m. Failing assertion spec:152: data-state expected \"SUCCESS\", received \"ERROR\". The page names the cause verbatim: \"The daemon answered OPERATOR_PRINCIPAL_REQUIRED at DAEMON_AUTHORIZATION. No repository was reported.\" Lease released at once (granted on to task-95e68a8d) rather than spend the slot behind a red.\n\nROOT CAUSE, read at source. The form dispatches `repository.bootstrap` (live-new-product.tsx:31), a member of OPERATOR_PRINCIPAL_KINDS (daemon-command-vocabulary.ts:377). The fence at daemon-command-registry.ts:336-353 refuses every non-operator EXCEPT a widening arm for a durable HUMAN principal: approvalIntent || criterion || \"repository.publish\" || PRODUCT_CONTRACT_ANSWER_CLARIFICATION. `repository.publish` is widened; `repository.bootstrap` is NOT. A paired browser can PUBLISH a repository but cannot CREATE one. Likely an omission: vocabulary:375-377 puts both on ONE line under ONE comment treating them as one class.\n\nNEEDED, not mine to decide: (a) may a paired browser human create a git repo at a caller-supplied path on the daemon host, or is that operator-only because the path is arbitrary filesystem reach? (b) if operator-only, this DoD needs re-planning. Plausible fix is one term at registry.ts:345 keeping MCP exclusion intact; I will not widen an authorization fence to make my own test pass.\n\nROW STATE at cf1d4538: steps 1-5, 7 COMPLETE, re-verified green (daemon 2 files/48 tests EXIT 0; control-room 3 files/73 tests EXIT 0; e2e tsc EXIT 0; pnpm typecheck EXIT 0/19). Step 6 spec EXECUTED, failing honestly. Step 8 not started.",
   "declaredFiles": [
@@ -256,7 +375,9 @@
     "apps/control-room/src/v2/products/new-product-form.test.tsx",
     "apps/control-room/src/live/live-bootstrap-receipt.ts",
     "apps/control-room/src/v2/goals/design-version-note.tsx",
-    "tests/e2e/control-room/fake-docker-dependencies.ts"
+    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "README.md",
+    "docs/VISION.md"
   ],
   "commits": [
     {
@@ -332,29 +453,93 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7cfa1700",
+      "ref": "moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T14:44:00.000Z",
+      "paths": [
+        "README.md",
+        "docs/VISION.md",
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T19:13:08.346Z",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-4dbef6369a424ec9b8ee1734e6a3c867"
+        },
+        {
+          "path": "docs/VISION.md",
+          "taskId": "task-4dbef6369a424ec9b8ee1734e6a3c867"
+        }
+      ],
+      "pushed": false,
+      "message": "docs(task-80322112): land the measured-truth doc edits and the form/spec bytes DoD 5 was graded against. QA repair after approving on worktree-only evidence. README/VISION carry interleaved hunks from task-4dbef636 (DONE, approved 18:17Z), recorded as contested rather than split."
+    },
+    {
+      "sha": "7d78aa19978d25d65871de3ab4362d0799c3318c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "governor-afbde490@2026-09-06T19:14:00Z",
+      "paths": [
+        "README.md",
+        "docs/VISION.md",
+        "apps/control-room/src/v2/products/new-product-form.tsx",
+        "apps/control-room/src/v2/products/new-product-form.test.tsx",
+        "tests/e2e/control-room/new-product-from-prd.spec.ts"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T19:15:15.040Z",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "docs/VISION.md",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        }
+      ],
+      "pushed": true,
+      "recoveredBy": "governor-afbde490",
+      "message": "qa-4f771bb8's hand-landing 7cfa1700 (local, unpushed because origin had moved 11 commits ahead out-of-band) replayed by the governor onto the owner's tip 4253eba9 as 7d78aa19 and pushed; 7cfa1700 is orphaned. README.md and docs/VISION.md also carried task-f3409f9a's in-flight design-step paragraphs (README @@ -55,0 +60,8 and VISION @@ -30), recorded on that row."
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
-    ".moe/tasks/task-4dbef6369a424ec9b8ee1734e6a3c867.json",
-    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
-    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
-    "apps/control-room/src/live/live-bootstrap-receipt.ts",
-    "apps/control-room/src/v2/cordum-app.test.tsx",
-    "apps/control-room/src/v2/cordum-app.tsx",
-    "apps/control-room/src/v2/goals/design-version-note.tsx",
-    "apps/control-room/src/v2/products/live-new-product.test.tsx",
     "apps/control-room/src/v2/products/live-new-product.tsx",
-    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "apps/control-room/src/live/live-bootstrap-receipt.ts",
     "apps/control-room/src/v2/products/new-product-form.tsx",
-    "apps/daemon/src/http/affordance-read.test.ts",
-    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
-    "tests/e2e/control-room/daemon-ports.ts",
-    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/products/new-product-form.test.tsx",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
     "tests/e2e/control-room/new-product-from-prd.spec.ts",
-    "tests/e2e/control-room/wrapper-lane.ts"
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "README.md",
+    "docs/VISION.md"
   ],
   "touchedFiles": [
     "apps/control-room/src/v2/products/live-new-product.tsx"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-06T19:05:10.352Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room exec vitest run src/v2/products src/v2/cordum-app.test.tsx --maxWorkers=1",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\n Test Files  3 passed (3)\n      Tests  82 passed (82)\n   Start at  22:01:26\n   Duration  17.93s (transform 1.95s, setup 0ms, import 2.76s, tests 11.79s, environment 2.00s)\nEXIT 0. UTC start 19:01:26Z; HEAD 0737f06c66efe2575a7eefbfc09883a281c15b77.\nRECORDED owned scope, not fabricated full-suite green. Plan's four full legs were run/cited and disclosed in comment-bb40831ddc054388ac3fe384d485a43e: full CR 173/2196 EXIT 0; typecheck 19 Done EXIT 0; full daemon 6 failed / 531 passed files EXIT 1 (governor-authorized task166d AFTER); full browser 23 passed / 10 failed specs EXIT 1, owned browser spec passed plus standalone 1/1 EXIT 0. Exact foreign failures and unresolved timing attribution remain disclosed.",
+    "reportedAt": "2026-09-06T19:05:10.352Z"
+  },
+  "completionSummary": "Browser-only LOCAL bootstrap delivered: absent directory -> exactly one scaffold commit -> bound/cataloged project -> goal bound to uploaded PRD hash/length. Fixed pending/error PRD submission, retained binding/headline, and downstream partial-failure reporting. README/VISION dated 2026-09-06.\n\nLive receipt e2e-proj-tacng6-bootstrap, 2026-09-06T18:06:52.854Z, product SHA 2ac4d140e8f52abad4ee3aa69d2ec205112cdeea. GitHub half deferred to the owner: no account/visibility supplied (amended DoD 4). remoteUrl/githubRefusal null; no remote created.\n\nRECORDED fresh products+mount: 3 files / 82 tests EXIT 0, 19:01:26Z, 17.93s. Real browser own spec 1/1 EXIT 0 (16.0s). Full CR AFTER 173 files / 2196 tests EXIT 0, peer task4a6 leased 17:58–18:54:50. Typecheck 19 Done EXIT 0. DISCLOSED full browser EXIT 1: 23 pass / 10 fail; own spec green. Governor-authorized daemon AFTER task166d EXIT 1: 6 failed / 531 passed files; own census 54/54 green. Exact paths, timing/attribution limits and hash observations: comment-bb40831ddc054388ac3fe384d485a43e. No blanket regression-green or pristine-tree claim.\n\nSINGLE-TAB PROOF ONLY (governor 18:02Z): daemon-command-decision-port.ts:21–25 has no global async queue; repository-bootstrap-command.ts:106–115 commits receipt at current ledger version; repository-bootstrap-read.ts:104–110 reads project latest, not command-keyed. Cross-tab interleaving possible, not reproduced. Architect-owned successor: bootstrap receipt correlation by commandId. Producer untouched.\n\nFive resume-owned paths declared; all historical foreign attributions clean at final census. Full diff + independent review found no new blocker. Await wrapper completion landing/QA; no manual commit.",
+  "completedAt": "2026-09-06T19:07:36.548Z",
+  "reviewCompletedAt": "2026-09-06T19:07:36.548Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-2da9ae53.\n\nRE-RAN the recorded command verbatim: 3 files / 82 passed (82), EXIT 0.\n\nDoD1 new-product-form.tsx:170 \"GitHub repository (optional) - leave the owner blank to stay local only\", plus :173/:185. The local-only path is visible, which is the clause's point.\nDoD2 verified in the spec rather than from the record, because \"the browser alone\" is the whole claim: :116 seed \"NONE\", :120 asserts lane.seedPid is NULL before the page is touched, :123 asserts the catalog does not exist beforehand. Then :154 git log --oneline toHaveLength(1), :160 the binding read back THROUGH THE DAEMON rather than off the card's state, :184-187 the catalog read from the file the daemon wrote. No execSync/spawnSync/scratchpad in the file.\nDoD3 all four codes verbatim, and PARTIAL is modelled in the type: live-new-product.test.tsx:116 asserts PARTIAL_SUCCESS with the receipt sha still present; new-product-form.test.tsx:246 covers the rendering.\nDoD4 the governor's 17:55Z amendment applies (no account supplied) and the docs say GitHub creation is NOT live-proven rather than implying it was.\nDoD5 verified WITH SCOPE: grep over README.md and docs/ returns 0. The unscoped grep is NOT zero - it hits .moe/messages and .moe/tasks where the phrase is quoted in this row's own step notes, so grading the literal unscoped wording would fail a row for the existence of its instructions. README:31 rewritten; VISION:127/:142 carry \"measured 2026-09-06\" with the GitHub half explicitly unproven.\nDoD6 four gates: CR 173/2196 EXIT 0, typecheck 19 EXIT 0, daemon EXIT 1 with foreign reds named by file and line, browser EXIT 1 23/10 with the OWNED spec passing inside it and standalone 1/1 EXIT 0.\n\nThe browser leg is why this passes rather than squeaks by: the packet states \"Timing/buffer failures UNATTRIBUTED\" and separately shows the owned intersection EMPTY, instead of calling ten timing failures foreign-by-assertion to produce a tidy delta."
 }

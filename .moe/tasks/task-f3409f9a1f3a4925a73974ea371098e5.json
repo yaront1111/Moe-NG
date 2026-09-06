@@ -55,25 +55,40 @@
     {
       "stepId": "step-3",
       "description": "PLAYWRIGHT JOURNEY (DoD 1, 3, 4, 5). New tests/e2e/control-room/design-operator.spec.ts copying the real-daemon harness from resources-and-contract.spec.ts / gate1-v1-approval.spec.ts (vite build, daemon-main with store-deps, demo-seed, pairing).\n\nDrive: (1) operator pairs; (2) scripted seat = POST design.submit on /command with PLANNING+WORK (same pattern gate1 uses to propose a revision as an agent) with a revision whose dataModel names a distinct entity; (3) browser opens the goal; (4) assert cr.design.card shows the version and that entity (DoD 1) — if the card is missing, that is a producer gap, report_blocked, do not rebuild the card; (5) submit a second revision; card shows version 2; POST /design/read {goalRef, version:1} still returns version 1 (DoD 3); (6) a goal with no design shows cr.design.none or cr.approve.design-version skip words, not a blank (DoD 4).\n\nCapture the success JSON frame from the live POST as a committed fixture next to the spec if DoD 5 requires fixtures; otherwise the spec itself is the surviving command. Quote `pnpm test:e2e:browser` Test Files / passed count. Do not edit journey-coverage.ts unless that matrix gains a new COVERED row you can honestly flip — default is leave it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "tests/e2e/control-room/design-operator.spec.ts"
       ],
-      "startedAt": "2026-09-06T15:16:00.662Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/design-operator.spec.ts",
+        "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+        "apps/control-room/src/v2/goals/design-read-frame.captured.json"
+      ],
+      "note": "THE BROWSER JOURNEY IS GREEN AGAINST A REAL DAEMON. The producer gap that blocked this row at 15:51Z is closed: `git show HEAD:apps/daemon/src/http/affordance-planning-offers.ts` now has the PRESENT arm offering BOTH `design.submit@design:<goalId>` and the decomposition, with `staffable` holding only the decomposition (task-4dbef636, bytes on the branch in afb302cf). The spec's `submitDesign(ENTITY_V2, ...)` resubmit -- the exact call that failed with \"no design.submit offer among ..., planning.submit_decomposition@goal-...\" -- now dispatches.\n\nRUN, foreground, standalone:\n`npx playwright test -c tests/e2e/control-room/playwright.config.ts tests/e2e/control-room/design-operator.spec.ts`\n=> `ok 1 [chromium] > design-operator.spec.ts:147:1 > the operator reads the design and the plan fold names its version (13.3s)` / `1 passed (14.0s)` EXIT 0.\n\n13 s covers a vite build, a real daemon on --port=0, demo-seed, browser pairing over the operator stdin pipe, two goals from PRDs, a Gate 1 propose+approve, two design.submit dispatches and the reads. It is fast, not vacuous -- see the drill.\n\nMUTATION DRILL (production, not the test). `versionWords` in `apps/control-room/src/v2/goals/design-version-note.tsx` \"Design version\" -> \"Design revision\". Spec went RED exactly where it should, proving execution reaches step 7 deep in the journey and that the assertion is load-bearing:\n  `Expected substring: \"Design version 1\"` / `Received string: \"Design revision 1. Approving this plan accepts that design.\"` at design-operator.spec.ts:337, EXIT 1.\nRESTORE, in a call separate from the drill: file is TRACKED and was clean at drill time (`git status --porcelain` printed only the untracked spec), so `git checkout --` plus an empty `git diff`; SHA256 95FBEB10EC4C5628180C4717AC43675A8689AF6A68DE3D0729FDA9F63CFA1121 equals the pre-drill backup in %TEMP%\\dvn-worker-deb4c7d8.bak.\n\nWHAT THE JOURNEY ASSERTS, by DoD:\n- DoD 1: `cr.design.card` visible, `cr.design.version` = \"Version 1\", `cr.design.body` contains ShelfItemV1Marker -- a named entity from the data-model section reaching the rendered tab off a real frame.\n- DoD 2: `cr.approve.design-version` contains \"Design version 1\", then \"Design version 2\".\n- DoD 3: after the resubmit the tab reads \"Version 2\"/ShelfItemV2Marker, and `POST /design/read {goalRef, version:1}` still answers version 1 carrying ShelfItemV1Marker and NOT ShelfItemV2Marker.\n- DoD 4: the second goal, planned with no design, renders `cr.design.card` with a non-empty `cr.design.none`.\n- Plus `cr.banner.fixture` count 0 (no fixture bundle) and `survivingPids([])` (no orphan daemon).\n\nDoD 5 FIXTURES ARE NOW CAPTURED FRAMES, NOT SHAPES. I added a temporary writeFileSync to the spec, ran it live, and committed the two verbatim `POST /design/read` bodies as `apps/control-room/src/v2/goals/design-read-frame.captured.json` (136 lines: `latest` version 2 versions [1,2] entity ShelfItemV2Marker; `older` version 1 entity ShelfItemV1Marker; goalRef goal-012d8848..., projectId e2e-proj-sdprxq). The capture code is REMOVED -- `grep -n 'writeFileSync|node:fs'` on the spec now matches only the pre-existing `import { existsSync, rmSync }` -- and a comment in its place names the fixture's provenance.\n\nThree new arms in design-version-note.test.tsx decode those frames with the PRODUCTION decoder `mapDesignAnswer` (exported by the sibling live-design.ts; I did not edit that file): the latest frame renders \"Design version 2\"; the older frame keeps version 1 with its own entity and not the newer one's; and the exact-key discipline is asserted against the REAL frame -- one extra key on `record` and one deleted `version` key each answer ERROR/DESIGN_RESPONSE_INVALID, with the note then saying \"DESIGN_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_DESIGN\" and explicitly NOT \"compiled with no design\".\n\n`pnpm --filter @moe/control-room test` => `Test Files 173 passed (173)` / `Tests 2199 passed (2199)` EXIT 0. The file alone, run from the package dir, `Test Files 1 passed (1)` / `Tests 13 passed (13)` (was 10 before the three arms). NOTE for whoever repeats it: `npx vitest run --root apps/control-room <file>` FAILS to collect -- the readFileSync fixture paths are cwd-relative, so run it from apps/control-room or via the pnpm filter.\n\n`npx tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0.\n\nNO REBUILD: live-design.ts, design-read.ts, the Design card, approve-plan.tsx and journey-coverage.ts are untouched. Peer dirt in the shared checkout (9 paths incl. new-product-form.tsx, daemon-command-registry.ts, deploy-fake-docker.spec.ts) left alone. `browser-e2e-gate` lease held for the run.",
+      "startedAt": "2026-09-06T15:16:00.662Z",
+      "completedAt": "2026-09-06T19:03:22.725Z"
     },
     {
       "stepId": "step-4",
       "description": "DOCS + LIVE DRIVE + GATES (DoD 6, 7) + adversarial self-review.\n\ndocs/VISION.md: mark item 4 UX and architecture as running, with today's date (2026-09-05), without turning the rest of the list into a changelog.\nREADME.md What runs today: one short bullet that the design step (UX and architecture) is running as of that date, pointing at VISION.md item 4. Do not rewrite the Gate 1 paragraph.\n\nLIVE DRIVE: on UnAI or a fresh project, a REAL seat (not the e2e double) submits a design. Put transcript + design ref in a row comment under ~4500 chars. If the seat cannot produce a valid design, quote DESIGN_SHAPE_INVALID (code AND layer) verbatim — that is a finding, not a workaround.\n\nGATES standalone foreground, each count line quoted: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane only, apps/** not covered by it — say so), `pnpm test:e2e:browser`. Path-attributed baseline for foreign red.\n\nAdversarial: no rebuild of sibling files; approve-plan.tsx line count unchanged; skip copy is words; extra-key decoder still in sibling tests. Report every path in complete_step.modifiedFiles.\n\nNamed verification command: `pnpm test:e2e:browser`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "docs/VISION.md",
         "README.md"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/design-operator.spec.ts",
+        "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+        "apps/control-room/src/v2/goals/design-read-frame.captured.json"
+      ],
+      "note": "DOCS, LIVE DRIVE, GATES, AND ONE MID-FLIGHT PRODUCTION CHANGE I HAD TO FOLLOW.\n\nDOCS (DoD 7) ARE ON THE BRANCH, UNDER SOMEONE ELSE'S COMMIT. I edited `docs/VISION.md:30` to `4. **UX and architecture** - running since 2026-09-06` and added a README \"What runs today\" bullet naming VISION item 4. Both were swept into `7d78aa19 docs(task-80322112...)` by a peer session before I could report them, so both files now read CLEAN here and `git show HEAD:README.md | grep 'Design step'` finds my bullet at :60-67, `git show HEAD:docs/VISION.md` line 30 the VISION line. I deliberately did NOT list README.md in modifiedFiles: its only remaining dirty hunk is a PEER's Gate-2 preview paragraph, and reporting the path would sweep their WIP into this row's commit.\n\nLIVE DRIVE (DoD 6): DONE, comment-6bc04f6c. A real claude seat staffed by `agent-wrapper-main.ts` submitted a valid five-section design 39 s after SPAWNED; principal `sess-wrap-8fd495c7...`, not any credential my driver holds. No DESIGN_SHAPE_INVALID. The drive also produced a real finding: a SCRIPT CANNOT APPROVE GATE 1 - `PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT` (product-contract-gate-1-bearer.ts:159, and `:161` refuses any non-HUMAN principal), so v2 pairs a real browser. That is the human-gate fence holding.\n\nTHE MID-FLIGHT CHANGE. Between my green run at 19:11Z and my next run, commit `4ac0dbda fix: harden release and deployment review gaps` (owner, no Moe-Task trailer) REWROTE the two files this row's DoD 2 lands on: `LiveDesignVersionNote` now takes `planningRunRef` and calls `readDesign(headers, goalRef, undefined, planningRunRef)`, and cordum-app.tsx:350 passes `planningRunRef={planRunId}`. The daemon then reads `readCompiledContractBinding` (design-store.ts:197-202) and answers DESIGN_RECORD_MALFORMED when the run has no compiled design binding. My journey went red with `Received string: \"The design version behind this plan could not be read right now.DetailsDESIGN_RECORD_MALFORMED @ LEDGER\"` at the DoD 2 assertion.\n\nI FOLLOWED THE NEW PRODUCTION SEMANTICS RATHER THAN REVERTING IT, because it is strictly closer to what DoD 2 asks: the fold now names the version THIS PLAN RUN WAS COMPILED AGAINST (`compile-dispatcher.ts:292` records `designVersion: design.ok ? design.record.version : null`), not the goal's newest revision. The journey now: design v1 -> tab Version 1 + ShelfItemV1Marker -> design v2 (resubmit) -> tab Version 2 + ShelfItemV2Marker -> `/design/read {goalRef, version:1}` still answers version 1 with ITS entity and not v2's -> a scripted seat compiles the plan (`planning.submit_decomposition`, node scopes copied from plan-reject-replan.spec.ts) -> fold says \"Design version 2\" and NOT \"Design version 1\".\n\nTHE ORDER IS FORCED, and I only learned it by measuring: once a decomposition compiles, the goal has left the design rung and the surface offers approval.decide/decide_intent instead of design.submit, so a resubmit attempted after the compile dies with `no design.submit offer among approval.decide@run-..., ...`. Comment in the spec says so at the step.\n\nDRILLS, both restored byte-identically (tracked file, clean at drill time, `git diff` empty AND sha256 equal to the %TEMP% backup, restore in a call separate from the drill):\n1. `versionWords` \"Design version\" -> \"Design revision\": e2e RED with `Expected substring: \"Design version 1\"` / `Received: \"Design revision 1. ...\"` at the fold assertion. Restore sha 95FBEB10EC4C5628...\n2. Drop the planning-run selector (`read(goalRef, \"\")`): the new unit arm goes RED, `expected [ { goalRef: 'goal-1', ...} ] to deeply equal [...]`, 1 failed | 13 passed. Restore sha 0075BE786003C76C...\nDrill 2 exists because the e2e CANNOT distinguish this: with v2 latest at compile time, a note that ignored the binding and read the latest would still print \"Design version 2\". The unit arm asserts the selector reaches the reader (`seen toEqual [{goalRef:\"goal-1\", planningRunRef:\"run-7\"}]`). That is stated so nobody reads the e2e as proving more than it does.\n\nGATES, each standalone foreground, counts quoted.\n- NAMED `pnpm test:e2e:browser tests/e2e/control-room/design-operator.spec.ts` (the named command, scoped to this row's leg): `1 passed (11.9s)` EXIT 0, fresh.\n- FULL `pnpm test:e2e:browser`: `7 failed` / `26 passed (8.9m)` EXIT 1, with `ok 9 ... design-operator.spec.ts:193:1` in it. ALL SEVEN ARE FOREIGN, none is a path this row owns: deploy-fake-docker.spec.ts x2 (an UNTRACKED peer spec, `BOOTSTRAP_PREREQUISITE_MISSING`), journeys.spec.ts:65 (`toBeDisabled()` failed), journeys.spec.ts:86 (`toHaveLength`), prd-persistence-boundary.spec.ts:127 (`Test timeout of 180000ms exceeded`), prd-to-approval.spec.ts:38 (`toHaveText`), provider-pause.spec.ts:181. Five of them are the standing set in `mem:gotcha-e2e-browser-lane-carries-a-standing-foreign-red-set`; `git log -1` names 2c952438, 503e927b and c81cc93d as the owners. Only design-operator.spec.ts greps for `cr.design`/`design-version`.\n- `pnpm --filter @moe/con",
+      "startedAt": "2026-09-06T19:03:25.098Z",
+      "completedAt": "2026-09-06T19:58:43.540Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-4f771bb8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,20 +113,27 @@
       "author": "architect-2e480458",
       "content": "SPIDR (architect-2e480458, 2026-09-05). Re-measured at plan time: POST `/design/read` does not exist (grep handleDesign|/design/read in apps/daemon/src = 0). Child 1 (DONE) owns the store only. task-06ac0da1 publishes MCP command/query, not HTTP. No Design tab, no live decoder, DEV_PROXY_PATHS has no pin. approve-plan.tsx is still 263 lines; task-a988ca1c is WORKING and has not landed a split.\n\nThis proof row cannot rebuild the missing HTTP+UI inside a 10-file plan. Producers filed:\n- task-7ca9dca37fb44b40ac35abfc3c36cb9a HTTP `/design/read` (leaf, dependsOn child 1)\n- Design-tab/decoder/proxy sibling (dependsOn the HTTP leaf)\n\nThis row keeps e2e, live drive, docs, and the approval-card provenance once the producers land. dependsOn now includes the HTTP leaf. Releasing to plan the HTTP leaf in build order.",
       "timestamp": "2026-09-05T14:27:07.148Z"
+    },
+    {
+      "id": "comment-6bc04f6c7ad744e4ad5c699a17e13f00",
+      "author": "worker-deb4c7d8",
+      "content": "LIVE DRIVE (DoD 6): A REAL SEAT SUBMITTED A DESIGN. Not the e2e double, not a scripted POST.\n\nDriver: D:/projexts/UnAI/.moe-next/live-drive-wdeb4c7d8/drive2.mjs (outside the repo), fresh scratch project `unai-design-drive`, real daemon-main + real demo-seed + real agent-wrapper-main with MOE_AGENT_COMMAND=claude. The script itself never posts design.submit -- everything below the wrapper spawn is the seat.\n\nFINDING 1, from v1 of the drive: A SCRIPT CANNOT APPROVE GATE 1, BY DESIGN. Driving `product_contract.approve_gate_1` with the daemon credential answers 422:\n  {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT\",...}}\n`product-contract-gate-1-bearer.ts:159` refuses when `readPrincipalRecord(store, witness.sessionId)` is ABSENT, and `:161` refuses `PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED` for any principal that is not HUMAN. That is the epic's human-gate fence holding: the operator credential is not a paired human. v2 therefore pairs a REAL headless browser (label 16ab-34ae-3ffd typed into the daemon's --operator-stdin) and clicks `cr.gate1.approve`; `/product-contract/pending/read` then answers outcome NONE.\n\nTRANSCRIPT, verbatim from drive2.log:\n  19:09:36.070 design.submit offered: {\"commandKind\":\"design.submit\",\"expectedVersion\":0,\"inputSchemaVersion\":\"moe-bootstrap-command/1\",\"targetAggregateId\":\"design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93\",...}\n  19:09:39.036 [wrapper] design.submit@design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93: SPAWNED\n  19:09:49.125 [wrapper] nothing to staff (surface SURFACE, active 2)\n  19:09:56.426 design read 200 {\"code\":\"DESIGN_REVISION_ABSENT\",\"layer\":\"LEDGER\",\"ok\":false,...}\n  19:10:36.461 DESIGN LANDED {\"ok\":true,\"record\":{...\n\nDESIGN REF: goalRef goal-4473bd1f-de5e-4886-892d-044f02fa6c93, aggregate design:goal-4473bd1f-de5e-4886-892d-044f02fa6c93, version 1 (versions [1]), submittedAt 2026-09-06T19:10:18.947Z, profile typescript-web-app/react-node-postgresql, contractRef contract-item-shelf/rev-1 digest 359b5532... Full JSON: D:/projexts/UnAI/.moe-next/live-drive-wdeb4c7d8/design.json. Seat wall clock: SPAWNED 19:09:39 -> submitted 19:10:18, 39 s.\n\nPROVENANCE, from the drive's own store (command_decisions, node:sqlite readOnly):\n  design.submit id=3b827deb-45ab-40e5-b5b2-99f63e3de35d principal_id=sess-wrap-8fd495c7b73940d0a42a5bf3a75d4048\nA `sess-wrap-` session is one the WRAPPER minted for the spawned seat. It is not `live-drive-wdeb4c7d8-credential` (the drive's operator credential) and not the e2e lane credential, and it is the ONLY design.submit decision in the store.\n\nNO DESIGN_SHAPE_INVALID. The seat produced a valid revision first try -- five sections, all admitted:\n- dataModel: Operator, Item, OperatorSession\n- apiSurface: POST /api/session, DELETE /api/session, GET /api/session, GET /api/items\n- componentList (13): SignInScreen, SignInForm, SessionProvider, RequireSignedInOperator, ItemShelfScreen, ItemList, ItemRow, ItemTitle, ItemOwner, ShelfEmptyState, ShelfErrorState, ShelfLoadingState, ShelfRetryControl\n- screens: one journey (\"An operator signs in and reads the shelf of items they own (req-1, crit-1)\") over Sign-in and Item shelf\n- nonFunctional.auth, verbatim: \"Only a signed-in operator may read the shelf. Every shelf read is authorized from the server-held operator session, and the set of items returned is scoped to the operator that session identifies, so an operator can never read an item owned by another operator. A request without a valid session is refused with 401 and the client sends the operator to the Sign-in screen rather than rendering an empty shelf.\"\n- 6 openDecisions, each naming what the PRD does NOT state (sign-in mechanism, sort order, pagination bound, write path, extra item attributes, whether an owner can differ from the viewer) rather than inventing it.\n\nThe seat also cited the contract by id: the journey names req-1 and crit-1, which are the requirement and criterion the drive proposed at Gate 1.\n\nFINDING 2, unrelated to this row, recorded not worked around: in the same lane the wrapper answers `node.deliver@node-live-design-drive: REPOSITORY_EXECUTION_OWNER_MISMATCH (REPOSITORY_DELIVERY)` and `node.deliver@node:v1:880fb9d9...: NODE_BRIEF_MISSING`. Both are demo-seed node staffing on a scratch project with no bound repository, not the design rung.",
+      "timestamp": "2026-09-06T19:11:28.778Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:37:41.269Z",
-  "updatedAt": "2026-09-06T16:38:05.500Z",
+  "updatedAt": "2026-09-06T19:59:32.661Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:19:17.986Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 2
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-2e480458",
-    "worker-1d53e70c"
+    "worker-1d53e70c",
+    "worker-deb4c7d8"
   ],
   "priorHandoffs": [
     {
@@ -129,7 +151,9 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T14:43:46.634Z",
@@ -182,15 +206,55 @@
       "pushed": true,
       "recoveredBy": "worker-1d53e70c",
       "message": "Governor attribution: task-80322112's wrapper exit (17446e73, worker-1d53e70c) carried this row's design-version-note.tsx (107 lines, step 2 deliverable) under the carried-importee closure declared 15:5xZ so cordum-app.tsx never landed without its importee. Bytes are f3409f9a's; the commit is 80322112's checkpoint."
+    },
+    {
+      "sha": "7d78aa19978d25d65871de3ab4362d0799c3318c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "governor-afbde490@2026-09-06T19:14:00Z",
+      "paths": [
+        "README.md",
+        "docs/VISION.md"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T19:15:20.929Z",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        },
+        {
+          "path": "docs/VISION.md",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        }
+      ],
+      "pushed": true,
+      "recoveredBy": "qa-4f771bb8",
+      "message": "Governor attribution: this row's in-flight doc hunks (README.md design-step paragraph @@ -55,0 +60,8 written 19:07:27Z; docs/VISION.md \"4. UX and architecture — running since 2026-09-06\") were swept into task-80322112's completion landing (7cfa1700 → replayed as 7d78aa19). Bytes are f3409f9a's; verify at HEAD, do not re-add."
     }
   ],
   "filesModified": [
-    "apps/control-room/src/v2/goals/design-version-note.tsx"
+    "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/goals/design-version-note.tsx",
+    "apps/control-room/src/v2/goals/design-version-note.test.tsx",
+    "tests/e2e/control-room/design-operator.spec.ts",
+    "apps/control-room/src/v2/goals/design-read-frame.captured.json"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "governor-afbde490@2026-09-06T16:38:00Z",
-    "at": "2026-09-06T16:38:05.500Z"
-  }
+    "sessionId": "governor-afbde490@2026-09-06T19:14:00Z",
+    "at": "2026-09-06T19:15:20.929Z"
+  },
+  "reviewStartedAt": "2026-09-06T19:59:29.836Z",
+  "verification": {
+    "command": "pnpm test:e2e:browser tests/e2e/control-room/design-operator.spec.ts",
+    "exitCode": 0,
+    "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\design-operator.spec.ts:193:1 > the operator reads the design and the plan fold names its version (11.1s)\n\n  1 passed (11.9s)\nexit=0",
+    "reportedAt": "2026-09-06T19:59:29.836Z"
+  },
+  "completionSummary": "THE OPERATOR READS THE DESIGN AND THE PLAN FOLD NAMES THE VERSION THE PLAN WAS COMPILED AGAINST - proved on a real daemon, plus a real agent seat.\n\nDELIVERED (3 new paths; I rebuilt nothing): tests/e2e/control-room/design-operator.spec.ts (446 lines), apps/control-room/src/v2/goals/design-version-note.test.tsx (210), apps/control-room/src/v2/goals/design-read-frame.captured.json (136). docs/VISION.md:30 and the README \"Design step\" bullet are MY DoD-7 edits but a peer sweep commit 7d78aa19 landed them first - both are in HEAD, both files read clean; README's remaining dirty hunk is a peer's Gate-2 paragraph and I did NOT report that path.\n\nJOURNEY (real daemon, vite build, demo-seed, browser pairing): operator pairs -> two goals from PRDs -> planner proposes Gate 1 -> human approves in the browser -> scripted seat submits design v1 -> tab shows Version 1 + ShelfItemV1Marker (DoD 1) -> resubmit v2 -> tab shows Version 2 + ShelfItemV2Marker, and POST /design/read {goalRef, version:1} still answers version 1 with ITS entity and not v2's (DoD 3) -> scripted seat compiles the plan -> fold says \"Design version 2\" and NOT \"Design version 1\" (DoD 2) -> the never-designed goal renders cr.design.none in words (DoD 4).\n\nMID-FLIGHT PRODUCTION CHANGE I FOLLOWED: owner commit 4ac0dbda rewrote design-version-note.tsx and cordum-app.tsx:350 to read /design/read with the plan run's selector, so the fold names the version THAT RUN compiled against (compile-dispatcher.ts:292). Consequences, all measured: nothing to name until a plan compiles (the daemon answers DESIGN_RECORD_MALFORMED @ LEDGER first); and the RESUBMIT must precede the COMPILE, because after a compile the surface offers approval.decide instead of design.submit. Both are commented at the step in the spec.\n\nFIXTURES ARE REAL FRAMES (DoD 5): two verbatim /design/read bodies captured from a live run, decoded by the PRODUCTION mapDesignAnswer; one extra key and one deleted key each answer DESIGN_RESPONSE_INVALID and the not"
 }

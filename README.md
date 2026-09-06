@@ -151,8 +151,14 @@ graph, the parallel staffing, the `depends:` gate and the coverage close are
 exercised over real daemon, wrapper and agent processes in
 `tests/e2e/foundation/multi-node-graph.e2e.test.ts`, and the coverage close and
 its negative arm are proven only there, not on the lane; there is
-no working preview and no release gate, so the vision's Gates 2 and 3 do not
-exist yet; a Codex seat is wired but was last proven only to reach the API; and
+Gate 2 is WIRED BUT NOT YET DRIVEN END TO END - `preview.start` is a published
+async command, the daemon serves the preview receipt and its captured
+screenshots over authenticated read routes, and the browser renders the running
+product with Approve and send-it-back controls - but no preview has been run
+against a real landed product, because a landed goal is recorded by
+`internal.repository.landing_receipt`, which has no HTTP ingress, so nothing a
+browser can do makes one; there is no release gate, so the vision's Gate 3 does
+not exist yet; a Codex seat is wired but was last proven only to reach the API; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in

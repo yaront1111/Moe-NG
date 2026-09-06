@@ -1,0 +1,39 @@
+{
+  "id": "task-122b55fd2c284174876bd1d5573bdcc5",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Nodes declare migration identifiers through durable authority and Runs reads",
+  "description": "Producer child of task-78eedd8ebc2b43c581ac21ea28648a9a, governor-directed re-slice. Measured local0737/ownerorigin4253: scheduler node-authority-contract.ts NODE_DEFINITION_KEYS:66–70 has no migration identifiers; daemon http/runs-read-contract.ts76–94 and browser live-runs.ts58–72 likewise none. Parent step3 explicitly forbids deriving migration declarations from diffs/landing.files. Scope is authoritative declaration and production read contract, NOT UI or a second node model. Enumerate canonical serialization/digest, planning admission, compile/seal, durable replay, schema and all exact-key consumers before plan submission. Adding a field to a frozen hash without legacy handling is not a safe additive UI change. Consumer parent78 renders via board-lanes.tsx (goal-nodes.tsx is only wrapper).",
+  "definitionOfDone": [
+    "A node author can explicitly declare zero, one or multiple bounded migration identifiers through the actual planning/admission path. Domain admission rejects malformed/duplicate/oversized declarations with stable code+layer; declaration is not inferred from objective, filenames, diff, writeScopes or verifier output.",
+    "Declaration survives canonical serialization, digest/authority binding, durable persistence, compilation/sealing, replay and readback. Mutating only declared migration IDs changes the authority binding or is refused; red-first test targets production seam, not helper transcription.",
+    "Compatibility policy is explicit and tested: existing persisted nodes without this member remain readable without minting a false declaration; missing evidence is UNKNOWN, explicit empty declaration is distinct. Census every exact-key/digest/schema asserting consumer and record the chosen compatibility/version policy before changing format.",
+    "Production /runs/read serves the declaration for the correct execution identity and browser exact decoder preserves it. No shared-node-key cross-goal bleed; two declared identifiers both survive and malformed wire fails closed. No receipt ownership inferred by matching filename or SHA.",
+    "Fresh focused scheduler/daemon/browser tests, typecheck and broader named gates quote nonzero counts. Parent78 is the UI consumer; physical bridges for any new runtime modules and consuming manifest/lock edges if a new workspace import is introduced. Keep contract/read/schema responsibilities in focused files; plan must enumerate all shape consumers."
+  ],
+  "taskRails": [
+    "No filename/diff inference, no browser-minted node authority, no silent rewrite of historical hashes.",
+    "This row owns declaration and read contract only; parent78 owns wording/UI. Test every changed codec/canonicalization consumer."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "priority": "HIGH",
+  "order": 112.72,
+  "comments": [
+    {
+      "id": "comment-655a30dd7c1147de87acedcaa41b722c",
+      "author": "worker-f72a1438",
+      "content": "Measured compatibility/size warning for planning, from independent read-only producer audit: node authority schema/domain is v2 (contract.ts37–39), closed required roster66–70 plus fields.ts183–187. compose.ts232–249 must copy declaration. Body hash automatically covers definition, BUT recursive hash has an independent PREIMAGE_KEYS whitelist in node-authority-recursion.ts58–62/:202–206; declaration must enter it or hash test is false assurance. graph-content.ts121–140 recomputes recursive hashes, graph-body-record.ts99–100/:163–187 keys/redecodes immutable bodies. Graph hash changes execution refs (compiled-execution-ref.ts12–13); do NOT silently reattribute historical claims/receipts/approval.\n\nActual authoritative input sources to measure before choosing field location: planning/compiled-policy-authority-body.ts102–126, journey-authority-bodies.ts126–144, v2-compiler/scheduler-node-planning-authority.ts98–120; v2-compiler authority-contracts.ts42–68/scheduler-authority.ts128–166 and V2CompiledNode contracts.ts95–114 currently lack declarations. NodePlanningSourceContent format/codec/bounds must be included IF chosen as input; never default [] at output and call it authored. Delivery adapters compiled-node-source.ts126–151, http/runs-read.ts78–102/229–254, both nodeDTOs and browser nodeOf exactkeys235–239.\n\nThis can exceed10paths once compatibility policy is chosen. Do NOT submit a five-projector-file plan or invent a v2 in-place shape change. Enumerate forced consumers first, then request governor-approved structural split or explicitly approved compatibility design; no extra child filed by this census. Optional in-memory versus required wire fields can preserve fixture constructors but does not itself solve authenticated historical bodies. Scheduler/Runs changes do NOT automatically rotate GENERATED_CONTRACT_DIGEST (contract-digest.ts31–52 hashes registry/limits, not these bodies). Parent78 consumes the actual landed declaration; it does not choose an undocumented field.",
+      "timestamp": "2026-09-06T19:21:36.976Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T19:15:27.611Z",
+  "updatedAt": "2026-09-06T19:21:36.976Z"
+}

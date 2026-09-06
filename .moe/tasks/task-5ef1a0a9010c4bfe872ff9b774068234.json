@@ -20,14 +20,18 @@
     {
       "stepId": "step-1",
       "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-4a0f706437a042059789be2ebdb98bc0 (the deterministic scaffold whose generated app actually builds), task-facff1d1e7ce44a6b1101490524890a9 (repository.bootstrap: git init, first commit, optional gh, binding, receipt), task-80322112a48d44c69c6c55f846f8d43f (the browser form, the Playwright journey, the live GitHub drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh get_context.epicSiblings confirms all three declared children DONE, landed=true, landing.merged=true, pushed=true. 4a0 scaffold completion2feed27bb68041c9d2d338a1063259c9a21568eb: verification EXIT0 controlled-profile; QA63c59cb9 independently reran2files11passed1skipped; opt-in generated-app proof2tests0skipped, child API1file3tests/web1file1test, install/typecheck/test/build all0. fac bootstrap db6da88a1ea7e0b33f5b568a64391bf51fe8604d: verification EXIT0 repository/projects/bootstrap/MCP slice; QAea1f31b8 reran71files808passed2skipped; real store/git injected-gh journey16arms plus production argv pin, async operator fence and correct bind version. 803 browser completion7d78aa19978d25d65871de3ab4362d0799c3318c recorded19:15:15: products+mount verification3files82tests EXIT0 independently rerun QA2da9ae53. CompletionSummary records real no-seed browser1/1, local receipt e2e-proj-tacng6-bootstrap@2026-09-06T18:06:52.854Z, productSHA2ac4d140e8f52abad4ee3aa69d2ec205112cdeea; remote deferred per child17:55 governor amendment. Source is sibling completionSummary/reviewSummary, not HEAD grep. CurrentHEAD=origin7d78aa19. Historical broader gate red/attribution limitations are preserved; these are pre-reconciliation runs, not fresh integrated green. Parent DoD4 mismatch will be handled explicitly in step2. Zero files changed; all shared dirt preserved.",
+      "startedAt": "2026-09-06T19:27:41.427Z",
+      "completedAt": "2026-09-06T19:33:17.093Z"
     },
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (repository.bootstrap operator-only, MCP-excluded, roster backfill, four refusals with code + layer) -> child task-facff1d1. DoD 2 (the scaffold golden test AND the generated app passing its own install/typecheck/test/build) -> child task-4a0f7064. DoD 3 (the browser journey to a bound repository and a PRD goal) -> child task-80322112. DoD 4 (gh argv offline, plus the live throwaway repository and the clean `gh`-absent refusal) -> split across task-facff1d1 (the offline argv assertion) and task-80322112 (the live drive) — confirm BOTH, since an argv assertion with no live run proves the command shape and not the integration. DoD 5 (runbook + README 'new repository creation' running) -> child task-80322112. CONFIRM ONE THING EXPLICITLY: child 1's DoD required the generated app to be BUILT, not merely written. Quote its child-run gate output. A golden file tree that was never installed and built is a file list, and it is the single most likely place this feature ships broken.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T19:33:40.625Z"
     },
     {
       "stepId": "step-3",
@@ -48,7 +52,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -58,10 +62,29 @@
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 80,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-9d694e10d4b34a3f8501c5e9a3fa55b0",
+      "author": "worker-f72a1438",
+      "content": "STEP2 RECONCILIATION (partial, no completion claim), fresh landed child records19:32Z. 1) Operator/MCP/rosters/four code+layer refusals: fac db6da88a; task.verification71files808pass2skip independently QAea1f31b8. 2) Generated app REALLY BUILT: 4a0 2feed27b QA63c59cb9 opt-in parent Tests2passed(2), ZERO skipped; generated API Test Files1passed(1)/Tests3passed, web Test Files1passed(1)/Tests1passed; install --frozen-lockfile/typecheck/test/build each0. These are generated-product counts, NOT Moe suite counts. Current later controlled-2/23files upgrade is separate task463, confirmed landed=true via parent78 epicSiblings; QA6dd06cb3 records real postgres up/down6files102tests0 and generated up app_metadata PRESENT/pgmigrations1, down ABSENT/0. 3) Browser:8037d78aa19, QA2da9ae53, unseeded real daemon1passed16.0s; receipt e2e-proj-tacng6-bootstrap@18:06:52.854Z productSHA2ac4d140e8f52abad4ee3aa69d2ec205112cdeea, onecommit,bound,catalog,PRDgoal. 4) Offline gh argv/failure:fac proven. Actual owner remote URL NOT produced; gh present/authenticated, no owner account/visibility supplied. Child803 amended17:55 permits this LOCAL-only evidence, parentDoD4/steps2+5 still not amended. CANNOT confirm BOTH under current parent wording or invent GH_UNAVAILABLE. Governor requested msgac56631c. 5) README41-45 and VISION127-128/142-145 describe dated2026-09-06 LOCAL new-repository creation and explicitly unproven GitHub. Parent also says runbook updated; read-only rg of docs/agent-stack-runbook.md finds NO new-product/repository.bootstrap guidance (only older unrelated J1 bootstrap references), and child803 docs scope was README/VISION. Needs explicit owner of runbook follow-up or normative reconciliation. Scoped git grep obsolete phrase over README.md docs yields0hits (gitgrep exit1); no unscoped .moe search claim. Historical child fullgates remain pre7d78; integrated parent gates NOT RUN and no leases held. No source/tests/doc paths modified.",
+      "timestamp": "2026-09-06T19:34:46.004Z"
+    },
+    {
+      "id": "comment-34e1bcdf32ee4cdd8c1886b06051b711",
+      "author": "worker-f72a1438",
+      "content": "READ-ONLY ADJUNCT to DoD reconciliation, independently audited at7d78aa19 (not completion of future step4; no probes/tests executed). Current scaffold matches postgres + db:migrate assumption: controlled-profile-generator.ts26=controlled-2; root-templates44-51 emits compose/scripts/pins,239-250 postgres/healthcheck; generator.test162-193 exact pins. Real opt-in migration test uses docker run, NOT generated Compose; task463 historical QA proves up/down, not Compose launch. Bootstrap service50-69 does not run DB/migration itself.\nDirectory existing tests: repository-bootstrap-ports.test150 trailing '/',151-152/158 dotfile-only,153-154 file; journey.test641-655 file command refusal+unchangedbytes; ports.test155-157 real junction target. Separate trailing Windows backslash, ordinary symlink variant, ancestor swap/concurrent replacement tests NOT FOUND. Production ports77-81 lstat rejects target symlink/file and counts every entry;95-97 explicitly disclaims hostile ancestor swaps. Do not inflate target checks into atomic filesystem guarantee.\nGitHub: ports56-57 combined gh repo create --source . --push, exact offline argv tests81-93. service.test138-147 nonzero GH keeps local success/binding/one real commit. journey.test312-348 missingGH partial receipt through command; disclosure.test115-130 thrownGH matching real SHA through HTTP. Specific remote-created THEN push-failed arm NOT FOUND. One combined exit status ports58-62 cannot distinguish phase, so null receipt remote is not proof no server-side repository exists. Journey remote success94-111/497-517 is explicitly simulated. Actual remote integration remains owner-deferred, not newly proven. All audited source paths clean; no modifications and no owned background work.",
+      "timestamp": "2026-09-06T19:35:29.718Z"
+    },
+    {
+      "id": "comment-f7407e490e31480bb8042c679f4d1f2e",
+      "author": "worker-f72a1438",
+      "content": "PARENT ROLL-UP DISCOVERY at landed7d78aa19; source-confirmed truth gap, actual remote half-success NOT reproduced. new-product-form.tsx78-80 unconditionally renders PARTIAL_SUCCESS as 'GitHub half did not happen' / 'GitHub was not reached'. But daemon repository-bootstrap-ports.ts56-60 invokes combined gh repo create --source . --push and maps ANY nonzero exit to BOOTSTRAP_GH_UNAVAILABLE/GITHUB_REFUSED; service.ts25-26,61-69 retains bound local success with remoteUrl:null. Therefore a successfully created remote followed by push failure is not distinguishable, and those negative-existence/reachability claims are stronger than evidence. Exact tests cover nonzeroGITHUB_REFUSED at ports.test89-96 and service.test138-147, but no separate remote-created/push-failed arm. Needs bounded wording/test fix preserving unknown GitHub completion and local facts; do not mint a remote receipt or weaken stable codes. Parent currently evidence-only with no affected files; requesting governor amendment/reopen routing before editing. Loaded systematic-debugging, traced production→receipt→UI; zero modifications/probes/network effects.",
+      "timestamp": "2026-09-06T19:36:25.996Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:49.471Z",
-  "updatedAt": "2026-09-05T00:44:01.036Z",
+  "updatedAt": "2026-09-06T19:36:27.484Z",
   "dependsOn": [
     "task-4a0f706437a042059789be2ebdb98bc0",
     "task-facff1d1e7ce44a6b1101490524890a9",
@@ -70,9 +93,12 @@
   "metrics": {
     "firstClaimAt": "2026-09-05T00:43:12.246Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 0
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T00:43:58.864Z",
   "planningNotes": {
@@ -86,5 +112,23 @@
       "README.md"
     ]
   },
-  "planApprovedAt": "2026-09-05T00:44:01.036Z"
+  "planApprovedAt": "2026-09-05T00:44:01.036Z",
+  "contextFetchedBy": [
+    "worker-f72a1438"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Read complete parent5ef plan and dependency summaries. Three children DONE; task803 latest delta is awaiting QA exact-hunk completion landing (governor2374ba6d), so do not equate DONE/symbol presence with final delivery. No step started or files changed.",
+      "whatRemains": "Execute roll-up steps after actual803 landing. Parent DoD4/step5 still requires GitHub live drive, while child803 amended17:55 allows LOCAL-only without owner-supplied account/visibility; request governor propagation rather than invent owner or GH_UNAVAILABLE. Full gate citations/runs per plan including root lane and scoped/full browser separation.",
+      "pitfalls": "Do not touch task803 five dirty paths; README/VISION mixed with f340 peer hunks, QA owns landing. Real local receipt e2e-proj-tacng6-bootstrap recorded child803; single-tab correlation limitation remains explicit.",
+      "releasedAt": "2026-09-06T19:11:34.058Z",
+      "releasedBy": "worker-f72a1438",
+      "reason": "Explicit handoff: governor msg111072385f3749659b5f03c80500e79b directs this worker to re-plan task78 after its production-gap block. Parent5ef claimed via runtime before governor PLANNING flip; no step started and zero edits."
+    }
+  ],
+  "workStartedAt": "2026-09-06T19:27:41.427Z",
+  "blockedReason": "Step1 complete: all3 children DONE/landed, latest8037d78aa19=origin. Step2 reconciliation cannot honestly confirm current parentDoD4: owner supplied no GitHub account/visibility, child80317:55 amendment explicitly accepts local-only but parentDoD4/steps2+5 still require actual remote URL (gh present/authenticated, no fabricated absence). ParentDoD5 also requires runbook update absent from child803 README/VISION scope; docs/agent-stack-runbook.md has no new-product guidance. During read-only reconciliation traced additional delivered UI overclaim: new-product-form.tsx78-80 says GitHub did not happen/was not reached for all PARTIAL, whereas combined gh create --push ports56-60 cannot distinguish remote-created/push-failed, and service25-26 returns nullremote for either. Actual remote half-success NOT reproduced; exact trace/comments on803/parent. Need authorized bounded UI+test/runbook amendment or owning child reopen before editing evidence-only shell (all affectedFiles empty). Do not mark DONE or cite old childgates as post7d78 green. Step2partial comment9d694e10, audit34e1bcdf; zerofilesmodified, no leases/processes.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T19:36:27.484Z"
 }

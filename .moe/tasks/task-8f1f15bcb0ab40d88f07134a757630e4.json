@@ -1,0 +1,40 @@
+{
+  "id": "task-8f1f15bcb0ab40d88f07134a757630e4",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Activity and deployment reads expose bounded migration receipt facts",
+  "description": "Producer child of task-78eedd8ebc2b43c581ac21ea28648a9a. Measured local0737: activity-read.ts163–170 emits seven generic members, migration absent from VERDICT_KINDS79–85; live-activity.ts90–101 exact-keys seven. Durable migration-receipt.ts22–36 has eleven members; APPLIED/REFUSED/REVERTED, applied[] meaning applied or undone files, nullable backupRef, failing basename in refusal.detail. COMMITTED is NOT APPLIED. Owner origin4253 adds existing /deployments/read via http/goal-deployment-read.ts and live-deployments.ts/live-goal-deployments.tsx; extend that after reconciliation, never create a duplicate endpoint/card. Runs existing project deployment projection is another asserting consumer; census before changing shape. Goal-scoped activity currently excludes migration:<id>; preserve honest project/goal scoping. Parent78 will render these facts.",
+  "definitionOfDone": [
+    "Real-store migration decisions project into existing activity and deployment/Runs read boundaries with explicit bounded environment, receipt identity, outcome, applied/reverted identifiers, nullable backup reference, and refusal code/layer/failing file. Reuse strict existing decoder; missing/corrupt/unverifiable evidence stays UNKNOWN/refused, not APPLIED or no pending work.",
+    "Receipt has no nodeRef/goalRef: expose and label project/environment observations as such, or require a real durable owner linkage from the producing decision. Never assign a receipt to a node/goal by matching filenames, SHA, latest timestamp, or arbitrary requestId. Goal-filtered reads must not bleed unrelated project evidence.",
+    "Pending versus applied is computed only from authoritative declared/bound migration identities and durable execution evidence from producer siblings; no browser directory scans or filename guesses. Missing declaration/source evidence is UNKNOWN, explicit empty is known-none. Tests include two migrations, two environments, APPLIED, REFUSED before backup, REFUSED after backup, REVERTED and corrupted receipt.",
+    "Backup is a non-download reference with hash only when verified as an existing confined backup; no database URL, password, SQL, full diagnostic output, credential hash/prefix or untrusted path reaches HTTP/logs/UI. Missing backup is not reported present; REFUSED may carry backupRef:null. Tests pin exact safe shape and code+layer.",
+    "Default production listener and browser exact decoders consume the new fields end to end; synchronize every exact-key/shape consumer. Existing auth/CSRF/read-only constraints hold; no new execution affordance. Fresh focused daemon/browser tests/typecheck and named broader gates have nonzero counts; parent78 remains presentation/live-journey consumer."
+  ],
+  "taskRails": [
+    "Use existing activity/deployment read composition including owner-origin files after reconciliation; do not duplicate public surfaces.",
+    "Do not change eleven-key persisted receipt casually; observation is not admission, dispatch or physical truth.",
+    "Project observations must never masquerade as node/goal ownership; no secret or backup download affordance."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "priority": "HIGH",
+  "order": 112.76,
+  "comments": [
+    {
+      "id": "comment-a70859cf924a4a65876fe6a494232ee8",
+      "author": "worker-f72a1438",
+      "content": "Non-obvious pending-state guard from independent audit: a historical migration receipt plus today's node declaration does NOT establish current pending DB state. DoD3 means an upstream admitted observation/batch binding for the same environment+workspace/SHA+freshness, not set subtraction across arbitrary receipt history. Missing observation is UNKNOWN, never pending=[]/all applied. Producer2db must supply actual bounded pending observation if UI is to demonstrate pending before apply; governor being asked to make this explicit rather than silently narrow parent DoD. Receipt.projectId/requestId/environment do not contain goalRef/nodeRef; preserve project-observation semantics. Ownerorigin4253's /deployments/read + live-deployments are existing sibling edge after reconciliation; do not add a duplicate endpoint based on oldlocal0737. Interface may require more than initial10 existing files due that owner edge; enumerate asserting shape consumers at actual worker HEAD before submit_plan.",
+      "timestamp": "2026-09-06T19:17:58.752Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T19:15:28.351Z",
+  "updatedAt": "2026-09-06T19:17:58.752Z"
+}

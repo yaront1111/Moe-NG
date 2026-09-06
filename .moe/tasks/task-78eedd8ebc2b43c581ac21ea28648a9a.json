@@ -23,10 +23,11 @@
     {
       "stepId": "step-1",
       "description": "PREREQUISITE HARD STOP. This row PROVES; it builds no migration machinery. All four dependencies were unlanded at plan time, so verify each on disk and STOP if any is missing.\n\n- `git grep -rn \"moe-migration-receipt\\|MIGRATION_BACKUP_FAILED\" -- apps/daemon/src` — the engine and receipt (task-0a56ecee17b740a3abb7f850e5250c99).\n- `git grep -rn \"migrate_down\" -- packages/contracts apps/daemon/src` — the published kind (task-537320eed95348dc9bc3afc879dc0563).\n- `git grep -rn \"node-pg-migrate\" -- apps/daemon/src` — the tool (task-463f195efd2f4fd2886790029a474194).\n- the disposable-PostgreSQL lifecycle (task-ff41c5c9efa34494b7b91e6f0ddcb7c2).\n- `git grep -c \"cr\\.deploy\" -- apps tests` and `ls apps/control-room/src/v2/goals/goal-deployments.tsx` — the Deployments card this row EXTENDS, owned by task-c9e76f53010149adb2ba1ba55838f41c. At plan time BOTH returned nothing; submit_plan refused that path as non-existent, which is why step 4 carries it in text rather than in a file roster.\n\nIf any is absent, `moe.report_blocked` with `blockedOnTaskIds`. Do NOT rebuild a migration path, do NOT mock a receipt, do NOT create a second Deployments card. A scaffold defect is child 1's, an engine defect is task-0a56ecee's, a command defect is task-537320ee's — comment on the owning row.\n\nRead each dependency's `completionSummary` from `get_context.epicSiblings` rather than re-measuring HEAD, and record the receipt's ACTUAL member names — every later step renders them and this plan names them from a sibling's DoD, not from landed code.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/v2/ops/activity-words.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T19:07:29.782Z"
     },
     {
       "stepId": "step-2",
@@ -90,12 +91,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor re-plan handoff 19:10Z (no architect seat registered; BLOCKED->PLANNING nulls the block fields, premise quoted). worker-f72a1438 19:10Z: \"Approved UI-only proof scope conflicts with missing production prerequisites measured in step 1. All four declared deps and the deployments card are DONE, but migrateWithBackup has zero production callers, migrateDown has no host configuration, NodeDefinition and the Runs node DTO have no declared migration IDs (step 3 expressly forbids filename inference), and activity/deployment reads expose no migration receipt/environment/backup payload. A real browser proof would need invented fixtures or upstream contract/composition edits outside approved scope. Also: REFUSED may have backupRef null; the actual pre-migration backup subtree must be preserved. Fresh commands/anchors in the latest row comment.\" RE-PLAN as the SHELL it is: one child row per missing producer — (1) deploy path calls migrateWithBackup in production (deploy-command composition); (2) migrate_down host configuration composed (databaseUrl/workspace/projectRoot seams from daemon config, refusing MIGRATE_DOWN_UNCONFIGURED when absent); (3) NodeDefinition / Runs node DTO declare migration identifiers; (4) activity + deployment reads expose the migration receipt (environment, backupRef, verdict) — each with a measured DoD, filed by the planner, this row's dependsOn set to all four; keep the six-path browser proof scope here for after they land; DoD text changes go to the governor. Worker seats plan when no architect exists; f72a1438 holds the measurements and may claim this row back with statuses [\"PLANNING\"].",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8f86e10504c74e248ccfa6f427b41a15",
   "dependsOn": [
@@ -106,10 +107,23 @@
   ],
   "priority": "HIGH",
   "order": 113,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-fbc4cc72c9b248bf9d37a219dfa6c1f2",
+      "author": "worker-f72a1438",
+      "content": "STEP 1 CENSUS, NO EDITS, 2026-09-06 ~19:09Z, HEAD 0737f06c. All four declared dependencies are DONE/landed per get_context.epicSiblings: scaffold463 (real generated app up/down), verifierff41 (disposable PostgreSQL lifecycle), engine0a56 (3c2da53a, real backup/restore11tests), migrate_down537 (9048426d, real last-batch revert). Read their verification/completionSummary, not HEAD-grep prerequisites. Card c9e76f53 independently queried: DONE, landing a4d1b795, actual goal-deployments.tsx exists. Do NOT rebuild these. Plan's no-Docker/no-deploy/no-card premises are stale.\n\nREPLAN REQUIRED BEFORE A REAL-DAEMON PROOF. Current six-path UI-only plan forbids building upstream machinery, but its producer edges are absent:\n1. Forward apply is a callable only: `git grep -n migrateWithBackup -- apps/daemon/src` finds definition migration-service.ts:78 and test callers ONLY. createDeployService in deployment/deploy-service.ts has no migration call. The engine handoff explicitly assigns parent78 composition, whereas approved step1 says builds no machinery. Migrate-down async entry passes optional options.migrateDown at daemon-command-async-entries.ts:139,322; `git grep -n -E 'migrateDown:' -- apps/daemon/src ':!*.test.ts'` returns0. MigrateDownCommandOptions requires host-only databaseUrl/workspace/projectRoot; absent answers MIGRATE_DOWN_UNCONFIGURED, never accept these from browser payload.\n2. NODE DECLARATION ABSENT, the explicit step3 stop condition: packages/scheduler/src/node-authority/node-authority-contract.ts:66–70/162–167 has no declared migration member. Runs DTOs apps/daemon/src/http/runs-read-contract.ts:76–94 and apps/control-room/src/live/live-runs.ts:58–72 carry criterionIds/dependsOn/identity/objective/receipt/landing but no migration identifiers. Sealed projection runs-read.ts:87–102/:229–254 does not add one. landing.files is NOT a declaration; cannot derive identifiers from diff/filename or fake a two-migration node.\n3. RECEIPT DOES NOT REACH BROWSER. migration-receipt.ts:86–96 readMigrationReceipt(store,projectId,requestId) is daemon-only. Activity read exports seven generic decision members; VERDICT_KINDS does not include internal.repository.migration_receipt, so verdict null. live-activity.ts:91 exact-keys those seven. No environment/applied/backupRef/refusal payload reaches Runs. Adding only activity-words cannot distinguish APPLIED versus REFUSED. GoalDeployments DeploymentEnvironmentView:39–54 likewise has no migration/backup fields; no migration public read route found. Current CordumApp LiveBoard call also supplies no deploying prop; do not paper over this with another card.\n\nACTUAL RECEIPT members (not plan assumptions): version,receiptId,requestId,projectId,environment,sha,decidedAt,applied[],backupRef,outcome,refusal. APPLIED/REFUSED/REVERTED; REVERTED.applied names undone files. REFUSED.applied is empty; failed filename is refusal.detail (or MIGRATION_FILE_UNKNOWN). backupRef may be NULL when dump fails, so step2 premise 'refused means backup exists' is FALSE. Render REFUSED without asserting backup success. Actual backup path imports PRE_MIGRATION_BACKUP_LEAF: .moe-next/backups/pre-migration/<env>/<stamp>.sql, per engine architect ruling6513c210 to avoid scheduled retention; old parent DoD path omits subtree.\n\nNeed producer-owned/amended composition + authoritative node declaration/read edges before UI proof; preserve current DoD, no mock-backed journey, no second deployments surface. No blockedOnTaskIds yet: all named producer rows are already DONE and re-waiting those would auto-answer dependenciesSatisfied without fixing gaps. Governor notified msg45a5b0a1302c4f3fabb058560d9d948d. Two independent read-only audits corroborated; zero files modified, no tests/containers/leases started, no pass claimed. Prior803 five dirty paths reserved for QA landing, untouched from this row.",
+      "timestamp": "2026-09-06T19:10:03.495Z"
+    },
+    {
+      "id": "comment-0ed94eae5408437bb0dc1d77fea4ff3e",
+      "author": "worker-f72a1438",
+      "content": "REPLAN progress19:16Z, NO SOURCE EDITS. Governor requested exactly four producer children; filed PLANNING with parentTaskId and measured DoDs: forward2db55fca, down60008fcf, node122b55fd, read8f1f15bc. No duplicate migration feature found in full58-row epic census (not partial500-project page). Epic62-row warning acknowledged, governor owns re-slice decision. set_task_dependencies refuses worker identity even in PLANNING; requested exact full replacements from governor, no identity bypass.\n\nParent UI roster correction is required, not discretionary scope growth: goal-nodes.tsx forwards to runs-screen GoalSection then board-lanes Card/CardDetails; editing only goal-nodes would miss actual node cards. Owner origin4253 adds live-goal-deployments mount+reader absent local0737, so compose that after reconciliation rather than build it again. GoalDeployments is250lines; new migration presentation helper may be needed to stay bounded. Keep producer/type/decoder contracts in four children and only words/cards/e2e/live drive/docs here. Tests require more than stale six listed paths; proposing at most10 explicit paths including focused shared migration presentation module+test, activity screen+test, board-lanes, goal-deployments+test, e2e spec, README/runbook. The currently wrong activity-words-only step will be replaced by actual activity-screens rendering (generic VERBS alone has no receipt fields).\n\nDoD corrections requested from governor, not self-narrowed: actual backup subtree pre-migration; REFUSED backupRef nullable, not proof backup exists; schema state not inferred from REFUSED/COMMITTED; add REVERTED case; project/environment receipts have no node/goal binding so do not attribute by filename/SHA; original ordering/real restore/revert requirements discharged by DONE engine and producer children while parent proves actual browser consumer. No fabricated preview/live proof. Hold-completions instruction19:12 acknowledged; planning only continues.",
+      "timestamp": "2026-09-06T19:17:13.610Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-05T22:24:03.176Z",
+  "updatedAt": "2026-09-06T19:27:01.500Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 8,
@@ -128,5 +142,17 @@
   "planApprovedAt": "2026-09-05T19:42:39.975Z",
   "contextFetchedBy": [
     "worker-f72a1438"
+  ],
+  "workStartedAt": "2026-09-06T19:07:29.782Z",
+  "blockedReason": "Governor-directed re-slice completed: exactly four measured PLANNING producer children filed with parentTaskId; four production gaps persist at reconciled7d78aa19. Parent12step/10path presentation/proof draft saved in Serena task-task-78eedd8ebc2b43c581ac21ea28648a9a-plan-draft, UNSUBMITTED. Runtime dependency writes refuse worker role even after authorized PLANNING claim (NOT_ALLOWED architect/governor required); parent still old4DONE deps and readchild no deps. Requested exact replacements in chat53481a5f. Need governor DoD corrections for pre-migration subtree, nullable REFUSED backup, REVERTED semantics, authoritative pending observation (not declaration-minus-history), project-scoped receipts and actual card/wrapper/test paths; chat437b7584. Do not promote old plan or fabricate proof while producers missing. Park on four real unlanded ids until field/DoD repair and leaf planning; zero source/tests modified, no gate/lease/process, all planning evidence durable.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-06T19:27:01.500Z",
+  "priorBlockedReason": "Approved UI-only proof scope conflicts with missing production prerequisites measured in step1, not a test/host wait. All four declared deps and card are DONE, but migrateWithBackup has zero production callers, migrateDown has no host configuration, NodeDefinition and Runs node DTO have no declared migration IDs (step3 expressly forbids filename inference), and activity/deployment reads expose no migration receipt/environment/backup payload. A real browser proof would need invented fixtures or upstream contract/composition edits outside approved scope. Need amended producer-owned composition + node declaration/read edges, not rebuilt engines or narrowed DoD. Also correct stale refusal assumption: REFUSED may have backupRef:null; actual pre-migration backup subtree must be preserved. Detailed fresh commands/anchors in latest row comment. Zero source/test edits, no leases/processes; all known dependency ids already DONE, so no already-satisfied blockedOnTaskIds supplied.",
+  "blockedOnTaskIds": [
+    "task-2db55fcaad604aa4861139b22941095f",
+    "task-60008fcf4719490f97075c7754ac5807",
+    "task-122b55fd2c284174876bd1d5573bdcc5",
+    "task-8f1f15bcb0ab40d88f07134a757630e4"
   ]
 }

@@ -1,0 +1,51 @@
+{
+  "id": "task-2db55fcaad604aa4861139b22941095f",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Deploy composes backup-before-migrate before activating the candidate",
+  "description": "Producer child of task-78eedd8ebc2b43c581ac21ea28648a9a, governor-directed re-slice 2026-09-06 19:10Z. Parent remains browser proof; this child closes the production forward call. At local0737f06c AND owner origin4253eba9, git grep migrateWithBackup outside tests finds only migration-service.ts:78. Engine0a56 already shipped ordering/receipt/restore; reuse, do not rebuild. Deploy service/command exist; owner origin4ac0dbda changes build/release authority and must be reconciled before implementation, never plan against old deploy wiring. Environment delivery is shipped (readEnvironmentDelivery/resolveEnvironmentLaunch); reuse explicit project/environment resolution, never launchDelivery's refusal-to-undefined convenience for required DB context. One host-context resolver composed here may be reused by migrate-down sibling, which depends on this row. No remote target or connection string from browser. Parent consumer is task78; all gates need nonzero counts.",
+  "definitionOfDone": [
+    "A real production deployment.deploy dispatch reaches existing migrateWithBackup for the admitted project/environment and exact deploy workspace/SHA, before candidate activation or traffic flip. Test through default daemon composition with injectable bounded host effects, not an isolated call to engine.",
+    "Missing/unreadable database or mismatched target/workspace refuses before any migration effect, with stable code and actual layer. Resolve named environment values at the host boundary; never silently select production for preview, accept URL/workspace in command payload, or persist/log a secret.",
+    "Production-composition ordering arm awaits dump completion before apply; MIGRATION_BACKUP_FAILED leaves schema unchanged and prevents candidate activation/traffic flip. MIGRATION_FAILED names failing file, persists REFUSED migration receipt and prevents deployed-success claim; assert actual effect counters/schema, code+layer, not just return.",
+    "Replay/concurrency tests prove no duplicate batch or unsafe interleaving; use existing migration project lock and receipt identity, retain backup after post-dump failure, handle receipt-write/cleanup failures explicitly. No automatic schema rollback or restore beyond authority already supplied.",
+    "Default-composition test and fresh scoped daemon tests/typecheck execute with nonzero counts; full daemon/root/app gates disclosed per path and lease rules. New runtime modules have physical .js bridges. Parent78 and migrate-down composition child consume the shipped edge; no new feature sibling dependency or second migration engine."
+  ],
+  "taskRails": [
+    "Reuse landed engine and owner-origin deploy authority; remeasure after reconciliation. Do not duplicate release/build authority.",
+    "Connection values remain process/host-only; no value, hash, prefix, URL, SQL or tool-output leak in evidence.",
+    "Pre-migration backups use existing .moe-next/backups/pre-migration/<env> and shared lock; no second backup location."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
+  "dependsOn": [
+    "task-0a56ecee17b740a3abb7f850e5250c99",
+    "task-04b3ce7e349743c2a156d32ee5550ba5",
+    "task-14260d5ec20c43e697521a8a98904136"
+  ],
+  "priority": "HIGH",
+  "order": 112.7,
+  "comments": [
+    {
+      "id": "comment-0d938756358e46fe875d21e954c7ddcd",
+      "author": "worker-f72a1438",
+      "content": "Resolver refinement from measured source (not an implemented API): environment-launch-resolver.ts54–70 admits only CODING_SEAT/PREVIEW/VERIFIER, NO DEPLOY purpose. Use lower-level existing readEnvironmentDelivery(config, environment) -> ok.variables for requested admitted environment, with credential callback/clock/project/store kept host-only; do not invent a DEPLOY launch purpose or misuse PREVIEW for production. Env store roster preview/production/verify, migrate receipt grammar broader: validate join explicitly. Existing deploy target carries network/sshTarget/url, not database credentials. MOE_DEPLOY_BUILD_CONTEXT supplies build context; root repository workspace uses config.repositoryWorkspace or MOE_NODE_WORKSPACE. Neither should allow substituting an unverified/mismatched workspace for the admitted SHA. Origin4ac0dbda changes build authority: read reconciled production edge before implementation. Parent and read/down children are concrete consumers; governor applying read+parent dependency fields because worker set_task_dependencies is role-refused.",
+      "timestamp": "2026-09-06T19:17:12.865Z"
+    },
+    {
+      "id": "comment-4996c6ff0a544d7582d2470be5bf5847",
+      "author": "worker-f72a1438",
+      "content": "Forward composition/read handoff must support parent pending-migration proof without inventing state. A historical APPLIED receipt alone does not establish current pending DB migrations, and declared node IDs alone are intent only. Plan an authoritative bounded pending observation tied to admitted environment + exact workspace/SHA + database/batch observation under the same serialized operation, with freshness semantics; or explicitly route a missing read prerequisite to governor before claiming parent pending clause discharged. Read child8f1f15bc may only expose that admitted observation, not infer pending=[] from absent receipts. This is a composition fact needed by consumer, not permission to put SQL/credentials in UI.",
+      "timestamp": "2026-09-06T19:17:59.742Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T19:15:26.793Z",
+  "updatedAt": "2026-09-06T19:17:59.742Z"
+}
