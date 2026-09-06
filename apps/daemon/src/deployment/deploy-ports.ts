@@ -56,6 +56,21 @@ export interface DeployPorts {
   readonly transfer: ImageTransferPort;
 }
 
+/** The same argv port locally and over SSH; never a shell command or HTTP authority in tests. */
+export function createProxyPort(run: DockerRunner, network: string) {
+  const config = "/etc/caddy/Caddyfile";
+  const lock = "/tmp/moe-deploy-lock";
+  return {
+    discover: (service: string) => run(["ps", "--filter", `label=com.docker.compose.service=${service}`,
+      "--filter", `network=${network}`, "--format", "{{.Names}}"]),
+    lock: (proxy: string) => run(["exec", proxy, "mkdir", lock]),
+    unlock: (proxy: string) => run(["exec", proxy, "rmdir", lock]),
+    read: (proxy: string) => run(["exec", proxy, "cat", config]),
+    write: (proxy: string, bytes: string) => run(["exec", "-i", proxy, "tee", config], bytes),
+    reload: (proxy: string) => run(["exec", proxy, "caddy", "reload", "--config", config, "--adapter", "caddyfile"]),
+  };
+}
+
 /**
  * 150s. DERIVED, not copied: the generated healthcheck is `--start-period=5s
  * --interval=5s --retries=20`, so docker needs 5 + 20 x 5 = 105s before it will
@@ -93,22 +108,24 @@ function runProcess(
 ): Promise<DeployRunResult> {
   return new Promise((resolve) => {
     const child = spawn(file, [...args], { shell: false, windowsHide: true });
-    let stdout = ""; let stderr = ""; let settled = false;
+    let stdout = ""; let stderr = ""; let settled = false; let uncertain = false;
     const finish = (code: number | null, extra = ""): void => {
       if (settled) return;
       settled = true;
       resolve({ code, stderr: `${stderr}${extra}`, stdout });
     };
-    const timer = setTimeout(() => { child.kill(); finish(null, "\ndeploy: command timed out"); }, timeout);
+    const abort = (reason: string): void => { uncertain = true; stderr += `\n${reason}`; child.kill(); };
+    const timer = setTimeout(() => abort("DEPLOY_COMMAND_TIMED_OUT"), timeout);
     timer.unref?.();
     const cap = (chunk: Buffer, sink: string): string =>
       sink.length < MAX_OUTPUT_BYTES ? sink + chunk.toString("utf8") : sink;
     child.stdout?.on("data", (chunk: Buffer) => { stdout = cap(chunk, stdout); });
     child.stderr?.on("data", (chunk: Buffer) => { stderr = cap(chunk, stderr); });
     // A spawn that never starts (no docker on PATH) must read as a refusal, not a throw.
-    child.on("error", (error: Error) => { clearTimeout(timer); finish(null, `\n${error.message}`); });
-    child.on("close", (code) => { clearTimeout(timer); finish(code); });
+    child.on("error", () => { uncertain = true; stderr += "\nDEPLOY_SPAWN_UNAVAILABLE"; });
+    child.on("close", (code) => { clearTimeout(timer); finish(uncertain ? null : code); });
     if (child.stdin !== null) {
+      child.stdin.on("error", () => abort("DEPLOY_STDIN_UNAVAILABLE"));
       if (stdin !== undefined) child.stdin.write(stdin);
       child.stdin.end();
     }
@@ -171,6 +188,13 @@ export const nodeImageTransfer: ImageTransferPort = (tag, sshTarget) => new Prom
 export type ContainerState = "ABSENT" | "STARTING" | "HEALTHY" | "STOPPED" | "REMOVED";
 
 export interface DockerDoubleOptions {
+  readonly proxyConfig?: string;
+  readonly proxyNames?: readonly string[];
+  readonly appContainer?: string;
+  readonly lockHeld?: boolean;
+  readonly reloadCodes?: readonly (number | null)[];
+  readonly rewriteCodes?: readonly (number | null)[];
+  readonly reloadAppliesOnFailure?: boolean;
   /** docker's own last stderr line when `build` must refuse. */
   readonly buildStderr?: string;
   /** Every docker call refuses to spawn, as it would with no docker on PATH. */
@@ -189,6 +213,11 @@ const failed = (stderr: string, code: number | null = 1): DeployRunResult =>
   ({ code, stderr, stdout: "" });
 
 export interface DockerDouble {
+  readonly transitions: readonly { readonly argv: readonly string[]; readonly serving: readonly string[] }[];
+  readonly writes: readonly string[];
+  upstream(): string;
+  config(): string;
+  locked(): boolean;
   /** Every docker argv, in call order. */
   readonly calls: readonly (readonly string[])[];
   readonly docker: DockerRunner;
@@ -214,6 +243,38 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
   const states = new Map<string, ContainerState>(Object.entries(options.running ?? {}));
   const probes = new Map<string, number>();
   const digest = options.imageDigest ?? `sha256:${"a".repeat(64)}`;
+  let config = options.proxyConfig ?? "";
+  const readUpstream = () => /^\s*reverse_proxy ([\w.-]+):3000\s*$/mu.exec(config)?.[1] ?? "";
+  let upstream = readUpstream(); let locked = options.lockHeld ?? false;
+  let reloads = 0; let rewrites = 0;
+  const writes: string[] = [];
+  const serving = (): string[] => {
+    const name = upstream === "app" ? options.appContainer ?? "app" : upstream;
+    return states.get(name) === "HEALTHY" ? [name] : [];
+  };
+  const transitions = [{ argv: ["initial"], serving: serving() }];
+  const proxyCall = (args: readonly string[], stdin?: string): DeployRunResult => {
+    if (args[0] === "ps") return ok((args.includes("label=com.docker.compose.service=proxy")
+      ? options.proxyNames ?? (config === "" ? [] : ["proxy"]) : [options.appContainer ?? "app"]).join("\n"));
+    if (args.includes("mkdir")) {
+      if (locked) return failed("lock exists");
+      locked = true; return ok();
+    }
+    if (args.includes("rmdir")) { locked = false; return ok(); }
+    if (args.includes("cat")) return ok(config);
+    if (args.includes("tee")) {
+      writes.push(stdin ?? "");
+      const code = options.rewriteCodes?.[rewrites++];
+      if (code !== undefined && code !== 0) return failed("write refused", code);
+      config = stdin ?? ""; return ok();
+    }
+    if (args.includes("reload")) {
+      const code = options.reloadCodes?.[reloads++];
+      if (code === undefined || code === 0 || options.reloadAppliesOnFailure === true) upstream = readUpstream();
+      return code === undefined || code === 0 ? ok() : failed("reload refused", code);
+    }
+    return failed("unsupported proxy argv");
+  };
   // A container that was never created cannot report health, whatever the script
   // says: real `docker inspect` exits nonzero for a name that does not exist.
   const healthOf = (name: string): ContainerState => {
@@ -225,13 +286,13 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
     probes.set(name, seen + 1);
     return scripted[Math.min(seen, scripted.length - 1)] as ContainerState;
   };
-  const docker: DockerRunner = (args) => {
-    calls.push([...args]);
-    if (options.dockerUnavailable === true) return Promise.resolve(failed("docker: not found", null));
+  const dispatch = (args: readonly string[], stdin?: string): DeployRunResult => {
+    if (options.dockerUnavailable === true) return failed("docker: not found", null);
     const [verb, ...rest] = args;
+    if (verb === "exec" || verb === "ps") return proxyCall(args, stdin);
     const named = rest[rest.length - 1] ?? "";
     if (verb === "build") {
-      return Promise.resolve(options.buildStderr === undefined ? ok() : failed(options.buildStderr));
+      return options.buildStderr === undefined ? ok() : failed(options.buildStderr);
     }
     if (verb === "run") {
       // The container name is the `--name` VALUE, never the trailing argv —
@@ -240,22 +301,28 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
       const flag = args.indexOf("--name");
       const name = flag === -1 ? named : args[flag + 1] ?? named;
       states.set(name, "STARTING");
-      return Promise.resolve(ok(name));
+      return ok(name);
     }
     if (verb === "inspect") {
       const state = healthOf(named);
       // An absent container is NOT inserted: recording the probe would create
       // the very key that makes the next probe answer from the script.
       if (state !== "ABSENT") states.set(named, state);
-      return Promise.resolve(state === "ABSENT" ? failed("No such object") : ok(`${state.toLowerCase()}\n`));
+      return state === "ABSENT" ? failed("No such object") : ok(`${state.toLowerCase()}\n`);
     }
-    if (verb === "image") return Promise.resolve(ok(`${digest}\n`));
-    if (verb === "stop") { states.set(named, "STOPPED"); return Promise.resolve(ok()); }
-    if (verb === "rm") { states.set(named, "REMOVED"); return Promise.resolve(ok()); }
+    if (verb === "image") return ok(`${digest}\n`);
+    if (verb === "stop") { states.set(named, "STOPPED"); return ok(); }
+    if (verb === "rm") { states.set(named, "REMOVED"); return ok(); }
     if (verb === "save") {
-      return Promise.resolve(options.saveStderr === undefined ? ok() : failed(options.saveStderr));
+      return options.saveStderr === undefined ? ok() : failed(options.saveStderr);
     }
-    return Promise.resolve(ok());
+    return ok();
+  };
+  const docker: DockerRunner = (args, stdin) => {
+    calls.push([...args]);
+    const result = dispatch(args, stdin);
+    transitions.push({ argv: [...args], serving: serving() });
+    return Promise.resolve(result);
   };
   const transfer: ImageTransferPort = (tag, sshTarget) => {
     calls.push([...dockerSaveArgv(tag)]);
@@ -267,14 +334,14 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
   // A remote call is the SAME docker argv wrapped in `ssh <target> docker ...`.
   // Unwrapping it here rather than giving the double a second model keeps "what
   // docker did" a single answer whether the target was local or remote.
-  const ssh: SshRunner = (args) => {
+  const ssh: SshRunner = (args, stdin) => {
     sshCalls.push([...args]);
     const docked = args.indexOf("docker");
-    return docked === -1 ? Promise.resolve(ok()) : docker(args.slice(docked + 1));
+    return docked === -1 ? Promise.resolve(ok()) : docker(args.slice(docked + 1), stdin);
   };
   return {
-    calls, docker, serving: () => [...states.entries()]
-      .filter(([, state]) => state === "STARTING" || state === "HEALTHY").map(([name]) => name),
+    calls, docker, serving, transitions, writes,
+    upstream: () => upstream, config: () => config, locked: () => locked,
     ssh, sshCalls, state: (name) => states.get(name) ?? "ABSENT", transfer,
   };
 }

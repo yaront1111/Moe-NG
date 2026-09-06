@@ -1,6 +1,6 @@
 /**
  * The infrastructure files the controlled profile does NOT ship: a multi-stage Dockerfile, the
- * build-context exclusions it needs, an `app` service, and a healthcheck the image can run itself.
+ * build-context exclusions it needs, app/proxy services, and a healthcheck the image can run itself.
  *
  * SAME DETERMINISM RULE AS THE SCAFFOLD SIBLING: line arrays joined with "\n" plus a trailing "\n",
  * never a multi-line template literal (whose indentation and line endings follow this file's own
@@ -8,7 +8,7 @@
  *
  * WHAT THIS MODULE DELIBERATELY DOES NOT EMIT: a `docker-compose.yml`, and any postgres service.
  * The scaffold (task-4a0f7064, landed) already emits `docker-compose.yml` with exactly one postgres
- * service `db`, and an operator's compose is theirs. The `app` service arrives as
+ * service `db`, and an operator's compose is theirs. The app and its public proxy arrive as
  * `docker-compose.override.yml`, which `docker compose` merges into the base file by default, so a
  * product ends up with ONE project and ONE database — which is what the migrations row assumes.
  *
@@ -25,7 +25,7 @@ const file = (lines: readonly string[]): string => `${lines.join("\n")}\n`;
  */
 export const DEPLOYMENT_NODE_IMAGE = "node:24.16.0-alpine" as const;
 
-/** The port the profile's api binds by default, and the port the override publishes. */
+/** The app's internal port and the public port owned only by the override's proxy. */
 export const DEPLOYMENT_APP_PORT = 3000 as const;
 
 /** The route the profile's api answers 200 on. The healthcheck probes exactly this. */
@@ -123,6 +123,7 @@ export function dockerignore(profileVersion: string, requirementIds: readonly st
  */
 export function dockerComposeOverride(profileVersion: string, requirementIds: readonly string[]): string {
   const port = String(DEPLOYMENT_APP_PORT);
+  // Official caddy-docker tag pinned by fba2853501d36e8a72f946ac8cb7ff64d07e48f2/2.11/alpine.
   return file([
     ...provenance("#", profileVersion, requirementIds),
     "#",
@@ -140,13 +141,35 @@ export function dockerComposeOverride(profileVersion: string, requirementIds: re
     "    environment:",
     `      PORT: ${port}`,
     "      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}",
-    "    ports:",
-    `      - "${port}:${port}"`,
     "    healthcheck:",
     `      test: ["CMD", "node", "${DEPLOYMENT_HEALTHCHECK_PATH}"]`,
     "      interval: 5s",
     "      timeout: 5s",
     "      retries: 20",
+    "  proxy:",
+    "    image: caddy:2.11.4-alpine",
+    "    restart: unless-stopped",
+    "    depends_on:",
+    "      app:",
+    "        condition: service_healthy",
+    "    ports:",
+    `      - "${port}:${port}"`,
+    "    volumes:",
+    '      - "./docker/Caddyfile:/etc/caddy/Caddyfile:rw"',
+  ]);
+}
+
+/** Only the proxy owns the public socket. Reload uses its private, loopback-only admin API. */
+function caddyfile(profileVersion: string, requirementIds: readonly string[]): string {
+  return file([
+    ...provenance("#", profileVersion, requirementIds),
+    "{",
+    "\tadmin 127.0.0.1:2019",
+    "}",
+    "",
+    `:${String(DEPLOYMENT_APP_PORT)} {`,
+    `\treverse_proxy app:${String(DEPLOYMENT_APP_PORT)}`,
+    "}",
   ]);
 }
 
@@ -195,6 +218,7 @@ export function deploymentInfrastructureFiles(
     [".dockerignore", dockerignore(profileVersion, requirementIds)],
     ["Dockerfile", dockerfile(profileVersion, requirementIds)],
     ["docker-compose.override.yml", dockerComposeOverride(profileVersion, requirementIds)],
+    ["docker/Caddyfile", caddyfile(profileVersion, requirementIds)],
     ["docker/healthcheck.mjs", healthcheckScript(profileVersion, requirementIds)],
   ]);
 }

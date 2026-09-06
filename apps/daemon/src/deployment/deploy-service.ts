@@ -2,26 +2,19 @@ import type { SqliteEventStore } from "@moe/store";
 
 import {
   DEPLOY_BUILD_FAILED, DEPLOY_DOCKER_UNAVAILABLE, DEPLOY_ENGINE_STAMP, DEPLOY_HEALTH_TIMEOUT,
-  DEPLOY_TARGET_MISSING, admitDeploySha, admitEnvironmentName, deployImageTag,
+  DEPLOY_TARGET_MISSING, admitDeploySha, admitEnvironmentName, deployImageTag, deployReceiptId,
 } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1, DeployRefusal, DeployRefusalCode } from "./deploy-receipt-contracts.js";
-import { DEPLOY_HEALTH_BUDGET_MS, DEPLOY_HEALTH_POLL_MS, lastStderrLine } from "./deploy-ports.js";
+import { createProxyPort, DEPLOY_HEALTH_BUDGET_MS, DEPLOY_HEALTH_POLL_MS, lastStderrLine } from "./deploy-ports.js";
 import type { DeployPorts, DeployRunResult, DeployTarget } from "./deploy-ports.js";
-import { recordDeployReceipt } from "./deploy-ledger.js";
+import { readDeployReceipt, recordDeployReceipt } from "./deploy-ledger.js";
+import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
 
-/**
- * The deploy effect: build the image at a landed sha, put a candidate beside
- * whatever is already running, and prove the CANDIDATE is healthy before
- * calling the deploy done.
- *
- * Nothing here chooses an environment, a sha, or a moment — the caller names
- * both and the ports do the work. One receipt is recorded per deploy.
- *
- * WHAT THIS MODULE DELIBERATELY DOES NOT DO: it does not move traffic and it
- * does not stop the incumbent on the success path. The switch point does not
- * exist in the shipped infrastructure yet; adding one is
- * task-db63dacc7cbe49cab9826e9b49c8669f, which depends on this module. The seam
- * where it attaches is marked below.
+/** Build a caller-selected sha, health-check the candidate, then switch the public route.
+ * Caddy's synchronous reload is the cutover, not mere signal delivery.
+ * A proxy-local mkdir lease fences other daemon processes too. Interrupted
+ * recovery retains the lease and BOTH containers instead of guessing which
+ * one is live. A stale lease requires operator recovery; no automatic steal.
  */
 
 export const PRODUCTION_ENVIRONMENT = "production" as const;
@@ -54,13 +47,7 @@ export interface DeployReport {
   readonly receipt: DeployReceiptV1 | null;
 }
 
-/**
- * The candidate's name. Deterministic in the deploy DECISION, not merely in the
- * sha: the same sha deployed twice is two decisions and therefore two
- * candidates, so neither deploy can destroy the other's container. A REPLAY of
- * one decision reproduces one name, and that collision is handled by REUSE
- * below rather than by removing something that may already be serving.
- */
+/** Decision-scoped name: retries never remove an already-serving candidate. */
 export function candidateContainerName(
   environment: string, sha: string, decisionId: string,
 ): string {
@@ -72,21 +59,12 @@ export function candidateContainerName(
 export const buildArgv = (tag: string, context: string): readonly string[] =>
   ["build", "--tag", tag, context];
 
-/**
- * The candidate publishes NO host port: it joins the network internally and is
- * reachable by name. That is what lets it start beside the incumbent instead of
- * fighting it for a bound port.
- */
+/** Internal candidate: no public port conflict with the incumbent or proxy. */
 export const runCandidateArgv = (
   name: string, network: string, tag: string,
 ): readonly string[] => ["run", "--detach", "--name", name, "--network", network, tag];
 
-/**
- * THE PROBE NAMES THE CANDIDATE, and that is the whole point. A probe addressed
- * at the environment's public url would be answered by the OLD container, so
- * every deploy would "pass" health instantly while proving nothing about the
- * image just built.
- */
+/** Probe the candidate by name: the public URL would prove only the incumbent's health. */
 export const healthArgv = (name: string): readonly string[] =>
   ["inspect", "--format", "{{.State.Health.Status}}", name];
 
@@ -98,6 +76,75 @@ const nodeSleep = (ms: number): Promise<void> => new Promise((resolve) => {
   timer.unref?.();
 });
 
+type ProxyPort = ReturnType<typeof createProxyPort>;
+interface ProxyLease { readonly proxy: string; readonly incumbent: string; readonly config: string; readonly upstream: string }
+const oneName = (result: DeployRunResult): string | null =>
+  result.code === 0 && /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/u.test(result.stdout.trim()) ? result.stdout.trim() : null;
+const proxyBody = (text: string): string => text.split(/\r?\n/u).map((line) => line.trim())
+  .filter((line) => line !== "" && !line.startsWith("#")).join("\n");
+const generatedProxyBody = proxyBody(deploymentInfrastructureFiles("", []).get("docker/Caddyfile") ?? "");
+
+async function acquireProxy(port: ProxyPort): Promise<ProxyLease | string> {
+  const proxy = oneName(await port.discover("proxy"));
+  if (proxy === null) return "DEPLOY_PROXY_MISSING_OR_AMBIGUOUS";
+  if ((await port.lock(proxy)).code !== 0) return "DEPLOY_PROXY_BUSY";
+  let acquired = false;
+  try {
+    const read = await port.read(proxy);
+    // Match the rewrite's horizontal grammar exactly: Unicode indentation must
+    // never be admitted then left unchanged while its backend is retired.
+    const matches = [...read.stdout.matchAll(/^[\t ]*reverse_proxy ([a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}):3000[\t ]*$/gmu)];
+    const upstream = matches.length === 1 ? matches[0]?.[1] : undefined;
+    if (read.code !== 0 || upstream === undefined) return "DEPLOY_PROXY_CONFIG_UNSUPPORTED";
+    // Custom routes may leave public traffic on another backend/listener. Only
+    // the generated topology is ours to flip, not arbitrary valid Caddy syntax.
+    if (proxyBody(read.stdout).replace(`reverse_proxy ${upstream}:3000`, "reverse_proxy app:3000") !== generatedProxyBody) {
+      return "DEPLOY_PROXY_CONFIG_UNSUPPORTED";
+    }
+    // `app` is a compose DNS alias, NOT its generated container name.
+    const incumbent = upstream === "app" ? oneName(await port.discover("app")) : upstream;
+    if (incumbent === null) return "DEPLOY_PROXY_INCUMBENT_MISSING";
+    acquired = true;
+    return { proxy, incumbent, config: read.stdout, upstream };
+  } finally { if (!acquired) await port.unlock(proxy); }
+}
+
+/** No tool output/config bytes enter a receipt: phase literals are stable and credential-free. */
+async function restoreProxy(port: ProxyPort, lease: ProxyLease): Promise<boolean> {
+  return (await port.write(lease.proxy, lease.config)).code === 0 && (await port.reload(lease.proxy)).code === 0;
+}
+
+async function flipProxy(port: ProxyPort, lease: ProxyLease, name: string) {
+  const next = lease.config.replace(/^([\t ]*reverse_proxy )[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}(:3000[\t ]*)$/mu,
+    (_line, prefix: string, suffix: string) => `${prefix}${name}${suffix}`);
+  const written = await port.write(lease.proxy, next);
+  const reloaded = written.code === 0 ? await port.reload(lease.proxy) : written;
+  // Killing a Docker CLI does not prove its remote exec stopped. Never race a
+  // late write/reload with rollback and candidate removal after a timeout.
+  if (reloaded.code === null) return { detail: "DEPLOY_PROXY_RECOVERY_REQUIRED", recoveryRequired: true };
+  const detail = written.code !== 0 ? "DEPLOY_PROXY_WRITE_FAILED"
+    : reloaded.code !== 0 ? "DEPLOY_PROXY_RELOAD_FAILED" : null;
+  if (detail === null) return { detail, recoveryRequired: false };
+  // Restore a definitively finished failure and acknowledge the old config
+  // before deleting the candidate. Failed recovery leaves both alive.
+  const recovered = await restoreProxy(port, lease);
+  return { detail: recovered ? detail : "DEPLOY_PROXY_RECOVERY_REQUIRED", recoveryRequired: !recovered };
+}
+
+function readReplay(config: DeployServiceConfig, request: DeployRequest): DeployReport | null {
+  const { environment, sha } = request;
+  const historical = readDeployReceipt(config.store, config.projectId,
+    deployReceiptId(config.projectId, environment, request.decisionId));
+  if (historical.ok) {
+    const receipt = historical.receipt;
+    return receipt.sha === sha
+      ? { outcome: receipt.outcome, detail: `replayed ${receipt.outcome}`, environment, receipt }
+      : { outcome: "REFUSED", detail: "DEPLOY_DECISION_REPLAY_MISMATCH", environment, receipt: null };
+  }
+  return historical.code === "DEPLOY_RECEIPT_NOT_FOUND" ? null
+    : { outcome: "REFUSED", detail: historical.code, environment, receipt: null };
+}
+
 export function createDeployService(config: DeployServiceConfig) {
   const clock = config.clock ?? (() => new Date().toISOString());
   const sleep = config.sleep ?? nodeSleep;
@@ -106,10 +153,12 @@ export function createDeployService(config: DeployServiceConfig) {
   const { ports } = config;
 
   /** One seam for both targets: a remote call is the same docker argv over ssh. */
-  const run = (target: DeployTarget, args: readonly string[]): Promise<DeployRunResult> =>
-    target.sshTarget === null
-      ? ports.docker(args)
-      : ports.ssh([target.sshTarget, "docker", ...args]);
+  const run = async (target: DeployTarget, args: readonly string[], stdin?: string): Promise<DeployRunResult> => {
+    try {
+      const result = await (target.sshTarget === null ? ports.docker(args, stdin) : ports.ssh([target.sshTarget, "docker", ...args], stdin));
+      return target.sshTarget !== null && result.code === 255 ? { ...result, code: null } : result;
+    } catch { return { code: null, stderr: "DEPLOY_EFFECT_UNAVAILABLE", stdout: "" }; }
+  };
 
   const record = (
     request: DeployRequest, target: DeployTarget | null,
@@ -150,6 +199,8 @@ export function createDeployService(config: DeployServiceConfig) {
 
   const deploy = async (request: DeployRequest): Promise<DeployReport> => {
     const { environment, sha } = request;
+    const historical = readReplay(config, request);
+    if (historical !== null) return historical;
     const releaseDecision = ports.releaseDecision(environment, sha);
     // DoD-7: a READ. It neither invents an approval nor refuses for the lack of
     // one — deciding a release is Gate 3's authority, not this module's.
@@ -164,7 +215,9 @@ export function createDeployService(config: DeployServiceConfig) {
       target: DeployTarget | null, code: DeployRefusalCode, detail: string,
     ): DeployReport => {
       const refused = refusal(code, detail);
-      return report("REFUSED", code, record(request, target, null, refused, releaseDecision));
+      const receipt = record(request, target, null, refused, releaseDecision);
+      if (receipt !== null && receipt.sha !== sha) return report("REFUSED", "DEPLOY_DECISION_REPLAY_MISMATCH", null);
+      return report(receipt?.outcome ?? "REFUSED", receipt?.outcome === "DEPLOYED" ? "replayed DEPLOYED" : code, receipt);
     };
 
     // BEFORE ANY EFFECT: a sha or environment the receipt decoder would refuse
@@ -182,41 +235,57 @@ export function createDeployService(config: DeployServiceConfig) {
     if (version.code !== 0) {
       return refuse(target, DEPLOY_DOCKER_UNAVAILABLE, lastStderrLine(version.stderr));
     }
-    const tag = deployImageTag(environment, sha);
-    const built = await run(target, buildArgv(tag, request.context));
-    // docker's OWN last stderr line: a generic message is undiagnosable from a receipt weeks later.
-    if (built.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(built.stderr));
-    if (target.sshTarget !== null) {
-      const moved = await ports.transfer(tag, target.sshTarget);
-      if (moved.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(moved.stderr));
-    }
+    const proxyPort = createProxyPort((args, stdin) => run(target, args, stdin), target.network);
+    const lease = await acquireProxy(proxyPort);
+    if (typeof lease === "string") return refuse(target, DEPLOY_BUILD_FAILED, lease);
+    let keepLock = false; let keepCandidate = false; let candidateStarted = false;
     const name = candidateContainerName(environment, sha, request.decisionId);
-    const started = await startCandidate(target, name, tag);
-    if (started.code !== 0) {
-      return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(started.stderr));
-    }
-    let healthy = false;
     try {
-      healthy = await awaitHealthy(target, name);
+      const replay = readReplay(config, request);
+      if (replay !== null) return replay;
+      const tag = deployImageTag(environment, sha);
+      const built = await run(target, buildArgv(tag, request.context));
+      // docker's OWN last stderr line: a generic message is undiagnosable from a receipt weeks later.
+      if (built.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(built.stderr));
+      if (target.sshTarget !== null) {
+        const moved = await ports.transfer(tag, target.sshTarget);
+        if (moved.code !== 0) return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(moved.stderr));
+      }
+      candidateStarted = true;
+      const started = await startCandidate(target, name, tag);
+      if (started.code !== 0) {
+        return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(started.stderr));
+      }
+      const healthy = await awaitHealthy(target, name);
+      if (!healthy) {
+        return refuse(target, DEPLOY_HEALTH_TIMEOUT, `${name} did not report healthy within ${String(budget)}ms`);
+      }
+      const inspected = await run(target, ["image", "inspect", "--format", "{{.Id}}", tag]);
+      const digest = inspected.stdout.trim();
+      if (inspected.code !== 0 || !/^sha256:[0-9a-f]{64}$/u.test(digest)) {
+        return refuse(target, DEPLOY_BUILD_FAILED, "DEPLOY_IMAGE_DIGEST_UNAVAILABLE");
+      }
+      const flipped = await flipProxy(proxyPort, lease, name);
+      keepLock = flipped.recoveryRequired;
+      keepCandidate = flipped.detail === null || flipped.recoveryRequired;
+      if (flipped.detail !== null) return refuse(target, DEPLOY_BUILD_FAILED, flipped.detail);
+      // A concurrent same-decision BUSY refusal may have consumed this receipt id.
+      // Do not retire the incumbent or claim success behind a conflicting receipt.
+      const receipt = record(request, target, digest, null, releaseDecision);
+      if (receipt === null || receipt.outcome !== "DEPLOYED" || receipt.sha !== sha) {
+        keepLock = !(await restoreProxy(proxyPort, lease));
+        keepCandidate = keepLock;
+        return report("REFUSED", keepLock ? "DEPLOY_PROXY_RECOVERY_REQUIRED" : "DEPLOY_RECEIPT_CONFLICT", receipt);
+      }
+      // Caddy /load is synchronous and zero-downtime; a signal is NOT sufficient.
+      // https://caddyserver.com/docs/api#post-load
+      const stopped = lease.incumbent === name ? null : await run(target, ["stop", lease.incumbent]);
+      const cleanup = stopped !== null && stopped.code !== 0 ? "; DEPLOY_INCUMBENT_STOP_FAILED" : "";
+      return report("DEPLOYED", `${name} healthy at ${tag}${cleanup}`, receipt);
     } finally {
-      // THE FAILURE PATH TIDIES UP IN A `finally`, not after the assertions: a
-      // refusal that leaks a stray container leaves the environment as
-      // undefined as a half-deploy would. The INCUMBENT is never touched here —
-      // it keeps running, which is what makes the refused state a defined one.
-      if (!healthy) await run(target, ["rm", "--force", name]);
+      if (candidateStarted && !keepCandidate && lease.incumbent !== name) await run(target, ["rm", "--force", name]);
+      if (!keepLock) await proxyPort.unlock(lease.proxy);
     }
-    if (!healthy) {
-      return refuse(target, DEPLOY_HEALTH_TIMEOUT, `${name} did not report healthy within ${String(budget)}ms`);
-    }
-    const inspected = await run(target, ["image", "inspect", "--format", "{{.Id}}", tag]);
-    const digest = inspected.stdout.trim();
-    // === THE FLIP SEAM ===
-    // The candidate is healthy and the incumbent is still running. Moving
-    // traffic and retiring the incumbent attaches HERE, and belongs to
-    // task-db63dacc7cbe49cab9826e9b49c8669f; this module stops at a healthy
-    // candidate and a recorded receipt.
-    return report("DEPLOYED", `${name} healthy at ${tag}`,
-      record(request, target, digest, null, releaseDecision));
   };
 
   return Object.freeze({ deploy });

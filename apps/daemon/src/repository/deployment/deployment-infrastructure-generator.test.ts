@@ -118,13 +118,32 @@ const EXPECTED_OVERRIDE = lines([
   "    environment:",
   "      PORT: 3000",
   "      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}",
-  "    ports:",
-  '      - "3000:3000"',
   "    healthcheck:",
   '      test: ["CMD", "node", "/app/healthcheck.mjs"]',
   "      interval: 5s",
   "      timeout: 5s",
   "      retries: 20",
+  "  proxy:",
+  "    image: caddy:2.11.4-alpine",
+  "    restart: unless-stopped",
+  "    depends_on:",
+  "      app:",
+  "        condition: service_healthy",
+  "    ports:",
+  '      - "3000:3000"',
+  "    volumes:",
+  '      - "./docker/Caddyfile:/etc/caddy/Caddyfile:rw"',
+]);
+
+const EXPECTED_CADDYFILE = lines([
+  ...PROVENANCE("#"),
+  "{",
+  "\tadmin 127.0.0.1:2019",
+  "}",
+  "",
+  ":3000 {",
+  "\treverse_proxy app:3000",
+  "}",
 ]);
 
 const EXPECTED_HEALTHCHECK = lines([
@@ -194,14 +213,17 @@ const imageOf = (body: readonly string[]): string | null => {
 };
 
 describe("the generated deployment infrastructure", () => {
-  it("pins the bytes of the Dockerfile, .dockerignore, the compose override and the healthcheck", () => {
+  it("pins every deployment artifact including the proxy configuration", () => {
     const files = written();
 
-    expect([...files.keys()]).toEqual([".dockerignore", "Dockerfile", "docker-compose.override.yml", "docker/healthcheck.mjs"]);
+    expect(new Set(files.keys())).toEqual(new Set([
+      ".dockerignore", "Dockerfile", "docker-compose.override.yml", "docker/Caddyfile", "docker/healthcheck.mjs",
+    ]));
     expect(files.get("Dockerfile")).toEqual(EXPECTED_DOCKERFILE);
     expect(files.get(".dockerignore")).toEqual(EXPECTED_DOCKERIGNORE);
     expect(files.get("docker-compose.override.yml")).toEqual(EXPECTED_OVERRIDE);
     expect(files.get("docker/healthcheck.mjs")).toEqual(EXPECTED_HEALTHCHECK);
+    expect(files.get("docker/Caddyfile")).toEqual(EXPECTED_CADDYFILE);
 
     for (const [path, body] of files) {
       expect(body.includes("\r"), path).toBe(false);
@@ -242,7 +264,7 @@ describe("the generated deployment infrastructure", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.kept).toEqual(["Dockerfile", "docker-compose.override.yml"]);
+    expect(new Set(result.kept)).toEqual(new Set(["Dockerfile", "docker-compose.override.yml"]));
     expect(result.write.has("Dockerfile")).toBe(false);
     expect(result.write.has("docker-compose.override.yml")).toBe(false);
     // The point is the operator's BYTES surviving, not a boolean: writing the plan leaves them alone.
@@ -252,7 +274,17 @@ describe("the generated deployment infrastructure", () => {
     }
     expect(disk.get("Dockerfile")).toBe(operatorDockerfile);
     // What the repository lacks is still generated — conditional, not disabled.
-    expect([...result.write.keys()]).toEqual([".dockerignore", "docker/healthcheck.mjs"]);
+    expect(new Set(result.write.keys())).toEqual(new Set([".dockerignore", "docker/Caddyfile", "docker/healthcheck.mjs"]));
+  });
+
+  it("keeps an existing proxy configuration instead of overwriting its upstream", () => {
+    const result = plan({ existingPaths: ["docker/Caddyfile"] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(new Set(result.kept)).toEqual(new Set(["docker/Caddyfile"]));
+    expect(new Set(result.write.keys())).toEqual(new Set([
+      ".dockerignore", "Dockerfile", "docker-compose.override.yml", "docker/healthcheck.mjs",
+    ]));
   });
 
   it("refuses an unknown profile version with DEPLOY_PROFILE_VERSION_UNKNOWN", () => {
@@ -275,15 +307,29 @@ describe("the generated deployment infrastructure", () => {
     const override = written().get("docker-compose.override.yml") ?? "";
 
     const merged = new Map([...composeServices(base), ...composeServices(override)]);
-    expect([...merged.keys()].sort()).toEqual(["app", "db"]);
+    expect(new Set(merged.keys())).toEqual(new Set(["app", "db", "proxy"]));
 
     const postgres = [...merged].filter(([, body]) => (imageOf(body) ?? "").startsWith("postgres:"));
     expect(postgres.map(([name]) => name)).toEqual(["db"]);
 
     // The override contributes NO database and NO volumes block: both belong to the base file.
-    expect([...composeServices(override).keys()]).toEqual(["app"]);
+    expect(new Set(composeServices(override).keys())).toEqual(new Set(["app", "proxy"]));
     expect(override).not.toContain("postgres");
     expect(override).not.toContain("\nvolumes:");
+  });
+
+  it("publishes only the proxy port and keeps its writable admin configuration private", () => {
+    const services = composeServices(written().get("docker-compose.override.yml") ?? "");
+    expect(new Set(services.keys())).toEqual(new Set(["app", "proxy"]));
+    const app = services.get("app") ?? [];
+    const proxy = services.get("proxy") ?? [];
+    expect(app).not.toContain("    ports:");
+    expect(proxy).toContain("    ports:");
+    expect(proxy.filter((line) => /^      - "\d+:\d+"$/.test(line))).toEqual(['      - "3000:3000"']);
+    expect(imageOf(proxy)).toBe("caddy:2.11.4-alpine");
+    expect(proxy).toContain('      - "./docker/Caddyfile:/etc/caddy/Caddyfile:rw"');
+    expect(written().get("docker/Caddyfile")).toEqual(EXPECTED_CADDYFILE);
+    expect(proxy.join("\n")).not.toContain("2019");
   });
 
   it("describes the app the scaffold actually generates", () => {
