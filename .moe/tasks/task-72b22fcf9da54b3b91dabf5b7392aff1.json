@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T21:17:31.209Z",
+  "updatedAt": "2026-09-06T21:24:27.969Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -265,18 +265,47 @@
       "treeId": "14edb901b63fe08548636a96da8b1eef44201afe",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "112f04d31ee2e8cf6991525f7d9c3b55566e2158",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:17:34Z",
+      "paths": [
+        ".moe/tasks/task-2b8431705baf4db5aafa750b5d0b5148.json",
+        ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+        ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+        ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:24:27.969Z",
+      "treeId": "4ce6d9b6ca1b712cde4ed7586b5c1056ad744076",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
-    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json"
+    ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+    ".moe/tasks/task-2b8431705baf4db5aafa750b5d0b5148.json",
+    ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+    ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+    ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+    ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "tests/e2e/control-room/lane-landing.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-1d53e70c@2026-09-06T18:45:37Z",
-    "at": "2026-09-06T18:49:24.654Z"
+    "sessionId": "worker-d107a8ef@2026-09-06T21:17:34Z",
+    "at": "2026-09-06T21:24:27.969Z"
   },
   "priorHandoffs": [
     {
