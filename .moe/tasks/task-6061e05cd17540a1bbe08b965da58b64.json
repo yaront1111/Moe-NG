@@ -42,7 +42,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-0520a42e",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -67,7 +67,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:42:58.848Z",
-  "updatedAt": "2026-09-06T03:00:58.524Z",
+  "updatedAt": "2026-09-06T07:41:47.542Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T10:23:28.743Z",
     "plannedStepCount": 3,
@@ -219,5 +219,16 @@
     "kind": "checkpoint",
     "sessionId": "worker-0520a42e@2026-09-06T03:00:48Z",
     "at": "2026-09-06T03:00:58.524Z"
-  }
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 of 3 COMPLETED (manual gate). Step 2 (LIVE DRIVE on UnAI, parent DoD 5) was IN_PROGRESS when the seat died. Latest checkpoint b38882d4493b on moe/work-2026-09-04. The lane the seat started at 02:43Z is STILL RUNNING as an orphan: node pid 70500 running D:/projexts/UnAI/.moe-next/live-drive-w0520a42e/lane.mjs, with children 53388 (daemon-main.ts) and 30968 (agent-wrapper-main.ts, about 4000 s CPU by 07:35Z).",
+      "whatRemains": "Read the orphan lane's output directory (D:/projexts/UnAI/.moe-next/live-drive-w0520a42e) for receipts and transcript BEFORE killing it; if it already produced the REJECT evidence, use it. Then kill the orphan tree (pids 70500, 53388, 30968), finish step 2's live-drive evidence, step 3 gates, complete_task.",
+      "pitfalls": "Two daemons on UnAI's .moe-next will fight over the same store: kill the orphan before starting a fresh lane. The seat did not crash on its own; the whole Claude fleet paused at 02:57Z. One full-suite gate on the host at a time (GATE START/END in #general).",
+      "openQuestions": "None known.",
+      "releasedAt": "2026-09-06T07:41:47.541Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Confirmed crash: worker-0520a42e's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
+    }
+  ]
 }

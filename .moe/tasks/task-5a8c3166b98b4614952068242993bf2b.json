@@ -74,12 +74,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved plan rotated the shared runtime-contract digest itself (six files: runtime-vocabulary.ts, generated-client.ts, runtime-contract.test.ts, generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx). That publish now belongs to task-64d2757c (deployment.migrate_down with the other four pending kinds, ONE rotation); dependsOn already points there. worker-7bdbffac parked it 22:19Z as a dependency wait with 0 edits (step 1 measured: 4 mirrors, count 110, migrate_down absent). Re-plan WITHOUT any packages/contracts or generated-client step; keep only what this row does with deployment.migrate_down once published, or archive it if 64d2757c leaves nothing.",
+  "reopenReason": "Governor archive per architect-b63fabf3's 07:39Z finding (comment-a180c5f112094d93b6c97411788bbb3b): all six DoD clauses are already satisfied at HEAD by task-64d2757c (DONE, merged 05cb3c3d, QA-approved): deployment.migrate_down is in RUNTIME_COMMAND_KINDS (runtime-vocabulary.ts:91), EXPECTED_COMMAND_KINDS carries it, the size literal reads 118, the client is regenerated. Nothing left to plan. Dependent task-537320ee is already WORKING; ARCHIVED satisfies dependsOn. Follow-up for architects: the digest-mirror census now has six hits (approve-plan-reject.test.tsx:110, plan-run-resolution.test.tsx:149 are new), so an \"exactly four mirrors\" rail will misfire next rotation.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-537320eed95348dc9bc3afc879dc0563",
   "priority": "HIGH",
@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:43:25.436Z",
-  "updatedAt": "2026-09-06T07:39:48.195Z",
+  "updatedAt": "2026-09-06T07:48:29.812Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:15.735Z",
     "plannedStepCount": 6,
@@ -137,12 +137,10 @@
     "architect-b63fabf3"
   ],
   "workStartedAt": "2026-09-05T22:18:42.833Z",
-  "blockedReason": "NOTHING LEFT TO PLAN — NEEDS A GOVERNOR ARCHIVE, not a re-plan. Re-planned per the governor hand-back of 22:20Z, which authorized this outcome (\"or archive it if 64d2757c leaves nothing\"). It leaves nothing: all six DoD clauses are satisfied at HEAD (moe/work-2026-09-04) by task-64d2757c06494c1f9016c5e2ffdf19fc, DONE and merged at sha 05cb3c3d, QA-approved.\n\nMEASURED: deployment.migrate_down is in RUNTIME_COMMAND_KINDS at runtime-vocabulary.ts:91, sorted between deployment.deploy and deployment.rollback; runtime-contract.test.ts:41 carries it in the still-hand-transcribed EXPECTED_COMMAND_KINDS; :109 reads expect(commands.size).toBe(118); the stale \"Literal 102\" comment DoD 2 asked to fix now reads \"Literal 118\" at :108; the client is regenerated, digest 9057aa94..., migrate_down twice in generated-client.ts. Clause-by-clause evidence in comment-a180c5f112094d93b6c97411788bbb3b.\n\nWHY BLOCKED NOT RELEASED: moe.archive_task refuses from PLANNING (BACKLOG/REVIEW/DONE only), so an architect seat cannot close this row. Releasing it would return it to the claimable pool and the next architect would burn a session on the same wall.\n\nNOT A DEPENDENCY WAIT: dependsOn task-64d2757c is already DONE, so nothing auto-unblocks. Clears only by a governor/human decision.\n\nDEPENDENT IS SAFE: task-537320eed95348dc9bc3afc879dc0563 names this row in dependsOn but is already WORKING (not gated); ARCHIVED satisfies dependsOn like DONE. Archiving also clears the collision warning against task-6cbcf5ff05084f3ea2a2e3ea89c3fb54 on runtime-vocabulary.ts.\n\nFINDING (#architects msg-1449f84b): the mirror census now returns SIX hits, not four — approve-plan-reject.test.tsx:110 and plan-run-resolution.test.tsx:149 are new. All carry the live hex, nothing stale, but \"exactly four / a FIFTH is a stop-and-report\" in this row's rail 1 and 64d2757c's DoD 3 will misfire next rotation.",
-  "blockedOnTaskIds": [
-    "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-06T07:39:24.615Z",
-  "priorBlockedReason": "Live get_context declares unmet prerequisite task-64d2757c06494c1f9016c5e2ffdf19fc, consolidated single digest rotation owner, still PLANNING/unlanded with no completion evidence. This row's old unamended plan independently rotates those same shared roster/mirror files; executing it before the declared producer would duplicate that rotation and violate build ordering. Step1 measured current4 mirrors, count110, migrate_down absent; all6 planned paths clean, no edits or tests. This is a declared-dependency wait, not a foreign dirty-path block. Claim_next_task offered it despite dependsOnUnmet; allow consolidation to land then re-evaluate old plan against producer evidence."
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "NOTHING LEFT TO PLAN — NEEDS A GOVERNOR ARCHIVE, not a re-plan. Re-planned per the governor hand-back of 22:20Z, which authorized this outcome (\"or archive it if 64d2757c leaves nothing\"). It leaves nothing: all six DoD clauses are satisfied at HEAD (moe/work-2026-09-04) by task-64d2757c06494c1f9016c5e2ffdf19fc, DONE and merged at sha 05cb3c3d, QA-approved.\n\nMEASURED: deployment.migrate_down is in RUNTIME_COMMAND_KINDS at runtime-vocabulary.ts:91, sorted between deployment.deploy and deployment.rollback; runtime-contract.test.ts:41 carries it in the still-hand-transcribed EXPECTED_COMMAND_KINDS; :109 reads expect(commands.size).toBe(118); the stale \"Literal 102\" comment DoD 2 asked to fix now reads \"Literal 118\" at :108; the client is regenerated, digest 9057aa94..., migrate_down twice in generated-client.ts. Clause-by-clause evidence in comment-a180c5f112094d93b6c97411788bbb3b.\n\nWHY BLOCKED NOT RELEASED: moe.archive_task refuses from PLANNING (BACKLOG/REVIEW/DONE only), so an architect seat cannot close this row. Releasing it would return it to the claimable pool and the next architect would burn a session on the same wall.\n\nNOT A DEPENDENCY WAIT: dependsOn task-64d2757c is already DONE, so nothing auto-unblocks. Clears only by a governor/human decision.\n\nDEPENDENT IS SAFE: task-537320eed95348dc9bc3afc879dc0563 names this row in dependsOn but is already WORKING (not gated); ARCHIVED satisfies dependsOn like DONE. Archiving also clears the collision warning against task-6cbcf5ff05084f3ea2a2e3ea89c3fb54 on runtime-vocabulary.ts.\n\nFINDING (#architects msg-1449f84b): the mirror census now returns SIX hits, not four — approve-plan-reject.test.tsx:110 and plan-run-resolution.test.tsx:149 are new. All carry the live hex, nothing stale, but \"exactly four / a FIFTH is a stop-and-report\" in this row's rail 1 and 64d2757c's DoD 3 will misfire next rotation."
 }

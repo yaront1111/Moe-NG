@@ -56,7 +56,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-afd89b78",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -105,7 +105,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:43.469Z",
-  "updatedAt": "2026-09-06T03:01:05.760Z",
+  "updatedAt": "2026-09-06T07:41:40.740Z",
   "dependsOn": [
     "task-2ee775b319cb496fad9256c84d24744c",
     "task-1c9587ed1b2b4e1abd6b51396ee672f8",
@@ -375,5 +375,16 @@
   ],
   "declaredFiles": [
     "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Reopen 1 in progress. Steps 1-2 of 5 COMPLETED (SPIDR roll-up gate; DoD reconciliation note with the corrected stale premise). Step 3 (full gate set at the integrated tree) was IN_PROGRESS when the seat died. Latest checkpoint 786c9bca4324 on moe/work-2026-09-04. One shell-layout test file is on this row's declaredFiles (governor declare_files after a peer's partial sweep), so your exit lands it automatically.",
+      "whatRemains": "Step 3: each gate leg standalone and foreground with its count line. Step 4: prove the roster actually bites (the parent-only integration check). Step 5: the roll-up naming which child discharged which DoD clause and where, then complete_task.",
+      "pitfalls": "Control-room lane: post GATE START/END in #general, one full gate on the host at a time. The 'usual 7' browser reds come from the production bundle serving fixtures on a URL param; they are foreign, disclose them and move on. The seat did not crash on its own; the whole Claude fleet paused at 02:57Z.",
+      "openQuestions": "None known.",
+      "releasedAt": "2026-09-06T07:41:40.740Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Confirmed crash: worker-afd89b78's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
+    }
   ]
 }

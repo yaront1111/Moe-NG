@@ -63,12 +63,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor handoff to re-plan (owner: \"unblock tasks\"). worker-7bdbffac parked this at 22:25Z: step 5 as written limits existing-file edits to daemon-main.ts yet requires composing the durable scheduler into a shutdown chain that lives in daemon-store-foundation-composition.ts:158-162 and daemon-store-dependencies.ts:59-62; MainOptions-only injection cannot reach the shipped store, so step 5 is unsatisfiable. No step was started; the step-1 census (tracked setInterval outside tests = 0) is in the task comments. Re-plan step 5's composition point and affectedFiles.",
   "createdBy": "WORKER",
   "parentTaskId": "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
   "priority": "HIGH",
@@ -83,7 +83,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:47.487Z",
-  "updatedAt": "2026-09-05T22:25:29.577Z",
+  "updatedAt": "2026-09-06T07:42:47.351Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:54:49.847Z",
     "plannedStepCount": 6,
@@ -109,8 +109,10 @@
     "worker-7bdbffac"
   ],
   "workStartedAt": "2026-09-05T22:20:15.799Z",
-  "blockedReason": "Unamended step5 limits existing-file edits to daemon-main.ts while requiring durable scheduler composition into its shutdown chain. Measured main's provider and StartedDaemon expose no EventStore/scheduler; actual store is lexical in daemon-store-foundation-composition.ts158-162 and private fromEnv/default forwarder in daemon-store-dependencies.ts59-62. MainOptions-only injection would leave shipped CLI unwired; second acquisition opens a new handle rather than the existing composition. Real edge minimally needs ownership of daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, and exact providerKeys asserter daemon-store-dependencies.test.ts752-763, currently forbidden by step5. Need architect amend those paths or explicitly stage injectable lifecycle with an actual consumer-wiring owner. Consumer B dependsOn this row but current plan owns no default-provider wiring. No source modified; first-scheduler premise holds (only setInterval disk hit is embedded preview test fixture). Full measurements in task comment; no foreign-dirt or redundant-proof block.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T22:25:29.577Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Unamended step5 limits existing-file edits to daemon-main.ts while requiring durable scheduler composition into its shutdown chain. Measured main's provider and StartedDaemon expose no EventStore/scheduler; actual store is lexical in daemon-store-foundation-composition.ts158-162 and private fromEnv/default forwarder in daemon-store-dependencies.ts59-62. MainOptions-only injection would leave shipped CLI unwired; second acquisition opens a new handle rather than the existing composition. Real edge minimally needs ownership of daemon-store-foundation-composition.ts, daemon-store-dependencies.ts, and exact providerKeys asserter daemon-store-dependencies.test.ts752-763, currently forbidden by step5. Need architect amend those paths or explicitly stage injectable lifecycle with an actual consumer-wiring owner. Consumer B dependsOn this row but current plan owns no default-provider wiring. No source modified; first-scheduler premise holds (only setInterval disk hit is embedded preview test fixture). Full measurements in task comment; no foreign-dirt or redundant-proof block.",
+  "blockedOnTaskIds": null
 }

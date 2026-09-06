@@ -49,7 +49,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-caece97b",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -73,7 +73,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T03:01:29.472Z",
+  "updatedAt": "2026-09-06T07:41:19.125Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -216,5 +216,16 @@
     "kind": "checkpoint",
     "sessionId": "worker-caece97b@2026-09-06T03:01:20Z",
     "at": "2026-09-06T03:01:29.472Z"
-  }
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 of 3 COMPLETED (the three SPIDR children confirmed delivered; the two pulling properties confirmed). Step 3 (GATES AND CLOSE) was IN_PROGRESS when the seat died. Checkpoints on moe/work-2026-09-04: 96aed5d3e9a1, then 8334cdc930ed at 02:58Z (1 path landed, 7 paths unattributed, see the MOE_ATTRIBUTION_UNRESOLVED banner in #governors).",
+      "whatRemains": "Step 3 only: run each gate leg STANDALONE and FOREGROUND, quote the count lines, attribute any red, then complete_task. The leg list is in the step-3 text and the task comments. Check whether the 7 unattributed paths from the 02:58Z checkpoint are this row's; if so declare_files them so your exit lands them.",
+      "pitfalls": "The seat did not crash on its own; the whole Claude fleet paused at 02:57Z. One full-suite gate on the host at a time: post GATE START <pkg> <task> / GATE END in #general. A 'Test timed out in 30000ms' red in a file this row neither owns nor imports is foreign; disclose it, do not re-run the suite hoping it clears.",
+      "openQuestions": "None known.",
+      "releasedAt": "2026-09-06T07:41:19.123Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Confirmed crash: worker-caece97b's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
+    }
+  ]
 }

@@ -72,12 +72,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor handoff to re-plan (owner: \"unblock tasks\"). Parked 22:26Z on two things: (1) no real PostgreSQL on the host (Docker Desktop engine pipe absent, no pg binaries); governor started Docker Desktop at 07:42Z, verify the pipe before relying on it; (2) an architect decision the worker asked for: the migration-backup owner is now task-0a56ecee, not 78eedd8e, so decide the lifecycle/layout composition and whether DoD 1-3 stand as written. Step-1 preflight measurements are in the comments. The new plan must make the PostgreSQL prerequisite explicit (a blockedOnTaskIds/resource step) so the next worker does not re-park.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-7683a432eb3f4e87b1eb0cbc6e3a55ff",
   "dependsOn": [],
@@ -105,7 +105,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:53:30.667Z",
-  "updatedAt": "2026-09-05T22:26:49.791Z",
+  "updatedAt": "2026-09-06T07:42:50.248Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:23.115Z",
     "plannedStepCount": 5,
@@ -130,8 +130,10 @@
     "worker-f72a1438"
   ],
   "workStartedAt": "2026-09-05T22:23:33.504Z",
-  "blockedReason": "Pre-edit gate: required real pg_dump restore/schema proof cannot be verified on measured host—Windows Docker pipe absent/service stopped, running Ubuntu24.04 socket absent, no PostgreSQL binaries found. Do not substitute a mock-backed VERIFIED receipt. Also need explicit lifecycle/layout composition decision: actual migration backup owner is now task-0a56ecee, not UI/proof row78eedd8e; it reuses absent/unlanded disposable PostgreSQL lifecycle ff41c5c9. Backup plan has no such dependency; asked architect whether to reuse rather than duplicate. Durable scheduler producer e651 is not landed/absent; injected schedule must not claim daemon composition. Existing activation backup targeted baseline exit0,1file26tests; no files edited, no process pending. Latest comment details safe reuse and full-gate ruling request. Dependencies not auto-filed because these are requested architect decisions, not invented mandatory prerequisites.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T22:26:06.799Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Pre-edit gate: required real pg_dump restore/schema proof cannot be verified on measured host—Windows Docker pipe absent/service stopped, running Ubuntu24.04 socket absent, no PostgreSQL binaries found. Do not substitute a mock-backed VERIFIED receipt. Also need explicit lifecycle/layout composition decision: actual migration backup owner is now task-0a56ecee, not UI/proof row78eedd8e; it reuses absent/unlanded disposable PostgreSQL lifecycle ff41c5c9. Backup plan has no such dependency; asked architect whether to reuse rather than duplicate. Durable scheduler producer e651 is not landed/absent; injected schedule must not claim daemon composition. Existing activation backup targeted baseline exit0,1file26tests; no files edited, no process pending. Latest comment details safe reuse and full-gate ruling request. Dependencies not auto-filed because these are requested architect decisions, not invented mandatory prerequisites.",
+  "blockedOnTaskIds": null
 }
