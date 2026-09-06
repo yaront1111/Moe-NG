@@ -154,7 +154,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T21:29:04.222Z",
+  "updatedAt": "2026-09-06T21:33:11.165Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
@@ -310,10 +310,11 @@
     "tests/e2e/control-room/wrapper-lane.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "worker-1d53e70c@2026-09-06T21:28:56Z",
-    "at": "2026-09-06T21:29:04.222Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-1d53e70c@2026-09-06T21:33:05Z",
+    "at": "2026-09-06T21:33:11.165Z"
   },
   "touchedFiles": [
     "tests/e2e/control-room/wrapper-lane.ts",

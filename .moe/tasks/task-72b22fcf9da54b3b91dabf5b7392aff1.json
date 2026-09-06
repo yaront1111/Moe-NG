@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T21:28:35.154Z",
+  "updatedAt": "2026-09-06T21:32:44.212Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -345,10 +345,11 @@
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "worker-d107a8ef@2026-09-06T21:28:23Z",
-    "at": "2026-09-06T21:28:35.154Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-d107a8ef@2026-09-06T21:32:37Z",
+    "at": "2026-09-06T21:32:44.212Z"
   },
   "priorHandoffs": [
     {
