@@ -20,20 +20,27 @@
     {
       "stepId": "step-1",
       "description": "SPIDR ROLL-UP GATE. This row is a parent shell: all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-2ee775b319cb496fad9256c84d24744c (Resources live, no SOON chip), task-1c9587ed1b2b4e1abd6b51396ee672f8 (the Product Contract and PRD dossiers), task-bc4617d6f84f4213a00c9b1786622577 (the bidirectional route roster, the forensic view, the design pass and the live drive) — recording each landing sha and its completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it. Write no production code in this step.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "SPIDR ROLL-UP GATE, re-run after qa_reject #1 (steps were reset to PENDING). No production code written in this step.\n\nAll three children DONE on disk (.moe/tasks/*.json) and every landing sha is an ancestor of HEAD 72c9008b on moe/work-2026-09-04 (`git merge-base --is-ancestor <sha> HEAD` = yes for each):\n- task-2ee775b319cb496fad9256c84d24744c (Resources live, no SOON chip) - DONE, commits 039911cd, 85aceb0d. verification `pnpm --filter @moe/control-room test` exit 0.\n- task-1c9587ed1b2b4e1abd6b51396ee672f8 (Product Contract + PRD dossiers) - DONE, commits 79d4c263, e1ce07b0, 11241edd, 21eab155, b7a7972a, 47a5750e. verification `pnpm --filter @moe/control-room test` exit 0.\n- task-bc4617d6f84f4213a00c9b1786622577 (bidirectional route roster, forensic view, design pass, live drive) - DONE, commits 666f70f4, e36aa37e, a65fa6f7, 4653ed18 (wip, cli-exit=1), 43ba833f, 06de729b. verification `cd apps/control-room && npx vitest run src/v2/shell/ src/v2/cordum-app.test.tsx src/live/live-graph-get.test.ts` exit 0.\n\ndependsOn = all three, dependsOnUnmet = []. Nothing short; no report_blocked needed.\n\nHEAD MOVED SINCE ATTEMPT 1: 74655552 -> 72c9008b (peer rows landed release.decide wip, .env.example fix, repository.bootstrap). Gate numbers from attempt 1 are therefore stale and are being re-measured in step 3, not inherited (`mem:gotcha-disclosed-reds-rot`, and this row's own attempt-1 finding that three inherited red claims did not survive a fresh run).\n\nQA REJECTION ACCEPTED AS CORRECT, verified myself rather than from the record:\n- `git log -1 -- apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx` = 63de7498 (2026-09-03), before every child.\n- `git show HEAD:<that file> | grep -in advancedslot` = no match, exit 1; the worktree copy has it at :55.\n- `git show HEAD:apps/control-room/src/v2/styles/cordum-shell.css | grep -n grid-template-rows` = `:321 grid-template-rows: auto auto minmax(0, 1fr) auto auto`, with `.cr2-advancedslot { grid-row: 4 }` at :348-349 and the strip at `grid-row: 5` (:361).\nSo HEAD CSS is five rows and the HEAD test asserts four: the checkpoint 4653ed18 landed half a coupled change and the 29-insertion test half sat uncommitted. The 167/2059 exit-0 in task.verification measured that dirty tree. Fixed in step 3 by committing that ONE path by pathspec and re-measuring.",
+      "startedAt": "2026-09-06T02:08:50.202Z",
+      "completedAt": "2026-09-06T02:09:48.513Z"
     },
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, AND CORRECT ONE STALE PREMISE, in a step note. DoD 1 (Resources live, no SOON chip, nav roster updated) -> child task-2ee775b3. DoD 2 (the contract dossier and its decoder/digest mirrors) -> child task-1c9587ed. DoD 3 (the bidirectional route roster), DoD 4 (the design pass comment) and DoD 5 (Playwright + gates) -> child task-bc4617d6. THE STALE PREMISE, measured by the architect at plan time and carried into child 1's description: this row says Resources is 'FROZEN with a SOON chip (apps/control-room/src/v2/shell/shell-model.ts:111)'. `grep -n SOON apps/control-room/src/v2/shell/shell-model.ts` returns NOTHING — :110-111 is the nav entry's label and icon. The real mechanism is the per-entry `live: boolean` flag declared at shell-model.ts:25, with nav-rail.tsx:112-124 rendering the SOON StatusChip (testid `cr.nav.<id>.unavailable`) when an entry is unavailable. Record that so QA grades the rendered marker rather than a grep for a string that was never in that file.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "DoD RECONCILIATION + THE STALE PREMISE, re-measured at HEAD 72c9008b (not inherited from attempt 1).\n\nDoD -> CHILD MAP, with where the evidence lives:\n- DoD 1 (Resources live, no SOON chip, nav roster tests) -> task-2ee775b319cb496fad9256c84d24744c @ 039911cd. Its completionSummary: \"Test Files 147 passed (147) / Tests 1843 passed (1843), exit 0\", 13 measured facts, baseline 142/1792. reviewSummary (qa): re-ran the same leg to the same counts, 13 paths, ZERO under apps/daemon/src; full evidence comment-90d5ccd2.\n- DoD 2 (Product Contract dossier, exact-key decoder, digest mirrors) -> task-1c9587ed1b2b4e1abd6b51396ee672f8 @ 21eab155. reviewSummary approved at that commit, evidence comment-f7a6ba8e. QA's own drill there: deleting the dev-proxy-paths.ts:27 pin reds the census arm, so the empty census is a LIVE arm not a dead one.\n- DoD 3 (bidirectional route roster), DoD 4 (design pass comment) and DoD 5 (Playwright + gates) -> task-bc4617d6f84f4213a00c9b1786622577 @ 43ba833f. Design pass = comment-8f17ea48 (supersedes comment-18d86d09, which QA rejected for naming skills without naming fixes). Live drive = comment-d5c38ef8. Gate attribution = comment-bec6a9e0. Roster-red heads-up = comment-b42c1d00. QA approval evidence = comment-1b10fc96.\n\nTHE STALE PREMISE - AND THE PLAN'S OWN CORRECTION IS ALSO WRONG. Measured now:\n1. `grep -n SOON apps/control-room/src/v2/shell/shell-model.ts` -> NO MATCH, exit 1. The row description's \"FROZEN with a SOON chip (shell-model.ts:111)\" is false, as the architect said.\n2. But step 2's replacement premise - \"the per-entry `live: boolean` flag declared at shell-model.ts:25\" - is false too. `sed -n '20,30p'` shows :25 is `readonly live: boolean;` on the CONNECTION descriptor (\"The relay is producing frames: the sparkline animates\"), a sibling of `key: ConnectionState | \"OFFLINE\"`, `toneVar`, `actionsEnabled`, `staleLabel`. It is not a nav field and governs nothing about the rail. Child 1's own completionSummary reached the same conclusion independently: \"The freeze was a ROUTE, not a flag. Both the parent row and this row's description named `live: boolean` at shell-model.ts:25; that field belongs to `ConnectionDescriptor` and governs nothing here.\"\n3. THE REAL MECHANISM, three files: `BUILT_NAV_ROUTES` (shell-routes.ts:88-95) is a Partial<Record<NavId, CordumRoute>>; `resolveNavDestinations()` (:98-105) maps every NAV_ID and returns `reason: \"NAV_DESTINATION_NOT_BUILT\"` for any id absent from that map; nav-rail.tsx:80 sets `const unavailable = reason !== null`, :90 `disabled={unavailable}`, :118-121 renders the StatusChip label=\"SOON\" testid `cr.nav.<id>.unavailable`. So membership in BUILT_NAV_ROUTES is the freeze, and the RENDERED marker is what a test must assert.\n4. `resources: Object.freeze({ kind: \"resources\" })` is present at shell-routes.ts:94 -> reason null -> not disabled -> no SOON chip. DoD 1 holds on the rendered marker. QA independently confirmed this anchor in the rejection (\"DoD 1 holds on the RENDERED marker (resources is in BUILT_NAV_ROUTES at shell-routes.ts:94)\").\n\nCONSEQUENCE FOR GRADERS: a `grep -c SOON` on the resources entry, as DoD 1 words it, is unsatisfiable-as-written in shell-model.ts and would be vacuously 0 whether or not the freeze were lifted. Grade the rendered testid `cr.nav.resources.unavailable` (absent) and BUILT_NAV_ROUTES membership instead. Recorded here so this does not have to be re-derived a fourth time.\n\nNo production code written in this step.",
+      "startedAt": "2026-09-06T02:09:50.969Z",
+      "completedAt": "2026-09-06T02:10:43.973Z"
     },
     {
       "stepId": "step-3",
       "description": "RUN THE FULL GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM; an exit-0 leg with no count line is a vacuous run (global rail 8). Legs: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test:e2e:browser`, and `pnpm test` — the root lane IS real evidence here because child 2 touched the packages digest mirrors, though it still covers NO apps/** (global rail 18), so the two --filter legs are what cover the daemon and the control room. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths and quote foreign red verbatim (global rail 3). Named verification command for completion: `pnpm --filter @moe/control-room test`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T02:10:59.154Z"
     },
     {
       "stepId": "step-4",
@@ -49,7 +56,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-afd89b78",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -98,7 +105,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:43.469Z",
-  "updatedAt": "2026-09-06T02:03:11.181Z",
+  "updatedAt": "2026-09-06T02:11:59.871Z",
   "dependsOn": [
     "task-2ee775b319cb496fad9256c84d24744c",
     "task-1c9587ed1b2b4e1abd6b51396ee672f8",
@@ -108,11 +115,14 @@
     "firstClaimAt": "2026-09-05T00:35:06.135Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 5,
+    "executedStepCount": 7,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 5: gates quoted with count lines — `pnpm --filter @moe/control-room test` is RED at the delivered tree; the quoted 167/2059 EXIT 0 measures an uncommitted working-tree state.",
@@ -138,7 +148,9 @@
     ]
   },
   "planApprovedAt": "2026-09-05T00:35:54.028Z",
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-afd89b78"
+  ],
   "workStartedAt": "2026-09-06T01:10:47.943Z",
   "reviewStartedAt": "2026-09-06T01:57:13.160Z",
   "verification": {
@@ -149,7 +161,8 @@
   },
   "filesModified": [
     ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
-    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json"
+    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx"
   ],
   "completionSummary": "SPIDR parent roll-up. All three children DONE and landed on moe/work-2026-09-04; ZERO production files written by this row, as step 5 requires. Evidence: comment-82deea3f (e2e), comment-5e5acaf1 (root/daemon/typecheck), comment-f3eaf818 (roster drills), comment-475ee7bd (design pass + live drive), comment-9881c6f2 (follow-ups). Step notes carry the per-clause detail.\n\nDoD MAP, with landing shas. DoD 1 -> task-2ee775b3 @ 039911cd (Resources live; graded on the RENDERED testid cr.nav.resources.unavailable being absent, not a grep; QA's credential-leak drill made sk-ant-api03-... reach the screen, so the hostile arm bites). DoD 2 -> task-1c9587ed @ 21eab155 (contract dossier, exact-key decoder, proxy pin drilled live). DoD 3/4/5 -> task-bc4617d6 @ 43ba833f.\n\nI DID NOT TAKE DoD 3 ON THE RECORD. Step 4 had me break the roster four ways and it bit every time: delete a consumer -> exactly the consumption arm reds; add a fully-registered served route with no consumer -> reds (plus a redundant frozen `toBe(30)`); delete one exclusion's stated reason -> the sense arm reds; break BOTH real /repository/remote/read call sites -> reds. So step 4(d) is answered: that route is genuinely consumed (five of its seven control-room mentions are comments stripComments erases), not special-cased. Six paths mutated, all restored byte-for-byte, sha256 proved in calls SEPARATE from each restore, porcelain empty, zero stray tokens, re-green 14/14 after each.\n\nDoD 4 DISCHARGES: comment-8f17ea48 names three findings and what CHANGED, and I verified the fixes on disk (cordum-shell.css:321 five grid rows, :348 .cr2-advancedslot grid-row 4, :352-356 hairline + scroll, cordum-shell.tsx:198) plus a committed regression guard at cordum-shell-layout.test.tsx:55. THE LIVE DRIVE HAPPENED: comment-d5c38ef8, real daemon on the UnAI store, and I confirmed two artifact sha256s byte-identical to the transcript.\n\nGATES: control-room EXIT 0 167/2059 (submitted); typecheck EXIT 0, 19 tsc echoes; root EXIT 1 (4 ",
   "commits": [
@@ -168,14 +181,29 @@
       "treeId": "4a1d78019acbb616b261397356ee502afc557e3a",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "16298577df0e94eaee395d82dd0fa59ac0d2a3a2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-afd89b78@2026-09-06T05:05:00Z",
+      "paths": [
+        "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx"
+      ],
+      "recordedBy": "worker-afd89b78",
+      "recordedAt": "2026-09-06T02:11:59.871Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "fix(task-e7a20a49): land the shell layout guard half that checkpoint 4653ed18 left behind. Hand-landed by pathspec on QA's instruction (qa_reject #1); git show --stat = 1 file changed, 29 insertions(+), 5 deletions(-). No peer path swept."
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-afd89b78@2026-09-06T01:10:33Z",
-    "at": "2026-09-06T01:58:41.389Z"
+    "kind": "checkpoint",
+    "sessionId": "worker-afd89b78@2026-09-06T05:05:00Z",
+    "at": "2026-09-06T02:11:59.871Z"
   },
   "reviewCompletedAt": "2026-09-06T02:01:42.275Z",
   "rejectionDetails": {
