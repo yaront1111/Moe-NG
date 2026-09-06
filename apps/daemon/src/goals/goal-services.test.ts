@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
@@ -32,6 +32,12 @@ import {
   seedReviewAcceptance,
 } from "./goal-closure-test-fixtures.js";
 import { GOAL_HANDLERS } from "./goal-services.js";
+import { createScopedCloseWorld } from "./goal-scoped-close-test-fixtures.js";
+
+vi.mock("../../../../packages/runner/src/platform/windows/windows-broker-path.js", async (original) => {
+  const actual = await original<{ resolveBrokerBinary(): unknown }>();
+  return { ...actual, resolveBrokerBinary: () => process.env["MOE_TEST_APPROVED_BROKER"] ?? actual.resolveBrokerBinary() };
+});
 
 /**
  * Goal creation and final acceptance. The ingress and sequence rules are not restated here —
@@ -43,13 +49,10 @@ import { GOAL_HANDLERS } from "./goal-services.js";
  * available here. Every refusal arm below therefore reads the goal back out of the store — a
  * handler that mutated and then refused would sail through a return-value-only assertion.
  *
- * ONE ARM HERE CLOSES A GOAL, and that is new (task-ae6fd9ac). Closing used to need a durable
- * Foundation verification receipt, which needs a proven attempt, which needs a committed
- * activation no test world can produce — so the DAEMON-side composition of a SUCCESSFUL close
- * had no owner and the arms that required it were retired. `qualifyGoalClosure` now also accepts
- * the LIVE loop's evidence (review acceptance + verifier receipt + the landing rule), which a
- * test world CAN produce through the shipped writers, so DIRECTION ONE of the payload-inertness
- * claim below is reachable again and is asserted rather than disclosed as a gap.
+ * ONE ARM HERE CLOSES A GOAL. Its compiled scope, bound verifier receipt, exact Git landing,
+ * and contained criterion checks pass through the shipped writers. This proves that durable
+ * evidence can authorize closure despite inert request witnesses. Actual Foundation receipts
+ * retain their separate production-backed qualifier tests.
  *
  * Core's own `EXECUTION_ENABLED -> CLOSING -> COMPLETED` transition, its ILLEGAL_TRANSITION on a
  * second close and its EXPECTED_VERSION_CONFLICT keep their owner in
@@ -301,26 +304,27 @@ describe("goal close accepts the verified result", () => {
    * nevertheless succeeds, which is only possible because the handler threw those witnesses away
    * and handed the core the ones `qualifyGoalClosure` derived from durable bytes.
    */
-  it("closes on durable records while the request's own witnesses would refuse at core", () => {
-    const store = openStore();
-    driveThrough(store, "goal.close");
-    seedReviewAcceptance(store, "node-1");
-    expectUnactivatedWorld(store);
-    // The precondition that makes this arm about DERIVATION and not about a lenient core:
-    // `validClosure` demands a STRONG truth class (`goal-validation.ts` strongTruth), and the
-    // request carries `HUMAN_APPROVED`. Its refs are the inert fixture literals besides. The arm
-    // below proves the same literals refuse a world with no durable records, so a core that had
-    // simply accepted them would redden there.
-    expect(closureWitness()["truthClass"]).toBe("HUMAN_APPROVED");
-    expect(closureWitness()["acceptanceClosureRef"]).toBe("acceptance-1");
-    const before = closeSnapshot(store);
+  it("closes on durable records while the request's own witnesses would refuse at core", async () => {
+    const world = await createScopedCloseWorld();
+    const { store } = world;
+    try {
+      expectUnactivatedWorld(store);
+      // The precondition that makes this arm about DERIVATION and not about a lenient core:
+      // `validClosure` demands a STRONG truth class (`goal-validation.ts` strongTruth), and the
+      // request carries `HUMAN_APPROVED`. Its refs are the inert fixture literals besides. The arm
+      // below proves the same literals refuse a world with no durable records, so a core that had
+      // simply accepted them would redden there.
+      expect(closureWitness()["truthClass"]).toBe("HUMAN_APPROVED");
+      expect(closureWitness()["acceptanceClosureRef"]).toBe("acceptance-1");
+      const before = closeSnapshot(store);
 
-    const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
+      const outcome = send(store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-    expect(goalRow(store)?.lifecycle).toBe("COMPLETED");
-    expect(decisionCount(store)).toBe(before.decisionCount + 1);
-  });
+      expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+      expect(goalRow(store)?.lifecycle).toBe("COMPLETED");
+      expect(decisionCount(store)).toBe(before.decisionCount + 1);
+    } finally { await world.cleanup(); }
+  }, 300_000);
 
   it.each([
     ["missing", { activation: { graphApprovalRef: "approval-1" }, events: [] }],

@@ -75,6 +75,7 @@ import {
   seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
+import { createScopedGoalWorld } from "./goal-scoped-test-fixtures.js";
 
 /**
  * The daemon prerequisite composer for `goal.close`, read straight out of durable bytes on a
@@ -380,24 +381,22 @@ describe("goal closure qualification — the reachable receipt reader", () => {
   });
 
   /**
-   * RE-AIMED (task-ae6fd9ac). This arm used to assert RECEIPT_ABSENT, and the world it builds —
-   * approved, reviewed, accepted, with no Foundation receipt anywhere — is EXACTLY the world the
-   * running loop leaves behind and the live leg now closes. The code it pinned is therefore no
-   * longer reachable from `qualify`; `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` stays in
-   * `GOAL_PREREQUISITE_REFUSAL_CODES` declared rather than raised. The live leg's own refusal
-   * arms live in `goal-live-evidence.test.ts`.
+   * The LIVE leg reads review evidence under immutable compiled execution refs. No Foundation
+   * receipt names those subjects. Raw legacy keys still need actual Foundation receipts; the
+   * live leg's other refusal arms live in `goal-live-evidence.test.ts`.
    */
   it("closes through the LIVE leg for approved, accepted nodes no Foundation receipt names", () => {
-    const store = openStore();
+    const world = createScopedGoalWorld(["node-1", "node-2"]);
+    const { store } = world;
     // Both nodes are fully reviewed and accepted, so the review guard cannot answer for either.
-    approvedWorld(store, ["node-1", "node-2"]);
+    for (const nodeRef of world.nodeRefs) seedReviewAcceptance(store, nodeRef);
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
-    expect(outcome.legs).toEqual({ "node-1": "LIVE", "node-2": "LIVE" });
+    expect(outcome.legs).toEqual(Object.fromEntries(world.nodeRefs.map((nodeRef) => [nodeRef, "LIVE"])));
     expectUnmoved(store, before);
   });
 
@@ -428,17 +427,18 @@ describe("goal closure qualification — the reachable receipt reader", () => {
    * one. Reading the SCANNED value would admit a receipt for a node nothing verified; reading the
    * STORED row skips it and leaves `node-1` with no Foundation evidence at all.
    *
-   * RE-AIMED (task-ae6fd9ac) WITHOUT LOSING ITS SUBJECT. `node-1` no longer refuses for want of a
-   * Foundation receipt — it closes on the live leg — so the question "was the decoy admitted?" is
-   * now asked of the LEG: a composer that trusted the scanned bytes would prove `node-1`
-   * FOUNDATION off a receipt naming `node-src`, and the assertion below is that it does not.
+   * The approved compiled execution has real review evidence for its LIVE leg. The question
+   * "was the decoy admitted?" is asked of the leg: trusting scanned bytes would incorrectly
+   * select FOUNDATION from a receipt whose stored row names the unrelated `node-src`.
    */
   it("indexes the stored row a receipt points at, never the bytes that pointed at it", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
+    const world = createScopedGoalWorld();
+    const { store } = world;
+    const nodeRef = world.nodeRef("node-1");
+    seedReviewAcceptance(store, nodeRef);
     plant(store, { graphIdentity: "node-src", verdict: "PASSED", verificationId: "verify-src" });
     const decoy = encodeFoundationPayload(
-      receiptRow({ graphIdentity: "node-1", verdict: "PASSED", verificationId: "verify-src" }));
+      receiptRow({ graphIdentity: nodeRef, verdict: "PASSED", verificationId: "verify-src" }));
     expect(decoy.ok).toBe(true);
     if (!decoy.ok) return;
     commitRawReceipt(store, "verify-src", decoy.bytes,
@@ -456,8 +456,8 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
-    expect(outcome.legs).toEqual({ "node-1": "LIVE" });
-    expect(outcome.legs["node-1"]).not.toBe("FOUNDATION");
+    expect(outcome.legs).toEqual({ [nodeRef]: "LIVE" });
+    expect(outcome.legs[nodeRef]).not.toBe("FOUNDATION");
     expectUnmoved(store, before);
   });
 

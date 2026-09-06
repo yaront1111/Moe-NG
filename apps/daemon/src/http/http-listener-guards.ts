@@ -226,6 +226,10 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_SESSIONS_UNAVAILABLE") return 503;
   if (code === "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_CRITERIA_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_CRITERIA_UNAVAILABLE") return 503;
+  if (code === "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_REPOSITORY_RECOVERY_UNAVAILABLE") return 503;
   if (code === "LISTENER_GOAL_SOURCE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;

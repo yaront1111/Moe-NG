@@ -1,5 +1,5 @@
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ACTIVATION_WORLD_NODE_KEY } from "../activation/activation-world-fixtures.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
@@ -10,7 +10,6 @@ import {
   deltaNode, envelope as reviewEnvelope, replanPayload, send as reviewSend,
 } from "../review/review-test-fixtures.js";
 import {
-  approveNodes,
   cleanupGoalClosureFixtures,
   closeGoalThroughCommandPath,
   seedLandingReceipt,
@@ -18,8 +17,18 @@ import {
   seedReviewAcceptance,
   seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
-import { readLiveNodeEvidence } from "./goal-live-evidence.js";
+import { composeClosure, readLiveNodeEvidence } from "./goal-live-evidence.js";
+import type { ClosureLeg } from "./goal-live-evidence.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
+import { indexDurableReceipts } from "./goal-qualification-reads.js";
+import * as qualificationReads from "./goal-qualification-reads.js";
+import { createScopedGoalWorld } from "./goal-scoped-test-fixtures.js";
+import { createScopedCloseWorld } from "./goal-scoped-close-test-fixtures.js";
+
+vi.mock("../../../../packages/runner/src/platform/windows/windows-broker-path.js", async (original) => {
+  const actual = await original<{ resolveBrokerBinary(): unknown }>();
+  return { ...actual, resolveBrokerBinary: () => process.env["MOE_TEST_APPROVED_BROKER"] ?? actual.resolveBrokerBinary() };
+});
 
 /**
  * THE LIVE LEG of `goal.close` qualification: the evidence the RUNNING loop actually produces.
@@ -30,19 +39,18 @@ import { qualifyGoalClosure } from "./goal-qualification.js";
  * this module, `qualify` demanded that Foundation receipt for every approved node and refused
  * `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT`, so no live goal could ever close.
  *
- * Every world below is built by the PRODUCTION writers — `approval.decide` and
- * `integration.accept_output` through the authenticated command path, the lander's own
- * `recordLandingReceipt` — never by planted bytes. `qualifyGoalClosure` is a pure read, so every
- * arm re-reads the store afterwards: a composer that mutated and then answered would sail
- * through a return-value-only assertion.
+ * Scoped worlds use the real source, contract, compiler and approval writers. Review acceptance
+ * and landing receipts also use production writers. Composition unit cases explicitly supply
+ * their leg inputs; the activation reader fault arm labels its injected historical input.
+ * `qualifyGoalClosure` is a pure read, so the cases snapshot and re-read durable state.
  *
- * The Foundation arms live in `goal-qualification.test.ts` and are NOT restated here; the two
- * arms below that build a Foundation world do so only to prove the legs stay apart.
+ * Foundation-only qualification is covered in `goal-qualification.test.ts`. These Foundation
+ * worlds exercise leg separation, the retired mixed path and historical activation ambiguity.
  */
 
 // `seedVerifiedNode` runs the shipped attempt service, whose completion authority pins the
-// Claude runtime to an absolute local-drive Windows path. The two arms that need a Foundation
-// leg therefore run only where production can reach one.
+// Claude runtime to an absolute local-drive Windows path. Foundation cases and contained
+// criterion execution therefore run only where production can reach those boundaries.
 const WINDOWS_ONLY = process.platform === "win32";
 const GOAL_WORLD_BOUND_MS = 120_000;
 
@@ -74,15 +82,24 @@ function expectRefusedExactly(
 }
 
 /** The approved + accepted world the live loop leaves behind, with no Foundation receipt. */
-function approvedWorld(store: SqliteEventStore, nodeRefs: readonly string[]): void {
-  approveNodes(store, [...nodeRefs]);
-  for (const nodeRef of nodeRefs) seedReviewAcceptance(store, nodeRef);
+function approvedWorld(localKeys: readonly string[] = ["node-1"]) {
+  const world = createScopedGoalWorld(localKeys);
+  for (const nodeRef of world.nodeRefs) seedReviewAcceptance(world.store, nodeRef);
+  return { ...world, subjectRef: world.nodeRefs[0]! };
 }
 
 function acceptanceOf(store: SqliteEventStore, nodeRef: string): AcceptanceRecord {
   const accepted = readReviewLedger(store, PROJECT_ID, nodeRef).accepted;
   if (accepted === undefined) throw new Error(`no acceptance was recorded for ${nodeRef}`);
   return accepted;
+}
+
+function foundationLeg(store: SqliteEventStore, nodeRef: string): ClosureLeg {
+  const indexed = indexDurableReceipts(store, new Set([nodeRef]));
+  if (!indexed.ok) throw new Error(indexed.code);
+  const receipt = indexed.index.get(nodeRef);
+  if (receipt === undefined) throw new Error("Foundation receipt missing");
+  return { accepted: acceptanceOf(store, nodeRef), leg: "FOUNDATION", nodeRef, receipt };
 }
 
 /** A durable re-plan on the node, through the shipped `qualification.replan` handler. */
@@ -97,21 +114,21 @@ function replan(store: SqliteEventStore, nodeRef: string): void {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanupGoalClosureFixtures();
 });
 
 describe("the live leg closes on acceptance, verifier receipt and landing", () => {
   it("qualifies an approved, accepted node whose landing COMMITTED", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", "COMMITTED");
+    const { store, subjectRef: nodeRef } = approvedWorld();
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
     const before = snapshot(store);
 
     const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
     expect(qualified.ok).toBe(true);
     if (!qualified.ok) return;
-    expect(qualified.legs).toEqual({ "node-1": "LIVE" });
+    expect(qualified.legs).toEqual({ [nodeRef]: "LIVE" });
     // The core's witness key roster is EXACT (`goal-validation.ts` CLOSURE_KEYS/ZERO_KEYS): the
     // leg tag lives in the derived-ref preimages and in the sibling `legs` field, never inside a
     // witness, so a witness that grew a key would refuse at the core rather than close.
@@ -127,26 +144,24 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
   });
 
   it("qualifies a node whose landing refused NOTHING_TO_COMMIT", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", { refusalCode: "NOTHING_TO_COMMIT" });
+    const { store, subjectRef: nodeRef } = approvedWorld();
+    seedLandingReceipt(store, nodeRef, { refusalCode: "NOTHING_TO_COMMIT" });
     const before = snapshot(store);
 
     const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
     expect(qualified.ok).toBe(true);
     if (!qualified.ok) return;
-    expect(qualified.legs).toEqual({ "node-1": "LIVE" });
+    expect(qualified.legs).toEqual({ [nodeRef]: "LIVE" });
     // The lander's own legitimate empty-diff refusal, read back as the receipt production wrote.
-    const live = readLiveNodeEvidence(store, PROJECT_ID, "node-1", acceptanceOf(store, "node-1"));
+    const live = readLiveNodeEvidence(store, PROJECT_ID, nodeRef, acceptanceOf(store, nodeRef));
     expect(live).toMatchObject({ landing: "NOTHING_TO_COMMIT", leg: "LIVE" });
     expectUnmoved(store, before);
   });
 
   it("refuses NOT_PASSED naming the landing code when the landing refused for any other reason", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", { refusalCode: "GIT_COMMIT_FAILED" });
+    const { store, subjectRef: nodeRef } = approvedWorld();
+    seedLandingReceipt(store, nodeRef, { refusalCode: "GIT_COMMIT_FAILED" });
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -159,25 +174,23 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
   });
 
   it("admits a node with no landing receipt at all and records the landing as NONE", () => {
-    const store = openStore();
+    const { store, subjectRef: nodeRef } = approvedWorld();
     // Landing is a wrapper knob (MOE_NODE_LANDING=0) and pre-feature nodes have none, so an
     // ABSENT landing is admitted; a PRESENT one is checked strictly by the arms above.
-    approvedWorld(store, ["node-1"]);
     const before = snapshot(store);
 
-    const live = readLiveNodeEvidence(store, PROJECT_ID, "node-1", acceptanceOf(store, "node-1"));
+    const live = readLiveNodeEvidence(store, PROJECT_ID, nodeRef, acceptanceOf(store, nodeRef));
     const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
     expect(live).toMatchObject({ landing: "NONE", landingReceiptId: null, leg: "LIVE" });
     expect(qualified.ok).toBe(true);
     if (!qualified.ok) return;
-    expect(qualified.legs).toEqual({ "node-1": "LIVE" });
+    expect(qualified.legs).toEqual({ [nodeRef]: "LIVE" });
     expectUnmoved(store, before);
   });
 
   it("refuses ACCEPTANCE_REQUIRED for an approved node the live loop never accepted", () => {
-    const store = openStore();
-    approveNodes(store, ["node-1"]);
+    const { store } = createScopedGoalWorld();
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -188,12 +201,11 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
   });
 
   it("refuses PACKAGE_STALE on the live leg when a durable re-plan supersedes the acceptance", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", "COMMITTED");
-    replan(store, "node-1");
+    const { store, subjectRef: nodeRef } = approvedWorld();
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    replan(store, nodeRef);
     // The precondition, measured: the re-plan really is durable on this node's ledger.
-    expect(readReviewLedger(store, PROJECT_ID, "node-1").delta).toBeDefined();
+    expect(readReviewLedger(store, PROJECT_ID, nodeRef).delta).toBeDefined();
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -209,11 +221,10 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
    * stand in for the one the review accepted.
    */
   it("refuses PACKAGE_STALE when the landing attests a different verifier receipt", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
+    const { store, subjectRef: nodeRef } = approvedWorld();
     const foreign = "f".repeat(64);
-    expect(foreign).not.toBe(acceptanceOf(store, "node-1").verifierReceiptId);
-    seedLandingReceipt(store, "node-1", "COMMITTED", foreign);
+    expect(foreign).not.toBe(acceptanceOf(store, nodeRef).verifierReceiptId);
+    seedLandingReceipt(store, nodeRef, "COMMITTED", foreign);
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -225,13 +236,12 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
 
   /** Two landings for one node: the ledger fold keeps the LAST decision, so the LATEST wins. */
   it("reads the latest landing receipt when a node carries more than one", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
+    const { store, subjectRef: nodeRef } = approvedWorld();
     const stale = "e".repeat(64);
-    seedLandingReceipt(store, "node-1", { refusalCode: "GIT_COMMIT_FAILED" }, stale);
-    seedLandingReceipt(store, "node-1", "COMMITTED");
+    seedLandingReceipt(store, nodeRef, { refusalCode: "GIT_COMMIT_FAILED" }, stale);
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
 
-    const live = readLiveNodeEvidence(store, PROJECT_ID, "node-1", acceptanceOf(store, "node-1"));
+    const live = readLiveNodeEvidence(store, PROJECT_ID, nodeRef, acceptanceOf(store, nodeRef));
 
     expect(live).toMatchObject({ landing: "COMMITTED", leg: "LIVE" });
     expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID).ok).toBe(true);
@@ -244,13 +254,12 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
    * it proves the leg fails CLOSED — an unreadable landing is never read as an absent one.
    */
   it("refuses NOT_PASSED, without throwing, when the durable landing evidence is unreadable", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", "COMMITTED");
-    const accepted = acceptanceOf(store, "node-1");
+    const { store, subjectRef: nodeRef } = approvedWorld();
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    const accepted = acceptanceOf(store, nodeRef);
     store.close();
 
-    const outcome = readLiveNodeEvidence(store, PROJECT_ID, "node-1", accepted);
+    const outcome = readLiveNodeEvidence(store, PROJECT_ID, nodeRef, accepted);
 
     expect(outcome).toMatchObject({
       code: "GOAL_CLOSE_VERIFICATION_NOT_PASSED",
@@ -260,7 +269,7 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
     });
   });
 
-  it.runIf(WINDOWS_ONLY)("closes a MIXED goal, naming the Foundation and live legs apart", async () => {
+  it.runIf(WINDOWS_ONLY)("refuses a legacy MIXED goal whose raw live node has no Foundation receipt", async () => {
     const store = openStore();
     await seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY, [ACTIVATION_WORLD_NODE_KEY, "node-2"]);
     seedReviewAcceptance(store, ACTIVATION_WORLD_NODE_KEY);
@@ -270,44 +279,50 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
 
     const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expect(qualified.ok).toBe(true);
-    if (!qualified.ok) return;
-    expect(qualified.legs).toEqual({
-      [ACTIVATION_WORLD_NODE_KEY]: "FOUNDATION", "node-2": "LIVE",
-    });
+    expectRefusedExactly(qualified, "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+      "no Foundation receipt proves the legacy approved node");
     expectUnmoved(store, before);
   }, GOAL_WORLD_BOUND_MS);
 
-  /**
-   * THE HOLE THE LIVE LEG WOULD OTHERWISE OPEN. Design 278 asks the closure to prove no
-   * execution authority outlives the goal, and the only durable instrument for that is the
-   * activation ledger: every activation must be the one its node's PASSED receipt names. A LIVE
-   * node has no receipt, so before this arm a durable activation naming one hit a plain
-   * `byNode` miss and was SKIPPED — the goal closed over an unaccounted lease and effect.
-   * Foundation could not reach this state, because a receipt-less node refused
-   * RECEIPT_ABSENT long before `zeroAuthority` ran; the live leg is what makes it reachable,
-   * so the live leg is what must refuse.
-   *
-   * The world is built by the PRODUCTION dispatch path: `seedProvenAttempt` is the first half
-   * of `seedVerifiedNode` and writes the activation, so stopping there leaves an activation
-   * whose node carries acceptance but no verification receipt.
-   */
-  it.runIf(WINDOWS_ONLY)("refuses AUTHORITY_REMAINS when an activation names a live node", async () => {
-    const store = openStore();
-    await seedProvenAttempt(store, ACTIVATION_WORLD_NODE_KEY, [ACTIVATION_WORLD_NODE_KEY]);
-    seedReviewAcceptance(store, ACTIVATION_WORLD_NODE_KEY);
-    seedLandingReceipt(store, ACTIVATION_WORLD_NODE_KEY, "COMMITTED");
+  it.runIf(WINDOWS_ONLY)("composes explicitly supplied mixed legs without conflating their evidence", async () => {
+    const foundationStore = openStore();
+    await seedVerifiedNode(foundationStore, ACTIVATION_WORLD_NODE_KEY);
+    seedReviewAcceptance(foundationStore, ACTIVATION_WORLD_NODE_KEY);
+    const { store, subjectRef: nodeRef } = approvedWorld(["node-2"]);
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    const before = snapshot(store); const foundationBefore = snapshot(foundationStore);
+    const live = readLiveNodeEvidence(store, PROJECT_ID, nodeRef, acceptanceOf(store, nodeRef));
+    if ("ok" in live) throw new Error(live.code);
+
+    // Composition unit inputs span two independently proved worlds; this does not authorize
+    // a mixed-era goal. The integration regression above explicitly refuses that legacy path.
+    const qualified = composeClosure("unit-mixed-approval", [ACTIVATION_WORLD_NODE_KEY, nodeRef],
+      [foundationLeg(foundationStore, ACTIVATION_WORLD_NODE_KEY), live], 1);
+
+    expect(qualified.legs).toEqual({ [ACTIVATION_WORLD_NODE_KEY]: "FOUNDATION", [nodeRef]: "LIVE" });
+    expectUnmoved(store, before); expectUnmoved(foundationStore, foundationBefore);
+  }, GOAL_WORLD_BOUND_MS);
+
+  it.runIf(WINDOWS_ONLY)("refuses AUTHORITY_REMAINS when a legacy activation names a compiled live node", async () => {
+    const source = openStore();
+    await seedProvenAttempt(source, ACTIVATION_WORLD_NODE_KEY, [ACTIVATION_WORLD_NODE_KEY]);
+    const accounts = qualificationReads.accountDurableActivations(source, PROJECT_ID);
+    expect(accounts).toHaveLength(1);
+    expect(accounts?.[0]?.nodeKey).toBe(ACTIVATION_WORLD_NODE_KEY);
+    const { store, subjectRef: nodeRef } = approvedWorld([ACTIVATION_WORLD_NODE_KEY]);
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID).ok).toBe(true);
     const before = snapshot(store);
 
+    // Adversarial reader input copied from a real production attempt, not a writer-success
+    // claim that these separate historical and compiled worlds shared one activation store.
+    vi.spyOn(qualificationReads, "accountDurableActivations").mockReturnValue(accounts);
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    // The node IS otherwise closable — acceptance, verifier receipt and a COMMITTED landing all
-    // hold — so the refusal below is the activation rule and nothing else.
-    expect(readLiveNodeEvidence(store, PROJECT_ID, ACTIVATION_WORLD_NODE_KEY,
-      acceptanceOf(store, ACTIVATION_WORLD_NODE_KEY)))
+    expect(readLiveNodeEvidence(store, PROJECT_ID, nodeRef, acceptanceOf(store, nodeRef)))
       .toMatchObject({ landing: "COMMITTED", leg: "LIVE" });
     expectRefusedExactly(outcome, "GOAL_CLOSE_AUTHORITY_REMAINS",
-      "a durable activation names a node proved on the live leg");
+      "a legacy activation ambiguously names a compiled node");
     expectUnmoved(store, before);
   }, GOAL_WORLD_BOUND_MS);
 
@@ -315,16 +330,24 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
    * A Foundation proof and a live proof OF THE SAME NODE must never derive the same refs — the
    * leg tag is in every preimage precisely so one cannot be replayed as the other.
    */
-  it.runIf(WINDOWS_ONLY)("derives different closure refs for a live and a Foundation proof of one node", async () => {
-    const liveStore = openStore();
-    approvedWorld(liveStore, [ACTIVATION_WORLD_NODE_KEY]);
-    seedLandingReceipt(liveStore, ACTIVATION_WORLD_NODE_KEY, "COMMITTED");
+  it.runIf(WINDOWS_ONLY)("domain-separates LIVE and Foundation leg inputs for the same node in composition", async () => {
     const foundationStore = openStore();
     await seedVerifiedNode(foundationStore, ACTIVATION_WORLD_NODE_KEY);
     seedReviewAcceptance(foundationStore, ACTIVATION_WORLD_NODE_KEY);
+    seedLandingReceipt(foundationStore, ACTIVATION_WORLD_NODE_KEY, "COMMITTED");
+    expect(qualifyGoalClosure(foundationStore, PROJECT_ID, GOAL_ID)).toMatchObject({
+      ok: true, legs: { [ACTIVATION_WORLD_NODE_KEY]: "FOUNDATION" },
+    });
+    const before = snapshot(foundationStore);
+    const liveLeg = readLiveNodeEvidence(foundationStore, PROJECT_ID, ACTIVATION_WORLD_NODE_KEY,
+      acceptanceOf(foundationStore, ACTIVATION_WORLD_NODE_KEY));
+    if ("ok" in liveLeg) throw new Error(liveLeg.code);
 
-    const live = qualifyGoalClosure(liveStore, PROJECT_ID, GOAL_ID);
-    const foundation = qualifyGoalClosure(foundationStore, PROJECT_ID, GOAL_ID);
+    // Codec unit test: explicitly vary only the evidence leg for the same node. Actual
+    // qualification above remains Foundation-only; raw LIVE cannot enter via legacy fallback.
+    const live = composeClosure("unit-approval", [ACTIVATION_WORLD_NODE_KEY], [liveLeg], 1);
+    const foundation = composeClosure("unit-approval", [ACTIVATION_WORLD_NODE_KEY],
+      [foundationLeg(foundationStore, ACTIVATION_WORLD_NODE_KEY)], 1);
 
     expect(live.ok).toBe(true);
     expect(foundation.ok).toBe(true);
@@ -341,6 +364,7 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
       .not.toBe(foundation.closureWitness["obligationsHoldRef"]);
     expect(live.zeroAuthorityWitness["zeroAuthorityProofRef"])
       .not.toBe(foundation.zeroAuthorityWitness["zeroAuthorityProofRef"]);
+    expectUnmoved(foundationStore, before);
   }, GOAL_WORLD_BOUND_MS);
 });
 
@@ -352,39 +376,44 @@ describe("the live leg through the shipped operator command path", () => {
    * ACCEPTED the derived witness: `reduceGoal` refuses a witness `validClosure` rejects, and a
    * refusal there would answer at the CORE layer instead of committing `GoalCompleted`.
    */
-  it("closes a live goal for real and refuses the second close at the core", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
-    seedLandingReceipt(store, "node-1", "COMMITTED");
-    const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
-    expect(qualified.ok).toBe(true);
-    if (!qualified.ok) return;
-    expect(qualified.legs).toEqual({ "node-1": "LIVE" });
-    expect(store.readEvents(GOAL_ID).filter((e) => e.eventType === "GoalCompleted")).toHaveLength(0);
+  it.runIf(WINDOWS_ONLY)("closes a live goal for real and refuses the second close at the core", async () => {
+    const world = await createScopedCloseWorld();
+    const { store } = world; const nodeRef = world.nodeRefs[0]!;
+    try {
+      const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+      expect(qualified.ok).toBe(true);
+      if (!qualified.ok) return;
+      expect(qualified.legs).toEqual({ [nodeRef]: "LIVE" });
+      expect(store.readEvents(GOAL_ID).filter((e) => e.eventType === "GoalCompleted")).toHaveLength(0);
 
-    const closed = closeGoalThroughCommandPath(store, 2);
+      const closed = closeGoalThroughCommandPath(store, store.getAggregateVersion(GOAL_ID));
 
-    expect(closed.ok).toBe(true);
-    if (!closed.ok) return;
-    expect(closed.decision.resultCode).toBe("EFFECTS_COMMITTED");
-    expect(closed.decision.disposition).toBe("DECIDED");
-    const completed = store.readEvents(GOAL_ID)
-      .filter((event) => event.eventType === "GoalCompleted");
-    expect(completed).toHaveLength(1);
-    expect((readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID)?.result as
-      { lifecycle?: string } | undefined)?.lifecycle).toBe("COMPLETED");
+      expect(closed.ok).toBe(true);
+      if (!closed.ok) return;
+      expect(closed.decision.resultCode).toBe("EFFECTS_COMMITTED");
+      expect(closed.decision.disposition).toBe("DECIDED");
+      const completed = store.readEvents(GOAL_ID)
+        .filter((event) => event.eventType === "GoalCompleted");
+      expect(completed).toHaveLength(1);
+      const completedGoal = readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID)?.result as
+        { lifecycle?: string; version?: number } | undefined;
+      expect(completedGoal?.lifecycle).toBe("COMPLETED");
+      if (typeof completedGoal?.version !== "number") throw new Error("completed goal version missing");
 
-    // The SECOND close is refused by the CORE, not by this daemon leg: the evidence is still
-    // there, and it is the goal's own lifecycle that says no. Pinned POSITIVELY — code, layer
-    // and the state the reducer names — because `not.toBe("DAEMON_PREREQUISITE")` would stay
-    // green if the daemon leg started refusing under any other layer and the core never ran.
-    const again = closeGoalThroughCommandPath(store, 4, "cmd-j1-goal-close-2");
-    expect(again.ok).toBe(false);
-    if (again.outcome !== "PORT_REFUSED") throw new Error(`expected a port refusal: ${again.outcome}`);
-    expect(again.refusal.code).toBe("ILLEGAL_TRANSITION");
-    expect(again.refusal.layer).toBe("CORE_REDUCER");
-    expect(again.refusal.detail).toContain("sourceState=COMPLETED");
-    expect(store.readEvents(GOAL_ID)
-      .filter((event) => event.eventType === "GoalCompleted")).toHaveLength(1);
-  });
+      // The SECOND close is refused by the CORE, not by this daemon leg: the evidence is still
+      // there, and it is the goal's own lifecycle that says no. Pinned POSITIVELY — code, layer
+      // and the state the reducer names — because `not.toBe("DAEMON_PREREQUISITE")` would stay
+      // green if the daemon leg started refusing under any other layer and the core never ran.
+      // A combined close advances the core state twice while its durable aggregate commits once.
+      // The reducer compares the request against the folded state's version.
+      const again = closeGoalThroughCommandPath(store, completedGoal.version, "cmd-j1-goal-close-2");
+      expect(again.ok).toBe(false);
+      if (again.outcome !== "PORT_REFUSED") throw new Error(`expected a port refusal: ${again.outcome}`);
+      expect(again.refusal.code).toBe("ILLEGAL_TRANSITION");
+      expect(again.refusal.layer).toBe("CORE_REDUCER");
+      expect(again.refusal.detail).toContain("sourceState=COMPLETED");
+      expect(store.readEvents(GOAL_ID)
+        .filter((event) => event.eventType === "GoalCompleted")).toHaveLength(1);
+    } finally { await world.cleanup(); }
+  }, 300_000);
 });

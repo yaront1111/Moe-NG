@@ -40,8 +40,8 @@ import {
   GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
   GOAL_CLOSE_REVIEW_PACKAGE_STALE,
   GOAL_CLOSE_VERIFICATION_NOT_PASSED,
-  readApprovedNodeScope,
 } from "./goal-close-prerequisite.js";
+import { readApprovedExecutionScope } from "./goal-approved-execution-scope.js";
 import {
   composeClosure, readLiveNodeEvidence, refuseClosure as refuse,
 } from "./goal-live-evidence.js";
@@ -109,6 +109,7 @@ function reviewClosure(
  */
 function zeroAuthority(
   store: SqliteEventStore, projectId: string, bound: readonly ClosureLeg[],
+  legacyLocalKeys: readonly string[],
 ): number | GoalClosureRefused {
   const accounts = accountDurableActivations(store, projectId);
   if (accounts === null) {
@@ -126,6 +127,10 @@ function zeroAuthority(
     if (account.nodeKey === null) {
       return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
         "a durable activation has no readable attempt record");
+    }
+    if (legacyLocalKeys.includes(account.nodeKey)) {
+      return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
+        "a legacy activation ambiguously names a compiled node");
     }
     // A live node holds NO receipt to name a lease and an effect, so a durable activation that
     // names one is authority this closure cannot account for. Skipping it — which is what a
@@ -154,7 +159,7 @@ function zeroAuthority(
 function qualify(
   store: SqliteEventStore, projectId: string, goalId: string,
 ): GoalClosureQualification {
-  const approved = readApprovedNodeScope(store, goalId);
+  const approved = readApprovedExecutionScope(store, projectId, goalId);
   if (approved === null) {
     return refuse(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
       "no current approval names an approved node scope");
@@ -165,6 +170,10 @@ function qualify(
   const bound: ClosureLeg[] = [];
   for (const nodeRef of nodes) {
     const receipt = indexed.index.get(nodeRef);
+    if (receipt === undefined && approved.requiresFoundation) {
+      return refuse(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
+        "no Foundation receipt proves the legacy approved node");
+    }
     if (receipt !== undefined) {
       if (receipt.verdict !== "PASSED") {
         return refuse(GOAL_CLOSE_VERIFICATION_NOT_PASSED,
@@ -190,7 +199,7 @@ function qualify(
     if ("ok" in live) return live;
     bound.push(live);
   }
-  const activations = zeroAuthority(store, projectId, bound);
+  const activations = zeroAuthority(store, projectId, bound, approved.legacyLocalKeys);
   if (typeof activations !== "number") return activations;
   return composeClosure(approved.approvalRef, nodes, bound, activations);
 }

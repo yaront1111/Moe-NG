@@ -30,6 +30,7 @@ import { workItemIdFor } from "../../../apps/daemon/src/http/affordance-read.js"
 import {
   activeCompiledGraphs,
 } from "../../../apps/daemon/src/orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../../../apps/daemon/src/orchestrator/compiled-execution-ref.js";
 import {
   readWorkClaimLedger,
 } from "../../../apps/daemon/src/work/work-claim-read-model.js";
@@ -51,13 +52,21 @@ export function withStore<T>(
 
 export const workItemFor = (nodeKey: string): string =>
   workItemIdFor(NODE_DELIVER_KIND, nodeKey);
+export function executionRefFor(scratch: MultiNodeScratch, nodeKey: string): string {
+  return withStore(scratch, (store) => {
+    const graph = activeCompiledGraphs(store, scratch.projectId).find((item) =>
+      item.content.snapshot.nodes.some((node) => node.nodeKey === nodeKey));
+    if (graph === undefined) throw new Error(`no active graph for ${nodeKey}`);
+    return compiledExecutionRef(scratch.projectId, graph, nodeKey);
+  });
+}
 
 /**
  * The work items that have EVER been claimed, from the durable claim fold.
  *
- * A claim is what the wrapper commits BEFORE it spawns, so this is the falsifiable record of
- * which nodes were staffed — the wrapper's own stdout is a report, and a report can be right
- * about a pass that never committed anything.
+ * Claims precede spawn admission, so this includes attempts refused by repository reservation.
+ * A claim alone does not establish physical execution; the journey also checks delivered bytes
+ * and real Git landing commits.
  */
 export function claimedWorkItems(scratch: MultiNodeScratch): readonly string[] {
   return withStore(scratch, (store) =>
@@ -238,9 +247,10 @@ export function delivered(scratch: MultiNodeScratch, nodeKey: string): string | 
 export function landedCommits(scratch: MultiNodeScratch, nodeKey: string): readonly string[] {
   const cwd = scratch.workspaces[nodeKey];
   if (cwd === undefined) return [];
+  const executionRef = executionRefFor(scratch, nodeKey);
   return execFileSync("git", ["log", "--format=%B"], { cwd, encoding: "utf8" })
     .split("\n").map((line) => line.trim())
-    .filter((line) => line.startsWith("Moe landed node "));
+    .filter((line) => line === `Moe landed node ${executionRef} after the daemon verified it.`);
 }
 
 /** Removes every scratch a run registered. A held Windows handle is not a test verdict. */

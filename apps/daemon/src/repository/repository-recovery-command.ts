@@ -5,6 +5,7 @@ import type { CommandRegistryEntry, CommandHandlerInput, DurableDecision } from 
 import { foundationSyncHandler } from "../daemon-foundation-command.js";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import type { RepositoryRecoveryResult } from "./repository-recovery-contracts.js";
+import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository-recovery-contracts.js";
 export interface RepositoryRecoveryCommandPort {
   recover(input: { readonly principalId: string; readonly operatorPrincipalId: string; readonly commandId: string;
     readonly correlationId: string; readonly expectedVersion: number; readonly targetAggregateId: string; readonly payload: unknown }):
@@ -15,7 +16,7 @@ export function createRepositoryRecoveryCommandEntry(options: { readonly store: 
   readonly assertAuthority: () => void }): CommandRegistryEntry {
   const refuse = (code: string, status = 422): never => { throw new DomainRefusal(code, "REPOSITORY_RECOVERY", code, status); };
   return Object.freeze({ kind: "repository.recover", requiredCapability: "project.admin",
-    payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"], handler: foundationSyncHandler,
+    payloadKeys: REPOSITORY_RECOVERY_PAYLOAD_KEYS, handler: foundationSyncHandler,
     asyncHandler: async (input: CommandHandlerInput): Promise<DurableDecision> => {
       options.assertAuthority();
       if (input.principal.projectId !== options.projectId) return refuse("REPOSITORY_RECOVERY_PROJECT_MISMATCH", 403);

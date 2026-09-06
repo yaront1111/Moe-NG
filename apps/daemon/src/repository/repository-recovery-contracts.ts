@@ -2,6 +2,9 @@ import type { NextAllowedCommand } from "@moe/contracts";
 import type { RepositoryExecutionPhase } from "./repository-execution-contracts.js";
 
 export const REPOSITORY_RECOVERY_COMMAND_KIND = "repository.recover" as const;
+export const REPOSITORY_RECOVERY_PAYLOAD_KEYS = Object.freeze([
+  "action", "decision", "expectedReservationRevision", "nodeRef", "reason",
+] as const);
 export const REPOSITORY_RECOVERY_VERSION = "moe-repository-recovery/1" as const;
 export const REPOSITORY_RECOVERY_LAYER = "REPOSITORY_RECOVERY" as const;
 export const REPOSITORY_RECOVERY_ACTIONS = ["ABORT_UNEXECUTED", "RECONCILE_LANDED"] as const;

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { closeStores, openStore, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
-import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { OPERATOR_CAPABILITIES, PAYLOAD_KEYS } from "../daemon-command-vocabulary.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -15,6 +15,8 @@ it("serves recovery only as an async human command and preserves the service res
   const recover = vi.fn(async () => ({ ok: true as const, commandId: "recovery-a", disposition: "COMMITTED" as const, resultCode: "REPOSITORY_RECOVERY_RELEASED" as const }));
   const entry = createDaemonCommandPorts({ store, projectId: PROJECT_ID, operatorPrincipalId: "operator", clock: () => new Date().toISOString(), repositoryRecovery: { recover } }).registry.get("repository.recover");
   expect(entry?.asyncHandler).toBeTypeOf("function");
+  expect(entry?.payloadKeys).toBe(PAYLOAD_KEYS["repository.recover"]);
+  expect(Object.isFrozen(entry?.payloadKeys)).toBe(true);
   if (entry?.asyncHandler === undefined) throw new Error("recovery entry missing");
   const input: CommandHandlerInput = { envelope: { schemaVersion: "moe-runtime-command/1", requestDigest: "a".repeat(64), sessionCredential: "test-session",
     commandId: "recovery-a", commandKind: "repository.recover", correlationId: "correlation-a", expectedVersion: 2,

@@ -177,27 +177,48 @@ describe("wrapper binary staffing wiring", () => {
     expect(end).toBeGreaterThan(start);
     return source.slice(start, end);
   };
+  const fenceConstruction = (source: string): string => {
+    const marker = "const staffingFence = createAgentSessionFence({";
+    expect(source.split(marker)).toHaveLength(2);
+    const start = source.indexOf(marker);
+    const end = source.indexOf("    });", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(start).toBeLessThan(source.indexOf("createRepositoryDeliveryRuntime({"));
+    expect(start).toBeLessThan(source.indexOf("createAgentWrapper({"));
+    return source.slice(start, end);
+  };
+  const assertStaffingWiring = (source: string): void => {
+    expect(wrapperCall(source)).toMatch(/^\s+staffingFence,\r?$/mu);
+    const construction = fenceConstruction(source);
+    expect(construction).toContain("isProcessAlive: probeProcessAlive");
+    expect(construction).toContain("projectId: config.projectId");
+    expect(construction).toContain("store: verifierStore");
+    const start = source.indexOf("createRepositoryDeliveryRuntime({");
+    const end = source.indexOf("    });", start);
+    expect(source.slice(start, end)).toContain("fence: staffingFence");
+  };
 
   it("passes a staffingFence in the production createAgentWrapper call", () => {
-    expect(wrapperCall(SOURCE)).toContain("staffingFence:");
+    expect(wrapperCall(SOURCE)).toMatch(/^\s+staffingFence,\r?$/mu);
   });
 
   it("builds that fence from the real store and the real liveness probe", () => {
-    // Pins WHAT is injected, not merely that the key is present: a
-    // `staffingFence: undefined` would satisfy the assertion above while leaving
-    // the binary exactly as unfenced as the rejected version.
-    const call = wrapperCall(SOURCE);
-    expect(call).toContain("staffingFence: createAgentSessionFence({");
-    expect(call).toContain("isProcessAlive: probeProcessAlive");
-    expect(call).toContain("store: verifierStore");
-    expect(call).not.toContain("staffingFence: undefined");
+    // The same constructed fence now serves staffing and repository delivery.
+    assertStaffingWiring(SOURCE);
   });
 
-  it("scans a slice that can actually fail (positive control)", () => {
-    // Without this, a scan that silently matched nothing would report success.
-    const unwired = SOURCE.replace(/staffingFence: createAgentSessionFence\(\{/, "");
-    expect(() => expect(wrapperCall(unwired)).toContain("staffingFence: createAgentSessionFence({"))
-      .toThrow();
+  it.each([
+    ["wrapper injection", "      staffingFence,", "      staffingFence: undefined,"],
+    ["constructor", "const staffingFence = createAgentSessionFence({", "const unusedFence = createAgentSessionFence({"],
+    ["liveness witness", "isProcessAlive: probeProcessAlive", "isProcessAlive: () => false"],
+    ["store witness", "isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,",
+      "isProcessAlive: probeProcessAlive, projectId: config.projectId, store: undefined,"],
+    ["repository injection", "fence: staffingFence", "fence: undefined"],
+  ])("rejects removal of the %s (positive control)", (_name, from, to) => {
+    const unwired = SOURCE.replace(from, to);
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => assertStaffingWiring(unwired)).toThrow();
   });
 
   it("passes a providerPause built from the real store in the production call", () => {

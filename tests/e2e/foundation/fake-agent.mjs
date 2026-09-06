@@ -20,6 +20,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { argv, cwd, pid, stdin, stdout } from "node:process";
+import { implementMultiNode } from "./multi-node-agent.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
 const ACCEPT = "application/json, text/event-stream";
@@ -260,7 +261,8 @@ async function main() {
   const offer = offerFor(context.daemon, nodeRef);
   say(`offer commandId=${offer.commandId} expectedVersion=${offer.expectedVersion}`);
 
-  const submittedBytes = implement(flagValue("--implement") ?? "math.mjs", arm);
+  const submittedBytes = arm === "multi-node" ? implementMultiNode(mission)
+    : implement(flagValue("--implement") ?? "math.mjs", arm);
 
   if (arm === "skip-review") {
     // The negative control: everything except the durable submission, and a CLEAN exit, so a

@@ -1,16 +1,14 @@
 /**
- * THE 3-NODE SCRATCH: one goal, one PRD, three criteria, three workspaces.
+ * One goal, one PRD, three criteria, and three module directories in one repository.
  *
  * THE SHAPE IS LOAD-BEARING. `node-alpha` and `node-beta` are INDEPENDENT of each other and
- * `node-omega` depends on BOTH, so ONE graph reaches both facts under test: two nodes staffed
- * in the same pass, and a third withheld until its hard dependencies are ACCEPTED. A straight
- * a->b->c chain would make the parallel arm unreachable; three independent nodes would make
- * the blocking arm unreachable.
+ * `node-omega` depends on BOTH. Independent nodes are graph-ready together, while repository
+ * reservation permits one physical execution per pass. The consumer stays blocked until
+ * both producers are accepted.
  *
- * Each node gets its OWN workspace holding its OWN failing test, because the spawner sets the
- * agent's cwd to the node's workspace (`agent-spawner.ts:151`) and the shipped `fake-agent.mjs`
- * writes `math.mjs` there. That is what lets ONE shim serve all three nodes: the agent learns
- * which node it is on from the mission the wrapper handed it, never from a flag.
+ * Each module has its own criterion test; the generic suite checks every implemented module.
+ * All agents share the repository root and learn their criterion from the compiled mission.
+ * Explicit human-approved checks run all three tests against the final integrated commit.
  *
  * NO WALL CLOCK AND NO RANDOM SOURCE (`e2e-harness.test.ts` scans this directory by plain
  * substring): scratch uniqueness comes from `mkdtempSync`, and every clock reading is a
@@ -33,15 +31,15 @@ export const MULTI_NODE_KEYS = Object.freeze([ALPHA, BETA, OMEGA]);
 export const CRITERIA = Object.freeze([
   Object.freeze({
     criterionId: "crit-alpha", nodeKey: ALPHA,
-    statement: "alpha/math.mjs exports add and multiply and its own test passes.",
+    statement: "node-alpha/math.mjs exports add and multiply and its own test passes.",
   }),
   Object.freeze({
     criterionId: "crit-beta", nodeKey: BETA,
-    statement: "beta/math.mjs exports add and multiply and its own test passes.",
+    statement: "node-beta/math.mjs exports add and multiply and its own test passes.",
   }),
   Object.freeze({
     criterionId: "crit-omega", nodeKey: OMEGA,
-    statement: "omega/math.mjs integrates alpha and beta and its own test passes.",
+    statement: "node-omega/math.mjs integrates alpha and beta and its own test passes.",
   }),
 ]);
 
@@ -68,7 +66,7 @@ export const HUMAN_SESSION = "sess-multi-node-human";
 export const HUMAN_SECRET = "secret-multi-node-human";
 
 export interface MultiNodeScratch extends J1Scratch {
-  /** Node key -> the workspace that node's agent is spawned into. */
+  /** Local node key -> its module directory beneath the shared repository root. */
   readonly workspaces: Readonly<Record<string, string>>;
 }
 
@@ -86,14 +84,14 @@ const NODE_TEST = [
 ].join("\n");
 
 /**
- * A git repository per workspace, so the wrapper's lander can make a REAL commit rather than
+ * One git repository, so the wrapper's lander can make a REAL commit rather than
  * reporting that there is nothing to land. `git init` is quiet and local; the identity is set
  * here because a host with no global `user.email` fails `git commit` with a message about
  * configuration that reads as a moe-next defect.
  */
 function initializeRepository(directory: string): void {
   const run = (...args: readonly string[]): void => {
-    execFileSync("git", [...args], { cwd: directory, stdio: "ignore" });
+    execFileSync("git", [...args], { cwd: directory, stdio: "ignore", windowsHide: true });
   };
   run("init", "--quiet");
   run("config", "user.email", "multi-node@moe-next.invalid");
@@ -103,31 +101,28 @@ function initializeRepository(directory: string): void {
 }
 
 /**
- * The scratch: three node specs in ONE specs directory and three git workspaces.
- *
- * A spec-dir brief WINS over the compiled-graph brief on a nodeRef collision
- * (`agent-wrapper-main.ts:139`), so these are what the wrapper hands each agent — which is
- * how each of the three seats gets its own workspace and its own test command.
+ * The scratch uses the production compiled mission source with no operator node overrides.
  */
 export function createMultiNodeScratch(): MultiNodeScratch {
   const root = mkdtempSync(join(tmpdir(), "moe-e2e-multi-"));
   const specsDir = join(root, "specs");
   mkdirSync(specsDir);
+  const repository = join(root, "workspace"); mkdirSync(repository);
   const workspaces: Record<string, string> = {};
   for (const criterion of CRITERIA) {
-    const workspace = join(root, criterion.nodeKey);
+    const workspace = join(repository, criterion.nodeKey);
     mkdirSync(workspace);
     writeFileSync(join(workspace, "test.mjs"), NODE_TEST, "utf8");
-    initializeRepository(workspace);
     workspaces[criterion.nodeKey] = workspace;
-    writeFileSync(join(specsDir, `${criterion.nodeKey}.json`), JSON.stringify({
-      instructions: "Create math.mjs exporting add and multiply so test.mjs passes.",
-      nodeRef: criterion.nodeKey,
-      test: "node test.mjs",
-      title: `Implement ${criterion.nodeKey}`,
-      workspace: workspace.replaceAll("\\", "/"),
-    }), "utf8");
   }
+  writeFileSync(join(repository, "test.mjs"), [
+    'import {existsSync} from "node:fs";',
+    `const modules = ${JSON.stringify(MULTI_NODE_KEYS)};`,
+    'let tested = 0; for (const module of modules) { if (!existsSync(new URL(`./${module}/math.mjs`, import.meta.url))) continue;',
+    'await import(`./${module}/test.mjs`); tested++; }',
+    'if (tested === 0) throw new Error("no module was implemented");',
+  ].join("\n"), "utf8");
+  initializeRepository(repository);
   return {
     // Unused by the multi-node arm (its shim is handed `--pid-dir`), but the J1Scratch shape
     // is what every harness function takes, so it is a real path rather than a lie.
@@ -137,9 +132,8 @@ export function createMultiNodeScratch(): MultiNodeScratch {
     root,
     specsDir,
     storePath: join(root, "store.sqlite"),
-    // The J1 single-node field. The three real ones are `workspaces`; this names the
-    // completion node's, so a consumer that reads the singular gets an honest directory.
-    workspace: workspaces[OMEGA] as string,
+    // The compiled mission workspace is the physical repository shared by every node.
+    workspace: repository,
     workspaces: Object.freeze(workspaces),
   };
 }

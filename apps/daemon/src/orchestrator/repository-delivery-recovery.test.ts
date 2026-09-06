@@ -9,7 +9,7 @@ import type { RepositoryExecutionHandle, RepositoryExecutionPhase, RepositoryExe
 import { AgentProcessContainmentError } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 import { createRepositoryDeliveryCoordinator } from "./repository-delivery-coordinator.js";
-import type { RepositoryDeliveryFacts } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryConfig, RepositoryDeliveryFacts } from "./repository-delivery-contracts.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -25,7 +25,10 @@ function fixture(portOf: (actual: RepositoryExecutionPort) => RepositoryExecutio
   const live = new Set([100, 200]);
   const baseline = vi.fn(async () => "original-baseline");
   const verify = vi.fn(async () => { facts = "ACCEPTED"; });
-  const land = vi.fn(async (): Promise<"RETRY" | void> => { facts = "LANDED"; });
+  const land = vi.fn<RepositoryDeliveryConfig["land"]>(async (_nodeRef, _baselineId, root, handle) => {
+    expect(actual.readOwned(root, owner.storeId, owner.projectId)).toEqual({ ok: true, handle });
+    facts = "LANDED";
+  });
   const coordinator = (controller = oldController) => createRepositoryDeliveryCoordinator({
     baseline, controller, facts: () => facts, isProcessAlive: (pid) => live.has(pid), land,
     port, projectId: owner.projectId, retired: () => true, storeId: owner.storeId, verify, workspaces: () => [workspace],
@@ -63,12 +66,17 @@ describe("repository delivery recovery", () => {
     const workspace = join(f.workspace, "package"); mkdirSync(workspace);
     const started = await coordinator.start({ ...f.request, workspace }, f.spawn);
     if (!started.ok) throw new Error(started.code);
+    const executing = f.actual.readOwned(f.workspace, owner.storeId, owner.projectId);
+    if (!executing.ok || executing.handle === null) throw new Error("owner missing");
     f.finish(); await started.exit;
     expect(f.spawn.mock.calls[0]?.[0]).toMatchObject({ workspace });
     expect(f.baseline).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, f.workspace);
     await coordinator.advance();
     expect(f.verify).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, f.workspace);
-    expect(f.land).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, "original-baseline", f.workspace);
+    expect(f.land).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, "original-baseline", f.workspace, {
+      owner: executing.handle.owner,
+      reservation: { ...executing.handle.reservation, phase: "LANDING", revision: executing.handle.reservation.revision + 3 },
+    });
   });
 
   it("retries releasing a durable landing without repeating the Git effect", async () => {
@@ -136,14 +144,18 @@ describe("repository delivery recovery", () => {
   });
 
   it("retries a known pre-effect refusal under the original baseline", async () => {
-    const f = fixture(); seedPhase(f, "AWAITING_LANDING"); f.setFacts("ACCEPTED");
+    const f = fixture(); const pending = seedPhase(f, "AWAITING_LANDING"); f.setFacts("ACCEPTED");
     f.land.mockResolvedValueOnce("RETRY");
-    const coordinator = f.coordinator({ controllerId: "replacement", controllerPid: 101 });
+    const controller = { controllerId: "replacement", controllerPid: 101 };
+    const coordinator = f.coordinator(controller);
     await coordinator.advance();
     expect(f.actual.inspect(f.workspace)).toMatchObject({ reservation: { phase: "AWAITING_LANDING", baselineId: "original-baseline" } });
     await coordinator.advance();
     expect(f.actual.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
-    expect(f.land.mock.calls).toEqual([[owner.nodeRef, "original-baseline", f.workspace], [owner.nodeRef, "original-baseline", f.workspace]]);
+    expect(f.land.mock.calls).toEqual([2, 4].map((revisionOffset) => [owner.nodeRef, "original-baseline", f.workspace, {
+      owner: pending.owner,
+      reservation: { ...pending.reservation, ...controller, phase: "LANDING", revision: pending.reservation.revision + revisionOffset },
+    }]));
     expect(f.baseline).not.toHaveBeenCalled();
   });
 
@@ -190,10 +202,14 @@ describe("repository delivery recovery", () => {
   });
 
   it("resumes an accepted pending landing under the original baseline after restart", async () => {
-    const f = fixture(); seedPhase(f, "AWAITING_LANDING"); f.setFacts("ACCEPTED");
-    await f.coordinator({ controllerId: "replacement", controllerPid: 101 }).advance();
+    const f = fixture(); const pending = seedPhase(f, "AWAITING_LANDING"); f.setFacts("ACCEPTED");
+    const controller = { controllerId: "replacement", controllerPid: 101 };
+    await f.coordinator(controller).advance();
     expect(f.actual.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
-    expect(f.land).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, "original-baseline", f.workspace);
+    expect(f.land).toHaveBeenCalledExactlyOnceWith(owner.nodeRef, "original-baseline", f.workspace, {
+      owner: pending.owner,
+      reservation: { ...pending.reservation, ...controller, phase: "LANDING", revision: pending.reservation.revision + 2 },
+    });
     expect(f.baseline).not.toHaveBeenCalled();
     expect(f.verify).not.toHaveBeenCalled();
   });

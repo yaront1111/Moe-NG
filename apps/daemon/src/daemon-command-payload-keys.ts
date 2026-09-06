@@ -50,6 +50,7 @@ import {
   STEP_FINISH_PAYLOAD_KEYS, STEP_START_COMMAND_KIND, STEP_START_PAYLOAD_KEYS,
 } from "./work/step-lifecycle-contracts.js";
 import type { WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository/repository-recovery-contracts.js";
 
 /**
  * WHICH EXACT PAYLOAD KEYS each wired kind admits, and nothing else about a kind.
@@ -74,7 +75,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
   Object.freeze({
     [CRITERION_APPROVE]: CRITERION_APPROVE_KEYS,
     [CRITERION_VERIFY]: CRITERION_VERIFY_KEYS,
-    "repository.recover": ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"],
+    "repository.recover": REPOSITORY_RECOVERY_PAYLOAD_KEYS,
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
     // SPREAD from the seam's own constant, never retyped: the module compares the payload against
     // that list, so a second hand-written copy here would let the advertised roster and the

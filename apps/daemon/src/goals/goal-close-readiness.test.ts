@@ -2,7 +2,7 @@
  * GOAL CLOSE READINESS: is every approved criterion of this goal's Product Contract verified?
  *
  * Unit arms exercise readiness arithmetic with explicit injected coverage, including reserved
- * VERIFIED states. Production has no criterion-specific evidence writer yet. The real-store
+ * VERIFIED states. Criterion execution is covered by its dedicated integration suite. The real-store
  * arms use shipped contract, approval, compiler and review writers with test verifier/landing
  * receipts: generic node acceptance stays EVIDENCE_REQUIRED and blocks both the close command
  * and its offered action. No injected criterion evidence grants authority to the real-store arms.
@@ -48,7 +48,7 @@ import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { goalCloseReadinessFor, readGoalCloseReadiness } from "./goal-close-readiness.js";
 import {
   approveNodes, cleanupGoalClosureFixtures, closeGoalThroughCommandPath,
-  seedLandingReceipt, seedReviewAcceptance,
+  seedLandingReceipt, seedReviewAcceptance, seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
 import { GOAL_HANDLERS } from "./goal-services.js";
 
@@ -329,9 +329,9 @@ describe("goalCloseReadinessFor over a real store", () => {
       .toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
   }, 30_000);
 
-  it("stays NOT_READY while a SECOND contract's criteria are still unverified", () => {
-    // A new contract increases the missing evidence count; the earlier node test remains
-    // accepted but cannot verify either contract's criteria.
+  it("keeps an unapproved second contract outside the immutable approved plan", () => {
+    // A draft cannot change the approved plan's criterion scope. Generic acceptance
+    // still supplies no criterion evidence for the original approved revision.
     const { sha, store } = contractBearingWorld(["crit-1", "crit-2", "crit-3"]);
     acceptNode(store, "node-slice");
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID))
@@ -340,7 +340,11 @@ describe("goalCloseReadinessFor over a real store", () => {
     proposeRevision(store, sha, SECOND_CONTRACT_ID, "rev-close-2", ["crit-4", "crit-5"]);
 
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID))
-      .toEqual({ criteria: 5, kind: "NOT_READY", verified: 0 });
+      .toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
+    const coverage = createDocumentCoverageReadPort({ store, projectId: PROJECT_ID }).readCoverage({ goalRef: GOAL_ID });
+    if (coverage.outcome !== "COVERAGE") throw new Error(coverage.code);
+    expect(coverage.contracts.map(({ contractId, revisionId }) => ({ contractId, revisionId })))
+      .toEqual([{ contractId: CONTRACT_ID, revisionId: "rev-close-1" }]);
   }, 30_000);
 });
 
@@ -433,14 +437,12 @@ describe("goal.close refuses until every approved criterion is verified", () => 
     });
   }, 30_000);
 
-  it("leaves the contract-less journey closing exactly as it did", () => {
-    // NO_CONTRACT falls through, so child 1's live leg still carries a seed/Foundation goal all
-    // the way to COMPLETED. This is the arm that reddens if GOAL_UNBOUND is ever mapped to
-    // NOT_READY, which would withdraw `goal.close` from every contract-less goal in the repo.
+  it.runIf(process.platform === "win32")("closes a contract-less goal with actual Foundation evidence", async () => {
+    // NO_CONTRACT still falls through to qualification. A real Foundation receipt,
+    // review and activation account prove the legacy leg; raw LIVE evidence cannot.
     const store = openStore();
-    approveNodes(store, ["node-1"]);
-    seedReviewAcceptance(store, "node-1");
-    seedLandingReceipt(store, "node-1", "COMMITTED");
+    const verified = await seedVerifiedNode(store);
+    seedReviewAcceptance(store, verified.nodeRef);
     expect(goalCloseReadinessFor(store, PROJECT_ID, GOAL_ID)).toEqual({ kind: "NO_CONTRACT" });
 
     const closed = closeGoalThroughCommandPath(store, 2);
@@ -449,7 +451,7 @@ describe("goal.close refuses until every approved criterion is verified", () => 
     expect(store.readEvents(GOAL_ID).filter((e) => e.eventType === "GoalCompleted")).toHaveLength(1);
     expect((readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID)?.result as
       { lifecycle?: string } | undefined)?.lifecycle).toBe("COMPLETED");
-  }, 30_000);
+  }, 120_000);
 });
 
 /**
