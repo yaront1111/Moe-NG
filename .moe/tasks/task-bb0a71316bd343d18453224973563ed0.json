@@ -43,7 +43,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-aa54e231",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -58,7 +58,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:40.763Z",
-  "updatedAt": "2026-09-05T22:27:30.275Z",
+  "updatedAt": "2026-09-05T23:16:57.938Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:55:15.753Z",
     "plannedStepCount": 3,
@@ -83,5 +83,8 @@
       "apps/control-room/src/v2/goals/approve-plan.test.tsx"
     ]
   },
-  "planApprovedAt": "2026-09-05T14:56:19.179Z"
+  "planApprovedAt": "2026-09-05T14:56:19.179Z",
+  "contextFetchedBy": [
+    "architect-aa54e231"
+  ]
 }
