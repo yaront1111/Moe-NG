@@ -4,14 +4,21 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
+import * as profile from "../repository/controlled-profile/controlled-profile-generator.js";
+import { nodeGitRunner } from "../repository/git-landing-port.js";
+import { bootstrapRequestBytes } from "../repository/repository-bootstrap-command.js";
 
 import { launchDelivery } from "./environment-launch-resolver.js";
 import type { EnvironmentStoreConfig } from "./environment-projection.js";
 import { setEnvironmentVariable } from "./environment-store.js";
 import { agentEnvironment } from "../orchestrator/agent-spawn-environment.js";
 import { createVerifierDatabaseRunner } from "../orchestrator/verifier-database.js";
-import { cleanUp, configFor, openMemoryStore } from "./environment-test-fixtures.js";
+import { cleanUp, configFor, NOW, openMemoryStore, PROJECT_ID } from "./environment-test-fixtures.js";
 
 /**
  * THE PRODUCTION COMPOSITION PATH, END TO END, WITH A REAL CHILD PROCESS.
@@ -47,6 +54,54 @@ const CANARY_NAME = "LAUNCH_CANARY_MARKER";
 const HOST_ONLY = "HOST_ONLY_SECRET";
 
 const temporaryDirectories: string[] = [];
+
+/** DoD 4 is post-bootstrap, NOT automatic: task-f1e40296's registered
+ * product_contract.sync_env_example reads approved contract names and commits them later.
+ * Pin the actual bootstrap SUPPLY so adding even an empty names list reopens this limitation.
+ * This observes the real generator without replacing it; git and the registered edge are real. */
+it("bootstrap supplies no contract names until product_contract.sync_env_example runs", async () => {
+  const workspace = temporaryWorkspace();
+  const generate = vi.spyOn(profile, "generateControlledProfile");
+  try {
+    const store = openMemoryStore();
+    const principal = { capabilities: ["project.admin"], principalId: "operator-env", projectId: PROJECT_ID };
+    const payload = { dir: join(workspace, "product"), productName: "supply-check",
+      profileVersion: profile.CONTROLLED_PROFILE_VERSION };
+    const envelope = { commandId: "bootstrap-supply", commandKind: "repository.bootstrap",
+      correlationId: "bootstrap-supply", expectedVersion: 0, payload,
+      requestDigest: "b".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: "unused-at-handler", targetAggregateId: "bootstrap-supply" } as const;
+    expect(runBootstrapCommand(store, bootstrapRequestBytes("project.register", PROJECT_ID, NOW,
+      { owner: "operator-env" }, { ...envelope, commandId: "register-supply" }, principal.principalId)))
+      .toMatchObject({ ok: true });
+    const ports = createDaemonCommandPorts({ clock: () => NOW, operatorPrincipalId: principal.principalId,
+      projectId: PROJECT_ID, store, repositoryBootstrap: { catalog: async () => {} } });
+    const entry = ports.registry.get("repository.bootstrap");
+    expect(entry?.asyncHandler).toBeTypeOf("function");
+    if (entry?.asyncHandler === undefined) throw new Error("bootstrap registration missing");
+    expect(await entry.asyncHandler({ envelope, principal })).toMatchObject({ disposition: "DECIDED" });
+    expect(generate).toHaveBeenCalledTimes(1);
+    const supplied = generate.mock.calls[0]?.[0];
+    expect(supplied).not.toHaveProperty("requiredVariableNames");
+    expect(supplied).toEqual({ ...payload, projectId: PROJECT_ID });
+    const committed = await nodeGitRunner(payload.dir, ["show", "HEAD:.env.example"]);
+    expect(committed.code).toBe(0);
+    const baseline = profile.generateControlledProfile(payload);
+    expect(baseline.ok).toBe(true);
+    if (!baseline.ok) throw new Error("controlled profile unexpectedly refused");
+    expect(committed.stdout).toBe(baseline.files.get(".env.example"));
+    // Positive control: the emitter DOES support names; it is the command's supply that is absent.
+    const withNames = profile.generateControlledProfile({ ...payload,
+      requiredVariableNames: ["CONTRACT_INPUT_NAME"] });
+    expect(withNames.ok).toBe(true);
+    if (!withNames.ok) throw new Error("controlled profile names unexpectedly refused");
+    expect(withNames.files.get(".env.example")).toContain("CONTRACT_INPUT_NAME=\n");
+    expect(committed.stdout).not.toContain("CONTRACT_INPUT_NAME=");
+  } finally {
+    generate.mockRestore();
+    rmSync(workspace, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
+  }
+}, 360_000); // Four bootstrap git calls plus git-show, each bounded at 60s, then cleanup.
 
 afterEach(() => {
   cleanUp();
