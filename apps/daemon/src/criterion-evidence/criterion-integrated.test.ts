@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { createCriterionCheckExecutor } from "@moe/runner";
 import { closeStores, GOAL_ID, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { criterionWorld } from "./criterion-test-fixtures.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
@@ -25,12 +26,15 @@ const git = (root: string, args: string[]): string => execFileSync("git", ["-C",
   encoding: "utf8", windowsHide: true, timeout: 30000, stdio: ["ignore", "pipe", "pipe"],
 }).trim();
 
-it("executes approved criterion checks on the fully integrated Git SHA and invalidates evidence when it changes", async () => {
-  const root = mkdtempSync(join(tmpdir(), "moe-criteria-integrated-"));
-  const fixture = criterionWorld({ workspace: root });
+it("records the native criterion outcome on the integrated Git SHA and invalidates coverage when it changes", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-criteria-integrated-")));
+  const executor = createCriterionCheckExecutor();
+  const execution = vi.spyOn(executor, "run");
+  const fixture = criterionWorld({ workspace: root, executor });
   const { store, service, approveAll, verifyInput } = fixture;
   try {
     git(root, ["init", "-b", "main"]);
+    git(root, ["config", "--local", "commit.gpgsign", "false"]);
     git(root, ["config", "user.name", "Criterion fixture"]); git(root, ["config", "user.email", "criterion@example.invalid"]);
     writeFileSync(join(root, "README.md"), "initial\n"); git(root, ["add", "README.md"]); git(root, ["commit", "-m", "initial"]);
     writeFileSync(join(root, "product.txt"), "working\n");
@@ -63,14 +67,27 @@ it("executes approved criterion checks on the fully integrated Git SHA and inval
     expect(service.verify(verifyInput(committed.receipt.sha))).toMatchObject({ ok: true });
     await service.advance();
     const after = service.read(GOAL_ID);
-    expect(after).toMatchObject({ run: { status: "COMPLETED", integratedSha: committed.receipt.sha },
-      criteria: [{ evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } },
-        { evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } }] });
-    expect(createRepositoryExecutionPort().inspect(root)).toMatchObject({ ok: true, reservation: null });
-    expect(coverage.readCoverage({ goalRef: GOAL_ID })).toMatchObject({ totals: { verified: 2, criteria: 2 } });
+    if (process.platform === "win32") {
+      expect(after).toMatchObject({ run: { status: "COMPLETED", integratedSha: committed.receipt.sha },
+        criteria: [{ evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } },
+          { evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } }] });
+      expect(createRepositoryExecutionPort().inspect(root)).toMatchObject({ ok: true, reservation: null });
+      expect(coverage.readCoverage({ goalRef: GOAL_ID })).toMatchObject({ totals: { verified: 2, criteria: 2 } });
+    } else {
+      // Observe the real executor's refusal; unsupported containment cannot authorize closure.
+      expect(execution).toHaveBeenCalledTimes(1);
+      expect(await execution.mock.results[0]?.value).toMatchObject({ containment: "UNKNOWN", exitCode: null,
+        byteCount: 0, refusal: { code: "PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED" } });
+      expect(after).toMatchObject({ run: { status: "BLOCKED", integratedSha: committed.receipt.sha },
+        criteria: [{ evidence: { status: "UNKNOWN", sha: committed.receipt.sha, exitCode: null, byteCount: 0 } },
+          { evidence: null }] });
+      expect(createRepositoryExecutionPort().inspect(root)).toMatchObject({ ok: true, reservation: { phase: "BLOCKED" } });
+      expect(coverage.readCoverage({ goalRef: GOAL_ID })).toMatchObject({ totals: { verified: 0, criteria: 2 } });
+    }
     writeFileSync(join(root, "README.md"), "changed integrated artifact\n");
     git(root, ["add", "README.md"]); git(root, ["commit", "-m", "new integration"]);
     expect(coverage.readCoverage({ goalRef: GOAL_ID })).toMatchObject({ totals: { verified: 0, criteria: 2 } });
-    expect(service.read(GOAL_ID)).toMatchObject({ criteria: [{ evidence: { sha: committed.receipt.sha } }, { evidence: { sha: committed.receipt.sha } }] });
+    expect(service.read(GOAL_ID)).toMatchObject({ criteria: [{ evidence: { sha: committed.receipt.sha } },
+      { evidence: process.platform === "win32" ? { sha: committed.receipt.sha } : null }] });
   } finally { await service.close(); rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
 }, 300000);

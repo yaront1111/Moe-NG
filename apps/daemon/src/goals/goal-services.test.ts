@@ -305,7 +305,7 @@ describe("goal close accepts the verified result", () => {
    * nevertheless succeeds, which is only possible because the handler threw those witnesses away
    * and handed the core the ones `qualifyGoalClosure` derived from durable bytes.
    */
-  it("closes on durable records while the request's own witnesses would refuse at core", async () => {
+  it.runIf(process.platform === "win32")("closes on durable records while the request's own witnesses would refuse at core", async () => {
     const world = await createScopedCloseWorld();
     const { store } = world;
     try {

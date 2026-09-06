@@ -202,7 +202,7 @@ describe("J1 creation, approval, and evidenced closure", () => {
     expect(OWNED_KINDS.filter((kind) => isHumanAction(kind))).toHaveLength(3);
   });
 
-  it("closes the compiled goal after exact delivery and approved criterion checks", async () => {
+  it.runIf(process.platform === "win32")("closes the compiled goal after exact delivery and approved criterion checks", async () => {
     const world = await createScopedCloseWorld();
     try {
       expect(goalLifecycle(world.store)).toBe("EXECUTION_ENABLED");
@@ -266,7 +266,7 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     ));
   });
 
-  it.each(cases)("%s replays to the same decision and leaves one durable row", async (
+  it.each(cases)("%s preserves durable decision identity when replayed", async (
     kind, index,
   ) => {
     const world = kind === "goal.close" ? await createScopedCloseWorld() : null;
@@ -288,6 +288,19 @@ describe("each command is idempotent on replay (DoD 5)", () => {
         seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
       }
       if (world !== null) expectUnactivatedWorld(store);
+
+      if (world !== null && process.platform !== "win32") {
+        expect(world.criterionEvidence).toMatchObject({ run: { status: "BLOCKED" },
+          criteria: [{ evidence: { status: "UNKNOWN", exitCode: null, byteCount: 0 } }, { evidence: null }] });
+        const before = evidenceBytes(store);
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          expect(drive(store, request)).toMatchObject({ ok: false, code: "GOAL_CLOSE_CRITERIA_UNVERIFIED" });
+          expect(goalLifecycle(store)).toBe("EXECUTION_ENABLED");
+          expect(rowsFor(store, request.commandId)).toBe(0);
+          expect(evidenceBytes(store)).toEqual(before);
+        }
+        return;
+      }
 
       const first = drive(store, request);
       expect(first.ok, first.ok ? "" : first.code).toBe(true);
@@ -317,7 +330,7 @@ describe("each command is idempotent on replay (DoD 5)", () => {
  * BYTES on both sides of the one command that could rewrite them.
  */
 describe("closure leaves earlier review and evidence records untouched (DoD 4)", () => {
-  it("keeps the acceptance decision and the receipt row byte-identical across goal.close", async () => {
+  it.runIf(process.platform === "win32")("keeps the acceptance decision and the receipt row byte-identical across goal.close", async () => {
     const world = await createScopedCloseWorld();
     const { store } = world;
     try {

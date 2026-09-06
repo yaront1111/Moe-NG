@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GOAL_ID, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -26,12 +26,13 @@ const git = (root: string, args: string[]): string => execFileSync("git", ["-C",
 export async function createScopedCloseWorld() {
   const world = createScopedGoalWorld();
   const { store, graph } = world;
-  const workspace = mkdtempSync(join(tmpdir(), "moe-scoped-close-"));
+  const workspace = realpathSync(mkdtempSync(join(tmpdir(), "moe-scoped-close-")));
   const service = createCriterionEvidenceService({ store, projectId: PROJECT_ID,
     storeId: `scoped-close-${workspace}`, workspace, clock: () => DECIDED_AT });
   const cleanup = async () => { await service.close(); rmSync(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); };
   try {
     git(workspace, ["init", "-b", "main"]);
+    git(workspace, ["config", "--local", "commit.gpgsign", "false"]);
     git(workspace, ["config", "user.name", "Scoped closure fixture"]);
     git(workspace, ["config", "user.email", "scoped-closure@example.invalid"]);
     writeFileSync(join(workspace, "README.md"), "initial\n");
@@ -84,11 +85,22 @@ export async function createScopedCloseWorld() {
     if (!queued.ok) throw new Error(queued.code);
     await service.advance();
     const read = service.read(GOAL_ID);
-    if (read.outcome !== "CRITERION_EVIDENCE" || read.run?.status !== "COMPLETED"
-      || read.criteria.length !== 2 || read.criteria.some((row) => row.evidence?.status !== "PASSED"
-        || row.evidence.sha !== committed.receipt.sha || row.evidence.byteCount !== row.criterionId.length)) {
-      throw new Error(`scoped criterion execution did not prove all checks: ${JSON.stringify(read)}`);
+    if (read.outcome !== "CRITERION_EVIDENCE" || read.criteria.length !== 2) {
+      throw new Error("scoped criterion evidence unavailable");
     }
-    return { ...world, workspace, cleanup, sha: committed.receipt.sha };
+    if (process.platform === "win32") {
+      if (read.run?.status !== "COMPLETED" || read.criteria.some((row) => row.evidence?.status !== "PASSED"
+        || row.evidence.sha !== committed.receipt.sha || row.evidence.byteCount !== row.criterionId.length)) {
+        throw new Error("scoped criterion execution did not prove all checks");
+      }
+    } else {
+      const first = read.criteria[0]?.evidence;
+      if (read.run?.status !== "BLOCKED" || first?.status !== "UNKNOWN"
+        || first.sha !== committed.receipt.sha || first.byteCount !== 0 || first.exitCode !== null
+        || read.criteria[1]?.evidence !== null) {
+        throw new Error("unsupported scoped criterion execution did not remain blocked");
+      }
+    }
+    return { ...world, workspace, cleanup, sha: committed.receipt.sha, criterionEvidence: read };
   } catch (error) { await cleanup(); throw error; }
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -26,7 +26,7 @@ import { readProviderVersion, resolveAgentImage } from "./activation-provider-ve
 describe("resolveAgentImage", () => {
   const temporaries: string[] = [];
   const temporaryRoot = (): string => {
-    const created = mkdtempSync(join(tmpdir(), "moe-agent-image-"));
+    const created = realpathSync(mkdtempSync(join(tmpdir(), "moe-agent-image-")));
     temporaries.push(created);
     return created;
   };
@@ -38,17 +38,17 @@ describe("resolveAgentImage", () => {
     }
   });
 
-  it("finds a win32 shim by PATHEXT, and reports a command that is simply absent", () => {
+  it.each([".CMD", ".cmd"])("finds a win32 shim matching PATHEXT spelling %s and refuses an absent command", (extension) => {
     const directory = temporaryRoot();
-    writeFileSync(join(directory, "claude.cmd"), "@echo off\r\n");
-    const env = { PATH: directory, PATHEXT: ".COM;.EXE;.BAT;.CMD" };
+    const command = join(directory, `claude${extension}`);
+    writeFileSync(command, "@echo off\r\n");
+    const env = { PATH: directory, PATHEXT: `.COM;.EXE;.BAT;${extension}` };
 
     // The bare name resolves through PATHEXT — this is the case Node 24 cannot spawn with
     // shell:false, and the case that made a missing CLI indistinguishable from a failing one.
-    // Compared case-insensitively: the extension comes back as PATHEXT spelled it, and win32
-    // paths do not distinguish `.CMD` from `.cmd`.
-    expect(resolveAgentImage("claude", env, "win32")?.toLowerCase())
-      .toBe(join(directory, "claude.cmd").toLowerCase());
+    // Match the fixture's exact spelling so the simulated win32 resolver is also tested on
+    // a case-sensitive POSIX filesystem. Both PATHEXT casings are independent cases.
+    expect(resolveAgentImage("claude", env, "win32")).toBe(command);
     expect(resolveAgentImage("codex", env, "win32")).toBeNull();
     expect(resolveAgentImage("", env, "win32")).toBeNull();
   });
@@ -131,7 +131,7 @@ describe("readProviderVersion", () => {
    * dropping its exit code would refuse the whole activation against a CLI that is installed.
    */
   it("keeps the exit code AND the output of a CLI that ran and failed", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "moe-agent-exit-"));
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-agent-exit-")));
     try {
       const win32 = process.platform === "win32";
       const script = join(directory, win32 ? "agent.cmd" : "agent.sh");
