@@ -141,8 +141,8 @@
       "completedAt": "2026-09-06T09:54:21.783Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f2906c26",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,16 +157,24 @@
       "author": "worker-1d53e70c",
       "content": "EVIDENCE ANNEX (detail that exceeds the completionSummary cap). worker-1d53e70c, branch moe/work-2026-09-04.\n\nVALUES ROTATED\n  digest    9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d -> 144d81c9186f9234a3c15ab91eb0814af46b8a06e0185a5c2311ff5e82a72a29\n  file sha  957b18dfe2d3c677d6104b753182b981d2b991844a0773218c7125a741d29f03 -> a3f65eb2f74974a759b75b73d06d702299e77789107ff1a4f9b3b8d471b71d6e\n  commands.size  118 -> 119   (from the PRINTED expected-vs-received, not from the plan)\n\nCENSUS, BOTH DIRECTIONS, `git grep -n --untracked <hex> -- . ':!.moe' ':!pnpm-lock.yaml' ':!.serena'`\n  BEFORE: 6 files -- generated-client.ts:935, generated-coverage.test.ts:36, data-adapter.test.ts:18,\n          approve-plan.test.tsx:255, approve-plan-reject.test.tsx:110, plan-run-resolution.test.tsx:149\n  AFTER : OLD hex 0 hits (exit 1); NEW hex 6 files, same set (generated-client.ts now :937)\n  Old FILE sha: 0 hits.\n\nMUTATION DRILLS - THREE, all restored and SHA-proven in a call separate from the restore\n  1. data-adapter.test.ts:18 -> OLD hex.  RED 16/16 of that file.\n     \"Error: compat gate refused the matching report\"  helper admittedClient at :20, then :63:18\n     restore sha 2a8242fe08054417a16738e928ae40dfb39408405e86c36270668135373acdfa\n  2. approve-plan.test.tsx:255 -> OLD hex.  RED 3/14; whole leg `Test Files 1 failed | 166 passed (167)`.\n     \"Error: the compat gate refused its own matching report\"  helper admittedWire at :257, then :304:18 and :322:18\n     restore sha 685195c30a5eb8f1b7f5adb78d8aca4ac8a35535f1643813dd52f99fcbe9d92d\n     -> DISTINCT message AND distinct helper from drill 1, so two independent gates, not one shared assertion.\n  3. SORT DRILL (self-review). Misplaced the kind: \"policy.install\", \"preview.start\", \"policy.validate\", \"preview.decide\".\n     RED: `keeps every command kind at its sorted position` --\n     AssertionError: expected { actual: 'preview.start', ...(2) } to be null   at runtime-contract.test.ts:138:7\n     restore sha 957e042e569a9414d7ed58c3e8f0ba198d794631d4d3bff7719ef20667d6b860\n  All three paths were `git status --porcelain`-checked BEFORE drilling: all TRACKED (` M`), and out-of-tree\n  %TEMP% backups suffixed with the worker id were taken anyway; backups deleted after.\n\nGATES (each standalone, foreground, count line quoted)\n  @moe/contracts            Test Files  15 passed (15)   Tests   509 passed (509)   exit 0\n  @moe/control-room-client  Test Files  10 passed (10)   Tests    96 passed (96)    exit 0\n  @moe/control-room         Test Files 168 passed (168)  Tests  2083 passed (2083)  exit 0   (168/2083 vs 167/2077 earlier: a peer landed a control-room test file mid-flight)\n  pnpm typecheck            exit 1, 2 FOREIGN errors\n  pnpm test (root)          exit 1, 21 FOREIGN failing files; root include has NO apps/**, so it is not evidence for 4 of the 6 mirrors\n\nFOREIGN RED, VERBATIM AND ATTRIBUTED (global rail 3; intersection with owned paths = EMPTY)\n  typecheck, both in apps/daemon/src/bootstrap/bootstrap-sequence.ts (CLEAN at HEAD):\n    (45,12) TS2739: ... is missing the following properties ...: \"deployment.deploy\", \"deployment.set_target\"\n    (109,10) TS7053: ... Property 'deployment.deploy' does not exist on type ...\n  Cause is peer WIP in apps/daemon/src/bootstrap/bootstrap-contracts.ts (` M`), whose diff appends\n  \"deployment.set_target\" / \"deployment.deploy\" to BOOTSTRAP_COMMAND_KINDS with no COMMAND_PREREQUISITES rows.\n  Already on record from task-dd86f35e's delivery. My kind is preview.start; my diff touches zero apps/daemon files.\n  root lane, 21 files, zero under packages/contracts or packages/control-room-client:\n    adapters/jetbrains/src/host/jetbrains-host.test.ts;\n    packages/benchmark/src/{freeze-manifest-admission,pre-freeze-audit,pre-freeze-pinned-documents}.test.ts;\n    packages/runner/src/verification/criterion-check-executor.test.ts;\n    packages/runner/src/workspace/foundation-workspace-capture-node.test.ts;\n    tests/e2e/foundation/{dispatch-crash-sweep,hostile-client,j1-loop-real-process,j3-crash-recovery,j4-replan-handoff,j5-plan-reject-replan,multi-node-graph}.e2e.test.ts;\n    tests/integration/portability/{bin-target-modes,goal-brief-mcp-readback}.test.ts;\n    tools/packaging/{pack-command,pack-source,pack-windows,pack-windows-candidate,pack-windows-main,pack-windows-process-lease}.test.ts\n  NOT STABLE on an unchanged tree: consecutive runs gave `17 failed | 413 passed` then `21 failed | 409 passed`;\n  durations pack-source 1,647,647ms and foundation-workspace-capture 846,071ms = the host spawn/handle cliff,\n  spawn-shaped suites only. Attribution is sound without a merge-base run: (HEAD - merge-base) is a SUBSET of HEAD,\n  and HEAD-failures inter owned = empty, so the difference inter owned = empty. Both owned root-lane packages also\n  pass standalone.\n\nSCOPE\n  8 files, +27/-13, all inside the plan's roster. contract-digest.test.ts NOT edited (`git diff --stat` empty) --\n  it DERIVES the digest, so the new pin is right by derivation, not by mirror agreement.\n  NOT claimed: apps/control-room/src/v2/goals/plan-run-resolution.ts (peer production file, dirty in my diff glob;\n  I edited only its .test.tsx). No apps/daemon write by me; the daemon dirt there is foreign and untouched.\n\nFOR task-dbc79d25 (the daemon half): packages/mcp stdio-tool-schemas.ts:201 `generateStdioToolEntries()` emits one MCP\nstdio tool per command kind MECHANICALLY, so preview.start is advertised over MCP the moment it joins the tuple. The\nexclusion must be added in apps/daemon (mcp-tool-allowlist.ts / daemon-command-vocabulary.ts) where preview.decide's\nfence lives (mcp-tool-allowlist.test.ts:393). Not inherited from this row.",
       "timestamp": "2026-09-06T09:56:04.973Z"
+    },
+    {
+      "id": "comment-78769eb887c346c48becf8f0821c07ac",
+      "author": "qa-f2906c26",
+      "content": "QA EVIDENCE (qa-f2906c26), anchored at the DELIVERED TREE. HEAD = 663b7109 on moe/work-2026-09-04, pushed. LANDING NOTE: the completion commit d397676e carries Moe-Paths: 1 (the task JSON only) - the eight SOURCE paths landed in the qa-session checkpoint 663b7109, whose parent chain contains d397676e. Bytes are on the branch; verified there, not from the dirty tree.\n\nDoD 1 - re-parsed the SOURCE tuple myself by line range (deliberately NOT the generated copy, which sorts and would hide a source-order defect): 119 kinds, 119 unique => zero duplicates; comparing element-wise against its own sort gives ZERO order defects; `preview.start` sits at index 69, prev `preview.decide`, next `product_contract.answer_clarification`. Absence before the edit: `git grep -c \"preview\\.start\" 663b7109^ -- apps packages` => no hits.\n\nDoD 2 - EXPECTED_COMMAND_KINDS hand-transcribed at the same slot (runtime-contract.test.ts:54). Count literal moved 118 -> 119 and the comment moved with it. Leg 1 green, so 119 is the received value, not a frozen one. RUNTIME_QUERY_KINDS / RUNTIME_TELEMETRY_KINDS untouched, as expected for a COMMAND kind.\n\nDoD 3 - generated-client.ts exposes the BUILDER in both places, not merely the string: `readonly [\"preview.start\"]: CommandBuilder<\"preview.start\">` at :246 and `[\"preview.start\"]: commandBuilderFor(\"preview.start\")` at :369.\n\nDoD 4 - I re-ran BOTH censuses at HEAD rather than trusting the step note.\n  OLD 9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d => git grep exit 1, ZERO hits.\n  NEW 144d81c9186f9234a3c15ab91eb0814af46b8a06e0185a5c2311ff5e82a72a29 => SIX files, count printed by `git grep -l ... | wc -l` = 6:\n    apps/control-room/src/data/data-adapter.test.ts:18\n    apps/control-room/src/v2/goals/approve-plan-reject.test.tsx:110\n    apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n    apps/control-room/src/v2/goals/plan-run-resolution.test.tsx:149\n    packages/control-room-client/src/generated-coverage.test.ts:36\n    packages/control-room-client/src/generated/generated-client.ts:937\n  Same file set as the before-census; no seventh, none missed.\n\nDoD 5 - GENERATED_FILE_SHA256 rotated 957b18df... -> a3f65eb2...; I recomputed it rather than reading it back: `sha256sum packages/control-room-client/src/generated/generated-client.ts` = a3f65eb2f74974a759b75b73d06d702299e77789107ff1a4f9b3b8d471b71d6e, EQUAL to the pin. contract-digest.test.ts is untouched by the diff (`git show --stat 663b7109 -- <path>` empty) and DERIVES via `expect(deriveContractDigest()).toBe(GENERATED_CONTRACT_DIGEST)` at :21 - green inside leg 2, so the new digest is correct by derivation, not merely self-consistent across mirrors.\n\nDoD 6 - two drills in different files with DISTINCT refusal strings and different guard helpers: \"compat gate refused the matching report\" (admittedClient, data-adapter.test.ts:20) vs \"the compat gate refused its own matching report\" (admittedWire, approve-plan.test.tsx:257). Restores proven by out-of-tree SHA256 equality in a separate call. I independently confirmed net-zero drift: `git status --porcelain` over all eight owned paths is EMPTY at review time, and the OLD hex census is zero - no mutant rode out.\n\nDoD 7 - every leg RE-RUN by me, foreground, standalone, count line quoted:\n  pnpm --filter @moe/contracts test           Test Files  15 passed (15)   / Tests   509 passed (509)   exit 0\n  pnpm --filter @moe/control-room-client test Test Files  10 passed (10)   / Tests    96 passed (96)    exit 0\n  pnpm --filter @moe/control-room test        Test Files 168 passed (168)  / Tests  2083 passed (2083)  exit 0   <- matches task.verification exactly\n  pnpm typecheck                              exit 1 (PIPESTATUS[0]=1), FOREIGN - see below\nFOREIGN RED, ATTRIBUTED INDEPENDENTLY (global rail 3), verbatim:\n  apps/daemon/src/bootstrap/bootstrap-sequence.ts(45,12): error TS2739: ... is missing the following properties ...: \"deployment.deploy\", \"deployment.set_target\"\n  apps/daemon/src/bootstrap/bootstrap-sequence.ts(109,10): error TS7053: ... Property 'deployment.deploy' does not exist ...\nThe Record is keyed by BootstrapCommandKind - a DAEMON-LOCAL union in bootstrap-contracts.ts - not by RuntimeCommandKind, so `preview.start` is not in its key set at all, and neither error names it. `\"deployment.set_target\"` / `\"deployment.deploy\"` entered BOOTSTRAP_COMMAND_KINDS in commit 5ab9640f (task-bb844c288f), and `git merge-base --is-ancestor 5ab9640f 663b7109^` => YES, so the red predates this row's diff. Both bootstrap files are CLEAN (committed) and this row edits ZERO apps/daemon paths - `git show --stat -- apps/daemon` is empty on BOTH d397676e and 663b7109. Intersection of (HEAD failures minus merge-base failures) with this row's owned paths = EMPTY.\nOne correction to the step-7 note, verdict unchanged: it describes bootstrap-contracts.ts as ` M` peer WIP. That WIP has since been committed (5ab9640f), so the red is now a committed baseline rather than a dirty-tree artifact - still foreign either way.\n\nSCOPE AND CAPS - task rail 1 held: no daemon-command-vocabulary / -families / -payload-keys, no MCP fence, no payload decoder, no async entry. Per-FILE line cap fine: runtime-vocabulary.ts 161, runtime-contract.test.ts 316, generated-coverage.test.ts 246; the four apps/control-room mirrors are one-line hex swaps.",
+      "timestamp": "2026-09-06T10:01:51.794Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T07:33:41.784Z",
-  "updatedAt": "2026-09-06T09:56:47.985Z",
+  "updatedAt": "2026-09-06T10:02:27.511Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T07:39:15.908Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-06T10:02:27.511Z",
+    "wallClockMs": 8591603
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -266,13 +274,41 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "d397676ee032c2fa5bdd3457f3faab65f7766662",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-1d53e70c@2026-09-06T08:47:52Z",
+      "paths": [
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json"
+      ],
+      "recordedBy": "worker-1d53e70c",
+      "recordedAt": "2026-09-06T09:57:13.807Z",
+      "treeId": "2a951f9084f0826aad8650c0c679b863c0c7fcde",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-f2906c26@2026-09-06T09:56:39Z",
-    "at": "2026-09-06T09:56:47.985Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-1d53e70c@2026-09-06T08:47:52Z",
+    "at": "2026-09-06T09:57:13.807Z"
+  },
+  "touchedFiles": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+    "apps/control-room/src/data/data-adapter.test.ts",
+    "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+    "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+    "packages/control-room-client/src/generated/generated-client.ts"
+  ],
+  "completedAt": "2026-09-06T10:02:27.511Z",
+  "reviewCompletedAt": "2026-09-06T10:02:27.511Z",
+  "reviewSummary": "APPROVED at delivered tree HEAD=663b7109 (moe/work-2026-09-04, pushed). Full evidence: comment-78769eb8.\n\nLANDING: completion commit d397676e carries Moe-Paths:1 (task JSON only); the 8 source paths landed in checkpoint 663b7109, whose parent chain contains d397676e.\n\nDoD1 I re-parsed the SOURCE tuple, not the generated copy: 119 kinds, 119 unique, ZERO order defects vs its own sort, preview.start idx 69 between preview.decide and product_contract.answer_clarification; absent at 663b7109^ over apps+packages.\nDoD2 hand transcription at same slot; count 118->119 from the run.\nDoD3 builder present twice in generated-client.ts (:246 interface, :369 map), not just the string.\nDoD4 I re-ran both censuses: OLD 9057aa94... ZERO hits (grep exit 1); NEW 144d81c9... exactly SIX files (data-adapter:18, approve-plan-reject:110, approve-plan:255, plan-run-resolution:149, generated-coverage:36, generated-client:937), same set as before.\nDoD5 I recomputed sha256sum of generated-client.ts = a3f65eb2f74974a759b75b73d06d702299e77789107ff1a4f9b3b8d471b71d6e, EQUAL to the rotated pin. contract-digest.test.ts untouched and DERIVES (:21), green.\nDoD6 two drills, distinct refusal strings AND distinct guard helpers; net-zero drift confirmed by me (porcelain over all 8 owned paths EMPTY, old-hex census zero).\nDoD7 legs re-run foreground: contracts 15/509, client 10/96, control-room 168 files/2083 tests (matches task.verification exactly), exit 0. typecheck exit 1 = FOREIGN: bootstrap-sequence.ts(45,12) TS2739 + (109,10) TS7053 missing \"deployment.deploy\"/\"deployment.set_target\" - keyed by daemon-local BootstrapCommandKind, not RuntimeCommandKind; those keys entered in 5ab9640f (task-bb844c288f), an ancestor of 663b7109^; both bootstrap files clean; zero apps/daemon edits here. Delta-vs-merge-base intersected with owned paths = EMPTY.\n\nRail 1 held. Per-file caps fine (161/316/246)."
 }

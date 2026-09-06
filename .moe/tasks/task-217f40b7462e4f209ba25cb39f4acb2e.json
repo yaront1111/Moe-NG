@@ -62,12 +62,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor handoff to re-plan: worker-96c6d708 measured (production probe, msg-613889a4 / msg-1a3f6eb0, no edits) that approved steps 2 and 4 rest on a dispatch-breaking premise — step 2 sends design.submit targeted at the GOAL aggregate with offer()->versionOf(goal), but daemon-command-design.ts forwards expectedVersion to the design:<goalId> fence (absent = 0), so the plan's own journey returns DESIGN_REVISION_CONFLICT@LEDGER; with design version 0 it accepts. Step 1's measurement is on the row. Re-plan against the design:<goalId> fence (or a version-resolution seam), keep the compiler-ladder placement step 1 confirmed.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -98,7 +98,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:23:30.489Z",
-  "updatedAt": "2026-09-06T09:53:13.152Z",
+  "updatedAt": "2026-09-06T09:58:15.815Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:35:43.594Z",
     "plannedStepCount": 5,
@@ -128,8 +128,10 @@
     "worker-96c6d708"
   ],
   "workStartedAt": "2026-09-06T09:43:05.679Z",
-  "blockedReason": "Approved step2/4 have a measured dispatch-breaking premise; fresh get_context immediately before this call confirms NO activeAmendmentId/amendments. Effective step2 explicitly mandates design.submit targeted at GOAL aggregate and uses offer()->versionOf(goal); step4 explicitly asserts design.submit@<goalId>. Production daemon-command-design.ts forwards expectedVersion unchanged to submitDesignRevision, which fences design:<goalId>. Real approved production journey probe (FULL SOURCE comment-f2756e8ba48b4620b3d199b984ad69d2) measured goalVersion1/designVersion0: goal-version submit returns DESIGN_REVISION_CONFLICT@LEDGER, source EXPECTED_VERSION_CONFLICT@DURABLE_STORE; identical world with designVersion0 accepts. Following plan would ship an unusable first-submit offer. Also commandFamilyFacts('design.submit').schemaVersion is moe-bootstrap-command/1, not COMPILER_OFFER_KINDS-selected compiler schema. Architect amendment requested msg-613889a474da47668ee7fc859184d557: correct design target/version/work-item identity (DoD3 already names designAggregateId) and schema, plus matching integrated dispatch test. No source edits; step1 measurement complete, step2 not implemented. This block is for non-working prescribed bytes, NOT foreign dirty paths or gate contention. Baseline failure/deferral evidence is in step1 note; all launched processes ended. Both declared prerequisites are already landed; no new dependency needed.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T09:53:13.152Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Approved step2/4 have a measured dispatch-breaking premise; fresh get_context immediately before this call confirms NO activeAmendmentId/amendments. Effective step2 explicitly mandates design.submit targeted at GOAL aggregate and uses offer()->versionOf(goal); step4 explicitly asserts design.submit@<goalId>. Production daemon-command-design.ts forwards expectedVersion unchanged to submitDesignRevision, which fences design:<goalId>. Real approved production journey probe (FULL SOURCE comment-f2756e8ba48b4620b3d199b984ad69d2) measured goalVersion1/designVersion0: goal-version submit returns DESIGN_REVISION_CONFLICT@LEDGER, source EXPECTED_VERSION_CONFLICT@DURABLE_STORE; identical world with designVersion0 accepts. Following plan would ship an unusable first-submit offer. Also commandFamilyFacts('design.submit').schemaVersion is moe-bootstrap-command/1, not COMPILER_OFFER_KINDS-selected compiler schema. Architect amendment requested msg-613889a474da47668ee7fc859184d557: correct design target/version/work-item identity (DoD3 already names designAggregateId) and schema, plus matching integrated dispatch test. No source edits; step1 measurement complete, step2 not implemented. This block is for non-working prescribed bytes, NOT foreign dirty paths or gate contention. Baseline failure/deferral evidence is in step1 note; all launched processes ended. Both declared prerequisites are already landed; no new dependency needed.",
+  "blockedOnTaskIds": null
 }
