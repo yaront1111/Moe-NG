@@ -40,19 +40,19 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // create a real repository on disk and then fail to bind it; a stricter one (naming the bind
   // itself) would be unsatisfiable, since there is nothing to bind until this command runs.
   "repository.bootstrap": Object.freeze(["project.register"]),
-  // DERIVED FROM WHAT THE DEPLOY ACTUALLY BUILDS, not from the family table's capability: the
-  // engine builds `deploymentInfrastructureFiles` — the Dockerfile and compose the controlled
-  // profile GENERATES (deploy-service.ts) — so an environment can only be pointed at a product
-  // whose workspace `repository.bootstrap` already created on this host. A looser requirement
-  // (`project.register`) would admit a target for a project that has no buildable workspace, and
-  // the refusal would arrive at `docker build` time instead of admission.
-  "deployment.set_target": Object.freeze(["repository.bootstrap"]),
-  // The deploy names an environment; the binding it deploys to is written by the kind above.
-  // The engine already refuses an unbound environment (DEPLOY_TARGET_MISSING,
-  // deploy-service.ts), so this entry does not invent the rule — it moves the same refusal to
-  // admission, where it costs no `docker` spawn. Direct requirement only, exactly as
-  // `plan.propose` names `goal.create` alone: the chain behind the target is that kind's entry.
-  "deployment.deploy": Object.freeze(["deployment.set_target"]),
+  // Naming where a project's product deploys presupposes the project itself is durably active —
+  // the same requirement `goal.create` carries, and for the same reason: an environment bound on
+  // a project that never activated could never be deployed to.
+  "deployment.set_target": Object.freeze(["project.activate"]),
+  // THE SAME PREREQUISITE AS THE PUBLISH IT FOLLOWS: a deploy builds THE LANDED SHA, and before
+  // the publish there is nothing landed to build. NOT `deployment.set_target`, though the deploy
+  // does need a bound target, and the difference is what makes this table fail closed rather
+  // than merely look strict. This table is keyed by KIND and reads COMMITTED DECISION KINDS, so
+  // naming set_target here would admit a deploy of `production` on the strength of a target
+  // bound for `staging` — coarser than the rule it claims to enforce. The BOUND TARGET is
+  // per-environment and stays where it can be checked per-environment: the engine refuses
+  // DEPLOY_TARGET_MISSING (deploy-service.ts, DoD 6) before any docker spawn.
+  "deployment.deploy": Object.freeze(["repository.publish"]),
   "project.register": Object.freeze([]),
   "provider.probe": Object.freeze(["project.register"]),
 } as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>);

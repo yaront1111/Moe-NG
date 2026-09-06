@@ -7,13 +7,20 @@ import { createFoundationVerificationHandler }
 import { FOUNDATION_VERIFICATION_COMMAND_KIND }
   from "./evidence/foundation-verification-contracts.js";
 import type { CommandRegistryEntry } from "./http/http-contract.js";
+import { DomainRefusal, domainRefusalOf } from "./daemon-command-dispatch.js";
+import { RELEASE_DECIDE_COMMAND_KIND, releaseRefusal }
+  from "./release/release-decide-contracts.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { unconfiguredFoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
-import { CAPABILITIES, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { createDeployCommandHandler, DEPLOY_BUILD_CONTEXT_ENV_KEY }
+  from "./deployment/deploy-command.js";
+import type { DeployPorts } from "./deployment/deploy-ports.js";
+import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deployment/deploy-target-contracts.js";
 import { createNodeProjectCatalogRegistrar } from "./projects/project-catalog-registrar.js";
 import { createRepositoryBootstrapHandler } from "./repository/repository-bootstrap-command.js";
 import type { BootstrapCatalogPort } from "./repository/repository-bootstrap-command.js";
@@ -28,13 +35,32 @@ import type { BootstrapGhPort } from "./repository/repository-bootstrap-contract
  * above it before it can be called.
  */
 export type AsyncCommandKind =
+  | typeof RELEASE_DECIDE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND
   | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   // `repository.bootstrap` runs `git`, optionally the `gh` CLI and a filesystem tree write, so a
   // synchronous `CommandHandler` cannot express it. It is registered HERE rather than in
   // `daemon-command-registry.ts` for the reason that file's own comment gives: the registry is
   // past its size cap, and this module is exactly the seam it spreads for async kinds.
-  | typeof REPOSITORY_BOOTSTRAP_COMMAND_KIND;
+  | typeof REPOSITORY_BOOTSTRAP_COMMAND_KIND
+  // `deployment.deploy` runs `docker build`, an optional `docker save | ssh docker load`, and a
+  // health poll that waits out docker's own start-period before the candidate replaces the
+  // incumbent. A `CommandHandler` answers with a `ServiceOutcome` synchronously, so a sync
+  // adapter could only answer BEFORE the deploy happened, and every receipt downstream of it
+  // would describe an intention rather than a deployed product. Registered HERE for the same
+  // reason as the kind above: the registry is past its size cap and this module is the seam it
+  // spreads for async kinds.
+  | typeof DEPLOYMENT_DEPLOY_COMMAND_KIND;
+
+/** The injectable half of the deploy. Production passes NOTHING and gets the real docker and ssh
+ *  runners on this host; a test passes `ports` and touches no docker daemon and no network.
+ *  `buildContext` overrides the host-scoped directory read from the environment at composition,
+ *  which is how a test names a context without exporting a variable into the process. */
+export interface DeploymentDeploySeams {
+  readonly buildContext?: string;
+  readonly clock?: () => string;
+  readonly ports?: DeployPorts;
+}
 
 /** The two injectable halves of the bootstrap command. Production passes NEITHER and gets the
  *  real `gh` CLI and the real manager catalog; a test passes both and touches no network and no
@@ -46,6 +72,9 @@ export interface RepositoryBootstrapSeams {
 }
 
 export interface AsyncCommandEntryOptions {
+  /** ABSENT means production: the real docker and ssh runners, and the build context this
+   *  daemon was configured with. */
+  readonly deploymentDeploy?: DeploymentDeploySeams;
   /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
    *  dispatch-time derivation resolves the SAME repository scope authority. */
   readonly foundationCatalogSource?: () => unknown;
@@ -63,7 +92,22 @@ export interface AsyncCommandEntryOptions {
   readonly verificationCatalogSource?: () => unknown;
 }
 
-/** The two async entries, keyed by kind so the registry can answer one lookup and stop. */
+/** Async entries bypass the registry's synchronous fence, so release fences at entry. */
+function unconfiguredReleaseHandler(
+  operatorPrincipalId: string,
+): NonNullable<CommandRegistryEntry["asyncHandler"]> {
+  return async (input) => {
+    if (OPERATOR_PRINCIPAL_KINDS.has(RELEASE_DECIDE_COMMAND_KIND)
+      && input.principal.principalId !== operatorPrincipalId) {
+      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
+        "this command requires the configured operator principal", 403);
+    }
+    throw domainRefusalOf(releaseRefusal("RELEASE_PR_FAILED",
+      "no release port is composed for this daemon"));
+  };
+}
+
+/** Async entries, keyed by kind so the registry can answer one lookup and stop. */
 export function createAsyncCommandEntries(
   options: AsyncCommandEntryOptions,
 ): Readonly<Record<AsyncCommandKind, CommandRegistryEntry>> {
@@ -107,7 +151,35 @@ export function createAsyncCommandEntries(
     ...(bootstrapSeams.clock === undefined ? {} : { clock: bootstrapSeams.clock }),
     ...(bootstrapSeams.gh === undefined ? {} : { gh: bootstrapSeams.gh }),
   });
+  // HOST-SCOPED DAEMON-PROCESS CONFIGURATION, read once here and passed down RAW, exactly as the
+  // runtime pin root above is. The build context is deliberately NOT a payload key: a
+  // caller-supplied path would let any operator-authenticated request build an arbitrary
+  // directory on this host. An unconfigured daemon REFUSES the deploy under the edge's own
+  // DEPLOY_BUILD_CONTEXT_UNCONFIGURED rather than building a directory nobody named.
+  const deploySeams = options.deploymentDeploy ?? {};
+  const buildContext = deploySeams.buildContext ?? process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
+  const deployEnvironment = createDeployCommandHandler({
+    operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
+    // DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
+    ...(buildContext === undefined ? {} : { buildContext }),
+    ...(deploySeams.clock === undefined ? {} : { clock: deploySeams.clock }),
+    ...(deploySeams.ports === undefined ? {} : { ports: deploySeams.ports }),
+  });
   return Object.freeze({
+    [DEPLOYMENT_DEPLOY_COMMAND_KIND]: Object.freeze({
+      asyncHandler: deployEnvironment, handler: foundationSyncHandler,
+      kind: DEPLOYMENT_DEPLOY_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[DEPLOYMENT_DEPLOY_COMMAND_KIND],
+      // GOAL-scoped, read off BOOTSTRAP_FAMILY's own reasoning: the capability fences REACH
+      // only, and the operator fence at the handler's entry is what makes deploying a human act.
+      requiredCapability: CAPABILITIES.GOAL,
+    }),
+    [RELEASE_DECIDE_COMMAND_KIND]: Object.freeze({
+      asyncHandler: unconfiguredReleaseHandler(options.operatorPrincipalId),
+      handler: foundationSyncHandler, kind: RELEASE_DECIDE_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[RELEASE_DECIDE_COMMAND_KIND], requiredCapability: CAPABILITIES.GOAL,
+    }),
     [REPOSITORY_BOOTSTRAP_COMMAND_KIND]: Object.freeze({
       asyncHandler: bootstrapRepositoryCommand, handler: foundationSyncHandler,
       kind: REPOSITORY_BOOTSTRAP_COMMAND_KIND,

@@ -68,7 +68,11 @@ export interface RepositoryBootstrapOptions {
   readonly store: SqliteEventStore;
 }
 
-function requestBytes(
+/** The canonical bytes of a bootstrap-family request, EXPORTED because the deploy command edge
+ *  admits through the same surface (`deploy-command.ts`). A second copy of this shape would be a
+ *  second place for `BOOTSTRAP_SCHEMA_VERSION` and the field set to drift, and the digest the
+ *  replay fence keys on is computed from exactly these bytes. */
+export function bootstrapRequestBytes(
   kind: string, projectId: string, decidedAt: string, payload: JsonObject,
   envelope: { commandId: string; correlationId: string; expectedVersion: number },
   principalId: string,
@@ -159,7 +163,7 @@ function portsFor(
       const projectVersion = versionOf(
         readDurableLedger(options.store, options.projectId), options.projectId,
       );
-      drive(requestBytes("project.bind_repository", options.projectId, decidedAt,
+      drive(bootstrapRequestBytes("project.bind_repository", options.projectId, decidedAt,
         { observation: observationOf(repository) },
         { ...envelope, commandId: `${envelope.commandId}-bind`, expectedVersion: projectVersion },
         principalId));
@@ -192,7 +196,7 @@ export function createRepositoryBootstrapHandler(
         "this command requires the configured operator principal", 403);
     }
     const decidedAt = clock();
-    const bytes = requestBytes("repository.bootstrap", projectId, decidedAt,
+    const bytes = bootstrapRequestBytes("repository.bootstrap", projectId, decidedAt,
       envelope.payload, envelope, principal.principalId);
     // ADMIT FIRST. A replay, an unmet `project.register` or a malformed envelope is answered
     // here, before one byte is written into the operator's directory.
