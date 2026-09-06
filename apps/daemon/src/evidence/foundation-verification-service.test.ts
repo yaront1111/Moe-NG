@@ -707,7 +707,7 @@ const EXIT_ZERO = Object.freeze([process.execPath, "-e", "process.exit(0)"]);
 const EXIT_THREE = Object.freeze([process.execPath, "-e", "process.exit(3)"]);
 const FLOOD = Object.freeze([
   process.execPath, "-e",
-  `process.stdout.write("x".repeat(${2 * 1024 * 1024}));process.exit(0)`,
+  `require("node:fs").writeFileSync(1, Buffer.alloc(${2 * 1024 * 1024}, "x"))`,
 ]);
 const HANG = Object.freeze([process.execPath, "-e", "setInterval(() => undefined, 1000)"]);
 
