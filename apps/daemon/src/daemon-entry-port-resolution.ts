@@ -31,6 +31,8 @@ import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
+import type { PreviewReadPort } from "./http/preview-read.js";
+import type { PreviewCapturePort } from "./http/preview-capture-route.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
@@ -53,6 +55,9 @@ export interface OptionalDaemonPortProvider {
    * config, so the binding is the composition root's fact and never request input.
    */
   environmentReads?(): EnvironmentsReadPort;
+  /** Durable preview receipts and captures from the runner's bound product workspace. */
+  previewReads?(): PreviewReadPort;
+  previewCaptures?(): PreviewCapturePort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
   /** The strict durable GoalCreated catalog, bound to this daemon's own project. */
@@ -129,6 +134,8 @@ export interface ResolvedOptionalDaemonPorts {
   readonly goalSource?: GoalSourceReadPort;
   readonly designReads?: DesignReadPort;
   readonly environmentReads?: EnvironmentsReadPort;
+  readonly previewReads?: PreviewReadPort;
+  readonly previewCaptures?: PreviewCapturePort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -161,6 +168,7 @@ const FACTORIES = Object.freeze([
   "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "repositoryWorkflows", "goalSource",
   "designReads",
   "environmentReads",
+  "previewReads", "previewCaptures",
   "sessionHandshake",
 ] as const);
 
@@ -366,6 +374,22 @@ export function resolveOptionalDaemonPorts(
     if (environmentReads !== undefined && !hasMethods(environmentReads, ["read"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const previewReadsFactory = provider.previewReads;
+    if (previewReadsFactory !== undefined && typeof previewReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewReads = previewReadsFactory?.call(provider);
+    if (previewReads !== undefined && !hasMethods(previewReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewCapturesFactory = provider.previewCaptures;
+    if (previewCapturesFactory !== undefined && typeof previewCapturesFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewCaptures = previewCapturesFactory?.call(provider);
+    if (previewCaptures !== undefined && !hasMethods(previewCaptures, ["projectDirectory"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const pendingFactory = provider.productContractPending;
     if (pendingFactory !== undefined && typeof pendingFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -462,6 +486,8 @@ export function resolveOptionalDaemonPorts(
       ...(goalSource === undefined ? {} : { goalSource }),
       ...(designReads === undefined ? {} : { designReads }),
       ...(environmentReads === undefined ? {} : { environmentReads }),
+      ...(previewReads === undefined ? {} : { previewReads }),
+      ...(previewCaptures === undefined ? {} : { previewCaptures }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

@@ -132,6 +132,16 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the environment reader is always wired");
     return port();
   },
+  previewReads: () => {
+    const port = fromEnv().previewReads;
+    if (port === undefined) throw new Error("unreachable: the preview reader is always wired");
+    return port();
+  },
+  previewCaptures: () => {
+    const port = fromEnv().previewCaptures;
+    if (port === undefined) throw new Error("unreachable: the preview capture reader is always wired");
+    return port();
+  },
   documentDossiers: () => {
     const port = fromEnv().documentDossiers;
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");

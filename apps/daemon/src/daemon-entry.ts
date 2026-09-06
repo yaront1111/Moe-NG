@@ -321,6 +321,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       ...(resolved.designReads === undefined ? {} : { designReads: resolved.designReads }),
       ...(resolved.environmentReads === undefined
         ? {} : { environmentReads: resolved.environmentReads }),
+      ...(resolved.previewReads === undefined ? {} : { previewReads: resolved.previewReads }),
+      ...(resolved.previewCaptures === undefined ? {} : { previewCaptures: resolved.previewCaptures }),
       ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
       ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
       ...(resolved.planningRuns === undefined

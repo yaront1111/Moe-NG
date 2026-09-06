@@ -297,4 +297,3 @@ describe("design MCP agent dispatch", () => {
       .toMatchObject({ ok: false, error: { code: "AUTHENTICATION_FAILED" }, stage: "AUTHENTICATE" });
   });
 });
-

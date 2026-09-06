@@ -42,6 +42,8 @@ import type { DesignReadInput } from "./design/design-store.js";
 import { readDesignRevision } from "./design/design-store.js";
 import type { DesignReadPort } from "./http/design-read.js";
 import type { EnvironmentsReadPort } from "./http/environments-read.js";
+import { createPreviewReadPort } from "./http/preview-read.js";
+import type { PreviewCapturePort } from "./http/preview-capture-route.js";
 import { launchDelivery } from "./environment/environment-launch-resolver.js";
 import { readEnvironmentVariables } from "./environment/environment-store.js";
 import { createAffordancePort } from "./http/affordance-read.js";
@@ -186,6 +188,13 @@ export function createStoreDependencies(
   // from the last position instead of re-walking the whole ledger per request.
   enrollDecisionLedgerMemo(store);
   const repositoryWorkspace = config.repositoryWorkspace === undefined ? process.env["MOE_NODE_WORKSPACE"] ?? null : config.repositoryWorkspace;
+  // The runner and capture reader share the same startup binding; no store-directory or CWD fallback.
+  const previewCaptures = (): PreviewCapturePort => Object.freeze({
+    projectDirectory: () => {
+      if (repositoryWorkspace === null || repositoryWorkspace === "") throw new Error("preview workspace unavailable");
+      return repositoryWorkspace;
+    },
+  });
   const releaseDecide = createProductionReleaseSeams({ store, projectId: config.projectId,
     storePath: config.storePath, workspace: repositoryWorkspace === "" ? null : repositoryWorkspace, clock });
   const workflows = createRepositoryWorkflowWiring({ store, projectId: config.projectId, storePath: config.storePath,
@@ -626,6 +635,8 @@ export function createStoreDependencies(
     health,
     planningRuns,
     policy,
+    previewCaptures,
+    previewReads: () => createPreviewReadPort(store),
     // The SAME instance the command registry above holds. Returned as a factory like every
     // other optional port, so the entry can sweep it from its already-async shutdown without
     // widening `close()` — which is SYNC and has six call sites outside this file.
