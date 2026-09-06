@@ -248,6 +248,7 @@ export interface GeneratedCommandBuilders {
   readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
   readonly ["product_contract.ask_clarification"]: CommandBuilder<"product_contract.ask_clarification">;
   readonly ["product_contract.propose_revision"]: CommandBuilder<"product_contract.propose_revision">;
+  readonly ["product_contract.sync_env_example"]: CommandBuilder<"product_contract.sync_env_example">;
   readonly ["profile.register"]: CommandBuilder<"profile.register">;
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
@@ -371,6 +372,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
     ["product_contract.ask_clarification"]: commandBuilderFor("product_contract.ask_clarification"),
     ["product_contract.propose_revision"]: commandBuilderFor("product_contract.propose_revision"),
+    ["product_contract.sync_env_example"]: commandBuilderFor("product_contract.sync_env_example"),
     ["profile.register"]: commandBuilderFor("profile.register"),
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
@@ -934,7 +936,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "144d81c9186f9234a3c15ab91eb0814af46b8a06e0185a5c2311ff5e82a72a29";
+export const GENERATED_CONTRACT_DIGEST = "9f578ae0a875d498cce7b9da03252daaa2655f825263c0963b4899971001e1ca";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

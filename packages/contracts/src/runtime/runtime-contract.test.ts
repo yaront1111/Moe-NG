@@ -54,6 +54,7 @@ const EXPECTED_COMMAND_KINDS = [
   "policy.install", "policy.validate", "preview.decide", "preview.start",
   "product_contract.answer_clarification", "product_contract.approve_gate_1",
   "product_contract.ask_clarification", "product_contract.propose_revision",
+  "product_contract.sync_env_example",
   "profile.register", "project.activate",
   "project.bind_repository", "project.register", "project.set_agent_provider",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
@@ -106,7 +107,7 @@ describe("runtime vocabulary is closed and disjoint", () => {
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
     // Literal 119, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(119);
+    expect(commands.size).toBe(120);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");

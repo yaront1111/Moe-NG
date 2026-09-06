@@ -32,8 +32,8 @@ import type { CommandAffordance } from "./generated/generated-client.js";
  * regenerate (`pnpm --filter @moe/control-room-client generate`), review the diff,
  * then update both constants. That ritual is the whole point of committing output.
  */
-const GENERATED_FILE_SHA256 = "a3f65eb2f74974a759b75b73d06d702299e77789107ff1a4f9b3b8d471b71d6e";
-const CONTRACT_DIGEST = "144d81c9186f9234a3c15ab91eb0814af46b8a06e0185a5c2311ff5e82a72a29";
+const GENERATED_FILE_SHA256 = "668ff85948d946ddf4da8c24c086ca04d0be79ebc303494a51bc980bd0293bca";
+const CONTRACT_DIGEST = "9f578ae0a875d498cce7b9da03252daaa2655f825263c0963b4899971001e1ca";
 
 const GENERATED_FILE = fileURLToPath(new URL("./generated/generated-client.ts", import.meta.url));
 
