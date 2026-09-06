@@ -143,13 +143,18 @@
     {
       "stepId": "step-8",
       "description": "DRILLS, GATES, SELF-REVIEW.\n\nDRILLS (DoD 5) - `git status --porcelain` the exact mutated paths FIRST; all files here are TRACKED, so `git diff -- <path>` is a valid restore proof.\n- BIDIRECTIONAL, BOTH DIRECTIONS: delete the kind from the ADVERTISED roster, confirm RED, restore. Delete it from the SERVED side (the async entry), confirm RED, restore. Quote the failing assertion each time.\n- THE FENCE: remove the kind from `OPERATOR_PRINCIPAL_KINDS` and confirm BOTH the allowlist arms and the per-transport sweeps go red - the sweeps are the ones that prove no transport advertises it. Restore and prove it.\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm typecheck`.\nRoot `pnpm test` is NOT evidence for this row (DoD 6) - vitest.config.ts has no `apps/**` in its include. Respect the host's one-full-suite-at-a-time rule.\n\nEVERY COUNT PIN ENUMERATED BY file:line IN THE COMPLETION RECORD (DoD 4), with the before/after census showing zero stale literals in THIS ROW'S files.\n\nSELF-REVIEW:\n- `wc -l apps/daemon/src/daemon-command-vocabulary.ts` - must be at or under 400. It was 392.\n- Did an `it(` counter move? Then you added a parallel arm - revert it.\n- Did you double-bump a pin that task-54b74b80 or task-04b3ce7e already reconciled?\n- Is the kind MCP-advertised at any point? Compute `wiredMcpToolKinds()` at HEAD and assert absence.\n- Did you edit an unrelated suite that happens to pin the same number? Revert - foreign.\n- Does the completion record name task-da60dc4b as the successor that replaces the fail-closed stub, and say which seam (async, not sync) serves this kind and why?",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-async-entries.ts",
         "apps/daemon/src/mcp-tool-allowlist.test.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/preview/preview-start-command.test.ts"
+      ],
+      "note": "Completed effective amendment1, not stalebasefullrun mandate. Governor15:00 msgd69dc5cc says close b224 on evidence; provider deltaHTTP grantedc422. No edits thiscontinuation; onlyunlandedownhunk previewtestrollbackliteral, alloriginal13paths alreadydeclared. Other12 checkpoint43a84045 (11exact13:03SHA; storetest hasforeignmonitoringhunks). Cited e15/task95 fullAFTER 13:30:54dd07→14:05:02a4d1:8failed514passed522files/10failed9741passed4skipped9755testsEXIT1; ALL13rollbackSTARThashesmatchEND; comment729aed3 fullfailroster/limits. No cleancheckout/currentwholepathfreeze/fullgreenclaim. Fresh18:05:14local owned3file scope rollback generatedcases+productionserved/MCPbidirectionalpartition+C1/C2/C3:12passed597skipped609 EXIT0,10.99s (commandstorednextverification). Broader9files ran twice:15then3foreignproviderpinreds; newenvkind nowmovesrostersagain; exactpaths/reasons in38428d6/a8fccf, nothidden. Freshtypecheck19projects0;CR172files2139tests0;foundation35/7560;store52/6750. Ownhunkfailureintersectionempty; foreigncountsprovider/envownednotb224. Countcensus49a6889 anchorsrollback59/48/23/22/44; allprior8drillsredrestored plus literalROWSdeletion9thred14:57 (1executed,385intentionalfilteredskips), separateSHAequal66348F3B..., tempsdeletedandTestPathfalse. Runtimehostprobe confirms{advertised:false,excluded:true,operator:true,human:true,agent:null}. Selfreview53588eaf: directasyncprincipalguard+closedmaprefusal, nofs/network/writes, concurrentretryalwaysrefuses, malformedpayloadcannotauthorizeeffect. Deliberatestub successor da60dc4b39c5409788246f6ed7fa932c. Rollbackcheckpointvocabulary395; newerpeerWIP404flaggedowners, notourdelivery. Allownchildrenexited. No manualgit/foreignWIPchanges.",
       "startedAt": "2026-09-06T12:58:51.308Z",
+      "completedAt": "2026-09-06T15:06:58.620Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -162,7 +167,7 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -217,16 +222,60 @@
       "author": "governor-afbde490",
       "content": "GOVERNOR 14:33Z — YOUR BYTES ARE ON THE BRANCH under another row's sha. Commit 43a840454134 (`wip(task-54b74b80…) … recovered`, qa-4f771bb8's wrapper post-flight at 14:29:23Z) carried 12 of this row's 13 declared paths — every +/- hunk in them is this row's deployment.rollback work (qa-4f771bb8 diffed each line before the sweep, 14:22Z; the commit's own Moe-Contested trailers name this row for three of them). No surgery, no rewrite: I recorded 43a84045 on this row's ledger as a checkpoint with those 12 paths. Still dirty and this row's alone: apps/daemon/src/preview/preview-start-command.test.ts — it lands with your completion. Next claimer: bytes have been frozen since 13:03Z (comment 22da1161 hashes); cite e15d25c8's 14:04Z daemon END or 1d53e70c's 14:22Z END under the two-arm rule (blob pairs for the 12 now-clean paths, hash pair for the test file), run the owned scope fresh, complete_task. Do not re-run a full suite for this row.",
       "timestamp": "2026-09-06T14:30:37.072Z"
+    },
+    {
+      "id": "comment-38428d6ccb714a709790490bb0cbe7fb",
+      "author": "worker-7bdbffac",
+      "content": "RESUME14:49Z afterclaimnext: active step8 amendment1 (13:49 architect-aa54) forbids ownfullrun/queue and permits namedsharedAFTER + freshownedfiles/typecheck; governor75eb72ae14:33 confirms checkpoint43a84045 and proceed. Step8 alreadyIN_PROGRESS, redundantstart refusedINVALID_STATE; resumed without resetting.\n\nMeasured checkpoint—not an assumption: gitshow43a84045 owns rollback production4files and roster12paths; residualpreviewtest stilldirty withonlyrollbackliteral, SHA9F3297A2966C1A802A246E8229691851076537DF768EFB81B6FA9EAD94C65DB1 equals13:03. 11/12checkpointedpaths match13:03hashes; daemon-store-dependencies.test.ts additionally carries later monitoring testhunks (anchor36DBE1B3...,checkpointD15ADBFA...). Thus governor's 'everyhunkrollback' shorthand is not claimed literally. No handgit/no changes this continuation. Independent review findsno rollbackdefect.\n\nConcurrent c422 project.set_agent_provider work means currentwholepathsarenotfrozen: newsettingsfamily/payload/operator/nullstaff entries, typedrosters beingupdated. Firstfresh9filegate at17:49:19local EXIT1 TestFiles7failed2passed(9),Tests15failed682passed(697),34.70s. Exactnewdeltas allproviderpins: vocab:32459→60,:36948→49,:42723→24;registry:103459→60,:108459→60,:125523→24,:1937/1959/199159→60;v2:27158→59;human:36022→23;allowlist:20622→23;stdio:24322→23;http:690/72122→23. Ownerworkerb3notifiedmsgc8909f; no peerpins edited/doublebumped. Currentownedpackagesnotgreenclaimed; willfreshreverifyafterownerfinish. SeparatetypecheckEXIT1 migrations/migration-service.test.ts(43,19) TS2673 privateSqliteEventStoreconstructor; ownere15notified. Subsequent freshverifyfoundationtypecheck19projects0 and35files756tests0 showspeerfixedwhilewecontinued.\n\nThis is not a block on foreignWIP. Continuing read/review and permittedfocusedgates, preservingallpeerbytes. Freshcompletionverification stillrequired.",
+      "timestamp": "2026-09-06T14:52:33.254Z"
+    },
+    {
+      "id": "comment-729aed3ff12f4ad6bbb4b8178a0a4f87",
+      "author": "worker-7bdbffac",
+      "content": "FULL-SUITE CITATION for active step8amend1 and DoD6, authority governor75eb72ae14:33 +7f7f6ab/msg-a0b82d1b: designated convoye15d25c8/task95e68a8d, START2026-09-06T13:30:54Z HEADdd07b69df7da20d5f87292f63cfd76e0d8ca190d -> END14:05:02Z HEADa4d1b7951c113ea13cc260d1a7bb22bd492173cb. Actual bounded full daemon command (same package test src lane,2workers insteadofscript4): pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 src. EXIT1, `Test Files 8 failed | 514 passed (522)` / `Tests 10 failed | 9741 passed | 4 skipped (9755)`, Duration1973.99s. Exactsource task95 commentc9ebdfa536734b76975fc078b998c39b.\n\nAFTER for this row's13:03frozen rollback BYTES, not claim that earlierHEAD contains latercheckpoint. ActualheadsdidNOTcontain43a84045; dirty-sourceSHA arm proveswhatran. Task95STARTcommentsacc32e87+6b0c71ae enumerateALL13rollbackhashes equalourcomment22da116; daemonENDcomment76ea76fc provesALL44STARThashesmatchEND. Fulltreenotimmutable:17newmutablepaths; dd07..a4d commits6cf7f15c(setter),a4d1b795(card). Hashesrecheckedagainstcurrent/checkpoint separately: checkpoint11/12exact, monitoringforeignhunksinstoretest; preview13thmatch. CurrentproviderWIPpostdatesthisrun andisNOTcertifiedbyit—freshownedfilesrequired. No clean-checkout/fullrepo-green inference.\n\nALL10FOREIGN FAILframes copied withpaths:\n1 apps/daemon/src/runtime-entrypoint.test.ts:255:6 expected{missing:[],unexpected:[],wrongContent:[]};receivedunexpected:[\"repository\\\\env-example-sync-contracts.js\"],missing/wrongContent[].\n2 apps/daemon/src/criterion-evidence/criterion-integrated.test.ts:66:19 expectedstatusCOMPLETED/twoPASSEDbyteCount16;receivedrunBLOCKED,firstUNKNOWNbyteCount0,secondevidence:null.\n3 apps/daemon/src/cutover/v2-readiness-evidence-collector.test.ts:118:50 producedrosteromitscontractSchema.\n4 apps/daemon/src/cutover/v2-readiness-evidence-producers.test.ts:69:24 \"AssertionError: expected false to be true // Object.is equality\",produceContractSchema.okfalse.\n5 apps/daemon/src/goals/goal-live-evidence.test.ts:380:19;\n6 apps/daemon/src/goals/goal-services.test.ts:309:19;\n7-9 apps/daemon/src/goals/j1-command-path.test.ts:203:19,265:43,314:19: \"Error: scoped criterion execution did not prove all checks:\" atgoal-scoped-close-test-fixtures.ts90:13;runBLOCKED,firstevidenceUNKNOWN/exitCode:null/byteCount:0,secondevidence:null.\n10 apps/daemon/src/work/foundation-attempt-service.test.ts:1215:3 \"Error: Test timed out in 30000ms.\" carrieseachdistinctsealrefusalcodeunrestamped.\nNoneofthe8failingpathsisownedbyrollback. ScopepathAFTER-BEFOREintersectionemptyat13:03bytes; currentownedscopeisrerunningbecauseproviderchangesmovedpins. Repo-wideAFTERcitationisred, neverdressedasexit0. Rootpnpmtestdoesnotcoverapps/**; daemonlegprovidesapps evidence. Countcensus/drillsnotrelaxed; newfullrunforbiddenbyamendment.",
+      "timestamp": "2026-09-06T14:53:38.848Z"
+    },
+    {
+      "id": "comment-53588eaf33fe4c67aeb4adcb5296f3a9",
+      "author": "worker-7bdbffac",
+      "content": "Fresh independent host-read proof14:55Z EXIT0, no source writes. Full replayable command: node --experimental-transform-types --input-type=module -e 'import assert from \"node:assert/strict\"; import {wiredMcpToolKinds,MCP_EXCLUDED_COMMAND_KINDS} from \"./apps/daemon/src/mcp-tool-allowlist.js\"; import {agentCapabilitiesFor,OPERATOR_PRINCIPAL_KINDS} from \"./apps/daemon/src/daemon-command-vocabulary.js\"; import {HUMAN_ONLY_STEPS} from \"./apps/daemon/src/orchestrator/agent-spawn-contract.js\"; const kind=\"deployment.rollback\"; const view={advertised:wiredMcpToolKinds().includes(kind),excluded:MCP_EXCLUDED_COMMAND_KINDS.includes(kind),operator:OPERATOR_PRINCIPAL_KINDS.has(kind),human:HUMAN_ONLY_STEPS.has(kind),agent:agentCapabilitiesFor(kind)};assert.deepEqual(view,{advertised:false,excluded:true,operator:true,human:true,agent:null});console.log(view);'\nObserved exactly advertised:false/excluded:true/operator:true/human:true/agent:null. Strip-only Nodeinitialprobe refused ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX on existingAgentProcessFailure parameterproperty; transform flag resolveswithoutsourcechange, no testclaimfromfailedprobe. Currentvocabulary399lines (rollbackcheckpoint395, laterproviderdelta+4);async271; nofilecapbreach.\n\nAdversarialre-readcheckpoint4productiondiff+currentruntime: immutable wiring/no sharedwrites orcheckthenact; asyncdirectprincipalcheck doesnotdependonsyncgate; namedoperatorrefusal usesclosedmap, noauthorizingfallback; null/malformed/extra payload alreadyingressadmitted and cannotrun effectbecauseintentionalstub alwaysrefuses; nofs/network/timeinput or childprocessfromstub, concurrentcallsindependentlyrefuse. No effect/backup implementationclaimed. Successor task-da60dc4b39c5409788246f6ed7fa932c ownsreceiptresolution/effect. Existing8drillsremainapplicabletounchangedrollbackhunks; priorSHArestorationcommentf7849246. Eightdrills, no new parallelrosterarms. Alltemp/transporthandlesownedbyexistingfinallyharnesses; allfreshchildsessionspolledtoclosure beforestop.",
+      "timestamp": "2026-09-06T14:55:58.518Z"
+    },
+    {
+      "id": "comment-07687cb34dab44de94e48ecf0164e1f2",
+      "author": "worker-7bdbffac",
+      "content": "DoD5 literal ROWS-deletion arm additionally executed14:57Z (prior8drills alreadycoverPAYLOAD/servedasync/fences/refusalcode+layer). No sharedsource mutation. BEFORE gitstatus registrytest M (providerWIP), outoftreebackupSHA66348F3B82BFA18FD44C99397957375D4AEF1D988F8B12A2F3944B252B3AB306. Vite process-local transform deleted EXACTLYONE rollback ROWS entry; printed DRILL_APPLIED, existing 'serves exactly the characterized kinds and nothing else' RED expected60rowsactual59. EXIT1 TestFiles1failed(1),Tests1failed385skipped(386),8.52s. Skips intentional -t filter; testactuallyexecuted1, mutationnonvacuous. SeparatepostcallSHAcomparisonoriginal/backupequal66348F3B...; no restorecopy neededbecauseontreebytesnevermutated. Normal9filecontrolwillrerunafterremainingpeerpinupdates.\n\nFullreplayablesource config saveoutside repo as b224-rows-worker-7bdbffac.mjs, command pnpm --filter @moe/daemon exec vitest run --root . --config <config> src/daemon-command-registry.test.ts -t \"serves exactly the characterized kinds and nothing else\":\nconst anchor = `  { agent: null, asyncOnly: true, capability: GOAL, code: \"ROLLBACK_RECEIPT_UNKNOWN\",\n    kind: \"deployment.rollback\", layer: PREREQ_LAYER,\n    payload: { environment: \"staging\", toReceiptRef: \"receipt-unknown\", restoreDatabase: false },\n    payloadKeys: [\"environment\", \"toReceiptRef\", \"restoreDatabase\"] },\\n`;\nexport default { test: { fileParallelism: false, maxWorkers: 1, testTimeout: 30000 }, plugins: [{ name: 'b224-rows-deletion', enforce: 'pre', transform(source,id) {\n  if (!id.replaceAll('\\\\','/').endsWith('/daemon-command-registry.test.ts')) return;\n  const code=source.replaceAll('\\r\\n','\\n');\n  if(code.split(anchor).length!==2) throw new Error('DRILL_ANCHOR_COUNT_WRONG');\n  console.log('DRILL_APPLIED ROWS deletion: exactly one rollback row');\n  return {code:code.replace(anchor,''),map:null};\n}}] };\n\nNo new tests/productionfilescreated; outoftreeconfig+backupremovedafterhashproof. This adds exactDoDwordingproof ratherthanclaimingthepriorasync-entrydeletionisthe ROWS-deletion.",
+      "timestamp": "2026-09-06T14:58:27.092Z"
+    },
+    {
+      "id": "comment-a8fccf38d2ab4abda1da678529d4d2cc",
+      "author": "worker-7bdbffac",
+      "content": "GOVERNOR15:00 msg-d69dc5cc1b4d44d7940fca949a0c955c grants remainingHTTPproviderpins toc422 and explicitly says 'close b224 on your evidence'. No changes here. c422owner confirmedproviderfixdone15:03:55 but immediatelynewpeer product_contract.sync_env_example widenssameglobalrosters again. Willnotchaseotherrows' kindpublishing indefinitely or relabeltheirWIPasrollback. Currentcompletiongateisfresh rollback-generated arms +existing production served/MCP partition bidirectional arm +C1/C2/C3fence surfaces, matching activeamendment's OWNED roster/fence/behaviour clause; full9file runs remain disclosed RED(15then3peerpins) ratherthanhidden. Priorall9files683green(13:05) +namedfullAFTERe15 proves rollback13:03bytes; currentfreshscope testschangedrollbackseams againstlatestproduction. No relaxationofexactcounts: ownrollbackcountcensus59/48/23/22/44 remainsanchored13:03andcheckpoint; subsequentprovider60/49/24/23/46 andenv61/25/24 belongnamedrows, not ourmissedpins. Source13:03SHA proof +checkpointrawbuffercomparison distinguishesourbytesfromlaterpeers. Firstscope afterprovider17:54:20 TestFiles2failed7passed(9),Tests3failed694passed(697),EXIT1; failedallowlistsummary247 andHTTP690/721 asquotedmsg02025. No fullgategreenclaim or nakedHEADcompilesclaim. Mostrecentownstandalonepnpmtypecheck14:55EXIT0 all19; foundation35/7560;store52/6750;ControlRoom172/21390.",
+      "timestamp": "2026-09-06T15:05:23.442Z"
+    },
+    {
+      "id": "comment-ae2d03d6e13d4a79a128d60441ae18a6",
+      "author": "worker-7bdbffac",
+      "content": "FINAL COMPLETION VERIFICATION repeated fresh AFTERstep8: see verification.command for exact3files+test-name regex, no omittedfilter. This covers12current rollback/productionpartition/C1-C3fence cases, intentionallyskipsotherkindarms (notfull9filegreen). All priorbroaderfailures and fullconvoycountlinespersistin729aed3/38428d6/a8fccf, governor15:00d69dc5cc directscloseb224ratherthanabsorbprovidercounts. Remainingartifactdelivery: residualpreview-start-command.test.ts one-line rollbackstring, SHA9F3297A2966C1A802A246E8229691851076537DF768EFB81B6FA9EAD94C65DB1. 12otherrollbackpathscheckpoint43a84045; doNOTclaimlaterprovider/env/monitoringhunks. Completiongatefresh0isownedfilteredtestsurface, notatestcountfabrication; namedfulldaemonAFTERevidenceisredandexplicit. No childjobsleftafterpoll, no source edits thisresume, no manualgit.",
+      "timestamp": "2026-09-06T15:08:56.031Z"
+    },
+    {
+      "id": "comment-8d5953f338f44c6d9c6fbbc86a2184ac",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE (qa-4f771bb8).\n\nGATE RE-RUN, recorded command verbatim: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts -t \"deployment.rollback|partitions every served kind|C1 |C2 |C3 \"` -> Test Files 3 passed (3), Tests 12 passed | 597 skipped (609), EXIT 0, 9.78s. Matches the record (12/597/609, 10.19s).\n\nI DID NOT STOP AT THE FILTERED GATE. The recorded command covers 3 of the row's files, and DoD 4's count pins live in the other five, so I ran the row's whole affected set unfiltered: `src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/mcp-main.test.ts src/daemon-command-registry-human-approver.test.ts src/daemon-v2-command-registry.test.ts src/mcp-http/mcp-http-host.test.ts src/preview/preview-start-command.test.ts` -> **Test Files 8 passed (8), Tests 671 passed (671), EXIT 0.** The two broader runs the completion record disclosed as red on concurrent provider pins (15 then 3 failures) are GONE — the provider and env owners reconciled their literals while this row sat in REVIEW. Nothing red remains anywhere in this row's blast radius.\n\nDoD 1 ROSTER — daemon-command-vocabulary.ts:67 widens BOOTSTRAP_FAMILY's Record type and :74 adds the GOAL capability; :222 the WiredCommandKind union member; :392 OPERATOR_PRINCIPAL_KINDS; payload-keys.ts:183 `[\"environment\",\"toReceiptRef\",\"restoreDatabase\"]` in served order; registry entry asserted live at registry.test.ts:1088 (`asyncHandler` defined). NEVER STAFFABLE is production, not just a table: vocabulary.ts:269 `if (kind === \"deployment.rollback\" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;` and registry.test.ts:1135 asserts `agentCapabilitiesFor(row.kind)` toEqual `row.agent`, which the census row sets to `null`.\n\nDoD 2 OPERATOR-ONLY AND MCP-EXCLUDED — I checked this one hard, because on a first pass it looks unguarded: `git grep deployment.rollback` finds NO hand-written non-operator dispatch arm, and the generated `$kind reaches its own family handler` arm sends as the OPERATOR. The negative half is there and it is generated: `OPERATOR_ONLY` (registry.test.ts:394) carries the kind at :403, and `it.each(ROWS)(\"$kind answers the non-operator session from its own layer\")` at :1268 dispatches every row from a session holding ADMIN+GOAL+PLANNING+REVIEW+WORK — so AUTHORIZE cannot answer first — and asserts httpStatus 403 with `{code:\"OPERATOR_PRINCIPAL_REQUIRED\", layer:\"DAEMON_AUTHORIZATION\"}`. Code AND layer, both directions, no parallel arm. `OPERATOR_ONLY` is itself pinned at length 25 and cross-checked against ROWS. The three-fence assertion is mcp-tool-allowlist.test.ts:332-336: `{operator: OPERATOR_PRINCIPAL_KINDS.has(...), mcp: wiredMcpToolKinds().includes(...), human: HUMAN_ONLY_STEPS.has(...)}` toEqual `{operator:true, mcp:false, human:true}` — one assertion, all three fences, and it would red if any single one moved. The MCP exclusion is DERIVED at mcp-tool-allowlist.ts:84 from OPERATOR_PRINCIPAL_KINDS, so it moved with the wiring exactly as the re-plan predicted.\n\nDoD 3 FAIL-CLOSED STUB — daemon-command-async-entries.ts:166-183. `ROLLBACK_CODE_LAYER_MAP` is a frozen closed map and the throw reads `ROLLBACK_CODE_LAYER_MAP.ROLLBACK_RECEIPT_UNKNOWN` rather than a literal layer string, which is the DoD's actual demand. The operator fence is at handler ENTRY (:175-178, OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION, 403) before any effect — correct for an async entry, which never reaches the registry's synchronous operator check. Successor named in the docblock AND the completion record: task-da60dc4b. No arm exists whose only purpose is to reach the stub; the refusal is asserted by the same generated census that covers every other kind.\n\nDoD 4/5 PINS AND NO PARALLEL ARM — the row added ONE ROW to the existing ROWS census (registry.test.ts:122-125) rather than a bespoke test, which is what DoD 5 asked for; `REGISTRATION_ORDER` is pinned at 61 and `[...registry.keys()]` compared to it; `OPERATOR_ONLY` at 25. All eight files green together is the evidence that every count pin agrees with the served roster — a stale pin cannot survive that run.\n\nDoD 6 GATES — `pnpm typecheck` EXIT 0, 19/19 projects Done, at HEAD 4e6aa894, run by me. Daemon full leg cited under epic rail 3 (worker's disclosed AFTER, e15/task95 13:30:54 dd07 -> 14:05:02 a4d1, 8 failed/514 passed files, EXIT 1, all 13 rollback START hashes equal at END).\n\nLANDING — task.commits held only checkpoint 43a84045 and no completion commit. The one remaining own hunk was `preview/preview-start-command.test.ts`, a single roster literal adding \"deployment.rollback\" to WRAPPER_FENCED_SERVED_KINDS; the file's ENTIRE delta against HEAD was that one line, so no foreign bytes could ride along. Landed as 4e6aa894; `git status --porcelain` on the path is now empty.",
+      "timestamp": "2026-09-06T15:14:15.458Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:56.488Z",
-  "updatedAt": "2026-09-06T14:33:14.042Z",
+  "updatedAt": "2026-09-06T15:14:38.437Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.326Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 14,
-    "executedStepCount": 7
+    "executedStepCount": 8,
+    "doneAt": "2026-09-06T15:14:38.437Z",
+    "wallClockMs": 69376111
   },
   "planSizeWarnings": [
     "Plan touches 14 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -238,7 +287,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T11:14:42.749Z",
@@ -249,7 +299,8 @@
   "planApprovedAt": "2026-09-06T11:14:44.897Z",
   "contextFetchedBy": [
     "worker-e15d25c8",
-    "worker-7bdbffac"
+    "worker-7bdbffac",
+    "qa-4f771bb8"
   ],
   "workStartedAt": "2026-09-06T11:02:45.095Z",
   "blockedReason": null,
@@ -309,26 +360,54 @@
       "status": "BLOCKED",
       "pushed": true,
       "message": "Governor attribution: 43a84045 is qa-4f771bb8's recovered checkpoint under task-54b74b80, but every +/- hunk in these 12 paths is task-b22462cf's deployment.rollback work (qa-4f771bb8 diffed each line, 14:22Z); recorded here so b224's ledger carries its own delivery. preview-start-command.test.ts (b224-only) is still dirty and lands with b224's completion."
+    },
+    {
+      "sha": "4e6aa894",
+      "ref": "moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T14:44:00.000Z",
+      "paths": [
+        "apps/daemon/src/preview/preview-start-command.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T15:13:44.776Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "feat(task-b22462cf9d9e41cd9472415da2c1fb7d): deployment.rollback joins the wrapper-fenced served-kind roster — QA hand-landing of the row's last unlanded hunk; the rest reached HEAD in checkpoint 43a84045."
     }
   ],
   "filesModified": [
-    "apps/daemon/src/daemon-command-async-entries.ts",
-    "apps/daemon/src/daemon-command-payload-keys.ts",
-    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/daemon-command-registry.test.ts",
-    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
     "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
-    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
     "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/mcp-tool-allowlist.test.ts",
-    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "governor-afbde490@2026-09-06T14:32:00Z",
-    "at": "2026-09-06T14:30:33.193Z"
-  }
+    "kind": "completion",
+    "sessionId": "qa-4f771bb8@2026-09-06T14:44:00.000Z",
+    "at": "2026-09-06T15:13:44.776Z"
+  },
+  "reviewStartedAt": "2026-09-06T15:09:22.000Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/mcp-tool-allowlist.test.ts -t \"deployment.rollback|partitions every served kind|C1 |C2 |C3 \"",
+    "exitCode": 0,
+    "outputTail": "\n Test Files  3 passed (3)\n      Tests  12 passed | 597 skipped (609)\n   Start at  18:08:14\n   Duration  10.19s (transform 6.25s, setup 0ms, import 9.79s, tests 28ms, environment 0ms)\n\n",
+    "reportedAt": "2026-09-06T15:09:22.000Z"
+  },
+  "completionSummary": "deployment.rollback is wired ASYNC, operator-only, MCP-excluded, HUMAN_ONLY and unstaffable. Nonoperator: OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION; operator: ROLLBACK_RECEIPT_UNKNOWN@DAEMON_PREREQUISITE from closed map. DELIBERATE STUB: task-da60dc4b39c5409788246f6ed7fa932c supplies receipt resolution/effect; no rollback effect claimed.\n\nFresh verification 18:08:14 local: 3 files passed; 12 passed,597 deliberately filtered skips (609). Covers rollback-generated arms plus production served/MCP bidirectional partition and C1-C3. Fresh typecheck19projects0, ControlRoom172files2139tests0, foundation35/7560,store52/6750. Nine mutation drills RED, separate SHA equality; count census49a6889 and drill07687cb3.\n\nEffective step8amend1 + governor15:00d69dc5cc authorize scoped closure. Full AFTER cited e15/task95:13:30:54dd07→14:05:02a4d1;8failed514passed522files/10failed9741passed4skipped9755tests EXIT1. All13 rollback START hashes equal END; comment729aed3 copies foreign failures. Two fresh broader9file runs red on concurrent provider pins (15 then3 failures), disclosed38428d6/a8fccf; provider/env owners reconcile their later additions. No full/repo-wide green or clean-checkout claim; root vitest excludes apps.\n\n12 rollback paths checkpoint43a84045; 11 match13:03bytes, store test also carries foreign monitoring hunks. ONLY remaining own unlanded hunk: preview/preview-start-command.test.ts rollback roster literal, SHA9F3297A... unchanged. Do NOT sweep newer provider/env/monitoring WIP as rollback. Original13 paths declared; no edits this resume, no manualgit or live jobs. Rollback vocabulary checkpoint395lines; laterpeer404flagged owners, not our authored delta.",
+  "completedAt": "2026-09-06T15:14:38.437Z",
+  "reviewCompletedAt": "2026-09-06T15:14:38.437Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-8d5953f3.\n\nRE-RAN the recorded command verbatim: 3 files, 12 passed | 597 skipped (609), EXIT 0, 9.78s - matches the record. It filters to 3 files, so I ALSO ran the row's whole affected set unfiltered (vocabulary, registry, allowlist, mcp-main, human-approver, v2-registry, mcp-http-host, preview-start): Test Files 8 passed (8), Tests 671 passed (671), EXIT 0. The broader runs disclosed red on concurrent provider pins are now GREEN - those owners reconciled while this row sat in REVIEW.\n\nDoD1 (vocabulary.ts:67/74/222/392, payload-keys.ts:183 served order, registry.test.ts:1088) wired. Never staffable is production not a table: vocabulary.ts:269 returns null, asserted at registry.test.ts:1135 against row.agent null.\nDoD2: no hand-written non-operator arm exists and none is needed. OPERATOR_ONLY(:394) carries the kind at :403 and it.each(ROWS) at :1268 dispatches from a session holding every capability - so AUTHORIZE cannot answer first - asserting 403, code OPERATOR_PRINCIPAL_REQUIRED, layer DAEMON_AUTHORIZATION. allowlist.test.ts:332-336 pins all three fences in one assertion {operator:true, mcp:false, human:true}. Exclusion DERIVED at allowlist.ts:84.\nDoD3 (async-entries.ts:166-183): frozen ROLLBACK_CODE_LAYER_MAP, layer read from the map not a literal; operator fence at handler ENTRY before any effect; successor task-da60dc4b named; no arm exists only to reach the stub.\nDoD4/5: one ROW added to the existing census, no parallel arm; REGISTRATION_ORDER pinned 61, OPERATOR_ONLY 25. Eight files green together is what proves no count pin went stale.\nDoD6: pnpm typecheck EXIT 0, 19/19, at HEAD 4e6aa894, run by me. Daemon full leg cited under epic rail 3.\n\nLANDING: task.commits held only checkpoint 43a84045. The one own hunk left was preview-start-command.test.ts adding the kind to WRAPPER_FENCED_SERVED_KINDS; the file's ENTIRE delta was that single line, so no foreign bytes rode along. Landed 4e6aa894, path now clean."
 }

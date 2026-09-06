@@ -43,7 +43,17 @@
       ],
       "newFiles": [
         "apps/control-room/src/v2/goals/deploy-target-form.tsx"
-      ]
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "THE CONTROL. NEW module `apps/control-room/src/v2/goals/deploy-target-form.tsx` — **new because `goal-deployments.tsx` is EXACTLY 250 lines, at the cap** (risk F).\n\nFOUR INPUTS matching the payload roster: environment, network, sshTarget, url. Arm/confirm shape, copied from the PUBLISH card so there is one interaction grammar on this screen.\n\n**THE ENVIRONMENT IS NAMED UNMISTAKABLY ON THE CONTROL AND ON ITS CONFIRM STEP** (risk C, DoD 2). This is the row's one safety property. A target bound to the wrong environment silently redirects a later deploy to another host; the daemon stores exactly what it was handed and nothing downstream can tell it was a slip. The confirm step must make the environment impossible to misread — not a subtitle, not a placeholder.\n\n**`sshTarget` IS VISIBLY OPTIONAL AND ITS EMPTY MEANING IS STATED**: leaving it blank means a local docker daemon. Say that in the label, not only in a tooltip. A control that implied it was required would make the local path unreachable.\n\n**ALL FOUR ADMISSION REFUSALS RENDER VERBATIM AS OPERATOR WORDS, EACH WITH ITS CODE** (DoD 3): a url carrying userinfo, and a network or sshTarget containing whitespace, a shell metacharacter, a newline or a NUL. **Render the REFUSAL — do not silently clean the input and resubmit** (risk D). The daemon refusing outright is the design; a control that repaired the value would be inventing one.\n\n**NO CREDENTIAL FIELD** (risk E). No password, no token, no key, no passphrase. `sshTarget` is a destination, not an authenticator. Nothing this control renders or dispatches may carry something that authenticates.\n\n**ASCII-ONLY SOURCES AND APOSTROPHE-FREE JSX TEXT** (risk G) — the scheduler package-boundary scan reds on an apostrophe in JSX. Write \"cannot\" rather than a contraction. Confirm the new testid namespace is free before using it, following `environmentTestId`'s existing convention in the sibling card.\n\nUnder 250 lines.\n\n---\n\n**ADDED BY AMENDMENT (governor 14:48Z, routing worker-1d53e70c's finding from task-2cedb26a) — THE RAW PREREQUISITE TOKEN.**\n\n**THE DEFECT:** the daemon reports `missing: [\"deployment.set_target\"]` and the browser renders it RAW — the operator sees **\"STILL NEEDS deployment.set_target\"**, a command kind quoted at a human. `work-labels.ts` `MISSING_TOKENS` has no entry for it, so the raw token falls through.\n\n**ADD ONE `MISSING_TOKENS` ENTRY**, reading like *\"a deploy target to be bound for an environment\"* — a phrase that tells the operator what is missing and implies what to do, rather than naming an internal kind. Match the voice of the entries already there rather than inventing a new register.\n\n**ASSERT IT IN `work-labels`' OWN TEST**, not only through the card. The token map is the authority and it needs an arm of its own; a card-level assertion would pass for the wrong reason if the card happened to special-case the string.\n\n**KEEP THE CARD'S `DEPLOY_TARGET_MISSING` WORDS CONSISTENT WITH IT.** The same absence is now described in two places — the refusal words on the card and the missing-token phrase — and they must not contradict each other. An operator who reads \"a deploy target to be bound for an environment\" in one place and something differently-shaped in the other has to work out whether they are the same problem.\n\n**THESE TWO FILES JOIN THIS STEP'S SCOPE:** `apps/control-room/src/v2/ops/work-labels.ts` (or wherever `MISSING_TOKENS` currently lives — measure it, do not trust this path) and its test sibling. Declare them in `complete_step.modifiedFiles`.\n\n**THE FAIL-CLOSED CORNER worker-1d53e70c FOUND IS CORRECT BEHAVIOUR, NOT A BUG TO FIX HERE:** a committed `set_target` whose payload no longer decodes reports `missing`. That is the right answer — an undecodable binding is not a binding — and it belongs in that row's completion record, not in this control.",
+          "reason": "Governor 14:48Z routed worker-1d53e70c's 2cedb26a finding here: the `missing: [\"deployment.set_target\"]` prerequisite token renders RAW in the browser (\"STILL NEEDS deployment.set_target\") because work-labels.ts MISSING_TOKENS has no entry. This row is the right home (the target-binding control). Adds work-labels.ts + its test to this step's scope; the DoD clause is the governor's to add.",
+          "amendedBy": "architect-b63fabf3",
+          "amendedAt": "2026-09-06T15:03:00.889Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-4",
@@ -98,7 +108,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:54:35.362Z",
-  "updatedAt": "2026-09-06T14:05:20.825Z",
+  "updatedAt": "2026-09-06T15:03:00.889Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.554Z",
     "plannedStepCount": 6,

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPROVAL_INTENT_FAMILY,
-  CRITERION_FAMILY, REPOSITORY_RECOVERY_FAMILY,
+  CRITERION_FAMILY, ENV_EXAMPLE_SYNC_FAMILY, REPOSITORY_RECOVERY_FAMILY,
   BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
-  GRAPH_FAMILY,
+  GRAPH_FAMILY, SETTINGS_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
@@ -23,10 +23,10 @@ import {
  * is where the next command kind will be registered.
  */
 type Family =
-  | "CRITERION" | "REPOSITORY_RECOVERY"
+  | "CRITERION" | "ENV_EXAMPLE_SYNC" | "REPOSITORY_RECOVERY"
   | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "DESIGN" | "ENVIRONMENT" | "GRAPH"
   | "PREVIEW" | "RELEASE"
-  | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
+  | "REVIEW" | "SESSION" | "SETTINGS" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
   readonly agent: readonly string[] | null;
@@ -224,12 +224,18 @@ const ROWS: readonly VocabularyRow[] = [
     kind: "project.bind_repository", payloadKeys: ["observation"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "project.register",
     payloadKeys: ["owner"] },
+  { agent: null, capability: ADMIN, family: "SETTINGS", kind: "project.set_agent_provider",
+    payloadKeys: ["base", "goalId", "provider"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "BOOTSTRAP", kind: "provider.probe",
     payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "repository.publish",
     payloadKeys: ["approval", "goalId", "remoteUrl"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "RELEASE", kind: "release.decide",
     payloadKeys: ["base", "decision", "goalId", "sha"] },
+  // Its OWN one-entry family, like RELEASE: GOAL because it acts on the product a goal
+  // produced, and `agent` null because committing in the operator's repository is their act.
+  { agent: null, capability: GOAL, family: "ENV_EXAMPLE_SYNC", kind: "product_contract.sync_env_example",
+    payloadKeys: ["contractId"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "deployment.set_target",
     payloadKeys: ["environment", "network", "sshTarget", "url"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "deployment.deploy",
@@ -263,6 +269,7 @@ const ROWS: readonly VocabularyRow[] = [
 /** Views over the production maps, so a value here is always the shipped value. */
 const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<string, string>>> = {
   CRITERION: new Map(Object.entries(CRITERION_FAMILY)),
+  ENV_EXAMPLE_SYNC: new Map(Object.entries(ENV_EXAMPLE_SYNC_FAMILY)),
   REPOSITORY_RECOVERY: new Map(Object.entries(REPOSITORY_RECOVERY_FAMILY)),
   APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
@@ -273,19 +280,21 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   RELEASE: new Map(Object.entries(RELEASE_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
+  SETTINGS: new Map(Object.entries(SETTINGS_FAMILY)),
   GRAPH: new Map(Object.entries(GRAPH_FAMILY)),
   STEP: new Map(Object.entries(STEP_FAMILY)),
   WORK: new Map(Object.entries(WORK_FAMILY)),
 };
 
 const FAMILY_NAMES = [
-  "CRITERION", "REPOSITORY_RECOVERY",
+  "CRITERION", "ENV_EXAMPLE_SYNC", "REPOSITORY_RECOVERY",
   "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "DESIGN", "ENVIRONMENT", "GRAPH", "PREVIEW",
   "RELEASE", "REVIEW",
-  "SESSION", "STEP", "WORK",
+  "SESSION", "SETTINGS", "STEP", "WORK",
 ] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
+  "project.set_agent_provider",
   "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // Both approval wires are human-only: the intent seam derives the authority the caller-shaped
   // wire used to accept, so gating one and not the other would leave the derived wire reachable
@@ -293,7 +302,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish", "repository.bootstrap",
-  "release.decide",
+  "release.decide", "product_contract.sync_env_example",
   "deployment.set_target", "deployment.deploy", "deployment.rollback",
   // The operator ANSWERS a material product question -- the human act the clarification
   // fence exists to keep off every agent wire.
@@ -317,8 +326,8 @@ describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(59);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(59);
+    expect(ROWS).toHaveLength(61);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(61);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -362,7 +371,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(48);
+    expect(declared).toHaveLength(50);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -380,6 +389,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.RELEASE.size).toBe(1);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);
+    expect(FAMILY_MAPS.SETTINGS.size).toBe(1);
     expect(FAMILY_MAPS.STEP.size).toBe(3);
     expect(FAMILY_MAPS.WORK.size).toBe(3);
   });
@@ -389,6 +399,7 @@ describe("command vocabulary", () => {
     // write a family entry can hand itself any capability it likes.
     expect(Object.isFrozen(APPROVAL_INTENT_FAMILY)).toBe(true);
     expect(Object.isFrozen(CRITERION_FAMILY)).toBe(true);
+    expect(Object.isFrozen(ENV_EXAMPLE_SYNC_FAMILY)).toBe(true);
     expect(Object.isFrozen(REPOSITORY_RECOVERY_FAMILY)).toBe(true);
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
     expect(Object.isFrozen(COMPILER_FAMILY)).toBe(true);
@@ -399,6 +410,7 @@ describe("command vocabulary", () => {
     expect(Object.isFrozen(RELEASE_FAMILY)).toBe(true);
     expect(Object.isFrozen(REVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(SESSION_FAMILY)).toBe(true);
+    expect(Object.isFrozen(SETTINGS_FAMILY)).toBe(true);
     expect(Object.isFrozen(STEP_FAMILY)).toBe(true);
     expect(Object.isFrozen(WORK_FAMILY)).toBe(true);
     expect(Object.isFrozen(PAYLOAD_KEYS)).toBe(true);
@@ -418,8 +430,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(23);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(23);
+    expect(OPERATOR_ONLY).toHaveLength(25);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(25);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

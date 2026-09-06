@@ -51,7 +51,10 @@ import {
   STEP_FINISH_PAYLOAD_KEYS, STEP_START_COMMAND_KIND, STEP_START_PAYLOAD_KEYS,
 } from "./work/step-lifecycle-contracts.js";
 import type { WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { AGENT_PROVIDER_COMMAND_KIND, AGENT_PROVIDER_PAYLOAD_KEYS }
+  from "./orchestrator/agent-provider-command.js";
 import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository/repository-recovery-contracts.js";
+import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
 
 /**
  * WHICH EXACT PAYLOAD KEYS each wired kind admits, and nothing else about a kind.
@@ -163,9 +166,15 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // DAEMON_INGRESS unreachable from the browser -- the one caller that most needs to be told
     // what it did wrong.
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
-    "project.register": ["owner"], "provider.probe": ["observation"],
+    "project.register": ["owner"],
+    [AGENT_PROVIDER_COMMAND_KIND]: [...AGENT_PROVIDER_PAYLOAD_KEYS],
+    "provider.probe": ["observation"],
     "repository.publish": ["approval", "goalId", "remoteUrl"],
     "release.decide": ["base", "decision", "goalId", "sha"],
+    // `projectId` is ABSENT BY CONSTRUCTION, as it is for `repository.bootstrap` above: it
+    // comes from the authenticated principal, so naming it is INPUT_INVALID at PAYLOAD_SHAPE.
+    // A caller-supplied projectId would read another project's contract.
+    [ENV_EXAMPLE_SYNC_COMMAND_KIND]: ["contractId"],
     // The docker build CONTEXT is deliberately absent from the deploy: it is host-scoped daemon
     // configuration, and a caller-supplied path would let any operator-authenticated request
     // build an arbitrary directory on the daemon's host. Both lists are the slice's own.

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -252,10 +252,20 @@ const ROWS: readonly Row[] = [
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
+  { agent: null, capability: ADMIN, code: "AGENT_PROVIDER_UNCONFIGURED",
+    kind: "project.set_agent_provider", layer: "DAEMON_COMPOSITION",
+    payloadKeys: ["base", "goalId", "provider"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "RELEASE_PR_FAILED",
     kind: "release.decide", layer: "RUNNER_WORKSPACE", payloadKeys: ["base", "decision", "goalId", "sha"] },
+  // Writing the approved contract's required variable NAMES into the bound repository's
+  // committed `.env.example`. Async-only: a file write plus `git` spawns, which a synchronous
+  // handler cannot express. `agent` is null and OPERATOR_ONLY carries it: committing in the
+  // operator's own repository is their act. An empty payload names no contract, so the
+  // operator path answers the approval gate's refusal from the daemon prerequisite layer.
+  { agent: null, asyncOnly: true, capability: GOAL, code: "ENV_EXAMPLE_CONTRACT_UNAPPROVED",
+    kind: "product_contract.sync_env_example", layer: PREREQ_LAYER, payloadKeys: ["contractId"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
     layer: PREREQ_LAYER, payloadKeys: ["approval", "goalId", "remoteUrl"] },
   // Creating a product repository at an operator-supplied path. Async-only: the service runs
@@ -365,8 +375,10 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
   "project.activate",
-  "project.bind_repository", "project.register", "provider.probe", "repository.publish",
-  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  "project.bind_repository", "project.register", "project.set_agent_provider",
+  "provider.probe", "repository.publish",
+  "release.decide", "product_contract.sync_env_example",
+  "deployment.set_target", "deployment.deploy", "deployment.rollback",
   "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -380,6 +392,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
+  "project.set_agent_provider",
   "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // BOTH approval wires. The intent seam derives the activation witness and the record the
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
@@ -388,6 +401,8 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
   "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  // Writing into and committing in the operator's own product repository is their act.
+  "product_contract.sync_env_example",
   // The operator ANSWERS a material product question; an agent transport presenting
   // that answer would be quiet invention with a human label (see the vocabulary set).
   "product_contract.answer_clarification",
@@ -502,6 +517,43 @@ function openSession(
   expect(opened).toMatchObject({ decision: { disposition: "DECIDED" }, outcome: "ACCEPTED" });
   return secret;
 }
+
+describe("project.set_agent_provider fails closed on its own synchronous edge", () => {
+  const payload = { base: "main", goalId: "", provider: "codex" };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally { reader.close(); }
+  };
+
+  it("refuses a well-formed operator dispatch without any durable write", () => {
+    const before = snapshot();
+    expect(send("cmd-provider-unconfigured", "project.set_agent_provider", payload)).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+      refusal: { code: "AGENT_PROVIDER_UNCONFIGURED", layer: "DAEMON_COMPOSITION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses the non-operator at authorization before composition", () => {
+    const credential = openSession("cmd-provider-session", "provider-agent", randomUUID(), [ADMIN, WORK]);
+    const before = snapshot();
+    expect(send("cmd-provider-agent", "project.set_agent_provider", payload, credential)).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("serves one ADMIN entry synchronously with no staffing capability", () => {
+    const entry = deps.registry.get("project.set_agent_provider");
+    expect(entry).toMatchObject({ kind: "project.set_agent_provider", requiredCapability: ADMIN,
+      payloadKeys: ["base", "goalId", "provider"] });
+    expect(entry?.asyncHandler).toBeUndefined();
+    expect(agentCapabilitiesFor("project.set_agent_provider")).toBeNull();
+  });
+});
 
 describe("release.decide operator-only async wiring", () => {
   const payload = { base: "main", decision: "APPROVE", goalId: "release-goal", sha: "b".repeat(40) };
@@ -989,8 +1041,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(59);
-    expect(deps.registry.size).toBe(59);
+    expect(ROWS).toHaveLength(61);
+    expect(deps.registry.size).toBe(61);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1039,7 +1091,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(59);
+    expect(REGISTRATION_ORDER).toHaveLength(61);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1210,8 +1262,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(23);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(23);
+      expect(OPERATOR_ONLY).toHaveLength(25);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(25);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1892,7 +1944,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(59);
+    expect(ports.registry.size).toBe(61);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1914,7 +1966,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(59);
+    expect(supplied.registry.size).toBe(61);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1946,7 +1998,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(59);
+    expect(snapshotPorts.registry.size).toBe(61);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

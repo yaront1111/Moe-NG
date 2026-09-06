@@ -140,6 +140,18 @@ function refusalCodeOf(queryKind: string): string | null {
 }
 
 describe("wiredMcpToolKinds command half", () => {
+  it("keeps paired-human bootstrap excluded through the unchanged operator partition", () => {
+    expect(provider.provide().registry.has("repository.bootstrap")).toBe(true);
+    expect(OPERATOR_PRINCIPAL_KINDS.has("repository.bootstrap")).toBe(true);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(
+      [...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort(),
+    );
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("repository.bootstrap");
+    expect(wiredMcpToolKinds()).not.toContain("repository.bootstrap");
+    expect(allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.kind))
+      .not.toContain("repository.bootstrap");
+  });
+
   it("release.decide belongs to the exact served operator exclusion partition", () => {
     const operatorKinds: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
     const served = [...provider.provide().registry.keys()]
@@ -203,7 +215,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(22);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(24);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -244,7 +256,11 @@ describe("wiredMcpToolKinds command half", () => {
     // advertised command plus one advertised query (`design.read`). A `design.submit` that had
     // been copied into OPERATOR_PRINCIPAL_KINDS by habit would show here as excluded: 18,
     // wired: 43.
-    }).toEqual({ excluded: 22, queries: 7, vocabulary: 59, wired: 44 });
+    // task-f1e40296 moved `vocabulary` and `excluded` by one each and `wired` by ZERO, the same
+    // shape as task-a2409cba above: `product_contract.sync_env_example` entered the vocabulary AND
+    // the operator-only class in the SAME change, so it was never advertised for a moment. A copy
+    // of it into the allowlist by habit would show here as wired: 45.
+    }).toEqual({ excluded: 24, queries: 7, vocabulary: 61, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {

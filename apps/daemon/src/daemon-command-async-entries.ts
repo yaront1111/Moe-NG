@@ -10,6 +10,12 @@ import type { CommandRegistryEntry } from "./http/http-contract.js";
 import { DomainRefusal, domainRefusalOf } from "./daemon-command-dispatch.js";
 import { RELEASE_DECIDE_COMMAND_KIND, releaseRefusal }
   from "./release/release-decide-contracts.js";
+import { createReleaseDecideHandler } from "./release/release-decide-service.js";
+import type {
+  ReleaseDossierFactsPort, ReleasePublisher,
+} from "./release/release-decide-service.js";
+import { createGhReleasePrPort } from "./release/release-pr-port.js";
+import type { ReleasePrPort } from "./release/release-pr-port.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { unconfiguredFoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
@@ -25,6 +31,9 @@ import { PREVIEW_START_COMMAND_KIND } from "./preview/preview-contracts.js";
 import { createPreviewStartHandler } from "./preview/preview-start-command.js";
 import type { PreviewSupervisor } from "./preview/preview-supervisor.js";
 import { createNodeProjectCatalogRegistrar } from "./projects/project-catalog-registrar.js";
+import { ENV_EXAMPLE_SYNC_COMMAND_KIND }
+  from "./repository/env-example-sync-contracts.js";
+import { createEnvExampleSyncHandler } from "./repository/env-example-sync-command.js";
 import { createRepositoryBootstrapHandler } from "./repository/repository-bootstrap-command.js";
 import type { BootstrapCatalogPort } from "./repository/repository-bootstrap-command.js";
 import { REPOSITORY_BOOTSTRAP_COMMAND_KIND }
@@ -48,6 +57,11 @@ export type AsyncCommandKind =
   // `daemon-command-registry.ts` for the reason that file's own comment gives: the registry is
   // past its size cap, and this module is exactly the seam it spreads for async kinds.
   | typeof REPOSITORY_BOOTSTRAP_COMMAND_KIND
+  // `product_contract.sync_env_example` writes a file into the operator's bound repository and
+  // spawns `git` to land it. A synchronous `CommandHandler` returns a `DurableDecision` with no
+  // await available, so it could only answer BEFORE the file was written and the commit made,
+  // and every receipt downstream of it would describe an intention rather than a committed file.
+  | typeof ENV_EXAMPLE_SYNC_COMMAND_KIND
   // `deployment.deploy` runs `docker build`, an optional `docker save | ssh docker load`, and a
   // health poll that waits out docker's own start-period before the candidate replaces the
   // incumbent. A `CommandHandler` answers with a `ServiceOutcome` synchronously, so a sync
@@ -112,8 +126,26 @@ export interface AsyncCommandEntryOptions {
   readonly previewWorkspace?: string | null;
   /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
+  /** ABSENT, or missing a publisher/facts/workspace, leaves release.decide fail-closed. */
+  readonly releaseDecide?: ReleaseDecideSeams;
   readonly store: SqliteEventStore;
   readonly verificationCatalogSource?: () => unknown;
+}
+
+/**
+ * The release edge's collaborators. `publisher` is taken off the ALREADY-COMPOSED
+ * `repository-delivery-runtime` publisher rather than constructed here, for the same reason
+ * `previewSupervisor` is: a second `createNodePublisher` would mint its own controller id and
+ * its own reservation owner, which is a second push path in everything but name (task rail 3).
+ * ABSENT is a REFUSING state under the producer's own RELEASE_PR_FAILED, never a skipped one.
+ */
+export interface ReleaseDecideSeams {
+  readonly clock?: () => string;
+  readonly dossierFacts?: ReleaseDossierFactsPort;
+  readonly prPort?: ReleasePrPort;
+  readonly publisher?: ReleasePublisher;
+  /** The SAME workspace node-publisher takes. NULL refuses; it never pushes. */
+  readonly workspace?: string | null;
 }
 
 /** Async entries bypass the registry's synchronous fence, so release fences at entry. */
@@ -213,6 +245,33 @@ export function createAsyncCommandEntries(
     ...(deploySeams.ports === undefined ? {} : { ports: deploySeams.ports }),
     ...(deploySeams.sleep === undefined ? {} : { sleep: deploySeams.sleep }),
   });
+  const syncEnvExampleCommand = createEnvExampleSyncHandler({
+    // The SAME catalog source the foundation handlers above read, so this command resolves the
+    // identical repository scope authority rather than a second view of it.
+    catalogSource: foundationCatalogSource,
+    operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+  });
+  // The release edge. Composed ONLY when the daemon actually has a publisher, the dossier
+  // facts and a non-null workspace; anything less stays on the fail-closed stub, which refuses
+  // under RELEASE_PR_FAILED rather than substituting a default and pushing somewhere nobody
+  // named. A null workspace refuses here for the same reason node-publisher refuses it.
+  const releaseSeams = options.releaseDecide ?? {};
+  const releaseWorkspace = releaseSeams.workspace ?? null;
+  const releaseDecideCommand
+    = releaseSeams.publisher !== undefined && releaseSeams.dossierFacts !== undefined
+      && releaseWorkspace !== null
+      ? createReleaseDecideHandler({
+        dossierFacts: releaseSeams.dossierFacts,
+        operatorPrincipalId: options.operatorPrincipalId,
+        prPort: releaseSeams.prPort ?? createGhReleasePrPort({ cwd: releaseWorkspace }),
+        projectId,
+        publisher: releaseSeams.publisher,
+        store,
+        // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
+        // is a DIFFERENT thing from an absent key, and only the absent key means "real clock".
+        ...(releaseSeams.clock === undefined ? {} : { clock: releaseSeams.clock }),
+      })
+      : unconfiguredReleaseHandler(options.operatorPrincipalId);
   const startPreviewCommand = createPreviewStartHandler({
     operatorPrincipalId: options.operatorPrincipalId, projectId, store,
     // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
@@ -245,7 +304,7 @@ export function createAsyncCommandEntries(
       requiredCapability: CAPABILITIES.GOAL,
     }),
     [RELEASE_DECIDE_COMMAND_KIND]: Object.freeze({
-      asyncHandler: unconfiguredReleaseHandler(options.operatorPrincipalId),
+      asyncHandler: releaseDecideCommand,
       handler: foundationSyncHandler, kind: RELEASE_DECIDE_COMMAND_KIND,
       payloadKeys: PAYLOAD_KEYS[RELEASE_DECIDE_COMMAND_KIND], requiredCapability: CAPABILITIES.GOAL,
     }),
@@ -254,6 +313,14 @@ export function createAsyncCommandEntries(
       kind: REPOSITORY_BOOTSTRAP_COMMAND_KIND,
       payloadKeys: PAYLOAD_KEYS[REPOSITORY_BOOTSTRAP_COMMAND_KIND],
       requiredCapability: CAPABILITIES.ADMIN,
+    }),
+    [ENV_EXAMPLE_SYNC_COMMAND_KIND]: Object.freeze({
+      asyncHandler: syncEnvExampleCommand, handler: foundationSyncHandler,
+      kind: ENV_EXAMPLE_SYNC_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[ENV_EXAMPLE_SYNC_COMMAND_KIND],
+      // GOAL, matching `ENV_EXAMPLE_SYNC_FAMILY`: the capability fences REACH only, and the
+      // operator fence at the handler's own entry is what makes the write a human act.
+      requiredCapability: CAPABILITIES.GOAL,
     }),
     [FOUNDATION_DISPATCH_COMMAND_KIND]: Object.freeze({
       asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler,

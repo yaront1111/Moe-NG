@@ -1,6 +1,6 @@
 import type { RuntimeCommandKind } from "@moe/contracts";
+import { AGENT_PROVIDER_COMMAND_KIND } from "./orchestrator/agent-provider-command.js";
 import { CRITERION_APPROVE, CRITERION_VERIFY } from "./criterion-evidence/criterion-contracts.js";
-
 import { EFFECT_ACTIVATE_COMMAND_KIND } from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
@@ -26,6 +26,7 @@ import { JOURNAL_APPEND_COMMAND_KIND } from "./journal/journal-contracts.js";
 import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
   from "./preview/preview-contracts.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
+import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
 } from "./product-contract/product-contract-gate-1-contract.js";
@@ -174,6 +175,9 @@ export const RELEASE_FAMILY: Readonly<Record<typeof RELEASE_DECIDE_COMMAND_KIND,
   Object.freeze({ [RELEASE_DECIDE_COMMAND_KIND]: CAPABILITIES.GOAL });
 export const CRITERION_FAMILY = Object.freeze({ [CRITERION_APPROVE]: CAPABILITIES.ADMIN, [CRITERION_VERIFY]: CAPABILITIES.ADMIN });
 export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN });
+/** GOAL like `release.decide`: acts on the product a goal produced. REACH only -- OPERATOR_PRINCIPAL_KINDS below is the human gate. NOT a bootstrap kind. */
+export const ENV_EXAMPLE_SYNC_FAMILY = Object.freeze({ [ENV_EXAMPLE_SYNC_COMMAND_KIND]: CAPABILITIES.GOAL });
+export const SETTINGS_FAMILY = Object.freeze({ [AGENT_PROVIDER_COMMAND_KIND]: CAPABILITIES.ADMIN });
 
 /** ADMIN fences REACH -- it keeps scoped agent sessions out. It is NOT the human gate: what
  *  makes these two human-only is OPERATOR_PRINCIPAL_KINDS below, plus the MCP exclusion
@@ -214,8 +218,9 @@ export const DESIGN_FAMILY: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export type WiredCommandKind =
+  | typeof AGENT_PROVIDER_COMMAND_KIND
   | "deployment.rollback"
-  | typeof RELEASE_DECIDE_COMMAND_KIND
+  | typeof RELEASE_DECIDE_COMMAND_KIND | typeof ENV_EXAMPLE_SYNC_COMMAND_KIND
   | "design.submit"
   | "repository.recover"
   | typeof CRITERION_APPROVE | typeof CRITERION_VERIFY
@@ -247,7 +252,7 @@ const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = O
   APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
   GRAPH_FAMILY,
   PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
-  REPOSITORY_RECOVERY_FAMILY,
+  REPOSITORY_RECOVERY_FAMILY, SETTINGS_FAMILY, ENV_EXAMPLE_SYNC_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -260,7 +265,8 @@ export function familyCapabilityOf(kind: string): string | null {
 }
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
-  if (kind === "deployment.rollback") return null;
+  if (kind === AGENT_PROVIDER_COMMAND_KIND) return null;
+  if (kind === "deployment.rollback" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;
   if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
@@ -339,6 +345,7 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
  *  capabilities say. `resource.confirm_released` belongs here because a proven release
  *  is a human's evidence about the physical world; ADMIN above only fences reach. */
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
+  AGENT_PROVIDER_COMMAND_KIND,
   CRITERION_APPROVE, CRITERION_VERIFY,
   "repository.recover",
   "approval.decide",
@@ -383,6 +390,8 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // synchronous operator check -- it fences itself at handler entry, and this membership is what
   // keeps it off the MCP roster rather than what fences the dispatch.
   "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  // Writing in the operator's own repository is their act. ASYNC-served like `deployment.deploy` above, so this membership keeps it off MCP; the handler fences itself at entry.
+  ENV_EXAMPLE_SYNC_COMMAND_KIND,
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
   // `approval.decide` is reserved for. The other three propose, release or request and activate

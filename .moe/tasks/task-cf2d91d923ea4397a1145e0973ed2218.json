@@ -22,58 +22,101 @@
     {
       "stepId": "step-1",
       "description": "MEASURE, NO EDITS. Confirm the five facts and paste outputs. (a) `git grep -n \"deploymentDeploy\" -- apps/daemon/src` — expect the seam declared at daemon-command-async-entries.ts:69/:92 and consumed at :202, and NOTHING in daemon-command-registry.ts, daemon-store-foundation-composition.ts or daemon-v2-command-registry.ts. That absence IS this row's production diff; if a peer has since forwarded it, say so and shrink the row rather than duplicating the edit. (b) `grep -n \"repositoryBootstrap\" apps/daemon/src/daemon-command-registry.ts` — :154 declares it and :296-297 forwards it; that is the EXACT pattern to copy for deploymentDeploy. (c) `sed -n '288,305p' tests/e2e/control-room/daemon-ports.ts` — confirm the `--dependencies=` switch and the `fixedDemoGoal` flag that selects a lane provider. (d) Read tests/e2e/control-room/fixed-demo-goal-dependencies.ts end to end — 50 lines, and the working template for a lane provider that wraps the PRODUCTION composition. (e) Read the prerequisite's state: task-79f8c7c00efe447a922f42b1967c3968 via get_context.epicSiblings. If it has NOT landed, `productionDeployPorts` still returns `target: () => null` and no deploy can reach docker — your DoD-2 arm would be unprovable, and the correct response is to report that, NOT to plant a target event by hand. Record the global-rail-3 baseline: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, and `pnpm test:e2e:browser`, saving the failing-path rosters and the SPEC COUNT.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-async-entries.ts"
-      ]
+      ],
+      "note": "NO EDITS. Claim 6eb68c3e. Confirmed deploymentDeploy only async entries (69/92/202), absent registry/root/v2. repositoryBootstrap154/296 exact optional-spread precedent; daemon-ports293 --dependencies switch; read fixed-demo provider50 lines. Prereq79 DONE landed1faef6a3, durable target reader (completion/review via epicSiblings). Peer dirty root composition health and lane catalogPath preserved. BEFORE async-entry actual gate --config package.json --root .:1file6tests exit0; initial missing-config run found NO tests exit1, not counted. BEFORE pnpm typecheck19projects exit1: vocabulary.test.ts7 SETTINGS_FAMILY missing,227/292 project.set_agent_provider not WiredCommandKind; orchestrator/agent-provider-command.test.ts4 module absent. Foreign pre-edit. E2E driver tsc exit0 (not specs). Full-suite lease held f72/cc05; approved step7 permits cited recent358 full daemon12:46:36Z cf1d4538→13:11:20Z dd07b69d 7failed515passed522files/12failed9739passed4skipped9755tests exit1 BASELINE ONLY. Request scoped browser gate amendment in governors fdeb249a (full baseline not run, no claimed specs). Will write step3 arms before step2 production as TDD requires.",
+      "startedAt": "2026-09-06T14:43:03.508Z",
+      "completedAt": "2026-09-06T14:49:22.658Z"
     },
     {
       "stepId": "step-2",
       "description": "FORWARD THE SEAM THROUGH THE PRODUCTION COMPOSITION — three small edits, no new capability. (1) apps/daemon/src/daemon-command-registry.ts: add `readonly deploymentDeploy?: DeploymentDeploySeams;` to `DaemonCommandPortOptions` beside `repositoryBootstrap` (:154), and forward it into the `createAsyncCommandEntries` call using the SAME spread-not-assign idiom already used at :296-297 (`...(options.deploymentDeploy === undefined ? {} : { deploymentDeploy: options.deploymentDeploy })`) — under exactOptionalPropertyTypes an explicit `undefined` is a different thing from an absent key, and only the absent key means \"production default\". (2) apps/daemon/src/daemon-store-foundation-composition.ts: add the same optional field to `StoreDependencyConfig` and forward it into the `createDaemonCommandPorts({...})` call, with the same spread idiom. (3) apps/daemon/src/daemon-v2-command-registry.ts: forward it at its own `createDaemonCommandPorts` call (:71) — miss this and v1 gets the fake while v2 silently keeps the real runner, which is a lane that looks green over a half-wired daemon. BOTH FILES IN (1) AND (2) ARE ALREADY PAST THE 400-LINE CAP (531 and 580): add only the option and its forwarding, do not refactor, and do not reorder anything — several rows are editing both. NO FAKE, NO ENV-VAR CHECK AND NO DEFAULT FALLBACK MAY ENTER apps/daemon (task rail 2): absent seam must continue to mean the real runners.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-store-foundation-composition.ts",
         "apps/daemon/src/daemon-v2-command-registry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-v2-command-registry.ts",
+        "apps/daemon/src/daemon-command-async-entries.test.ts"
+      ],
+      "note": "TDD: wrote step3 arms first. Initial V2 harness CUTOVER_V2_NOT_ACTIVE corrected using existing activateV2Directly fixture (real gate, no admission mock). RED exact 2failed8passed: injected V1/V2 expected DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE but got DEPLOY_BUILD_CONTEXT_UNCONFIGURED@DAEMON_COMMAND_SEAM at async-entry.test105. Added only type+optional spreads: registry→async entries; root→BOTH v1/v2; v2 captures option once then forwards. No runtime fake/env/default changes. GREEN same standalone gate1file10tests exit0. Root existing health hunks preserved. Test path is approved step3, reported here for TDD ordering.",
+      "startedAt": "2026-09-06T14:49:23.109Z",
+      "completedAt": "2026-09-06T14:52:36.781Z"
     },
     {
       "stepId": "step-3",
       "description": "THE DAEMON-SIDE ARMS, in apps/daemon/src/daemon-command-async-entries.test.ts (it already passes `deploymentDeploy` at :112, so the harness exists). Write these RED first. (1) THE PRODUCTION DEFAULT IS THE REAL RUNNER (DoD 3, and the anti-vacuity clause of this row): compose through the production path with NO seam supplied and assert by REFERENCE IDENTITY that the composed docker port IS the exported real runner (`nodeDockerRunner`), not a fake and not a wrapper. Assert what was COMPOSED — reading the source, or asserting only that a supplied seam works, would not catch a fallback added later. (2) THE SEAM ARRIVES WHEN SUPPLIED (DoD 1's daemon half): supply a `ports` object through the SAME production option chain you wired in step 2 — `createStoreDependencies`-level, not by calling `createAsyncCommandEntries` directly — and assert the injected port is the one the deploy reaches by OBSERVING IT BEING CALLED, not by trusting the wiring. (3) BOTH PLANES: repeat the identity assertion for the v2 registry path, since it composes separately. Keep these arms cheap and synchronous; the expensive proof is the lane's, in step 6.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-async-entries.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-async-entries.test.ts"
+      ],
+      "note": "Four new daemon arms over actual createStoreDependencies.provide/provideV2, two per plane: actual createDeployService input docker identity===nodeDockerRunner with absent seam (intercept only before spawning); injected unavailable docker called version argv and durable receipt preserves DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE. Existing fixture activates V2 gate, no gate mock. Both defaults pass before wiring; both injections red at line105 prior wiring and green after. Fresh standalone async-entry1file10tests0. Unit harness prior publish authority uses existing bootstrap fixture; will NOT reuse that mocked publish setup for real lane DoD2 (reported governors23f04b85). Runtime production changes remain only3 minimal forwarding paths.",
+      "startedAt": "2026-09-06T14:52:37.289Z",
+      "completedAt": "2026-09-06T14:53:37.114Z"
     },
     {
       "stepId": "step-4",
       "description": "THE LANE PROVIDER — NEW FILE tests/e2e/control-room/fake-docker-dependencies.ts, modelled on fixed-demo-goal-dependencies.ts (read it first; 50 lines, same shape). It imports `createStoreDependencies` and `readStoreDependencyEnv` from `../../../apps/daemon/src/daemon-store-dependencies.js` — that import path is proven to work from the lane driver today — calls the PRODUCTION composition with `deploymentDeploy: { ports: <fake>, healthBudgetMs, pollMs, sleep }`, and re-exports the provider as the default export the way the template does. THE FAKE LIVES ENTIRELY IN THIS FILE, under tests/. It implements the `DeployPorts` shape and replaces ONLY the spawns — docker, ssh and transfer. It must NOT stub the ledger, the receipts, the admission or the command edge; those stay real and that is what DoD 2 certifies. SCRIPT ITS BEHAVIOUR FROM AN ENV VAR the spec sets when spawning the daemon (the spec cannot call into a child process): one variable selecting SUCCESS or a named refusal. Cover at least a success and `DEPLOY_DOCKER_UNAVAILABLE`, which the engine raises at deploy-service.ts:236 when the first `docker version` call returns nonzero and is the cheapest refusal to drive; use `healthBudgetMs`/`pollMs`/`sleep` from the seam for a timeout arm rather than adding new knobs or waiting real time. Default the variable to SUCCESS so a spec that forgets to set it does not silently exercise a refusal path.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/fake-docker-dependencies.ts"
       ],
       "newFiles": [
         "tests/e2e/control-room/fake-docker-dependencies.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+        "tests/e2e/control-room/daemon-ports.ts"
+      ],
+      "note": "Test-first e2e red (provider audit absent at spec59); implemented73line tests-only provider, with step5 selection needed to execute it. createStoreDependencies real root; full productionDeployPorts authority copied, only docker/ssh/transfer replaced using existing model. Target read facade opens SAMEstore per read, closes finally; no target/ledger/receipt/admission stub. MOE_E2E_DEPLOY_MODE read onlytests: SUCCESS(default), DOCKER_UNAVAILABLE, BUILD_FAILED, HEALTH_TIMEOUT. Missing target must be real missing binding, never scripted authority. Auditfile proves provider selected; current spawn behavior/receipt arms remain UNVERIFIED behind missing real publication (commentd6fcd41); not claiming success. E2E tsc0 and realchild starts, target setter ACCEPTED. Workspace typecheck19projects0; async-entry10tests0. Step5 path included for TDD/reachability; preexisting peer catalogPath preserved.",
+      "startedAt": "2026-09-06T14:53:37.716Z",
+      "completedAt": "2026-09-06T15:02:30.855Z"
     },
     {
       "stepId": "step-5",
       "description": "SELECT THE PROVIDER FROM THE LANE, in tests/e2e/control-room/daemon-ports.ts. Extend the existing dependency switch at :293-299 — do not write a second spawn path. Today it is a boolean (`fixedDemoGoal`) choosing between the lane provider and the production one; add the new provider as a third option in the same expression, keeping the PRODUCTION module the default so every existing spec is unaffected. Pass the fake's behaviour variable through the `env` map `spawnNode` already forwards (daemon-children.ts:81-84). Change nothing else about how the daemon is spawned: same ephemeral port, same `--dependencies=` flag, same operator-stdin handling. Confirm by reading the diff that no existing caller's behaviour changed — this file is shared by every lane spec, and a default flip here would silently re-point the whole lane at a fake daemon.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/daemon-ports.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/daemon-ports.ts"
+      ],
+      "note": "Existing one startDaemon spawn path now third opt-in fakeDocker mode selects tests/fake-docker-dependencies.ts; existing fixedDemoGoal preserved, omission still production module. Behaviorkey passed onlyenvmap to child; ambient MOE_E2E_DEPLOY_MODE cleared when option absent. No production fake-selection branch. Real3spec run verified provider file/audit loaded on2 seeded lanes and1 seed:NONE throwing-body lane. Tsc0;21.2s browser run2failed1passed, both failures later at deploy prerequisite, NOT provider selection (details nextstep/commentd6fcd41). Original provider defaults exercised by preceding red-first run: nofakeaudit (rightred), original throwingbody cleanup passed. No teardown semantics changed.",
+      "startedAt": "2026-09-06T15:02:31.407Z",
+      "completedAt": "2026-09-06T15:02:32.010Z"
     },
     {
       "stepId": "step-6",
       "description": "THE SPEC — NEW FILE tests/e2e/control-room/deploy-fake-docker.spec.ts, against a REAL daemon started through step 5's switch. FOUR ARMS. (1) SUCCESS REACHES A DURABLE RECEIPT (DoD 2): bind a target and deploy through the real command edge, then assert the receipt is written and readable THROUGH THE PRODUCTION READ PATH — not from the fake's own bookkeeping. Assert the fake was called, so the arm cannot pass against a daemon that never deployed. (2) A REFUSAL REACHES A DURABLE RECEIPT WITH ITS CODE VERBATIM (DoD 4): drive the fake to fail and assert the persisted code, with the layer, per global rail 1. (3) ONLY THE SPAWNS ARE FAKE (DoD 2, the clause that stops this seam widening): assert the admission, the ledger and the receipt are the real ones — the receipt read back through the production surface is the evidence. (4) TEARDOWN LEAVES NOTHING (DoD 5, epic rail 4): the daemon child, its port and its store directory die in a `finally`/`afterEach`, never at the end of a happy path, and assert `survivingChildren` (daemon-children.ts) is EMPTY rather than trusting `killTree` returned. Run the arms and QUOTE THE SPEC COUNT with the spec named — `test:e2e:browser` is `tsc && playwright test`, so a tsc failure means zero specs ran and exit code alone cannot tell you (task rail 5).",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/e2e/control-room/deploy-fake-docker.spec.ts"
       ],
       "newFiles": [
         "tests/e2e/control-room/deploy-fake-docker.spec.ts"
-      ]
+      ],
+      "startedAt": "2026-09-06T15:02:32.563Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "THE SPEC — NEW FILE tests/e2e/control-room/deploy-fake-docker.spec.ts, against a REAL daemon started through step 5's switch. FOUR ARMS.\n\n**AMENDED (governor 15:13Z): ARM (1) NEEDS A SEED, AND HERE IS THE EXACT RECIPE. My earlier suggestion was wrong — read this before building it.**\n\n`deployment.deploy` admits only after a committed `repository.publish` (`bootstrap-sequence.ts:55`). So arm (1) cannot deploy through the REAL admission without one, and worker-96c6d708 measured that the three obvious routes all fail:\n- the approved lane stops at approval;\n- the committed publish-remote spec forbids publication without a landing;\n- **driving `repository.publish` from the bootstrap fixture table refuses `PUBLISH_HUMAN_REQUIRED@DAEMON_AUTHORIZATION`** — which is what I wrongly suggested at 15:00Z.\n\n**WHY THAT REFUSAL HAPPENS, so the fix is understood rather than copied blindly:** `repository.publish` is one of the kinds WIDENED at `daemon-command-registry.ts:352-355` for a **durable HUMAN principal** (`isDurableHumanPrincipal`). The bootstrap fixture table's principal is not one, so the fence refuses it. The seed needs a paired HUMAN, not a louder fixture.\n\n**THE RECIPE THE TREE ALREADY HAS.** `apps/daemon/src/daemon-command-registry-human-approver.test.ts` does exactly this:\n- `mintPairing(capabilities, sessionId)` at `:56` returns `{credential, principalId}` — it writes a durable HUMAN principal record plus an open session whose credential the authenticator accepts (`:46-67`);\n- `:74` `HUMAN_ADMIN = mintPairing(OPERATOR_CAPABILITIES, \"sess-waiver-human-admin\")` and `:76` `HUMAN_NO_ADMIN = mintPairing([CAPABILITIES.PLANNING], ...)` are ready-made variants;\n- `:146` is a positive control asserting the mint really produced a durable HUMAN — **copy that control too**, so a seed that silently failed to mint cannot make arm (1) pass for the wrong reason.\n\nUse that to commit the `repository.publish` your deploy needs. If the publish ALSO requires a landing the lane cannot produce, seed the landed-goal fixture the lane composes rather than faking a landing — and if neither reaches, **report rather than narrowing**: a receipt arm that stops proving real admission is the seam widening this row exists to prevent.\n\n**DO NOT** fake the prerequisite, write the receipt directly, or reach past admission. Arm (3) is precisely the check that would then be false while green.\n\n---\n\n**THE FOUR ARMS.**\n\n**(1) SUCCESS REACHES A DURABLE RECEIPT (DoD 2):** with the seed above in place, bind a target and deploy through the real command edge, then assert the receipt is written and readable THROUGH THE PRODUCTION READ PATH — not from the fake's own bookkeeping. Assert the fake was called, so the arm cannot pass against a daemon that never deployed.\n\n**(2) A REFUSAL REACHES A DURABLE RECEIPT WITH ITS CODE VERBATIM (DoD 4):** drive the fake to fail and assert the persisted code, with the layer, per global rail 1.\n\n**(3) ONLY THE SPAWNS ARE FAKE (DoD 2, the clause that stops this seam widening):** assert the admission, the ledger and the receipt are the real ones — the receipt read back through the production surface is the evidence. **The publish seed is part of this arm's meaning: a deploy that only admitted because its prerequisite was stubbed has not gone through real admission.**\n\n**(4) TEARDOWN LEAVES NOTHING (DoD 5, epic rail 4):** the daemon child, its port and its store directory die in a `finally`/`afterEach`, never at the end of a happy path, and assert `survivingChildren` (daemon-children.ts) is EMPTY rather than trusting `killTree` returned.\n\nRun the arms and QUOTE THE SPEC COUNT with the spec named — `test:e2e:browser` is `tsc && playwright test`, so a tsc failure means zero specs ran and exit code alone cannot tell you (task rail 5).",
+          "reason": "Governor 15:13Z: the row blocked on the omission I named at 15:00Z — arm (1) needs a repository.publish the lane cannot reach. My 15:00Z suggestion (seed through the bootstrap fixture table) was WRONG: worker-96c6d708 probed it and it refuses PUBLISH_HUMAN_REQUIRED@DAEMON_AUTHORIZATION, because repository.publish is one of the kinds widened for a durable HUMAN principal. This amendment names the seed recipe the tree already has (mintPairing in daemon-command-registry-human-approver.test.ts:56) so the arm keeps its full strength instead of being narrowed.",
+          "amendedBy": "architect-b63fabf3",
+          "amendedAt": "2026-09-06T15:12:33.642Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-7",
@@ -99,7 +142,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor 15:13Z: architect-b63fabf3 amended step 6 (amend, 15:12Z) with a reachable receipt arm — the block was the plan's omission (a repository.publish state the lane cannot reach), now resolved in the effective step text. Row returns to WORKING for its next claimer; the seam, both registries and the root forwarding are already delivered as one production slice (worker-96c6d708, 10/10 green, two drills RED) — resume at step 6 under the amended text, read activeAmendmentId first.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "dependsOn": [
@@ -113,23 +156,49 @@
       "author": "architect-fa3a3e17",
       "content": "TWO NOTES CARRIED FROM A DUPLICATE ROW I FILED IN ERROR AND ARCHIVED (task-1bee7227). Both are measurements, not scope changes (architect-fa3a3e17, 2026-09-06).\n\n1. THE COMPOSITION ALREADY HAS THE SHAPE TO FOLLOW - no new mechanism needed. `apps/daemon/src/daemon-store-foundation-composition.ts` declares `StoreDependencyConfig` with optional injected config already: `schedule?: Pick<ScheduleConfig, \"timer\" | \"resolve\">`, `repositoryWorkspace?`, `affordanceMintId?`, `clock?`. A lane-supplied docker/ssh seam is the same pattern one entry wider. Inventing a second injection mechanism where this one fits would give the daemon two ways to be configured for tests.\nThe seam has to reach `productionDeployPorts()` (deploy-command.ts:91), which today hard-codes `docker: nodeDockerRunner` and `ssh: nodeSshRunner` with no substitution point.\n\n2. THE DISCLOSURE CONSTRAINT, which matters for whichever row consumes this. A journey running on a fake docker seam proves the daemon COMPOSED AND DISPATCHED correctly. It does NOT prove a container ran, an image was built, or a URL served. The consuming row (task-84cd2e55) has DoD clauses about an operator seeing \"where it went\", so it must state plainly which half its journey proves - otherwise a green browser journey reads as evidence of a working deploy when it is evidence of a working dispatch.\nTwo guardrails worth keeping when you plan this: production must be unchanged when no seam is supplied (assert the default explicitly), and the seam must not be reachable from an environment variable or ambient default - a test door an operator's daemon could open is a production hazard rather than a test affordance.\n\nContext for why this matters now: docker was absent from this host for most of 2026-09-05 and is present today (29.6.2). A browser journey depending on the host's docker goes red whenever the host loses it, which already parked task-3706b7e7's DoD 3 and task-99f364e3's docker-dependent clauses. A lane-injected seam makes the journey depend on the daemon's composition instead.",
       "timestamp": "2026-09-06T14:05:06.639Z"
+    },
+    {
+      "id": "comment-d6fcd41ae61b49fd94dc840960149348",
+      "author": "worker-96c6d708",
+      "content": "LIVE MEASUREMENT 14:58Z, working tree after own seam diff. Durable replay anchor is owned tests/e2e/control-room/deploy-fake-docker.spec.ts; `pnpm test:e2e:browser deploy-fake-docker.spec.ts --grep SUCCESS` executes1spec then exits1 at line65. Real daemon started via test-only dependency provider, actual deployment.set_target answered ACCEPTED (line63 passes); deployment.deploy answers EXACT {httpStatus:422,ok:false,outcome:'PORT_REFUSED',refusal:{code:'BOOTSTRAP_PREREQUISITE_MISSING',detail:'BOOTSTRAP_PREREQUISITE_MISSING',httpStatus:422,layer:'DAEMON_PREREQUISITE'},stage:'DISPATCH'}. All finally assertions passed: both childPIDs gone, daemon/server ports closed, exactscratchroot absent. Prior 3spec run executed2failed1passed including throwing-body cleanup, not green.\n\nMissing setup was not planned: bootstrap/bootstrap-sequence.ts55 deployment.deploy requires repository.publish (deploy-command.ts comment says set_target but is stale). Lane SHIPPED demo-seed stops approval; committed tests/e2e/control-room/publish-remote.spec.ts asserts no publish offered because nothing landed. Real createPublishRepository needs durable human, bound workspace candidate, publicationGoalIntegrated's scoped COMMITTED landing in approved git ancestry. Lane is not a repository (repository-workflows.spec.ts14 documents). No production publication fixture found in lane; wrapper-lane fakes a failing provider seat and turns landing off.\n\nWill NOT seed using bootstrap-test-fixtures.driveThrough: ALL_HANDLERS213-215 replaces publish isHuman/validateGoal/readPublicationCandidate. That would manufacture the authority DoD2 insists remain real. Unit composition tests explicitly use that existing unit fixture and are not offered as replacement lane proof. Asked architects4c7431f for an existing production fixture/owner; real publication journey or permitted scoped prerequisite is needed, not a test-local authority fake. Current bytes are WIP, not completion.",
+      "timestamp": "2026-09-06T14:59:39.592Z"
+    },
+    {
+      "id": "comment-60b544e2a4eb417c936aeb56c012e683",
+      "author": "worker-96c6d708",
+      "content": "Reproducible follow-up to architect8ae63b91's fixture suggestion, production-at-working-tree15:04Z. Fixture driveThrough stops BEFORE named kind, so stop at repository.publish (approval already committed). Replacing ONLY fixture publication handler with default real handler yields exact PUBLISH_HUMAN_REQUIRED@DAEMON_AUTHORIZATION, ok:false, advisoryOnly:true,authority:NONE. Node command exits0 because it prints the refusal; this is NOT a passing test. FULL SOURCE (stdin to node --experimental-transform-types --input-type=module, no file written):\nimport { openStore, closeStores, driveThrough, envelope, FIXTURE_PUBLICATION_APPROVAL, ALL_HANDLERS } from \"./apps/daemon/src/bootstrap/bootstrap-test-fixtures.js\";\nimport { runBootstrapCommand } from \"./apps/daemon/src/bootstrap/bootstrap-services.js\";\nimport { createPublishRepository } from \"./apps/daemon/src/repository/publish-services.js\";\nconst store = openStore();\ntry {\n  driveThrough(store, \"repository.publish\");\n  const request = envelope(\"repository.publish\", 0, {goalId:\"goal-1\", remoteUrl:FIXTURE_PUBLICATION_APPROVAL.remoteUrl, approval:FIXTURE_PUBLICATION_APPROVAL}, \"probe-real-publication\");\n  const bytes = new TextEncoder().encode(JSON.stringify(request));\n  const result = runBootstrapCommand(store, bytes, {...ALL_HANDLERS, \"repository.publish\":createPublishRepository()});\n  console.log(JSON.stringify(result));\n} finally { closeStores(); }",
+      "timestamp": "2026-09-06T15:04:29.109Z"
+    },
+    {
+      "id": "comment-c12861a82efa4b7ab369b5b1f128d940",
+      "author": "worker-96c6d708",
+      "content": "WIP validation15:05–15:06Z: step7 drills(i)/(ii) performed early while waiting real-publish clarification. NO shared source mutation during peer full gate. External Vite pre-transform plugin changes exact production strings and prints MUTANT_GENERATED (zero-match throws). (i) Remove V2 `...(deploymentDeploy === undefined ? {} : { deploymentDeploy }),` ->1failed9passed; async-entry.test105 V2 injected arm expected DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE, got DEPLOY_BUILD_CONTEXT_UNCONFIGURED@DAEMON_COMMAND_SEAM. V1 green. (ii) Replace deploy-command `docker: nodeDockerRunner,` with inline zero-effect fake ->2failed8passed; both default identity arms94 fail nodeDockerRunner vs docker.\n\nGitstatus before: V2 tracked M, deploy-command tracked clean. Separate post-run SHA256 against external backups proves unchanged source: V2 D9341AE6B57660B25141FA5DB803EF1CE895194ADBA338627C0D6CB452198B05; command71FC50CCADE453CDF2052926ECD3ABB2065B72F970058171C757DBC83891043F. No untracked source mutated. No restoration copy necessary. TEMP backup/config dir C:/Users/Yaron/AppData/Local/Temp/moe-deploy-drill-worker-96c6d708 remains (command.ts,default.mjs,v2.mjs,v2.ts): deletion tool policy rejected both native cleanup attempts despite absolute path check; no claim it was removed. No process remains running there. Leak drill pending.\n\nBroader composition4files443tests15:02Z exit1:3failed1passed /7failed436passed. All7 newkind roster pins product_contract.sync_env_example: registry.test1035/1085/1937/1959/1991(61vs60), store-dependencies.test783(newkind), v2-registry.test271(60vs59). Own async-entry10/10green. No counts changed; worker channeld22ca608 notified. Fresh pnpm typecheck19projects0 before this run; not HEADproperty. No completion claimed.",
+      "timestamp": "2026-09-06T15:08:56.441Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T14:05:06.639Z",
+  "updatedAt": "2026-09-06T15:12:47.255Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-96c6d708"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T14:03:45.253Z",
   "planningNotes": {
@@ -147,5 +216,21 @@
       "apps/daemon/src/deployment/deploy-service.ts"
     ]
   },
-  "planApprovedAt": "2026-09-06T14:03:47.458Z"
+  "planApprovedAt": "2026-09-06T14:03:47.458Z",
+  "workStartedAt": "2026-09-06T14:43:03.508Z",
+  "declaredFiles": [
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-v2-command-registry.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-command-async-entries.test.ts",
+    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Approved step6 real-admission receipt proof lacks a real repository.publish setup. Fresh context15:09Z: step6 has NO activeAmendmentId/amendments; effective text requires real command/admission/ledger with ONLY spawns fake. Actual owned replay command `pnpm test:e2e:browser deploy-fake-docker.spec.ts` executes3specs:2failed1passed, exit1; both receipt arms at spec65 receive BOOTSTRAP_PREREQUISITE_MISSING@DAEMON_PREREQUISITE stageDISPATCH after real deployment.set_target ACCEPTED. Seed SHIPPED stops approval, not publication; bootstrap-sequence55 requires repository.publish. Existing publish-remote.spec asserts no publication with nothing landed. Architect suggested bootstrap-test-fixtures, but measured ALL_HANDLERS213-215 overrides publish isHuman/validateGoal/readCandidate; substituting default createPublishRepository after seeded approval yields PUBLISH_HUMAN_REQUIRED@DAEMON_AUTHORIZATION (full probe source comment60b544e2). Seeding with that override would fabricate authority, explicitly forbidden. Need an approved real-publication setup/prerequisite (durable human + real workspace candidate + scoped COMMITTED landing/ancestry), not a narrowed/mocked proof. Relevant capability owner not identified, so no invented dependency id. Commentsd6fcd41/60b544e2/c12861a8 hold measurements. Steps1-5 implemented,7actualpaths declared, atomic3-production-file seam green10tests fresh15:09Z/defaultidentity bothplanes; two mutation drills red sourcehashunchanged. Real lane children/ports/store-root cleanup assertions pass including thrown-body arm. No live jobs or lease held. Leak drill/final gates pending. No complete_task claim; WIP for replan, preserve foreign registry/provider and lane catalog hunks.",
+  "blockedOnTaskIds": null
 }

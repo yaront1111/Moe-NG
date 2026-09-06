@@ -172,8 +172,13 @@ const ENV_EXAMPLE_CONTRACT_HEADING: readonly string[] = [
  * publish bytes. `NAME=` with nothing after the `=` is the emitted form — a bare `NAME` is not
  * valid in a file the README tells the operator to `cp` to `.env`, and an empty right-hand side
  * is unambiguously "declared, not supplied".
+ *
+ * EXPORTED FOR A SECOND CALLER, not for testing. `env-example-sync-command.ts` regenerates this
+ * exact file in an already-scaffolded repository when the approved contract's names change, and
+ * it must emit the bytes the scaffold WOULD have written — so it calls THIS function rather than
+ * a second copy of the same rules. One definition, two callers.
  */
-const envExample = (requiredVariableNames: readonly string[]): string => {
+export const envExampleBytes = (requiredVariableNames: readonly string[]): string => {
   const names = [...new Set(requiredVariableNames.filter(isContractVariableName))]
     .filter((name) => !ENV_EXAMPLE_PROFILE_ASSIGNED_NAMES.has(name))
     .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
@@ -302,7 +307,7 @@ export function controlledProfileRootFiles(
   requiredVariableNames: readonly string[] = [],
 ): ReadonlyMap<string, string> {
   return new Map([
-    [".env.example", envExample(requiredVariableNames)],
+    [".env.example", envExampleBytes(requiredVariableNames)],
     [".github/workflows/ci.yml", CI_WORKFLOW],
     [".gitignore", GITIGNORE],
     ["README.md", readme(productName)],
