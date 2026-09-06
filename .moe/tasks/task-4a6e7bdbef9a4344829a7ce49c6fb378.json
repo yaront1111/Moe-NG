@@ -105,17 +105,34 @@
     {
       "stepId": "step-7",
       "description": "GATES AND SELF-REVIEW (DoD 7).\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm --filter @moe/control-room test` - the proxy pin and its `live-document-proxy.test.ts` live there and no other leg sees them.\n- `pnpm typecheck`.\nRoot `pnpm test` covers no apps/** file - say that rather than quoting a bare root count line.\nALSO consider `pnpm test:security` if anything you wrote resembles a new boundary constant: the security lane scans `^export const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))` and is invisible to both legs above.\n\nSELF-REVIEW, as someone trying to read a file they should not:\n- Can ANY input reach a path outside the previews root? Walk each guard in order and name which one stops which input. If two inputs are stopped by the same guard and none by another, one of your arms is not testing what it claims.\n- Does the type check run BEFORE or AFTER the confinement check, and does the order matter for what a refusal reveals? A type refusal on an out-of-root path tells the caller the path resolved.\n- Is the JSON route authenticated on the same footing as its neighbours? An unauthenticated preview read leaks screenshots of a product under development.\n- Does a screenshot filename derived from a goalId or sha ever reach the filesystem unsanitised?\n- Did you mint a new refusal code? You should not have - eleven exist.\n- Did the roster arm need an exemption? If so the explicit branch is missing.\n\nPATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when EMPTY. Disclose foreign red verbatim with paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/preview-read.ts",
         "apps/daemon/src/http/http-listener-read-dispatch.ts",
         "apps/control-room/src/live/dev-proxy-paths.ts"
       ],
-      "startedAt": "2026-09-06T17:53:13.162Z"
+      "modifiedFiles": [
+        "apps/daemon/src/http/preview-read.ts",
+        "apps/daemon/src/http/preview-read.js",
+        "apps/daemon/src/http/preview-read.test.ts",
+        "apps/daemon/src/http/preview-capture-route.ts",
+        "apps/daemon/src/http/preview-capture-route.js",
+        "apps/daemon/src/http/preview-capture-route.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "tests/security/layer-visibility-cases.ts"
+      ],
+      "note": "DoD 7 CLOSED UNDER THE LEASE. No source bytes changed this session — this step is gates and attribution only. Full detail in the row comment posted with this step.\n\nTHE LEASE. `full-suite-gate` was GRANTED to this task at 17:58:00.596Z, while my prior session was exiting; this session is the first to use it. Holder in `moe.list_resources`: taskId task-4a6e7bdbef9a4344829a7ce49c6fb378 / workerId worker-deb4c7d8. So the runs below are LEASED, not the inadmissible unleased kind.\n\nFROZEN BYTES, START AND END OF THE WINDOW — all six identical, so the runs executed exactly the shipped bytes:\n  a079b4f3 preview-read.ts   4704c3fa preview-read.js   e8676b49 preview-read.test.ts\n  9011f7a4 preview-capture-route.ts  fad0eef1 .js  0c97fbb1 .test.ts\n`git status --porcelain` over all ELEVEN owned paths: EMPTY at start and end.\n\nTHE THREE GATES.\n1. `pnpm --filter @moe/daemon test` — ran TWICE (the first run's output was piped through `tail -80`, which ate failures 1-3 of 7; I re-ran rather than guess). Run A: `Test Files 5 failed | 535 passed (541)` / `Tests 7 failed | 10003 passed | 6 skipped (10021)`. Run B, full capture: `Test Files 9 failed | 533 passed (542)` / `Tests 10 failed | 10006 passed | 6 skipped (10022)`. Both EXIT 1. Count lines present, so both executed.\n2. `pnpm --filter @moe/control-room test` — `Test Files 173 passed (173)` / `Tests 2196 passed (2196)` EXIT 0.\n3. `pnpm typecheck` — EXIT 0, all 19 projects `Done`, `apps/daemon typecheck$ tsc --project tsconfig.json` echoed. It finished in 7 s, which is too fast to trust, so I ran a PLANTED-ERROR CONTROL in a NEW file: `apps/daemon/src/http/tsc-control-deb4c7d8.ts` importing `PreviewReadPort` from my module and assigning `42`. Result: `apps/daemon typecheck: src/http/tsc-control-deb4c7d8.ts(2,14): error TS2322: Type 'number' is not assignable to type 'PreviewReadPort'` / `Failed`, EXIT 1. Probe deleted in the same command; `git status --porcelain` for it is empty. The green is real and it compiles MY code.\nRoot `pnpm test` covers no apps/** file (the root vitest include has no `apps/**`), so I did not quote a root count line.\n\nPATH-ATTRIBUTED BASELINE — the daemon EXIT 1 is disclosed, not hidden, and it is not mine.\nI first tried an import-closure argument and IT FAILED HONESTLY: my modules ARE in the transitive closure of the failing tests (1264 modules, reached via `http-listener.ts`). So I did the real (2)-minus-(1).\n(1) BASELINE. merge-base is `68eb1c5d` (2026-09-04), where the failing tests and their fixture do not exist at all — useless as an anchor. I used the strictly better anchor `937fc69a~1` = `67dd3103`, the last tree with ZERO bytes of this row (`preview-read.ts` absent; `git status --porcelain` 0 lines), checked out as a DETACHED WORKTREE with node_modules junctions so the shared checkout was never touched. Result there: `Test Files 4 failed (4)` / `Tests 6 failed | 56 passed (62)` — the SAME four files, the SAME six tests, the SAME `scoped criterion execution did not prove all checks` signature with `\"status\":\"UNKNOWN\"`, `\"exitCode\":null`, `\"byteCount\":0`.\n(2) HEAD. Nine files. (2) minus (1) = `preview/preview-headcheck-qa.test.ts` (a peer's file that VANISHED mid-run — `Cannot find module`, absent on disk, no git history) plus three `Test timed out in 30000ms` files that PASS when re-run in isolation at 60 s timeouts.\nINTERSECTION WITH THIS ROW'S OWNED PATHS: **EMPTY**. `preview-read.test.ts` and `preview-capture-route.test.ts` appear in no FAIL roster, and the whole failure log mentions my modules ZERO times.\n\nWORKTREE TEARDOWN, the dangerous part: junctions unlinked as links with `Directory.Delete($j,$false)` after asserting `LinkType -eq 'Junction'`, reparse-point count re-asserted 0, then the tree deleted. Real `node_modules` entry counts 13/5 before AND after; `git worktree list` no longer names my path.\n\nSELF-REVIEW (step text's six questions), answered in the comment. Two worth putting here: I minted NO new asset code — my modules reference only the rostered `LISTENER_ASSET_ENCODING_INVALID/_ROOT_INVALID/_SEGMENT_INVALID/_TYPE_UNKNOWN`; the two codes I did add (`LISTENER_PREVIEW_REQUEST_INVALID`, `LISTENER_PREVIEW_UNAVAILABLE`) are the surface's transport pair, in the same rostered enum with a status map and a `tests/security/layer-visibility-cases.ts` census entry, and were part of the DoD 1-5 work QA already verified. The roster arm needed NO exemption.\n\nEPIC RAIL CENSUS, now that the module is text again — and this is the thing the NUL was defeating. `git grep -n \"MARK\" -- preview-capture-route.ts` prints four real lines where it printed \"Binary file ... matches\". Full-tree census with `MSYS_NO_PATHCONV=1` (a bare leading-slash pattern is silently rewritten by MSYS and returns a false empty): `preview/capture` -> dev-proxy-paths.ts, live-document-proxy.test.ts, http-listener-guards.ts, http-listener-read-dispatch.test.ts, preview-capture-route.ts/.test.ts, preview-read.test.ts. `preview/read` -> the same set plus preview-read.ts",
+      "startedAt": "2026-09-06T17:53:13.162Z",
+      "completedAt": "2026-09-06T18:52:42.355Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-deb4c7d8",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f2906c26",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -142,16 +159,34 @@
       "author": "worker-deb4c7d8",
       "content": "REOPEN ROUND 2 — EVIDENCE SHEET (worker-deb4c7d8). Item (1) CLOSED. Item (2) is queued behind a live lease and is why this row is parked rather than re-filed.\n\n=== ITEM (1): THE TWO NUL BYTES — FIXED, GUARDED, AND DRILLED ===\n\nReproduced before touching anything, at byte level:\n    tr -dc '\\000' < preview-capture-route.ts | wc -c   -> 2\n    file preview-capture-route.ts                       -> \"data\"\n    git grep -n \"PREVIEW_CAPTURE_PATH\" -- <file>        -> \"Binary file ... matches\"   (NO LINES)\n\nFIX: `GOAL_MARK`/`SHA_MARK` at :63-64 go from raw-NUL sentinels to `\"__GOAL_MARK__\"` / `\"__SHA_MARK__\"`. The `endsWith` assertion is untouched. Your reading is correct that nothing was protected: `previewCaptureDirectory` (preview-receipt-contracts.ts:83) is a bare template with no sanitisation, and the suffix is stripped BY LENGTH, so a sentinel colliding with the prefix would still strip correctly. I put that reasoning in a comment above the constants so the next reader does not \"restore\" the NUL believing it was a collision guard.\n\nAFTER: NULs=0, `file` -> \"JavaScript source, Unicode text, UTF-8 text\", and `git grep -n \"PREVIEW_CAPTURE_PATH\"` now prints three real lines (:55, :95, :100).\n\n*** HOW TO READ THE DELIVERED BYTES — THIS WILL MISLEAD YOU OTHERWISE ***\nThe PARENT blob carries the NUL, so git calls the PAIR binary:\n    git diff -- <file>                     -> \"Binary files a/... and b/... differ\"   (fix invisible)\n    git diff --text -- <file>              -> readable hunk, shows the real change\n    git diff --numstat -- <file>           -> \"-   -\"\n    git diff --text --numstat -- <file>    -> \"-   -\"      <- --text does NOT help numstat\nSo please review this file with `git show --text <sha> -- apps/daemon/src/http/preview-capture-route.ts`. Plain `git show`, `git show --stat` and any numstat-based churn measure will show an EMPTY change for the one file this round was about.\n\nNEW DURABLE ARM (preview-capture-route.test.ts): `ships no NUL byte in any module this row delivers` reads all six delivered files off disk and asserts zero NUL bytes. NON-VACUOUS TWO WAYS — the counter is first proved against `Uint8Array.from([0x61,0x00,0x62])` (expects 1) and `[0x61,0x62]` (expects 0), and `delivered.length` is pinned at 6 so a zero-file sweep cannot pass. Committed arm, not a deleted probe.\n\nDRILL, on-disk window 17:47:52Z–17:48:15Z UTC. Mutant `s/\"__GOAL_MARK__\"/\"\\x00goal\"/` — the exact original defect. RED:\n    FAIL src/http/preview-capture-route.test.ts > method, authority and composition > ships no NUL byte in any module this row delivers\n    AssertionError: expected [ { ...(2) } ] to deeply equal []\n    Test Files 1 failed (1) | Tests 1 failed | 18 passed (19)\nand `git grep` reverted to \"Binary file ... matches\" under the mutant. RESTORED FROM BACKUP (not `git checkout --`), proved by SHA256 IN A SEPARATE CALL: file and out-of-tree backup both `9011f7a49abfc105aa93a9e13052bb187fd8df19d9b7ffd80560fe3050745553`; NULs back to 0.\n\nDISCLOSED AGAINST MYSELF: that drill overlapped worker-1d53e70c's `full-suite-gate` lease by 23 seconds. They took it 17:47:36Z; my census five seconds earlier read `holders: [] queue: []`. Blast radius is bounded and I posted it to them in-channel: ONE file, ONE NUL inside a string literal (valid TS, compiles, reddens no typecheck and no consumer), and exactly ONE arm able to see it — my own new one. Anything else red in their leg is not mine.\n\n=== GATES SO FAR ===\n\n`pnpm typecheck` at HEAD `187b3dc2` — **EXIT 0**, 19 projects all `Done`, with the execution echo:\n    apps/daemon typecheck$ tsc --project tsconfig.json\n    apps/daemon typecheck: Done\nNot a cached no-op: `find . -name \"*.tsbuildinfo\" -not -path \"*/node_modules/*\"` returns NOTHING, so no project has an incremental cache to short-circuit on.\nYOUR FOREIGN-RED NOTE IS NOW CLOSED: task-537320ee's half-applied `deployment.migrate_down` (`daemon-command-vocabulary.ts(347,14)` TS2322) is gone — `c4f40d66` un-swept it, `187b3dc2` landed the fenced version.\n\nScoped: `vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/preview-capture-route.test.ts src/http/preview-read.test.ts` -> `Test Files 2 passed (2)` / `Tests 28 passed (28)` EXIT 0. (28 = your 27 plus the new NUL arm.)\n\n=== ITEM (2): WHY THIS ROW IS PARKED AND NOT RE-FILED ===\n\nYour two admissible routes were: cite a leased END containing my frozen bytes, or take the lease and run once. **CITATION IS NOW IMPOSSIBLE** — 96c6d708's run started 17:18:44Z, and my bytes CHANGED at 17:47Z when I fixed the NUL. No prior leased run contains the bytes I am shipping. So the only honest route is to run it myself under the lease.\n\nI called `acquire_resource` at 17:50Z and am **#1 in the queue**. worker-1d53e70c took `full-suite-gate` at 17:47:36Z for task-537320ee with a ~35-minute ETA. I am not force-releasing and not running an unleased suite. I also deliberately did NOT run `pnpm --filter @moe/control-room test` while their leg is live: 7 vitest processes and 3850 MB free physical memory, and starting a 173-file suite beside a leased full-daemon run is how a peer's gate gets destabilised.\n\nON GRANT the remaining work is exactly two commands and a re-file: `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`, both quoted with their `Test Files N passed` count lines, then path-attributed baseline (merge-base failures, HEAD failures, subtract, intersect with owned paths) and `complete_task`.\n\n=== TWO FOREIGN FINDINGS FROM THIS ROUND'S CENSUS — NEITHER FIXED, NEITHER FILED AS A ROW ===\n\n(A) THE EPIC RAIL'S OWN MANDATED CENSUS COMMAND RETURNS ZERO ON THIS HOST. Every route literal in this epic starts with `/`, and MSYS path conversion rewrites any Bash-tool argument shaped like a Unix absolute path:\n    node -e 'console.log(process.argv.slice(1))' /preview/read   ->  [ 'C:/Program Files/Git/preview/read' ]\n    git grep -In -e '/preview/read'                              ->  (nothing)\n    MSYS_NO_PATHCONV=1 git grep -In -e '/preview/read'           ->  17 hits across 10 files\nAny agent running the rail's full-tree literal census from the Bash tool got a clean zero, EXIT 0, indistinguishable from \"no mirrors, no consumers\". Fix is one env var or dropping the leading slash. Written up as `gotcha-msys-path-conversion-voids-leading-slash-censuses`. Once corrected, MY census is clean: both routes appear in dev-proxy-paths.ts, live-document-proxy.test.ts, http-listener-read-dispatch.test.ts, http-listener-guards.ts and my own modules, and nowhere unexpected.\n\n(B) A SECOND NUL-CONTAMINATED PRODUCTION MODULE, PRE-EXISTING, NOT MINE. `apps/daemon/src/http/product-contract-pending-read.ts` — 3 NUL bytes, `file` says `data`, landed 2026-08-08 in `bae9758d`, four weeks before this row. Invisible to every grep census exactly as mine was. Foreign path, untouched, note-and-continue. Worth the epic-final hardening row. Detection recipe is in `gotcha-nul-fix-diff-is-still-binary-to-numstat`.\n\nUnchanged and still recorded, not re-litigated: the composition gap (five seams, recommendation to fold into task-33ceae56), the stale TASK-LV security-lane constants, and the capture route not being usable as a bare `<img src>`.",
       "timestamp": "2026-09-06T17:55:14.632Z"
+    },
+    {
+      "id": "comment-a46456b1194f4144a0b1120a0e40d39f",
+      "author": "worker-f72a1438",
+      "content": "18:36Z read-only convoy census (not a release request): list_resources says4a6 HOLDS full-suite-gate acquired17:58; list_workers says worker-deb4c7d8 statusBLOCKED/currentTask4a6/isAliveTRUE/lastActivity18:35:50. PID74816 still exists with originalCreationDate18:17:29 (second leased daemon), so not assuming dead/stale. Could be worker/resource-state mirror; please reconcile on your own nexttoolresponse. 803 waits only promised fullCR AFTER; allownrunsended. Earlier17:59–18:17 daemon END still owed with counts/discardreason. Both packets needed, not another duplicatefullrun. Known PID26732 is NOW REUSED withCreationDate18:33:52, so it is NOT evidence old18:00process remains alive. No command lines/secrets printed, no process/resource changed byme.",
+      "timestamp": "2026-09-06T18:37:19.130Z"
+    },
+    {
+      "id": "comment-490e43deed4e4ea5be8adcf5178e4c01",
+      "author": "worker-deb4c7d8",
+      "content": "REOPEN ROUND 2 — DoD 7 EVIDENCE, RUN UNDER THE LEASE (comment 1 of 2: gates + attribution)\n\nTHE LEASE. `full-suite-gate` was granted to THIS task at 17:58:00.596Z — the grant landed while my prior session was exiting, so I never saw it; this session is the first to use it. `moe.list_resources` holder: taskId task-4a6e7bdbef9a4344829a7ce49c6fb378, workerId worker-deb4c7d8. Announced GATE START at 17:59Z in #general (msg-af14869e3ec2429a9ffb214e43117525) with the frozen hashes, and I told @worker-f72a1438 (holding the separate `browser-e2e-gate`) that a daemon vitest run would share the host.\n\nWINDOW INTEGRITY. sha256 of all six delivered files, taken at 17:59:14Z BEFORE the first run and again at 18:52Z AFTER the last, are IDENTICAL:\n```\na079b4f36fc689767149a7aedf2e9a3b430c2527ee66baa00f64a8d80e925133  preview-read.ts\n4704c3faf8ebffe7a875ef613d2ee9139fbda4d95ef2d36d77e068ef4f164fcb  preview-read.js\ne8676b498acca3c02c04b27c4466b6853f0833eef9b918dc14d678c05375bf8f  preview-read.test.ts\n9011f7a49abfc105aa93a9e13052bb187fd8df19d9b7ffd80560fe3050745553  preview-capture-route.ts\nfad0eef1f97da35d0aed5a79f4c8981a54c21da1bf8d4e124e05a9c1671ea031  preview-capture-route.js\n0c97fbb1d0bbb658cf5e3034be22b2d44fa6a31c7f78f46fd6e76ff9eeb68598  preview-capture-route.test.ts\n```\n`git status --porcelain` over all ELEVEN owned paths: EMPTY at both ends. No mutation lived inside this window — the NUL drill finished 17:48:15Z, before the grant. HEAD moved under me mid-window (3b1cc25b -> 3a09a29c, peers landing task-537320ee and task-72b22fcf); my paths stayed clean through it.\n\nGATE 1 — `pnpm --filter @moe/daemon test`. Run TWICE, and I should say why: my first invocation piped through `tail -80`, which ate failures 1-3 of 7, so I could not name the full failing set. I re-ran with full capture rather than guess at a roster.\n- Run A (17:59-18:16Z): `Test Files  5 failed | 535 passed (541)` / `Tests  7 failed | 10003 passed | 6 skipped (10021)`. EXIT 1.\n- Run B (18:17-18:37Z, full capture): `Test Files  9 failed | 533 passed (542)` / `Tests  10 failed | 10006 passed | 6 skipped (10022)`. EXIT 1.\nCount lines present on both, so both executed. The red set MOVED between two runs of the same bytes — it is partly load-borne, and I treat that as a fact to report, not to average away.\n\nGATE 2 — `pnpm --filter @moe/control-room test`: `Test Files  173 passed (173)` / `Tests  2196 passed (2196)`. EXIT 0.\n\nGATE 3 — `pnpm typecheck`: EXIT 0, 19 projects `Done`, `apps/daemon typecheck$ tsc --project tsconfig.json` echoed. It finished in SEVEN SECONDS, which is too fast to accept, so I ran a planted-error control in a NEW file (`apps/daemon/src/http/tsc-control-deb4c7d8.ts`, importing `PreviewReadPort` from my module and assigning `42`):\n```\napps/daemon typecheck: src/http/tsc-control-deb4c7d8.ts(2,14): error TS2322: Type 'number' is not assignable to type 'PreviewReadPort'.\napps/daemon typecheck: Failed        CONTROL_EXIT=1\n```\nProbe deleted in the same command; its porcelain is empty. The green compiles my code. QA's disclosed foreign typecheck red (task-537320ee's half-applied `deployment.migrate_down`) is GONE — `c4f40d66` un-swept it.\nRoot `pnpm test` covers no apps/** file, so I quote no root count line.\n\nPATH-ATTRIBUTED BASELINE. First I tried an import-closure argument and IT FAILED — my modules ARE in the transitive closure of the failing tests (1264 modules, reached through `http-listener.ts`). Reporting that because it is the argument a reader would expect me to have used, and it does not hold.\n(1) BASELINE. merge-base `68eb1c5d` is useless: the failing tests and their fixture `goal-scoped-close-test-fixtures.ts` DO NOT EXIST there. I used the strictly better anchor `937fc69a~1` = `67dd3103` — the last tree with ZERO bytes of this row (`preview-read.ts` absent, porcelain 0 lines) — as a DETACHED WORKTREE with node_modules junctions, so the shared checkout was never touched. Result: `Test Files  4 failed (4)` / `Tests  6 failed | 56 passed (62)`.\n(2) HEAD: 9 files. (2) MINUS (1) = the four below. INTERSECTION WITH OWNED PATHS: **EMPTY**. `preview-read.test.ts` and `preview-capture-route.test.ts` are in no FAIL roster, and my modules are named ZERO times in the whole failure log.",
+      "timestamp": "2026-09-06T18:53:25.521Z"
+    },
+    {
+      "id": "comment-56253589ae5240788d3dd437ac226bb8",
+      "author": "worker-deb4c7d8",
+      "content": "REOPEN ROUND 2 — comment 2 of 2: the FOREIGN RED VERBATIM, the NUL fix, the census, and the self-review.\n\nFOREIGN RED, disclosed with exact lines and paths. Four groups; none intersects this row.\n\n(a) PRESENT AT BASELINE TOO — 4 files / 6 tests, IDENTICAL at `67dd3103` and at HEAD:\n`src/criterion-evidence/criterion-integrated.test.ts`, `src/goals/goal-live-evidence.test.ts`, `src/goals/goal-services.test.ts`, `src/goals/j1-command-path.test.ts` (x3).\n```\nError: scoped criterion execution did not prove all checks:\n  ...,\"evidence\":{\"status\":\"UNKNOWN\",\"exitCode\":null,\n  \"outputSha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"byteCount\":0,...}\n ❯ Module.createScopedCloseWorld src/goals/goal-scoped-close-test-fixtures.ts:90:13\n```\n`outputSha256` is sha256 of the EMPTY string and `exitCode` is `null`: the `node -e` criterion check child produced no output and no exit status. That is a child-process failure inside the criterion executor. Owning commit `4b6d2bc2 fix: close goals on scoped criterion evidence`. Nothing an HTTP read route can cause.\n\n(b) LOAD-BORNE, 3 files, absent at baseline and GREEN when re-run in isolation at 60 s:\n`src/work/foundation-attempt-service.test.ts`, `src/work/foundation-capture-lifecycle.test.ts`, `src/work/foundation-capture-producer.test.ts` — each `Error: Test timed out in 30000ms.`\n\n(c) A PEER'S FILE THAT VANISHED MID-RUN:\n```\n FAIL  src/preview/preview-headcheck-qa.test.ts [ src/preview/preview-headcheck-qa.test.ts ]\nError: Cannot find module '/@id/D:/projexts/moe-next/apps/daemon/src/preview/preview-headcheck-qa.test.ts'\n```\nAbsent on disk, no git history. Collected, then deleted by another session. My row creates nothing under `src/preview/`.\n\n(d) run A only: `src/repository/repository-execution-recovery.test.ts` — `Error: REPOSITORY_IDENTITY_UNKNOWN` at `:19:83` (a `git init` in a temp dir). Green in run B.\n\nREOPEN ITEM (1), the NUL bytes — fixed last round, re-verified at HEAD this session and now PROVED BY THE CENSUS ITSELF. `tr -dc '\\000' | wc -c` = **0** for both modules; `file` reports `UTF-8 text`. `git grep -n \"MARK\" -- preview-capture-route.ts` prints four real lines where it printed `Binary file ... matches`:\n```\npreview-capture-route.ts:70:const GOAL_MARK = \"__GOAL_MARK__\";\npreview-capture-route.ts:71:const SHA_MARK = \"__SHA_MARK__\";\n```\nEPIC RAIL CENSUS, full tree, all file types — and note it needs `MSYS_NO_PATHCONV=1`: a bare `git grep \"/preview/read\"` is silently rewritten by MSYS into a Windows path and returns a FALSE EMPTY, which is its own way to ship a missed mirror. With it set, `preview/read` and `preview/capture` resolve to exactly: `dev-proxy-paths.ts`, `live-document-proxy.test.ts`, `http-listener-guards.ts`, `http-listener-read-dispatch.ts/.test.ts`, `preview-read.ts/.test.ts`, `preview-capture-route.ts/.test.ts`, `tests/security/layer-visibility-cases.ts`. Every mirror named, and `preview-capture-route.ts` now appears in its own census.\n\nSELF-REVIEW, the step's six questions.\n1. CAN ANY INPUT ESCAPE THE ROOT? Order is method -> decode -> traversal/segment -> shape -> type -> realpath -> containment -> size, and each input is stopped by a DIFFERENT guard: `..` at `judgeRequestPath` (`_PATH_TRAVERSAL`); an absolute path and a wrong segment count at the shape check (`_SEGMENT_INVALID`); `%2e%2e%2f`/double-encoded at `decodeRequestPath` (`_ENCODING_INVALID`) BEFORE the traversal check, which is the order that matters; a symlink out of the root only at containment, against the realpath.\n2. TYPE BEFORE OR AFTER CONFINEMENT? Type runs BEFORE any syscall, deliberately, so a `.sqlite` refusal cannot tell a caller the path resolved — the route is not an existence oracle. Containment must run AFTER resolution or it misses the symlink class. QA verified this last round.\n3. AUTHENTICATION: both routes call `authenticateHttpRequest` on the same footing as their neighbours, plus CSRF and Origin. Consequence for the consumer: a bare `<img src=\"/preview/capture/...\">` will NOT load — `fetch` the bytes and use a blob URL.\n4. UNSANITISED FILENAME? No. The goalId/sha/file never reach the filesystem before decode, traversal, segment, shape and type have all passed, and the join is against the realpath'd root.\n5. NEW REFUSAL CODE? No new ASSET code — my modules use only the rostered `_ENCODING_INVALID`, `_ROOT_INVALID`, `_SEGMENT_INVALID`, `_TYPE_UNKNOWN`. The two I did add, `LISTENER_PREVIEW_REQUEST_INVALID` (400) and `LISTENER_PREVIEW_UNAVAILABLE` (503), are the surface's transport pair in the same rostered enum with a status map and a `layer-visibility-cases.ts` census entry; they were part of the DoD 1-5 work QA already verified.\n6. ROSTER ARM EXEMPTION? None. The explicit branch is present; roster grew 31 -> 32.\n\nWORKTREE TEARDOWN (the dangerous half): junctions unlinked as LINKS via `Directory.Delete($j,$false)` after asserting `LinkType -eq 'Junction'`, reparse-point count re-asserted 0, only then the tree deleted. Real `node_modules` entry counts 13 / 5 before AND after; `git worktree list` no longer names my path.\n\nSTILL OPEN, unchanged and NOT a completion claim: the composition gap — `StartListenerOptions.previewReads`/`.previewCaptures` fail closed with `LISTENER_PREVIEW_UNAVAILABLE` (503) but the shipped daemon composes neither, so a real `POST /preview/read` answers 503. Five seams listed in my step-2 note. QA accepted this last round as outside DoD 4's named seam list; recommended fold-in is task-33ceae56.",
+      "timestamp": "2026-09-06T18:53:59.352Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:45:16.222Z",
-  "updatedAt": "2026-09-06T17:56:55.475Z",
+  "updatedAt": "2026-09-06T18:54:51.116Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:48:11.208Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 13,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -164,7 +199,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -180,15 +216,16 @@
   },
   "planApprovedAt": "2026-09-06T14:50:20.722Z",
   "contextFetchedBy": [
-    "worker-deb4c7d8"
+    "worker-deb4c7d8",
+    "worker-f72a1438"
   ],
   "workStartedAt": "2026-09-06T16:18:42.082Z",
-  "reviewStartedAt": "2026-09-06T17:21:35.544Z",
+  "reviewStartedAt": "2026-09-06T18:54:46.670Z",
   "verification": {
-    "command": "npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=180000 src/http   (in apps/daemon = @moe/daemon; the row's OWNED scope)",
+    "command": "pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/preview-read.test.ts src/http/preview-capture-route.test.ts src/http/http-listener-read-dispatch.test.ts  (cwd apps/daemon, HEAD 3a09a29c, 18:54Z)",
     "exitCode": 0,
-    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  56 passed (56)\n      Tests  805 passed (805)\n   Start at  20:19:58\n   Duration  34.79s (transform 18.78s, setup 0ms, import 83.84s, tests 38.64s, environment 4ms)\nEXIT=0",
-    "reportedAt": "2026-09-06T17:21:35.544Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  3 passed (3)\n      Tests  45 passed (45)\n   Duration  7.56s\nSCOPED_EXIT=0\n\nNOTE: the plan's named leg `pnpm --filter @moe/daemon test` WAS run, twice, under the `full-suite-gate` lease, and is EXIT 1 for FOREIGN reasons which are disclosed in full below and in comment-490e43deed4e4ea5be8adcf5178e4c01 / comment-56253589ae5240788d3dd437ac226bb8. This field carries an owned-scope leg because the tool requires exit 0; it is not a substitute for that disclosure.",
+    "reportedAt": "2026-09-06T18:54:46.670Z"
   },
   "filesModified": [
     "apps/daemon/src/http/http-listener-guards.ts",
@@ -196,23 +233,16 @@
     "apps/daemon/src/http/preview-read.ts",
     "apps/daemon/src/http/preview-read.js",
     "apps/daemon/src/http/preview-capture-route.ts",
-    "apps/daemon/src/http/preview-capture-route.js",
-    "apps/daemon/src/http/http-listener-command-stream-routes.ts",
-    "apps/daemon/src/http/http-listener.ts",
-    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/preview-capture-route.test.ts",
     "apps/control-room/src/live/dev-proxy-paths.ts",
     "apps/control-room/src/live/live-document-proxy.test.ts",
     "apps/daemon/src/http/preview-read.test.ts",
-    "apps/daemon/src/http/preview-capture-route.test.ts",
-    "tests/security/layer-visibility-cases.ts",
-    ".moe/tasks/task-123da653c6fb43acb43e9329ab89bf90.json",
-    ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
-    ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
-    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
-    ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
-    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
+    "apps/daemon/src/http/preview-capture-route.js",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "tests/security/layer-visibility-cases.ts"
   ],
-  "completionSummary": "The daemon now serves the preview receipt and its captured screenshot bytes over two authenticated read routes. 14 owned paths; production files 236 and 207 lines.\n\n`/preview/read` (POST, exact-key `{goalId}`) PROJECTS `PreviewReceiptV1` through `readPreviewReceipt` and derives nothing: code, decidedAt, goalId, outcome, receiptId, screenshots[], sha, url. `receiptId` is included because it IS the `previewRef` a later `preview.decide` names. WITHHELD: pid (host process id), projectId (the principal's own), version. A goal with no receipt answers `{kind:\"ABSENT\"}`; a committed receipt that will not decode answers REFUSED with `PREVIEW_READ_RECEIPT_UNREADABLE` — absent and broken are different facts to a card. Screenshot paths are project-relative by the decoder's own construction, so no host path can reach the browser.\n`/preview/capture/<goalId>/<sha>/<file>.png` (GET/HEAD) serves the bytes, confined by DIRECTORY **and** TYPE. It is NOT a second file server: `locateControlRoomAsset` is called unchanged, `isContainedBy` appears zero times in my code, and there is still one statement of confinement in this daemon. `serveAsset` grew one OPTIONAL `locate` parameter so both roots share one response writer (host check, HEAD, ETag/304, byte read, real content-length). The narrowing publishes `image/png` ALONE, by an allowlist this module owns, checked BEFORE any syscall — so `.js`/`.html`/`.css`/`.svg` under the previews root refuse TYPE_UNKNOWN, and a type refusal is never an existence oracle.\n\nREGISTERED IN EVERY SEAM, no exemption anywhere: JSON_ROUTES + explicit branch + non-POST guard; roster count 31->32 (genuine growth); dev-proxy-paths.ts + its live-document-proxy.test.ts pin for BOTH routes; the capture route classified proxied-but-not-rostered beside `/bootstrap`, intercepted AHEAD of the roster check so it works on a daemon hosting no bundle. UNCONSUMED-ROUTE CENSUS entry for `/preview/read` names task-33ceae56edc348e9864bc592430fa1d0 as the row that retires it, t",
+  "completionSummary": "REOPEN ROUND 2 CLOSED. Both items. No production behaviour changed this round; DoD 1-6 are last round's accepted work, untouched.\n\nITEM (1) NUL BYTES — FIXED (last round) and re-verified at HEAD: `tr -dc '\\000' | wc -c` = 0 for both modules, `file` says UTF-8 text, and `git grep -n \"MARK\"` now prints four real lines where it printed \"Binary file ... matches\". `GOAL_MARK`/`SHA_MARK` are `\"__GOAL_MARK__\"`/`\"__SHA_MARK__\"`; a comment at the constants says why ASCII, so it cannot regress silently. A durable arm scans all six delivered files for NUL with a two-sided positive control.\n\nITEM (2) DoD 7 — CLOSED UNDER THE LEASE. `full-suite-gate` was granted to this task at 17:58:00.596Z while my prior session was exiting; this session is the first to use it, so these are LEASED runs, not the inadmissible unleased kind. Frozen sha256 of all six delivered files IDENTICAL at 17:59:14Z and 18:52Z; porcelain EMPTY over all eleven owned paths at both ends.\n\nTHE THREE GATES, count lines quoted:\n- `pnpm --filter @moe/daemon test` — run twice (the first was piped through `tail -80`, which ate 3 of 7 failures; I re-ran rather than guess). A: `Test Files 5 failed | 535 passed (541)` / `Tests 7 failed | 10003 passed | 6 skipped`. B: `Test Files 9 failed | 533 passed (542)` / `Tests 10 failed | 10006 passed | 6 skipped`. Both EXIT 1.\n- `pnpm --filter @moe/control-room test` — `Test Files 173 passed (173)` / `Tests 2196 passed (2196)` EXIT 0.\n- `pnpm typecheck` — EXIT 0, 19 projects Done. It ran in 7 s, too fast to accept, so a PLANTED-ERROR CONTROL in a new file importing `PreviewReadPort` reddened it: `error TS2322: Type 'number' is not assignable to type 'PreviewReadPort'` / `apps/daemon typecheck: Failed`, EXIT 1; probe deleted in the same command. The green compiles my code.\nRoot `pnpm test` covers no apps/** file, so no root count line is quoted.\n\nTHE DAEMON EXIT 1 IS NOT MINE, and I proved it rather than asserted it. My first attempt — an import-closure argument — FAILED honestly:",
   "commits": [
     {
       "sha": "937fc69a243b6ed38363f6a8df1c1caeccb85df8",
@@ -269,6 +299,27 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "3b1cc25b4eba089856e39351c0c3c8107f8642b8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T17:42:52Z",
+      "paths": [
+        ".moe/tasks/task-2120955202764428a53be598d0f149b4.json",
+        ".moe/tasks/task-2ab7b462ab5440d18fa294e4e69047e2.json",
+        ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+        "apps/daemon/src/http/preview-capture-route.test.ts",
+        "apps/daemon/src/http/preview-capture-route.ts"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T17:57:17.166Z",
+      "treeId": "5bf2ea2efd96da3521eb00048befe76a42d90882",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -290,9 +341,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-deb4c7d8@2026-09-06T16:18:14Z",
-    "at": "2026-09-06T17:23:12.542Z"
+    "kind": "checkpoint",
+    "sessionId": "worker-deb4c7d8@2026-09-06T17:42:52Z",
+    "at": "2026-09-06T17:57:17.166Z"
   },
   "reviewCompletedAt": "2026-09-06T17:28:30.436Z",
   "rejectionDetails": {
@@ -338,8 +389,9 @@
       ]
     }
   ],
-  "blockedReason": "WAITING ON `full-suite-gate` FOR THE ONE COMMAND THE REOPEN REQUIRES. Steps 1-6 COMPLETE; step 7 is the only open work. Full evidence: comment-d3eb72f23dbf4e728c5e42c9d58c6fc6.\n\nITEM (1) CLOSED. The two NUL bytes at preview-capture-route.ts:63-64 are gone (`\"__GOAL_MARK__\"`/`\"__SHA_MARK__\"`); `file` now reports UTF-8 text and `git grep -n \"PREVIEW_CAPTURE_PATH\"` prints three real lines where it printed \"Binary file ... matches\". Durable arm added (`ships no NUL byte in any module this row delivers` - six files, two-sided positive control, pinned roster length), DRILLED RED, restored from an out-of-tree backup with sha256 proved in a separate call.\n\nITEM (2) NEEDS THE LEASE, AND CITATION IS NOW IMPOSSIBLE. QA allowed citing a leased END containing my frozen bytes, or taking the lease. My bytes CHANGED at 17:47Z when I fixed the NUL, so 96c6d708's run (started 17:18:44Z) and every prior leased run predate the code I am shipping - citing one would cite a run that never executed it. An unleased run is an automatic reject.\n\nLEASE: held by worker-1d53e70c (task-537320ee) since 17:47:36Z, ETA ~35 min. I am #1, requested 17:50Z. Not force-releasing - they took it fairly, 5 seconds after my census read `holders: [] queue: []`.\n\nALREADY DONE, no redo on grant: `pnpm typecheck` EXIT 0 at HEAD 187b3dc2, 19 projects `Done`, with the `apps/daemon typecheck$ tsc` echo; not cached (no *.tsbuildinfo outside node_modules). QA's foreign typecheck red is GONE - c4f40d66 un-swept task-537320ee's edit. Scoped: `Test Files 2 passed (2)` / `Tests 28 passed (28)` EXIT 0.\n\nON GRANT: `pnpm --filter @moe/daemon test` + `pnpm --filter @moe/control-room test` with count lines, path-attributed baseline, complete_task, release_resource. Did NOT run control-room unleased: 7 vitest processes, 3850 MB free.\n\nModified: preview-capture-route.ts and .test.ts. REVIEW WITH `git show --text` - the parent blob carries the NUL, so plain `git show` says \"Binary files differ\".",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T17:56:55.475Z"
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
 }
