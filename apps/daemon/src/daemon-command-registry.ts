@@ -48,6 +48,7 @@ import {
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
+import type { RepositoryBootstrapSeams } from "./daemon-command-async-entries.js";
 import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
@@ -122,6 +123,9 @@ export interface DaemonCommandPortOptions {
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
   readonly projectId: string;
+  /** `repository.bootstrap`'s two injectable halves. ABSENT means the real `gh` CLI and the
+   *  real manager catalog — production passes nothing. */
+  readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   readonly store: SqliteEventStore;
   /** The daemon-startup VERIFICATION catalog: the host-scoped argv authority the
    *  recipe seal derives its command from. OPTIONAL on the same terms as the
@@ -259,6 +263,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     "project.activate": activateEntry,
     ...createAsyncCommandEntries({
       projectId, store,
+      ...(options.repositoryBootstrap === undefined
+        ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
       ...(options.foundationContextSeal === undefined

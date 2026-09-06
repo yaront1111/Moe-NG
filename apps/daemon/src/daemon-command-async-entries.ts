@@ -14,6 +14,12 @@ import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifec
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import { CAPABILITIES, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { createNodeProjectCatalogRegistrar } from "./projects/project-catalog-registrar.js";
+import { createRepositoryBootstrapHandler } from "./repository/repository-bootstrap-command.js";
+import type { BootstrapCatalogPort } from "./repository/repository-bootstrap-command.js";
+import { REPOSITORY_BOOTSTRAP_COMMAND_KIND }
+  from "./repository/repository-bootstrap-contracts.js";
+import type { BootstrapGhPort } from "./repository/repository-bootstrap-contracts.js";
 
 /**
  * The registry entries whose services are genuinely ASYNCHRONOUS. They are kept apart
@@ -23,7 +29,21 @@ import { CAPABILITIES, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
  */
 export type AsyncCommandKind =
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND
-  | typeof FOUNDATION_VERIFICATION_COMMAND_KIND;
+  | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
+  // `repository.bootstrap` runs `git`, optionally the `gh` CLI and a filesystem tree write, so a
+  // synchronous `CommandHandler` cannot express it. It is registered HERE rather than in
+  // `daemon-command-registry.ts` for the reason that file's own comment gives: the registry is
+  // past its size cap, and this module is exactly the seam it spreads for async kinds.
+  | typeof REPOSITORY_BOOTSTRAP_COMMAND_KIND;
+
+/** The two injectable halves of the bootstrap command. Production passes NEITHER and gets the
+ *  real `gh` CLI and the real manager catalog; a test passes both and touches no network and no
+ *  home directory. */
+export interface RepositoryBootstrapSeams {
+  readonly catalog?: BootstrapCatalogPort;
+  readonly clock?: () => string;
+  readonly gh?: BootstrapGhPort;
+}
 
 export interface AsyncCommandEntryOptions {
   /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
@@ -35,6 +55,8 @@ export interface AsyncCommandEntryOptions {
   readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   readonly projectId: string;
+  /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
+  readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   readonly store: SqliteEventStore;
   readonly verificationCatalogSource?: () => unknown;
 }
@@ -70,7 +92,25 @@ export function createAsyncCommandEntries(
     ...(options.verificationCatalogSource === undefined
       ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
   });
+  // The manager catalog is resolved ONCE at composition. `createNodeProjectCatalogRegistrar`
+  // reads a path and builds ports; it performs no I/O until the command actually registers.
+  const bootstrapSeams = options.repositoryBootstrap ?? {};
+  const bootstrapRepositoryCommand = createRepositoryBootstrapHandler({
+    catalog: bootstrapSeams.catalog ?? createNodeProjectCatalogRegistrar(),
+    projectId,
+    store,
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
+    // DIFFERENT thing from an absent key, and only the absent key means "use the real one".
+    ...(bootstrapSeams.clock === undefined ? {} : { clock: bootstrapSeams.clock }),
+    ...(bootstrapSeams.gh === undefined ? {} : { gh: bootstrapSeams.gh }),
+  });
   return Object.freeze({
+    [REPOSITORY_BOOTSTRAP_COMMAND_KIND]: Object.freeze({
+      asyncHandler: bootstrapRepositoryCommand, handler: foundationSyncHandler,
+      kind: REPOSITORY_BOOTSTRAP_COMMAND_KIND,
+      payloadKeys: PAYLOAD_KEYS[REPOSITORY_BOOTSTRAP_COMMAND_KIND],
+      requiredCapability: CAPABILITIES.ADMIN,
+    }),
     [FOUNDATION_DISPATCH_COMMAND_KIND]: Object.freeze({
       asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler,
       kind: FOUNDATION_DISPATCH_COMMAND_KIND,

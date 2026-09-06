@@ -22,12 +22,15 @@
     {
       "stepId": "step-1",
       "description": "ORIENT AND RE-MEASURE, no production edits. (a) Prerequisites: get_context.epicSiblings landing.merged (or `git log --grep \"Moe-Task: task-bda0eeac02544c1992c6738c2db83178\"`) for child A, and the same for task-40e52fa8. If A has not landed, STOP — runtime should not have offered WORKING; report_blocked with blockedOnTaskIds. (b) Confirm A's exports exist: grep RELEASE_DECIDE_COMMAND_KIND, releaseRefusal, RELEASE_PR_FAILED, RELEASE_DECIDE_CODE_LAYER_MAP in apps/daemon/src/release/release-decide-contracts.ts. Do not recreate that module. (c) Confirm the gap this row owns is still open: grep -n \"release.decide\" apps/daemon/src/daemon-command-vocabulary.ts daemon-command-async-entries.ts daemon-command-registry.ts must be empty (A's contract module will match; that is expected). (d) Record the CURRENT count literals you will reconcile to, by reading them: vocabulary.test.ts ROWS/OPERATOR/declared/FAMILY_MAPS sizes; registry.test.ts ROWS/registry.size/REGISTRATION_ORDER plus :1678/:1700/:1732; store-deps registryKinds; mcp-tool-allowlist.test.ts {excluded, queries, vocabulary, wired}; daemon-v2-command-registry.test.ts:267. (e) Read comment-7bf36ca0 (payload [\"base\",\"decision\",\"goalId\",\"sha\"]) and comment-eb460c84 (DoD split — MCP/HUMAN_ONLY are sibling task-20b7d6bb). (f) `git status --porcelain -- apps/daemon/src/` and note peer dirt; never revert it. (g) Dependency edge already present (do not edit manifests): apps/daemon/package.json lists @moe/contracts; pnpm-lock.yaml apps/daemon importer has it; vocabulary.ts already imports RuntimeCommandKind from the bare specifier. Optional compiled probe in apps/daemon importing from \"@moe/contracts\", `pnpm --filter @moe/daemon typecheck`, delete the probe in the same command. Put measured counts in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-async-entries.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "note": "ORIENT AND RE-MEASURE done; NO production edits (two tsx probes created and deleted in the same command each; `ls` proof both gone).\n\n(a) PREREQS LANDED. child A task-bda0eeac feat commit 0aeb0cf5; task-40e52fa8 feat commit e3066278.\n(b) A'S EXPORTS PRESENT in apps/daemon/src/release/release-decide-contracts.ts: RELEASE_DECIDE_COMMAND_KIND :31, RELEASE_DECIDE_CODE_LAYER_MAP :38 with RELEASE_PR_FAILED -> \"RUNNER_WORKSPACE\" :42, releaseRefusal :83. Not recreated.\n(c) GAP OPEN. `git grep -n \"release\\.decide\" -- apps/daemon/src` minus A's own module = ZERO hits. Nothing to duplicate.\n\n(g) DEPENDENCY EDGE: unchanged, no manifest edit needed; the consumption is same-package (`./release/release-decide-contracts.js`).\n\n=== STRUCTURE MOVED SINCE PLANNING (plan step-3 is stale on one point) ===\nPAYLOAD_KEYS is no longer defined in daemon-command-vocabulary.ts. task-a2409cba SPLIT it out to apps/daemon/src/daemon-command-payload-keys.ts (164 lines) when vocabulary.ts crossed the 400-line cap; vocabulary.ts:279 re-exports it verbatim. vocabulary.ts is now 329 lines. So the PAYLOAD_KEYS row this task adds lands in daemon-command-payload-keys.ts -- a NINTH owned path (roster 8 -> 9, still under the 10 cap), not a scope change.\nSecond stale point: MCP_EXCLUDED_COMMAND_KINDS is now DERIVED, not hand-kept -- mcp-tool-allowlist.ts:68 is `[...OPERATOR_PRINCIPAL_KINDS].filter(k => !MCP_REACHABLE_OPERATOR_KINDS.has(k)).sort()`. Adding release.decide to OPERATOR_PRINCIPAL_KINDS (this row) therefore MCP-excludes it with NO edit to mcp-tool-allowlist.ts, and moves the `excluded` literal the fence sibling task-20b7d6bb owns. Plan step 2(d) \"leave excluded at its current value\" is measured-wrong; the literal moves whether or not it is edited here.\n\n=== (d) LIVE PRODUCTION COUNTS (tsx probe, deleted same command) ===\nPAYLOAD_KEYS.length 53 | OPERATOR_PRINCIPAL_KINDS.size 18 | MCP_EXCLUDED.length 17 | MCP_SERVED_QUERY_KINDS.length 6 | wiredMcpToolKinds().length 42.\nPAYLOAD_KEYS insertion order at the anchor: [\"provider.probe\",\"repository.publish\",\"repository.bootstrap\",\"qualification.replan\"] -- release.decide goes between repository.publish and repository.bootstrap.\n\n=== BASELINE IS RED AT HEAD ON ALL FOUR PIN FILES; FOREIGN, ONE ROOT CAUSE ===\nProduction at HEAD carries three kinds the hand pins do not: environment.set_variable, environment.unset_variable, repository.bootstrap. Measured, each command standalone foreground:\n- daemon-command-registry.test.ts: :875 / :1735 / :1757 / :1789 `expected 53 to be 50`; :883 REGISTRATION_ORDER toEqual diff shows exactly `+ \"environment.set_variable\" + \"environment.unset_variable\" + \"repository.bootstrap\"`. 5 failed / 333.\n- daemon-store-dependencies.test.ts:769 registryKinds toEqual, same three `+` lines. 1 failed / 28.\n- daemon-v2-command-registry.test.ts:267 `expected 52 to be 49`. 1 failed / 8.\n- mcp-tool-allowlist.test.ts:143 `expected 17 to be 14` (the derived exclusion denominator; :174 vocabulary/wired never reached because :143 throws first). 1 failed.\n- daemon-command-vocabulary.test.ts was ALSO red at 03:38 (`expected 52 to deeply equal 51`, `expected 18 to be 17`) and went GREEN by 03:39 WITHOUT any edit of mine -- a peer reconciled it under me mid-measurement.\n\n=== (f) PEER DIRT, and why it is decisive here ===\n`git status --porcelain -- apps/daemon/src/` : ` M daemon-command-families.ts`, ` M daemon-command-vocabulary.test.ts`, plus untracked mcp-design-read-query.{js,test.ts} and preview/preview-goal-landing.test.ts. Nothing reverted, stashed or staged.\nThe two modified files are the live WIP of task-a2409cba9ad841a690961692a2948c41 (WORKING, assignee worker-caece97b, step 4 of 9). Liveness measured, not inferred: task json mtime 03:41:24 and daemon-command-vocabulary.test.ts mtime 03:39:28, against `date` 03:43:36 -- 2 and 4 minutes old. That row's own affectedFiles are daemon-command-vocabulary.ts/.test.ts, daemon-command-registry.ts/.test.ts, daemon-command-payload-keys.ts and daemon-command-families.ts: FIVE of them are also this row's owned paths, and both rows must move the SAME count literals.\nBlocking on that row per epic rail 3 rather than editing an uncommitted foreign file. Detail in the block reason and in the row comment.",
+      "startedAt": "2026-09-06T00:36:19.092Z",
+      "completedAt": "2026-09-06T00:45:04.049Z"
     },
     {
       "stepId": "step-2",
@@ -74,8 +77,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2739fee7",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -100,15 +103,22 @@
       "author": "architect-2e480458",
       "content": "SPIDR (architect-2e480458, 2026-09-05). Rail 18 at plan time: adding `release.decide` to MCP_EXCLUDED_COMMAND_KINDS reds THREE extra count pins this row's original 10-file roster missed — daemon-command-registry-human-approver.test.ts:323 (toHaveLength(6) + expectedExclusions list), mcp-main.test.ts:207-230 (EXPECTED_EXCLUDED_COMMAND_KINDS + EXCLUSION_CASES.length 6 + 6x2=12), mcp-http-host.test.ts:688 (EXCLUSION_CASES.length 6). Combined with wiring that is 13 files against the 10-file hard cap.\n\nTHIS ROW keeps the wiring + operator principal + fail-closed async stub. Fence sibling is task-20b7d6bba60f445faa87a51a09d4b125 (MCP-excluded + HUMAN_ONLY_STEPS + those extra pins + staffing arm).\n\nOriginal DoD clauses that MOVE to the sibling (do not implement them here; do not edit mcp-tool-allowlist.ts or agent-spawn-contract.ts):\n- MCP_EXCLUDED_COMMAND_KINDS membership, HUMAN_ONLY_STEPS membership\n- bidirectional MCP set-equality against the dispatch seam\n- MCP INPUT_INVALID / excluded-kind dispatch arm\n- mutation drills (b) and (c)\n\nThis row still owns: family + WiredCommandKind + PAYLOAD_KEYS + asyncEntries + OPERATOR_PRINCIPAL_KINDS; the four kind-roster pins (vocabulary.test, registry.test including REGISTRATION_ORDER insertion order, store-deps registryKinds, mcp-tool-allowlist.test.ts vocabulary/wired count literals ONLY); non-operator OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; fail-closed RELEASE_PR_FAILED with no durable write; drill (a).\n\nParent task-f961dc89 dependsOn now names both children. This row no longer dependsOn task-5f883e4e (no shared fence files).",
       "timestamp": "2026-09-05T13:39:45.185Z"
+    },
+    {
+      "id": "comment-49d6960542174eb89b0442277fcc014f",
+      "author": "worker-2739fee7",
+      "content": "MEASURED STATE 2026-09-06 03:38-03:45 JST, worker-2739fee7, branch moe/work-2026-09-04. Step 1 complete, no production edits. Blocking on task-a2409cba9ad841a690961692a2948c41. Everything below is a re-measurement; nothing is carried from the description.\n\nTWO PLAN ASSUMPTIONS ARE MEASURED-STALE (both from task-a2409cba, which landed while this row waited):\n\n1. PAYLOAD_KEYS IS NO LONGER IN daemon-command-vocabulary.ts. It was split out to apps/daemon/src/daemon-command-payload-keys.ts (164 lines) when vocabulary.ts crossed the 400-line cap, and vocabulary.ts:279 re-exports it (`export { PAYLOAD_KEYS } from \"./daemon-command-payload-keys.js\"`). vocabulary.ts is 329 lines now, not 372. Plan step 3's \"PAYLOAD_KEYS: insert ... immediately after the repository.publish entry\" therefore lands in daemon-command-payload-keys.ts. Owned-path roster goes 8 -> 9, still under the 10 cap. Not a scope change, just the file the table moved to.\n\n2. MCP_EXCLUDED_COMMAND_KINDS IS DERIVED, NOT HAND-KEPT. mcp-tool-allowlist.ts:68 is `...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()` (MCP_REACHABLE_OPERATOR_KINDS = {\"session.open\"}). Consequence for the SPIDR split in comment-eb460c84: adding release.decide to OPERATOR_PRINCIPAL_KINDS -- which THIS row owns -- MCP-excludes it with no edit to mcp-tool-allowlist.ts, and moves the `excluded` denominator plus the three pins the fence sibling task-20b7d6bb owns (daemon-command-registry-human-approver.test.ts:326, mcp-main.test.ts:238/:240, mcp-http/mcp-http-host.test.ts:690/:692/:721 -- all currently `14` / `28`). Plan step 2(d)'s \"leave excluded at its current value\" cannot hold: the literal moves whether or not it is edited. The architect should decide whether the `excluded` bump belongs here or stays with task-20b7d6bb, given the two rows can no longer be independent on that literal.\n\nLIVE PRODUCTION COUNTS (tsx probe importing the real modules, created and deleted in the same command): PAYLOAD_KEYS.length 53 | OPERATOR_PRINCIPAL_KINDS.size 18 | MCP_EXCLUDED_COMMAND_KINDS.length 17 | MCP_SERVED_QUERY_KINDS.length 6 | wiredMcpToolKinds().length 42. Insertion-order neighbourhood: [\"provider.probe\",\"repository.publish\",\"repository.bootstrap\",\"qualification.replan\"] -- release.decide goes between repository.publish and repository.bootstrap.\n\nALL FOUR HAND-WRITTEN PIN FILES ARE ALREADY RED AT HEAD, foreign, one root cause: production carries three kinds the pins do not (environment.set_variable, environment.unset_variable, repository.bootstrap).\n- daemon-command-registry.test.ts :875 /:1735 /:1757 /:1789 `expected 53 to be 50`; :883 REGISTRATION_ORDER toEqual diff prints exactly those three as `+` lines. 5 failed of 333.\n- daemon-store-dependencies.test.ts:769 registryKinds, same three `+` lines. 1 of 28.\n- daemon-v2-command-registry.test.ts:267 `expected 52 to be 49`. 1 of 8.\n- mcp-tool-allowlist.test.ts:143 `expected 17 to be 14`; :174 {excluded, queries, vocabulary, wired} is never reached because :143 throws first, so the `vocabulary: 50` / `wired: 42` literals are currently unverified.\n- daemon-command-vocabulary.test.ts was red at 03:38 (`expected 52 to deeply equal 51`, `expected 18 to be 17`) and was GREEN at 03:39 with no edit of mine -- reconciled under me mid-measurement.\n\nWHY THIS IS A BLOCK AND NOT A PROCEED. task-a2409cba (WORKING, worker-caece97b, step 4 of 9) is live in this checkout: its task json mtime is 03:41:24 and daemon-command-vocabulary.test.ts is 03:39:28 against `date` 03:43:36. Its affectedFiles are vocabulary.ts/.test.ts, registry.ts/.test.ts, payload-keys.ts, families.ts -- five are this row's owned paths, and both rows must move the same count literals. daemon-command-vocabulary.test.ts and daemon-command-families.ts are UNCOMMITTED foreign WIP right now, so editing them means either committing another session's bytes under this task id or not reporting a path I modified; global rail 5 forbids both. Epic rail 3 prescribes the dependency instead. Reconciling the four pins myself would also mean transcribing that row's three kinds into its own test tables while it is mid-flight there.\n\nNothing reverted, stashed, staged or committed. `pnpm --filter @moe/daemon test` was NOT run: per the fleet GATE START/END rule one full-suite gate runs at a time, and no owned bytes exist yet to gate.",
+      "timestamp": "2026-09-06T00:45:46.935Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T00:35:41.268Z",
+  "updatedAt": "2026-09-06T00:47:24.575Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-71b9a4e9",
@@ -118,7 +128,9 @@
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T13:41:03.457Z",
   "planningNotes": {
@@ -138,5 +150,52 @@
       "apps/daemon/src/daemon-command-dispatch.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T13:41:05.648Z"
+  "planApprovedAt": "2026-09-05T13:41:05.648Z",
+  "commits": [
+    {
+      "sha": "83a4392b33eee4b1fee806bd0c6185d1f0282493",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-06T00:35:44Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-06T00:35:52.833Z",
+      "treeId": "4a01df1bd7a5af67267c5262665e366bb9808385",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+    ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+    ".moe/tasks/task-fd2d438f29d64830a2bd6110f2ded78b.json"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "Moe-NG_Deep_Review_2026-09-05.md"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-2739fee7@2026-09-06T00:35:44Z",
+    "at": "2026-09-06T00:35:52.833Z"
+  },
+  "workStartedAt": "2026-09-06T00:36:19.092Z",
+  "blockedReason": "A CONCURRENT KIND-PUBLISHING ROW HOLDS 5 OF THIS ROW'S 9 OWNED PATHS, UNCOMMITTED, RIGHT NOW. Epic rail 3 prescribes the dependency. Blocked on task-a2409cba9ad841a690961692a2948c41 (WORKING, worker-caece97b, step 4/9).\n\nLIVENESS MEASURED: `date` 03:43:36 JST 2026-09-06; that row's task json mtime 03:41:24; daemon-command-vocabulary.test.ts mtime 03:39:28. Mid-measurement that file went red (03:38) -> green (03:39) with no edit of mine.\n\nOVERLAP: its affectedFiles are vocabulary.ts/.test.ts, registry.ts/.test.ts, payload-keys.ts, families.ts. Five are this row's owned paths and both rows must bump the SAME count literals. vocabulary.test.ts and families.ts are UNCOMMITTED foreign WIP: editing them means committing another session's bytes under this task id, or not reporting a path I modified -- global rail 5 forbids both. That is the delivery-bias rail's \"overwrite foreign WIP\" condition, and not re-orderable: DoD 1 requires all four pins reconciled IN THE SAME COMMIT as the wiring.\n\nNO SAFE PARTIAL SLICE: all four pin files are ALREADY RED AT HEAD, foreign, one cause (production carries environment.set_variable, environment.unset_variable, repository.bootstrap; the pins do not). registry.test.ts :875/:1735/:1757/:1789 `expected 53 to be 50`; store-dependencies.test.ts:769 same three kinds; v2-command-registry.test.ts:267 `expected 52 to be 49`; mcp-tool-allowlist.test.ts:143 `expected 17 to be 14`. Greening them means transcribing that row's three kinds while it is mid-flight there.\n\nARCHITECT DECISION WANTED, 1 point: MCP_EXCLUDED_COMMAND_KINDS is now DERIVED from OPERATOR_PRINCIPAL_KINDS (mcp-tool-allowlist.ts:68, less session.open), so this row's own OPERATOR_PRINCIPAL_KINDS edit MCP-excludes release.decide with no allowlist edit and moves the `excluded` denominator plus the 3 pins comment-eb460c84 gave sibling task-20b7d6bb. Step 2(d) cannot hold as written.\n\nSTATE CLEAN: no production edits, probes deleted in-command, foreign dirt untouched.",
+  "blockedOnTaskIds": [
+    "task-a2409cba9ad841a690961692a2948c41"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T00:47:24.575Z"
 }
