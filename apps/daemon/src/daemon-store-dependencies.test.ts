@@ -1141,7 +1141,10 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     const synchronous = Object.keys({
       ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
     });
-    expect(synchronous.filter((kind) => kind.startsWith("deployment."))).toEqual([]);
+    // `deployment.deploy` NAMED, rather than "no deployment kind is synchronous": its sibling
+    // `deployment.set_target` is an ordinary synchronous write and BELONGS in a handler table,
+    // so the broader claim would red the day that row lands while proving nothing extra.
+    expect(synchronous).not.toContain("deployment.deploy");
     // `deployment.deploy` and ONLY it: `deployment.set_target` is an ordinary synchronous write
     // whose handler is a sibling row's, so naming it here would claim an async seam it does not
     // have. The membership is proved rather than declared in

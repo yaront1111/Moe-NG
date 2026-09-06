@@ -66,6 +66,11 @@ const OWNED_KINDS = [
   // optionally `gh` and a tree write, none of which a synchronous CommandHandler can express.
   "repository.bootstrap",
   "repository.publish",
+  // Both deployment edges admit through this surface. `deployment.set_target` is an ordinary
+  // synchronous write; `deployment.deploy` is served on the ASYNC entry for the same reason
+  // `repository.bootstrap` is -- it runs `docker` and an optional `ssh`, and polls health.
+  "deployment.set_target",
+  "deployment.deploy",
 ] as const;
 
 function bytes(value: unknown): Uint8Array {
@@ -87,10 +92,12 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the thirteen command kinds this surface owns", () => {
+  it("covers exactly the fifteen command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(13);
-    expect(OWNED_KINDS).toHaveLength(13);
+    // Moved 13 -> 15 from the PRINTED expected-vs-received of this arm when the two deployment
+    // kinds joined the family, never from a number in a plan.
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(15);
+    expect(OWNED_KINDS).toHaveLength(15);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

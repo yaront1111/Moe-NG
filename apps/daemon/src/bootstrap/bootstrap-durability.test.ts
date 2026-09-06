@@ -203,6 +203,13 @@ const UNDRIVEN_KINDS: readonly string[] = Object.freeze([
   // write, none of which `send` -- a synchronous ledger drive -- can express. Driven end to end
   // in repository/repository-bootstrap-journey.test.ts instead.
   "repository.bootstrap",
+  // Served on the ASYNC entry for the same reason: `docker build`, an optional
+  // `docker save | ssh docker load`, and a health poll. Driven end to end through the
+  // REGISTERED kind in deployment/deploy-journey.test.ts instead.
+  "deployment.deploy",
+  // Synchronous, but this journey has no target to bind: the payload names a network, an ssh
+  // target and a url for an environment, and the kind's own suite drives it against those.
+  "deployment.set_target",
 ]);
 
 /** `plan.propose` and `policy.install` each appear twice; both repeats are asserted below. */
