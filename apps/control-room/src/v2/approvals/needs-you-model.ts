@@ -4,14 +4,21 @@ import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goa
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { ROUTE_WORDS } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
+import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
- * from things the daemon already states. Four kinds of item:
+ * from things the daemon already states. Five kinds of item:
  *
  *  - PLAN_APPROVAL: the affordance surface OFFERS `approval.decide_intent` for a goal's
  *    planning run. The offer is the daemon's own statement that the run is in review and
  *    this session may approve it; nothing here infers "reviewable" from a lifecycle word.
+ *  - PLAN_REJECTED: the operator sent a plan back and the daemon has moved the goal onto a
+ *    SUCCESSOR run it is not yet offering for approval (`planSentBack`). It is listed so a
+ *    reject does not vanish from the operator's queue between the click and the re-plan,
+ *    and it CLEARS on the same frame that offers the successor - at which point the
+ *    PLAN_APPROVAL item above takes its place. The two are mutually exclusive by
+ *    construction: `planSentBack` is false exactly when that offer exists.
  *  - ESCALATION: the surface OFFERS `escalation.decide` for a node, which the daemon does
  *    only when three review rounds failed and the kernel refuses more until a human decides.
  *    The runs read names the goal the node belongs to.
@@ -25,7 +32,9 @@ import { MIDDOT } from "../glyphs.js";
  * inline decision exists only where the daemon offered the command for it.
  */
 
-export const NEEDS_YOU_KINDS = ["PLAN_APPROVAL", "ESCALATION", "GATE_1", "READY_TO_CLOSE"] as const;
+export const NEEDS_YOU_KINDS = [
+  "PLAN_APPROVAL", "PLAN_REJECTED", "ESCALATION", "GATE_1", "READY_TO_CLOSE",
+] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
 export interface EscalationFacts {
@@ -70,7 +79,7 @@ export interface NeedsYouInput {
 }
 
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, ESCALATION: 1, GATE_1: 2, READY_TO_CLOSE: 3,
+  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, ESCALATION: 2, GATE_1: 3, READY_TO_CLOSE: 4,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -90,13 +99,32 @@ function itemsFor(
   const title = entry.brief?.title ?? entry.goalId;
   const base = { goalId: entry.goalId, planningRunRef: entry.planningRunRef, title };
   const items: NeedsYouItem[] = [];
-  if (offerFor(surface, "approval.decide_intent", entry.planningRunRef) !== undefined) {
+  // THE CURRENT RUN, not the catalog's frozen one. `planningRunRef` is immutable and after a
+  // reject it still names the run the operator sent back, so looking the offer up under it
+  // would drop the approval item entirely once the successor is compiled - the queue would
+  // go empty while a plan sat waiting for a decision nobody was told about.
+  const currentRun = currentRunOf(surface, entry.goalId, entry.planningRunRef);
+  if (offerFor(surface, "approval.decide_intent", currentRun) !== undefined) {
     items.push(Object.freeze({
       ...base,
       actionLabel: "Review the plan",
       detail: "Read the plan and its acceptance criteria before approving.",
       headline: "A plan is waiting for your approval",
       kind: "PLAN_APPROVAL",
+    }));
+  } else if (planSentBack(surface, entry.goalId, entry.planningRunRef)) {
+    items.push(Object.freeze({
+      ...base,
+      actionLabel: "Open the goal",
+      // NO REASON TEXT HERE, and that is measured rather than an oversight: no daemon read
+      // this browser can decode carries it. `/activity/read` entries are an exact SEVEN-key
+      // shape (commandKind, decidedAt, disposition, principalId, targetAggregateId, verdict,
+      // version) with a verdict word and no reason, and the plan-review read carries none
+      // either. Inventing one here would put words in the operator's mouth.
+      detail: "The daemon is compiling a new plan from the reason you gave."
+        + " Nothing needs you until it is offered for approval.",
+      headline: "The plan you sent back is being re-planned",
+      kind: "PLAN_REJECTED",
     }));
   }
   if (coverage?.status === "COVERAGE") {

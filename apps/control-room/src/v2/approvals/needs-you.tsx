@@ -42,6 +42,7 @@ const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
   ESCALATION: "Review exhausted",
   GATE_1: "Product contract",
   PLAN_APPROVAL: "Plan",
+  PLAN_REJECTED: "Plan sent back",
   READY_TO_CLOSE: "Ready to close",
 });
 

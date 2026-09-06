@@ -2,6 +2,7 @@ import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { pauseResetWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
+import { planSentBack } from "./plan-run-resolution.js";
 import { DEPENDS_TOKEN_PREFIX } from "./work-labels.js";
 
 /**
@@ -19,6 +20,7 @@ export type GoalStage =
   | "ESCALATION"
   | "NO_PRD"
   | "PLAN"
+  | "PLAN_REJECTED"
   | "READY_TO_CLOSE"
   | "REPLANNED"
   | "UNKNOWN"
@@ -196,6 +198,17 @@ export function deriveGoalStatus(input: {
   if (offered(surface, "approval.decide_intent", runId)) {
     return status("PLAN", "The plan is waiting for your approval.", {
       anchor: "plan", detail: "Read the steps and the acceptance criteria, then approve to start the agents.", label: "Review the plan",
+    }, { agents, progress });
+  }
+  // AFTER the PLAN branch, never before it: the frame that offers the successor for approval
+  // is the same frame on which `planSentBack` goes false, so checking this first would only
+  // ever shadow a decision the operator can actually make.
+  if (planSentBack(surface, goalId, runId)) {
+    return status("PLAN_REJECTED", "You sent this plan back; the daemon is compiling a new one.", {
+      anchor: "plan",
+      detail: "The successor run is being compiled from your reason. Nothing needs you until it"
+        + " is offered for approval.",
+      label: "Waiting for a new plan",
     }, { agents, progress });
   }
   if (agents !== null && agents.replanned > 0 && agents.replanned + agents.accepted === agents.total) {

@@ -21,6 +21,7 @@ export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object
   ESCALATION: "Review exhausted",
   NO_PRD: "No PRD",
   PLAN: "Plan review",
+  PLAN_REJECTED: "Plan sent back",
   READY_TO_CLOSE: "Ready to close",
   REPLANNED: "Replanned",
   UNKNOWN: "Reading",

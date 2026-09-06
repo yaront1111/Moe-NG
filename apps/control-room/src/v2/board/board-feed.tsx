@@ -35,6 +35,12 @@ export function toneOf(entry: ActivityEntryView): "bad" | "good" | "none" {
     return entry.verdict === null ? "none" : "bad";
   }
   if (entry.commandKind === "escalation.decide") return entry.verdict === "REPLAN" ? "bad" : "none";
+  // An approval kind is only GOOD when it approved. A REJECT commits through the same
+  // command, so reading the kind alone would tint "rejected the plan" green - the tone
+  // would then contradict the words on its own line.
+  if (entry.commandKind === "approval.decide" || entry.commandKind === "approval.decide_intent") {
+    return entry.verdict === "REJECT" ? "bad" : "good";
+  }
   if (GOOD_KINDS.has(entry.commandKind)) return "good";
   return BAD_KINDS.has(entry.commandKind) ? "bad" : "none";
 }

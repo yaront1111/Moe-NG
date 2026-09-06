@@ -122,7 +122,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:10:57.448Z",
-  "updatedAt": "2026-09-06T02:08:50.763Z",
+  "updatedAt": "2026-09-06T02:09:53.442Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:13:26.060Z",
     "plannedStepCount": 5,
@@ -194,7 +194,9 @@
     "apps/control-room/src/v2/goals/gate1-contract-shape.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
-    "apps/daemon/src/environment/environment-required-variables.ts"
+    "apps/daemon/src/environment/environment-required-variables.ts",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+    ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json"
   ],
   "completionSummary": "RETRY #1. QA's four rejection issues are all fixed; the rest of the row is unchanged from f4e1495b, which QA verified by four mutation drills.\n\nTHE DEFECT, FIXED. `envExample` appended the contract's names without excluding names the profile section already assigns, so a contract requiring `DATABASE_URL` emitted the profile's `DATABASE_URL=postgres://app:CHANGE_ME@localhost:5432/app` AND a later bare `DATABASE_URL=`. Consumers are last-wins and the generated app's `?? \"<default>\"` does not fall back on \"\", so the operator got an empty value with no error naming the cause. New `ENV_EXAMPLE_PROFILE_ASSIGNED_NAMES` is DERIVED from `ENV_EXAMPLE_PROFILE_LINES` (split at the first `=`, comments dropped) — never a hand-kept list, because the profile's lines are editable and a hand list would drift. `envExample` filters through it.\n\nCOLLISION RULE, stated in a code comment with its rejected alternative: THE PROFILE'S LINE WINS and the contract's declaration is dropped, because the requirement is already satisfied by that line and the operator gets a value to edit rather than a bare name. Letting the contract win would mean deleting the profile's line, which moves the `/POSTGRES_PASSWORD=(\\S+)/` read-back at deployment-infrastructure-generator.test.ts:305-306 and strips a working placeholder.\n\nORDER IS LOAD-BEARING: the exclusion runs BEFORE the `names.length === 0` decision, so a contract whose names ALL collide emits the profile's bytes exactly rather than a heading with nothing under it. Pinned by byte-identity.\n\nTWO NEW ARMS, WRITTEN FIRST AND WATCHED FAIL on the unfixed surface (`Tests 2 failed | 18 passed`): (1) file-wide duplicate-key check — every non-comment `KEY=` line collected, `keys` must equal its own dedupe, and `DATABASE_URL` / `POSTGRES_PASSWORD` must each keep their PROFILE value; (2) fully-colliding sets emit bytes identical to the untouched profile file, with an anti-vacuity assertion that a non-colliding name is still emitted so an over-filtering bug can",
   "commits": [
@@ -252,6 +254,22 @@
       "pushed": false,
       "recoveredBy": "qa-f2906c26",
       "message": "fix(task-971caed1c5ca46bd871a7ec1c6ca8de1): .env.example never re-declares a name the profile already assigns (retry after qa_reject #1). Hand-landed by QA under the ratified QA hand-landing rule after the wrapper exit commit did not fire for review round 2 (polled ~6 min past complete_task; only the round-1 commit f4e1495b existed). Author of record: worker-2739fee7. HEAD blobs SHA256-equal the bytes QA verified."
+    },
+    {
+      "sha": "f011dffe405bf627b4c3d3793373d5adc1e3e992",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T01:59:32Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T02:09:53.442Z",
+      "treeId": "4d5b02e51ee37f7c0e6dcccfc0aeb5be6cc38a36",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -263,13 +281,13 @@
     "apps/daemon/src/environment/environment-required-variables.test.ts"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx"
+    ".baseline-fails-8c5af680.txt"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-f2906c26@2026-09-06T02:00:00.000Z",
-    "at": "2026-09-06T02:06:31.390Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T01:59:32Z",
+    "at": "2026-09-06T02:09:53.442Z"
   },
   "reviewCompletedAt": "2026-09-06T02:08:50.763Z",
   "rejectionDetails": {

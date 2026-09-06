@@ -52,8 +52,15 @@ export const PLAN_APPROVAL_TRANSPORT_LAYER = "CONTROL_ROOM_TRANSPORT";
 /** The DAEMON-OWNED approval wire. The caller-authored `approval.decide` is not it. */
 export const APPROVAL_COMMAND_KIND = "approval.decide_intent" as const;
 
-/** The one decision this screen sends; `decisionReason` stays null for a plain approve. */
+/**
+ * The two decisions this screen sends, over the ONE offer the daemon made. They are
+ * distinguished by the operator's reason and nothing else: a null reason is an
+ * approve, a reason is a reject. That invariant is why no third state exists here -
+ * a reject with no reason is not composed at all, so the browser can never spend a
+ * grant on a decision the daemon would refuse for a missing reason.
+ */
 const APPROVE_DECISION = "APPROVE";
+const REJECT_DECISION = "REJECT";
 
 /**
  * Every reason this gate can withhold approval. Exhaustive and stable: each is
@@ -118,8 +125,15 @@ export type PlanApprovalOutcome =
   | { readonly code: string; readonly layer: string; readonly ok: false };
 
 export interface PlanApprovalPort {
-  /** Calls the real typed command. Only a grant the daemon offered can reach it. */
-  readonly submit: (grant: ApprovalGrant) => Promise<PlanApprovalOutcome>;
+  /**
+   * Calls the real typed command. Only a grant the daemon offered can reach it.
+   * `decisionReason` null approves; any string rejects and travels VERBATIM as the
+   * operator wrote it - this module never trims, summarises or re-words it, because
+   * the daemon fences that text into the successor's mission.
+   */
+  readonly submit: (
+    grant: ApprovalGrant, decisionReason?: string | null,
+  ) => Promise<PlanApprovalOutcome>;
 }
 
 /**
@@ -163,12 +177,16 @@ function answerOf(response: unknown, commandId: string): PlanApprovalOutcome {
 
 export function createPlanApprovalPort(wire: PlanApprovalWire): PlanApprovalPort {
   return Object.freeze({
-    submit: async (grant: ApprovalGrant): Promise<PlanApprovalOutcome> => {
-      // The explicit empty tuple is this authenticated human's assertion that approval changes
-      // no dependencies. It is never a daemon default; the witness remains server-minted.
+    submit: async (
+      grant: ApprovalGrant, decisionReason: string | null = null,
+    ): Promise<PlanApprovalOutcome> => {
+      const rejecting = decisionReason !== null;
+      // The explicit empty tuple is this authenticated human's assertion that the decision
+      // changes no dependencies. It is never a daemon default; the witness remains
+      // server-minted. Four keys, the same four for both decisions.
       const payload = {
-        decision: APPROVE_DECISION,
-        decisionReason: null,
+        decision: rejecting ? REJECT_DECISION : APPROVE_DECISION,
+        decisionReason,
         dependencyChanges: { additions: [], challenges: [], removals: [] },
         runId: grant.runId,
       };
@@ -176,7 +194,7 @@ export function createPlanApprovalPort(wire: PlanApprovalWire): PlanApprovalPort
       const built = wire.client.commands[APPROVAL_COMMAND_KIND](
         grant.affordance as unknown as CommandAffordance<typeof APPROVAL_COMMAND_KIND>,
         {
-          correlationId: `ui-approve-${requestDigest.slice(0, 16)}`,
+          correlationId: `ui-${rejecting ? "reject" : "approve"}-${requestDigest.slice(0, 16)}`,
           payload,
           requestDigest,
           sessionCredential: wire.sessionCredential,

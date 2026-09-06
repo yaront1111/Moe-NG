@@ -34,6 +34,7 @@ import { GOAL_SECTION_IDS } from "./goals/goal-status-strip.js";
 import { LiveBoard } from "./board/board-screen.js";
 import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
+import { currentRunOf, planSentBack } from "./goals/plan-run-resolution.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
 import { useAdvancedFrames } from "./shell/advanced-frames.js";
@@ -258,6 +259,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     () => (attached === null || plane !== "V1" ? null : createGate1ApprovalPortV1(attached)),
     [attached, plane],
   );
+  // THE RUN THE PLAN GATE ACTS ON: after a reject the goal's immutable `planningRunRef`
+  // still names the run the operator sent back. Resolved ONCE and fed to both the grant
+  // and the screen; two resolutions could disagree (see plan-run-resolution.ts).
+  const planRunId = open === null ? "" : currentRunOf(boardFrame, open.goalId, open.planningRunRef);
   /**
    * The approval surface handed to the plan-review screen: the daemon's OWN verdict
    * on whether this run may be approved, plus the wire to spend that grant. Nothing
@@ -268,10 +273,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const approval = useMemo<PlanApprovalSurface | undefined>(() => {
     if (attached === null || open === null) return undefined;
     return {
-      authorization: authorizeApproval(boardFrame, open.planningRunRef),
+      authorization: authorizeApproval(boardFrame, planRunId),
+      sentBack: planSentBack(boardFrame, open.goalId, open.planningRunRef),
       submit: createPlanApprovalPort(attached).submit,
     };
-  }, [attached, boardFrame, open]);
+  }, [attached, boardFrame, open, planRunId]);
 
   let body: JSX.Element;
   if (open !== null) {
@@ -328,7 +334,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
               goalId={open.goalId}
               onBack={back}
               read={readRun}
-              runId={open.planningRunRef}
+              runId={planRunId}
               title={open.title}
             />
           </details>
