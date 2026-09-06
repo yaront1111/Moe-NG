@@ -48,7 +48,7 @@
       "startedAt": "2026-09-06T02:49:50.688Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -69,11 +69,17 @@
       "author": "worker-caece97b",
       "content": "DISCLOSED GAP — BOTH DELIVERY SEAMS EXIST AND ARE PROVEN, NEITHER HAS A PRODUCTION CALLER SUPPLYING DATA YET.\n\nFiled as a comment, not a new row (DELIVERY BIAS rail + \"evidence/quality work is not its own row\"). Recorded here so the row that wires the deploy path picks it up instead of re-deriving it. Neither item is a shortfall against any child's GRADED DoD — both children stated it and QA approved with it disclosed.\n\n1. THE SPAWN SIDE. `delivered` is an OPTIONAL parameter at all three allowlist constructions and nothing in production passes it:\n   - `apps/daemon/src/orchestrator/agent-spawn-environment.ts` `agentEnvironment(source, delivered?)` — `agent-spawner.ts` passes nothing, DELIBERATELY (grandchild A's stated decision: a coding seat is not a deploy target and must not receive an operator's production secrets).\n   - `apps/daemon/src/orchestrator/verifier-process-runner.ts:72` — `delivered` is a runner option.\n   - `apps/daemon/src/preview/preview-process.ts` — same, on the `env:` arg.\n   `git grep readEnvironmentDelivery -- apps packages` outside `environment-delivery.{ts,test.ts}` = ZERO. The consumer is whoever resolves a project's environment PER SPAWN.\n\n2. THE REPOSITORY SIDE, AND THIS ONE IS ONE FIELD WIDE. The lander genuinely reaches the generator — `repository-bootstrap-service.ts:54 generateControlledProfile(input)`, then `ports.tree.write(dir, tree.files)`, then `ports.git.commit(dir)` — so `.env.example` IS generated into the repository and committed. But the request type it forwards carries no names:\n   - `apps/daemon/src/repository/repository-bootstrap-contracts.ts:61-67` — `BootstrapRequest = { projectId, productName, profileVersion, dir, github? }`. No `requiredVariableNames`.\n   - `apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts:63` declares `readonly requiredVariableNames?: readonly string[]` and :138 defaults it `?? []`.\n   CONSEQUENCE, stated plainly: on every REAL bootstrap today the landed `.env.example` is byte-identical to the profile's own — the contract-derived names are emitted only when a caller supplies them, and the only callers that do are tests. `git grep requiredVariableNames -- apps/daemon/src --include='*.ts'` outside tests returns exactly the generator's own declaration/default plus `environment-required-variables.ts:90`, which is the PRODUCER of the list.\n\nWHAT CLOSING IT LOOKS LIKE (measured, so nobody re-derives it): add `requiredVariableNames?: readonly string[]` to `BootstrapRequest`, have the bootstrap command edge read the project's approved contract revision through `requiredVariableNames(revision)` (`apps/daemon/src/environment/environment-required-variables.ts:90`, already exported, already tested, already `.js`-bridged), and pass it through. `generateControlledProfile(input)` is called with the whole request object, so the field flows structurally the moment the type carries it — no call-site edit at :54. The `.env.example` golden pin then MOVES for any product whose contract names variables; `controlled-profile-generator.test.ts` already pins both hashes (`GOLDEN_MANIFEST`'s row and `GOLDEN_ENV_EXAMPLE_WITH_NAMES = a391d228…`), so the pin is there to be moved, never softened.\n\nNEAREST OWNERS. Read side: child 3 `task-ba83b202265d40d1885d3091f009b0a2` (WORKING — the Environments screen and the goal's unset count), which consumes `unsetVariableNames` and may want the bootstrap edge too. Write side: whichever row wires the deploy spawn — which DOES NOT EXIST at HEAD (grandchild A measured it: no `apps/daemon/src/deploy`; `repository/deployment/` is a file generator plus a `spawnSync docker version` capability probe; the live spawn sites are agent-spawner, verifier-process-runner, moe-up-spawn, preview-process, project-stack-host-main).",
       "timestamp": "2026-09-06T02:50:35.752Z"
+    },
+    {
+      "id": "comment-ad20b756cf4e408687d61a37acb16c81",
+      "author": "worker-f72a1438",
+      "content": "RESUME RE-MEASUREMENT 2026-09-06 07:59Z, HEAD4ad67796abc937a4bdf6e81a3cac1121f1def9b1. NO SOURCE EDITS. Handoff history read; steps1-2 COMPLETED, step3 already IN_PROGRESS (start_step returns INVALID_STATE; not reset). All3 declared children still DONE+landed in epicSiblings; verification/completion/review read there, not inferred from HEAD. store.ts:60 header and exact3 exports117/146/165 intact. B field now in core contract111/admission235-240, CRmirror28/107/110 and Cconsumer93; original packages/contracts/planning grep remains wrong locus.\nFRESH focused characterization: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/environment src/orchestrator/verifier-process-runner.test.ts src/orchestrator/agent-spawn-environment.test.ts src/repository/controlled-profile/controlled-profile-generator.test.ts -> EXIT0, Test Files11passed(11), Tests210passed(210), start10:59:22 local, duration11.69s. Polled to completion, not background claim. This is NOT step3's named full verification.\nATTRIBUTION: earlier8334cdc9 and96aed5d3 are1path task-JSON-only checkpoints; all7 unattributed activation/deploy source paths are foreign. environment-store.ts and agent-spawn-environment.ts appear ASSERTED only because completed read-only step1 had affectedFiles; both clean and this shell changed neither. Governor asked remove stale attribution, not sweep peer WIP.\nMISSING COMPOSITION rechecked via committed commands: git grep -n readEnvironmentDelivery -- apps/daemon/src ':!*.test.ts' returns only declaration environment-delivery.ts:104; git grep -n requiredVariableNames -- apps/daemon/src ':!*.test.ts' shows producer declaration90 and generator/template plumbing only, no bootstrap caller. BootstrapRequest61-67 omits names, command bootstrapRequestOf130 supplies no names, generator138 defaults empty. Existing210green tests prove injected seams, not real project-to-process/repository data flow. Raised to architect/governor before proof closure; no new implementation inside this NO-CODE shell. Whole-package daemon gate is queued AFTER worker7bdbffac (governor priority), no full gate token held.",
+      "timestamp": "2026-09-06T08:00:20.661Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T07:41:19.125Z",
+  "updatedAt": "2026-09-06T08:07:56.887Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -104,7 +110,8 @@
   },
   "planApprovedAt": "2026-09-05T19:12:08.066Z",
   "contextFetchedBy": [
-    "worker-caece97b"
+    "worker-caece97b",
+    "worker-f72a1438"
   ],
   "workStartedAt": "2026-09-06T02:45:52.083Z",
   "commits": [
@@ -227,5 +234,12 @@
       "releasedBy": "governor-afbde490",
       "reason": "Confirmed crash: worker-caece97b's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
     }
+  ],
+  "blockedReason": "Governor rail4 ruling msg-6733786c: uncovered production composition, not proof-only gap. One child filed task-14260d5ec20c43e697521a8a98904136 in PLANNING; await its real encrypted-environment-to-launch and approved-contract-to-bootstrap-name consumer edges. Parent stays blocked until child lands, no closure over injected seams. Current owner of active worker work is separate53267f86; this call only adds explicit prerequisite to parked unassigned72.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T08:01:36.964Z",
+  "blockedOnTaskIds": [
+    "task-14260d5ec20c43e697521a8a98904136"
   ]
 }

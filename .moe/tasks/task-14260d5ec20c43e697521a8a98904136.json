@@ -1,0 +1,39 @@
+{
+  "id": "task-14260d5ec20c43e697521a8a98904136",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Compose project environment delivery into real process launches and bootstrap required names",
+  "description": "ONE production-composition child requested by governor-afbde490 in workers msg-6733786c150c42ca88553c1ea21c461c (2026-09-06 08:03Z). architect-aa54e231 owns scope; this is missing production work, NOT a quality/evidence-only row. Parent72b22fcf DoD1/4 cannot close over injected seams.\nMEASURED CURRENT08:00Z at HEAD4ad67796 plus untracked source census, independent read-only audit corroborated: readEnvironmentDelivery only definition environment/environment-delivery.ts104; real agent-spawner156/159 one-arg agentEnvironment; real verifier factory wrapper-main159 has onFatalContainment only; preview-runner165-167 forwards process config, no production delivered assignment anywhere. Existing deploy engine now exists but no production createDeployService caller and no encrypted-store-to-container handoff. Do not repeat childA's now-stale claim that no deploy engine exists.\nREPOSITORY half: requiredVariableNames only producer definition environment-required-variables.ts90 outside generator/templates/tests. BootstrapRequest61-67 and command bootstrapRequestOf130-139 omit names; bootstrap service54 forwards same request; generator138 defaults[]. Actual command therefore emits profile-only .env.example, not approved-contract names. Existing childC generator is correct when supplied names; reuse it.\nAt planning: measure actual host/process project+environment authority and exact producer dependency edges, coordinate with deployment command04b3 now being split, declare the actual async host producer dependency before WORKING. Respect10distinctfiles/12steps; architect owns any necessary scope resolution. No new parallel store/decoder/reducer, no UI, no weakening parent DoD. Existing evidence comments on parent ad20b756 and childA65692a2/childCab6da08 carry detailed anchors.",
+  "definitionOfDone": [
+    "The production project/environment resolver calls the existing encrypted delivery reader and supplies the intended verifier/preview/deploy process boundary; demonstrate real caller edges, not test-injected optional parameters. Resolve and declare any missing host/deploy composition prerequisite before implementation.",
+    "Each intended child receives its selected environment's value under the existing closed allowlist; a non-allowlisted ambient host variable remains excluded. Scope mismatch/unavailable delivery refuses with exact stable code and layer, without raw error data.",
+    "A real child-process canary in the production composition path proves receipt of the selected value while wrapper/log/receipt bytes remain value-free; no production credentials are delivered to coding seats merely because agentEnvironment exposes an optional parameter.",
+    "The real registered repository.bootstrap command reads required variable names from the approved product contract and supplies the existing generator; verify committed .env.example includes noncolliding required NAMES ONLY, preserves the existing profile collision rule and moves no unrelated golden pins.",
+    "Empty/no configured environment variables and a contract naming none preserve existing spawn/example behavior byte-for-byte; reuse landed no-op tests and add production-composition regressions.",
+    "Run focused consumer tests plus standalone daemon/control-room/typecheck gates with actual nonzero test counts and path-attributed foreign failures. Report owned paths exactly; no secret/sentinel/value-derived evidence in handoff."
+  ],
+  "taskRails": [
+    "No operator production secrets in coding seats by default; resolve intended project/environment and purpose at the real launch boundary, never broad process.env plus extras.",
+    "Reuse environment-delivery and environment-required-variables plus the existing bootstrap generator. No duplicate store, hand-maintained required-name list or second authority.",
+    "Scope is production composition. Parent proof stays blocked until these actual edges land; injected-seam tests alone cannot discharge parent DoD1/4."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-72b22fcf9da54b3b91dabf5b7392aff1",
+  "dependsOn": [
+    "task-945bb541777a4b789983382f9513f43c",
+    "task-971caed1c5ca46bd871a7ec1c6ca8de1",
+    "task-facff1d1e7ce44a6b1101490524890a9"
+  ],
+  "priority": "HIGH",
+  "order": 102.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T08:07:09.378Z",
+  "updatedAt": "2026-09-06T08:07:09.378Z"
+}

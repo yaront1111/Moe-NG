@@ -1,0 +1,36 @@
+{
+  "id": "task-358b6ec8ee884ca6b6bc96bbf1f54d84",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "deployment.set_target writes the durable target, adopting the orphaned admission module",
+  "description": "SPIDR child of task-04b3ce7e349743c2a156d32ee5550ba5, filed by architect-fa3a3e17 on 2026-09-06 on the governor's re-plan hand-back. That row measured at 18+ existing paths before its new files, past the 10-file cap, and the governor's note asks the split to \"either adopt [deploy-target-contracts.ts] in the child that owns the constants or delete it from the worktree\". THIS ROW ADOPTS IT.\n\nWHY THE SPLIT FALLS HERE. `deployment.set_target` is an ORDINARY SYNCHRONOUS WRITE and `deployment.deploy` is not - bootstrap-contracts.ts:48 already records that distinction in its own comment. `CommandHandler` is `(context: HandlerContext) => ServiceOutcome` (bootstrap-ledger-vocabulary.ts:253), a SYNC type, so set_target fits GOAL_HANDLERS and deploy cannot. The parent keeps the async half.\n\nTHE ORPHAN THIS ROW ADOPTS. `apps/daemon/src/deployment/deploy-target-contracts.ts` is UNTRACKED (`git status --porcelain` shows `??`) and `git grep -c deploy-target-contracts -- apps/daemon/src` returns ZERO IMPORTERS. It is not scratch work - it is a considered module holding the two kinds' vocabulary, the admission rules for an operator-typed target, and the aggregate the binding lands on, with its own header stating \"ADMISSION IS A SECURITY BOUNDARY, NOT TIDINESS. Every field here is operator-typed text that ends up in an argv (`--network <network>`, `ssh <sshTarget> docker ...`) or on a receipt that a screen renders.\" That reasoning is worth keeping; an unconsumed module is not. This row gives it a consumer or the row is not done.\n\nMEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06 - MOST OF THE ROSTER WORK IS ALREADY LANDED, so do not redo it:\n- `daemon-command-vocabulary.ts:70` -> `\"deployment.set_target\": CAPABILITIES.GOAL, \"deployment.deploy\": CAPABILITIES.GOAL` (family table, DONE).\n- `:361` -> both kinds in the operator roster, with `:358` commenting that deploy is served from an ASYNC entry (DONE).\n- PAYLOAD_KEYS HAS MOVED TO ITS OWN FILE: `apps/daemon/src/daemon-command-payload-keys.ts:165` -> `\"deployment.set_target\": [\"environment\", \"network\", \"sshTarget\", \"url\"]` and `:166` -> `\"deployment.deploy\": [\"environment\", \"sha\"]` (DONE). Plans naming PAYLOAD_KEYS inside daemon-command-vocabulary.ts are stale.\n- `bootstrap-contracts.ts:51-52` -> both kinds listed (DONE).\nSo the roster is NOT this row's work. `git grep -n \"deployment.set_target\" -- apps/daemon/src` finds NO handler: the write itself is what is missing.\n\nWHAT THIS ROW OWNS: adopting deploy-target-contracts.ts (tracked, imported, tested), the `deployment.set_target` handler in GOAL_HANDLERS, and the durable target aggregate that `deploy-ports.ts:32` already declares is \"WRITTEN by `deployment.set_target`; only read here\".\n\nNOT IN SCOPE: `deployment.deploy` and its async entry, the journey, the roster counts - all the parent's.",
+  "definitionOfDone": [
+    "`apps/daemon/src/deployment/deploy-target-contracts.ts` is ADOPTED: tracked by git, imported by production code, and covered by tests. `git status --porcelain` no longer shows it as `??`, and `git grep -c deploy-target-contracts -- apps/daemon/src` returns a NONZERO importer count from a non-test module. An unconsumed module satisfies every existence grep while the feature does not exist.",
+    "`deployment.set_target` is registered as a SYNCHRONOUS handler in GOAL_HANDLERS (apps/daemon/src/goals/goal-services.ts), matching `CommandHandler = (context) => ServiceOutcome` at bootstrap-ledger-vocabulary.ts:253. It writes the durable target that deploy-ports.ts:32 declares is written by this kind and only read there. Do NOT add it to the async entries - it is an ordinary synchronous write and bootstrap-contracts.ts:48 already says so.",
+    "THE ADMISSION RULES ARE ENFORCED AND ASSERTED, because every field is operator-typed text that reaches an argv or a rendered receipt: a `url` carrying `user:password@` is REFUSED, and a `network` or `sshTarget` containing whitespace, a shell metacharacter, a newline or a NUL is REFUSED. Assert each with its specific code AND the layer that refused - never merely that it failed. The engine spawns with shell:false so a metacharacter cannot re-parse into a second command, but an unadmitted value still reaches a remote host and a credential still lands on every receipt.",
+    "THE DURABLE TARGET ROUND-TRIPS: written by the command, read back from a REAL store, with every member asserted. Setting a target twice for one environment REPLACES rather than duplicating - assert the read-back count is one.",
+    "NO ROSTER WORK. The family table, the operator roster, PAYLOAD_KEYS (now in apps/daemon/src/daemon-command-payload-keys.ts) and the bootstrap kind lists ALREADY carry both kinds - `git status --porcelain` proves daemon-command-vocabulary.ts, daemon-command-payload-keys.ts and bootstrap-contracts.ts are untouched by this row. Eight rows are contending those files; re-editing one is a collision, not thoroughness.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` covers no apps/** file, so say that rather than quoting a bare root count line."
+  ],
+  "taskRails": [
+    "ADOPT THE ORPHAN OR DELETE IT - do not leave apps/daemon/src/deployment/deploy-target-contracts.ts untracked with zero importers. The governor's hand-back names this explicitly.",
+    "ADMISSION IS A SECURITY BOUNDARY, NOT TIDINESS. Operator-typed target text reaches an argv and a rendered receipt; a url with embedded userinfo puts a credential on every receipt.",
+    "SYNCHRONOUS ONLY. `CommandHandler` returns `ServiceOutcome`, not a promise. set_target fits GOAL_HANDLERS; the async entry is the parent's.",
+    "NO ROSTER EDITS. The vocabulary, payload keys and bootstrap lists already carry both kinds and eight rows are contending those files.",
+    "NO DEPLOY EFFECT, NO JOURNEY, NO UI - all belong to the parent task-04b3ce7e349743c2a156d32ee5550ba5."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-04b3ce7e349743c2a156d32ee5550ba5",
+  "priority": "HIGH",
+  "order": 91.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T08:09:18.405Z",
+  "updatedAt": "2026-09-06T08:09:18.405Z"
+}

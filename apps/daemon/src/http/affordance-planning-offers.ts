@@ -7,6 +7,7 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION }
   from "../product-contract/product-contract-command-contracts.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
+import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
 import type { CompilerLanePort } from "./affordance-compiler-lane.js";
 
 const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
@@ -62,6 +63,17 @@ export interface PlanningOfferInput {
   readonly landedCommit: (goalId: string) => boolean;
   readonly ledger: DurableLedger;
   readonly mintId: (kind: string) => string;
+  /**
+   * Whether a preview has actually RUN for this goal, and how it ended. A FACT and LAZY for the
+   * same reasons as `closeReadiness` and `landedCommit` above: the ladder stays pure, and the
+   * receipt walk happens only for a goal that could actually be offered a decision.
+   *
+   * `null` is "no preview has ever run", NOT "it failed" — and `"REFUSED"` is a RECORD of a
+   * preview that never became answerable. Both withhold the card, because an operator handed a
+   * Decide control for a preview that is not serving would be judging a product that is not
+   * there; only `"STARTED"` is offered.
+   */
+  readonly previewReceipt: (goalId: string) => "REFUSED" | "STARTED" | null;
   readonly projectId: string;
 }
 
@@ -121,7 +133,7 @@ function offer(
   input: PlanningOfferInput,
   kind: CompilerOfferKind
     | "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose"
-    | "repository.publish",
+    | "preview.decide" | "repository.publish",
   aggregateId: string,
 ): NextAllowedCommand {
   return Object.freeze({
@@ -176,11 +188,24 @@ function offersForGoal(
   // node of this goal is landed as a commit yet" (seen live on UnAI 2026-09-04). Targets the
   // goal's publish aggregate so the decision's own version fence never moves the goal's; read
   // here rather than above so the landing walk is skipped for a goal that could not publish.
-  const publish = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING"
-    || lifecycle === "COMPLETED"
+  const built = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING"
+    || lifecycle === "COMPLETED";
+  const publish = built
     ? (input.landedCommit(goal.goalId)
       ? [offer(input, "repository.publish", `publish:${goal.goalId}`)]
       : [])
+    : [];
+  // The product-preview verdict, offered only once a preview really STARTED for this goal — a
+  // Decide card for a preview that never became answerable would ask the operator to judge a
+  // product that is not serving, the same defect PUBLISH had before `landedCommit` gated it.
+  // A null receipt (none ever ran) and a REFUSED one both withhold, fail closed. Targets the
+  // goal's PREVIEW aggregate so the decision's own version fence never moves the goal's — the
+  // same reason publish takes `publish:<goalId>`, and here it is load-bearing rather than tidy:
+  // `readDurableLedger` keeps the last committed result per targetAggregateId, so a decide on
+  // the goal itself would overwrite the goal's state and drop it from `durableGoals` entirely.
+  // Read HERE rather than above so the receipt walk is skipped for every goal with nothing built.
+  const preview = built && input.previewReceipt(goal.goalId) === "STARTED"
+    ? [offer(input, "preview.decide", previewAggregateId(goal.goalId))]
     : [];
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
     // A goal is offered to close only when its product is DONE: every approved criterion of its
@@ -191,10 +216,10 @@ function offersForGoal(
     // above so the coverage walk is skipped for every goal that could not be offered one.
     const readiness = input.closeReadiness(goal.goalId);
     return readiness === "NO_CONTRACT" || readiness === "READY"
-      ? [offer(input, "goal.close", goal.goalId), ...publish]
-      : [...publish];
+      ? [offer(input, "goal.close", goal.goalId), ...publish, ...preview]
+      : [...publish, ...preview];
   }
-  if (lifecycle === "COMPLETED") return [...publish];
+  if (lifecycle === "COMPLETED") return [...publish, ...preview];
   return [];
 }
 

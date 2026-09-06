@@ -17,6 +17,8 @@ import type { JsonObject, NextAllowedCommand } from "@moe/contracts";
 
 import type { CompilerLaneFacts, CompilerLanePort } from "./affordance-compiler-lane.js";
 import { resolvePlanningOffers } from "./affordance-planning-offers.js";
+import type { PreviewReceiptState } from "../preview/preview-daemon-edge.js";
+import { previewAggregateId } from "../preview/preview-receipt-contracts.js";
 import type { PlanningOfferResolution } from "./affordance-planning-offers.js";
 import type { DurableAggregate, DurableLedger } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
@@ -72,6 +74,13 @@ const NO_CONTRACT = (): GoalCloseReadiness["kind"] => "NO_CONTRACT";
 const NOTHING_LANDED = (): boolean => false;
 
 /**
+ * A goal with NO preview receipt is the default, because that is what every goal looks like
+ * until a preview has actually run for it. The decision card is offered off the opposite fact,
+ * so an arm that wants it must say so.
+ */
+const NO_PREVIEW = (): PreviewReceiptState | null => null;
+
+/**
  * A goal whose run was REJECTED and whose CURRENT run is its successor. The goal's own
  * `planningRunRef` STAYS on the rejected run: it is immutable, and the whole point of the
  * `currentRun` fact is that consumers RESOLVE past it rather than rewrite it.
@@ -113,6 +122,7 @@ function resolutionOver(
     currentRun,
     landedCommit: NOTHING_LANDED,
     ledger,
+    previewReceipt: NO_PREVIEW,
     mintId: () => `cmd-${(minted += 1)}`,
     projectId: PROJECT,
   });
@@ -122,6 +132,7 @@ function resolutionFor(
   runLifecycle: string, goalLifecycle: string, lane: CompilerLanePort = LEGACY_LANE,
   closeReadiness: (goalId: string) => GoalCloseReadiness["kind"] = NO_CONTRACT,
   landedCommit: (goalId: string) => boolean = NOTHING_LANDED,
+  previewReceipt?: (goalId: string) => PreviewReceiptState | null,
 ): PlanningOfferResolution {
   let minted = 0;
   return resolvePlanningOffers({
@@ -132,6 +143,7 @@ function resolutionFor(
     currentRun: (planningRunRef) => planningRunRef,
     landedCommit,
     ledger: ledgerWith(runLifecycle, goalLifecycle),
+    previewReceipt: previewReceipt ?? NO_PREVIEW,
     mintId: () => `cmd-${(minted += 1)}`,
     projectId: PROJECT,
   });
@@ -528,5 +540,107 @@ describe("the offer ladder resolves the goal's CURRENT run", () => {
       `approval.decide@${RUN_ID}`, `approval.decide_intent@${RUN_ID}`,
     ]);
     expect(resolution.planningGoalRefs).toEqual({ [RUN_ID]: GOAL_ID });
+  });
+});
+
+/**
+ * THE PRODUCT-PREVIEW DECISION CARD (task-dd86f35e, DoD 4).
+ *
+ * A goal is offered `preview.decide` only when a preview really RAN for it — a STARTED receipt.
+ * No receipt and a REFUSED receipt both WITHHOLD, fail closed: an operator handed a Decide card
+ * for a preview that never became answerable would be judging a product that is not there, the
+ * same defect the PUBLISH card had before `landedCommit` gated it (seen live on UnAI 2026-09-04).
+ *
+ * EVERY ARM IS SET-EQUALITY on `commandKind@target`, never a subset, because the two withholding
+ * arms are exactly the ones a subset assertion cannot see: an offer that should have DISAPPEARED
+ * still satisfies `toContain` on everything else.
+ *
+ * THE RECEIPT STATE IS A FACT HERE, as `landedCommit` and `closeReadiness` are, and the ladder
+ * stays pure. Its PRODUCTION derivation — `createPreviewReceiptReader` over receipts written by
+ * `recordPreviewReceipt`, the runner's own writer — is proven over a REAL store in
+ * `preview/preview-daemon-edge.test.ts`, the same split `affordance-compiler-lane.test.ts` makes
+ * for the compiler lane.
+ */
+describe("the preview decision card", () => {
+  const PREVIEW_TARGET = previewAggregateId(GOAL_ID);
+  const roster = (resolution: PlanningOfferResolution): string[] => resolution.offers
+    .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort();
+  const started = (): PreviewReceiptState | null => "STARTED";
+  const refused = (): PreviewReceiptState | null => "REFUSED";
+
+  it("offers preview.decide at the goal's preview aggregate once a preview has STARTED", () => {
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, started,
+    );
+    expect(roster(resolution)).toEqual([
+      `goal.close@${GOAL_ID}`,
+      `preview.decide@${PREVIEW_TARGET}`,
+      `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("WITHHOLDS it when no preview has ever run for the goal", () => {
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, NO_PREVIEW,
+    );
+    expect(roster(resolution)).toEqual([
+      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("WITHHOLDS it when the preview was REFUSED, which is a record and not an absence", () => {
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, refused,
+    );
+    expect(roster(resolution)).toEqual([
+      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("offers it on a CLOSING and a COMPLETED goal, and never on a DRAFT one", () => {
+    for (const lifecycle of ["CLOSING", "COMPLETED"]) {
+      const resolution = resolutionFor(
+        "PLAN_REVIEW", lifecycle, LEGACY_LANE, NO_CONTRACT, LANDED, started,
+      );
+      expect(roster(resolution), lifecycle).toContain(`preview.decide@${PREVIEW_TARGET}`);
+    }
+    // A DRAFT goal is still being approved: there is nothing built, so there is nothing to
+    // preview, and the ladder must not reach the receipt fact at all (asserted below).
+    expect(roster(resolutionFor(
+      "PLAN_REVIEW", "DRAFT", LEGACY_LANE, NO_CONTRACT, LANDED, started,
+    ))).toEqual([`approval.decide@${RUN_ID}`, `approval.decide_intent@${RUN_ID}`]);
+  });
+
+  it("asks for the receipt state LAZILY, only for a goal that could be offered the card", () => {
+    // Same discipline `closeReadiness` and `landedCommit` are held to: the fact is a ledger read
+    // per goal, so a surface poll over many goals must not pay it for goals that cannot be
+    // offered a decision (the 2026-09-05 affordances hot-path incident).
+    const asked: string[] = [];
+    const spy = (goalId: string): PreviewReceiptState | null => {
+      asked.push(goalId);
+      return "STARTED";
+    };
+    resolutionFor("PLAN_REVIEW", "DRAFT", LEGACY_LANE, NO_CONTRACT, LANDED, spy);
+    expect(asked).toEqual([]);
+    resolutionFor("DRAFTING", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, spy);
+    expect(asked).toEqual([]);
+    resolutionFor("PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, spy);
+    expect(asked).toEqual([GOAL_ID]);
+  });
+
+  it("fences the card on the PREVIEW aggregate's version, never the goal's", () => {
+    // The goal aggregate sits at version 3 in this fixture. A decide committed against the goal
+    // would overwrite the goal's own durable result in `readDurableLedger` (last write wins per
+    // targetAggregateId) and the goal would vanish from this very surface, so the card must
+    // carry the preview aggregate's version — 0 here, because no receipt decision is in the
+    // fixture ledger.
+    const resolution = resolutionFor(
+      "PLAN_REVIEW", "EXECUTION_ENABLED", LEGACY_LANE, NO_CONTRACT, LANDED, started,
+    );
+    const card = resolution.offers.find((entry) => entry.commandKind === "preview.decide");
+    expect(card?.targetAggregateId).toBe(PREVIEW_TARGET);
+    expect(card?.expectedVersion).toBe(0);
+    expect(resolution.offers.find((entry) => entry.commandKind === "goal.close")?.expectedVersion)
+      .toBe(3);
   });
 });

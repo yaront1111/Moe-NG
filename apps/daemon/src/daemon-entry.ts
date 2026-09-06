@@ -66,6 +66,13 @@ export type DaemonEntryRefusalCode = (typeof DAEMON_ENTRY_REFUSAL_CODES)[number]
 
 /** The one seam through which real authority reaches the transport. */
 export interface DaemonDependencyProvider extends OptionalDaemonPortProvider {
+  /**
+   * The daemon's live preview processes, so shutdown can stop them. OPTIONAL: a provider that
+   * wires no preview runner has nothing to sweep, and its absence must not stop a shutdown.
+   * Declared HERE rather than on `OptionalDaemonPortProvider` because this is not a READ port
+   * the listener serves — nothing resolves it per request; only `shutdown` below touches it.
+   */
+  previews?(): { close(): Promise<void> };
   provide(): CommandAdapterDeps;
   /** Separate authority plane for `/v2/command`; absence is surfaced by the listener. */
   provideV2?(): CommandAdapterDeps;
@@ -234,6 +241,18 @@ function runBootReconciliation(
   }
 }
 
+/**
+ * Stops every preview this daemon left running. Called AFTER the listener closes, so no new
+ * decide can arrive mid-sweep, and it never throws for the reason `preview-supervisor.close()`
+ * gives for not throwing on a straggler: its caller is the daemon on its way down, and taking
+ * the shutdown down harder kills nothing extra. A leaked preview is caught BY PID in the tests.
+ */
+async function sweepPreviews(provider: DaemonDependencyProvider): Promise<void> {
+  try {
+    await provider.previews?.().close();
+  } catch { /* best effort by contract; liveness is asserted by pid, not by this call */ }
+}
+
 const ALREADY_STOPPED = Object.freeze({
   code: "DAEMON_ENTRY_ALREADY_STOPPED",
   layer: DAEMON_ENTRY_LAYER,
@@ -331,6 +350,10 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       if (stopped) return ALREADY_STOPPED;
       stopped = true;
       await started.close();
+      // AFTER the listener, so no decide can arrive while the roster is being swept, and on
+      // THIS path rather than `StoreDependencyProvider.close()` — that one is SYNC with six
+      // call sites, and a fire-and-forget stop would let the process exit before the kills land.
+      await sweepPreviews(dependencies);
       return Object.freeze({ ok: true } as const);
     },
   } as const);

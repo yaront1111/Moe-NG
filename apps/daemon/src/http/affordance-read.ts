@@ -16,6 +16,7 @@ import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
 import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { createPreviewReceiptReader } from "../preview/preview-daemon-edge.js";
 
 import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
@@ -313,7 +314,15 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       // them, so the surface cost does not multiply by the goal count. Derived per call for the
       // same reason readiness is — a commit that lands between two polls shows up on the next.
       landedCommit: landings.hasLandedCommit,
-      ledger, mintId: config.mintId, projectId: config.projectId,
+      ledger, mintId: config.mintId,
+      // ONE reader for the whole poll, and the SAME authority the decide edge reads: both go
+      // through `readPreviewReceipt`, so the surface can never offer a decision the command
+      // would refuse, nor withhold one it would accept. The reader memoises its single ledger
+      // walk on the first goal that asks and shares it with the rest — the discipline
+      // `landedCommit` above is held to. Built per call, never cached across calls, so a
+      // receipt written between two polls shows up on the next one.
+      previewReceipt: createPreviewReceiptReader(config.store, config.projectId),
+      projectId: config.projectId,
     });
     offers.push(...planning.offers);
     // Derived from the SAME `planning` resolution that produced planningGoalRefs and the offers,

@@ -87,10 +87,17 @@
   ],
   "priority": "HIGH",
   "order": 112.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-6513c210037a48c7a05d2f08789a4b5e",
+      "author": "architect-fa3a3e17",
+      "content": "ARCHITECT RULING ON THE SHARED BACKUP TREE - binding on this row and on task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4 (architect-fa3a3e17, 2026-09-06). The governor handed task-95e68a8d back asking for exactly this decision; recording it on both rows so neither worker has to infer it.\n\nTHE COLLISION, MEASURED. Both rows write pg_dumps under the same convention:\n- THIS row (task-0a56ecee) writes a PRE-MIGRATION backup at `<project>/.moe-next/backups/<env>/<ts>.sql`.\n- task-95e68a8d writes SCHEDULED backups under the same `.moe-next/backups` tree AND prunes them: its DoD 3 is \"RETENTION PRUNES TO N and the receipt LISTS THE PRUNED REFS\", with `BACKUP_RETENTION = 5` already exported from apps/daemon/src/bootstrap/activation-receipts-measure.ts.\nLeft as-is, a scheduled prune would delete pre-migration backups. That is not a tidiness problem: a pre-migration backup is the artifact a failed migration restores FROM, and task-0a56ecee's own rail 2 says a backup nobody has restored is not a safety net. One deleted by a retention counter it never knew about is worse - it is absent exactly when someone reaches for it.\n\nTHE RULING - SEPARATE SUBTREES, SCOPE-LIMITED RETENTION:\n- SCHEDULED backups:      `<project>/.moe-next/backups/scheduled/<env>/<ts>.sql`   (plus the store backup)\n- PRE-MIGRATION backups:  `<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql`\n- RETENTION PRUNES ONLY THE `scheduled/` SUBTREE. Pre-migration backups are never pruned by the schedule; their lifecycle belongs to whoever owns migration history, and no row currently claims it - which is the honest state, not an oversight to paper over.\n\nWHAT THIS MEANS FOR THIS ROW: emit into `backups/pre-migration/<env>/<ts>.sql` rather than `backups/<env>/<ts>.sql`, and say in the completion record that the path is scoped so a scheduled prune cannot reach it. Rail 3's \"reuse `.moe-next/backups`\" is satisfied - one tree, one scheme, two named subtrees. Rail 4's \"coordinate the layout with the migrations row\" is what this comment is.\n\nSTILL ONE TREE, ONE SCHEME (task-95e68a8d's rail 4). Both rows share the root, the `<env>/<ts>` shape and the sha256-per-backup discipline. What differs is a single path segment naming WHO wrote it and therefore WHO may delete it.\n\nIF YOU DISAGREE, SAY SO ON THIS ROW RATHER THAN DIVERGING SILENTLY - two backup layouts is the \"second place to look during an incident\" your own rail 3 forbids.",
+      "timestamp": "2026-09-06T07:52:49.468Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:34:29.013Z",
-  "updatedAt": "2026-09-05T22:24:30.793Z",
+  "updatedAt": "2026-09-06T07:52:49.468Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:41:11.264Z",
     "plannedStepCount": 7,

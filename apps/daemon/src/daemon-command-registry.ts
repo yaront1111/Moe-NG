@@ -24,8 +24,8 @@ import { PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND }
   from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
-import { decodePreviewDecidePayload, previewRefusal }
-  from "./preview/preview-contracts.js";
+import { runPreviewDecideEdge } from "./preview/preview-daemon-edge.js";
+import type { PreviewDaemonPort } from "./preview/preview-daemon-edge.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
@@ -131,6 +131,12 @@ export interface DaemonCommandPortOptions {
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
+  /** The daemon's ONE preview supervisor, as the decide edge and the shutdown sweep see it.
+   *  OPTIONAL, and its absence is a REFUSING state rather than a skipped one, exactly as the
+   *  environment credential and the Foundation seal are: an unwired daemon still REGISTERS
+   *  `preview.decide` and refuses every dispatch of it PREVIEW_COMMAND_MISSING @ RUNNER, so
+   *  the served roster never depends on host configuration. */
+  readonly preview?: PreviewDaemonPort;
   readonly projectId: string;
   /** `repository.bootstrap`'s two injectable halves. ABSENT means the real `gh` CLI and the
    *  real manager catalog — production passes nothing. */
@@ -429,15 +435,25 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         return runResourceConfirmReleasedEdge(context);
       }
       // Answered BEFORE `requestOf`: preview has no codec, so the assembler would refuse with
-      // the wrong code entirely. Every layer here comes from PREVIEW_CODE_LAYERS through the
-      // contract, never a literal. The second throw is the FAIL-CLOSED stub the runner replaces.
+      // the wrong code entirely. Every code and layer comes from PREVIEW_CODE_LAYERS through
+      // `previewRefusal` inside the edge, never a literal here. An ABSENT port is passed
+      // through as an absent port rather than shortcut here: the edge fails closed with
+      // PREVIEW_COMMAND_MISSING @ RUNNER, so an unwired daemon still answers a preview code
+      // instead of a generic one minted at the wrong layer.
       if (preview) {
-        const decoded = decodePreviewDecidePayload(envelope.payload);
-        if (!decoded.ok) {
-          throw new DomainRefusal(decoded.code, decoded.layer, "preview.decide payload refused");
-        }
-        const stub = previewRefusal("PREVIEW_GOAL_NOT_LANDED");
-        throw new DomainRefusal(stub.code, stub.layer, "preview runner is not landed");
+        return runPreviewDecideEdge({
+          envelope: {
+            commandId: envelope.commandId,
+            correlationId: envelope.correlationId,
+            expectedVersion: envelope.expectedVersion,
+            payload: envelope.payload,
+          },
+          now: clock,
+          ...(options.preview === undefined ? {} : { port: options.preview }),
+          principalId: principal.principalId,
+          projectId,
+          store,
+        });
       }
       // Answered BEFORE `requestOf`, and that placement is the whole point rather than a
       // stylistic choice: `requestOf` encodes the WHOLE envelope -- `payload` included -- into

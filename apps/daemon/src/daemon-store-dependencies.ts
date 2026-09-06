@@ -158,6 +158,18 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the goal catalog is always wired");
     return port();
   },
+  /**
+   * FORWARDED for the reason stated on `graph` above, and the consequence here is a LEAKED
+   * PROCESS rather than a refusal: `daemon-main` loads THIS frozen object, so a preview port
+   * missing here leaves the shipped daemon's shutdown with nothing to sweep, and every preview
+   * server it started keeps its port after the daemon is gone — while every direct-injection
+   * test stays green.
+   */
+  previews: () => {
+    const port = fromEnv().previews;
+    if (port === undefined) throw new Error("unreachable: the preview port is always wired");
+    return port();
+  },
   planningRuns: () => {
     const port = fromEnv().planningRuns;
     if (port === undefined) throw new Error("unreachable: the planning-run reader is always wired");

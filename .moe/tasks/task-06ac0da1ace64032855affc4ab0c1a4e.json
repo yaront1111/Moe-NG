@@ -98,7 +98,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:40:28.076Z",
-  "updatedAt": "2026-09-06T07:50:26.489Z",
+  "updatedAt": "2026-09-06T07:51:02.660Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:26:39.278Z",
     "plannedStepCount": 5,
@@ -191,7 +191,16 @@
     ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
     ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
     ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
-    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json"
+    ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+    ".moe/project.json",
+    ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+    ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+    ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+    ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+    ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json"
   ],
   "completionSummary": "design.submit and design.read are published and REACHABLE BY A SEAT. Full evidence in step notes 1-5; the load-bearing numbers are below.\n\nSCOPE CORRECTION, MEASURED AT HEAD IN STEP 1 (the plan's step 4 assumed otherwise): this row adds ONE kind to the daemon COMMAND roster, not two. `git grep '\"product_contract.read\"|\"graph.get\"|\"events.read\"|\"documents.source_read\"' -- daemon-command-{payload-keys,registry,vocabulary,families}.ts returns ZERO hits — no served MCP query has a vocabulary/family/PAYLOAD_KEYS/registry entry. So `design.submit` is the command; `design.read` is a QUERY and gets exactly two edits. Every roster count moved by ONE. Moving them by two would have red 53->55.\n\nCONTRACT HALF: NOT MINE, AND UNTOUCHED. `git status --porcelain -- packages/` prints NOTHING. task-64d2757c (DONE) published both kinds — runtime-vocabulary.ts:92 hits both on one line. DoD-6's question is answered YES by that leaf: the browser does dispatch these kinds, which is why it published them.\n\nDELIVERED. PRODUCTION: DESIGN_FAMILY {design.submit: PLANNING} + union member + FAMILY_TABLES (vocabulary.ts); payload row [\"contractRef\",\"goalRef\",\"revision\"] (payload-keys.ts, where PAYLOAD_KEYS moved under task-a2409cba); `design` fact + predicate (families.ts); NEW daemon-command-design.ts (116 lines) + .js bridge with `runDesignSubmitEdge`, answered BEFORE `requestOf` so the slice's closed DESIGN_CODE_LAYERS map survives — no layer literal at any throw site, no new *_LAYER constant; a 22-line delegation branch in the registry (509->531, already over the bar at merge-base, which is why the edge is its own module). QUERY: `design.read` into MCP_SERVED_QUERY_KINDS + `\"design.read\": answerDesignRead` into QUERY_HANDLERS, SAME COMMIT, delegating to the already-tracked `mcp-design-read-query.ts` (5cde885c).\n\nTHE PLAN DID NOT NAME SEAT COMPOSITION AND WITHOUT IT THE TITLE WOULD BE FALSE. `agent-wrapper-main.ts:260` is the seats' ONLY MCP host; an advertised `design.read` with `config.desig",
   "commits": [
@@ -344,6 +353,39 @@
       "treeId": "5c1efad3decb08d47eb9814f60e64c951792bb56",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "4ad67796abc937a4bdf6e81a3cac1121f1def9b1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T07:38:08Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T07:51:02.660Z",
+      "treeId": "68653cd228ce7975d99f1a45ddb51960bda80684",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -365,12 +407,17 @@
     "apps/daemon/src/daemon-command-design.js",
     "apps/daemon/src/daemon-command-registry.test.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-activation.test.ts",
+    "apps/control-room/src/live/live-dispatch-production.test.ts",
+    "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-d81848bc@2026-09-06T03:01:42Z",
-    "at": "2026-09-06T03:01:51.875Z"
+    "sessionId": "qa-4f771bb8@2026-09-06T07:38:08Z",
+    "at": "2026-09-06T07:51:02.660Z"
   },
   "reviewCompletedAt": "2026-09-06T07:49:19.978Z",
   "rejectionDetails": {

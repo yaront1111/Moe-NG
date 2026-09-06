@@ -785,7 +785,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "documentIngest", "environmentReads", "goalCatalog", "goalSource",
         "graph", "health",
         "pairingOpenSessions",
-        "planningRuns", "policy", "productContractGate1", "productContractPending",
+        // `previews` is the daemon's ONE preview supervisor, forwarded for exactly the reason
+        // stated above: absent here, the shipped daemon's shutdown sweeps nothing and every
+        // preview server it started keeps its port after the daemon is gone.
+        "planningRuns", "policy", "previews", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
         "provide", "provideV2", "reconciliation", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",

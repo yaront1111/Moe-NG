@@ -31,6 +31,8 @@ import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js"
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
+import { createPreviewDaemonPort } from "./preview/preview-daemon-edge.js";
+import type { PreviewDaemonPort } from "./preview/preview-daemon-edge.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import type { DesignReadInput } from "./design/design-store.js";
@@ -186,6 +188,14 @@ export function createStoreDependencies(
     projectId: config.projectId,
   });
   const cutoverWiring = cutoverActivationWiringOf(config.cutoverEvidenceRoot);
+  /**
+   * THE DAEMON'S ONE PREVIEW SUPERVISOR, constructed HERE and nowhere else. It holds live
+   * preview processes in memory, so a second instance would hold half the roster: the decide
+   * edge would find nothing to stop for one half and shutdown would sweep only the other. The
+   * SAME object is handed to the command registry below and returned as `previews` for the
+   * entry's shutdown sweep, which is what makes "stop it once between them" true.
+   */
+  const previewPort = createPreviewDaemonPort({ projectId: config.projectId, store });
   const { decisions, registry } = createDaemonCommandPorts({
     criterionEvidence: workflows.criterionEvidence, repositoryRecovery: workflows.repositoryRecovery,
     readPublicationCandidate: workflows.readPublicationCandidate,
@@ -201,7 +211,8 @@ export function createStoreDependencies(
     ...(foundation.foundationContextSeal === undefined
       ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
     foundationLifecycle: foundation.foundationLifecycle,
-    operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    operatorPrincipalId: config.principalId, preview: previewPort, projectId: config.projectId,
+    store,
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
   const v2Ports = createDaemonV2CommandPorts({
@@ -559,6 +570,10 @@ export function createStoreDependencies(
     health,
     planningRuns,
     policy,
+    // The SAME instance the command registry above holds. Returned as a factory like every
+    // other optional port, so the entry can sweep it from its already-async shutdown without
+    // widening `close()` — which is SYNC and has six call sites outside this file.
+    previews: (): PreviewDaemonPort => previewPort,
     productContractGate1,
     productContractPending,
     productContractV2Current,

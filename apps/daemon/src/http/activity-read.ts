@@ -77,7 +77,12 @@ export interface ActivityReadPort {
 const refused = (code: string): ActivityRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
 
 const VERDICT_KINDS: ReadonlySet<string> = new Set([
-  "approval.decide", "approval.decide_intent", "escalation.decide", "review.submit",
+  // `preview.decide` commits `{decision: "APPROVE"|"REJECT", ...}` on the goal's PREVIEW
+  // aggregate (preview/preview-daemon-edge.ts), so `decisionWord` reads its word off the same
+  // `decision` member the approval kinds carry. Without the kind here the operator's own
+  // product verdict would read back as a decision with nothing decided.
+  "approval.decide", "approval.decide_intent", "escalation.decide", "preview.decide",
+  "review.submit",
 ]);
 
 /** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
