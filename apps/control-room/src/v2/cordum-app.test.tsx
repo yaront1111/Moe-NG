@@ -1586,9 +1586,9 @@ describe("the composition root feeds the Advanced panel real frames", () => {
     eventPageHook = () => Object.freeze({
       code: "EVENTS_READ_FORBIDDEN", layer: "DAEMON_EVENT_STREAM", outcome: "REFUSED",
     });
-    vi.stubGlobal("fetch", advancedFetch(() => Promise.resolve(jsonResponse({
-      code: "GRAPH_QUERY_FORBIDDEN", layer: "DAEMON_GRAPH_QUERY",
-    }))));
+    let finishGraph = (_response: Response): void => undefined;
+    const graphReply = new Promise<Response>((resolve) => { finishGraph = resolve; });
+    vi.stubGlobal("fetch", advancedFetch(() => graphReply));
 
     render(<CordumApp liveSetup={attachedSetup()} search="" />);
 
@@ -1596,12 +1596,24 @@ describe("the composition root feeds the Advanced panel real frames", () => {
 
     // The SPECIFIC code and the layer that refused, per global rail 1 - never just
     // "it did not load", which is what a null prop would have rendered forever.
-    const graphRefusal = await screen.findByTestId("cr.advanced.graph.refusal");
-    expect(graphRefusal.textContent).toContain("GRAPH_QUERY_FORBIDDEN");
-    expect(graphRefusal.textContent).toContain("DAEMON_GRAPH_QUERY");
-    const eventsRefusal = await screen.findByTestId("cr.advanced.events.refusal");
-    expect(eventsRefusal.textContent).toContain("EVENTS_READ_FORBIDDEN");
-    expect(screen.queryByTestId("cr.advanced.graph.pending")).toBeNull();
+    try {
+      // Attachment can render before this read answers. An earlier local read-error
+      // element is not evidence that the daemon refusal has arrived.
+      expect(screen.queryByTestId("cr.advanced.graph.refusal")?.textContent ?? "")
+        .not.toContain("GRAPH_QUERY_FORBIDDEN");
+      finishGraph(jsonResponse({ code: "GRAPH_QUERY_FORBIDDEN", layer: "DAEMON_GRAPH_QUERY" }));
+      await waitFor(() => {
+        const graphRefusal = screen.getByTestId("cr.advanced.graph.refusal");
+        expect(graphRefusal.textContent).toContain("GRAPH_QUERY_FORBIDDEN");
+        expect(graphRefusal.textContent).toContain("DAEMON_GRAPH_QUERY");
+        expect(screen.getByTestId("cr.advanced.events.refusal").textContent).toContain("EVENTS_READ_FORBIDDEN");
+      });
+      expect(screen.queryByTestId("cr.advanced.graph.pending")).toBeNull();
+    } finally {
+      await act(async () => { finishGraph(jsonResponse({
+        code: "GRAPH_QUERY_FORBIDDEN", layer: "DAEMON_GRAPH_QUERY",
+      })); await graphReply; });
+    }
   });
 
   it("reads neither raw route while the session is unattached", async () => {
