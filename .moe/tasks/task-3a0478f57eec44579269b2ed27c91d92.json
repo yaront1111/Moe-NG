@@ -114,8 +114,8 @@
       "completedAt": "2026-09-06T22:51:43.162Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,11 +130,17 @@
       "author": "architect-b63fabf3",
       "content": "THE ROW'S RAIL BINDS THE INVARIANT BUT NOT THE SEAM — and the seam is where the real work is. architect-b63fabf3, 2026-09-05, HEAD f3b94eaa. Plan approved: 6 steps, 8 files (2 new).\n\n## The structural gap the description does not name\n\nRail 2 says \"spawner uses it inside attemptSpawn\". Measured, the spawner **has nothing to resolve from**:\n\n```\nSpawnRequest      (agent-wrapper.ts:44-55)     credential, expiresAt, kind, mission,\n                                               sessionId, workItemId, workspace\n                                               -> no projectId, no goalRef\nAgentSpawnerOptions (agent-spawn-contract.ts:18-43)  command?, environment?, spawn?, …\n                                               -> no store handle\n```\n\nA worker following the rail's words alone reaches step 2 and finds `attemptSpawn` cannot see a project or a goal. So the plan decides the seam: **the wrapper resolves, the spawner consumes.** `staff()` (agent-wrapper.ts:295-298) already holds `config.projectId` and the step, and already threads `projectId` into all three mission builders — it is the only site with the facts. The spawner reads `request.provider ?? options.command ?? env ?? \"claude\"`, so `codexSeat` still becomes per-spawn inside `attemptSpawn` exactly as the rail requires.\n\n## `SpawnRequest.provider` is OPTIONAL, and that is load-bearing\n\n`git grep -ln 'credential:' -- apps/daemon/src/orchestrator` names **six** other files that build a SpawnRequest (agent-authority-cleanup, plus five test files). A required field drags all six in and turns an 8-file row into 14. Optional keeps them out *and* makes the no-provider path byte-identical to today — which is what the fourth arm in step 5 exists to prove.\n\n## Why option (a) really is the small slice\n\nThe pause **ledger is already keyed by provider**: `readProviderPause(store, projectId, provider, iso)` at agent-provider-pause.ts:66. What is frozen is the **gate**, not the ledger — built once at agent-wrapper-main.ts:287-292 and consulted **once per pass** at agent-wrapper.ts:326, before the step loop. So per-provider pause = move that check into the step loop. No ledger change at all.\n\n## Three things a worker would otherwise hit mid-flight\n\n1. **Two files are already over the 400-line cap** — agent-spawner.ts (438) and agent-wrapper-main.ts (485) — and **agent-wrapper.ts is at 394, six lines of headroom**, while needing a SpawnRequest field, a resolver call, and a per-step pause decision. That is why the new module exists; agent-wrapper-staffing.ts (186) is the second landing site.\n2. **The per-goal override cannot cover `node.deliver` seats.** Their `step.aggregateId` is a nodeRef, not a goal, and no node→goal mapping exists. The plan states the limit and forbids inventing a lookup or passing a nodeRef where a goalRef is expected (it would silently miss every override).\n3. **`runPass` reports `PROVIDER_PAUSED_OUTCOME` for the whole pass.** Once one provider can be paused while another staffs, that signal becomes ambiguous — and it is the wrapper's only operator-facing output. Step 4 requires the worker choose deliberately and say which.\n\n## Two docblocks state the retired invariant verbatim\n\nagent-provider-pause.ts:36 (\"one MOE_AGENT_COMMAND per wrapper process\") and agent-wrapper.ts:323-325. DoD-3 names only the second; the plan fixes both, or the next reader re-learns a rule this row deleted.\n\n## Global rail 13 genuinely fires here, unlike most rows\n\nThe drill paths are **mixed**: agent-provider-resolve.ts and its test are new (`??`), so `git diff` is blind to them — SHA256 against an out-of-tree backup. The six pre-existing files are tracked — empty `git diff` is their proof. The plan requires saying which proof applies to which path rather than applying one rule to all eight.\n\nThe middle precedence rungs are the silent-failure risk: a suite proving only \"env wins\" and \"default is claude\" leaves the goal override and project setting untested. Drill (ii) exists to catch an override rung that never really fired.",
       "timestamp": "2026-09-05T17:00:33.403Z"
+    },
+    {
+      "id": "comment-0891a61416ac4dfe8775faf3946cbf59",
+      "author": "qa-97200064",
+      "content": "QA EVIDENCE (full record; the qa_approve summary is capped at 2000 chars). Verified at completion commit **a9be3950** (feat, trailer Moe-Task=task-3a0478f57eec, on moe/work-2026-09-04). `git status --porcelain -- apps/daemon/src/orchestrator/` is EMPTY, so the bytes I tested ARE the landed bytes, not dirt. task.commits held only checkpoint 853c25fa (pathCount 1, the row json) when I claimed; the wrapper landed a9be3950 mid-review, so no QA hand-landing was needed.\n\n## GATES I RAN MYSELF (foreground)\n1. `pnpm typecheck` -> **EXIT=0**, 19 packages Done incl. `apps/daemon typecheck: Done`.\n2. `npx vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 src/orchestrator` (cwd apps/daemon) -> `Test Files  46 passed (46)` / `Tests  690 passed | 1 skipped (691)` **EXIT=0**. The row's own closure.\n3. THE LITERAL DoD-4 GATE `pnpm --filter @moe/daemon test` (= `vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src`) -> `Test Files  6 failed | 563 passed (569)` / `Tests  8 failed | 10235 passed | 7 skipped (10250)` **EXIT=1**, 565s. Run only after a process census showed ZERO vitest processes alive (holder worker-d107a8ef's run had finished). No force-release; no peer run voided.\n\n## ALL 8 REDS ATTRIBUTED OUTSIDE THIS ROW\nZero are reachable from its 9 paths (all under src/orchestrator).\n- **5 files = the DISCLOSED HEAD-red owned by task-0397287d** (WORKING, queued on full-suite-gate): criterion-evidence/criterion-integrated.test.ts, goals/goal-live-evidence.test.ts, goals/goal-services.test.ts, goals/j1-command-path.test.ts — all throwing `Error: scoped criterion execution did not prove all checks` from goal-scoped-close-test-fixtures.ts:94, verbatim that row's \"scoped criterion execution reports UNKNOWN/BLOCKED on win32 (4 files)\"; plus daemon-command-registry.test.ts `'deployment.migrate_down' reaches its own family handler`, verbatim its \"migrate_down refusal precedence moved under the registry table (1 file)\".\n- **1 file = DIRT-red, not HEAD-red**: http/http-listener-read-dispatch.test.ts `expected 35 to be 34`. `git diff --numstat` shows UNCOMMITTED peer work — +25 http-listener-read-dispatch.ts, +16 http-listener-guards.ts, +7 http-listener.ts — plus untracked deployments-health-read.{ts,js,test.ts}. A 35th route was added and `expect(roster.size).toBe(34)` was not moved with it. Owner of that dirt: fix the count in the same edit.\n- CLOSURE PROOF for the criterion family: criterion-evidence reaches orchestrator only via compiled-execution-ref.ts / compiled-node-source.ts / compiled-node-identity.ts. None of this row's 9 files.\n\n## DoD, ITEM BY ITEM\n- **DoD-1 PASS.** agent-provider-pause.test.ts `spawnedUnder()` wires the DURABLE setting fact into a real `createAgentWrapper` behind the REAL `claudeSpawnStarter` and asserts the SPAWNED CHILD: setting codex -> `child.file` \"codex\", `args[0]` \"exec\", `env[\"MOE_AGENT_MCP_BEARER\"]` present; setting claude -> `child.file` \"claude\", `args[0]` \"-p\", bearer `toBeUndefined()`. argv[0] end-to-end from the setting, not an internal field, allowlist pinned in BOTH directions. `platform: \"linux\"` set deliberately for the documented win32 argv-collapse caveat. agent-spawner.test.ts adds 6 more argv[0] arms incl. fallback ordering.\n- **DoD-2 PASS.** \"lets MOE_AGENT_COMMAND win over a contrary durable setting\": env \"claude\" vs setting \"codex\" -> `child.file` \"claude\". The spawner arm sets the env to the CONTRARY value on purpose so it cannot pass under any ordering.\n- **DoD-3 PASS.** Both directions, each with its own control, same work item: codex staffs while CLAUDE paused (SURFACE, `paused` undefined, staffed policy.install@...) and refuses while codex paused (PROVIDER_PAUSED, `paused.provider` \"codex\"); claude/codex mirror likewise. A gate ignoring its new provider argument fails the held arm. Retired invariant text GONE: `grep -rn \"one MOE_AGENT_COMMAND per wrapper\" apps/daemon/src --include=*.ts` returns NOTHING; both agent-wrapper.ts and agent-provider-pause.ts:36 docblocks rewritten.\n- **DoD-4 PASS with the foreign red disclosed above.** typecheck EXIT 0; the daemon suite EXIT 1 for causes this row cannot reach or repair.\n\n## RAILS\n(1) option (a) per-spawn taken, recorded in completionSummary, option (b) explicitly not taken. (2) EXTRACT-DO-NOT-GROW HOLDS, measured per file: agent-spawner.ts 439->439 (delta 0), agent-wrapper-main.ts 400->400 (delta 0), agent-wrapper.ts 398->399 (UNDER 400), agent-provider-pause.ts 186->205, new agent-provider-resolve.ts 160 — no per-file cap crossed or worsened. (3) argv[0] asserted, codex env allowlist applied. (4) env still wins; no /sessions/read change. (5) features only — 9 paths, all src/orchestrator.\n\n## ALSO CHECKED\n`.js` bridge matches the sibling convention verbatim (`export * from \"./agent-provider-resolve.ts\";`) so no boot-time ERR_MODULE_NOT_FOUND. `SpawnRequest.provider` is OPTIONAL, so the six other request builders are untouched and the no-provider path keeps the pre-change chain (`requested ?? option ?? env ?? claude`) byte-identical. Fail-safe rungs tested: store throw -> claude, blank env -> unset, empty goalRef -> project scope read ONCE, unknown command -> ledger key claude. The per-step store read is bounded by steps-per-pass and is the stated point (an operator's set_agent_provider reaches the NEXT spawn). The narrowed pass-level PROVIDER_PAUSED report (only when a pause is why the pass staffed NOTHING) is deliberate, documented, and leaves agent-spawn-contract.ts:158-163 unchanged; wider disclosure is grandchild E. Task net LOC NOT raised — project globalRails customRule 2 puts the cap PER PRODUCTION FILE with no per-task budget. Minor, non-blocking: a9be3950 also swept .moe/tasks/task-33ceae56...json (board state, not source). I deleted my own scratch log from the repo root; no QA artifact left in the tree.",
+      "timestamp": "2026-09-06T23:11:03.731Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.317Z",
-  "updatedAt": "2026-09-06T22:53:16.598Z",
+  "updatedAt": "2026-09-06T23:11:42.278Z",
   "dependsOn": [
     "task-c851961b968942f880950acc16dc575a"
   ],
@@ -142,7 +148,9 @@
     "firstClaimAt": "2026-09-05T16:55:07.067Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-06T23:11:42.278Z",
+    "wallClockMs": 108995211
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -194,6 +202,45 @@
       "treeId": "946871c5f2b628a16667f0dd163cc37c82362cae",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "a9be395003c114886595c43b609851e60644204a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-06T22:05:39Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-3a0478f57eec44579269b2ed27c91d92.json",
+        "apps/daemon/src/orchestrator/agent-provider-pause.test.ts",
+        "apps/daemon/src/orchestrator/agent-provider-pause.ts",
+        "apps/daemon/src/orchestrator/agent-provider-resolve.js",
+        "apps/daemon/src/orchestrator/agent-provider-resolve.test.ts",
+        "apps/daemon/src/orchestrator/agent-provider-resolve.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-06T22:54:12.857Z",
+      "treeId": "cc05cf1cd2c1f348f46255055f00e758516b13d3",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+          "taskId": "task-48932becda314704aad652b49a8d2209"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawner.ts",
+          "taskId": "task-48932becda314704aad652b49a8d2209"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+          "taskId": "task-adc4b229cae840c086cc1acc83fd4989"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -205,14 +252,16 @@
     "apps/daemon/src/orchestrator/agent-provider-pause.ts",
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/agent-spawner.test.ts",
-    "apps/daemon/src/orchestrator/agent-provider-pause.test.ts"
+    "apps/daemon/src/orchestrator/agent-provider-pause.test.ts",
+    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+    ".moe/tasks/task-3a0478f57eec44579269b2ed27c91d92.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-b1872f24@2026-09-06T22:05:39Z",
-    "at": "2026-09-06T22:05:43.536Z"
+    "at": "2026-09-06T22:54:12.857Z"
   },
   "reviewStartedAt": "2026-09-06T22:53:12.215Z",
   "verification": {
@@ -221,5 +270,18 @@
     "outputTail": " Test Files  63 passed (63)\n      Tests  960 passed | 1 skipped (961)\n   Start at  01:51:50\n   Duration  51.32s (transform 8.52s, setup 0ms, import 45.75s, tests 119.13s, environment 3ms)\n\nEXIT=0",
     "reportedAt": "2026-09-06T22:53:12.215Z"
   },
-  "completionSummary": "INVARIANT DECISION, RECORDED SO IT IS NOT RE-OPENED: option (a), PER-SPAWN RESOLUTION. Precedence env > per-goal setting > per-project setting > \"claude\". Pause bookkeeping is per (project, provider), not per wrapper process. Option (b) (one provider per process, two wrappers) was NOT taken.\n\nWHERE RESOLUTION HAPPENS AND WHY — the wrapper resolves, the spawner consumes. Two measurements force it: (1) `AgentSpawnerOptions` (agent-spawn-contract.ts) carries NO store handle; (2) `SpawnRequest` carried no projectId and no goalRef, while `staff()` already holds `config.projectId` and the ChainStep. `attemptSpawn` had nothing to resolve FROM. `SpawnRequest.provider` is OPTIONAL — `grep -ln 'credential:'` names SIX other request-building files; a required field would have made this a 14-file row and the no-provider path stays byte-identical.\n\nDELIVERED (9 paths, all under apps/daemon/src/orchestrator): NEW agent-provider-resolve.ts (160) + its .js bridge + test; agent-spawner.ts resolves `request.provider ?? options.command ?? MOE_AGENT_COMMAND ?? claude` PER SPAWN inside attemptSpawn (codexSeat with it); agent-wrapper.ts adds the optional field, the config fact, and a PER-STEP seat decision; agent-provider-pause.ts `paused(nowMs, provider?)` / `exitObserver(…, provider?)` threaded through livePause/resetFor/recordExit/park/observe/classifySeatExit; agent-wrapper-main.ts supplies `agentProviderFact(store, projectId)` and no longer freezes one provider.\n\nPASS REPORTING, the deliberate choice: PROVIDER_PAUSED and the `paused` key appear ONLY when a live pause is why the pass staffed NOTHING. One provider paused while another staffs reports SURFACE and omits `paused` — matching agent-spawn-contract.ts:158-163 verbatim, so no consumer changed.\n\nSTATED LIMIT: the per-goal override does NOT reach `node.deliver` seats — their aggregateId is a nodeRef, not a goal, and no node-to-goal mapping exists. They take the project setting. This is a limit, not an oversight; it is a comment "
+  "completionSummary": "INVARIANT DECISION, RECORDED SO IT IS NOT RE-OPENED: option (a), PER-SPAWN RESOLUTION. Precedence env > per-goal setting > per-project setting > \"claude\". Pause bookkeeping is per (project, provider), not per wrapper process. Option (b) (one provider per process, two wrappers) was NOT taken.\n\nWHERE RESOLUTION HAPPENS AND WHY — the wrapper resolves, the spawner consumes. Two measurements force it: (1) `AgentSpawnerOptions` (agent-spawn-contract.ts) carries NO store handle; (2) `SpawnRequest` carried no projectId and no goalRef, while `staff()` already holds `config.projectId` and the ChainStep. `attemptSpawn` had nothing to resolve FROM. `SpawnRequest.provider` is OPTIONAL — `grep -ln 'credential:'` names SIX other request-building files; a required field would have made this a 14-file row and the no-provider path stays byte-identical.\n\nDELIVERED (9 paths, all under apps/daemon/src/orchestrator): NEW agent-provider-resolve.ts (160) + its .js bridge + test; agent-spawner.ts resolves `request.provider ?? options.command ?? MOE_AGENT_COMMAND ?? claude` PER SPAWN inside attemptSpawn (codexSeat with it); agent-wrapper.ts adds the optional field, the config fact, and a PER-STEP seat decision; agent-provider-pause.ts `paused(nowMs, provider?)` / `exitObserver(…, provider?)` threaded through livePause/resetFor/recordExit/park/observe/classifySeatExit; agent-wrapper-main.ts supplies `agentProviderFact(store, projectId)` and no longer freezes one provider.\n\nPASS REPORTING, the deliberate choice: PROVIDER_PAUSED and the `paused` key appear ONLY when a live pause is why the pass staffed NOTHING. One provider paused while another staffs reports SURFACE and omits `paused` — matching agent-spawn-contract.ts:158-163 verbatim, so no consumer changed.\n\nSTATED LIMIT: the per-goal override does NOT reach `node.deliver` seats — their aggregateId is a nodeRef, not a goal, and no node-to-goal mapping exists. They take the project setting. This is a limit, not an oversight; it is a comment ",
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/agent-provider-resolve.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-pause.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-pause.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+    "apps/daemon/src/orchestrator/agent-provider-resolve.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.ts"
+  ],
+  "completedAt": "2026-09-06T23:11:42.278Z",
+  "reviewCompletedAt": "2026-09-06T23:11:42.278Z",
+  "reviewSummary": "APPROVED at completion commit a9be3950 (feat, Moe-Task trailer, moe/work-2026-09-04); orchestrator paths CLEAN in tree = bytes tested are bytes landed. FULL EVIDENCE: comment-0891a61416ac4dfe8775faf3946cbf59.\n\nGATES I RAN, foreground: (1) `pnpm typecheck` EXIT=0, incl. `apps/daemon typecheck: Done`. (2) `npx vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 src/orchestrator` (cwd apps/daemon) -> `Test Files  46 passed (46)` / `Tests  690 passed | 1 skipped (691)` EXIT=0 = the row's own closure. (3) Literal DoD-4 gate `pnpm --filter @moe/daemon test` -> `Test Files  6 failed | 563 passed (569)` / `Tests  8 failed | 10235 passed | 7 skipped (10250)` EXIT=1, run only after a census showed ZERO vitest alive (no lease forced, no peer run voided).\n\nALL 8 REDS OUTSIDE THIS ROW: 5 files = disclosed HEAD-red owned by task-0397287d (4 throwing `scoped criterion execution did not prove all checks` at goal-scoped-close-test-fixtures.ts:94, + daemon-command-registry migrate_down); 1 = DIRT-red from UNCOMMITTED peer http work (+25 read-dispatch, +16 guards, +7 listener, untracked deployments-health-read.*) adding a 35th route without moving `expect(roster.size).toBe(34)`. criterion-evidence reaches orchestrator only via compiled-execution-ref/compiled-node-source/compiled-node-identity — none of this row's 9 files.\n\nDoD-1/2/3 PASS: argv[0] asserted on the SPAWNED CHILD end-to-end from the durable setting (agent-provider-pause.test.ts `spawnedUnder`); env-wins arm uses the CONTRARY value so it cannot pass under any ordering; cross-provider pause proven BOTH directions with controls. `grep -rn \"one MOE_AGENT_COMMAND per wrapper\"` returns NOTHING. DoD-4 passes with that foreign red disclosed.\n\nRAILS per file: spawner 439->439, wrapper-main 400->400, wrapper 398->399 (<400), new module 160. `.js` bridge present; `SpawnRequest.provider` OPTIONAL so the six other builders stay byte-identical."
 }

@@ -56,7 +56,8 @@ describe("the Needs-you queue after a plan is sent back", () => {
    */
   it("advertises PLAN_REJECTED once, beside PLAN_APPROVAL", () => {
     expect([...NEEDS_YOU_KINDS]).toEqual([
-      "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "ESCALATION", "GATE_1", "READY_TO_CLOSE",
+      "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "ESCALATION", "GATE_1",
+      "READY_TO_CLOSE",
     ]);
     expect(new Set(NEEDS_YOU_KINDS).size).toBe(NEEDS_YOU_KINDS.length);
   });

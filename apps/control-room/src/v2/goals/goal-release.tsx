@@ -105,7 +105,12 @@ export function GoalRelease({ evidence, frame, goalId, port }: GoalReleaseProps)
     <section className="cr2-ops-panel" data-testid="cr.release.root">
       <h3 className="cr2-approve-heading">{`RELEASE ${MIDDOT} YOUR DECISION`}</h3>
       <p className="cr2-needs-detail" data-testid="cr.release.covered">
-        {`Criteria covered ${String(summary.covered)} of ${String(summary.total)}`}
+        {/* ZERO CRITERIA IS NOT COMPLETE EVIDENCE. "Criteria covered 0 of 0" is arithmetically
+            true and reads like a finished checklist, so a dossier with nothing in it says so
+            in words instead. Approving here releases work no criterion ever described. */}
+        {summary.total === 0
+          ? "No acceptance criteria are attached to this goal, so there is no evidence to cover."
+          : `Criteria covered ${String(summary.covered)} of ${String(summary.total)}`}
       </p>
       {summary.unknown === 0 ? null : (
         <p className="cr2-needs-detail" data-testid="cr.release.unknown">

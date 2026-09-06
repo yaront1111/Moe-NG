@@ -39,7 +39,10 @@ export const LANDED_PATH = "landed-by-the-seat.txt";
 export const LANDING_BUDGET_MS = 180_000;
 
 /** The lander's own words for a landing that produced a commit. */
-const COMMITTED_LINE = /^\[lander] (\S+): COMMITTED /mu;
+// The closing bracket is ESCAPED. Under the `u` flag a lone `]` is a SyntaxError ("Lone
+// quantifier brackets"), thrown at IMPORT, so an unescaped one takes every spec that imports
+// this module down with it and `test:e2e:browser` finds no tests at all.
+const COMMITTED_LINE = /^\[lander\] (\S+): COMMITTED /mu;
 
 export interface LaneLanded {
   readonly ok: true;

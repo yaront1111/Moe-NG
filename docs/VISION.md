@@ -138,6 +138,15 @@ Contract; requirement-to-code traceability; canonical Foundation execution;
 Claude and Codex; isolated verifier; working browser preview; proof-carrying
 GitHub PR. *(proposed bar)* survives a crash **mid-write**, with recovery
 provable from durable records alone, never from agent memory.
+*Status, measured 2026-09-07:* the preview gate and the release gate are both
+BUILT AND WIRED and neither has been DRIVEN against a real landed product -
+`internal.repository.landing_receipt` has no HTTP ingress, so no browser path
+produces the landed goal both gates require. `release.decide` ships with a
+closed three-code refusal vocabulary, a daemon-rendered evidence dossier served
+over an authenticated read, and a browser card that keeps covered and UNKNOWN
+counts apart before asking for the verdict. The proof-carrying PR itself is the
+one piece with no run behind it: the `gh` path reached github.com and answered
+on 2026-09-07, but no pull request has been opened by this product.
 
 **Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
 browser path creates one commit, binds and catalogs the repository, and creates

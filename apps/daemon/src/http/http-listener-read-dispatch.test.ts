@@ -161,12 +161,10 @@ const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
   "/environments/read",
   "/events/resume",
-  // `/release/read`, the release evidence read. The daemon half lands here
-  // (task-2b8431705baf4db5aafa750b5d0b5148); the Release card that fetches it is
-  // task-817d893fa1254a4d82d2888af1f87a47, which declares dependsOn against this row and
-  // RETIRES THIS ENTRY in the same edit that adds its consumer — exactly as task-e6000b57,
-  // task-1c9587ed, task-80322112 and the `/preview/read` entry above it were retired.
-  "/release/read",
+  // `/release/read` was here and is RETIRED by task-817d893fa1254a4d82d2888af1f87a47, exactly
+  // as its own comment instructed: the Release card now fetches it. `live-release.ts` decodes
+  // the answer and `live-goal-release.tsx` is mounted in cordum-app.tsx, so the route is
+  // reachable from main.tsx over VALUE edges and the consumption arm below counts it.
   "/session/challenge-operands/read",
   "/v2/product-contract/current",
 ]);

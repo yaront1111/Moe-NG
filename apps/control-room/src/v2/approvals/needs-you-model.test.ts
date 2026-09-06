@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
+import { mapReleaseAnswer } from "../../live/live-release.js";
+import type { ReleaseOutcome } from "../../live/live-release.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { deriveNeedsYou } from "./needs-you-model.js";
 
@@ -255,5 +257,145 @@ describe("deriveNeedsYou", () => {
     });
     expect(data.items).toEqual([]);
     expect(data.note).toContain("offers have not arrived");
+  });
+});
+
+/**
+ * GATE 3 IN THE QUEUE. Two arms carry DoD 4 and they are a pair: an item that appears but
+ * never clears is a queue that grows forever, so the disappearance arm is not optional
+ * politeness -- it is the half that proves the entry has an exit.
+ *
+ * WHY THE RECEIPT CLEARS IT AND NOT THE OFFER. `affordance-planning-offers.ts` withholds
+ * `release.decide` only where no commit has landed and deliberately withholds NOTHING after
+ * that, so the offer OUTLIVES the release. If this derivation keyed on the offer alone the
+ * released goal below would still be listed, which is exactly what the second arm catches.
+ */
+
+/** The daemon's `release.decide` offer: the same six keys `offer()` mints, targeting the
+ *  release aggregate `releaseDossierAggregateId` dictates. */
+const releaseOffer = (goalId: string): Record<string, unknown> => ({
+  commandEnvelopeVersion: "moe-runtime-command/1",
+  commandId: "e28f1a90-6f37-4a1c-9a1e-5b7c0f2d4411",
+  commandKind: "release.decide",
+  expectedVersion: 4,
+  inputSchemaVersion: "moe-bootstrap-command/1",
+  targetAggregateId: `release:${goalId}`,
+});
+
+/** A `/release/read` PRESENT answer, DECODED BY THE PRODUCTION DECODER so a fixture that
+ *  drifts from the daemon's exact-key shape fails here instead of propping up a green arm. */
+function releaseRead(
+  goalId: string,
+  unknownCount: number,
+  receipt: { outcome: "RELEASED" | "REFUSED"; refusalCode: string | null } | null,
+): ReleaseOutcome {
+  const criteria = [
+    { command: "pnpm test", criterionId: "crit-0", exitCode: "0", gaps: [], landing: "a".repeat(40),
+      nodeKey: "node-0", receiptSha: "c".repeat(40), title: "Covered" },
+    ...Array.from({ length: unknownCount }, (_, index) => ({
+      command: "pnpm test", criterionId: `crit-u${String(index)}`, exitCode: "0",
+      gaps: [{ code: "EVIDENCE_UNVERIFIED", criterionId: `crit-u${String(index)}`, detail: "No receipt cites it." }],
+      landing: "UNKNOWN", nodeKey: `node-u${String(index)}`, receiptSha: "c".repeat(40), title: "Unmeasured",
+    })),
+  ];
+  const answer = mapReleaseAnswer(200, {
+    evidence: {
+      ancestryMeasured: true, criteria, goalId, goalTitle: "t", preview: null,
+      receipt: receipt === null ? null : {
+        dossierSha256: "b".repeat(64), outcome: receipt.outcome,
+        prUrl: receipt.outcome === "RELEASED" ? "https://github.com/owner/unai/pull/7" : null,
+        receiptId: "release-receipt-1", refusalCode: receipt.refusalCode, sha: "a".repeat(40),
+      },
+      reviewRounds: [], sha: "a".repeat(40),
+    },
+    kind: "PRESENT",
+  });
+  if (answer.status !== "PRESENT") throw new Error(`fixture rejected by mapReleaseAnswer: ${JSON.stringify(answer)}`);
+  return answer;
+}
+
+describe("deriveNeedsYou and Gate 3", () => {
+  it("lists a goal whose evidence is ready, with the UNKNOWN count kept out of covered", () => {
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r", releaseRead("goal-r", 2, null)]]),
+      surface: surface([releaseOffer("goal-r")]),
+    });
+    expect(data.items.map((item) => [item.kind, item.goalId])).toEqual([["RELEASE", "goal-r"]]);
+    const item = data.items[0];
+    if (item === undefined) throw new Error("expected the release item");
+    expect(item.headline).toBe("Your work is ready to release and needs your verdict");
+    // 1 covered of 3, with the 2 unmeasured named as their own number: an operator reading
+    // "3 of 3" in the queue would open the goal already believing the evidence is complete.
+    expect(item.detail).toContain("Evidence covered 1 of 3");
+    expect(item.detail).toContain("UNKNOWN 2 could not be re-measured");
+    expect(item.detail).not.toContain("covered 3 of 3");
+    // The offer travels VERBATIM so the release port spends the daemon's own bytes.
+    expect(item.release?.affordance).toEqual(releaseOffer("goal-r"));
+    expect(item.release).toMatchObject({ covered: 1, sha: "a".repeat(40), total: 3, unknown: 2 });
+  });
+
+  it("STOPS listing the goal once a RELEASED receipt exists, even though the offer survives", () => {
+    const released = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r", releaseRead("goal-r", 0, { outcome: "RELEASED", refusalCode: null })]]),
+      // THE OFFER IS STILL ON THE SURFACE. The daemon keeps offering it, so an item derived
+      // from the offer alone would never clear and the queue would grow forever.
+      surface: surface([releaseOffer("goal-r")]),
+    });
+    expect(released.items).toEqual([]);
+    expect(released.countLabel).toBe("0 decisions need you");
+  });
+
+  it("keeps listing a REFUSED release and names the code that refused it", () => {
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r",
+        releaseRead("goal-r", 1, { outcome: "REFUSED", refusalCode: "RELEASE_EVIDENCE_INCOMPLETE" })]]),
+      surface: surface([releaseOffer("goal-r")]),
+    });
+    expect(data.items.map((item) => item.kind)).toEqual(["RELEASE"]);
+    // A refused release is still waiting on a person, and the operator is told WHICH code
+    // refused rather than being shown the same "ready to release" line twice.
+    expect(data.items[0]?.headline).toBe("A release was refused and needs you again");
+    expect(data.items[0]?.detail).toContain("last attempt refused RELEASE_EVIDENCE_INCOMPLETE");
+  });
+
+  it("lists nothing without the daemon's offer, and nothing before the read answers", () => {
+    const unoffered = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r", releaseRead("goal-r", 0, null)]]),
+      surface: surface([]),
+    });
+    // No offer means the daemon is not accepting the decision: an item here would be a queue
+    // entry whose control dispatches into a refusal.
+    expect(unoffered.items).toEqual([]);
+    const unread = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      surface: surface([releaseOffer("goal-r")]),
+    });
+    expect(unread.items).toEqual([]);
+    const absent = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map<string, ReleaseOutcome>([["goal-r", { goalId: "goal-r", status: "ABSENT" }]]),
+      surface: surface([releaseOffer("goal-r")]),
+    });
+    expect(absent.items).toEqual([]);
+  });
+
+  it("ignores another goal's release offer and a differently targeted one", () => {
+    const wrongTarget = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r", releaseRead("goal-r", 0, null)]]),
+      // The BARE goal id, which `release-decide-command.ts` refuses RELEASE_TARGET_INVALID for.
+      surface: surface([{ ...releaseOffer("goal-r"), targetAggregateId: "goal-r" }]),
+    });
+    expect(wrongTarget.items).toEqual([]);
+    const otherGoal = deriveNeedsYou({
+      catalog: catalog([entry("goal-r", "Releasable")]), coverage: new Map(),
+      releases: new Map([["goal-r", releaseRead("goal-r", 0, null)]]),
+      surface: surface([releaseOffer("goal-other")]),
+    });
+    expect(otherGoal.items).toEqual([]);
   });
 });

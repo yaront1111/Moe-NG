@@ -51,6 +51,7 @@ const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
   PLAN_REJECTED: "Plan sent back",
   PREVIEW: "Gate 2",
   READY_TO_CLOSE: "Ready to close",
+  RELEASE: "Gate 3",
 });
 
 interface InlineDecision {

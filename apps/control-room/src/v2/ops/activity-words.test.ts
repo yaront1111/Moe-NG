@@ -80,4 +80,21 @@ describe("preview decisions, as operator words", () => {
   it("still renders a kind this table has never heard of, as the daemon spelled it", () => {
     expect(kindWords("preview.teleport")).toBe("preview.teleport");
   });
+
+  /**
+   * GATE 3 ON THE RUNS FEED. Runs shows what happened, so the release receipt has to read as
+   * an event a person recognises rather than as a raw kind. The verdicts are the only two the
+   * command admits (`release-decide-command.ts:46` refuses anything else), and a third still
+   * prints the verdict rather than swallowing it.
+   */
+  it("words the release decision and its receipts", () => {
+    expect(decisionWords("release.decide", "APPROVE")).toBe("released the work to users");
+    expect(decisionWords("release.decide", "REJECT")).toBe("held the release back");
+    expect(decisionWords("release.decide", "LATER")).toBe("decided the release: LATER");
+    expect(decisionWords("release.decide", null)).toBe("decided the release");
+    // The receipt kinds the daemon writes beside the decision, so the feed shows the release
+    // itself and the evidence it was taken over, not two unreadable internal kinds.
+    expect(kindWords("internal.release.receipt")).toBe("recorded the release");
+    expect(kindWords("internal.release.dossier")).toBe("recorded the release evidence");
+  });
 });

@@ -84,6 +84,72 @@ Moe never launches either bearer-bearing URL itself because another Windows
 process running as the same user can read process command lines. Keep console
 scrollback private and open printed URLs immediately.
 
+## New product from PRD
+
+In a paired project's Control Room, open **New product from a PRD**. Choose a
+new or empty directory, enter the product name, and attach the PRD. **Create
+product** writes the controlled TypeScript web/API/PostgreSQL scaffold at that
+directory, makes the first scaffold commit, binds the repository to the project,
+registers it in the manager catalog, and continues through activation to PRD goal
+creation. Read the reported outcome: repository creation can succeed while a
+later activation or goal step refuses, with its code and layer shown separately.
+
+Leave the GitHub owner blank for a local-only repository. This browser-only path
+was live-proven on 2026-09-06; live GitHub creation is deferred until the owner
+supplies an account and visibility. No remote is requested by the local-only
+path. If the optional GitHub step does not complete, keep the committed local
+repository: a remote repository may already exist under the supplied account
+even when the push failed. Check that account before retrying the GitHub step.
+
+Do not repeat bootstrap over the populated directory: it refuses
+`BOOTSTRAP_DIR_NOT_EMPTY`. Preserve the existing repository and read its receipt
+before deciding how to continue; a missing receipt is not proof nothing was
+created. Bootstrap creates the scaffold but does not start PostgreSQL or deploy
+the product; use the generated README for its development commands.
+
+## Releasing: the `gh` prerequisite and what its absence looks like
+
+Gate 3 asks you whether the evidence is strong enough to expose the work to
+users, and approving it opens a pull request. **The daemon opens that pull
+request by spawning the GitHub CLI, so `gh` must be installed and authenticated
+on the machine running the daemon** — not on the machine running the browser.
+Check before you need it:
+
+```
+gh --version
+gh auth status
+```
+
+`gh auth status` must show an active account for the host holding the remote,
+and the token needs the `repo` scope.
+
+**What you see when it is missing.** The release refuses
+`RELEASE_PR_FAILED @ RUNNER_WORKSPACE`, and the Release card prints that code
+verbatim beside the refusing layer. The daemon carries the CLI's own last stderr
+line as the refusal detail, so the card tells you which of these happened rather
+than making you guess: `gh` not installed at all (the spawn never starts), `gh`
+installed but not logged in, or GitHub itself declining — for example
+`head branch "main" is the same as base branch "main", cannot create a pull
+request`. **A refused release is recorded, not lost:** the daemon writes a
+REFUSED release receipt before it refuses, so the attempt and its code survive a
+restart, and the goal stays in Needs you until a release actually succeeds.
+
+Two things people mistake for a broken `gh`, both from earlier in the chain:
+
+- `RELEASE_HEAD_CHANGED` — not a refusal code of its own; it arrives as the
+  DETAIL of `RELEASE_PR_FAILED`. The branch the release would open a PR from is
+  not on the remote at the approved sha. The daemon proves this with
+  `git ls-remote --exit-code -- <remote> refs/heads/<branch>` before it spawns
+  anything, so this refusal means the push has not happened or the branch moved.
+  Publish the goal again, then release.
+- `RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE` — nothing to do with
+  GitHub. Some acceptance criteria have no verified evidence; the detail names
+  the criterion ids, and the card shows them under the UNKNOWN count. Fix the
+  evidence, do not retry the release.
+
+`RELEASE_REMOTE_MISSING @ PROJECT_REDUCER` is the third and last code: no remote
+is bound to the project at all. Bind one, publish, then release.
+
 ## Source development launcher
 
 From a clean checkout, with one agent credential exported and nothing else

@@ -8,6 +8,8 @@ import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readPreview } from "../../live/live-preview.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
+import { readRelease } from "../../live/live-release.js";
+import type { ReleaseOutcome } from "../../live/live-release.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { useGoalCoverage } from "../goals/use-goal-coverage.js";
@@ -28,10 +30,11 @@ import { deriveNeedsYou } from "./needs-you-model.js";
 import type { NeedsYouItem } from "./needs-you-model.js";
 
 /**
- * The LIVE Needs-you queue. Four daemon reads feed it and each answers one question: the
+ * The LIVE Needs-you queue. Five daemon reads feed it and each answers one question: the
  * affordance surface says what this session is OFFERED (plan approvals, escalations, goal
  * closes), the durable goal catalog says which goals exist, the coverage read says where each
- * goal's contract stands, and the runs read names the goal an exhausted node belongs to. The
+ * goal's contract stands, the release read says whether Gate 3 is still waiting on a person,
+ * and the runs read names the goal an exhausted node belongs to. The
  * queue is derived from those answers and nothing else; `onCount` hands the derived count to
  * the shell for the nav badge so the badge and the list cannot disagree. A decision spends
  * the daemon's own offer through the matching port and keeps the answer beside its card.
@@ -55,6 +58,8 @@ export interface LiveNeedsYouProps {
   readonly readPreview?: ((goalId: string) => Promise<PreviewReadOutcome>) | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly previewPort?: PreviewPort | undefined;
+  /** Injectable for tests; the default reads POST /release/read with the session headers. */
+  readonly readRelease?: ((goalId: string) => Promise<ReleaseOutcome>) | undefined;
   /** Injectable for tests; the default reads POST /runs/read with the session's headers. */
   readonly readRuns?: (() => Promise<RunsOutcome>) | undefined;
   readonly setup: LiveSetup;
@@ -62,7 +67,8 @@ export interface LiveNeedsYouProps {
 
 export function LiveNeedsYou({
   closePort, escalationPort, onConnection, onCount, onOpenBoard, previewPort, readCoverage,
-  readPreview: readPreviewProp, readRuns: readRunsProp, setup, successorPort,
+  readPreview: readPreviewProp, readRelease: readReleaseProp, readRuns: readRunsProp, setup,
+  successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
@@ -74,6 +80,8 @@ export function LiveNeedsYou({
   const [preview] = useState(() => previewPort ?? createPreviewPort(setup));
   const [previewReader] = useState(() => readPreviewProp
     ?? ((goalId: string): Promise<PreviewReadOutcome> => readPreview(goalId, setup.headers)));
+  const [releaseReader] = useState(() => readReleaseProp
+    ?? ((goalId: string): Promise<ReleaseOutcome> => readRelease(setup.headers, goalId)));
 
   const feed = useMemo(() => createBoardFeed({
     headers: setup.headers,
@@ -104,9 +112,10 @@ export function LiveNeedsYou({
 
   const coverage = useGoalCoverage(catalog, readCoverage);
   const previews = useGoalReads(catalog, previewReader);
+  const releases = useGoalReads(catalog, releaseReader);
   const data = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, previews, runs, surface }),
-    [catalog, coverage, previews, runs, surface],
+    () => deriveNeedsYou({ catalog, coverage, previews, releases, runs, surface }),
+    [catalog, coverage, previews, releases, runs, surface],
   );
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;

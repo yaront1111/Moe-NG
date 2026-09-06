@@ -157,8 +157,19 @@ screenshots over authenticated read routes, and the browser renders the running
 product with Approve and send-it-back controls - but no preview has been run
 against a real landed product, because a landed goal is recorded by
 `internal.repository.landing_receipt`, which has no HTTP ingress, so nothing a
-browser can do makes one; there is no release gate, so the vision's Gate 3 does
-not exist yet; a Codex seat is wired but was last proven only to reach the API; and
+browser can do makes one. Gate 3 EXISTS AND IS WIRED, AND IS BLOCKED BEHIND THE
+SAME MISSING LANDING (measured 2026-09-07): `release.decide` is a published,
+operator-fenced command with a closed three-code refusal vocabulary, the daemon
+builds the evidence dossier and serves it over an authenticated read route, the
+affordance surface offers the decision once a commit has landed, and the browser
+renders the evidence with its covered and UNKNOWN counts kept apart, an
+arm-then-confirm approve, and the pull request link a released receipt carries.
+No release has been driven against a real landed product for the reason above,
+and NO PULL REQUEST HAS BEEN OPENED BY THE PRODUCT: the `gh` path was driven as
+far as GitHub itself on 2026-09-07 - the head proof, the production argv and an
+authenticated answer from github.com - but the run that would create one needs a
+landed goal and an owner-named target repository. A Codex seat is wired but was
+last proven only to reach the API; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in
@@ -187,6 +198,9 @@ decision 2026-08-18), and a hermetic verifier is v0.2. The unsigned artifact and
 the unproven canary remain release blockers, not operator configuration issues.
 The next major milestone is Stage 1 of the vision — a small but real PRD taken
 to a proof-carrying, verified pull request (see [docs/VISION.md](./docs/VISION.md)).
+The machinery for that last step now exists and is described above; what is
+missing is a run, not a design. No pull request has been opened by this product
+as of 2026-09-07, and nothing here should be read as saying one has.
 
 ## Windows: start your first project
 
