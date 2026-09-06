@@ -22,12 +22,11 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE EVERYTHING THIS PLAN CITES. Both load-bearing values moved between two readings a few hours apart today, so treat every number below as stale until you reprint it.\n\n1. THE DIGEST AND ITS MIRRORS, censused BY HEX across ALL file types — a symbol grep cannot see three of the four:\n   D=$(grep -o '\"[0-9a-f]\\{64\\}\"' packages/control-room-client/src/generated/generated-client.ts | head -1 | tr -d '\"')\n   git grep -n \"$D\" -- . ':!.moe' ':!.serena'\n   At 19:47Z: digest f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd, four hits (generated-client.ts, generated-coverage.test.ts, apps/control-room/src/data/data-adapter.test.ts, apps/control-room/src/v2/goals/approve-plan.test.tsx). Record the CURRENT digest and the CURRENT file list — if a fifth mirror has appeared, it joins this row's owned paths.\n2. `grep -n \"commands.size).toBe(\" packages/contracts/src/runtime/runtime-contract.test.ts` — the literal to move. It read `toBe(104)` at :105 earlier today and `toBe(110)` at :108 at 19:47Z.\n3. `grep -n \"repository.publish\\|deployment.deploy\" packages/contracts/src/runtime/runtime-vocabulary.ts` — find the sorted neighbours `deployment.migrate_down` belongs between. A PEER ROW (task-44760ed17c714ccc8bdc5a36b630a17a) is publishing `deployment.set_target` and `deployment.deploy` into this same tuple; if its entries are present, yours sorts among them.\n4. `git grep -c \"migrate_down\" -- packages/contracts apps/daemon/src` must return NOTHING. If a peer already published it, STOP rather than landing a duplicate.\n\nREBASE, NEVER REVERT: expect roster entries you did not write. Deleting a peer's entry to clean your diff is the failure this step exists to prevent.",
-      "status": "IN_PROGRESS",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/contracts/src/runtime/runtime-contract.test.ts"
-      ],
-      "startedAt": "2026-09-05T22:18:42.833Z"
+      ]
     },
     {
       "stepId": "step-2",
@@ -78,8 +77,8 @@
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Governor archive per architect-b63fabf3's 07:39Z finding (comment-a180c5f112094d93b6c97411788bbb3b): all six DoD clauses are already satisfied at HEAD by task-64d2757c (DONE, merged 05cb3c3d, QA-approved): deployment.migrate_down is in RUNTIME_COMMAND_KINDS (runtime-vocabulary.ts:91), EXPECTED_COMMAND_KINDS carries it, the size literal reads 118, the client is regenerated. Nothing left to plan. Dependent task-537320ee is already WORKING; ARCHIVED satisfies dependsOn. Follow-up for architects: the digest-mirror census now has six hits (approve-plan-reject.test.tsx:110, plan-run-resolution.test.tsx:149 are new), so an \"exactly four mirrors\" rail will misfire next rotation.",
+  "reopenCount": 1,
+  "reopenReason": "SUPERSEDED - parked for archival on the human's instruction (2026-09-06). `deployment.migrate_down` was published on the shared runtime contract by task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29), the batched rotation filed to end per-kind digest rotations after three mirror collisions in one day. That row's own description names this row as one of the four it absorbs. Measured at HEAD: runtime-vocabulary.ts:91 carries \"deployment.migrate_down\"; every clause of this row's DoD - the sorted roster entry, the hand-edited transcription, the moved count literal, the regenerated client and the transcribed mirrors - is already satisfied. Re-running any of it would rotate GENERATED_CONTRACT_DIGEST again and invalidate the four kinds that landed together.\n\nI filed this row at 19:43Z, hours before the batching decision, when task-537320ee measured 15 files against a 10-file cap and the contract half was the clean seam. The split was right for the size problem and wrong about who should publish. Parent task-537320eed95348dc9bc3afc879dc0563's dependsOn has been cleared of this row so it is no longer gated on a row that will never complete; its remaining prerequisite is task-0a56ecee. Full record in comment-53fcec6a77634f1494c3922fec3d800c.\n\nNot DONE, because nothing was delivered - parked, then archived.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-537320eed95348dc9bc3afc879dc0563",
   "priority": "HIGH",
@@ -112,7 +111,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:43:25.436Z",
-  "updatedAt": "2026-09-06T07:48:29.812Z",
+  "updatedAt": "2026-09-06T10:36:59.301Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:48:15.735Z",
     "plannedStepCount": 6,
@@ -132,10 +131,7 @@
   "dependsOn": [
     "task-64d2757c06494c1f9016c5e2ffdf19fc"
   ],
-  "contextFetchedBy": [
-    "worker-7bdbffac",
-    "architect-b63fabf3"
-  ],
+  "contextFetchedBy": [],
   "workStartedAt": "2026-09-05T22:18:42.833Z",
   "blockedReason": null,
   "blockedOnTaskIds": null,

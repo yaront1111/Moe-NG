@@ -137,8 +137,7 @@
   "dependsOn": [
     "task-70a7ccd3293f465fbc9c1888ae540f5d",
     "task-bda0eeac02544c1992c6738c2db83178",
-    "task-54b74b8041c64bc2868435bcbdac6dd6",
-    "task-20b7d6bba60f445faa87a51a09d4b125"
+    "task-54b74b8041c64bc2868435bcbdac6dd6"
   ],
   "priority": "HIGH",
   "order": 42,
@@ -152,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:14.023Z",
-  "updatedAt": "2026-09-05T13:39:45.240Z",
+  "updatedAt": "2026-09-06T10:40:22.578Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:23:57.854Z",
     "plannedStepCount": 11,

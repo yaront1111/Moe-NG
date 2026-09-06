@@ -147,8 +147,8 @@
       "completedAt": "2026-09-06T10:05:51.185Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -220,16 +220,24 @@
       "author": "worker-e15d25c8",
       "content": "COMPLETION GATE RULING: governor-afbde490 msg-6265526a3bce48df98baf5fe335ae574 (10:00:23Z) accepts step9's scoped/path-attributed evidence and instructs complete_task; no overlay required by that ruling. Preserve exact measurement anchors: pre-edit three-file baseline from this runner at575fc4fe (comment4c5cc63), no persistent own edits until7be56433; final three-file lane measured after own tests (commentbb6e). Baseline failing paths={mcp-dispatch-port.test.ts(timeouts131/406),mcp-tool-allowlist.test.ts(147;bootstrap109)}; final={mcp-tool-allowlist.test.ts(147;bootstrap109)}. Final-minus-before EMPTY; owned intersection EMPTY. Allowlist IS in planned owned paths but unchanged and already failed before this diff; attribution is via EMPTY DELTA, not pretending it is outside scope.\nTwo foreign failures, verbatim: `AssertionError: expected 19 to be 17 // Object.is equality` at apps/daemon/src/mcp-tool-allowlist.test.ts:147; `TypeError: Cannot read properties of undefined (reading 'filter')` at apps/daemon/src/bootstrap/bootstrap-sequence.ts:109. Owner is deployment task-04b3ce7e349743c2a156d32ee5550ba5. Full3file EXIT1 Test Files1failed|2passed(3), Tests2failed|59passed(61). Final root typecheck/verify:foundation/verify:store EXIT1 on same bootstrap45/109 TS2739/TS7053, no owned TypeScript errors; wrapper verification scripts stopped before test stages.\nIMPORTANT DISCLOSED LIMIT: complete full-daemon/root BEFORE/AFTER failures were NOT collected by this runner. Those attempts were interrupted and later deferred by the host gate order; cannot claim full-package delta, full-package pass, or repo-wide green. Scope of delta above is exactly three MCP files. I explicitly notified governor of this limit in msg8f46528 before completing; baseline deferral was already recorded at step8/comment1c49. Larger regression remains for the epic integration/hardening pass, not invented green here.",
       "timestamp": "2026-09-06T10:04:41.830Z"
+    },
+    {
+      "id": "comment-4f21fcdb1ea9464a9b801302ac9f9e55",
+      "author": "qa-d81848bc",
+      "content": "QA INDEPENDENT RE-MEASUREMENT (qa-d81848bc, 2026-09-06, anchor = delivered tree at HEAD 408fccfa, owned paths clean per `git status --porcelain`). Every number below is mine, re-run, not copied from the completion record.\n\n1) NAMED VERIFICATION COMMAND, cwd apps/daemon: `pnpm exec vitest run --root . --config package.json --no-file-parallelism src/mcp-design-read-query.test.ts src/mcp-tool-allowlist.test.ts -t 'design|Q1 advertises'` => EXIT 0, `Test Files 2 passed (2)`, `Tests 15 passed | 20 skipped (35)`. Reproduces task.verification exactly.\n\n2) UNFILTERED THREE-FILE LANE (same cwd, --no-file-parallelism --testTimeout=60000) => EXIT 1, `Test Files 1 failed | 2 passed (3)`, `Tests 2 failed | 59 passed (61)`, 143.05s. Both reds verbatim, both FOREIGN:\n- `AssertionError: expected 19 to be 17 // Object.is equality` at apps/daemon/src/mcp-tool-allowlist.test.ts:147 (`MCP_EXCLUDED_COMMAND_KINDS.length`).\n- `TypeError: Cannot read properties of undefined (reading 'filter')` at apps/daemon/src/bootstrap/bootstrap-sequence.ts:109, via bootstrap-ledger:140 -> affordance-read:207/269/231/339 -> mcp-dispatch-port:167/393 -> allowlist.test:85.\nATTRIBUTION VERIFIED INDEPENDENTLY, not taken on the worker's word: MCP_EXCLUDED_COMMAND_KINDS is DERIVED at mcp-tool-allowlist.ts:84 from `OPERATOR_PRINCIPAL_KINDS`, and daemon-command-vocabulary.ts:361 lists `\"deployment.set_target\", \"deployment.deploy\"` there — so the roster grew 17->19 from the deployment row, and the same two kinds are missing from COMMAND_PREREQUISITES, which is exactly what bootstrap-sequence.ts:109 dereferences. One root cause, task-04b3ce7e, zero owned paths.\nQ1 (`Q1 advertises exactly the queries the production port serves`, allowlist.test.ts:302-311, both directions spelled out) is GREEN — the DoD-1 arm is not among the two reds.\n\n3) `pnpm typecheck` (repo root) => EXIT 1 with EXACTLY two errors, both apps/daemon/src/bootstrap/bootstrap-sequence.ts (45,12) TS2739 and (109,10) TS7053, both naming missing `deployment.deploy`/`deployment.set_target`. Zero TypeScript errors in any owned path.\n\n4) FULL DAEMON LANE, which the worker disclosed as UNMEASURED — I ran it: `pnpm --filter @moe/daemon test` => EXIT 1, `Test Files 32 failed | 483 passed (515)`, `Tests 158 failed | 9322 passed | 48 skipped (9528)`, 1305.73s. LIMIT ON MY OWN EVIDENCE: I piped through `tail -45`, so I hold the count lines but NOT the per-file failing roster; I cannot enumerate the 32. I settled it the other way instead — re-ran the two OWNED test files under the package script's exact flags (`--maxWorkers=4 --testTimeout=30000`, the shape whose 30s timeout produced the earlier dispatch-port reds): `Test Files 2 passed (2)`, `Tests 40 passed (40)`, EXIT 0. Combined with `git show --stat 408fccfa` showing this row carries ZERO production bytes (5 paths: 3 .moe json + mcp-design-read-query.test.ts +300, mcp-dispatch-port.test.ts +10), there is no channel by which this diff reaches the 32 foreign files. Delta ∩ owned paths = EMPTY.\n\n5) STRUCTURE AT HEAD: `design.read` at mcp-tool-allowlist.ts:39 and QUERY_HANDLERS mcp-dispatch-port.ts:317; handler delegates via createDesignReadPort -> readDesignRevision (mcp-design-read-query.ts:41), aggregate not reimplemented; `design: provider.designReads?.()` composed in BOTH mcp-tool-allowlist.test.ts:54 and production mcp-main.ts:130, so the phantom-tool hazard comment-e6ac2ad4 warned about is closed. HUMAN_ONLY_STEPS (agent-spawn-contract.ts:198) is a set of COMMAND KINDS (\"approval.decide\", \"goal.close\", ...), same namespace as \"design.submit\" — I checked, because a cross-namespace `.has()` would have made that arm a tautology. Line counts: mcp-dispatch-port.ts 396 (<400), handler 126, new test 300.\n\nNO-COMPLETION-COMMIT is expected here and investigated, not waived: task.commits holds only checkpoint 408fccfa (kind=checkpoint, pushed, refs/heads/moe/work-2026-09-04). The delivered bytes are in it and the owned worktree paths are clean, so the tree I graded IS the landed tree.",
+      "timestamp": "2026-09-06T10:40:10.212Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:30:16.693Z",
-  "updatedAt": "2026-09-06T10:06:01.134Z",
+  "updatedAt": "2026-09-06T10:42:27.951Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:41:35.541Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T10:42:27.951Z",
+    "wallClockMs": 75652410
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -286,7 +294,43 @@
     "apps/daemon/src/mcp-design-read-query.test.ts",
     "apps/daemon/src/mcp-dispatch-port.ts",
     "apps/daemon/src/mcp-tool-allowlist.ts",
-    "apps/daemon/src/mcp-dispatch-port.test.ts"
+    "apps/daemon/src/mcp-dispatch-port.test.ts",
+    ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+    ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json"
   ],
-  "completionSummary": "DoD1-4 met. Dependency06ac0da1 already landed production roster/handler; this row finishes tests rather than duplicates wiring. Independent roster/handler deletion drills both red; real durable agent sessions submit and read via stdio AND HTTP MCP, exact revision/history and DESIGN_REVISION_ABSENT@LEDGER asserted. Unknown HTTP bearer cannot use valid fallback: AUTHENTICATION_FAILED@AUTHENTICATE. Both kinds stay advertised, MCP-unexcluded and not HUMAN_ONLY. Existing handler tests now call production reader factory and pin authentication code. Only two test paths changed; new test300lines, production dispatch396/handler126 unchanged.\nFresh scoped gate EXIT0: Test Files2passed, Tests15passed|20skipped; dispatch supplement EXIT0:1file,3passed|23skipped. Refusal drills:4/2/5 intended failures; separate production source hash checks unchanged. Plain Node bridge smoke green. Adversarial review complete.\nGovernor msg6265526a accepted scoped/path-attributed completion. Full3file final EXIT1:1failed|2passed files,2failed|59passed tests, vs pre-edit4failed|53passed; new failing paths EMPTY. Remaining exact reds: allowlist.test.ts147 expected19 to be17; bootstrap-sequence.ts109 undefined.filter, both deployment task04b3ce7e. Typecheck/verify:foundation/store EXIT1 on same bootstrap45/109 errors; no own TypeScript errors. Full-daemon/root before/after remains UNMEASURED/deferred under host gate order, explicitly disclosed to governor; NOT repo-wide green. Evidence comments74402123,bb6e6843,ec4dff9c. All subprocesses finished."
+  "completionSummary": "DoD1-4 met. Dependency06ac0da1 already landed production roster/handler; this row finishes tests rather than duplicates wiring. Independent roster/handler deletion drills both red; real durable agent sessions submit and read via stdio AND HTTP MCP, exact revision/history and DESIGN_REVISION_ABSENT@LEDGER asserted. Unknown HTTP bearer cannot use valid fallback: AUTHENTICATION_FAILED@AUTHENTICATE. Both kinds stay advertised, MCP-unexcluded and not HUMAN_ONLY. Existing handler tests now call production reader factory and pin authentication code. Only two test paths changed; new test300lines, production dispatch396/handler126 unchanged.\nFresh scoped gate EXIT0: Test Files2passed, Tests15passed|20skipped; dispatch supplement EXIT0:1file,3passed|23skipped. Refusal drills:4/2/5 intended failures; separate production source hash checks unchanged. Plain Node bridge smoke green. Adversarial review complete.\nGovernor msg6265526a accepted scoped/path-attributed completion. Full3file final EXIT1:1failed|2passed files,2failed|59passed tests, vs pre-edit4failed|53passed; new failing paths EMPTY. Remaining exact reds: allowlist.test.ts147 expected19 to be17; bootstrap-sequence.ts109 undefined.filter, both deployment task04b3ce7e. Typecheck/verify:foundation/store EXIT1 on same bootstrap45/109 errors; no own TypeScript errors. Full-daemon/root before/after remains UNMEASURED/deferred under host gate order, explicitly disclosed to governor; NOT repo-wide green. Evidence comments74402123,bb6e6843,ec4dff9c. All subprocesses finished.",
+  "commits": [
+    {
+      "sha": "408fccfa583ceb6abe542d03bec4e4d48bebe5bd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T10:06:02Z",
+      "paths": [
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        "apps/daemon/src/mcp-design-read-query.test.ts",
+        "apps/daemon/src/mcp-dispatch-port.test.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T10:06:15.313Z",
+      "treeId": "cca4c1b3fed313cb8606d156c72612e761bb2c9e",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/repository/repository-bootstrap-read.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-06T10:06:02Z",
+    "at": "2026-09-06T10:06:15.313Z"
+  },
+  "completedAt": "2026-09-06T10:42:27.951Z",
+  "reviewCompletedAt": "2026-09-06T10:42:27.951Z",
+  "reviewSummary": "APPROVED. 5/5 DoD. Numbers are mine, re-run; transcript in comment-4f21fcdb.\nDoD1: design.read at allowlist.ts:39 AND QUERY_HANDLERS dispatch-port.ts:317; the both-direction set-equality arm Q1 (allowlist.test.ts:302) is GREEN in my run. Drill reproducible (comment-28e494b5): an enforce:pre transform deletes the exact anchored line from the REAL module, one direction per process, both red at :308.\nDoD2/3: test:271-291 opens a real durable session via session.open through the production port, submits design.submit (ACCEPTED/DESIGN_REVISION_SUBMITTED) and reads design.read back over BOTH stdio and http, asserting toEqual(readDesignRevision(...)) - not a truthy envelope. DESIGN_REVISION_ABSENT with layer LEDGER from an AUTHENTICATED caller; an unknown HTTP bearer cannot borrow the fallback (AUTHENTICATION_FAILED@AUTHENTICATE). dispatch-port.test.ts:100 pins both kinds advertised/unexcluded/not-HUMAN_ONLY, and HUMAN_ONLY_STEPS is a COMMAND-KIND set, so that negative is not a tautology.\nDoD4: delegates to readDesignRevision via createDesignReadPort; {goalRef}+optional version, unknown keys refused, projectId off the authenticated principal.\nDoD5 (path-attributed, governor msg-6265526a): named cmd EXIT 0, 15 passed|20 skipped. 3-file lane EXIT 1, 2 failed|59 passed; I attributed both reds myself - the exclusion roster is DERIVED (allowlist.ts:84) from OPERATOR_PRINCIPAL_KINDS, which vocabulary:361 now carries deployment.deploy/set_target, the same kinds missing from COMMAND_PREREQUISITES that bootstrap-sequence.ts:109 dereferences. One root cause: task-04b3ce7e. typecheck EXIT 1, 2 errors, both bootstrap-sequence.ts, none owned. I also ran the full daemon lane the worker deferred: EXIT 1, 32 failed|483 passed files; I tail-truncated it so I cannot enumerate the 32, and settled it by re-running the two owned files under the package's exact flags: 40 tests, EXIT 0. Row carries ZERO production bytes; delta n owned = EMPTY. Caps: dispatch-port 396<400."
 }

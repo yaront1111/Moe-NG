@@ -105,15 +105,14 @@
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-78eedd8ebc2b43c581ac21ea28648a9a",
   "dependsOn": [
-    "task-0a56ecee17b740a3abb7f850e5250c99",
-    "task-5a8c3166b98b4614952068242993bf2b"
+    "task-0a56ecee17b740a3abb7f850e5250c99"
   ],
   "priority": "HIGH",
   "order": 112.6,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:35:08.019Z",
-  "updatedAt": "2026-09-05T19:44:57.448Z",
+  "updatedAt": "2026-09-06T10:36:40.990Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:42:41.167Z",
     "plannedStepCount": 8,
