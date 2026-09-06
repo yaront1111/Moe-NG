@@ -98,7 +98,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:27:30.045Z",
-  "updatedAt": "2026-09-06T01:19:36.306Z",
+  "updatedAt": "2026-09-06T01:19:55.564Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T14:43:17.427Z",
     "plannedStepCount": 3,
@@ -253,20 +253,41 @@
       "treeId": "60ed9cfcbf2abdcfb4ae59724e713c991ccc26c6",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "1b17941cb98668547ce750b672a28fe46212a7ec",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T01:09:11Z",
+      "paths": [
+        ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+        ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T01:19:55.564Z",
+      "treeId": "8f4673302e457ca7387a7f366333816c924f314c",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
-    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json"
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+    ".moe/tasks/task-64d2757c06494c1f9016c5e2ffdf19fc.json",
+    ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+    ".moe/tasks/task-f3edb8fb39ad42ce8980dae7d62b604c.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/goals/goal-intent-approved-closure.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-afd89b78@2026-09-06T00:35:36Z",
-    "at": "2026-09-06T01:10:01.558Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T01:09:11Z",
+    "at": "2026-09-06T01:19:55.564Z"
   },
   "priorHandoffs": [
     {

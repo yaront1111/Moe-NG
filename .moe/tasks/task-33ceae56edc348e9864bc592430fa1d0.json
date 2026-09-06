@@ -23,8 +23,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY THE PREREQUISITES ON DISK, NO EDITS. This row certifies what two siblings shipped, so prove they are there rather than trusting the board (global rail 4 clause 2). (a) task-40e52fa8a85a4921b97bee933b00403f and task-5f883e4e12c34842b3cb6c2f218e4256 — `preview.decide` is in the daemon vocabulary, MCP-excluded, and in the regenerated client. (b) task-f5a74c23f8754665ab9d36cba386e1d0 — `grep -rn 'moe-preview-receipt' --include=*.ts apps/daemon/src` returns hits and a receipt carries {goalId, sha, url, pid, screenshots[], STARTED|REFUSED(code)}. Read its completion record for the one thing it was permitted to leave uncovered: whether the daemon-SHUTDOWN cleanup arm was reachable. If any prerequisite is absent, report_blocked with blockedOnTaskIds naming it — do NOT add a daemon field here (task rail 1). (c) Confirm the offer actually reaches the browser: the daemon must OFFER `preview.decide` on the affordance surface for a goal with a STARTED receipt, or no card can ever render. If the offer is missing, that is a gap in task-f5a74c23, not something to work around with a synthetic card.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T01:13:44.330Z"
     },
     {
       "stepId": "step-2",
@@ -87,7 +88,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -97,14 +98,22 @@
   "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
   "dependsOn": [
     "task-40e52fa8a85a4921b97bee933b00403f",
-    "task-f5a74c23f8754665ab9d36cba386e1d0"
+    "task-f5a74c23f8754665ab9d36cba386e1d0",
+    "task-dd86f35e117e4de1b5b885332d8af1f8"
   ],
   "priority": "HIGH",
   "order": 33,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-66e75ba771c540fd9d8381ade1e74126",
+      "author": "worker-0520a42e",
+      "content": "STEP 1 PREREQUISITE VERIFICATION - FULL MEASUREMENT (the block reason is capped at 2000 chars; this is the evidence it points at). worker-0520a42e, 2026-09-06, HEAD eb13d2f6 on moe/work-2026-09-04. NO EDITS MADE. step-1 deliberately left IN_PROGRESS so the verification is re-run at the new HEAD rather than trusted from this session.\n\n(a) PASS - the kind. preview.decide on the shared roster: packages/contracts/src/runtime/runtime-vocabulary.ts:104. Regenerated client: packages/control-room-client/src/generated/generated-client.ts:245 and :367. Human-only: apps/daemon/src/orchestrator/agent-spawn-contract.ts:229 (HUMAN_ONLY_STEPS). MCP-excluded: apps/daemon/src/mcp-tool-allowlist.ts:72. Contract module: apps/daemon/src/preview/preview-contracts.ts:43.\n\n(b) PASS - the receipt. `grep -rn \"moe-preview-receipt\" --include=*.ts apps/daemon/src` -> preview-receipt-contracts.ts:47 `PREVIEW_RECEIPT_VERSION = \"moe-preview-receipt/1\"`. Members and STARTED|REFUSED(code) present as the plan describes. Read task-f5a74c23's handoff: the arm it was permitted to leave uncovered is the daemon-SHUTDOWN sweep - createPreviewSupervisor().close(), named there as \"the daemon-shutdown seam a composition row should call\". I carried that into the new row's DoD item 6 so it is not lost.\n\n(c) FAIL - the offer, and everything upstream of it. Four independent measurements:\n\n1. THE REGISTRY ENTRY IS AN UNCONDITIONAL FAIL-CLOSED STUB. apps/daemon/src/daemon-command-registry.ts:433-439. The comment at :432 says so itself: \"The second throw is the FAIL-CLOSED stub the runner replaces.\"\n     if (preview) {\n       const decoded = decodePreviewDecidePayload(envelope.payload);\n       if (!decoded.ok) {\n         throw new DomainRefusal(decoded.code, decoded.layer, \"preview.decide payload refused\");\n       }\n       const stub = previewRefusal(\"PREVIEW_GOAL_NOT_LANDED\");\n       throw new DomainRefusal(stub.code, stub.layer, \"preview runner is not landed\");\n     }\n   EVERY well-formed decision - APPROVE and REJECT alike - throws PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. Only a MALFORMED payload gets a different code. Nothing is ever committed, so nothing can be read back from /activity/read.\n\n2. THE RUNNER PACKAGE HAS ZERO CONSUMERS.\n     git grep -n \"preview/preview-\" -- '*.ts' '*.tsx' '*.js' ':!*/dist/*' ':!apps/daemon/src/preview/*'\n   returns exactly FOUR hits, and every one imports ONLY ./preview/preview-contracts.js - the vocabulary task-40e52fa8 published, not the runner:\n     apps/daemon/src/daemon-command-families.ts:21\n     apps/daemon/src/daemon-command-payload-keys.ts:34\n     apps/daemon/src/daemon-command-registry.ts:28\n     apps/daemon/src/daemon-command-vocabulary.ts:26\n     git grep -n \"createPreviewRunner\\|createPreviewSupervisor\\|previewReceiptId\" outside apps/daemon/src/preview/ -> ZERO.\n   preview-runner, preview-supervisor, preview-ledger, preview-capture, preview-process, preview-receipt-contracts, preview-goal-landing and preview-command-resolution are unreachable from the live daemon.\n\n3. NOTHING CAN START A PREVIEW. `git grep -n \"preview\\.start\"` over apps/ and packages/ -> ZERO. preview.decide is the ONLY preview kind on the roster. runPreview has no command, no goal-lifecycle hook and no HTTP route, so recordPreviewReceipt never runs and no receipt reaches a live store.\n\n4. preview.decide IS NOT ON THE AFFORDANCE OFFER SURFACE. `git grep -in \"preview\" -- 'apps/daemon/src/http/affordance-*.ts'` excluding tests -> ZERO. The one hit in affordance-planning-offers.test.ts:456 is HUMAN_ONLY_STEPS membership - the FENCE - not an offer.\n\nDoD REACHABILITY, clause by clause. 1: no receipt and no offer to render from. 2: the registry refuses every APPROVE - precisely the defect the clause exists to catch. 3: REJECT never commits, so no node moves to REWORK. 5: no start and no approve for Playwright to drive. 6: cannot drive UnAI. Clauses 4 (stage + refusal words) and 7 (gates) are the only reachable ones, and neither is worth landing alone.\n\nAMENDMENT CHECK (global rail 9): all eight steps have activeAmendmentId=None and zero amendments, so the base plan text is authoritative and this block is premised on the effective text.\n\nACTIONS TAKEN: filed task-dd86f35e117e4de1b5b885332d8af1f8 (PLANNING, CRITICAL, dependsOn task-f5a74c23 + task-40e52fa8) for the registry edge, the start trigger, the affordance offer and the shutdown sweep; commented the consumer-edge measurement on task-f5a74c23 (global rail 4 clause 1 puts it on the producer's record, not a reopen); commented the band-shape finding on the parent task-f3edb8fb with the architect ask.\n\nPLAN NEEDS NO AMENDMENT. Steps 2-8 stand as written once the prerequisite exists.",
+      "timestamp": "2026-09-06T01:19:07.013Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T23:00:06.234Z",
-  "updatedAt": "2026-09-04T23:13:30.442Z",
+  "updatedAt": "2026-09-06T01:20:57.498Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:12:12.571Z",
     "plannedStepCount": 8,
@@ -130,5 +139,16 @@
       "tests/e2e/control-room/daemon-board.spec.ts"
     ]
   },
-  "planApprovedAt": "2026-09-04T23:13:30.442Z"
+  "planApprovedAt": "2026-09-04T23:13:30.442Z",
+  "contextFetchedBy": [
+    "worker-0520a42e"
+  ],
+  "workStartedAt": "2026-09-06T01:13:44.330Z",
+  "blockedReason": "STEP 1 ASKED ITS QUESTION; ANSWER IS NO. Step 1(c): a missing offer \"is a gap in task-f5a74c23, not something to work around with a synthetic card.\" NO EDITS; step-1 left IN_PROGRESS to force re-measurement at the new HEAD. FULL EVIDENCE: comment-66e75ba771c540fd9d8381ade1e74126 on this row.\n\nHEAD eb13d2f6. (a) kind PASSES; (b) receipt PASSES (preview-receipt-contracts.ts:47); (c) FAILS four ways:\n1. daemon-command-registry.ts:433-439 is an unconditional fail-closed stub - its comment at :432 calls it \"the FAIL-CLOSED stub the runner replaces\". EVERY well-formed APPROVE and REJECT throws PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. Nothing commits.\n2. git grep \"preview/preview-\" (minus dist + preview dir) -> 4 hits, ALL importing only preview-contracts.js, the vocabulary. createPreviewRunner/createPreviewSupervisor/previewReceiptId outside that dir -> ZERO. Runner unreachable from the live daemon.\n3. git grep \"preview\\.start\" over apps/ and packages/ -> ZERO. Nothing starts a preview; recordPreviewReceipt never runs.\n4. git grep -in preview -- apps/daemon/src/http/affordance-*.ts minus tests -> ZERO. No offer reaches the browser.\n\nA MISSING ROW, NOT AN UNDER-DELIVERY. Epic rail 1 makes a kind a four-row job with \"daemon wiring and operator fence\" third. Gate 2 shipped rows 1, 2, the FENCE HALF of 3, and 4. The release band has its wiring row explicitly (task-54b74b80); Gate 2 never got one.\n\nDoD 1,2,3,5,6 unreachable. DoD 2 is refused by the registry - the exact defect it exists to catch. Task rail 1 forbids repairing the subject inside the proof; parent rail 4 forbids a fixture substitute. planningNotes already rejected this: \"a card that offers a decision the daemon will refuse is worse than no card.\"\n\nFILED task-dd86f35e117e4de1b5b885332d8af1f8 (PLANNING, CRITICAL): registry edge, start trigger, offer, shutdown sweep. Commented task-f5a74c23 and parent task-f3edb8fb.\n\nASK: plan it; add it to task-f3edb8fb dependsOn (architect-only). Steps 2-8 stand unamended.",
+  "blockedOnTaskIds": [
+    "task-dd86f35e117e4de1b5b885332d8af1f8"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T01:20:12.940Z"
 }
