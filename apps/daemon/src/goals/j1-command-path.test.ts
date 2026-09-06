@@ -68,6 +68,9 @@ const OWNED_KINDS = [
   // cannot express. Still an OWNED kind of this family -- it admits through the same surface.
   "repository.bootstrap",
   "repository.publish",
+  // Both deployment edges are advertised; deploy is served by the async sibling.
+  "deployment.set_target",
+  "deployment.deploy",
 ] as const;
 
 const HANDLERS: daemon.HandlerTable = Object.freeze({
@@ -169,10 +172,12 @@ function isHumanAction(kind: string): boolean {
 afterEach(closeStores);
 
 describe("J1 command vocabulary", () => {
-  it("publishes exactly the thirteen owned kinds from the package root", () => {
+  it("publishes exactly the fifteen owned kinds from the package root", () => {
     expect(new Set<string>(daemon.BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(13);
-    expect(OWNED_KINDS).toHaveLength(13);
+    // Moved 13 -> 15 from this arm's PRINTED expected-vs-received when the two deployment kinds
+    // joined the family, never from a number in a plan.
+    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(15);
+    expect(OWNED_KINDS).toHaveLength(15);
   });
 
   it("routes every owned kind to a handler reachable from the package root", () => {
@@ -229,6 +234,13 @@ const UNDRIVEN_BY_LEGACY_JOURNEY: readonly string[] = Object.freeze([
   // `gh` or a tree write. Replay and idempotence are covered against the REAL dispatch seam in
   // repository/repository-bootstrap-journey.test.ts (the second run refuses DIR_NOT_EMPTY).
   "repository.bootstrap",
+  // Served on the ASYNC entry for the same reason: `docker build`, an optional
+  // `docker save | ssh docker load`, and a health poll. Replay is covered against the REAL
+  // dispatch seam in deployment/deploy-journey.test.ts.
+  "deployment.deploy",
+  // Synchronous, but the legacy journey binds no deploy target: its payload names a network, an
+  // ssh target and a url for an environment, and the kind's own suite drives it against those.
+  "deployment.set_target",
 ]);
 
 describe("each command is idempotent on replay (DoD 5)", () => {
