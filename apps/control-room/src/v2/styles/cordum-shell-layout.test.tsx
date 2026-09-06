@@ -32,7 +32,13 @@ import { CordumShell } from "../shell/cordum-shell.js";
 
 const SHELL_CSS = readFileSync(resolve(process.cwd(), "src/v2/styles/cordum-shell.css"), "utf8");
 
-interface Rows { readonly bar: string; readonly slot: string; readonly stage: string; readonly strip: string }
+interface Rows {
+  readonly advanced: string;
+  readonly bar: string;
+  readonly slot: string;
+  readonly stage: string;
+  readonly strip: string;
+}
 
 function panelRows(root: HTMLElement): Rows {
   const rowOf = (selector: string): string => {
@@ -46,6 +52,7 @@ function panelRows(root: HTMLElement): Rows {
   return {
     bar: rowOf(".cr2-panel > .cr2-contextbar"),
     slot: rowOf(".cr2-panel > .cr2-bannerslot"),
+    advanced: rowOf(".cr2-panel > .cr2-advancedslot"),
     stage: rowOf(".cr2-panel > .cr2-stage"),
     strip: rowOf(".cr2-panel > .cr2-statusstrip"),
   };
@@ -68,9 +75,9 @@ afterEach(() => {
   for (const style of [...document.head.querySelectorAll("style")]) style.remove();
 });
 
-describe("the shell's four panel rows are stated, not inferred from who rendered", () => {
+describe("every shell panel row is stated, not inferred from who rendered", () => {
   it("puts the banner slot in a row of its own and the strip in the last row", () => {
-    expect(panelRows(mount("DISCONNECTED"))).toEqual({ bar: "1", slot: "2", stage: "3", strip: "4" });
+    expect(panelRows(mount("DISCONNECTED"))).toEqual({ advanced: "4", bar: "1", slot: "2", stage: "3", strip: "5" });
   });
 
   it("keeps every row identical when the healthy relay renders no banner at all", () => {
@@ -79,7 +86,7 @@ describe("the shell's four panel rows are stated, not inferred from who rendered
     // the stage and the strip up one row each.
     expect(window.getComputedStyle(healthy.querySelector(".cr2-bannerslot") as HTMLElement).display)
       .toBe("none");
-    expect(panelRows(healthy)).toEqual({ bar: "1", slot: "2", stage: "3", strip: "4" });
+    expect(panelRows(healthy)).toEqual({ advanced: "4", bar: "1", slot: "2", stage: "3", strip: "5" });
   });
 
   it("holds the panel and the stage to the viewport so main is what scrolls", () => {
@@ -89,12 +96,29 @@ describe("the shell's four panel rows are stated, not inferred from who rendered
     expect(shell.gridTemplateRows).toBe("minmax(0, 1fr)");
     expect(shell.height).toBe("100dvh");
     expect(shell.overflow).toBe("hidden");
-    expect(panel.gridTemplateRows).toBe("auto auto minmax(0, 1fr) auto");
+    expect(panel.gridTemplateRows).toBe("auto auto minmax(0, 1fr) auto auto");
     // Without this a grid item's automatic minimum size is its content, so a long
     // list re-inflates the panel past the shell and the strip leaves the screen.
     expect(panel.minHeight).toBe("0px");
   });
 
+  it("leaves NO panel child auto-placed, enumerated from the DOM not from a list", () => {
+    // THE BIDIRECTIONAL DIRECTION (global rail 9). The arms above read a FIXED
+    // roster of four selectors, so a NEW child with no stated row was invisible to
+    // them - which is exactly how the Advanced panel came to be auto-placed above
+    // the stage, over the operator's work. This enumerates the children the shell
+    // actually renders and requires a stated row for every one of them, so the next
+    // child added without one reds here instead of shipping.
+    const panel = mount("CONNECTED").querySelector(".cr2-panel") as HTMLElement;
+    const children = [...panel.children] as HTMLElement[];
+    expect(children.length).toBeGreaterThan(3);
+    const unplaced = children.filter((child) => {
+      const computed = window.getComputedStyle(child);
+      const row = computed.getPropertyValue("grid-row") || computed.gridRowStart;
+      return row === "" || row === "auto";
+    }).map((child) => child.className);
+    expect(unplaced).toStrictEqual([]);
+  });
 });
 
 /** Declarations of one top-level rule, by exact selector text. */
