@@ -211,7 +211,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T08:42:20.804Z",
-  "updatedAt": "2026-09-06T01:39:48.860Z",
+  "updatedAt": "2026-09-06T01:40:14.289Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:01:30.843Z",
     "plannedStepCount": 9,
@@ -473,6 +473,22 @@
       "treeId": "6a007c6488e26319593ffeb2ad92c67e1850ce08",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "966df40545d6241a2eaf5e19e9e58b017020a0d5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T01:40:14.289Z",
+      "treeId": "2ebe1bbfab23ccc4f7b911cae40d21820c22473b",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -493,14 +509,19 @@
     "apps/daemon/src/mcp-main.test.ts",
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
     ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
-    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/daemon/src/goals/j1-command-path.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-caece97b@2026-09-06T00:35:26Z",
-    "at": "2026-09-06T01:22:04.642Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+    "at": "2026-09-06T01:40:14.289Z"
   },
   "blockedReason": null,
   "blockedOnTaskIds": null,
