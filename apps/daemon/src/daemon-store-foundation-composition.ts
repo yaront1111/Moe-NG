@@ -99,8 +99,12 @@ import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
 import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wiring.js";
 import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
 import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
+import { createHealthProbeJob } from "./monitoring/health-probe-ring.js";
+import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
+import { HEALTH_PROBE_JOB_ID } from "./monitoring/health-probe-contracts.js";
 
 export interface StoreDependencyConfig {
+  readonly healthProbeHttp?: HealthHttpPort;
   readonly schedule?: Pick<ScheduleConfig, "timer" | "resolve">;
   readonly repositoryWorkspace?: string | null;
   /** Optional deterministic command identity source for bounded harness composition. */
@@ -563,13 +567,19 @@ export function createStoreDependencies(
     store,
   });
 
-  const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock });
+  const healthProbe = createHealthProbeJob({ store, projectId: config.projectId, clock,
+    ...(config.healthProbeHttp === undefined ? {} : { http: config.healthProbeHttp }) });
+  const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
+    resolve: (id) => id === HEALTH_PROBE_JOB_ID ? healthProbe : config.schedule?.resolve?.(id) ?? null });
+  const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
+  const registered = schedules.register(HEALTH_PROBE_JOB_ID, healthProbe);
+  if (!registered.ok) { close(); throw new Error(`${registered.code}@${registered.layer}`); }
   return Object.freeze({
     activation,
     activity,
     affordances,
     budgetCommitment,
-    close: (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); },
+    close,
     commandAuthorityPlane,
     designReads,
     documentCoverage,
