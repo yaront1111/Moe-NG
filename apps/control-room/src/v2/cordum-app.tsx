@@ -24,6 +24,7 @@ import { LiveCriterionEvidence } from "./goals/live-criterion-evidence.js";
 import { LiveDesign } from "./goals/design-card.js";
 import { LiveDesignVersionNote } from "./goals/design-version-note.js";
 import { LiveGoalDeployments } from "./goals/live-goal-deployments.js";
+import { LiveGoalRelease } from "./goals/live-goal-release.js";
 import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -302,6 +303,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             title={open.title}
           />
           <LiveGoalDeployments setup={attached} goalRef={open.goalId} frame={boardFrame} />
+          <LiveGoalRelease frame={boardFrame} goalId={open.goalId} setup={attached} />
           <div id={GOAL_SECTION_IDS.contract}>
             {gate1Read !== null && gate1Port !== null ? (
               <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />

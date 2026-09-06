@@ -49,7 +49,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-d107a8ef",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T21:32:44.212Z",
+  "updatedAt": "2026-09-06T21:55:33.417Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -348,8 +348,8 @@
     "outcome": "nothing",
     "kind": "checkpoint",
     "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-d107a8ef@2026-09-06T21:32:37Z",
-    "at": "2026-09-06T21:32:44.212Z"
+    "sessionId": "worker-d107a8ef@2026-09-06T21:40:45Z",
+    "at": "2026-09-06T21:40:50.524Z"
   },
   "priorHandoffs": [
     {
