@@ -183,6 +183,8 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   expect(preKinds).toContain("product_contract.propose_revision");
   expect(preKinds).not.toContain("plan.propose");
   expect(preKinds).not.toContain("planning.submit_decomposition");
+  // Before Gate 1 the design rung is not reached at all, whatever the design state says.
+  expect(preKinds).not.toContain("design.submit");
 
   // ---- the AGENT writes the Product Contract from the PRD it can read ----
   const source = provider.goalSource?.().read(GOAL_ID);
@@ -305,6 +307,11 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   expect(postKinds).toContain("planning.submit_decomposition");
   expect(postKinds).not.toContain("product_contract.propose_revision");
   expect(postKinds).not.toContain("plan.propose");
+  // A design that was SKIPPED is never offered again — end to end, through a real dispatch of
+  // the skip rather than a stubbed state. A PRESENT design DOES keep its resubmit offered
+  // (affordance-planning-offers.ts), so this line is what proves the two are not collapsed:
+  // if `design.submit` ever appears here, the skip arm was folded into the PRESENT arm.
+  expect(postKinds).not.toContain("design.submit");
 
   // ---- the AGENT submits PLAN ONLY; the daemon compiles and drives the chain ----
   accepted("submit_decomposition", dispatch("planning.submit_decomposition", {

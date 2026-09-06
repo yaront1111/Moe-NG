@@ -390,14 +390,48 @@ describe("the compiler ladder on a source-bound goal", () => {
     }), NO_CONTRACT, NOTHING_LANDED, NO_PREVIEW, () => state);
   }
 
-  it.each([
-    [false, "ABSENT", "product_contract.propose_revision"],
-    [true, "ABSENT", "design.submit"],
-    [true, "PRESENT", "planning.submit_decomposition"],
-    [true, "SKIPPED", "planning.submit_decomposition"],
-  ] as const)("design rung: approved=%s, state=%s offers only %s", (approved, state, kind) => {
-    expect(new Set(designResolution(approved, state).offers.map((entry) => entry.commandKind)))
-      .toEqual(new Set([kind]));
+  /** `kind@targetAggregateId` per offer, IN ORDER: a Set of kinds cannot tell a design offer
+   *  fenced on the design aggregate from one fenced on the goal, and the second is the
+   *  non-dispatchable shape this ladder already shipped once. */
+  const offered = (resolution: PlanningOfferResolution): readonly string[] =>
+    resolution.offers.map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`);
+
+  it("design rung: approved=false offers only the revision writer, whatever the design says", () => {
+    for (const state of ["ABSENT", "PRESENT", "SKIPPED"] as const) {
+      expect(offered(designResolution(false, state)))
+        .toEqual([`product_contract.propose_revision@${GOAL_ID}`]);
+    }
+  });
+
+  it("design rung: ABSENT offers the design alone, and staffs it", () => {
+    const resolution = designResolution(true, "ABSENT");
+    expect(offered(resolution)).toEqual([`design.submit@${designAggregateId(GOAL_ID)}`]);
+    expect(resolution.compilerSteps).toEqual([
+      { aggregateId: designAggregateId(GOAL_ID), kind: "design.submit" },
+    ]);
+  });
+
+  // THE ARM THIS ROW EXISTS FOR, and both halves belong in ONE arm: the resubmit is OFFERED to
+  // the operator and NOT staffed. Split across two arms, one can rot green while the other
+  // passes — an offered-and-staffed resubmit is an infinite design loop, and an
+  // unoffered-and-unstaffed one is the defect this row fixes.
+  it("design rung: PRESENT offers the resubmit AND the decomposition, but staffs only the latter", () => {
+    const resolution = designResolution(true, "PRESENT");
+    expect(offered(resolution)).toEqual([
+      `design.submit@${designAggregateId(GOAL_ID)}`,
+      `planning.submit_decomposition@${GOAL_ID}`,
+    ]);
+    expect(resolution.compilerSteps).toEqual([
+      { aggregateId: GOAL_ID, kind: "planning.submit_decomposition" },
+    ]);
+  });
+
+  it("design rung: SKIPPED is never offered a design again", () => {
+    const resolution = designResolution(true, "SKIPPED");
+    expect(offered(resolution)).toEqual([`planning.submit_decomposition@${GOAL_ID}`]);
+    expect(resolution.compilerSteps).toEqual([
+      { aggregateId: GOAL_ID, kind: "planning.submit_decomposition" },
+    ]);
   });
 
   it("fences the design offer on the design aggregate, not the advanced goal", () => {
@@ -477,12 +511,14 @@ describe("the compiler ladder on a source-bound goal", () => {
       .map((entry) => entry.commandKind)).toEqual(["product_contract.propose_revision"]);
   });
 
-  it("offers the dispatcher once Gate 1 is approved and a design exists", () => {
+  it("offers the dispatcher AND the resubmit once Gate 1 is approved and a design exists", () => {
     const resolution = resolutionFor("DRAFTING", "DRAFT",
       laneOf({ approvedGateRef: GATE_REF, lane: "COMPILER" }));
-    expect(resolution.offers.map((entry) => entry.commandKind))
-      .toEqual(["planning.submit_decomposition"]);
-    expect(resolution.offers[0]?.targetAggregateId).toBe(GOAL_ID);
+    expect(offered(resolution)).toEqual([
+      `design.submit@${designAggregateId(GOAL_ID)}`,
+      `planning.submit_decomposition@${GOAL_ID}`,
+    ]);
+    // Only the decomposition is staffed; the resubmit waits for an operator.
     expect(resolution.compilerSteps).toEqual([
       { aggregateId: GOAL_ID, kind: "planning.submit_decomposition" },
     ]);
@@ -588,7 +624,12 @@ describe("the offer ladder resolves the goal's CURRENT run", () => {
       ledgerWithSuccessor(null), () => SUCCESSOR_ID,
       compilerLane({ approvedGateRef: GATE_REF, lane: "COMPILER" }),
     );
-    expect(roster(resolution)).toEqual([`planning.submit_decomposition@${GOAL_ID}`]);
+    // `resolutionOver` leaves designState at its PRESENT default, so the resubmit rides along
+    // — and `roster` sorts, hence design.submit first.
+    expect(roster(resolution)).toEqual([
+      `design.submit@${designAggregateId(GOAL_ID)}`,
+      `planning.submit_decomposition@${GOAL_ID}`,
+    ]);
     expect(resolution.compilerSteps).toEqual([
       { aggregateId: GOAL_ID, kind: "planning.submit_decomposition" },
     ]);

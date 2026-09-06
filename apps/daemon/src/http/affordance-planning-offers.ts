@@ -159,10 +159,27 @@ function offer(
   });
 }
 
+/**
+ * What one goal answers: everything the operator is OFFERED, and the subset the WRAPPER may
+ * STAFF. The two differ in exactly one place — the PRESENT-arm design resubmit — and are the
+ * SAME array everywhere else. Splitting them is what keeps an operator affordance from becoming
+ * agent work: `resolvePlanningOffers` fills `compilerSteps` from `staffable` alone, and
+ * `affordance-read.ts` turns every compilerStep into a READY step a seat picks up.
+ */
+interface GoalOffers {
+  readonly offers: readonly NextAllowedCommand[];
+  readonly staffable: readonly NextAllowedCommand[];
+}
+
+/** The default and the answer at every site but one: what is offered is also staffable. */
+function staffAll(offers: readonly NextAllowedCommand[]): GoalOffers {
+  return Object.freeze({ offers, staffable: offers });
+}
+
 /** `runId` is the goal's CURRENT run, resolved once by the caller and used at every run site. */
 function offersForGoal(
   input: PlanningOfferInput, goal: DurableGoal, runId: string,
-): readonly NextAllowedCommand[] {
+): GoalOffers {
   if (!planReviewable(input.ledger, runId)) {
     // THE COMPILER LADDER. A source-bound goal is compiled, never hand-planned:
     // `plan.propose` is WITHHELD (the wrapper staffing the demo payload against
@@ -172,30 +189,55 @@ function offersForGoal(
     // binding that fails integrity offers NOTHING (fail closed, never legacy).
     // Before dispatch, offer the design on its OWN aggregate until present or explicitly skipped.
     const facts = input.compilerLane.factsFor(goal.goalId);
-    if (facts.lane === "WITHHELD") return [];
+    if (facts.lane === "WITHHELD") return staffAll([]);
     if (facts.lane === "COMPILER") {
       if (facts.approvedGateRef !== null) {
-        if (input.designState(goal.goalId) === "ABSENT") {
-          return [offer(input, "design.submit", designAggregateId(goal.goalId))];
+        // Read ONCE: the three states are exhaustive here and a second read could disagree
+        // with the first if a design landed between them.
+        const design = input.designState(goal.goalId);
+        // ABSENT offers the design and nothing else — the goal is not ready to compile yet.
+        if (design === "ABSENT") {
+          return staffAll([offer(input, "design.submit", designAggregateId(goal.goalId))]);
         }
-        return [offer(input, "planning.submit_decomposition", goal.goalId)];
+        // PRESENT offers BOTH. `design.submit` is a VERSIONED revision command
+        // (design-store.ts selects a wanted version; the approve fold renders "Version 2"),
+        // so a designed goal must keep an operator route to revise it — without this arm
+        // nothing in production can ever produce version 2. The decomposition stays offered
+        // because the goal is ALSO ready to compile; this is an addition, not a swap, and the
+        // four-state MEANINGS are unchanged. SKIPPED deliberately does NOT get the design back:
+        // a goal whose operator chose to skip must never be offered one again.
+        if (design === "PRESENT") {
+          // THE ONE PLACE THE TWO SETS DIVERGE. The resubmit is offered to the OPERATOR and
+          // never staffed: `design.submit` is in COMPILER_OFFER_KINDS, so leaving it in
+          // `staffable` would make affordance-read mint a READY step for it on EVERY poll and
+          // the wrapper would staff a design agent onto every already-designed goal, forever.
+          const decomposition = offer(input, "planning.submit_decomposition", goal.goalId);
+          return Object.freeze({
+            offers: Object.freeze([
+              offer(input, "design.submit", designAggregateId(goal.goalId)),
+              decomposition,
+            ]),
+            staffable: Object.freeze([decomposition]),
+          });
+        }
+        return staffAll([offer(input, "planning.submit_decomposition", goal.goalId)]);
       }
       // A revision awaiting Gate 1 is the human's turn: nothing to staff until they decide.
-      return (facts.pendingRevision ?? null) === null
+      return staffAll((facts.pendingRevision ?? null) === null
         ? [offer(input, "product_contract.propose_revision", goal.goalId)]
-        : [];
+        : []);
     }
-    return [offer(input, "plan.propose", runId)];
+    return staffAll([offer(input, "plan.propose", runId)]);
   }
   const lifecycle = goal.state["lifecycle"];
   if (lifecycle === "DRAFT") {
     // Both human approval wires ride the same reviewable run: `approval.decide`
     // carries the seeded approve-and-activate journey, `approval.decide_intent`
     // is the only kind the browser's plan-approval gate authorizes against.
-    return [
+    return staffAll([
       offer(input, "approval.decide", runId),
       offer(input, "approval.decide_intent", runId),
-    ];
+    ]);
   }
   // Publishing is offered only once at least one node of the goal is landed as a commit — a
   // goal with nothing to push gets no PUBLISH card. The surface used to mint one for every
@@ -230,12 +272,12 @@ function offersForGoal(
     // the surface must never offer a close the command would refuse. Read here rather than
     // above so the coverage walk is skipped for every goal that could not be offered one.
     const readiness = input.closeReadiness(goal.goalId);
-    return readiness === "NO_CONTRACT" || readiness === "READY"
+    return staffAll(readiness === "NO_CONTRACT" || readiness === "READY"
       ? [offer(input, "goal.close", goal.goalId), ...publish, ...preview]
-      : [...publish, ...preview];
+      : [...publish, ...preview]);
   }
-  if (lifecycle === "COMPLETED") return [...publish, ...preview];
-  return [];
+  if (lifecycle === "COMPLETED") return staffAll([...publish, ...preview]);
+  return staffAll([]);
 }
 
 export function resolvePlanningOffers(input: PlanningOfferInput): PlanningOfferResolution {
@@ -260,8 +302,12 @@ export function resolvePlanningOffers(input: PlanningOfferInput): PlanningOfferR
       && (bound !== goal.goalId
         || !durableGoalMatches(input.ledger, bound, input.projectId, goal.planningRunRef))) continue;
     refs[current] = goal.goalId;
-    for (const minted of offersForGoal(input, goal, current)) {
-      offers.push(minted);
+    // ONE resolution, TWO reads of it: everything minted is offered, but only the STAFFABLE
+    // subset can become a compiler step. Running the kind filter over every minted offer —
+    // as this loop used to — is what would staff the design resubmit forever.
+    const resolved = offersForGoal(input, goal, current);
+    offers.push(...resolved.offers);
+    for (const minted of resolved.staffable) {
       const kind = COMPILER_OFFER_KINDS.find((compiler) => compiler === minted.commandKind);
       if (kind !== undefined) {
         compilerSteps.push(Object.freeze({ aggregateId: minted.targetAggregateId, kind }));

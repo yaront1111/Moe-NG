@@ -1181,7 +1181,7 @@ function rejectedWorld(reason: string) {
 describe("the real design surface journey", () => {
   afterAll(closeStores);
 
-  it("offers the exact design work-item only between Gate 1 and the first design", () => {
+  it("offers the exact design work-item from Gate 1 on, staffable only before the first design", () => {
     const store = boundWorld();
     const ref = committedRevision(store);
     const port = designPort(store);
@@ -1201,8 +1201,43 @@ describe("the real design surface journey", () => {
     // Use the actual offer's fence; the goal is already version 1, but the design is version 0.
     expect(writeDesign(store, ref, designRevisionFixture(), offered.expectedVersion).record.version)
       .toBe(1);
-    expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+    // The design is now PRESENT: the operator keeps a route to revise it, and the goal is also
+    // ready to compile. Both are offered; only the decomposition is STAFFED on the line below.
+    expect(designKinds(port)).toEqual(
+      new Set(["design.submit", "planning.submit_decomposition"]));
     expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+  });
+
+  /**
+   * THE CAPABILITY THIS ROW EXISTS TO MAKE REACHABLE, against the REAL `designState` over a real
+   * store — no stub. `design.submit` is a versioned revision command and the approve fold renders
+   * "Version 2", but before this row nothing in production offered it once a design existed, so
+   * version 2 was unreachable by any operator. The `expectedVersion` assertions are the whole
+   * arm: an offer minted at the wrong fence is dispatch-refused on every attempt and the ABSENT
+   * case cannot detect it, because 0 is the correct answer there.
+   */
+  it("offers a resubmit fenced on the design head, and the fence tracks TWO resubmits", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designRevisionFixture());
+    const port = designPort(store);
+    for (const expected of [1, 2]) {
+      const frame = designFrame(port);
+      const resubmit = frame.nextAllowedCommands
+        .find((entry) => entry.commandKind === "design.submit");
+      if (resubmit === undefined) throw new Error(`no design.submit offer at version ${expected}`);
+      // The DESIGN aggregate's head, not the goal's: same reason the first design is fenced at 0
+      // while the goal is already at 1.
+      expect(resubmit).toMatchObject({
+        expectedVersion: expected, targetAggregateId: designAggregateId(REJECT_GOAL),
+      });
+      // OFFERED, never STAFFED: a resubmit in `steps` is a design agent restaffed every poll.
+      expect(frame.steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+      // The offer the surface minted is the one the store accepts — dispatched at its own fence.
+      expect(writeDesign(store, ref, designRevisionFixture(), resubmit.expectedVersion)
+        .record.version).toBe(expected + 1);
+    }
   });
 
   it("skips the design while the real chain still compiles and reaches approval", () => {
@@ -1229,9 +1264,15 @@ describe("the real design surface journey", () => {
     const ref = committedRevision(store);
     approveGate1(store, ref);
     const blind = blindChainStore(store, designAggregateId(REJECT_GOAL));
-    expect(designPort(blind).readSurface()).toMatchObject({
+    const refused = designPort(blind).readSurface();
+    expect(refused).toMatchObject({
       code: "DESIGN_STORE_UNAVAILABLE", layer: "LEDGER", outcome: "REFUSED",
     });
+    // UNREADABLE IS NOT ABSENCE, and now that PRESENT offers a resubmit it is not PRESENT
+    // either: the refusal carries no roster at all, so neither a first design nor a revision
+    // can be offered over a ledger nobody could read.
+    expect("nextAllowedCommands" in refused).toBe(false);
+    expect("steps" in refused).toBe(false);
   });
 
   it.each([true, false])("reads the latest revision when skipped=%s changes between polls", (skipFirst) => {
@@ -1246,7 +1287,15 @@ describe("the real design surface journey", () => {
       if (!read.ok) throw new Error(`${read.code}@${read.layer}`);
       expect(read.record.version).toBe(index + 1);
       expect(isDesignSkip(read.record.revision)).toBe(skipped);
-      expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+      // The two states DIVERGE here, on the real store, inside one journey: a skip withholds
+      // the design for good, a real revision keeps the resubmit offered. Asserting the same
+      // set for both — as this arm did before the resubmit existed — cannot see the difference.
+      expect(designKinds(port)).toEqual(new Set(skipped
+        ? ["planning.submit_decomposition"]
+        : ["design.submit", "planning.submit_decomposition"]));
+      // Neither state staffs a design: SKIPPED has no offer, PRESENT has one that is not a step.
+      expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit"))
+        .toEqual([]);
     }
   });
 
@@ -1264,8 +1313,13 @@ describe("the real design surface journey", () => {
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    expect(designPort(corrupt).readSurface()).toMatchObject({
+    const refused = designPort(corrupt).readSurface();
+    expect(refused).toMatchObject({
       code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER", outcome: "REFUSED",
     });
+    // A design that EXISTS but cannot be decoded must not be treated as PRESENT and handed a
+    // resubmit offer over bytes nobody could read; the whole surface refuses instead.
+    expect("nextAllowedCommands" in refused).toBe(false);
+    expect("steps" in refused).toBe(false);
   });
 });
