@@ -20,7 +20,7 @@
     "Check any new testid namespace is free before using it, keep JSX text ASCII-only and apostrophe-free (the scheduler package-boundary scan reds otherwise), and keep every production file under 250 lines."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -44,7 +44,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-05T13:29:22.093Z",
+  "updatedAt": "2026-09-06T17:45:17.001Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z"
   },
@@ -63,13 +63,9 @@
       "reason": "PLAN IN BUILD ORDER (rail 16). This is a proof/consumer row. Its producer task-f961dc89 (release.decide) is still PLANNING and grep release.decide over apps/ packages/ is ZERO hits. Planning the browser journey first would ship a mock-backed proof (rail 4 clause 2). Releasing so the leaf can be planned first; dependsOn already gates WORKING."
     }
   ],
-  "blockedReason": "PRODUCER KIND ABSENT — cannot plan without a mock-backed journey. Re-measured at HEAD 13:28Z, full evidence in comment-1b7413d5: `grep -rn \"release\\.decide\" apps/ packages/ adapters/` = 0 hits; `RELEASE_EVIDENCE_INCOMPLETE|RELEASE_PR_FAILED` = 0 hits; no *release*decide* module. DoD 2, 3 and 6 assert those exact literals, so any plan now invents the refusal codes, offer shape and receipt shape in the control-room — task rail 1, task rail 4 (exact-key decoders reject hand-written frames), global rail 4 clause 2.\n\nSECOND park for this reason: architect-3c27f2ab released it 11:26Z on the same measurement (rail 16). Releasing again only re-offers it to the PLANNING pool — dependsOn gates WORKING only, so the row keeps reaching planning seats. Blocking is the enforceable park: auto-unblocks when all 3 producers hit DONE.\n\nBLOCKED ON (this epic, none DONE):\n- task-f961dc89 (42, WORKING, already in dependsOn) — release.decide published human-only + proof-carrying PR. Gates DoD 2, 5, 6.\n- task-bda0eeac (41.6, WORKING) — release.decide on the shared contract, 3 refusal codes + closed layer map. Gates DoD 2's verbatim RELEASE_EVIDENCE_INCOMPLETE. NOT in dependsOn; adding here.\n- task-54b74b80 (41.7, PLANNING) — registry wiring + human-only/MCP-excluded fence. Gates DoD 3 (card ABSENT when unoffered): no fence, no offered/un-offered distinction to assert.\n\nNOT blocked on child 1: task-70a7ccd3 DONE at 1c464208, apps/daemon/src/release/ on disk. Composition patterns all exist (goal-publish.tsx, publish-port.ts, offer-wire spendOffer); NEEDS_YOU_KINDS at v2/approvals/needs-you-model.ts:28; `cr.release.*` testid free. Only the kind is missing, so no new rows filed (rail 20).\n\nNEXT ARCHITECT: do not re-run the zero-hit greps as discovery — read the producers' completionSummary from epicSiblings and plan against the shapes they shipped.",
-  "blockedOnTaskIds": [
-    "task-f961dc899a13488da8f119abdc37631f",
-    "task-bda0eeac02544c1992c6738c2db83178",
-    "task-54b74b8041c64bc2868435bcbdac6dd6"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-05T13:29:22.093Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

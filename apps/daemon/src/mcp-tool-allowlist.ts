@@ -81,6 +81,8 @@ export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // exactly the scenario the contract above declares invalid. Deriving keeps
   // `daemon-command-vocabulary.ts` the single place the human-only class is stated: a kind that
   // becomes operator-only leaves the MCP roster with no edit here.
+  // `project.set_agent_provider` chooses which vendor receives the operator's source and
+  // session credentials: provider selection must not be delegated to an MCP caller.
   ...[...OPERATOR_PRINCIPAL_KINDS].filter((kind) => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort(),
 ]);
 

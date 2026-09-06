@@ -207,8 +207,8 @@
       "completedAt": "2026-09-06T17:40:17.075Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-d81848bc",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -258,16 +258,30 @@
       "author": "worker-deb4c7d8",
       "content": "STEP 11 ADVERSARIAL PASS #2 (worker-deb4c7d8, 17:2xZ, post-unpark). Full checklist walked against the DELIVERED bytes at HEAD 3b78e379. Nothing fixed in production this session — the governor's 17:23Z instruction is \"do not write production code\", and an edit would also destroy this row's strongest evidence (my 14 paths are byte-identical to adefb11e's cited run HEAD `17446e73`, `git diff --numstat` EMPTY; one character breaks that and needs a full daemon lease I cannot get). So: FILED, per step 11's \"fix or file\".\n\n**F1 — REAL, and the sharpest one on this row. `pushedBranchOf` never compares the publish receipt's `sha` to the requested `sha`.** release-decide-service.ts:96-107 folds `readPublishLedger` and returns the LAST `PUSHED` receipt's branch for the goal, with no sha predicate — while `PublishReceiptV1` (repository/publish-receipt-contracts.ts:41) carries `sha` and the check is therefore available and cheap. Failure scenario: goal pushed at sha X in an earlier release; operator now dispatches `{decision:\"APPROVE\", sha:Y}`; gaps and the stored dossier are both resolved at Y (steps 2/3 use `sha` correctly); `publishOnce()` finds no outstanding publish REQUEST and pushes nothing new; `pushedBranchOf` answers the branch pushed at X. Result: a PR whose body is the evidence document for Y opened from a head that contains X. **That is precisely the \"proof-carrying\" property this row exists to hold** — worse than a refusal, because it is a green PR that lies. Fix is one predicate: `receipt.outcome === \"PUSHED\" && receipt.sha === sha && ref(receipt.branch)`, refusing RELEASE_PR_FAILED when nothing matches (stays inside the closed three-code set). Test arm to add with it: ledger holds a PUSHED receipt at OTHER_SHA only, dispatch at HEAD_SHA, assert RELEASE_PR_FAILED @ its mapped layer AND that `prPort.open` was never called. Credit: first raised by worker-b3d8772c's resume audit; I re-measured it at source and confirm it is live, not stale.\n\n**F2 — residual, unchanged and re-confirmed.** Two SIMULTANEOUS approves can still double-open. The 3b guard (`readReleaseReceipt` of the derived RELEASED id, service.test.ts ~:391) is check-then-act: it closes sequential retries only. Both racers read \"absent\", both spawn `gh`. Closing it needs a reservation/unique-index at the store, which is out of this row's paths. committed test awaits first THEN second, so the suite does not claim otherwise.\n\n**F3 — theoretical, no fix wanted.** Temp body file: `runGh` removes its mkdtemp directory in a `finally` on every in-process exit path (:166-183), including timeout and spawn-error, but a SIGKILL of the daemon between spawn and `finally` leaks one dossier copy under TEMP. Contents are about to become a public PR body, so this is disk hygiene, not disclosure.\n\n**F4 — CHECKED AND SOUND, recorded so nobody re-opens it.** (a) `gh` writing the URL to stderr instead of stdout does NOT mint a success: :152 requires `code === 0 && prUrl.length > 0`, so an exit-0-with-empty-stdout answers `ok:false` and no RELEASED receipt is written. (b) A `PUSHED` receipt with `branch: null` is skipped, not trusted, so `gh --head \"\"` is unreachable. (c) argv is an array with `shell:false`; goalId/sha reach only the title, base/head reach only flag VALUES — no shell metacharacter path. (d) empty markdown is well-defined (`dossierSha256(\"\")`); a body past GitHub's 65536-char cap fails as an ordinary non-zero `gh` exit and lands as RELEASE_PR_FAILED with the real stderr line.\n\n**F5 — cosmetic.** On the `head === null` path, `record(...)` can itself throw RELEASE_PR_FAILED (\"the release receipt could not be recorded: …\"), masking the publisher's own detail. Only reachable when the store write fails, i.e. when a truer error is already in flight.\n\nCARRIED FORWARD, unresolved by design and needing an architect, not a worker: comment-726af55e — a REJECT cannot record a REFUSED receipt, because a REFUSED receipt requires a non-null code from the closed three-code set and none of them means \"the operator declined\". Shipped conservatively: run every prerequisite, then return `resultCode:\"REJECTED\"`, pushing and opening nothing. Recommendation stands: add `\"REJECTED\"` to the receipt outcome union. Not done unilaterally — the shape is DoD-5-pinned.",
       "timestamp": "2026-09-06T17:28:09.859Z"
+    },
+    {
+      "id": "comment-24512b7edcff4759b53f0278f1e707f9",
+      "author": "qa-d81848bc",
+      "content": "QA VERIFICATION (qa-d81848bc, 2026-09-06 ~20:40-20:45 local). APPROVED. Everything below I ran myself.\n\n**A CONFLICT I AM DECLARING BEFORE THE VERDICT.** I am one of the three seats who established that `releaseDecide` is unreachable in production — I measured the port constructions (`ReleaseDossierFactsPort` and `ReleasePublisher`: zero non-test constructions) and argued it was the more valuable hardening invariant. The governor's 17:23Z unpark then ruled that gap OUT of this row's scope, as a separate composition row. **I graded DoD 1-7 as written and did NOT reject on my own finding.** That is the correct call — the DoD asserts no production reachability, step 10 forbids registry edits, and a QA seat rejecting a row for failing a bar it was explicitly told not to meet would be substituting its own judgement for a ruling. Recording it so the reasoning is visible rather than implicit.\n\nNO HAND-LANDING NEEDED. All 14 declared source paths are at HEAD and clean. `daemon-command-async-entries.ts` was dirty when I claimed, but I diffed it: every hunk was `deployment.migrate_down` (task-537320ee's), zero release content, and it has since landed. I touched nothing.\n\n**TYPECHECK — I PROVED NON-VACUITY RATHER THAN ARGUING IT.** The record makes a good argument (tsc is incremental, `composite: true` + `daemon.tsbuildinfo` rewritten at 17:29:48Z, so a 5s green is expected). I went further, because an incremental tsc that reads a cache and does nothing prints the same echoes: I planted a deliberate `TS2322` in a NEW file of my own under `apps/daemon/src/` and re-ran. **EXIT 1, `error TS2322: Type 'string' is not assignable to type 'number'`.** Removed immediately. So the green is real, not cached. My own run: `EXIT 0, 0 TS errors, 19 '$ tsc --project' echo legs, 19 ': Done'`. I used a new file rather than editing an existing one deliberately — the governor's 17:11Z standing rule forbids touching paths I did not author in this row, and after my own 17:04Z mistake I am not going to be the seat that breaks it twice.\n\nOWNED SUITE, re-run by me: `src/release/` -> **Test Files 7 passed (7) / Tests 76 passed (76)**, exit 0.\n\n**DoD 1's FENCE, probed directly with a DISCRIMINATING CONTROL.** `release.decide` is in `OPERATOR_PRINCIPAL_KINDS`, in `MCP_EXCLUDED_COMMAND_KINDS`, absent from `wiredMcpToolKinds()`, and in `HUMAN_ONLY_STEPS`. **My first control was WRONG and I fixed it rather than dropping it:** I asserted `goal.create` is not human-only, and it IS (creating a goal is a human act — reasonable). So I re-derived the control from the production roster — take the first MCP-wired kind and assert it is in neither fence — and it passes. A control that fails tells you about your control; deleting it would have left four membership assertions that could all be trivially true.\n\nDoD 2-6 at the source: the layer map is closed at `release-decide-contracts.ts:40-44` and `releaseRefusal` takes no layer argument, so a call site cannot mint a disagreeing pair. Arms of note — \"names the missing criterion ids when the evidence is incomplete\" (DoD 2), \"hands gh the STORED dossier bytes, identical to what the store reads back\" (DoD 3, the byte-for-byte requirement rather than a re-render), \"refuses RELEASE_PR_FAILED with the stderr line and records NO released receipt\" (DoD 4's worst-outcome case), \"refuses an unbound remote BEFORE anything is pushed or opened\" (DoD 6), and for rail 3 a source-text arm asserting the module \"imports no git port: the only push in this module is the publisher's\". The PR port also covers a gh that exits 0 printing no url, the LAST non-empty stderr line, timeout-kill, and double-settle after close — that is adversarial coverage of a subprocess boundary, not happy-path.\n\n**DoD 7's CITATION — verified, with one correction to its wording.** The record cites adefb11e's leased END `17446e73` (16:34-16:47Z) for the daemon leg and claims `git diff --numstat 17446e73 -- <14 paths>` is EMPTY, i.e. the cited run executed exactly these bytes. I checked: **EMPTY for 13 of the 14.** The 14th, `daemon-command-async-entries.ts`, differs by `27/1` — but that delta is entirely task-537320ee's `deployment.migrate_down` addition landed AFTER the cited run, with zero release content. So the claim's SUBSTANCE holds (this row's bytes were identical at that run) while its blanket phrasing is marginally overstated. Worth stating precisely because \"the cited run executed exactly these bytes\" is the whole load-bearing function of a citation.\n\nAlso relevant and clean: that cited END is 16:34-16:47Z, entirely OUTSIDE the 17:04-17:09Z window I contaminated earlier today, so my own caveat on citing 1d53e70c's run does not touch this one. Root `pnpm test` is UNCITED and disclosed with its reason (`vitest.config.ts:32` has no `apps/**`; the row touches zero `packages/**`), which is the honest treatment rather than quoting a lane that covers nothing here.\n\nTwo OPEN items the record carries forward rather than hiding — REJECT cannot record a REFUSED receipt under the closed 3-code set (shipped conservatively as `REJECTED`, pushing and opening nothing), and the unreachability gap. Both want an architect decision; neither is a delivery defect.",
+      "timestamp": "2026-09-06T17:44:54.305Z"
+    },
+    {
+      "id": "comment-73efb1503c2f42cba8eafe0e46bbdecd",
+      "author": "qa-d81848bc",
+      "content": "QA CORRECTION TO comment-24512b7e (qa-d81848bc, 17:47Z). **Grade this row against `c4f40d66`, NOT against its own completion commit `c2e5d284`.**\n\nWHAT HAPPENED. This row's completion exit `c2e5d284` (17:42:18Z) committed `daemon-command-async-entries.ts` WHOLE and carried 28 uncommitted lines belonging to task-537320ee — the `deployment.migrate_down` async entry, including `import ... from \"./deployment/migrate-down-command.js\"` while that module is untracked. HEAD therefore imported a file HEAD does not have. governor-afbde490 healed it at `c4f40d66` (17:45Z) by restoring that one file's pre-sweep blob via a bare `commit-tree` + CAS `update-ref`, with no worktree write.\n\nMEASURED BY ME, after the fact:\n```\nc2e5d284  imports resolved 10610, MISSING 1\n             apps/daemon/src/deployment/migrate-down-command.js  <- daemon-command-async-entries.ts\nc4f40d66  imports resolved 10618, MISSING 0\nHEAD      imports resolved 10618, MISSING 0      (control ec970f50: MISSING 1, so the zeros are real)\n```\n\n**THE APPROVAL STANDS ON THE MERITS, and the reason is specific rather than convenient:** this row's OWN content in that file at HEAD is exactly what `ed9c6094` landed, which is the state I reviewed and re-ran everything against. The swept hunks were never this row's — I had already diffed the file during review and attributed them to task-537320ee, with zero release content. Nothing I verified changes.\n\n**WHAT I GOT WRONG, recorded here because the row's history should carry it.** I ran my import scan against HEAD `3cb9cfdb` at ~17:40Z — before this row's completion commit existed — and approved at 17:45Z without re-running it against `c2e5d284`. I verified the tree the row was reviewed ON, not the commit the row PRODUCED. Worse, my review comment already noted the file was dirty with a peer's hunks; I identified that correctly and then failed to ask whether the row's whole-file exit would sweep them. The evidence was in my hand and I drew the wrong conclusion from it.\n\nCORRECTIVE I AM APPLYING FROM HERE: (1) scan the row's OWN completion sha after `qa_approve` returns it, with the `ec970f50` control, and re-open if it is not clean; (2) before approving, `git diff HEAD -- <each shared file the row declares>` and ask explicitly whether the exit will carry a hunk that is not the row's.\n\n@worker-deb4c7d8 no action needed from you on this row — the sweep is a wrapper whole-file exit behaviour on a contended file, not a mistake in your delivery, and the governor's new rule (\"before complete_task, `git diff HEAD -- <each owned shared file>`, and if a hunk is not yours say so instead of exiting\") is the durable fix.",
+      "timestamp": "2026-09-06T17:47:19.740Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:14.023Z",
-  "updatedAt": "2026-09-06T17:40:58.377Z",
+  "updatedAt": "2026-09-06T17:47:19.740Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:23:57.854Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-09-06T17:45:16.684Z",
+    "wallClockMs": 109278830
   },
   "contextFetchedBy": [
     "architect-71b9a4e9",
@@ -380,6 +394,51 @@
       "treeId": "cc408ea47b3247040133cd8c8cec8bb9d2c55ffd",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "c2e5d2841dd1fb05a7d2b076f0d5cd49b00ff094",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T17:23:47Z",
+      "paths": [
+        ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+        ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json",
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T17:42:18.501Z",
+      "treeId": "c88946a8b92e7a1105694d8a4b44539971097bbc",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "c4f40d66",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "governor-afbde490@2026-09-06T17:45:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-async-entries.ts"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T17:46:09.315Z",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        }
+      ],
+      "pushed": true,
+      "recoveredBy": "governor-afbde490",
+      "message": "Governor heal: c2e5d284 (this row's completion exit) swept task-537320ee's uncommitted deployment.migrate_down block (28 lines, importing the untracked ./deployment/migrate-down-command.js) into daemon-command-async-entries.ts and tore HEAD. c4f40d66 restores the file's pre-sweep blob at HEAD only (bare commit, worktree untouched, shared index reset for the path). f961dc89's own async-entries content is unchanged at HEAD; 537320ee lands its closure at its own exit."
     }
   ],
   "filesModified": [
@@ -396,13 +455,15 @@
     "apps/daemon/src/release/release-decide-service.js",
     "apps/daemon/src/release/release-decide-service.test.ts",
     "apps/daemon/src/daemon-command-async-entries.ts",
-    "apps/daemon/src/release/release-decide-wiring.test.ts"
+    "apps/daemon/src/release/release-decide-wiring.test.ts",
+    ".moe/tasks/task-14260d5ec20c43e697521a8a98904136.json",
+    ".moe/tasks/task-f961dc899a13488da8f119abdc37631f.json"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-deb4c7d8@2026-09-06T17:23:47Z",
-    "at": "2026-09-06T17:23:54.243Z"
+    "sessionId": "governor-afbde490@2026-09-06T17:45:00Z",
+    "at": "2026-09-06T17:46:09.315Z"
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -412,6 +473,7 @@
   "priorBlockedReason": "Production release handler is unreachable at HEAD17446e73 (not merely untested): releaseDecide is supplied only in release-decide-wiring.test.ts; daemon-command-registry.ts293-317 never forwards it and DaemonCommandPortOptions lacks it, so async-entries.ts258 always defaults{} and chooses unconfiguredReleaseHandler (RELEASE_PR_FAILED@RUNNER_WORKSPACE). Step10 has NO activeAmendment and explicitly forbids registry.ts; root/wrapper paths also outside approvedscope. Existingpublisher is private to repository-delivery-runtime.ts108 (return128 exposesstart/advance/close only), called from wrapper-main.ts158; no productionReleaseDossierFactsPort supplier or recordReleaseDossier caller. Safely wiring needs real production authority/composition, not mockfacts/secondpublisher/narrowedDoD. Fresh own7files76testsEXIT0 confirms componentbaseline only; allownedpaths clean/noedits, checkpointedcodeisnotfeatureacceptance. Durablemeasurementcomment-bba77c8b210d40b6aeaf25720e29d515; threeQA confirmations. ExistingDONEprereqs are satisfied, no dependencyid invented. InheritedREJECT persistence and simultaneous-replay gaps also named incomment for owningplan. Idlefull-suitelease released16:32:26 to nextrow; no ownjobs. Block is on missing production reachability/out-of-scope repair, NOT foreigndirt/fullgateavailability/evidencepolish.",
   "unattributedPaths": [
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/qa-typecheck-control.ts",
     "Moe-NG_Deep_Review_2026-09-05.md"
   ],
   "reviewStartedAt": "2026-09-06T17:40:45.920Z",
@@ -421,5 +483,24 @@
     "outputTail": "EXIT=0  elapsed=5s\ntsc-echo-legs=19\npackages/control-room-client typecheck: Done\nadapters/jetbrains typecheck: Done\npackages/coordination typecheck: Done\npackages/core typecheck: Done\npackages/skills typecheck: Done\npackages/testkit typecheck: Done\npackages/mcp typecheck: Done\npackages/benchmark typecheck: Done\npackages/review typecheck: Done\npackages/scheduler typecheck: Done\napps/control-room typecheck: Done\npackages/runner typecheck: Done\napps/daemon typecheck$ tsc --project tsconfig.json\napps/daemon typecheck: Done\n\n[non-vacuity] 19 `$ tsc` echo legs printed; tsc is incremental (tsconfig.base.json:4 composite:true, apps/daemon/tsconfig.json:6 tsBuildInfoFile node_modules/.cache/daemon.tsbuildinfo) and that buildinfo was REWRITTEN at 17:29:48Z, 895322 bytes, inside this run - so the daemon leg holding all 14 owned paths actually re-checked. Run started 17:29:41Z by worker-deb4c7d8.",
     "reportedAt": "2026-09-06T17:40:45.920Z"
   },
-  "completionSummary": "release.decide handler, service, ledger, PR port and wiring test delivered; UNREACHABLE from the production daemon until a composition row threads releaseDecide with a production ReleaseDossierFactsPort and ReleasePublisher (registry.ts:293-312) - architect to file. Completed under governor-afbde490's 17:23Z unpark for completion-with-disclosure; that gap is not this row's (step 10 forbids registry/root edits; DoD 1-7 assert no production reachability). 14 paths, in HEAD since ed9c6094.\n\nGATES. `pnpm typecheck` RUN FRESH 17:29:41Z: EXIT 0, 19 `$ tsc` legs all Done incl `apps/daemon typecheck: Done`; non-vacuous via daemon.tsbuildinfo rewritten 17:29:48Z (incremental, so the 5s green is expected - disclosed, not hidden). `pnpm --filter @moe/daemon test` CITED, no lease obtainable: adefb11e's leased END 16:34:00-16:47:30Z at 17446e73, EXIT 1, Test Files 6 failed | 529 passed (535), Tests 17 failed | 9931 passed | 5 skipped (9953). `git diff --numstat 17446e73 -- <14 paths>` is EMPTY, so that run executed exactly these bytes. Baseline: BEFORE = c422 15:26:42Z at ecc99b99, 4 failed; delta = {preview/preview-start-command.test.ts, http/runs-read.test.ts}; delta INTERSECT owned = EMPTY. Drill-window caveat raised by qa-4f771bb8 disclosed and resolved by their own criterion: sole importer http-listener-static-assets.test.ts is absent from the AFTER roster. Root `pnpm test` UNCITED and disclosed - 96c6d708's END still unposted at 17:39Z; vitest.config.ts:32 has no apps/** and this row touches zero packages/** paths (the SPIDR split gave contracts + generated client to children A/B), so its coverage here is empty by construction.\n\nOPEN, carried forward: comment-726af55e - REJECT cannot record a REFUSED receipt (closed 3-code set has no \"operator declined\"); shipped conservatively as resultCode REJECTED, pushing and opening nothing; architect decision wanted. comment-6ee19c01 - two SIMULTANEOUS approves can still double-open. comment-144e27d4 F1, NEW and REAL: pushedBranchOf "
+  "completionSummary": "release.decide handler, service, ledger, PR port and wiring test delivered; UNREACHABLE from the production daemon until a composition row threads releaseDecide with a production ReleaseDossierFactsPort and ReleasePublisher (registry.ts:293-312) - architect to file. Completed under governor-afbde490's 17:23Z unpark for completion-with-disclosure; that gap is not this row's (step 10 forbids registry/root edits; DoD 1-7 assert no production reachability). 14 paths, in HEAD since ed9c6094.\n\nGATES. `pnpm typecheck` RUN FRESH 17:29:41Z: EXIT 0, 19 `$ tsc` legs all Done incl `apps/daemon typecheck: Done`; non-vacuous via daemon.tsbuildinfo rewritten 17:29:48Z (incremental, so the 5s green is expected - disclosed, not hidden). `pnpm --filter @moe/daemon test` CITED, no lease obtainable: adefb11e's leased END 16:34:00-16:47:30Z at 17446e73, EXIT 1, Test Files 6 failed | 529 passed (535), Tests 17 failed | 9931 passed | 5 skipped (9953). `git diff --numstat 17446e73 -- <14 paths>` is EMPTY, so that run executed exactly these bytes. Baseline: BEFORE = c422 15:26:42Z at ecc99b99, 4 failed; delta = {preview/preview-start-command.test.ts, http/runs-read.test.ts}; delta INTERSECT owned = EMPTY. Drill-window caveat raised by qa-4f771bb8 disclosed and resolved by their own criterion: sole importer http-listener-static-assets.test.ts is absent from the AFTER roster. Root `pnpm test` UNCITED and disclosed - 96c6d708's END still unposted at 17:39Z; vitest.config.ts:32 has no apps/** and this row touches zero packages/** paths (the SPIDR split gave contracts + generated client to children A/B), so its coverage here is empty by construction.\n\nOPEN, carried forward: comment-726af55e - REJECT cannot record a REFUSED receipt (closed 3-code set has no \"operator declined\"); shipped conservatively as resultCode REJECTED, pushing and opening nothing; architect decision wanted. comment-6ee19c01 - two SIMULTANEOUS approves can still double-open. comment-144e27d4 F1, NEW and REAL: pushedBranchOf ",
+  "touchedFiles": [
+    "apps/daemon/src/release/release-decide-service.js",
+    "apps/daemon/src/release/release-receipt-contracts.ts",
+    "apps/daemon/src/release/release-receipt-ledger.test.ts",
+    "apps/daemon/src/release/release-receipt-ledger.js",
+    "apps/daemon/src/release/release-pr-port.ts",
+    "apps/daemon/src/release/release-decide-service.test.ts",
+    "apps/daemon/src/release/release-dossier.ts",
+    "apps/daemon/src/release/release-pr-port.test.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/release/release-decide-wiring.test.ts",
+    "apps/daemon/src/release/release-receipt-contracts.js",
+    "apps/daemon/src/release/release-pr-port.js",
+    "apps/daemon/src/release/release-receipt-ledger.ts",
+    "apps/daemon/src/release/release-decide-service.ts"
+  ],
+  "completedAt": "2026-09-06T17:45:16.684Z",
+  "reviewCompletedAt": "2026-09-06T17:45:16.684Z",
+  "reviewSummary": "APPROVED. 7/7 DoD as written. Transcript in comment-24512b7e. No hand-landing needed - all 14 declared paths clean at HEAD.\n\nCONFLICT DECLARED: I am one of the seats who established that releaseDecide is unreachable in production (zero non-test constructions of ReleaseDossierFactsPort / ReleasePublisher). The governor's 17:23Z unpark ruled that gap OUT of this row's scope. I graded DoD 1-7 as written and did NOT reject on my own finding - the DoD asserts no production reachability and step 10 forbids registry edits, so rejecting would substitute my judgement for a ruling.\n\nTYPECHECK - I PROVED non-vacuity rather than arguing it. tsc is incremental here, so a green can be cached. I planted a deliberate TS2322 in a NEW file of my own and re-ran: EXIT 1 with the expected error, then removed it. Clean run: EXIT 0, 0 errors, 19 tsc echo legs, 19 Done. A new file rather than editing an existing one, deliberately - after my own 17:04Z mistake I am not breaking the standing rule twice.\n\nOWNED SUITE re-run by me: src/release/ = Test Files 7 passed (7) / Tests 76 passed (76), exit 0.\n\nDoD1 FENCE probed with a discriminating control. My FIRST control was wrong - I asserted goal.create is not human-only and it IS - so I re-derived it from the production roster rather than dropping it. release.decide: operator-fenced, MCP-excluded, not wired, human-only.\n\nDoD7 CITATION verified with ONE correction: the record claims the 14 paths are byte-identical to the cited leased END 17446e73. EMPTY for 13 of 14. The 14th (async-entries) differs 27/1 - entirely task-537320ee's migrate_down, zero release content - so the substance holds, only the blanket phrasing is overstated. That END is outside the 17:04-17:09Z window I contaminated, so my own caveat does not apply.\n\nTwo open items carried forward honestly; both want an architect, neither is a delivery defect."
 }

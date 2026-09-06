@@ -218,6 +218,9 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // an agent reaching the kind over a transport, this one stops the wrapper minting a
   // session to take it.
   "environment.set_variable", "environment.unset_variable",
+  // Provider selection chooses which vendor receives source and session credentials. MCP
+  // exclusion blocks transport access; this fence also forbids staffing that human decision.
+  "project.set_agent_provider",
   // Deciding a product preview is the operator LOOKING AT THE THING and saying yes or no. An
   // agent pressing APPROVE would be staffing the human gate itself, and the verdict the daemon
   // then records would be indistinguishable from a human's. This is the WRAPPER's half of the
@@ -254,6 +257,14 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   "deployment.set_target", "deployment.deploy",
   // Replacing the running production image is an operator decision, never staffed work.
   "deployment.rollback",
+  // REVERTING A PRODUCTION SCHEMA IS NEVER AN AGENT'S DECISION: it destroys the data the forward
+  // migration created, and the wrapper performs it as an effect of the operator's decision, never
+  // as staffed work. Belt-and-braces even so -- `agentCapabilitiesFor` already answers null for
+  // this kind, so no seat is granted reach in the first place, and `migrate-down-command.ts`
+  // fences the dispatch at handler entry because an async entry never reaches the registry's
+  // synchronous operator check. Each of the three would have to fail for a schema to be reverted
+  // by anything other than a human.
+  "deployment.migrate_down",
 ]);
 
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
