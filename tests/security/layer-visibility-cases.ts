@@ -154,7 +154,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
  * constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 66;
+const EXPECTED_PRIVATE_COUNT = 73;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -164,6 +164,15 @@ const EXPECTED_PRIVATE_COUNT = 66;
  * to make the population a number that cannot move without an arm going red.
  */
 const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
+  // Browser-only answer stamps: four live read decoders, two offer consumers, and
+  // the advanced read-frame adapter. Enumerated individually; no scanner exemption.
+  { constant: "LIVE_ACTIVATION_LAYER", file: "apps/control-room/src/live/live-activation.ts" },
+  { constant: "LIVE_GRAPH_GET_LAYER", file: "apps/control-room/src/live/live-graph-get.ts" },
+  { constant: "LIVE_GATE_1_LAYER", file: "apps/control-room/src/live/live-product-contract-gate-1.ts" },
+  { constant: "LIVE_REPOSITORY_REMOTE_LAYER", file: "apps/control-room/src/live/live-repository-remote.ts" },
+  { constant: "PREVIEW_LAYER", file: "apps/control-room/src/v2/approvals/preview-port.ts" },
+  { constant: "DEPLOY_LAYER", file: "apps/control-room/src/v2/goals/deploy-port.ts" },
+  { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
   { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
   { constant: "AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority-contracts.ts" },
@@ -350,8 +359,8 @@ const resolvedLayerLiterals = (): readonly string[] => {
     .filter((value) => declared.has(value));
 };
 
-const EXPECTED_LITERAL_COUNT = 94;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 29;
+const EXPECTED_LITERAL_COUNT = 102;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 37;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -361,6 +370,15 @@ const EXPECTED_UNRESOLVED_LITERAL_COUNT = 29;
  * `cutover-quiesce-evidence.ts`, and an ALL-CAPS-shaped census would have missed it.
  */
 const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
+  // These answer stamps are literals or constants outside the *_LAYER declaration
+  // grammar. Closed entries retain the scanner's ability to detect any further growth.
+  "ACTIVATION_READ", // http/activation-read.ts
+  "CONTROL_ROOM_CRITERIA", // v2/goals/criterion-evidence-port.ts and its live reader
+  "CONTROL_ROOM_RECOVERY", // v2/ops/repository-recovery-port.ts and its live reader
+  "CRITERION_EVIDENCE", // criterion-evidence/criterion-contracts.ts and command/read edges
+  "CRITERION_EXECUTOR", // criterion-evidence/{criterion-approval,criterion-runner,criterion-receipt}.ts
+  "DAEMON_COMMAND_SEAM", // daemon-command contracts and adapters
+  "REPOSITORY_WORKFLOW_READ", // http/repository-workflow-read.ts
   "CARRY_EVIDENCE_ASSEMBLER",
   "CONFIRMATORY_FREEZE_GIT",
   "CONFIRMATORY_FREEZE_MANIFEST_ADMISSION",

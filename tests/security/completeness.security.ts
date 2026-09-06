@@ -72,6 +72,11 @@ import {
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
+import { RECENT_WORKFLOW_TRANSPORT_CASES } from "./recent-workflow-transport-hostile-cases.js";
+import { RECENT_WORKFLOW_INTEGRITY_CASES } from "./recent-workflow-integrity-hostile-cases.js";
+import {
+  RECENT_REPOSITORY_SCHEDULER_CASES, RECENT_REPOSITORY_SCHEDULER_RACES,
+} from "./recent-repository-scheduler-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
 import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
 import {
@@ -134,6 +139,7 @@ const transportPairs = (): readonly CoveredPair[] =>
   [
     ...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES, ...RECENT_TRANSPORT_HOSTILE_CASES,
     ...RECENT_GATE1_TRANSPORT_CASES,
+    ...RECENT_WORKFLOW_TRANSPORT_CASES,
   ].map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
@@ -142,6 +148,7 @@ const integrityPairs = (): readonly CoveredPair[] =>
     ...RECENT_INTEGRITY_HOSTILE_CASES, ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
     ...RECENT_DELIVERY_V2_INTEGRITY_CASES, ...RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
     ...RECENT_V2_CUTOVER_INTEGRITY_CASES,
+    ...RECENT_WORKFLOW_INTEGRITY_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the
@@ -174,6 +181,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...RECENT_SCHEDULER_CASES,
     ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES,
     ...RECENT_V2_COMPILER_SCHEDULER_CASES,
+    ...RECENT_REPOSITORY_SCHEDULER_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
@@ -186,6 +194,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...RECENT_SCHEDULER_RACES,
     ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES,
     ...RECENT_V2_COMPILER_SCHEDULER_RACES,
+    ...RECENT_REPOSITORY_SCHEDULER_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 

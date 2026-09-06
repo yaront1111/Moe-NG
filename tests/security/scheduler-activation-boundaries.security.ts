@@ -109,6 +109,9 @@ import type {
   HostileCase,
   HostileRaceCase,
 } from "./scheduler-activation-hostile-cases.js";
+import {
+  RECENT_REPOSITORY_SCHEDULER_CASES, RECENT_REPOSITORY_SCHEDULER_RACES,
+} from "./recent-repository-scheduler-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -124,8 +127,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES, ...RECENT_SCHEDULER_CASES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES, ...RECENT_V2_COMPILER_SCHEDULER_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES, ...RECENT_SCHEDULER_RACES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES, ...RECENT_V2_COMPILER_SCHEDULER_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES, ...RECENT_SCHEDULER_CASES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_CASES, ...RECENT_V2_COMPILER_SCHEDULER_CASES, ...RECENT_REPOSITORY_SCHEDULER_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES, ...RECENT_SCHEDULER_RACES, ...RECENT_PRODUCT_CONTRACT_V2_SCHEDULER_RACES, ...RECENT_V2_COMPILER_SCHEDULER_RACES, ...RECENT_REPOSITORY_SCHEDULER_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -190,7 +193,8 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // 43 -> 46 on 2026-09-02 once the roster scanner became digit-aware: the `/2` planning
     // compiler and the two product-contract `/2` command services (clarification, propose).
     // Arms in recent-v2-cutover- and recent-product-contract-v2-hostile-cases.ts.
-    expect(ROSTER_AXIS).toHaveLength(46);
+    // Repository delivery and recovery now each carry three hostile authority arms.
+    expect(ROSTER_AXIS).toHaveLength(48);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {

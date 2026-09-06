@@ -64,10 +64,17 @@ it("refuses an approved scope that omits an execution-bearing graph node", () =>
   expect(qualifyGoalClosure(hostile, PROJECT_ID, GOAL_ID)).toMatchObject({ ok: false, code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED" });
 });
 
-it("refuses legacy LIVE evidence when no Foundation receipt proves the approved subject", () => {
+it("identifies the absent Foundation receipt for a durably approved, accepted legacy subject", () => {
   const store = openStore(); approveNodes(store, ["node-1"]); seedReviewAcceptance(store, "node-1");
+  expect(readApprovedExecutionScope(store, PROJECT_ID, GOAL_ID)).toMatchObject({
+    scope: ["node-1"], requiresFoundation: true,
+  });
+  expect(qualificationReads.indexDurableReceipts(store, new Set(["node-1"])))
+    .toEqual({ ok: true, index: new Map() });
+  const before = store.readEventHorizon();
   expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({ ok: false,
-    code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED", message: "no Foundation receipt proves the legacy approved node" });
+    code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT", message: "no Foundation receipt proves the legacy approved node" });
+  expect(store.readEventHorizon()).toEqual(before);
 });
 
 it("refuses missing compiled graph provenance instead of using a raw-key acceptance", () => {

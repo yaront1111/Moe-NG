@@ -33,6 +33,7 @@ import { assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import type { LegOutcome } from "./hostile-harness.js";
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { RECENT_TRANSPORT_HOSTILE_CASES } from "./recent-transport-hostile-cases.js";
+import { RECENT_WORKFLOW_TRANSPORT_CASES } from "./recent-workflow-transport-hostile-cases.js";
 import { RECENT_GATE1_TRANSPORT_CASES } from "./recent-v2-cutover-hostile-cases.js";
 import {
   DIVERGENCE_TRANSPORT_HOSTILE_CASES, TRANSPORT_HOSTILE_CASES,
@@ -59,6 +60,7 @@ const HOSTILE_CASES = Object.freeze([
   ...TRANSPORT_HOSTILE_CASES,
   ...PROJECT_TRANSPORT_HOSTILE_CASES,
   ...RECENT_TRANSPORT_HOSTILE_CASES,
+  ...RECENT_WORKFLOW_TRANSPORT_CASES,
   ...RECENT_GATE1_TRANSPORT_CASES,
 ]);
 
@@ -150,7 +152,8 @@ describe("transport axis — completeness against the roster and the no-admissio
     expect(ROSTER_TRANSPORT.length).toBeGreaterThan(0);
     // 25 -> 26 on 2026-09-02 for GATE1_LAYER, the Gate 1 card's mapping of a daemon answer,
     // seen once the roster scanner became digit-aware; arms in recent-v2-cutover-hostile-cases.ts.
-    expect(ROSTER_TRANSPORT).toHaveLength(26);
+    // Three new browser receipt/activation/resource boundaries, each with all three arms.
+    expect(ROSTER_TRANSPORT).toHaveLength(29);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

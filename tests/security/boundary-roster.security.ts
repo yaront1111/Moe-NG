@@ -148,8 +148,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 26, integrity 41, durable-store 22, runtime-provider
- * 33, scheduler-activation 46 — sums to 168, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 29, integrity 47, durable-store 22, runtime-provider
+ * 33, scheduler-activation 48 — sums to 179, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -185,6 +185,21 @@ interface ScannedBoundary {
  * task-bdbe0519/task-2ae75398; roster row and hostile arms task-12465418.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
+  // Browser response decoding and offer spending are transport boundaries. Design,
+  // environment and preview input guards are integrity boundaries. Delivery and recovery
+  // gate repository execution authority. All eleven have BEFORE/AFTER/RACE cases in
+  // recent-workflow-{transport,integrity}- and recent-repository-scheduler-hostile-cases.ts.
+  { constant: "BOOTSTRAP_RECEIPT_LAYER", file: "apps/control-room/src/live/live-bootstrap-receipt.ts", axis: "transport" },
+  { constant: "ACTIVATION_LAYER", file: "apps/control-room/src/v2/ops/activation-port.ts", axis: "transport" },
+  { constant: "RESOURCES_LAYER", file: "apps/control-room/src/v2/resources/resources-credential.ts", axis: "transport" },
+  { constant: "DESIGN_LAYERS", file: "apps/daemon/src/design/design-contracts.ts", axis: "integrity" },
+  { constant: "DESIGN_CODE_LAYERS", file: "apps/daemon/src/design/design-contracts.ts", axis: "integrity" },
+  { constant: "ENVIRONMENT_LAYERS", file: "apps/daemon/src/environment/environment-contracts.ts", axis: "integrity" },
+  { constant: "ENVIRONMENT_CODE_LAYERS", file: "apps/daemon/src/environment/environment-contracts.ts", axis: "integrity" },
+  { constant: "PREVIEW_LAYERS", file: "apps/daemon/src/preview/preview-contracts.ts", axis: "integrity" },
+  { constant: "PREVIEW_CODE_LAYERS", file: "apps/daemon/src/preview/preview-contracts.ts", axis: "integrity" },
+  { constant: "REPOSITORY_DELIVERY_LAYER", file: "apps/daemon/src/orchestrator/repository-delivery-contracts.ts", axis: "scheduler-activation" },
+  { constant: "REPOSITORY_RECOVERY_LAYER", file: "apps/daemon/src/repository/repository-recovery-contracts.ts", axis: "scheduler-activation" },
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "IDE_ADAPTER_LAYERS", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "LIVE_BUDGET_COMMITMENT_LAYER", file: "apps/control-room/src/live/live-budget-commitment.ts", axis: "transport" },
@@ -566,7 +581,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * (the Gate 1 card mapping). Forty-eight arms across recent-delivery-v2-,
  * recent-product-contract-v2- and recent-v2-cutover-hostile-cases.ts.
  */
-const EXPECTED_ROSTER_SIZE = 168;
+const EXPECTED_ROSTER_SIZE = 179;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -574,13 +589,13 @@ const EXPECTED_ROSTER_SIZE = 168;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 81,
+  "apps/daemon": 89,
   "packages/benchmark": 5,
   "packages/runner": 23,
   "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 11,
+  "apps/control-room": 14,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -803,11 +818,11 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 62 module-private declarations against those 62 plus the 168 exported ones.
+ * 73 module-private declarations against those 73 plus the 179 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 234;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 282;
+const EXPECTED_INVISIBLE_DENOMINATOR = 252;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 290;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

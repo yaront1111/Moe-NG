@@ -85,13 +85,13 @@ function goalRow(store: SqliteEventStore): GoalRow | undefined {
     GoalRow | undefined;
 }
 
-/** The frozen tuple `goal.close` answers while no durable review acceptance names an approved
+/** The frozen tuple `goal.close` answers while no Foundation receipt names an approved legacy
  *  node. Restated by hand, in full, so a code, a refusing layer or an authority quietly changing
  *  reddens here instead of passing as "still refused". */
-const NO_ACCEPTANCE_REFUSAL = Object.freeze({
+const NO_FOUNDATION_RECEIPT_REFUSAL = Object.freeze({
   advisoryOnly: true,
   authority: "NONE",
-  code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
   ok: false,
   refusedBy: "DAEMON_PREREQUISITE",
 });
@@ -376,10 +376,9 @@ describe("goal close accepts the verified result", () => {
    */
   it("refuses perfectly-shaped payload witnesses when no durable record backs them", () => {
     const store = openStore();
-    // NO review acceptance is seeded, and that is the whole world: the node is approved and
-    // nothing durable says its output was ever accepted, so no leg — Foundation or live — has
-    // anything to derive from. A payload witness that `validClosure` would accept must not
-    // substitute for the record that is missing.
+    // Neither Foundation verification nor review acceptance is seeded for this approved legacy
+    // node. Its required Foundation receipt is the first missing prerequisite; a payload witness
+    // that `validClosure` would accept must not substitute for that durable record.
     approveNodes(store, ["node-1"]);
     expectUnactivatedWorld(store);
     const before = closeSnapshot(store);
@@ -389,7 +388,7 @@ describe("goal close accepts the verified result", () => {
       zeroAuthorityWitness: zeroAuthorityWitness(),
     })));
 
-    expect(outcome).toMatchObject(NO_ACCEPTANCE_REFUSAL);
+    expect(outcome).toMatchObject(NO_FOUNDATION_RECEIPT_REFUSAL);
     expectNoCloseMutation(store, before);
   });
 

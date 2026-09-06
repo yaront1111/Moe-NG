@@ -279,7 +279,7 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
 
     const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expectRefusedExactly(qualified, "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+    expectRefusedExactly(qualified, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
       "no Foundation receipt proves the legacy approved node");
     expectUnmoved(store, before);
   }, GOAL_WORLD_BOUND_MS);

@@ -40,6 +40,7 @@ import {
   GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
   GOAL_CLOSE_REVIEW_PACKAGE_STALE,
   GOAL_CLOSE_VERIFICATION_NOT_PASSED,
+  GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
 } from "./goal-close-prerequisite.js";
 import { readApprovedExecutionScope } from "./goal-approved-execution-scope.js";
 import {
@@ -171,7 +172,7 @@ function qualify(
   for (const nodeRef of nodes) {
     const receipt = indexed.index.get(nodeRef);
     if (receipt === undefined && approved.requiresFoundation) {
-      return refuse(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
+      return refuse(GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
         "no Foundation receipt proves the legacy approved node");
     }
     if (receipt !== undefined) {
@@ -192,9 +193,8 @@ function qualify(
       bound.push(Object.freeze({ accepted, leg: "FOUNDATION" as const, nodeRef, receipt }));
       continue;
     }
-    // NO Foundation receipt names this node, and the running loop mints none — its own durable
-    // evidence answers instead. `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` is unreachable from here
-    // as a result, and stays in the roster declared rather than raised.
+    // Only approved scopes that do not require Foundation receipts may use their own durable
+    // LIVE evidence. Legacy subjects without a Foundation receipt have already refused above.
     const live = readLiveNodeEvidence(store, projectId, nodeRef, accepted);
     if ("ok" in live) return live;
     bound.push(live);
