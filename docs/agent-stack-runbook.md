@@ -665,6 +665,34 @@ TWO APPROVAL MODES, both real:
   `humanAuthorityGate` on the run outranks any click
   (`APPROVAL_HUMAN_AUTHORITY_REQUIRED` until its own GO is granted).
 
+SENDING THE PLAN BACK, from the same gate. The plan gate offers two decisions over
+the ONE `approval.decide_intent` offer the daemon minted for the run: **Approve
+plan**, and **Send the plan back**, which requires a reason and stays disabled
+until one is typed (whitespace does not count). Both spend the same grant and
+differ only in the payload's `decision` and `decisionReason`; the browser composes
+no authority, and a reason travels VERBATIM because the daemon fences it into the
+successor's compiler mission (`rejection-instructions.ts`). A reject with no reason
+is refused `APPROVAL_REJECT_REASON_REQUIRED` at `APPROVAL_INTENT_REJECTION` and
+the code is rendered on the gate unchanged.
+
+After a reject the daemon binds the goal to a SUCCESSOR run and offers
+`planning.submit_decomposition` instead of an approval, so the browser stops acting
+on the run you sent back: the goal's `planningRunRef` is IMMUTABLE and still names
+it, and the gate resolves the current run by inverting the surface's
+`planningGoalRefs` (`plan-run-resolution.ts`). While the successor compiles the gate
+reads *Plan sent back - waiting for a new plan* and offers no decision, the goal's
+status strip reads **Plan sent back** with the next step *Waiting for a new plan*,
+and Needs you lists a **PLAN_REJECTED** item that CLEARS on the same frame that
+offers the successor for approval. The decision feed shows *rejected the plan* with
+a bad tone. Acting on the run you rejected would be refused
+`APPROVAL_RUN_NOT_REVIEWABLE` @ `APPROVAL_RUN_BINDING`, which is the fence the gate
+exists to keep you away from.
+
+The rejection REASON is not read back into the browser today: `/activity/read`
+entries carry a verdict word (`REJECT`) and no reason field, so the surfaces above
+name the re-plan without quoting your text. The reason is committed and reaches the
+successor's agent; only the read-back is missing.
+
 The DAEMON must ALSO see the same `MOE_NODE_SPECS_DIR`. It loads the node specs
 itself (`daemon-store-dependencies.ts`), so a daemon started without it publishes
 no `node.deliver` step: every command still commits and the seed then exits

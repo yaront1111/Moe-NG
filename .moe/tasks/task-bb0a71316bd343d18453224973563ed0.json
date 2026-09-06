@@ -42,12 +42,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-aa54e231",
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved 3-step plan rotated the shared runtime-contract digest itself for project.set_agent_provider. That publish now belongs to task-64d2757c (all five pending kinds, ONE rotation); dependsOn already points there. Row was unassigned with 0/3 steps started. Re-plan WITHOUT any packages/contracts or generated-client step: if 64d2757c publishes the kind and rotates all four mirrors, this row reduces to verification (or archive it and repoint task-8e793ae3's dependsOn to 64d2757c).",
+  "reopenReason": "Scope fully shipped by task-64d2757c (DONE, QA-approved). Re-measured at HEAD: kind at the sorted slot in both tuples, commands.size 118, digest 9057aa94 agreed by all FIVE mirrors, contract-digest.test.ts derives it, @moe/control-room-client test = Test Files 10 passed. Zero bytes remain. Parking for archive; task-8e793ae3 dependsOn already repointed bb0a7131 -> 64d2757c. See comment-06745743 for the full measurement.",
   "createdBy": "WORKER",
   "parentTaskId": "task-8e793ae3c63f41189bcc05f6d7c15605",
   "dependsOn": [
@@ -55,10 +55,17 @@
   ],
   "priority": "HIGH",
   "order": 71.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-06745743912e48be95f0d0148e52b89a",
+      "author": "architect-aa54e231",
+      "content": "ARCHIVE RATIONALE — architect-aa54e231, 2026-09-06, re-plan after governor hand-back.\n\nGovernor's hand-back offered two routes: reduce to verification, or archive + repoint task-8e793ae3. Taking ARCHIVE. All three DoD items are already TRUE at HEAD on moe/work-2026-09-04, shipped by task-64d2757c (DONE, QA-approved by qa-d81848bc at 05cb3c3d). Zero production bytes remain, so a verification-only row would burn a worker seat for a completion commit touching nothing — squarely what global rails \"EVIDENCE/QUALITY WORK IS NOT ITS OWN ROW\" and DELIVERY BIAS forbid.\n\nMEASURED AT HEAD (not read off 64d2757c's record):\n\nDoD 1 — kind on both tuples at the sorted slot:\n  packages/contracts/src/runtime/runtime-vocabulary.ts:108\n  packages/contracts/src/runtime/runtime-contract.test.ts:58\n  Both read: \"project.bind_repository\", \"project.register\", \"project.set_agent_provider\",\n  followed by \"provider.probe\" — i.e. the exact neighbours this plan specified.\n  runtime-contract.test.ts:109  expect(commands.size).toBe(118)   [was 104 at claim; peers added\n  release.decide, criterion_check.approve/verify, repository.recover, and 64d2757c's other four]\n  git grep HEAD -- runtime-vocabulary.ts -> 1 hit; generated-client.ts -> 2 hits. In the COMMIT,\n  not merely the worktree.\n\nDoD 2 — generator + every mirror:\n  packages/control-room-client/src/generated/generated-client.ts:376\n    [\"project.set_agent_provider\"]: commandBuilderFor(\"project.set_agent_provider\")\n  GENERATED_CONTRACT_DIGEST (generated-client.ts:935) = 9057aa947ce5cd23c1e2e667ddbf9315a7e329869a4fa0d473e037cd1d30077d\n  Full-tree grep -rnoE \"[0-9a-f]{64}\" over packages/ apps/ adapters/ scripts/ finds that digest in\n  FIVE files, all in agreement:\n    packages/control-room-client/src/generated/generated-client.ts:935\n    packages/control-room-client/src/generated-coverage.test.ts:36   (CONTRACT_DIGEST)\n    apps/control-room/src/data/data-adapter.test.ts:18\n    apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n    apps/control-room/src/v2/goals/approve-plan-reject.test.tsx:110  <-- FIFTH MIRROR, not named in\n      this row's description NOR in 64d2757c's handoff memory. Already correct; flagging it so the\n      next rotation row greps the digest rather than trusting either frozen four-file list.\n  generated-coverage.test.ts:35 GENERATED_FILE_SHA256 = 957b18dfe2d3c677d6104b753182b981d2b991844a0773218c7125a741d29f03\n  data-adapter.test.ts:18 no longer holds the divergent ed325554... hash the description reported as\n  foreign WIP — that reconciled inside 64d2757c.\n  git status --porcelain over all six planned files: EMPTY (clean, so these are HEAD bytes).\n\nDoD 3 — gates:\n  pnpm --filter @moe/control-room-client test  ->  \"Test Files  10 passed (10)\" / \"Tests  96 passed (96)\",\n  exit 0 (captured via ${PIPESTATUS[0]}, not the tail's). Non-vacuous per global rail 8.\n  That lane executes generated-coverage.test.ts (both pins) AND contract-digest.test.ts, which\n  DERIVES the digest — expect(deriveContractDigest()).toBe(GENERATED_CONTRACT_DIGEST) — so the value\n  is correct by derivation, not merely agreed on by five mirrors. The other three legs were run\n  foreground by 64d2757c's worker and independently re-run by qa-d81848bc (contracts 15/509,\n  control-room 164/2034, plus the root-config owned-intersection run).\n\nACTIONS TAKEN:\n  1. moe.set_task_dependencies on task-8e793ae3c63f41189bcc05f6d7c15605: replaced\n     task-bb0a7131 with task-64d2757c in dependsOn, other five children untouched. Confirmed\n     dependsOnUnmet went 6 -> 5, i.e. 64d2757c counts as satisfied. The parent's dependency record\n     now names the row that actually shipped the capability, so provenance survives this archive.\n  2. This row parked and archived. No packages/contracts or generated-client work was planned or\n     performed by me; nothing was written to the shared checkout.\n\nCARRY-FORWARD for the remaining consumer rows (06ac0da1, 37a50989, 5a8c3166, and 7f9f20c7,\n217f40b7, de059823, f3409f9a behind them): the CONTRACT half is done for all five kinds — drop\nevery contracts/generated-client step. Only the daemon half is left (daemon vocabulary, family\ntable, dispatch handler, MCP fence, roster counts). PAYLOAD_KEYS for this kind still live in\nSPIDR grandchild B, which is unaffected by this archive.",
+      "timestamp": "2026-09-06T01:46:52.286Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:40.763Z",
-  "updatedAt": "2026-09-05T23:16:57.938Z",
+  "updatedAt": "2026-09-06T01:47:02.010Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:55:15.753Z",
     "plannedStepCount": 3,
@@ -86,5 +93,39 @@
   "planApprovedAt": "2026-09-05T14:56:19.179Z",
   "contextFetchedBy": [
     "architect-aa54e231"
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "27843539c114b9b4f7d8e2b48bd9f8d7f07ef20d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-aa54e231@2026-09-05T23:17:03Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json"
+      ],
+      "recordedBy": "architect-aa54e231",
+      "recordedAt": "2026-09-06T01:43:15.853Z",
+      "treeId": "cb9444335aed11c25e0d9a3979de69d9cb3e8481",
+      "status": "PLANNING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-bb0a71316bd343d18453224973563ed0.json"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/board/board-feed.tsx",
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/daemon/src/goals/j1-command-path.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-aa54e231@2026-09-05T23:17:03Z",
+    "at": "2026-09-06T01:43:15.853Z"
+  }
 }

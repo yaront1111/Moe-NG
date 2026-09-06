@@ -62,7 +62,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -94,7 +94,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:10:20.830Z",
-  "updatedAt": "2026-09-05T11:17:31.452Z",
+  "updatedAt": "2026-09-06T01:57:39.031Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T09:19:28.202Z",
     "plannedStepCount": 7,
@@ -186,16 +186,11 @@
     "at": "2026-09-04T09:44:00.767Z"
   },
   "workStartedAt": "2026-09-04T09:41:24.952Z",
-  "blockedReason": "Step-1 gate NOT satisfied: 0 of 4 SPIDR children are DONE, so this verification row has nothing to verify. Measured at HEAD ddc5fa05 (moe/work-2026-09-04); full transcript in comment-f403ea63.\n\nAll four children are PLANNING, unassigned, 0 commits, 0 plan steps: A task-741dad13e23d441a8385d0f14df5b5c1 (receipts leaf, dependsOn=[]) -> B task-4b9c394debe94b41a80e2b46c6d55ab8 -> C task-0a5d7212a7f644d5891df4e0e1545787 -> D task-ac9d5e2d43334525bd990b1362652ce4. `git log main --grep \"Moe-Task: task-<id>\"` = 0 matches per child, same against HEAD.\n\nThe gap is still open at the delivered tree, so no child landed under another trailer: `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` = 1 match at :93 (DoD 3 requires 0); `grep -rn \"ACTIVATION_REPOSITORY_UNMEASURED\\|ACTIVATION_PROVIDER_UNMEASURED\\|ACTIVATION_BACKUP_FAILED\" --include=*.ts .` = 0 matches; apps/daemon/src/bootstrap/ has no activation-receipts module.\n\nThis row modifies no files by design (verification-only plan, every affectedFiles empty). I delivered nothing, touched no production path, and did not re-implement a child's work — step 1 forbids that.\n\nNEEDED FROM A GOVERNOR:\n1. Set this row's dependsOn to the four child ids via moe.set_task_dependencies. It is EMPTY on disk (`deps= []`), which is why the runtime offered this row for a WORKING claim while every child is unplanned. The planning architect could not set it: the tool answered [NOT_ALLOWED] \"architect or governor role required (worker architect-d1711c47 is on neither team)\". blockedOnTaskIds here gives auto-unblock this cycle; the field prevents a repeat.\n2. Route child A (task-741dad13e23d441a8385d0f14df5b5c1) to an architect. It is the only child with no dependencies and it gates the other three.\n\nSeat freed; claiming other work.",
-  "blockedOnTaskIds": [
-    "task-741dad13e23d441a8385d0f14df5b5c1",
-    "task-4b9c394debe94b41a80e2b46c6d55ab8",
-    "task-0a5d7212a7f644d5891df4e0e1545787",
-    "task-ac9d5e2d43334525bd990b1362652ce4"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-04T09:43:06.309Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "dependsOn": [
     "task-741dad13e23d441a8385d0f14df5b5c1",
     "task-4b9c394debe94b41a80e2b46c6d55ab8",

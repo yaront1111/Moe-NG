@@ -17,7 +17,9 @@ Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRI
 The loop the vision describes runs, on a real project, with real agents: a PRD
 dropped in the browser becomes a Product Contract a planning agent proposes and a
 human approves (Gate 1), a decomposition the daemon compiles and a human approves
-(the plan gate), code a coding agent writes in the project's repository, a
+- or sends back with a reason, which re-plans it into a successor run the gate
+then follows - at the plan gate, code a coding agent writes in the project's
+repository, a
 verification the daemon runs itself, and a local git commit of exactly the
 files that delivery changed. This was live-proven on 2026-09-02/03 on a real
 TypeScript project with real `claude -p` seats (the first proof of the

@@ -1,0 +1,39 @@
+{
+  "id": "task-db63dacc7cbe49cab9826e9b49c8669f",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The generated compose ships a flippable upstream, and the deploy flips it atomically",
+  "description": "SPUN OUT of task-c0e00f0a55ad43bfa5f6b323779834cd (the deploy engine) by architect-b63fabf3, 2026-09-06, on a governor re-plan hand-back. dependsOn task-c0e00f0a for the service and ports it flips.\n\nWHY THIS ROW EXISTS. task-c0e00f0a's DoD-2 (\"the OLD container still serves until the NEW one answers health, and there is NO point at which neither serves\") is NOT implementable against the infrastructure that shipped, and worker-afd89b78 correctly stopped at that row's own named stop outcome rather than fabricating it. I re-measured the finding at HEAD 27843539 and it holds:\n\n- `apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts:124` `dockerComposeOverride` ships ONE service, `app`, publishing the host port DIRECTLY: line 143-144 are `\"    ports:\"` then `` `      - \"${port}:${port}\"` `` with `DEPLOYMENT_APP_PORT = 3000` (:29).\n- Base `docker-compose.yml` (task-4a0f7064, DONE, `controlled-profile-root-templates.ts` `DOCKER_COMPOSE`) ships `db` only.\n- `git grep -in -E \"nginx|traefik|caddy|start-first|docker service\" -- apps/daemon packages` = ZERO hits.\n\nA published host port is fixed at container CREATE, and two containers cannot bind 0.0.0.0:3000 at once. So there is nothing to flip: the candidate cannot start beside the incumbent on the public port. THIS ROW ADDS THE FLIPPABLE THING and then uses it.\n\nTHE MECHANISM. Generate a proxy service into `dockerComposeOverride` that publishes the app port and forwards to an app container by name on the compose network; `app` itself loses its `ports:` key and becomes internal. The deploy then: start candidate internal (task-c0e00f0a already does this and probes it by name), rewrite the proxy upstream to the candidate, reload the proxy, and ONLY THEN stop the incumbent. The reload is the atomic instant.\n\nTWO REJECTED ALTERNATIVES, recorded so they are not re-proposed. (1) A docker NETWORK ALIAS switch (`docker network connect --alias`) moves only INTERNAL dns; the public port stays bound to the incumbent's container, so the operator-visible outage survives and the atomicity arm would be green while the property is false. (2) Amending DoD-2 to name an outage window deletes the reason task-c0e00f0a exists — its title is \"replace atomically\" and its rail 2 says a stop-then-start deploy is an outage the operator did not ask for.\n\nTASK SIZING NOTE: task-3706b7e7 (which generated the infrastructure) is DONE, so there is no live owner to collide with in the shared worktree; the earlier \"that is 3706b7e7's file to change\" instruction was a plan-step sentence written while that row was in flight, not a rail, and it is spent.",
+  "definitionOfDone": [
+    "`dockerComposeOverride` generates a proxy service that PUBLISHES `DEPLOYMENT_APP_PORT` and an `app` service with NO `ports:` key at all — assert BOTH on the generated text by exact string (the published-port line present under the proxy, and `git grep`-equivalent absence of any `ports:` mapping under `app`), not by a regex that a stray colon could satisfy. The proxy's upstream config artifact is generated too, and `deploymentInfrastructureFiles` gains its key.",
+    "THE ARTIFACT ROSTER IS ASSERTED BIDIRECTIONALLY (global rail 9): `deploymentInfrastructureFiles(...)` key set is compared for SET EQUALITY against the asserted roster — every generated key is advertised AND every advertised key is generated. A test that only iterates the map shrinks with it and stays green while an artifact silently vanishes. Existing generator tests that pin the artifact set must be found and updated in the same diff, not left to red.",
+    "ATOMIC REPLACE PROVEN, not asserted in prose: drive a deploy through task-c0e00f0a's state-machine docker double and assert the invariant over EVERY recorded transition — at each step at least one container was serving — rather than checking the two endpoints, because a stop-then-start deploy has correct endpoints and a hole in the middle. Mutate the service to stop-the-old-before-starting-the-new and confirm the arm goes RED, quoting the failing transition in the step note. An ordering property that has never been seen red is not evidence.",
+    "THE FLIP IS RECORDED AS ARGV AND ORDERED: the proxy upstream rewrite and reload are invoked as bare `docker` under `shell: false` with an argv ARRAY (never a `.cmd`, never a shell string, never a chain), and the incumbent is stopped ONLY AFTER the reload returns 0. Assert the stop's index in the recorded call order is greater than the reload's.",
+    "A FAILED RELOAD REFUSES AND LEAVES THE INCUMBENT SERVING: assert code AND layer, and assert it by reading the double's FINAL STATE (old container running, upstream still pointing at it, candidate removed) rather than by trusting the return value. Name the layer stamp WITHOUT a `LAYER`/`LAYERS`/`BOUNDARIES` suffix, or leave it unexported and publish only `export type` — `tests/security/boundary-roster.security.ts:331` scans `^export const ([A-Z_]+(?:LAYERS|LAYER|BOUNDARIES))` and a match owes a security-roster row plus cardinality pins that are foreign to this row.",
+    "OFFLINE ONLY, AND NOTHING LEAKS: no test reaches the network or a real docker daemon; every container, temp directory and child process the tests create is released on EVERY exit path including the throwing one — teardown in a `finally`, not after the assertions (epic rail 4). Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` is NOT evidence — vitest.config.ts includes no `apps/**`."
+  ],
+  "taskRails": [
+    "NO COMMAND KIND. No edit to daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, agent-spawn-contract.ts or packages/contracts — every one belongs to the parent task-04b3ce7e349743c2a156d32ee5550ba5.",
+    "DO NOT RESHAPE `moe-deploy-receipt/1`. task-c0e00f0a ships it and task-da60dc4b39c (rollback effect, WORKING) builds against it. A member added here is a member that row has never seen.",
+    "THE PROXY IS GENERATED INFRASTRUCTURE. It lives in `dockerComposeOverride`'s template and the generator's artifact map — never as a hand-written file committed into this repo, and never invented inside a test.",
+    "ATOMIC REPLACE: the old container serves until the new one is healthy. A stop-then-start deploy is an outage the operator did not ask for.",
+    "OFFLINE TESTS ONLY. Every port is injectable; no test may reach the network or a real docker daemon."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-c0e00f0a55ad43bfa5f6b323779834cd"
+  ],
+  "priority": "HIGH",
+  "order": 91.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T01:48:48.638Z",
+  "updatedAt": "2026-09-06T01:48:48.638Z"
+}

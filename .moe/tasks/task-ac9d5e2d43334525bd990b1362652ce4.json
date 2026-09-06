@@ -103,7 +103,7 @@
       "completedAt": "2026-09-06T01:34:38.924Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -158,11 +158,17 @@
       "author": "worker-2739fee7",
       "content": "GATE RESULTS AND FOREIGN-RED DISCLOSURE (DoD 6, global rail 3 path-attributed baseline) — worker-2739fee7, 2026-09-06. Every leg graded on its count line, never its exit code.\n\nGREEN, OWNED:\n1. `npx tsc -p tests/e2e/control-room/tsconfig.json` — exit 0 (the lane's typecheck leg of `pnpm test:e2e:browser`).\n2. `pnpm test:e2e:browser` (playwright leg, full lane) — `21 passed`, `6 failed`, 9.6m. THIS ROW'S SPEC: `ok 1 ... a fresh project goes from empty store to a created goal, in the browser alone (9.7s)`.\n3. `pnpm --filter @moe/control-room test` — `Test Files 164 passed (164)`, `Tests 2034 passed (2034)`, exit 0.\n4. `pnpm typecheck` — exit 0, every workspace `Done` (apps/control-room, apps/daemon, packages/{benchmark,scheduler,review,runner}).\n5. demo-seed (parent DoD 4), targeted with a nonzero executed count: `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/orchestrator/demo-seed-{env,http,main,payloads,plan}.test.ts` -> `Test Files 5 passed (5)`, `Tests 69 passed (69)`, exit 0.\n\nRED, ALL FOREIGN — disclosed verbatim, none fabricated green:\n6. `pnpm --filter @moe/daemon test` — `Test Files 12 failed | 493 passed (505)`, `Tests 19 failed | 9218 passed | 2 skipped (9239)`, 791s.\n   ATTRIBUTION: every one of the 12 files is under apps/daemon, which this row owns NO path in, and the shared checkout is mid-flight with peer WIP on exactly those modules. `git status --porcelain apps/daemon` shows 19 MODIFIED + 6 UNTRACKED peer paths, including the precise subjects that fail:\n   - `bootstrap-services.test.ts` \"covers exactly the twelve command kinds this surface owns\" and `j1-command-path.test.ts` \"publishes exactly the twelve owned kinds\" — roster counts, with `daemon-command-registry.ts`, `daemon-command-families.ts` and `daemon-command-async-entries.ts` all dirty (task-54b74b8041c64bc2868435bcbdac6dd6, release.decide wiring, itself BLOCKED mid-edit).\n   - `mcp-http-host.test.ts` / `mcp-main.test.ts` exclusion-roster arms — both test files dirty.\n   - `controlled-profile-generator.test.ts` (4 arms, .env.example names) — generator AND test dirty, plus untracked `environment/environment-required-variables.ts` (task-fd2d438f).\n   - `goal-services.test.ts` / `goal-live-evidence.test.ts` / `j1-command-path.test.ts` goal.close arms — commit 4b6d2bc2 \"close goals on scoped criterion evidence\".\n   - `runtime-entrypoint.test.ts` \".js bridge for every runtime module\" — 6 untracked peer modules without bridges.\n7. `pnpm test` (ROOT LANE ONLY — apps/** IS NOT COVERED by the root vitest include) — `Test Files 5 failed | 426 passed | 1 skipped (432)`, `Tests 58 failed | 10296 passed | 44 skipped (10398)`, 437s. The 5:\n   - `tools/packaging/pack-source.test.ts` \"materializes a selected commit without its tracked runtime state\" and `tools/packaging/pack-windows-main.test.ts` \"refuses tracked or untracked live packer drift from the labeled commit\" — both `Test timed out in 5000ms`; the second one's SUBJECT is untracked drift, and this checkout has 20+ foreign dirty/untracked paths.\n   - `packages/benchmark/src/freeze-manifest-admission.test.ts` — `Test timed out in 5000ms`.\n   - `packages/runner/src/verification/criterion-check-executor.test.ts` — `expected {…} to match object { containment: 'PROVEN' }`.\n   - `tests/e2e/foundation/multi-node-graph.e2e.test.ts` — `expected { runRef: 'multi-verify-all' } to match object { status: 'COMPLETED' }`.\n   Three of the five are bare 5000ms timeouts, the signature of this host's spawn-latency cliff.\n\n(2)-MINUS-(1) INTERSECTED WITH OWNED PATHS = EMPTY. This session's only byte change is one arm inside `tests/e2e/control-room/activation-fresh-project.spec.ts`, which the root vitest lane cannot even see (root includes `tests/**/*.test.ts`; the browser lane is `*.spec.ts` — disjoint by naming, per playwright.config.ts). No failing path is one this row owns.\n\nWRAPPER BOOTSTRAP UNTOUCHED (DoD 5): this row's delivered path set is README.md, docs/agent-stack-runbook.md, tests/e2e/control-room/activation-fresh-project.spec.ts, apps/control-room/src/v2/goals/live-goal-create.{ts,test.ts}. None is under `apps/daemon/src/orchestrator/` or `scripts/`. The large diff those paths show against merge-base 68eb1c5d is entirely peers' (seat-exit-classifier, seat-output-tail, up.ps1, ...), not this row's.",
       "timestamp": "2026-09-06T01:33:47.226Z"
+    },
+    {
+      "id": "comment-a0881913e3414859a056170af8a6f98f",
+      "author": "qa-f2906c26",
+      "content": "QA REVIEW EVIDENCE (approval; reviewSummary is capped at 2000 so the detail lives here, global rail 14). Reviewed at completion commit d0c69621 = HEAD of moe/work-2026-09-04; kind=completion, Moe-Task trailer correct, `git branch --contains d0c69621` = the branch. I verified delivered bytes, not the summary.\n\nGATES I RE-RAN MYSELF (count lines, never exit codes):\n1. `npx tsc -p tests/e2e/control-room/tsconfig.json` -> exit 0.\n2. `npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project.spec.ts` -> `1 passed (7.9s)`.\n3. `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)`, `Tests 2057 passed (2057)`, exit 0. Higher than the worker's 164/2034 because peers landed tests since; the package that owns live-goal-create.{ts,test.ts} is fully green at review time.\n4. FULL browser lane -> `22 passed | 5 failed (7.5m)`, this row's spec `ok 1`. BETTER than the disclosed 21|6.\n\nMY OWN NON-VACUITY DRILL, independent of the worker's three. Mutated the daemon's measured HEAD sha at apps/daemon/src/bootstrap/activation-receipts-measure.ts:78 to \"qaDrillPlaceholder\". The journey went RED at spec.ts:138 and the DOM read `<span data-testid=\"cr.activate.reason.repository\">qaDrillPlaceholder</span>` — so the \"receipts are MEASURED\" arm really reads the daemon's measurement through the browser. Restored with `git checkout --`; restore proven in a SEPARATE call by blob-hash equality, `git hash-object` == `git rev-parse HEAD:<path>` == fbf13abcbb6cd914ed7ba5124c4457d2b311bcf4, and 0 occurrences of the marker.\n\nTHE 5 E2E REDS, ATTRIBUTED PER FAILING FILE (not per directory), all foreign:\n- journeys.spec.ts:65 CR-J1-002 — `getByTestId('cr.nav.resources')` toBeDisabled() failed. cordum-app.tsx is DIRTY with peer WIP; task-bc4617d6's own summary describes rewiring that panel.\n- journeys.spec.ts:86 CR-A11Y-001 — toHaveLength on truth classes; styles/cordum-shell-layout.test.tsx DIRTY.\n- prd-persistence-boundary.spec.ts:127 — `Test timeout of 180000ms exceeded`. Owner = dfe9329c, task-503e927b, already on worker-afd89b78's disclosed e2e list. It runs a FULL `vite build` of the dirty apps/control-room inside the 180s budget; error-context.md shows the shell fully mounted, so the budget died in build/boot, not in an assertion. Fails in ISOLATION too, so it is not my concurrent gate either.\n- prd-to-approval.spec.ts:130 — peer CASING drift: `Expected pattern: /\\d+ GOAL/u`, `Received string: \"1 goal\"`.\n- provider-pause.spec.ts:181 — \"the wrapper must staff node.deliver@...\"; wrapper staffing, no control-room path.\nNone asserts this row's changed surface: journeys.spec.ts, prd-to-approval.spec.ts and provider-pause.spec.ts have ZERO references to `cr.activate`, the Activate copy or `newgoal`. prd-persistence-boundary touches `cr.goals.newgoal.report` only structurally (not.toHaveText(\"\"), textContent reads) and never pins the BLOCKED sentence. Failing-path set INTERSECT this row's owned paths = EMPTY (global rail 3).\n\nTHREE JUDGEMENT CALLS, recorded so they are not relitigated:\n(a) DoD 3's \"in the SAME commit as the journey\" is NOT literally met. The bytes span 6d759782 (docs, this row), e4855265 (the live-goal-create copy, swept by peer task-9ade7f88's wrapper), a1e12d22 (the spec, swept by task-d342a2b1's wrapper) and d0c69621. The worker disclosed the spread but misattributed the copy to a1e12d22; it is e4855265 (`git show e4855265^:...` still has the old sentence, HEAD has the new one). Wrapper-sweep artifact under the shared-checkout commit rail, all four ancestors of HEAD, DoD 2's grep = 0 at the delivered tree. Not a defect.\n(b) DoD 5's \"`pnpm seed` with its count line\" is unsatisfiable as written: `seed` = `node apps/daemon/src/orchestrator/demo-seed-main.ts`, a seed RUN with no count line. Substance proven by demo-seed `Test Files 5 passed (5)` / `Tests 69 passed (69)`, and the delivered path set touches nothing under apps/daemon/src/orchestrator/ or scripts/, so the wrapper bootstrap cannot have moved.\n(c) DoD 7's \"recorded in the completion summary\" — completionSummary is EXACTLY 2000 chars, truncated mid-DoD-6. The findings are in comment-9cc1ff43 on the OWNING row task-741dad13, which is what row rail 2 requires and what global rail 14 designates as the overflow.\n\nALSO CHECKED: the disclosed DoD-1 deviation is TRUE — cordum-app.tsx:374-379 `createDisabledReason` derives ONLY from `describeConnection(connection)`, never from the goal.create offer, so asserting a disabled New Goal would assert a product that does not exist; the substitute arm (the daemon really refuses on submit, in this row's rewritten words) proves more. `goal.create_with_source` really is the kind driven (live-goal-create.ts:248-250 keys on draft.prd, and the spec attaches a real file and pins the browser-computed sha256). A prior QA's stranded `#c Agent stack runbook` drill mutant is repaired at HEAD. Dependencies A/B/C/C2 all DONE and merged. live-goal-create.ts is 275 lines — over the 250 target, under the 400 split threshold, and the growth is peer task-9ade7f88's, not this row's ~3 lines.\n\nOPEN FINDING, filed and not chargeable here: two concurrent activations fail closed but the loser reads `backup destination already exists`, which looks like a stale-file accident rather than \"another activation is in flight\"; the browser's inFlight useRef guard is per-tab only. It sits with task-741dad13 (comment-9cc1ff43).",
+      "timestamp": "2026-09-06T01:56:50.602Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:37:11.087Z",
-  "updatedAt": "2026-09-06T01:36:17.952Z",
+  "updatedAt": "2026-09-06T01:57:38.856Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -180,7 +186,9 @@
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 7,
     "firstClaimAt": "2026-09-05T03:22:24.779Z",
-    "executedStepCount": 12
+    "executedStepCount": 12,
+    "doneAt": "2026-09-06T01:57:38.856Z",
+    "wallClockMs": 81314077
   },
   "planningNotes": {
     "approachesConsidered": "Rejected extending board-chain.spec.ts: it navigates to `${lane.baseUrl}?v1=1`, and that param serves the LEGACY dev board whose DEV_PAYLOADS witness is exactly the fake this feature removes. Extending it would prove the old path. A new spec on the V2 surface is the only journey that certifies the product.\n\nRejected deriving the expected strings from apps/ modules: tests/e2e/control-room/tsconfig.json cannot reach apps/ (TS6059), and board-chain.spec.ts:35-43 states the deeper reason — assertions derived from the module that produces them pass whatever the board put on screen. Hand-transcribe, as that spec does.\n\nRejected asserting only that the receipts render: the whole point is that they are MEASURED, so the journey asserts the repository row carries the lane's actual HEAD sha and that no row reads as a `<projectId>-*` literal. Rendering six rows would pass just as well against the old fake witness.\n\nOn the docs, rejected rewriting the whole README paragraph: only the fresh-project clause is now false. The one-node fence, the absent preview/release gates, the Codex seat and the trusted-workspace verifier are still true and belong to other rows of this epic — rewriting them here would make the README claim capability that has not shipped.",
@@ -198,7 +206,8 @@
   },
   "planApprovedAt": "2026-09-04T09:54:25.707Z",
   "contextFetchedBy": [
-    "worker-2739fee7"
+    "worker-2739fee7",
+    "qa-f2906c26"
   ],
   "workStartedAt": "2026-09-05T03:22:38.352Z",
   "blockedReason": null,
@@ -343,6 +352,23 @@
       "treeId": "03c179e5ed5a49d327623ffdcc7cf2f6e0ae4a0d",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "d0c696213591820e0da327b4e21c336c4da8ca5f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-06T00:49:07Z",
+      "paths": [
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-06T01:36:31.405Z",
+      "treeId": "b8b5750e7d7399f771eda2f28d0ddb6abe30f532",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -352,38 +378,21 @@
     "tests/e2e/control-room/board-chain.spec.ts",
     "tests/e2e/control-room/daemon-ports.ts",
     "tests/e2e/control-room/activation-fresh-project.spec.ts",
-    "apps/control-room/src/v2/goals/live-goal-create.test.ts"
+    "apps/control-room/src/v2/goals/live-goal-create.test.ts",
+    ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
-    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
-    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
-    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
-    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
-    "apps/daemon/src/daemon-repository-workflows.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-shutdown.test.ts",
-    "apps/daemon/src/repository/publication-approval.test.ts",
-    "apps/daemon/src/repository/publication-effect-ledger.ts",
-    "apps/daemon/src/repository/publish-services.ts",
-    "apps/daemon/src/repository/repository-recovery-git.test.ts",
-    "apps/daemon/src/repository/repository-recovery-native.test.ts",
-    "packages/runner/src/platform/windows/windows-boundary.test.ts",
-    "packages/runner/src/platform/windows/windows-process-contract.test.ts",
-    "packages/runner/src/platform/windows/windows-status.ts",
-    "packages/runner/src/verification/criterion-check-executor.test.ts",
-    "packages/runner/src/verification/criterion-check-executor.ts",
-    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
-    "tests/e2e/control-room/repository-workflows.spec.ts"
+    "apps/control-room/src/v2/goals/plan-reject-frames.fixture.ts",
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+    "apps/control-room/src/v2/goals/plan-run-resolution.ts",
+    "apps/daemon/src/goals/j1-command-path.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-2739fee7@2026-09-05T23:25:20Z",
-    "at": "2026-09-05T23:26:09.237Z"
+    "kind": "completion",
+    "sessionId": "worker-2739fee7@2026-09-06T00:49:07Z",
+    "at": "2026-09-06T01:36:31.405Z"
   },
   "priorHandoffs": [
     {
@@ -402,5 +411,15 @@
     "outputTail": "TSC_EXIT=0\n\nRunning 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (7.7s)\n\n  1 passed (8.6s)\nPW_EXIT=0",
     "reportedAt": "2026-09-06T01:36:17.952Z"
   },
-  "completionSummary": "THE BROWSER-ONLY FRESH START IS PROVEN, and every sentence in the repo that denied it is gone. Resumed after task-d342a2b1 (d103e849/a1e12d22) closed the ACTIVATION_POLICY_UNMEASURED block; its commit had ALREADY removed this journey's `test.fixme` (`grep -rn \"test.fixme\" tests/e2e/control-room/` -> 0).\n\nDoD 1. `tests/e2e/control-room/activation-fresh-project.spec.ts` drives a REAL daemon + REAL vite + REAL chromium on `seed: \"NONE\"`, asserting `lane.seedPid` is null first. Bare `lane.baseUrl`, no `?v1=1`, no `cr.liveboard.*` selector (row rail 3). Pair -> submit draft -> daemon REFUSES -> one click on `cr.activate.button` -> five chain steps -> SAME draft -> `Goal created: Browser-only fresh start`. `1 passed (8.6s)`, tsc exit 0.\n\nDoD 2. `grep -c \"cannot drive the pre-activation chain\" .../live-goal-create.ts` = 0. Replacement names the Activate card; prerequisite half still from `labelForMissing`. The test pins the NEW sentence with `toBe`.\n\nDoD 3. README \"What this is not\" fresh-project clause removed, stamp re-dated to 2026-09-05, positive claim added as its own bullet; runbook's \"no production writer\" sentence replaced while KEEPING the true \"**New Goal** remains disabled...\" sentence and the fail-closed half. Delivered across two commits, not one: 6d759782 carries the docs, a1e12d22 carries the spec + copy (the peer wrapper swept them). Disclosed, not hidden.\n\nDoD 4. Live drive: HEAD f4e1495b, store `%TEMP%\\moe-e2e-daemon-Wg8YgA\\store.sqlite` (200704 bytes, isolated by a before/after delta watcher — the lane deletes its scratch), trace `%TEMP%\\ac9d5e2d-livedrive-trace-w2739fee7.zip` sha256 979e030a…, 83 screenshot frames. comment-21619c70.\n\nDoD 5. demo-seed targeted: `Test Files 5 passed (5)` / `Tests 69 passed (69)`. No delivered path under `apps/daemon/src/orchestrator/` or `scripts/`.\n\nDoD 6. control-room `164 files / 2034 tests` green; `pnpm typecheck` exit 0; e2e lane `21 passed | 6 failed`; daemon `12 failed | 493 passed`; root lane (apps/** NOT covered)"
+  "completionSummary": "THE BROWSER-ONLY FRESH START IS PROVEN, and every sentence in the repo that denied it is gone. Resumed after task-d342a2b1 (d103e849/a1e12d22) closed the ACTIVATION_POLICY_UNMEASURED block; its commit had ALREADY removed this journey's `test.fixme` (`grep -rn \"test.fixme\" tests/e2e/control-room/` -> 0).\n\nDoD 1. `tests/e2e/control-room/activation-fresh-project.spec.ts` drives a REAL daemon + REAL vite + REAL chromium on `seed: \"NONE\"`, asserting `lane.seedPid` is null first. Bare `lane.baseUrl`, no `?v1=1`, no `cr.liveboard.*` selector (row rail 3). Pair -> submit draft -> daemon REFUSES -> one click on `cr.activate.button` -> five chain steps -> SAME draft -> `Goal created: Browser-only fresh start`. `1 passed (8.6s)`, tsc exit 0.\n\nDoD 2. `grep -c \"cannot drive the pre-activation chain\" .../live-goal-create.ts` = 0. Replacement names the Activate card; prerequisite half still from `labelForMissing`. The test pins the NEW sentence with `toBe`.\n\nDoD 3. README \"What this is not\" fresh-project clause removed, stamp re-dated to 2026-09-05, positive claim added as its own bullet; runbook's \"no production writer\" sentence replaced while KEEPING the true \"**New Goal** remains disabled...\" sentence and the fail-closed half. Delivered across two commits, not one: 6d759782 carries the docs, a1e12d22 carries the spec + copy (the peer wrapper swept them). Disclosed, not hidden.\n\nDoD 4. Live drive: HEAD f4e1495b, store `%TEMP%\\moe-e2e-daemon-Wg8YgA\\store.sqlite` (200704 bytes, isolated by a before/after delta watcher — the lane deletes its scratch), trace `%TEMP%\\ac9d5e2d-livedrive-trace-w2739fee7.zip` sha256 979e030a…, 83 screenshot frames. comment-21619c70.\n\nDoD 5. demo-seed targeted: `Test Files 5 passed (5)` / `Tests 69 passed (69)`. No delivered path under `apps/daemon/src/orchestrator/` or `scripts/`.\n\nDoD 6. control-room `164 files / 2034 tests` green; `pnpm typecheck` exit 0; e2e lane `21 passed | 6 failed`; daemon `12 failed | 493 passed`; root lane (apps/** NOT covered)",
+  "touchedFiles": [
+    "tests/e2e/control-room/activation-fresh-project.spec.ts",
+    "README.md",
+    "apps/control-room/src/v2/goals/live-goal-create.test.ts",
+    "apps/control-room/src/v2/goals/live-goal-create.ts",
+    "docs/agent-stack-runbook.md"
+  ],
+  "completedAt": "2026-09-06T01:57:38.856Z",
+  "reviewCompletedAt": "2026-09-06T01:57:38.856Z",
+  "reviewSummary": "APPROVED at completion commit d0c69621 (HEAD; kind=completion, trailer + branch --contains verified). FULL EVIDENCE: comment-a0881913.\n\nRE-RAN MYSELF: e2e tsc exit 0; activation-fresh-project.spec.ts -> `1 passed (7.9s)`; `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)` / `Tests 2057 passed (2057)` exit 0; FULL browser lane -> `22 passed | 5 failed (7.5m)`, this row's spec `ok 1` (better than the disclosed 21|6).\n\nMY OWN DRILL: mutated the daemon's measured HEAD sha at activation-receipts-measure.ts:78 -> journey RED at spec.ts:138 with the mutant in the DOM. Restored, proven byte-identical in a SEPARATE call by blob-hash equality. Journey is bound to a real daemon, not hermetic.\n\nDoD 1 MET: bare lane.baseUrl (no ?v1=1), zero cr.liveboard.*, seed:\"NONE\" with seedPid asserted null, no test.fixme, real PRD attachment so the kind is goal.create_with_source, refuse-then-accept on the SAME draft. Its disclosed deviation is TRUE: cordum-app.tsx:374-379 derives createDisabledReason ONLY from the connection descriptor.\nDoD 2 MET: grep 0 at HEAD; test pins the NEW sentence with toBe across 4 arms; no other source asserts the old copy.\nDoD 3 substance MET, not literally one commit: bytes span 6d759782/e4855265/a1e12d22/d0c69621, a wrapper sweep the worker disclosed (it misattributed the copy to a1e12d22; it is e4855265). All ancestors of HEAD.\nDoD 4 MET: comment-21619c70 - store path+bytes, sha, count line, trace sha256, 83 frames.\nDoD 5 MET: `pnpm seed` is a seed RUN with no count line, so that clause is unsatisfiable as written; substance proven by demo-seed 5/69, no delivered path under orchestrator/ or scripts/.\nDoD 6 MET: all 5 e2e reds foreign, attributed per FAILING FILE; none asserts this row's surface; failing-paths INTERSECT owned-paths = EMPTY.\nDoD 7 MET: four scenarios plus a fifth in comment-9cc1ff43 on owning row task-741dad13; absent from completionSummary only because that field is at its 2000-char cap."
 }
