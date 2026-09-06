@@ -130,7 +130,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -153,7 +153,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:30:16.693Z",
-  "updatedAt": "2026-09-05T14:04:24.121Z",
+  "updatedAt": "2026-09-06T09:25:42.517Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:41:35.541Z",
     "plannedStepCount": 9,
@@ -189,11 +189,9 @@
   },
   "planApprovedAt": "2026-09-05T13:46:29.295Z",
   "workStartedAt": "2026-09-05T13:46:31.647Z",
-  "blockedReason": "ADVERTISING design.read NOW WOULD STOP THE MCP SERVER FROM CONSTRUCTING. Measured by doing it: `Error: MCP_TOOL_ALLOWLIST_UNKNOWN_KIND: design.read has no generated tool`, from packages/mcp/src/stdio/stdio-tool-schemas.ts:240. Handoff detail in comment-e6ac2ad4.\n\nCHAIN: `generateStdioToolEntries()` (:199-204) builds one tool per kind from RUNTIME_COMMAND_KINDS + RUNTIME_QUERY_KINDS and nothing else; `allowlistedToolEntries()` (:230-244) THROWS on an allowlisted kind with no generated entry, by design (\"REFUSES rather than dropping\"); both MCP servers construct through it (stdio-server.ts:235, http-tool-bridge.ts:53) on `toolAllowlist: wiredMcpToolKinds()`, which spreads MCP_SERVED_QUERY_KINDS. So DoD 1 is a daemon STARTUP THROW until design.read is on RUNTIME_QUERY_KINDS — packages/contracts, which task rail 2 forbids me editing and task-06ac0da1 owns.\n\nI GOT THIS WRONG AT PLAN TIME AND AM CORRECTING IT. planningNotes fact 1 measured truly that `dispatchQueryBytes` routes only on `Object.hasOwn(QUERY_HANDLERS, kind)` with no vocabulary check, then wrongly generalised from the DISPATCH path to the ADVERTISEMENT path. The row's declared dependsOn was right.\n\nDELIVERED AND GREEN on the wip checkpoint: apps/daemon/src/mcp-design-read-query.{ts,js,test.ts} — answerer (111 lines), bridge, 11 arms each drilled to red and restored (SHA256-proved; module untracked, so git diff certifies nothing). After the revert: tsc --noEmit EXIT 0; targeted vitest over the three MCP files => Test Files 3 passed (3) / Tests 54 passed (54), EXIT 0.\n\nREVERTED exactly three tracked paths by name. Step 5's wiring went with them: a served-but-unadvertised kind reds the parity arm the other way, so the pair cannot land half. Peer dirt at http-listener-read-dispatch.test.ts (worker-b33940f5) untouched.\n\nRESUMING IS SIX LINES, enumerated in comment-e6ac2ad4 with the count pin, the required test-side port composition, and a warning that the port file lands at 394 of its 400-line bar.",
-  "blockedOnTaskIds": [
-    "task-06ac0da1ace64032855affc4ab0c1a4e"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-05T14:04:24.121Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

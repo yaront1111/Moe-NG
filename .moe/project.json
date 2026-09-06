@@ -48,8 +48,11 @@
     "chatEnabled": true,
     "chatMaxAgentHops": 4,
     "staleWorkerTimeoutMs": 1800000,
-    "reviewStaleTimeoutMs": 1800000
+    "reviewStaleTimeoutMs": 1800000,
+    "taskSizing": {
+      "maxDistinctFiles": 20
+    }
   },
   "createdAt": "2026-08-07T10:32:37.002284400Z",
-  "updatedAt": "2026-09-05T11:06:30.167Z"
+  "updatedAt": "2026-09-06T09:17:38.832Z"
 }

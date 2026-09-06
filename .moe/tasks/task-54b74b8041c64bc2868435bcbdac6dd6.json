@@ -78,7 +78,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -120,7 +120,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T02:07:06.531Z",
+  "updatedAt": "2026-09-06T09:25:42.454Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 5,
@@ -247,11 +247,9 @@
     "at": "2026-09-06T02:07:06.531Z"
   },
   "workStartedAt": "2026-09-06T00:36:19.092Z",
-  "blockedReason": "CONCURRENT LIVE EDIT ON 5 OF 9 OWNED PATHS. Measured 05:01-05:05 JST 2026-09-06, HEAD db6da88a; full evidence in comment-6e9d72870b924073be8772e8dc0f09af. Old premise task-a2409cba RESOLVED (landed 3a7e54de, dependsOnUnmet []). New: task-06ac0da1 (design.submit/design.read, WORKING, worker-0520a42e, step 5 of 5, commits:[] so nothing on the branch) holds UNCOMMITTED bytes in daemon-command-payload-keys.ts 04:58:59, mcp-tool-allowlist.test.ts 04:57:03, daemon-command-vocabulary.test.ts 04:52:28, daemon-store-dependencies.test.ts 04:53:07, daemon-command-families.ts 04:48:29 vs `date` 05:01:47 — all four hand-written count pins sit in that set. DoD 1 requires them in the SAME COMMIT as the wiring, so not re-orderable; editing them pathspec-commits a peer's bytes under this task id (global rail 5) = overwrite-foreign-WIP hard block. No production edits made; step 2 untouched.\n\nHEAD ALSO TORN BY A PARTIAL SWEEP (foreign): `git show HEAD:<f>|grep -c design.submit` vs worktree = vocabulary.ts 4/4 and registry.test.ts 2/2 LANDED, payload-keys 0/1, families 0/4, vocabulary.test 0/3, store-deps 0/1, allowlist.test 0/2. HEAD's registry ROWS asserts a kind HEAD's PAYLOAD_KEYS lacks; counts move again when 06ac0da1 exits.\n\nARCHITECT DECISION OWED (asked comment-49d69605, unanswered; all 5 steps activeAmendmentId null): MCP_EXCLUDED_COMMAND_KINDS is DERIVED (mcp-tool-allowlist.ts:68) from OPERATOR_PRINCIPAL_KINDS, which THIS row edits — so it moves `excluded` plus the 3 pins comment-eb460c84 gave sibling task-20b7d6bb. Step 2(d) is unsatisfiable, and 20b7d6bb is BLOCKED on this row for \"release.decide not served\" -> deadlock unless one row owns those pins. ABSENT A RULING the next session takes them (owned paths 9 -> 12).\n\nUNBLOCK IS CHEAPER THAN DONE: needs 06ac0da1 COMMITTED, not approved; wrapper commits on every exit. Re-offered session: re-run `git status --porcelain -- apps/daemon/src` first.",
-  "blockedOnTaskIds": [
-    "task-06ac0da1ace64032855affc4ab0c1a4e"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T02:06:53.032Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

@@ -22,23 +22,33 @@
     {
       "stepId": "step-1",
       "description": "READ THE ORPHAN BEFORE CHANGING IT, and confirm the two facts this plan rests on.\n\n`apps/daemon/src/deployment/deploy-target-contracts.ts` is 128 lines and COMPLETE - it is not a stub to finish. Read it end to end. Its surface: DEPLOYMENT_SET_TARGET_COMMAND_KIND/:24, DEPLOYMENT_DEPLOY_COMMAND_KIND/:25, the two PAYLOAD_KEYS constants at :30 and :37, DEPLOY_TARGET_BOUND_EVENT/:41, DEPLOY_TARGET_INVALID/:44, DEPLOY_ENVIRONMENT_UNBOUND/:46, the NETWORK_NAME and SSH_TARGET regexes at :49/:51, MAX_URL/:52, admitDeployUrl/:61, admitDeployNetwork/:74, admitSshTarget/:78, deployTargetAggregateId/:83, AdmittedDeployTarget/:87, admitDeployTargetPayload/:99, decodeDeployTarget/:117.\n\nCONFIRM:\n- `git status --porcelain apps/daemon/src/deployment/deploy-target-contracts.ts` shows `??` (untracked).\n- `git grep -c \"deploy-target-contracts\" -- apps/daemon/src` returns NOTHING (zero importers).\n- `grep -n \"DeployTarget\\|DeployTargetPort\" apps/daemon/src/deployment/deploy-ports.ts` - :33 declares the shape `decodeDeployTarget` returns, and :41 declares `DeployTargetPort` with the comment \"WRITTEN by `deployment.set_target`; only read here\". THIS ROW IS THAT WRITE.\n- `grep -n \"deployment.set_target\" apps/daemon/src/daemon-command-payload-keys.ts` - :165 holds the SAME keys as hand-written literals. Record both lists verbatim; step 5 asserts they agree.\n\nIF THE ORPHAN HAS BEEN DELETED OR ADOPTED BY SOMEONE ELSE since filing, stop and re-plan rather than re-creating it.\n\nDO NOT EDIT the roster files: daemon-command-vocabulary.ts, daemon-command-payload-keys.ts and bootstrap-contracts.ts already carry both kinds and eight rows are contending them.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/deployment/deploy-target-contracts.ts",
         "apps/daemon/src/deployment/deploy-ports.ts"
-      ]
+      ],
+      "note": "Read full128line orphan at5ab9640f: git status --porcelain shows?? deploy-target-contracts.ts; git grep -c deploy-target-contracts -- apps/daemon/src zero importers. DeployTarget :33 and DeployTargetPort :41 match codec {network,sshTarget|null,url|null}. Literal key lists at payload-keys165/166 exactly [environment,network,sshTarget,url] and [environment,sha], matching orphan constants. goal-services.ts clean and4ordered entries; collision notice acknowledged, append-only edit planned. Roster files read-only. Baseline shell/plumbing currently has foreign bootstrap-sequence deployment prerequisite holes; parent04 owns those (peer fullgate38195ec6), not this handler leaf. No source edits yet.",
+      "startedAt": "2026-09-06T09:13:12.803Z",
+      "completedAt": "2026-09-06T09:14:08.548Z"
     },
     {
       "stepId": "step-2",
       "description": "ADOPT THE MODULE (DoD 1). Track it and give it the `.js` bridge the package convention requires.\n\n1. `git add apps/daemon/src/deployment/deploy-target-contracts.ts` so it stops being untracked. The wrapper commits by explicit pathspec, so an untracked file with no declared owner can be swept or lost.\n2. Create `apps/daemon/src/deployment/deploy-target-contracts.js` containing exactly `export * from \"./deploy-target-contracts.ts\";` - the measured convention in this package (every `.ts` has a tracked one-line `.js` bridge, and daemon modules import siblings by `.js`).\n3. `moe.declare_files` both paths so the completion commit attributes them.\n\nCHANGE THE MODULE'S CONTENT ONLY IF SOMETHING IS ACTUALLY WRONG. It is complete and its admission rules are the considered part; adoption means giving it a consumer and a test, not rewriting it. If you do change a rule, say which and why in the step note - the header explains these fields reach an argv and a rendered receipt.\n\nADOPTION IS NOT COMPLETE UNTIL SOMETHING IMPORTS IT (DoD 1): a tracked module with zero importers satisfies every existence grep while the feature does not exist. Steps 3 and 4 provide the importers; this step just stops it being invisible to git.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/deployment/deploy-target-contracts.ts",
         "apps/daemon/src/deployment/deploy-target-contracts.js"
       ],
       "newFiles": [
         "apps/daemon/src/deployment/deploy-target-contracts.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.ts",
+        "apps/daemon/src/deployment/deploy-target-contracts.js"
+      ],
+      "note": "Orphan source adopted unchanged with explicit git add -- exactpath: status A not??. Added one-line .js bridge and declared both paths. Real Node import probe exit0 TARGET_BRIDGE_OK. No source behavior change yet; production importer intentionally remains step3/4 and DoD not claimed complete. Pre-write shape census uncovered three unnamed asserting GOAL_HANDLERS consumers: goals/goal-services.test.ts:170 exact4orderedkeys; goals/j1-command-path.test.ts:183 servedset; http/affordance-read.test.ts:467 tablecoverage. Following globalrail to stop/report before handlerappend or extra test edits. Read-only deploy-ports was in step1 planned paths; no edits/adoption of that peer-owned module.",
+      "startedAt": "2026-09-06T09:14:08.956Z",
+      "completedAt": "2026-09-06T09:16:04.974Z"
     },
     {
       "stepId": "step-3",
@@ -94,7 +104,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -104,24 +114,47 @@
   "parentTaskId": "task-04b3ce7e349743c2a156d32ee5550ba5",
   "priority": "HIGH",
   "order": 91.8,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-a2bb8ed26a6441ea8a96f06800948ceb",
+      "author": "worker-7bdbffac",
+      "content": "Measured scope defect BEFORE handler edit: `git grep -n -E 'Object.keys\\(GOAL_HANDLERS|GOAL_HANDLERS\\).*to|GOAL_HANDLERS.*toEqual' -- apps/ tests/` finds goals/goal-services.test.ts:170 exact [goal.create,goal.close,goal.create_with_source,repository.publish]. Full GOAL_HANDLERS spread census additionally finds goals/j1-command-path.test.ts:183 servedset equality with OWNED_KINDS and http/affordance-read.test.ts:467-481 served table/uncarded exception. All three absent from affectedFiles; append-only does NOT preserve these exact rosters. 8 current distinct paths+3=11; possible re-plan drop deploy-ports.ts read-only path then10, or move consuming roster work to parent with explicit seam; architect decides, worker will not evade checks or take extra paths. Only step2 orphan .ts exact stagedadoption and .jsbridge created/declared; no handler/ledger/test/roster edits. Further measured admission concerns for owning implementation: current admitDeployUrl returns raw whitespace/control-normalized URLs and query/fragment, so userinfo-only guard insufficient for no-secret rail; decodeDeployTarget defaults omitted mandatory nullable fields to null; SSH comment claims :port while regex refuses colon. Tighten through TDD in sameownedmodule after scope corrected, no new layer constant. These are implementation notes, not separate evidence rows.",
+      "timestamp": "2026-09-06T09:16:05.413Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T08:09:18.405Z",
-  "updatedAt": "2026-09-06T09:08:10.146Z",
+  "updatedAt": "2026-09-06T09:17:03.288Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T09:06:07.728Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T09:08:07.965Z",
   "planningNotes": {
     "approachesConsidered": "EDITING daemon-command-payload-keys.ts TO IMPORT THE ORPHAN'S CONSTANTS. This is the correct end state and it is deliberately NOT in this plan: eight rows are contending that file and this row's rail 4 forbids roster edits. Deferred with a guard (step 5's agreement arm) and a follow-up note, so the duplication cannot drift unnoticed while it waits.\n\nDELETING THE ORPHAN INSTEAD OF ADOPTING IT - the other half of the governor's either/or. Rejected on reading it: 128 lines of admission rules with regexes, bounds and an aggregate id, plus a decoder that already matches `DeployTarget` at deploy-ports.ts:33. Deleting it means rewriting it, and the security reasoning in its header is exactly what a rewrite would lose.\n\nPUTTING set_target IN THE ASYNC ENTRIES beside `deployment.deploy`. Rejected: it is an ordinary synchronous write, `CommandHandler` returns `ServiceOutcome`, and bootstrap-contracts.ts:48 already records the distinction in its own comment. The async seam is the parent's.\n\nINSERTING THE HANDLER ALPHABETICALLY into GOAL_HANDLERS. Rejected - the table's own comment says appended, never reordered, because existing suites assert its key order.\n\nSize: 8 files, 7 steps.",
     "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06.\n\nTHE ORPHAN IS COMPLETE, NOT A STUB - 128 lines, and it already holds everything this row needs. `apps/daemon/src/deployment/deploy-target-contracts.ts` (UNTRACKED, `??`, with ZERO importers):\n  :24-25  DEPLOYMENT_SET_TARGET_COMMAND_KIND / DEPLOYMENT_DEPLOY_COMMAND_KIND\n  :30,:37 DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS / DEPLOYMENT_DEPLOY_PAYLOAD_KEYS\n  :41     DEPLOY_TARGET_BOUND_EVENT = \"EnvironmentDeployTargetBound\"\n  :44,:46 DEPLOY_TARGET_INVALID / DEPLOY_ENVIRONMENT_UNBOUND\n  :49,:51 NETWORK_NAME and SSH_TARGET regexes; :52 MAX_URL = 512\n  :61,:74,:78 admitDeployUrl / admitDeployNetwork / admitSshTarget\n  :83     deployTargetAggregateId(projectId, environment)\n  :87,:99 AdmittedDeployTarget and admitDeployTargetPayload(payload)\n  :117    decodeDeployTarget(value) -> DeployTarget | null\nSo this row is mostly ADOPTION and WIRING, not authoring. Read it before changing a line of it; the admission rules are the considered part and its header explains why they are a security boundary rather than tidiness.\n\nIT ALREADY FITS THE CONSUMER IT WAS WRITTEN FOR: `decodeDeployTarget` returns `DeployTarget` as declared at deploy-ports.ts:33 (`network`, `sshTarget: string | null`, `url: string | null`), and deploy-ports.ts:41 declares `DeployTargetPort = (environment) => DeployTarget | null` with the comment \"WRITTEN by `deployment.set_target`; only read here\". This row is that write.\n\nA DUPLICATION THIS ROW MUST NOT SILENTLY LEAVE UNGUARDED. The payload keys exist TWICE: as `DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS` in the orphan (:30) and as hand-written literals in `apps/daemon/src/daemon-command-payload-keys.ts:165` (`[\"environment\",\"network\",\"sshTarget\",\"url\"]`). The governor's hand-back notes \"the literal hotfix does not import it\". Converging them by editing daemon-command-payload-keys.ts is the obvious fix and it is NOT available here: that file is contended by eight rows and this row's rail 4 forbids roster edits. The plan therefore ASSERTS THE TWO AGREE with a test - reading a file is not editing it - and records the convergence as a follow-up. A duplicated roster with a guard is survivable; a duplicated roster with nothing watching it is how the two silently diverge.\n\nGOAL_HANDLERS IS ORDER-SENSITIVE. apps/daemon/src/goals/goal-services.ts:199 carries the comment \"Appended, never reordered: existing suites assert against this table's key order\", and the table today is goal.create, goal.close, goal.create_with_source, repository.publish. APPEND; do not insert alphabetically. This file is contended by task-537320ee, so re-read HEAD before touching it.\n\nINCIDENTAL FINDING, not this row's work: deploy-ports.ts:60 `createProxyPort(run, network)` already exists and names `/etc/caddy/Caddyfile` and a `/tmp/moe-deploy-lock`. The flippable-upstream row task-db63dacc plans to CHOOSE a proxy - the choice is evidently already made and partly built. I am noting it on that row rather than acting on it here."
   },
-  "planApprovedAt": "2026-09-06T09:08:10.146Z"
+  "planApprovedAt": "2026-09-06T09:08:10.146Z",
+  "contextFetchedBy": [
+    "worker-7bdbffac"
+  ],
+  "workStartedAt": "2026-09-06T09:13:12.803Z",
+  "declaredFiles": [
+    "apps/daemon/src/deployment/deploy-target-contracts.ts",
+    "apps/daemon/src/deployment/deploy-target-contracts.js"
+  ],
+  "blockedReason": "Approved step4 (no activeAmendmentId present) appends deployment.set_target to GOAL_HANDLERS, but measured shape census finds three required asserting consumers OUTSIDE affectedFiles: apps/daemon/src/goals/goal-services.test.ts:170 exact4orderedkeys; apps/daemon/src/goals/j1-command-path.test.ts:183 combinedservedset; apps/daemon/src/http/affordance-read.test.ts:467-481 servedset/uncardedexceptions. Global unnamed-consumer rail requires STOP/report rather than taking paths or evading checks. Current8distinct+3=11; architect can likely remove read-only deploy-ports.ts plannedownership to reach actual10 or explicitly rescope with parent04. Need corrected affected-path plan before handler edit to avoid knowingly shipping failing consumers; NOT blocking on peer dirt or foreign typecheck. Only step2 orphan128line.ts stagedunchanged and one-line.jsbridge created/declared; no handler/ledger/test/roster edits. Commenta2bb8ed2+Serena handoff preserve exact measurements and admission/expectedVersion implementation notes. Root baseline typecheck completeexit1 foreignbootstrap45/109, no running jobs.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T09:17:03.288Z"
 }
